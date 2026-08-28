@@ -70,6 +70,8 @@ contract CrapsGasTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new GasHarness();
+        // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
     }
 
     /// @dev A full board: every leg live, so this is the worst-case per-roll branch load. Only

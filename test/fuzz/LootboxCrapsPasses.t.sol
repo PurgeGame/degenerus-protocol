@@ -200,10 +200,13 @@ contract LootboxCrapsPasses is DeployProtocol {
         assertLt(small, big, "small boxes announced as often as large ones: the zero-pass fallback is not firing");
     }
 
-    /// @dev FAIL-OPEN. Lootbox settlement is a permissionless sweep other players depend on, so a
-    ///      craps table that cannot be reached must not take a box down with it: the open still
-    ///      succeeds, and the award is still announced so nothing about it is invisible.
-    function test_anUnreachableTableDoesNotWedgeTheBox() public {
+    /// @dev A PASS IS NEVER LOST — which changed what an unreachable table means. The old rule
+    ///      swallowed the award to keep the sweep alive; the award was announced and owed by
+    ///      nobody. Now the delivery falls back to the table's credit-only door, and when even
+    ///      THAT is unreachable the box entry REVERTS and stays retryable: a box that cannot
+    ///      record its award is not consumed while the logs claim it paid. The sweep resumes the
+    ///      moment the table answers again.
+    function test_anUnreachableTableRevertsTheBoxRetryably() public {
         address player = _ready();
         uint256 snap = vm.snapshotState();
         (uint256 word,,) = _findPassWord(player, 8000, 10 ether);
@@ -217,10 +220,21 @@ contract LootboxCrapsPasses is DeployProtocol {
 
         // Back to before any of it happened, then break the table.
         vm.revertToState(snap);
+        bytes memory live = address(crapsBattle).code;
         vm.etch(address(crapsBattle), hex"60006000fd");
 
+        vm.expectRevert();
+        this.openExternal(player, index, word, 10 ether);
+
+        // The table comes back; the SAME box settles and the award lands whole.
+        vm.etch(address(crapsBattle), live);
         (bool found,,, uint24 day) = _open(player, index, word, 10 ether);
-        assertTrue(found, "the award went unannounced when the table was unreachable");
-        assertEq(day, 0, "an unreachable table still reported a reservation");
+        assertTrue(found, "the retried box went unannounced once the table answered");
+        day; // the reservation outcome is the delivery test's business, not this one's
+    }
+
+    /// @dev `_open` behind an external boundary, so `expectRevert` can grade the whole box call.
+    function openExternal(address player, uint48 index, uint256 word, uint256 paid) external {
+        _open(player, index, word, paid);
     }
 }

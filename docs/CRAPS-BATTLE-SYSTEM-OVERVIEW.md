@@ -290,12 +290,17 @@ Both jobs stay permissionless on the table — that path is the unstick valve an
 changed. What is new is that the protocol's own crank takes them too, so a window is never left
 hanging on nobody's initiative.
 
-`mineFlip()`'s **last** leg looks at exactly one slot — the window whose close has just passed —
-and does one job:
-
-- shut it (`armBonusWindow`) if it is still open, or
-- walk it forward for as much **gas of work** as the box legs left (`resolveSlot`) if it is
-  already shut.
+`mineFlip()`'s **last** leg drives the table's own **scheduled cursor** (`keepScheduled`): a
+persistent pointer naming the oldest scheduled slot still owing work. Each crank does the next
+piece of that work — cross a spent slot, sweep a lapsed day's reservations back to pass credits,
+shut a window whose close has passed, or settle a batch of an armed field within the gas
+allowance the box legs left. The cursor cannot pass a slot that still owes anything, so nothing
+scheduled is forgotten: the old `openSlot - 1` probe abandoned any field that outlasted one
+budget — the daily event above all, armed in its fifteen-minute lead and worded later. External
+help through the still-permissionless `armBonusWindow`/`resolveSlot` doors is detected as done
+work and crossed, never wedged on. What the cursor will not do is wait on the impossible: a live
+window, a wordless armed field, and an unopened day all stop it with no progress claimed and no
+bounty paid.
 
 It pays a **flat 1 FLIP** for either, as `MinerBounty` kind 4 — the same shape and figure
 `degeneretteResolve` pays the protocol's other permissionless batch resolver. The credit is
@@ -311,27 +316,30 @@ Four properties make the leg safe rather than merely convenient:
 
 - **It never shares a call with an advance.** It lives in the crank's else branch, and only on a
   call that opened no lootbox.
-- **It is sized out of the box legs' own budget, and it is measured rather than counted.** The
-  second argument to `resolveSlot` is a GAS ALLOWANCE, not a seat count: `OPEN_WEIGHT_BUDGET`
-  minus whatever the afking walk and human sweep already burned, priced at `CRAPS_GAS_PER_UNIT`
-  (4,700 gas a unit, the box legs' own rate) less a 100,000-gas router reserve. An untouched
-  budget hands the table **8,924,000 gas**.
+- **It is sized out of the box legs' own budget, and it is charged rather than counted.** The
+  second argument to `resolveSlot` is a WORK BUDGET in the protocol's own walk units (~4.7k gas
+  each), not a seat count: whatever the afking walk and human sweep left of `OPEN_WEIGHT_BUDGET`,
+  passed through as-is less a 32-unit router reserve — no gas conversion anywhere. An untouched
+  budget hands the table **1,888 units**.
 
-  The table then meters ITSELF: it reads a gas meter after every completed seat, adds a reserve
-  for each pending Coinflip credit, and stops on the first seat that crosses the allowance. A
-  seat's real cost varies by two orders of magnitude — a three-roll bust against a four-hundred-
-  roll one, and whether the run pays at all — so a head count priced the mean and was wrong on
-  both tails. Measured over 64 shared table words per format, the same allowance walks a median
-  of **86 seats** on the dearest format and **256** on the cheapest, against the old flat 80.
+  Each settled seat then charges its own OUTCOME, deterministically:
+  `_SEAT_UNITS(7) + rolls/6 + (paid ? _CREDIT_UNITS(6) : 0)` — the engine already reports the
+  roll count, and rolls are what a seat's cost actually varies by (two orders of magnitude
+  between a three-roll bust and a four-hundred-roll run). The walk stops on the first seat whose
+  charge crosses the budget, so a head count's twin failures — underpricing the tail, overpricing
+  the mean — are both gone, and the stopping point is a pure function of chain state: the same
+  batch boundary on every node, under every gas schedule, with no `gasleft()` anywhere in it.
+  Each weight rounds its measured gas UP (seat plumbing ~28k, dice 578-699/roll, a cold credit
+  25,910), so the charge is conservative at every point.
 
   The old form also had an arithmetic hole: it divided the spend into seats first, so a box walk
   that consumed the whole 1,920-unit budget still left `80 - 1920/27 = 9` seats stacked on top of
   a full-budget call. The remainder now saturates at zero.
 
-  Worst 95th-percentile crank across all nine scheduled formats: **9.13M gas**. The deterministic
-  hard bound — allowance plus one whole seat of overshoot plus the router tail — is **9.37M
-  measured**, and **11.87M** against the engine's own 2.25M regression ceiling. Both are far below
-  the 16.7M that hard-fails.
+  The hard bound is the budgeted work at the units' own conservative gas ceiling plus one whole
+  seat of overshoot: ~1,888 x 4.7k plus the engine's 2.25M regression ceiling and the router
+  tail — around **11.3M**, far below the 16.7M that hard-fails, and the measured typical crank
+  sits near 9M as before.
 - **It pays for work, not for calling.** An arm reverts when there is nothing to arm, and
   `resolveSlot` returns *silently* on a field that is already finished — so the cursor is read
   either side and the bounty is gated on it actually moving. An idle table pays nothing.

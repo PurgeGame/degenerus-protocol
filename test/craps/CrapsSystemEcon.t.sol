@@ -128,6 +128,8 @@ contract CrapsSystemEconTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new SysHarness();
+        // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
         _setIndex(4);
     }
 

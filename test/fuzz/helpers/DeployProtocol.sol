@@ -93,13 +93,16 @@ abstract contract DeployProtocol is Test {
     ///      has opened craps days — so a fixture that means "no box work" has to say "and no
     ///      craps work" too, or it is asserting something it did not set up.
     ///
-    ///      Arming the one window whose close has passed is enough: the leg's arm then reverts
-    ///      `BonusPeriodSpent` and its walk reverts `RngNotReady` (no table word was landed),
-    ///      both caught, and `_crapsKeep` reports no work. Permissionless, and it pays no bounty.
+    ///      The table owns a scheduled cursor now, so quieting it means DRIVING that cursor until
+    ///      it reports no progress: every spent slot crossed, every closed window armed, every
+    ///      lapsed day swept. What remains after that is only work the crank cannot do either —
+    ///      fields waiting on words, windows still taking bets — which is exactly the no-work
+    ///      state the probe wants to assert against.
     function _quietCrapsTable() internal {
-        uint64 open = afkingModule.keeperCrapsOpenSlot();
-        if (open == 0) return;
-        try crapsBattle.armBonusWindow(open - 1) returns (uint48) {} catch {}
+        for (uint256 i = 0; i < 64; ++i) {
+            (bool progressed,) = crapsBattle.keepScheduled(type(uint64).max);
+            if (!progressed) return;
+        }
     }
 
     /// @notice Deploy the full protocol. Must be called from setUp().

@@ -209,6 +209,8 @@ contract CrapsBattleTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new BattleHarness();
+        // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
         _setIndex(4);
         // Arming needs today's word in. This one lands on preset 0 with no spread, so the fixed
         // terms below can be named as constants: `% 4 == 0` picks the preset, `(>> 8) % 40 == 0`
@@ -2393,8 +2395,9 @@ contract CrapsBattleTest is CrapsPins {
         // The pot is the bounties and the boost this table drew — bounded above by the ceiling
         // the window advertised, and below by nothing granular, since a small budget may draw
         // less than one granule. A busted run's remainder is deleted, so it is not in here.
-        uint256 drew =
-            craps.boostShareFor(craps.boostUnitsAt(slot), craps.betOf(winnerId).standing) * craps.BATTLE_STAKE_UNIT();
+        uint256 drew = craps.roundBoostFor(
+            craps.boostShareFor(craps.boostUnitsAt(slot), craps.betOf(winnerId).standing)
+        ) * craps.BATTLE_STAKE_UNIT();
         assertEq(pot.betId, winnerId, "the pot named a seat the scoreboard did not");
         assertEq(pot.player, craps.betOf(winnerId).player, "the pot reached an address that held no seat");
         assertEq(pot.amount, stakes + drew, "the pot is not the stakes and the boost");
@@ -2794,13 +2797,23 @@ contract CrapsBattleTest is CrapsPins {
 
         _warpPastClose(PER);
         uint48 index = _armAt(PER);
-        _setWord(index, uint256(keccak256("whole-donation")));
 
         uint64 slot = _slotAt(PER);
         uint256 entrants = craps.battleOf(_keyOf(PER)).entrants;
         assertEq(craps.boostShareFor(1000, 0), 0, "a scoreless winner can still take house money");
 
-        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
+        // THE SCORELESS SEAT MUST WIN for this to test anything: the house's comped seat competes
+        // at the sybil floor, so the word is searched until the dice hand alice the field.
+        PaidOut memory pot;
+        uint256 snap = vm.snapshotState();
+        for (uint256 i = 0; i < 64; ++i) {
+            _setWord(index, uint256(keccak256(abi.encode("whole-donation", i))));
+            pot = _onlyPot(craps, slot, WHOLE_FIELD);
+            if (pot.player == alice) break;
+            vm.revertToState(snap);
+            snap = vm.snapshotState();
+        }
+        assertEq(pot.player, alice, "no word gave the scoreless seat the field: the fixture proves nothing");
         // The protocol's own boost is rationed by the winner's standing and then rounded; the
         // DONATION is neither, and rides on top whole. Written as the sum so it holds whichever
         // seat the dice hand the pot to.

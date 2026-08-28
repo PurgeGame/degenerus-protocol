@@ -241,31 +241,38 @@ contract CrapsBattle is LootboxCraps {
     ///         large call, which is why the budget and not the ceiling is what sizes a crank.
     uint64 internal constant _RESOLVE_MAX_SEATS = 256;
 
-    /// @notice What one pending `creditFlipBatch` recipient reserves against the budget.
+    /// @notice A SEAT'S WORK, IN THE PROTOCOL'S OWN WALK UNITS (~4.7k gas each, the same unit
+    ///         every box leg budgets in) — deterministic, derived from the seat's OUTCOME after it
+    ///         settles rather than from a gas meter:
     ///
-    ///         EVERYTHING ELSE A SEAT COSTS IS MEASURED. The engine replay, the scoring fold, the
-    ///         finalization, the pot, the progressive and the lane all happen inside the loop and
-    ///         are already on the meter by the time it is read. The batched bankroll return is the
-    ///         one piece that happens AFTER the loop, so it is the one piece that has to be
-    ///         predicted — and it is predicted per RECIPIENT, since a busted run adds none.
+    ///             cost = _SEAT_UNITS + rolls / _ROLLS_PER_UNIT + (paid ? _CREDIT_UNITS : 0)
     ///
-    ///         MEASURED, in the dearest shape the lane can take: 25,910 gas for one more DISTINCT
-    ///         recipient with no stake on the target day, flat from two recipients up
-    ///         (`test_probe_coinflipBatchCreditCost`, against the real Coinflip). A repeat
-    ///         recipient costs 5,738 and a warm day slot less again, so this over-reserves on
-    ///         purpose. The balance covers the per-item calldata encode and memory copy the
-    ///         callee's own measurement does not include.
-    uint256 internal constant _CREDIT_RESERVE_GAS = 28_000;
+    ///         The engine already reports the roll count, and rolls are what a seat's cost
+    ///         actually varies by — two orders of magnitude between a three-roll bust and a
+    ///         four-hundred-roll run — so the unit charge keeps the outcome sensitivity a flat
+    ///         per-seat weight never had, while staying replayable: the same chain state stops
+    ///         the same batch at the same seat, on every node, under every gas schedule.
+    ///
+    ///         Each weight rounds its measured cost UP so the charge is conservative everywhere:
+    ///         seat plumbing ~28k → 7 units (32.9k); dice 578-699 gas a roll → a unit per 6
+    ///         rolls (783 budgeted); a distinct cold coinflip credit 25,910 → 6 units (28.2k).
+    uint256 internal constant _SEAT_UNITS = 7;
+    uint256 internal constant _ROLLS_PER_UNIT = 6;
+    uint256 internal constant _CREDIT_UNITS = 6;
 
-    /// @notice What the work AFTER the loop reserves, whether or not anything was paid: the
-    ///         batch call's own fixed cost (6,214 measured empty), the day's action write, the
-    ///         high-lane action write and the cursor. All three storage writes can be COLD on a
-    ///         slot's first batch — 22,100 each — which is what this figure is sized against, and
-    ///         on every later batch they are warm and it over-reserves.
-    uint256 internal constant _RESOLVE_TAIL_GAS = 70_000;
+    /// @notice What one lapsed-day reservation refund charges: a pass-credit write, two logs and
+    ///         the resumable sweep cursor — ~33k measured cold, rounded up.
+    uint256 internal constant _SWEEP_SEAT_UNITS = 8;
 
     /// @notice How many days of action a budget is drawn from.
     uint256 internal constant _BOOST_ACTION_WINDOW_DAYS = 7;
+
+    /// @notice The most cheap cursor hops one `keepScheduled` call may take — finalized windows,
+    ///         empty armed fields and day separators crossed without doing real work. Two days'
+    ///         worth of slots, so a backlog of externally-settled days still clears at a bounded
+    ///         and predictable per-call cost.
+    uint256 internal constant _KEEP_MAX_HOPS = 16;
+
 
     /// @notice THE DAILY BASE SUBSIDY, ADDED and never a floor. Every opened day puts this up on
     ///         top of the linear rate, so a table nobody has played still has something to offer
@@ -778,6 +785,20 @@ contract CrapsBattle is LootboxCraps {
     ///      ladder under-realisation and rounding dust all stay exactly where they are.
     uint256 internal _progressive;
 
+    /// @dev THE SCHEDULED CURSOR: the oldest scheduled slot the protocol may still owe work on.
+    ///      Every scheduled slot strictly below it is completely finalized, an armed field with
+    ///      no seats, a LAPSED day whose reservations were credited back, or the remainder-zero
+    ///      separator — nothing of value is ever left behind it. Born in the constructor at
+    ///      genesis + 1's separator: the deployment day is a warm-up day with no windows, so
+    ///      tomorrow is the first day that can owe anything.
+    ///
+    ///      It only ever moves FORWARD, and only past a slot proven spent. A day the advance
+    ///      never opened — a protocol stall — is not replayed: nobody could have entered it (the
+    ///      doors check the live clock and the word), so all it can hold is prepaid reservations,
+    ///      and the cursor hands each of those its pass credit back before crossing. Late work is
+    ///      finished; dead days are refunded in kind; nothing is stranded either way.
+    uint64 internal _keeperSlot;
+
     /// @dev What a future day costs bought outright, per day. FIXED constants, deliberately not
     ///      derived from the pass denominations or from each other: the pass is a lootbox award
     ///      priced at the expectation, while these are a retail price with the protocol's margin
@@ -972,6 +993,13 @@ contract CrapsBattle is LootboxCraps {
         uint256 balance
     );
 
+    /// @notice A day the advance never opened was crossed by the scheduled cursor: every seat
+    ///         reserved on it was handed its pass credit back. Nobody else could have entered — a
+    ///         dead day's doors were shut by the clock and the missing word the whole time — so
+    ///         `seats` is the whole of what the day held, and each seat's own
+    ///         `CrapsPassesCredited` precedes this.
+    event CrapsDayLapsed(uint24 indexed day, uint64 seats);
+
     /// @notice Protocol money a winner's activity standing would not admit, banked in the
     ///         progressive rather than left unminted.
     /// @dev PROTOCOL MONEY ONLY. Bounties, principal, run losses, deleted bust remainders, the
@@ -989,6 +1017,18 @@ contract CrapsBattle is LootboxCraps {
     ///      ReverseRegistrar and Base's L2ReverseRegistrar. Constructor code is init code, so this
     ///      costs nothing against the deployed contract's EIP-170 ceiling.
     constructor() {
+        // THE DEPLOYMENT DAY IS A WARM-UP DAY WITH NO WINDOWS. Genesis is marked consumed and the
+        // scheduled cursor born pointing at TOMORROW'S separator, so the first Craps windows open
+        // on genesis + 1 and nothing can ever fall behind initialization: a pass awarded on
+        // genesis reserves genesis + 1 normally, and the cursor is already standing there.
+        // Derived from the clock rather than hard-coded, so deployment timing cannot move the
+        // rule — and written from INIT code, which costs the runtime nothing.
+        uint24 genesis = _currentDayIndex();
+        unchecked {
+            _bonus = uint256(genesis) + 1;
+            _keeperSlot = uint64(_daySlotOf(uint256(genesis) + 1));
+        }
+
         address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
         if (ensReg != address(0)) {
             (bool ok, ) = ensReg.call(
@@ -1307,31 +1347,29 @@ contract CrapsBattle is LootboxCraps {
     ///      so the settled set is contiguous by construction. A lane that could start anywhere
     ///      would break that.
     ///
-    ///      ⚠ THE SECOND ARGUMENT IS A GAS BUDGET, NOT A SEAT COUNT. That is a deliberate public
-    ///      change with an unchanged selector: both arguments are still `uint64`, so an
-    ///      integration that keeps passing a head count will settle far fewer seats than it
-    ///      intended rather than reverting. The reason is that a seat's cost is not a constant —
-    ///      a three-roll bust and a four-hundred-roll one differ by two orders of magnitude, and
-    ///      whether a run PAYS decides whether it adds a deferred credit — so a count is a
-    ///      guess about work while a budget is the work itself. A bust-heavy table now walks many
-    ///      more seats per call and a correlated hot one walks fewer, which is exactly the
-    ///      behaviour a fixed count cannot express.
+    ///      ⚠ THE SECOND ARGUMENT IS A WORK BUDGET IN WALK UNITS, NOT A SEAT COUNT. That is a
+    ///      deliberate public change with an unchanged selector: both arguments are still
+    ///      `uint64`, so an integration that keeps passing a head count will settle far fewer
+    ///      seats than it intended rather than reverting. The reason is that a seat's cost is not
+    ///      a constant — a three-roll bust and a four-hundred-roll one differ by two orders of
+    ///      magnitude, and whether a run PAYS decides whether it adds a deferred credit — so each
+    ///      settled seat charges its own OUTCOME (`_SEAT_UNITS`) and a bust-heavy table walks
+    ///      many more seats per call than a correlated hot one, which is exactly the behaviour a
+    ///      fixed count cannot express. The charge is deterministic, so the same chain state
+    ///      stops the same batch at the same seat on every node.
     ///
     ///      Zero settles nothing. Any nonzero budget completes at least one seat, because the
-    ///      meter is read AFTER a seat rather than before: a run cannot be stopped halfway
+    ///      charge is levied AFTER a seat rather than before: a run cannot be stopped halfway
     ///      without storing a resumable engine state that costs more than the overshoot it would
     ///      save. A caller repeats the call to walk a deeper field.
     /// @param slot A window's `day * _BONUS_SLOTS_PER_DAY + period + 1`, or a custom battle's.
-    /// @param gasBudget HOW MUCH GAS OF WORK to do, not how many seats. See the note above:
-    ///        the walk stops after the first seat whose completion takes measured consumption
-    ///        plus the pending credit reserve to or past this figure. Zero settles nothing.
+    /// @param budgetUnits HOW MUCH WORK to do, in the protocol's walk units — not how many seats.
+    ///        Each settled seat charges its own outcome (see `_SEAT_UNITS`), and the walk stops
+    ///        after the first seat whose charge meets or crosses the budget. Zero settles
+    ///        nothing; any nonzero budget completes at least one seat.
     /// @custom:reverts RngNotReady If the slot has not shut, or its table has no word yet.
-    function resolveSlot(uint64 slot, uint64 gasBudget) public {
-        // THE METER STARTS HERE, above the readiness reads, the window decode and the arrays —
-        // all of it is craps work the caller is paying for, and a budget that only measured the
-        // loop would under-report a batch by its whole fixed cost.
-        uint256 startGas = gasleft();
-        if (gasBudget == 0) return;
+    function resolveSlot(uint64 slot, uint64 budgetUnits) public {
+        if (budgetUnits == 0) return;
         // Unarmed reads as zero: the slot has not shut, so no table has been chosen yet.
         uint48 index = _slotIndex[slot];
         if (index == 0) revert RngNotReady();
@@ -1359,13 +1397,8 @@ contract CrapsBattle is LootboxCraps {
             // range — so a single cursor still covers both and nothing here has to skip or scan.
             // Only where a seat's word LIVES differs.
             (uint256 dayBase, uint64 dayN) = _dayField(slot);
-            // The gasleft() the walk stops at, handed down as ONE value rather than the pair it
-            // is derived from — the batch frame is already stack-tight. Saturated, so a budget
-            // larger than the gas actually supplied simply means "run until something else stops
-            // you" rather than wrapping into an enormous floor.
-            uint256 stopAt = startGas > gasBudget ? startGas - gasBudget : 0;
-            (uint256 put, uint256 hi, uint64 done) =
-                _settleBatch(slot, from, end, (end0 - 1) - dayN, dayBase, w, word, stopAt);
+            (uint256 put, uint256 hi) =
+                _settleBatch(slot, from, end, (end0 - 1) - dayN, dayBase, w, word, budgetUnits);
             // Booked to the day the field PLAYED, not the day someone got round to settling it.
             // Settlement is permissionless and unbounded in time, so keying the books to `now`
             // would let a holder of unsettled slots choose which day's boost budget their action
@@ -1377,7 +1410,6 @@ contract CrapsBattle is LootboxCraps {
             _bookDay(
                 slot < _CUSTOM_SLOT_BASE ? uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY) : _currentDayIndex(), put, hi
             );
-            _bonusCursor[slot] = done;
         }
     }
 
@@ -1389,10 +1421,10 @@ contract CrapsBattle is LootboxCraps {
     /// @return staked The bankroll this batch's seats put up — the action a later day's bonus
     ///         budget is drawn against.
     /// @return high The high-lane part of that action.
-    /// @return done The LAST SEAT ACTUALLY RESOLVED, which is the cursor's new value. It is what
-    ///         the budget makes necessary: the offered `end` is now a ceiling rather than a plan,
-    ///         and booking the offer instead of the outcome would strand every seat the meter
-    ///         stopped short of.
+    /// @dev The walk writes the slot's cursor ITSELF, to the last seat actually resolved — the
+    ///      budget makes that necessary: the offered `end` is a ceiling rather than a plan, and
+    ///      booking the offer instead of the outcome would strand every seat the charge stopped
+    ///      short of.
     function _settleBatch(
         uint64 slot,
         uint64 from,
@@ -1401,10 +1433,9 @@ contract CrapsBattle is LootboxCraps {
         uint256 dayBase,
         Window memory w,
         uint256 word,
-        uint256 stopAt
-    ) private returns (uint256 staked, uint256 high, uint64 done) {
+        uint256 budgetUnits
+    ) private returns (uint256 staked, uint256 high) {
         unchecked {
-            uint256 base = uint256(slot) << 64;
             // One batched credit for the whole walk. `creditFlipBatch` skips nothing we have to
             // pre-filter, but a busted run pays zero and a zero word still costs calldata, so the
             // arrays are packed and then trimmed to what actually pays.
@@ -1412,8 +1443,9 @@ contract CrapsBattle is LootboxCraps {
             uint256[] memory amounts = new uint256[](end - from);
             uint256 k;
             for (uint64 n = from; n < end; ++n) {
-                uint256 id = n <= ownN ? base | n : dayBase | (n - ownN);
-                (address player, uint256 paid, uint256 put, uint256 hi) = _resolve(id, n, _bets[id], w, word);
+                uint256 id = n <= ownN ? (uint256(slot) << 64) | n : dayBase | (n - ownN);
+                (address player, uint256 paid, uint256 put, uint256 hi, uint256 cost) =
+                    _resolve(id, n, _bets[id], w, word);
                 staked += put;
                 high += hi;
                 if (paid != 0) {
@@ -1421,18 +1453,19 @@ contract CrapsBattle is LootboxCraps {
                     amounts[k] = paid;
                     ++k;
                 }
-                done = n;
-                // THE BUDGET IS MEASURED, NOT PREDICTED. Whatever this seat cost — a three-roll
-                // bust, a four-hundred-roll one, or a run that finished the field and paid a
-                // progressive — the meter already has it. What the meter cannot see is the
-                // `creditFlipBatch` below, so every pending recipient carries a reserve until it
-                // is actually spent.
+                _bonusCursor[slot] = n;
+                // THE CHARGE IS THE SEAT'S OWN OUTCOME — its rolls and whether it pays — so a
+                // bust-heavy field walks many more seats than a paying one on the same budget,
+                // and the stopping point is a pure function of chain state: no gas meter, no
+                // schedule dependence, the same batch boundary on every node.
                 //
                 // CHECKED AFTER THE SEAT, because a run cannot be half-settled without storing a
                 // resumable engine state, and that state costs more than the overshoot. So one
-                // complete seat may cross the soft target; the hard bound is what covers it.
-                if (gasleft() <= stopAt + k * _CREDIT_RESERVE_GAS + _RESOLVE_TAIL_GAS) break;
+                // complete seat may cross the budget; the hard bound is what covers it.
+                if (cost >= budgetUnits) break;
+                budgetUnits -= cost;
             }
+
             if (k != 0) {
                 assembly ("memory-safe") {
                     mstore(players, k)
@@ -1443,13 +1476,129 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @notice How far `slot`'s field has settled: the last seat id the walk examined, zero for a
-    ///         field nobody has touched. The one reader production kept, and it is here for the
-    ///         keeper alone: `resolveSlot` returns SILENTLY on a field that is already finished,
-    ///         so "the call did not revert" is worth nothing as a work signal and a crank paying
-    ///         for work has no other way to tell a real batch from a no-op.
-    function bonusCursorOf(uint64 slot) external view returns (uint64) {
-        return _bonusCursor[slot];
+    /// @notice One step of the scheduled keeper: find the oldest scheduled slot still owing work
+    ///         and do the next piece of it, whatever that piece is — cross a spent slot, sweep a
+    ///         lapsed day's reservations back to credits, shut a window whose close has passed,
+    ///         or settle a batch of an armed field within `budgetUnits`.
+    /// @dev PERMISSIONLESS, and the ONE source of scheduled liveness. The old keeper looked only
+    ///      at the most recently closed window, so a field that outlasted one budget — or whose
+    ///      word came late, the daily event above all — fell behind the rewarded crank forever.
+    ///      This cursor cannot pass a slot that still owes anything, so nothing scheduled is ever
+    ///      forgotten; external help (a direct arm, a direct settle) is detected as done work and
+    ///      crossed, never wedged on.
+    ///
+    ///      WHAT IT WILL NOT DO is wait for the impossible. It stops — reporting no progress and
+    ///      earning no bounty — on a window still taking bets, an armed field whose word has not
+    ///      landed, a day the advance has not opened yet, and a settle it lacks budget for. All
+    ///      four resolve themselves; polling them pays nobody.
+    /// @param budgetUnits The work allowance in walk units, exactly as `resolveSlot` takes it.
+    ///        Zero still does the cheap lifecycle work — crossing spent slots and shutting a
+    ///        closed window — since the arm is the time-critical piece and costs no settlement.
+    /// @return progressed Whether ANY state moved: the cursor, a sweep, an arm, or settled seats.
+    ///         The keeper's bounty gate, so a poll can never be farmed.
+    /// @return slot Where the cursor stands after the call.
+    function keepScheduled(uint64 budgetUnits) external returns (bool progressed, uint64 slot) {
+        // Never zero: the constructor births the cursor at genesis + 1's separator.
+        uint64 cur = _keeperSlot;
+        uint24 today = _currentDayIndex();
+        (,, uint256 open) = _currentBonusSlot();
+        unchecked {
+            for (uint256 hops = 0; hops < _KEEP_MAX_HOPS; ++hops) {
+                uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
+                if (cur % _BONUS_SLOTS_PER_DAY == 0) {
+                    // THE SEPARATOR. An opened day is crossed into its windows; today and the
+                    // future wait for the advance to open them; a day the advance never opened is
+                    // LAPSED — nobody could have entered it, so all it holds is reservations, and
+                    // they are swept back to pass credits before the WHOLE day is stepped over.
+                    if (_boostBudget[day] != 0) {
+                        ++cur;
+                        continue;
+                    }
+                    if (day >= today) break;
+                    // The sweep is this call's ONE expensive action, complete or not. A PARTIAL
+                    // one must still report its refunds as progress — the rewarded crank reverts
+                    // a no-progress call as NoWork, and a revert would undo the very credits the
+                    // sweep just committed. The day's own sweep cursor moving is that report;
+                    // crossing the finished day moves the keeper cursor and reports itself.
+                    (bool doneAll, bool moved) = _sweepLapsedDay(cur, day, budgetUnits);
+                    if (doneAll) cur += uint64(_BONUS_SLOTS_PER_DAY);
+                    else if (moved) progressed = true;
+                    break;
+                }
+                Window memory w = _slotWindow(cur);
+                uint256 g = _battles[w.key];
+                uint48 idx = _slotIndex[cur];
+                if (idx == 0) {
+                    if (cur >= open) break;
+                    // The battle exists by construction: the cursor only enters a day's windows
+                    // through a separator that proved the day opened, and an opened day writes
+                    // all seven.
+                    _armSlot(cur, w);
+                    progressed = true;
+                    break;
+                }
+                uint256 entrants = g & _MASK32;
+                // Finalized — or armed with nobody in it, which is a race with no runners and
+                // nothing owed. Either way the slot is spent.
+                if (entrants == 0 || ((g >> _BG_RESOLVED_SHIFT) & _MASK32) == entrants) {
+                    ++cur;
+                    continue;
+                }
+                if (_wordAt(idx - 1) == 0) break;
+                if (budgetUnits == 0) break;
+                resolveSlot(cur, budgetUnits);
+                progressed = true;
+                g = _battles[w.key];
+                if (((g >> _BG_RESOLVED_SHIFT) & _MASK32) == (g & _MASK32)) ++cur;
+                break;
+            }
+            if (cur != _keeperSlot) {
+                _keeperSlot = cur;
+                progressed = true;
+            }
+        }
+        slot = cur;
+    }
+
+    /// @dev Hand every seat reserved on a lapsed day its pass credit back, metered against the
+    ///      caller's budget and resumable mid-walk: the day's OWN `_bonusCursor` entry is the
+    ///      refund cursor, free because a remainder-zero slot is never a battle and never settles.
+    ///      Restitution is IN KIND — a reservation was a claim on one future day seat, and a pass
+    ///      credit is exactly that claim again.
+    /// @return doneAll The whole day refunded — the separator, and its seven never-opened
+    ///         windows with it, are now crossable.
+    /// @return moved Whether this call refunded anybody — real, one-time progress even when the
+    ///         day is not yet done.
+    function _sweepLapsedDay(uint64 daySlot_, uint24 day, uint64 budgetUnits)
+        private
+        returns (bool doneAll, bool moved)
+    {
+        unchecked {
+            uint64 n = uint32(_dayTickets[daySlot_]);
+            uint64 done = _bonusCursor[daySlot_];
+            uint256 base = uint256(daySlot_) << 64;
+            while (done < n) {
+                if (budgetUnits < _SWEEP_SEAT_UNITS) return (false, moved);
+                budgetUnits -= uint64(_SWEEP_SEAT_UNITS);
+                ++done;
+                moved = true;
+                uint256 header = _bets[base | done];
+                _credit(address(uint160(header)), header & _BET_HIGH_BIT != 0, 1);
+                _bonusCursor[daySlot_] = done;
+            }
+            emit CrapsDayLapsed(day, n);
+            doneAll = true;
+        }
+    }
+
+    /// @notice GAME-only: bank a rolled pass award as credits and nothing else — no reservation
+    ///         attempt, no external call, no way to revert past the saturation the credit lane
+    ///         already announces. The lootbox module's LAST resort when the full delivery lane
+    ///         fails: a pass the table has banked is a pass nobody can lose.
+    function creditPasses(address player, uint32 normal, uint32 high) external {
+        if (msg.sender != _GAME) revert OnlyGame();
+        if (normal != 0) _credit(player, false, normal);
+        if (high != 0) _credit(player, true, high);
     }
 
     /// @notice The Craps progressive's live balance, in FLIP wei — one pool, shared by all nine
@@ -1648,9 +1797,11 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev Settle one loaded bet. The slot's terms and word are supplied by `resolveSlot`, which
     ///      reads each once for the whole batch.
+    /// @dev The last return is the seat's WORK CHARGE in walk units — plumbing, dice and the
+    ///      deferred credit a paying run adds — computed here, where the roll count is in hand.
     function _resolve(uint256 betId, uint64 seat, uint256 header, Window memory w, uint256 word)
         private
-        returns (address player, uint256 paid, uint256 staked, uint256 high)
+        returns (address player, uint256 paid, uint256 staked, uint256 high, uint256 cost)
     {
         Settlement memory s = _settlementOf(betId, header, w, word);
 
@@ -1665,7 +1816,7 @@ contract CrapsBattle is LootboxCraps {
         uint256 sc;
         unchecked {
             sc = (_rankOf(s.stop, s.handsPlayed) << _SC_RANK_SHIFT)
-                | (((s.won / 1 ether) & _SC_WON_MASK) << _SC_WON_SHIFT)
+                | (_wonComponent(s.won) << _SC_WON_SHIFT)
                 | ((header >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK);
         }
         // THE LANE FOLDS FIRST, and the ordering is load-bearing: scoring the main board is what
@@ -1703,6 +1854,7 @@ contract CrapsBattle is LootboxCraps {
             if (header & _BET_HIGH_BIT != 0) {
                 emit CrapsHighRollerPaid(betId, w.key, player, ride, true);
             }
+            cost = _SEAT_UNITS + s.totalRolls / _ROLLS_PER_UNIT + (paid != 0 ? _CREDIT_UNITS : 0);
         }
         emit CrapsBetSettled(betId, player, s.won * scale, paid);
     }
@@ -2118,8 +2270,8 @@ contract CrapsBattle is LootboxCraps {
             (uint256 rawMain, uint256 highBudget) = _drawBudgets(today);
             // HALF THE MAIN ALLOCATION NEVER REACHES A WINDOW. The ladder gets one half; the other
             // is banked in the progressive, here and exactly once — this whole block is behind the
-            // `_bonus` guard set two lines above, so however many times the day is arbed, opened
-            // or advanced, it funds once.
+            // `_bonus` guard set above, so however many times the day is arbed, opened or
+            // advanced, it funds once.
             (uint256 mainBudget, uint256 contribution) = _splitMainBudget(rawMain);
             _boostBudget[today] = mainBudget | (_routineWeight(word) << _BUDGET_W_SHIFT);
             // A day that banked no high action has no high budget, and writing a zero would cost
@@ -2182,6 +2334,12 @@ contract CrapsBattle is LootboxCraps {
         if (_slotIndex[slot] != 0) revert BonusPeriodSpent();
         Window memory w = _slotWindow(slot);
         if (_battles[w.key] == 0) revert BonusPeriodSpent();
+        index = _armSlot(slot, w);
+    }
+
+    /// @dev The arm itself, past the door's checks — shared by the permissionless door above and
+    ///      the scheduled cursor, which has already proven the same preconditions on its own walk.
+    function _armSlot(uint64 slot, Window memory w) private returns (uint48 index) {
         unchecked {
             index = _currentIndex() + 1;
             _slotIndex[slot] = index + 1;
@@ -2713,6 +2871,17 @@ contract CrapsBattle is LootboxCraps {
             }
         }
         return handsPlayed;
+    }
+
+    /// @dev The money component of a composite score: whole FLIP, SATURATED at the field rather
+    ///      than masked into it. The mask would wrap a seventeen-trillion-FLIP return to a small
+    ///      one and rank it WORSE; no constructible battle reaches a fortieth of that, but a
+    ///      comparator's job is to be right past the horizon too.
+    function _wonComponent(uint256 won) internal pure returns (uint256 f) {
+        unchecked {
+            f = won / 1 ether;
+            if (f > _SC_WON_MASK) f = _SC_WON_MASK;
+        }
     }
 
     /// @dev A stored rank back into what it says. Only ever called on a competitive rank.

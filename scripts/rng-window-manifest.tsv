@@ -147,6 +147,7 @@ ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
 ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
 CONSUMER-SEALED	_wordAt	_seedFor	LootboxCraps.sol	READ
 CONSUMER-SEALED	_wordAt	resolveSlot	CrapsBattle.sol	READ
+CONSUMER-SEALED	_wordAt	keepScheduled	CrapsBattle.sol	READ
 ACCESSOR	_wordAt	previewSettlement	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_windowTerms	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_shareOf	CrapsBattle.sol	READ

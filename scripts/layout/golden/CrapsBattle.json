@@ -150,5 +150,13 @@
     "offset": 0,
     "slot": 18,
     "typeLabel": "uint256"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "_keeperSlot",
+    "offset": 0,
+    "slot": 19,
+    "typeLabel": "uint64"
   }
 ]

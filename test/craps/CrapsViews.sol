@@ -329,6 +329,22 @@ contract CrapsViews is CrapsBattle {
         return _PROG_RARE_DIV;
     }
 
+    /// @dev The composite's money component, clamp included.
+    function wonComponentOf(uint256 won) external pure returns (uint256) {
+        return _wonComponent(won);
+    }
+
+    /// @dev How far a slot's field has settled. Production dropped this reader when the crank
+    ///      moved to `keepScheduled`'s own progress report; the suites still grade batches by it.
+    function bonusCursorOf(uint64 slot) external view returns (uint64) {
+        return _bonusCursor[slot];
+    }
+
+    /// @dev The scheduled cursor, raw. Zero until the first day opens.
+    function keeperSlot() external view returns (uint64) {
+        return _keeperSlot;
+    }
+
     /// @dev Write straight into the pool, so a fixture can put a known balance on the table
     ///      without opening thirty days to accumulate one.
     function seedProgressive(uint256 amount) external {

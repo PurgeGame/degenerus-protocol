@@ -51,18 +51,13 @@ interface IGameRouter {
 ///         completion flags alone, skipping the full `playerQuestStates` tuple
 ///         (streak / lastCompletedDay / progress) and its per-slot validity and
 ///         native-unit conversion work.
-/// @dev The craps table's keeper surface. Both calls are permissionless ON THE TABLE — the crank
-///      only makes sure somebody makes them. `armBonusWindow` shuts a window that has stopped
-///      taking bets and asks for the word that settles it; `resolveSlot` walks a shut field
-///      forward from its cursor for as much GAS OF WORK as it is given — the second argument is
-///      an allowance, not a seat count; `bonusCursorOf` is how a paying crank tells a real batch
-///      from a call on a field that is already finished, since that call returns silently.
+/// @dev The craps table's keeper surface: ONE call, permissionless on the table — the crank only
+///      makes sure somebody makes it. The table owns its own scheduled cursor, so it knows which
+///      slot is the oldest still owing work; `keepScheduled` does the next piece of that work
+///      within the gas allowance and reports whether anything actually moved, which is the whole
+///      of what a bounty-paying caller needs to know.
 interface ICrapsKeeper {
-    function bonusCursorOf(uint64 slot) external view returns (uint64);
-
-    function armBonusWindow(uint64 slot) external returns (uint48);
-
-    function resolveSlot(uint64 slot, uint64 gasBudget) external;
+    function keepScheduled(uint64 budgetUnits) external returns (bool progressed, uint64 slot);
 }
 
 interface IQuestCompletionView {
@@ -372,56 +367,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      other permissionless batch resolver in the protocol.
     uint256 internal constant CRAPS_KEEP_FLAT_FLIP = 1 ether;
 
-    /// @dev What one walk unit is worth in GAS, and the whole conversion between the two legs.
-    ///      The box walk is calibrated at ≈4.7k a unit across every item kind (see
-    ///      `test/gas/OpenWalkCompositionGas.t.sol`), so pricing the craps leg's allowance at the
-    ///      same rate is what keeps the three legs on ONE per-transaction envelope rather than
-    ///      three independent ones that can stack.
-    ///
-    ///      ⚠ THE CRAPS LEG NO LONGER COUNTS SEATS. A seat's cost is not a constant — a
-    ///      three-roll bust and a four-hundred-roll one differ by two orders of magnitude, and
-    ///      whether the run PAYS decides whether it writes a coinflip credit — so a head count
-    ///      prices the mean and is wrong on both tails. What is handed down is a GAS ALLOWANCE
-    ///      and the table meters itself against it: a bust-heavy field walks far more seats than
-    ///      the old flat eighty, and a correlated hot one walks fewer.
-    uint256 internal constant CRAPS_GAS_PER_UNIT = 4_700;
-
-    /// @dev Held back from the allowance for everything that happens AFTER the table returns:
-    ///      the arm probe above it, the cursor reads either side, the bounty `creditFlip`, the
-    ///      `MinerBounty` log and the router's own tail. The table's meter cannot see any of it,
-    ///      so the router subtracts it rather than letting a full-budget crank overshoot by
-    ///      exactly that much.
-    ///
-    ///      MEASURED at 68,247 gas — the same field settled through `game.mineFlip()` against
-    ///      `resolveSlot` called directly (`test_probe_theRouterTailOverTheResolver`). Held at
-    ///      100,000 for the margin, since the tail carries a cold `creditFlip` to a keeper that
-    ///      has never been paid before.
-    uint256 internal constant CRAPS_ROUTER_TAIL_GAS = 100_000;
+    /// @dev THE CRAPS LEG SPENDS THE SAME WALK UNITS THE BOX LEGS DO — no gas conversion at all.
+    ///      The table charges each settled seat its own outcome in these units (`_SEAT_UNITS` and
+    ///      friends on `CrapsBattle`), so the three legs genuinely share ONE deterministic
+    ///      per-transaction envelope: whatever the afking walk and the human sweep left of
+    ///      `OPEN_WEIGHT_BUDGET` is handed down as-is, less a small reserve for the router's own
+    ///      tail — the cursor reads, the bounty credit, the `MinerBounty` log (~100k gas ≈ 22
+    ///      units, held at 32 for margin).
+    uint256 internal constant CRAPS_ROUTER_TAIL_UNITS = 32;
 
     /// @dev Below this the leg passes ZERO rather than a token allowance. Any nonzero budget
-    ///      completes at least one seat — the table's meter is read after a seat, not before —
-    ///      so handing it a sliver would buy a whole seat's gas with a sliver's worth of budget
-    ///      and reintroduce exactly the stacking this shares an envelope to prevent.
-    ///
-    ///      A DIRECT permissionless caller is deliberately not clamped: it may ask for one seat
-    ///      with a tiny budget and pay for it out of its own gas.
-    uint256 internal constant CRAPS_MIN_START_GAS = 300_000;
-
-    /// @dev THE CRAPS WINDOW LADDER, restated here so the crank can find its work without a call.
-    ///
-    ///      ⚠ These five MUST hold the values `CrapsBattle` shuts its windows on. They are
-    ///      restated rather than read because a keeper leg that pays a cross-contract call just to
-    ///      learn the time of day is a leg that costs more than the work it finds — and reading it
-    ///      cost `CrapsBattle` 57 bytes of an EIP-170 margin it does not have. The duplication is
-    ///      held honest by a test that walks a day of timestamps and pins this derivation against
-    ///      the table's own `currentBonusSlot`, so a drift fails CI rather than a window.
-    uint256 internal constant CRAPS_DAY_START = 82_620;
-    uint256 internal constant CRAPS_EVENT_CLOSE = 20 minutes;
-    uint256 internal constant CRAPS_CLOCK_ALIGN = 3 minutes;
-    uint256 internal constant CRAPS_PERIOD = 4 hours;
-    uint256 internal constant CRAPS_PERIODS_PER_DAY = 7;
-    uint256 internal constant CRAPS_EVENT_LEAD = 15 minutes;
-    uint256 internal constant CRAPS_SLOTS_PER_DAY = 8;
+    ///      completes at least one seat — the table charges after a seat, not before — so handing
+    ///      it a sliver would buy a whole seat's work with a sliver's worth of budget and
+    ///      reintroduce exactly the stacking this shares an envelope to prevent. A DIRECT
+    ///      permissionless caller is deliberately not clamped.
+    uint256 internal constant CRAPS_MIN_START_UNITS = 64;
 
     /// @dev The craps table itself, pinned once. The address is a compile-time constant, so this
     ///      is the same bytecode as writing the cast at every call site — it just stops the keeper
@@ -1987,7 +1947,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 uint256 k = afkKneeCredit < OPEN_KNEE ? afkKneeCredit : OPEN_KNEE;
                 bountyEarned = (unit * k) / OPEN_KNEE;
                 bountyKind = MINER_BOUNTY_BOX_OPEN;
-            } else if (_crapsKeep(_crapsGasBudget(spentUnits))) {
+            } else if (_crapsKeep(_crapsUnitBudget(spentUnits))) {
                 // NO BOX OPENED, so the crank goes to the craps table — LAST, and only here. A
                 // call that spent its weight budget opening boxes is already ~9.1M of gas, and
                 // stacking a settle batch on top of that would push it past the ceiling; the
@@ -2039,49 +1999,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
 
-    /// @dev THE SLOT OF THE WINDOW STILL TAKING BETS, from the clock alone. Everything strictly
-    ///      below it has stopped, so `open - 1` is the window whose close has just passed — the
-    ///      one and only slot this leg touches.
-    ///
-    ///      A mirror of `CrapsBattle._currentBonusSlot`, and deliberately shaped the same way so
-    ///      the two read as one derivation: `period` counts the windows whose CLOSING time has
-    ///      arrived rather than the part of the day it is, the opener may be shut twenty minutes
-    ///      in, and the event shuts a quarter-hour EARLY — past its lead the day has no window
-    ///      still taking bets and `period` runs one past the last of them.
-    function _crapsOpenSlot() private view returns (uint64) {
-        unchecked {
-            uint256 sinceStart = block.timestamp - CRAPS_DAY_START;
-            uint256 day = sinceStart /
-                1 days -
-                uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) +
-                1;
-            uint256 elapsed = sinceStart % 1 days;
-            uint256 period = elapsed >= 1 days - CRAPS_EVENT_LEAD
-                ? CRAPS_PERIODS_PER_DAY
-                : (
-                    elapsed < CRAPS_EVENT_CLOSE + CRAPS_CLOCK_ALIGN
-                        ? 0
-                        : 1 + (elapsed - CRAPS_CLOCK_ALIGN) / CRAPS_PERIOD
-                );
-            return uint64(day * CRAPS_SLOTS_PER_DAY + period + 1);
-        }
-    }
-
-    /// @notice Where the craps window schedule stands: the slot of the window still taking bets.
-    /// @dev The crank's own derivation, exposed. It reads nothing but the clock and a compile-time
-    ///      constant, so it answers identically whether it is called on this module or reached
-    ///      through the Game — which is what lets the drift gate hold it against the table's own
-    ///      ladder directly, and what lets an off-chain keeper ask the same question for free.
-    function keeperCrapsOpenSlot() external view returns (uint64) {
-        return _crapsOpenSlot();
-    }
-
     /// @dev The craps leg's own budget derivation, exposed for the same reason the slot one is:
     ///      it reads nothing but a compile-time constant, so a suite can grade the shared
     ///      envelope — and the zero it must return on a fully spent box walk — without cranking
     ///      a whole `mineFlip`.
-    function keeperCrapsGasBudget(uint256 spentUnits) external pure returns (uint64) {
-        return _crapsGasBudget(spentUnits);
+    function keeperCrapsUnitBudget(uint256 spentUnits) external pure returns (uint64) {
+        return _crapsUnitBudget(spentUnits);
     }
 
     /// @dev The shared walk budget the three legs divide, so a fixture names it once.
@@ -2089,83 +2012,43 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return OPEN_WEIGHT_BUDGET;
     }
 
-    /// @dev The GAS the craps leg may spend on a call whose box legs already burned `spentUnits`
-    ///      of the shared walk budget. Converting the REMAINDER at `CRAPS_GAS_PER_UNIT` is what
-    ///      keeps the three legs on one per-transaction envelope instead of three independent
-    ///      ones that can stack.
+    /// @dev The WORK the craps leg may spend, in the same walk units the box legs already burned
+    ///      `spentUnits` of — the remainder of one shared budget, so the three legs cannot stack.
     ///
     ///      SATURATING, and that is a fix rather than a nicety. The old form divided the spend
     ///      into seats first, so a box walk that consumed the WHOLE 1,920-unit budget still left
     ///      `80 - 1920/27 = 9` seats of craps work stacked on top of a full-budget call. Taking
-    ///      the remainder in units and flooring it at zero is what makes a spent budget mean
-    ///      spent.
-    function _crapsGasBudget(uint256 spentUnits) private pure returns (uint64) {
+    ///      the raw remainder and flooring it at zero is what makes a spent budget mean spent.
+    function _crapsUnitBudget(uint256 spentUnits) private pure returns (uint64) {
         unchecked {
             if (spentUnits >= OPEN_WEIGHT_BUDGET) return 0;
-            uint256 allowance = (OPEN_WEIGHT_BUDGET - spentUnits) * CRAPS_GAS_PER_UNIT;
-            if (allowance <= CRAPS_ROUTER_TAIL_GAS) return 0;
-            allowance -= CRAPS_ROUTER_TAIL_GAS;
-            return allowance < CRAPS_MIN_START_GAS ? 0 : uint64(allowance);
+            uint256 allowance = OPEN_WEIGHT_BUDGET - spentUnits;
+            if (allowance <= CRAPS_ROUTER_TAIL_UNITS) return 0;
+            allowance -= CRAPS_ROUTER_TAIL_UNITS;
+            return allowance < CRAPS_MIN_START_UNITS ? 0 : uint64(allowance);
         }
     }
 
-    /// @dev THE CRAPS LEG. The table's own doors are already permissionless — anybody may shut a
-    ///      window that has stopped taking bets, and anybody may walk a shut field forward — so
-    ///      this adds no authority. What it adds is that the protocol's own crank does it, and so
-    ///      a window is never left hanging on nobody's initiative.
-    ///
-    ///      TWO JOBS, IN THE ORDER THEY COME UP. Shutting a window takes the next table index and
-    ///      asks for the word that will settle it; that word cannot exist in the same block, so a
-    ///      window shut here is walked by a LATER crank. The walk therefore looks back over
-    ///      windows already shut rather than at the one it just shut.
-    ///
-    ///      THE ARM IS AVAILABLE EXACTLY WHEN THE REQUEST IS. `armBonusWindow` asks the lootbox
-    ///      lane fail-open — a locked lane, a request already in flight or a gas ceiling all leave
-    ///      the index to fill on that lane's own schedule — so the clock is never hostage to the
-    ///      RNG. When there is nothing to arm the call reverts, and that is this leg's no-work
-    ///      signal and nothing worse: every probe below is caught.
-    ///
-    ///      ONE SLOT, THE ONE THAT MOST RECENTLY SHUT. There is no search: `_crapsOpenSlot` names
-    ///      the window still taking bets, so the one below it is the one whose close just passed.
-    ///      Both calls are sent blind and caught — the table refuses whatever does not apply, and
-    ///      a refusal is this leg's no-work signal and nothing worse. An older window nobody got
-    ///      to is not stranded by that: every door on the table stays permissionless, and the
-    ///      crank is a backstop rather than the only way in.
-    /// @param gasBudget How much GAS OF WORK the walk may spend — what the box legs left of the
-    ///        call's shared weight budget, priced at `CRAPS_GAS_PER_UNIT`. The table meters
-    ///        itself against it and stops on the first seat that crosses it, so a bust-heavy
-    ///        field walks many more seats than a paid-heavy one for the same allowance. Zero
-    ///        still ARMS: shutting a window is one cheap state change and it is the
+    /// @dev THE CRAPS LEG. The table's doors are permissionless and its SCHEDULED CURSOR is its
+    ///      own: `keepScheduled` names the oldest slot still owing work and does the next piece —
+    ///      crossing spent slots, sweeping a lapsed day's reservations back to credits, shutting
+    ///      a closed window, or settling a batch within the allowance. This crank adds no
+    ///      authority; what it adds is that the protocol's own keeper drives that cursor, so no
+    ///      scheduled window is ever left hanging on nobody's initiative — the `openSlot - 1`
+    ///      probe this replaces abandoned any field that outlasted one budget.
+    /// @param budgetUnits How much WORK the walk may spend, in the shared walk units the box
+    ///        legs left of the call's weight budget. Zero still does the
+    ///        cheap lifecycle work: shutting a window is one state change and it is the
     ///        time-critical half, since a window left open past its close is one the field can
     ///        keep re-tuning against.
-    /// @return worked Whether a window was shut or a field's cursor actually advanced — the gate
-    ///         on both the flat bounty and the caller's no-work revert.
-    function _crapsKeep(uint64 gasBudget) private returns (bool worked) {
-        uint64 open = _crapsOpenSlot();
-        if (open == 0) return false;
-        uint64 slot;
-        unchecked {
-            slot = open - 1;
-        }
-
-        // THE ARM, and it is available exactly when the RNG request is: `armBonusWindow` asks the
-        // lootbox lane fail-open, so a locked lane, a request already in flight or a gas ceiling
-        // all leave the index to fill on that lane's own schedule and the clock is never hostage
-        // to it. A window that shuts here has taken an index whose word cannot exist in this
-        // block, so there is nothing left to walk on it — take the arm and stop.
-        try craps.armBonusWindow(slot) returns (uint48) {
-            return true;
-        } catch {}
-
-        // ZERO STILL ARMED. The arm above is one cheap state change and belongs to the clock, not
-        // to the work envelope; only the settle walk is budgeted.
-        if (gasBudget == 0) return false;
-        // Already shut, then. The cursor either side is the only honest test of whether the walk
-        // did anything: a field that is already finished returns from `resolveSlot` SILENTLY, so
-        // a bounty gated on the call not reverting would pay for nothing.
-        uint64 before = craps.bonusCursorOf(slot);
-        try craps.resolveSlot(slot, gasBudget) {
-            worked = craps.bonusCursorOf(slot) != before;
+    /// @return worked Whether the table reports real progress — the gate on the flat bounty and
+    ///         on the caller's no-work revert.
+    function _crapsKeep(uint64 budgetUnits) private returns (bool worked) {
+        // The table's own cursor decides what is owed and does the next piece of it; the crank
+        // pays only when the table says something moved. Caught, so a table defect can never
+        // take the whole crank down with it.
+        try craps.keepScheduled(budgetUnits) returns (bool progressed, uint64) {
+            worked = progressed;
         } catch {}
     }
 

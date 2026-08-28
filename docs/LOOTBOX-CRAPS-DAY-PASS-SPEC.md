@@ -534,9 +534,16 @@ This is deliberate:
 - quest-streak credit occurs on actual entry;
 - `openBonusDay`, `advanceGame`, and settlement never iterate reservation holders.
 
-If the player does not enter during the target day's full-day lane, the reservation expires with
-no refund or action credit. A prepaid reservation's burn remains deleted. The historical mapping
-word may remain; no cleanup sweep is required.
+A reservation IS the seat: it is written as a whole-day bet at reserve time, plays all seven
+windows of a day that opens, and settles like any other ticket — there is nothing to show up for
+and nothing that lapses through inattention.
+
+The one day that cannot settle it is a day the advance never opened (a protocol stall). Such a
+LAPSED day is not replayed: the scheduled cursor sweeps it, hands every reserved seat one pass
+credit of its own lane back (`CrapsPassesCredited`, then `CrapsDayLapsed`), and steps over the
+whole day. Restitution is in kind — a reservation was a claim on one future day seat, and the
+credit is exactly that claim again. Nothing expires and nothing is stranded; earlier drafts of
+this spec that said a missed reservation "expires with no refund" are superseded by this rule.
 
 ## 10. Craps Day-State Packing
 

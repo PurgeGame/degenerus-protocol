@@ -51,6 +51,8 @@ interface IWWXRP {
 /// @notice The craps table's day-pass door. Called ONCE per lootbox entry that rolled any pass,
 ///         never once per box, and it never reverts on an unavailable day.
 interface ICrapsPassDelivery {
+    function creditPasses(address player, uint32 normal, uint32 high) external;
+
     function deliverPasses(address player, uint32 normal, uint32 high) external returns (uint24 day);
 }
 
@@ -1017,11 +1019,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      box — and let it place at most one of them on tomorrow.
     ///
     ///      FAIL-OPEN, AND THE PASSES ARE NEVER LOST. A bounded stipend caps what a broken table
-    ///      could burn, and any failure at all is swallowed: an unreachable craps contract must
-    ///      not wedge lootbox settlement, which is a permissionless sweep other players depend on.
-    ///      The award is announced from HERE either way, so the log records what was rolled even
-    ///      on the path where the table never took it — and a pass the table did not bank is a
-    ///      pass nobody owes, which is exactly what the reverted state says.
+    ///      could burn. A failure of the FULL lane no longer swallows the award: it falls back to
+    ///      the table's credit-only door, and only if both fail does the entry revert — retryable,
+    ///      never silently consumed. The roll is announced from HERE, and the table's own
+    ///      `CrapsPassesCredited`/`CrapsDayReserved` logs say which disposition it landed in, so
+    ///      an indexer reconciles every rolled pass.
     function _deliverPasses(address player, BoxAcc memory acc) private {
         uint24 day;
         try ICrapsPassDelivery(ContractAddresses.CRAPS).deliverPasses{gas: PASS_DELIVERY_GAS}(
@@ -1030,7 +1032,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint24 reserved
         ) {
             day = reserved;
-        } catch {}
+        } catch {
+            // A PASS IS NEVER LOST. The full path can fail on its stipend — the reservation leg
+            // reads the player's standing off the Game — so the whole award falls back to the
+            // credit-only lane, which makes no external call at all. If even THAT fails, the box
+            // entry reverts and stays retryable: consuming it while recording nothing would be an
+            // award the logs assert and nobody owes.
+            ICrapsPassDelivery(ContractAddresses.CRAPS).creditPasses{gas: PASS_DELIVERY_GAS}(
+                player, acc.passNormal, acc.passHigh
+            );
+        }
         emit LootBoxCrapsPasses(player, acc.passNormal, acc.passHigh, day);
     }
 

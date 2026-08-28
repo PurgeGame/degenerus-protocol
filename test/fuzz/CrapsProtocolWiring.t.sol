@@ -38,8 +38,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     address internal constant STRANGER = address(0xDEAD);
     address internal constant KEEPER = address(0xC0FFEE);
 
-    /// @dev The afking module reached DIRECTLY, not through the Game. `keeperCrapsOpenSlot` reads
-    ///      only the clock and a compile-time constant, so it needs no storage context.
+    /// @dev The afking module reached DIRECTLY, not through the Game — its remaining keeper
+    ///      readers are pure, so they need no storage context.
     GameAfkingModule internal constant keeper = GameAfkingModule(ContractAddresses.GAME_AFKING_MODULE);
 
     function setUp() public {
@@ -213,6 +213,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     function test_mineFlipShutsAWindowAndWalksItsField() public {
         // The fixture clock sits an hour into a protocol day, so period 1 is still taking bets
         // and its close is the next one to come round.
+        // Genesis is a warm-up day with no windows; play from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
         uint24 today = crapsBattle.currentDayIndex();
         _landDayWord(today, uint256(keccak256("mineflip craps day")));
         vm.prank(ContractAddresses.GAME);
@@ -231,21 +233,20 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
         assertEq(crapsBattle.slotIndexOf(slot), 0, "the window was armed before anything shut it");
 
-        // Past period 1's close, still inside the same protocol day so no advance is owed.
-        vm.warp(block.timestamp + 4 hours);
-        assertFalse(game.advanceDue(), "the fixture drifted into an advance; the leg would not be reached");
+        // Past period 1's close. The genesis+1 warp leaves a day's advance owed, and that is
+        // fine: the crank loop below absorbs the advance arms first — craps is the LAST category,
+        // exactly as production orders it — and the bounty arithmetic counts only craps cranks.
+        vm.warp(vm.getBlockTimestamp() + 4 hours);
 
-        // ── The ARM. One flat FLIP, and the window is shut.
-        uint256 before = coinflip.coinflipAmount(KEEPER);
+        // ── The ARM. The cursor works OLDEST-FIRST, so period 0's window is shut and settled
+        // before this one is touched — each crank does one piece and pays one flat FLIP for it.
         vm.recordLogs();
-        vm.prank(KEEPER);
-        game.mineFlip();
+        (uint48 index,) = _crankUntilArmed(slot);
         // The CATEGORY, not just the amount: the crank has three other legs and the event is how
-        // an indexer tells which one earned.
+        // an indexer tells which one earned. The loop may have paid advance-category bounties on
+        // its way — what matters here is that the LAST crank, the one that armed the window, was
+        // booked as the craps leg.
         assertEq(_minerBountyKind(vm.getRecordedLogs()), 4, "the credit was not booked as the craps leg");
-        uint48 index = crapsBattle.slotIndexOf(slot);
-        assertGt(index, 0, "the crank did not shut the window that had stopped taking bets");
-        assertEq(coinflip.coinflipAmount(KEEPER) - before, 1 ether, "the arm did not pay the flat FLIP");
         assertEq(coin.balanceOf(KEEPER), 0, "the craps bounty minted liquid FLIP");
 
         // The word cannot exist in the block that took the index, which is exactly why the walk
@@ -254,7 +255,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.store(address(game), wordSlot, bytes32(uint256(keccak256("mineflip craps table"))));
 
         // ── The WALK. The cursor moves, and the same flat FLIP pays for it.
-        before = coinflip.coinflipAmount(KEEPER);
+        uint256 before = coinflip.coinflipAmount(KEEPER);
         assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field had already been walked");
         vm.prank(KEEPER);
         game.mineFlip();
@@ -267,6 +268,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     ///      would push the crank past the ceiling the protocol sizes every chunk against. So a
     ///      window that is owed a shutting waits for a crank that is not advancing.
     function test_theAdvanceLegStillPreemptsTheCrapsLeg() public {
+        // Genesis is a warm-up day with no windows; play from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
         uint24 today = crapsBattle.currentDayIndex();
         _landDayWord(today, uint256(keccak256("mineflip craps day")));
         vm.prank(ContractAddresses.GAME);
@@ -290,6 +293,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     ///      than a paying one for the same gas, and the cursor carries a deeper field to the next
     ///      crank either way.
     function test_oneCrankSpendsItsWholeWorkBudgetAndStrandsNothing() public {
+        // Genesis is a warm-up day with no windows; play from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
         uint24 today = crapsBattle.currentDayIndex();
         _landDayWord(today, uint256(keccak256("mineflip craps day")));
         vm.prank(ContractAddresses.GAME);
@@ -311,9 +316,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
         vm.warp(block.timestamp + 4 hours);
-        vm.prank(KEEPER);
-        game.mineFlip(); // the arm
-        uint48 index = crapsBattle.slotIndexOf(slot);
+        // OLDEST-FIRST: the cursor settles period 0's window before this one arms.
+        (uint48 index,) = _crankUntilArmed(slot);
         vm.store(address(game), keccak256(abi.encode(uint256(index - 1), uint256(34))), bytes32(uint256(1)));
 
         uint256 g = gasleft();
@@ -405,13 +409,41 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     ///      the crank paid nothing at all.
     function _minerBountyKind(Vm.Log[] memory logs) internal pure returns (uint8) {
         bytes32 sig = keccak256("MinerBounty(uint8,address,uint256)");
+        // The LAST bounty in the stream: a crank loop may pay advance-category bounties on its
+        // way to the craps leg, and the final crank is the one under test.
+        uint8 last;
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length != 0 && logs[i].topics[0] == sig) {
                 (uint8 kind, ) = abi.decode(logs[i].data, (uint8, uint256));
-                return kind;
+                last = kind;
             }
         }
-        return 0;
+        return last;
+    }
+
+    /// @dev Crank `mineFlip` until `slot` is armed, feeding the CURSOR's own pending word each
+    ///      round: the scheduled keeper works oldest-first and will not pass an armed field whose
+    ///      word has not landed, so a fixture that wants a later window shut walks the earlier
+    ///      ones through settlement the same way the live protocol would.
+    /// @return index The armed slot's table index.
+    /// @return cranks How many cranks it took — each one paid the flat bounty for real progress.
+    function _crankUntilArmed(uint64 slot) internal returns (uint48 index, uint256 cranks) {
+        for (; cranks < 24 && index == 0; ) {
+            uint64 at = crapsBattle.keeperSlot();
+            uint48 pending = crapsBattle.slotIndexOf(at);
+            if (pending != 0 && crapsBattle.wordAt(pending - 1) == 0) {
+                _landTableWordW(pending - 1, uint256(keccak256(abi.encode("cursor-feed", at))));
+            }
+            vm.prank(KEEPER);
+            game.mineFlip();
+            ++cranks;
+            index = crapsBattle.slotIndexOf(slot);
+        }
+        assertGt(index, 0, "the cursor never armed the window under test");
+    }
+
+    function _landTableWordW(uint48 index, uint256 word) internal {
+        vm.store(address(game), keccak256(abi.encode(uint256(index), uint256(34))), bytes32(word));
     }
 
     /// @dev Land a day's committed word in the Game slot the table reads it out of.
@@ -420,35 +452,6 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertEq(crapsBattle.dailyWordAt(day), word, "the day word did not land where the table reads it");
     }
 
-    /// @dev THE DUPLICATED LADDER, held to the table's own. The crank finds its work from the
-    ///      clock rather than by calling the table for the time of day — a cross-contract read
-    ///      would cost more than the work it locates, and it cost `CrapsBattle` 57 bytes of an
-    ///      EIP-170 margin it does not have. What makes that safe is this: a whole protocol day
-    ///      of timestamps, minute by minute across every close, with the module's derivation held
-    ///      to `_currentBonusSlot` at each one. A drift fails here rather than in a window.
-    function test_theKeepersWindowLadderMatchesTheTables() public {
-        uint256 dayStart = block.timestamp - ((block.timestamp - 82_620) % 1 days);
-        uint256 checked;
-        // Every minute of a full day is 1,440 samples; step by one minute across the whole day so
-        // no close — the opener's, the five routine ones, or the event's early one — is skipped.
-        for (uint256 m = 0; m < 1440; ++m) {
-            vm.warp(dayStart + m * 1 minutes);
-            (,, uint256 want) = crapsBattle.currentBonusSlot();
-            assertEq(uint256(keeper.keeperCrapsOpenSlot()), want, "the keeper's ladder left the table's");
-            ++checked;
-        }
-        assertEq(checked, 1440, "the sweep did not walk a whole day");
-
-        // And the boundaries either side, where an off-by-one hides.
-        uint256[6] memory edges =
-            [uint256(23 minutes), 4 hours + 3 minutes, 8 hours + 3 minutes, 12 hours + 3 minutes, 1 days - 15 minutes, 1 days - 1];
-        for (uint256 i = 0; i < 6; ++i) {
-            vm.warp(dayStart + edges[i]);
-            (,, uint256 want) = crapsBattle.currentBonusSlot();
-            assertEq(uint256(keeper.keeperCrapsOpenSlot()), want, "the ladders disagree on a close boundary");
-            vm.warp(dayStart + edges[i] - 1);
-            (,, want) = crapsBattle.currentBonusSlot();
-            assertEq(uint256(keeper.keeperCrapsOpenSlot()), want, "the ladders disagree a second before a close");
-        }
-    }
+    // The keeper's duplicated window ladder — and the drift gate that held it to the table's —
+    // are gone: the table owns the scheduled cursor now, so there is no second copy to drift.
 }

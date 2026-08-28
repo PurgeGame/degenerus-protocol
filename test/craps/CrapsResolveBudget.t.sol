@@ -17,12 +17,8 @@ contract BudgetHarness is CrapsViews {
         return _RESOLVE_MAX_SEATS;
     }
 
-    function creditReserveGas() external pure returns (uint256) {
-        return _CREDIT_RESERVE_GAS;
-    }
-
-    function resolveTailGas() external pure returns (uint256) {
-        return _RESOLVE_TAIL_GAS;
+    function seatUnits() external pure returns (uint256, uint256, uint256) {
+        return (_SEAT_UNITS, _ROLLS_PER_UNIT, _CREDIT_UNITS);
     }
 
     function _daySlotOfPub(uint24 day) public pure returns (uint256) {
@@ -47,6 +43,9 @@ contract CrapsResolveBudgetTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new BudgetHarness();
+        // The deployment day is a Craps warm-up day with no windows; every fixture plays
+        // from genesis + 1, the first day the table opens.
+        vm.warp(block.timestamp + 1 days);
         _setIndex(4);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }
@@ -140,7 +139,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             } else if (mode == 1) {
                 for (uint256 i = 0; i < FIELD + 8; ++i) craps.resolveSlot(slot, 1);
             } else {
-                for (uint256 i = 0; i < 12; ++i) craps.resolveSlot(slot, 900_000);
+                for (uint256 i = 0; i < 12; ++i) craps.resolveSlot(slot, 180);
             }
 
             CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
@@ -179,7 +178,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             bookedBefore = booked;
 
             vm.recordLogs();
-            craps.resolveSlot(slot, 700_000);
+            craps.resolveSlot(slot, 150);
             uint256 settled = _countSig(vm.getRecordedLogs(), keccak256("CrapsBetSettled(uint256,address,uint256,uint256)"));
             uint64 after_ = craps.bonusCursorOf(slot);
             // EXACTLY the seats that settled, and every one of them contiguous with the last.
@@ -245,47 +244,31 @@ contract CrapsResolveBudgetTest is CrapsPins {
     // C. Liveness
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev A BUDGET IS A REQUEST, NOT A PROMISE OF GAS, and asking for more than you supply is
-    ///      safe in both directions.
-    ///
-    ///      THE FLOOR SATURATES. `stopAt` is `startGas - gasBudget` clamped at zero, so a caller
-    ///      that asks for nine million with a hundred thousand behind it does not get a nonsense
-    ///      floor — it gets zero, and then the TAIL RESERVE is what actually stops the walk while
-    ///      there is still enough gas to write the cursor, book the action and pay the batch. The
-    ///      call therefore does as much as it can afford and commits that consistently.
-    ///
-    ///      Below one seat it simply runs out, and because the cursor is written after the walk,
-    ///      nothing is committed at all.
-    function test_anUnderfundedCallerDegradesRatherThanStranding() public {
+    /// @dev AN UNDERFUNDED CALLER REVERTS WHOLE AND STRANDS NOTHING. The budget is deterministic
+    ///      WORK UNITS, not measured gas — so a caller that asks for more work than its gas can
+    ///      execute simply runs out, the whole transaction rolls back, and the cursor never moves.
+    ///      Nothing is half-committed, and the next adequately funded call resumes exactly where
+    ///      the last complete one stopped.
+    function test_anUnderfundedCallerRevertsWholeAndStrandsNothing() public {
         (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("underfunded")));
         craps.resolveSlot(slot, 1);
         uint64 marked = craps.bonusCursorOf(slot);
         assertEq(marked, 1, "the fixture did not settle its first seat");
 
-        // TOO LITTLE FOR EVEN ONE SEAT: out of gas, and nothing committed.
+        // A big work budget behind far too little gas: out of gas, nothing committed.
         (bool ok,) = address(craps).call{gas: 60_000}(
-            abi.encodeWithSignature("resolveSlot(uint64,uint64)", slot, uint64(9_000_000))
+            abi.encodeWithSignature("resolveSlot(uint64,uint64)", slot, uint64(100_000))
         );
         assertFalse(ok, "a call below one seat's gas did not run out");
         assertEq(craps.bonusCursorOf(slot), marked, "a reverted call committed part of a walk");
 
-        // ENOUGH FOR SOME OF IT: an over-large budget with modest gas commits a shorter walk
-        // rather than reverting, and every seat it claims is really settled.
-        (ok,) = address(craps).call{gas: 400_000}(
-            abi.encodeWithSignature("resolveSlot(uint64,uint64)", slot, uint64(9_000_000))
-        );
-        assertTrue(ok, "a call with real gas behind an over-large budget did not complete");
-        uint64 shortWalk = craps.bonusCursorOf(slot);
-        assertGt(shortWalk, marked, "the affordable walk committed nothing");
-        assertLt(shortWalk, craps.battleOf(craps.keyOfSlot(slot)).entrants, "the short walk finished the field");
-
         // And the field is still perfectly live, from exactly where it stopped.
         craps.resolveSlot(slot, WHOLE_FIELD);
-        assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized, "the field was stranded by the short call");
+        assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized, "the field was stranded by the failed call");
     }
 
-    /// @dev AN ALL-BUST FIELD STILL STOPS. The reserve is per PAID seat, so a field that pays
-    ///      nobody reserves nothing — and it is the measured replay gas, not an outcome label,
+    /// @dev AN ALL-BUST FIELD STILL STOPS. The credit charge is per PAID seat, so a field that
+    ///      pays nobody charges none of it — and it is the ROLL count, not an outcome label,
     ///      that has to stop the walk.
     function test_aFieldThatPaysNobodyStillStopsOnItsBudget() public {
         // Searched rather than asserted: a word where the whole field busts.
@@ -293,7 +276,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         for (uint256 i = 0; i < 64; ++i) {
             (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256(abi.encode("allbust", i))));
             vm.recordLogs();
-            craps.resolveSlot(slot, 1_400_000);
+            craps.resolveSlot(slot, 300);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             uint256 settled = _countSig(logs, keccak256("CrapsBetSettled(uint256,address,uint256,uint256)"));
             uint256 paidSeats = _paidIn(logs);

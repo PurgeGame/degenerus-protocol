@@ -98,6 +98,8 @@ contract CrapsShooterBoostTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new BoostHarness();
+        // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
         _setIndex(4);
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);

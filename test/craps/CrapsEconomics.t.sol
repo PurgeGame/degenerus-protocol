@@ -121,6 +121,8 @@ contract CrapsEconomicsTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new EconHarness();
+        // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
         // Worst case for the protocol: every comp pays the 75% ceiling.
         game.setScore(player, 65_534);
     }

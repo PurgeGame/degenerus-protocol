@@ -66,6 +66,9 @@ contract CrapsHighRollerTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new HighHarness();
+        // The deployment day is a Craps warm-up day with no windows; every fixture plays
+        // from genesis + 1, the first day the table opens.
+        vm.warp(block.timestamp + 1 days);
         _setIndex(4);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
@@ -663,6 +666,9 @@ contract CrapsHighRollerGasTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new HighHarness();
+        // The deployment day is a Craps warm-up day with no windows; every fixture plays
+        // from genesis + 1, the first day the table opens.
+        vm.warp(block.timestamp + 1 days);
         _setIndex(4);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         for (uint256 i = 0; i < players.length; ++i) {

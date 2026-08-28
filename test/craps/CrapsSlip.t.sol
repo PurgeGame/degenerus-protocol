@@ -171,6 +171,8 @@ contract CrapsSlipTest is CrapsPins {
     function setUp() public {
         _installPins();
         craps = new CrapsSlipHarness();
+        // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
+        vm.warp(block.timestamp + 1 days);
         _setIndex(4);
         // Clear of the sybil floor. This suite prices a SEAT — what a placement burns and what a
         // settlement pays back — so the low-score surcharge must not ride silently inside every
