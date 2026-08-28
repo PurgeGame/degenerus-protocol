@@ -432,7 +432,7 @@ contract CrapsBattle is LootboxCraps {
     //   bits   0..159  player
     //   bits 160..189  ten three-bit chip counts; all ten zero means draw all ten
     //   bits 190..205  entry-time standing
-    //   bits 206..213  entry multiple minus one
+    //   bits 206..213  unused (the entry multiple is carried on the event, never stored)
     //   bits 214..216  the period a day-wide entry began at, plus one
     //   bits 217..223  high-roller flags: bit 217 alone on a window-local slip, bit 217 + p per
     //                  period on a day ticket
@@ -454,18 +454,18 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _BET_SCORE_SHIFT = 190;
     uint256 internal constant _BET_SCORE_MASK = 0xFFFF;
 
-    /// @dev Bits 206..213 of the bet word hold the entry multiple MINUS ONE, so the whole 1..256
-    ///      range fits in a byte and an untouched word reads as a single ordinary seat. The
-
-    /// @dev The same byte on `CrapsSlipPlaced`, above the bet id rather than in the two-bit gap
-    ///      under it — the id ends at 159 and a byte does not fit in two bits.
+    /// @dev The entry multiple MINUS ONE, carried on `CrapsSlipPlaced` alone and never stored: a
+    ///      seat's scale is derived from its high flag at settlement, not read back from the word,
+    ///      so storage keeps no multiple field and bits 206..213 of the bet word stay unused. The
+    ///      byte rides above the bet id on the event rather than in the two-bit gap under it — the
+    ///      id ends at 159 and a byte does not fit in two bits.
     uint256 internal constant _EV_MULT_SHIFT = 160;
 
     /// @dev Bits 214..216 of the bet word: the period a DAY-WIDE entry began at, PLUS ONE. Zero is
     ///      a slip placed on one window of its own, which answers to that window alone. Held as an
     ///      offset rather than a flag beside a period because seven periods and the absent case are
-    ///      eight values, which is exactly three bits — one field instead of two. The multiple's
-    ///      byte above ends at 213, so nothing is displaced.
+    ///      eight values, which is exactly three bits — one field instead of two. The unused byte
+    ///      below it ends at 213, so nothing is displaced.
     /// @dev A seat took the high-roller lane. Stored as a FLAG rather than inferred from the
     ///      multiple: a custom battle may legally set `H` to a figure an ordinary seat could once
     ///      have named, so eligibility has to be a thing the entry recorded, not a thing a later
@@ -2311,7 +2311,10 @@ contract CrapsBattle is LootboxCraps {
     /// @return burned The exact FLIP delta charged: the sum over the newly upgraded windows of
     ///         `(bankroll + bounty) * (H - 1)`.
     /// @custom:reverts BonusPeriodSpent If the mask names a period past the seventh, or any newly
-    ///         selected window is closed, armed, or on a day that is not open.
+    ///         selected window is closed by the clock, already armed, or not yet opened.
+    /// @custom:reverts RngNotReady If a newly selected window is on a day whose word has not landed
+    ///         — a banked pass or an unworded future reservation cannot be upgraded at calculated
+    ///         terms, so its every period fails this before anything burns.
     /// @custom:reverts NoSuchBet If the caller holds no day ticket on `day`.
     /// @custom:reverts NothingToUpgrade If no selected period is newly upgradable.
     function upgradeDayWindows(uint24 day, uint8 periodMask) external returns (uint256 burned) {

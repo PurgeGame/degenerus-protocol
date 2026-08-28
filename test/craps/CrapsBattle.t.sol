@@ -3051,7 +3051,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      body at the table, so it pays or it stays out.
     ///
     ///      The comped seat costs the field one bounty nobody burned. That is the price of the day
-    ///      running at all — one seat, announced by `CrapsHouseComped` so it is never silent.
+    ///      running at all — one seat, visible as a `CrapsSlipPlaced` with no matching burn.
     function test_aStarvedHouseIsCompedAndTheVaultIsNot() public {
         address house = ContractAddresses.SDGNRS;
         flip.setBurnRefused(house, true);

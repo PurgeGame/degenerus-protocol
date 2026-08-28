@@ -21,7 +21,7 @@ this brief for the product delta. Do not reset, discard, or broadly rewrite unre
 ## The one door
 
 `CrapsBattle.creditPasses(address player, uint32 normal, uint32 high)` — `OnlyGame`, credit-only,
-no external calls, saturating at the lane cap with `CrapsPassesDropped` announced. It exists and
+no external calls, saturating silently at the lane cap (an unreachable four-billion-pass ceiling). It exists and
 is tested (built as the lootbox delivery fallback). The richer
 `deliverPasses(player, normal, high)` additionally auto-reserves tomorrow; it is `OnlyGame` too.
 
@@ -112,7 +112,7 @@ flipRemains  = flipOut - passes * 25_000e18
 3. Boundary tests at levels 9 and 10 for both.
 4. Presale FLIP branch: conservation (`passes * 25k + flipRemains == flipOut`), the under-one-pass
    box unchanged, the cap path, and the 40%/10% branches byte-identical.
-5. Saturation: a buyer at the pass-lane cap drops the excess with `CrapsPassesDropped`, and the
+5. Saturation: a buyer at the pass-lane cap silently clamps the excess (the cap is unreachable), and the
    purchase still succeeds.
 6. The credits are spendable: an awarded pass reserves a future day through `applyCrapsPasses`
    end to end.
