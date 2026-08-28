@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `41f04be2` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `09413eb0` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -141,35 +141,46 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,697
-results / 101 detectors over 163 contracts at tree `41f04be2`; 171 High / 447 Medium / 433 Low /
-2,594 Informational / 52 Optimization, and the "High" tier is dominated by 134 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,909
+results / 101 detectors over 178 contracts at tree `09413eb0`; 176 High / 510 Medium / 510 Low /
+2,661 Informational / 52 Optimization, and the "High" tier is dominated by 134 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
-units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 21 Low, unchanged and
-category-identical to the prior tree).
+units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 22 Low, category-identical
+to the prior tree apart from one new `dead-code` Low on the Craps reader surface — internal view
+helpers consumed only by the test-only reader shim, not on chain).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `41f04be2`, not carried forward from an earlier scan.
-The immediately preceding tree `2cfcd461` re-scanned in the same environment reproduced
-3,697 / 171 High / 448 Medium / 432 Low / 2,594 Informational / 52 Optimization exactly, tier for
-tier — the figure recorded for it at the time — so the delta across this span is a measurement
-rather than an assumption.
+These counts were measured directly at tree `09413eb0`, not carried forward from an earlier scan.
+The immediately preceding freeze tree `41f04be2` (tag `degenerus-c4a`) re-scanned in the same
+environment reproduced 3,697 / 171 High / 447 Medium / 433 Low / 2,594 Informational / 52
+Optimization exactly, tier for tier — the figure recorded for it at that freeze — so the delta
+across this span is a measurement rather than an assumption.
 
-That delta is **one Medium retired, one Low added, ZERO High, and no change in the total**, both
-sides of it on the same change: `Coinflip.armCenturySeed` becoming a GAME-only call the daily
-advance makes at an x00 level's transition close, rather than a permissionless entrypoint.
+That delta is **+212 results and +5 High**, effectively the whole of it the addition of the Craps
+table — `CrapsBattle` plus its `Craps` / `LootboxCraps` bases, new to the audited scope this freeze
+(deploy set 29 → 30, appended last so no predicted address moved) — net of a refactor of the daily
+advance. The contract count moves 163 → 178 for the craps compilation units.
 
-The retired Medium is the `unused-return` on that function. It previously read
-`degenerusGame.purchaseInfo()` for the level and the RNG-lock flag and discarded the other three
-tuple members; it now takes the level as a parameter from the advance already running, so there is
-no ignored return left to flag. The added Low is `calls-loop` on
-`DegenerusGameAdvanceModule.advanceGame()` — the new `coinflip.armCenturySeed(lvl)` call site sits
-inside the `do { ... } while (false)` block the advance uses as a one-stage-per-call switch, which
-Slither reads as a loop body. It executes at most once per transaction, and at most once per level
-boundary. The High tier is composition-identical to the prior tree, detector for detector, and the
-`reentrancy-events` entry on the arm (`VaultWwxrpToppedUp` emitted after the `mintPrize` that raises
-the vault's WWXRP allowance, the last statement of the function, callee a protocol contract whose
-mint writes storage and returns) carries over unchanged.
+The five new High are **all `weak-prng`**: `uninitialized-state` is unchanged at 134, and every
+other High detector class is composition-identical (arbitrary-send-eth 6, delegatecall-loop 4,
+encode-packed-collision 2, incorrect-exp 2, reentrancy-balance 6, reentrancy-eth 3). `weak-prng`
+moves 14 → 19 — **+7** in `CrapsBattle`, the table's seven keccak draws (board scatter, tie-break,
+boost rung, daily high-roller size, progressive cutoff, survival coin, award-rounding roll), each
+the same benign class as `requestLootboxRng` where the entropy is the committed VRF word and the
+keccak is only an extractor; and **−2** as the advance refactor (−345 nSLOC on
+`DegenerusGameAdvanceModule`) retired two of its own. No new detector class entered the High tier.
+
+The Medium (+63), Low (+77) and Informational (+67) additions are the ordinary footprint of three
+new contracts, keyed line-insensitively on (check, impact, subject function): `reentrancy-events` /
+`-no-eth` / `-benign` on the craps external credit-and-burn calls and the re-keyed `advanceGame`
+body, `timestamp` on the table's clock gates, `calls-loop` on `_payout` / `_extsload` /
+`_deliverPasses`, `unused-state` on the new `DegenerusGameStorage` craps constants
+(`HIGH_ROLLER_DAY_PASS_VALUE`, `MINER_BOUNTY_CRAPS_KEEP`, and the pass-value siblings), and
+`divide-before-multiply` / `incorrect-equality` on the craps preset and progressive math. Every
+new finding names craps code or the refactored advance/lootbox path; nothing else moved.
+
+The paragraphs below record the accumulated attribution of the standing false-positive classes
+across the earlier freeze chain, and remain accurate as history.
 
 Across the wider chain from `33ccd5b9`, the High tier gained no new detector class and one retired
 entirely. A single finding was added —
