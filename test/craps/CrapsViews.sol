@@ -100,6 +100,16 @@ contract CrapsViews is CrapsBattle {
         amendSlip(betId, _pack(chips));
     }
 
+    /// @dev The three-argument applicators the suite has always called — blank-board overloads of
+    ///      the packed-board doors, the same shape as the entry overloads above.
+    function applyCrapsPasses(uint24 startDay, uint8 count, bool high) external {
+        applyCrapsPasses(startDay, count, high, 0);
+    }
+
+    function buyFutureCrapsDays(uint24 startDay, uint8 count, bool high) external {
+        buyFutureCrapsDays(startDay, count, high, 0);
+    }
+
     // ── Table / RNG ─────────────────────────────────────────────────────────
     function currentIndex() external view returns (uint48) {
         return _currentIndex();
@@ -206,16 +216,37 @@ contract CrapsViews is CrapsBattle {
         return (w & _PASS_MAX, (w >> _PASS_HIGH_SHIFT) & _PASS_MAX);
     }
 
-    /// @dev A day's ticket counts, packed: the total in the low 32 bits, the high-roller subset
-    ///      above. One word, because a window folds both in when it shuts.
+    /// @dev A day's ticket counts in the SHAPE the suite has always read them: the total in the
+    ///      low 32 bits, a high-roller count above. The stored word now carries one high count
+    ///      per period; the shape is reconstructed from period zero's, which equals the old
+    ///      whole-day figure everywhere the old assertions look — a whole-day high ticket bumps
+    ///      all seven counters alike, and only an upgrade can make them differ.
     function dayTicketsOf(uint24 day) external view returns (uint64) {
+        uint256 t = _dayTickets[uint256(day) * BONUS_SLOTS_PER_DAY];
+        return uint64(uint32(t)) | (uint64(uint32(t >> _DT_HIGH_SHIFT)) << 32);
+    }
+
+    /// @dev The stored ticket word, raw: total low, seven per-period high counts above.
+    function dayTicketsWordOf(uint24 day) external view returns (uint256) {
         return _dayTickets[uint256(day) * BONUS_SLOTS_PER_DAY];
     }
 
-    /// @dev The packed day-state byte for one player on one day: seated, reserved, or nothing.
+    /// @dev One period's high-ticket count.
+    function dayHighTicketsOf(uint24 day, uint256 period) external view returns (uint256) {
+        return (_dayTickets[uint256(day) * BONUS_SLOTS_PER_DAY] >> (_DT_HIGH_SHIFT * (period + 1)))
+            & _MASK32;
+    }
+
+    /// @dev The day state as the suite has always graded it: `DAY_SEATED()` for any claim, zero
+    ///      for none. The stored value is the SEAT NUMBER now; `daySeatNumberOf` reads it raw.
     function dayStateOf(uint24 day, address player) external view returns (uint256) {
         // `_daySlotOf` is private on the contract; the derivation is one multiply, so the view
         // restates it rather than asking for a visibility change on production code.
+        return _daySeated[uint256(day) * BONUS_SLOTS_PER_DAY][player] == 0 ? 0 : 1;
+    }
+
+    /// @dev The holder's day-ticket seat number, or zero — the raw stored value.
+    function daySeatNumberOf(uint24 day, address player) external view returns (uint256) {
         return _daySeated[uint256(day) * BONUS_SLOTS_PER_DAY][player];
     }
 
@@ -224,11 +255,12 @@ contract CrapsViews is CrapsBattle {
     }
 
     function DAY_SEATED() external pure returns (uint256) {
-        return _DAY_SEATED;
+        return 1;
     }
 
     /// @dev Whether the day-lane seat `player` holds on `day` is a HIGH one. The lane lives on the
     ///      ticket itself rather than in the day state, so it is read off the bet the day holds.
+    ///      Bit 217 is period zero's flag, which every whole-day high ticket sets.
     function daySeatIsHigh(uint24 day, address player) external view returns (bool) {
         uint256 daySlot = uint256(day) * BONUS_SLOTS_PER_DAY;
         uint64 n = uint32(_dayTickets[daySlot]);
@@ -237,6 +269,15 @@ contract CrapsViews is CrapsBattle {
             if (address(uint160(w)) == player) return w & _BET_HIGH_BIT != 0;
         }
         return false;
+    }
+
+    /// @dev The seven per-period high flags of `player`'s day ticket, bit `p` for period `p`.
+    function daySeatHighMaskOf(uint24 day, address player) external view returns (uint256) {
+        uint256 daySlot = uint256(day) * BONUS_SLOTS_PER_DAY;
+        uint256 seat = _daySeated[daySlot][player];
+        if (seat == 0) return 0;
+        return (_bets[(daySlot << 64) | seat] >> _BET_HIGH_SHIFT)
+            & (_BET_DAYHIGH_MASK >> _BET_HIGH_SHIFT);
     }
 
     function NORMAL_FUTURE_DAY_PRICE() external pure returns (uint256) {

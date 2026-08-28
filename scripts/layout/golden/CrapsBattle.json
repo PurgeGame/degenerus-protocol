@@ -61,7 +61,7 @@
     "label": "_dayTickets",
     "offset": 0,
     "slot": 7,
-    "typeLabel": "mapping(uint256 => uint64)"
+    "typeLabel": "mapping(uint256 => uint256)"
   },
   {
     "bytes": "32",

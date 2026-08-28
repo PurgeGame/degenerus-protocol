@@ -468,15 +468,25 @@ Expose sibling player functions with behavior equivalent to:
 function applyCrapsPasses(
     uint24 startDay,
     uint8 numberOfPasses,
-    CrapsPassType passType
+    bool high,
+    uint32 chips
 ) external;
 
 function buyFutureCrapsDays(
     uint24 startDay,
     uint8 numberOfDays,
-    CrapsPassType reservationType
+    bool high,
+    uint32 chips
 ) external;
 ```
+
+`chips` is the packed board every reserved day starts on, in the same shape every live door
+takes: zero for a blank/random ticket, otherwise exactly seven selected chips, at most four per
+leg, never both the pass line and don't pass. It is vetted once, before anything burns or
+debits, and the SAME initial slip applies to every day of the range; each day may still be
+re-spread on its own through `amendSlip` at any time until that day's first window closes,
+future days included. `CrapsSlipPlaced` already carries the packed board, so no reservation
+event gains a field.
 
 Function names may follow repository conventions, and an implementation may use one selector with
 an explicit funding enum. `CrapsPassType` itself is NOT free-form — it crosses the trust boundary
@@ -533,17 +543,15 @@ The price is final. The target day's eventual 10x/100x result and realized norma
 neither top-up nor refund. Repeating or racing the same range after one purchase succeeds must
 revert on occupancy before burning additional FLIP.
 
-### 9.4 Reservation, not automatic seating
+### 9.4 The reservation IS the seat
 
-Applying a pass or purchasing a future day reserves a funded full-day entitlement. It does not
-create the battle slip and does not choose the player's chip allocation. The player still calls the
-reservation-specific full-day entry during period 0 of the target day.
+Applying a pass or purchasing a future day writes the whole-day battle slip immediately, on the
+board the call named (or a blank one). There is no later redemption call:
 
-This is deliberate:
-
-- the player can choose a legal seven-chip allocation or a blank random board after terms exist;
-- activity standing freezes at actual entry, matching paid entries;
-- quest-streak credit occurs on actual entry;
+- the board named at reservation — or any legal re-spread through `amendSlip`, allowed on a
+  future reserved day at any time until that day's first window closes — is what the day plays;
+- activity standing is frozen at reservation and refreshed by any amendment;
+- quest-streak credit belongs to the live paid door only, never to a reservation;
 - `openBonusDay`, `advanceGame`, and settlement never iterate reservation holders.
 
 A reservation IS the seat: it is written as a whole-day bet at reserve time, plays all seven
@@ -559,48 +567,26 @@ this spec that said a missed reservation "expires with no refund" are superseded
 
 ## 10. Craps Day-State Packing
 
-Change the value stored at the existing `_daySeated[daySlot][player]` mapping root from `bool` to
-a packed byte or word with these flags:
+**AS SHIPPED**, `_daySeated[daySlot][player]` stores the holder's day-ticket SEAT NUMBER — the
+low-32-bit dense seat the ticket was written at — and zero means no claim. Every consumer gate
+asks only nonzero: one ticket per address per day, and a bar on any single window of that day.
+Storing the seat rather than a flag is what lets `upgradeDayWindows` name the caller's own ticket
+as `(daySlot << 64) | seat` without any walk or enumeration.
 
-| Bit | Meaning |
-|---:|---|
-| 0 | A day-wide battle seat has been created |
-| 1 | A normal full-day entitlement is reserved for this day |
-| 2 | A high-roller full-day entitlement is reserved for this day |
-| 3..7 | Reserved |
+There are no separate seated/reserved bits. A reservation writes the whole seat the moment it is
+made (`_reserveDay`), a paid entry writes it at purchase, and the protocol bodies write theirs
+when the day opens — all through the one `_writeDaySeat` writer — so all three states are the
+same nonzero seat number and are indistinguishable afterwards. No value records pass versus FLIP
+funding, price, premium, or any other purchase history.
 
-The invariant is that bits 0, 1, and 2 are mutually exclusive for one player/day.
+An existing nonzero value is what "tomorrow is full" means for automatic lootbox delivery.
 
-The mapping root and key derivation remain unchanged. Existing `false/true` values decode as
-zero or the seated bit. Update the storage-layout golden because the compiler-reported mapping
-value type changes.
-
-**AS SHIPPED there are exactly five sites**, all in `contracts/CrapsBattle.sol`, and the change has
-to visit all of them:
-
-| Line | Site | What it becomes |
-|---:|---|---|
-| 757 | day-seat test inside the scheduled-window entry guard | any nonzero byte blocks |
-| 908 | `if (_daySeated[daySlot][msg.sender]) revert AlreadyInBonus();` | any nonzero byte reverts |
-| 930 | the paid day-lane seat | sets the seated bit |
-| 1736 | the sDGNRS house day ticket | sets the seated bit only |
-| 1753 | the vault day ticket | sets the seated bit only |
-
-The two protocol seats set **only** bit 0 and never a reservation bit — the house and the vault
-buy their day outright and are never reserved into it.
-
-All existing uses must distinguish the cases:
-
-- A scheduled single-window placement rejects any seated or reserved state for that day.
-- A paid full-day entry rejects any seated or reserved state.
-- A reserved full-day entry requires the matching reservation bit.
-- Protocol house and vault day tickets set only the seated bit.
-- Successful reserved entry replaces the reservation bit with the seated bit in one storage write.
-
-No bit records pass versus FLIP funding, price, premium, or any other purchase history. A
-pass-funded and a prepaid reservation of the same type are byte-identical.
-
-An existing reservation is what “tomorrow is full” means for automatic lootbox delivery.
+The companion `_dayTickets[daySlot]` word is a `uint256` holding EIGHT counts: the day's total
+ticket count in bits 0..31 and one high-roller count per period above it, 32 bits each — period
+`p`'s at bits `32(p + 1)`. A whole-day high entry increments the total and all seven period
+counters in one write; a per-window upgrade increments only its own period's counter; each window
+folds in the total plus its own period's high count when it arms. The storage-layout golden pins
+the mapping value type accordingly.
 
 ## 11. Redeeming a Reserved Day
 
@@ -659,10 +645,10 @@ Then:
 1. Do not call `FLIP.burnCoin` for `coveredCost`.
 2. Replace the reservation bit with the seated bit.
 3. Increment the day-ticket counts. **These are already one packed word**: `_dayTickets[daySlot]`
-   is a `uint64` holding the total in its low 32 bits and the high-roller subset above
-   `_DT_HIGH_SHIFT = 32`, and the paid lane advances both in a single write —
-   `_dayTickets[daySlot] + 1 + (high ? 1 << _DT_HIGH_SHIFT : 0)`. Reuse that expression; do not add
-   a second mapping.
+   is a `uint256` holding the total in its low 32 bits and one high-roller count per period above
+   it (period `p` at bits `32(p + 1)`), and the paid lane advances everything in a single write —
+   `_dayTickets[daySlot] + 1 + (high ? _DT_ALL_HIGH : 0)`, where `_DT_ALL_HIGH` bumps all seven
+   period counters at once. Reuse that expression; do not add a second mapping.
 4. Store the same chip allocation, standing, and high-roller flag as a paid entry.
 5. Emit the ordinary slip event plus a reservation-consumption event containing the reservation type,
    multiplier, target day, and `coveredCost`.
@@ -670,6 +656,50 @@ Then:
 
 The entry participates in all seven main fields. A high-roller reservation also participates in
 all seven high-roller fields.
+
+## 11a. Per-Window High-Roller Upgrade
+
+A player holding a NORMAL whole-day ticket — bought, pass-funded, or prepaid alike — may upgrade
+any subset of its seven windows to the day's high-roller lane while each selected window remains
+joinable:
+
+```solidity
+function upgradeDayWindows(uint24 day, uint8 periodMask)
+    external
+    returns (uint256 burned);
+```
+
+Per selected window, the ticket already supplies one copy of the run, so the upgrade burns only
+the missing copies:
+
+```text
+upgradeCost = (bankroll + bounty) x (H - 1)
+```
+
+and the selected window thereafter settles exactly as a native full high seat: the same board,
+player, standing, dice, and rounding, paid the complete `H x` result; one main-scoreboard entry
+and one main-pot bounty; `H - 1` additional high-lane bounties; sole-rider and contested-lane
+behavior unchanged; `H x bankroll` booked as both total action and high action. Unselected
+windows remain completely ordinary.
+
+Rules:
+
+- Only mask bits 0..6 are legal; anything above reverts `BonusPeriodSpent`.
+- Every newly requested window is vetted through the same `_joinableSlot` predicate the paid
+  doors use, before anything burns. A window closed by the clock but not yet armed is already
+  locked. One locked or unavailable new target reverts the whole batch atomically.
+- Bits already high are ignored — never charged or counted twice — and a mask containing no new
+  upgrades reverts `NothingToUpgrade`. A caller without a day ticket reverts `NoSuchBet`, and the
+  seat lookup is keyed to the caller, so nobody can reach another player's ticket.
+- The day must be OPEN with its terms and multiple knowable: a banked pass or an unworded future
+  reservation has nothing to price an upgrade against and cannot come through this door.
+- No downgrade, clearing, transfer, or refund path exists, and no quest-streak credit moves.
+- Existing fixed-price high future passes are unchanged, and a whole-day high entry (paid,
+  reserved, or a protocol body's high pass) sets all seven period flags and counters, so it is
+  byte-for-byte the seat it always was and has nothing left to upgrade.
+
+`CrapsDayWindowsUpgraded(player, day, upgradedMask, burned)` reports only the newly set bits and
+the exact total delta burned.
 
 ## 12. Battle and Boost Accounting
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -133,22 +132,156 @@ contract CrapsPassesTest is CrapsPins {
         (uint256 n,) = craps.passCreditsOf(alice);
         assertEq(n, uint256(max) - 1, "the first award did not bank whole");
 
-        // Over the ceiling: the excess is dropped and announced, and the call still returns.
-        vm.recordLogs();
+        // Over the ceiling: the excess is silently clamped and the call still returns — the cap
+        // is unreachable by any real award, so nothing here is worth a log of its own.
         vm.prank(ContractAddresses.GAME);
         craps.deliverPasses(alice, 10, 0);
         (n,) = craps.passCreditsOf(alice);
         assertEq(n, max, "the lane did not saturate at its ceiling");
+    }
 
-        bytes32 sig = keccak256("CrapsPassesDropped(address,bool,uint256)");
-        uint256 dropped;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == sig) {
-                (, dropped) = abi.decode(logs[i].data, (bool, uint256));
-            }
+    // ── The board a reservation names ───────────────────────────────────────
+
+    /// @dev Restated for `expectEmit`; matched by topics and data, not by declaring contract.
+    event CrapsSlipPlaced(address indexed player, uint256 bet);
+
+    /// @dev A seven-chip allocation in the packed shape the doors take: 4 on the pass line, 3 on
+    ///      place 8 — `_seven()` as the doors see it.
+    uint32 internal constant PACKED_SEVEN = 4 | (3 << 12);
+
+    /// @dev A reservation may name its board up front, and ONE slip then serves every day of the
+    ///      run: each reserved day's ticket stores the same chips, and each day's own
+    ///      `CrapsSlipPlaced` carries them.
+    function test_aReservationNamesOneBoardForTheWholeRun() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 2, 0);
+        uint24 start = _today() + 2;
+
+        vm.prank(alice);
+        craps.applyCrapsPasses(start, 2, false, PACKED_SEVEN);
+
+        for (uint24 d = start; d < start + 2; ++d) {
+            uint256 seat = craps.daySeatNumberOf(d, alice);
+            uint256 betId = ((uint256(d) * craps.BONUS_SLOTS_PER_DAY()) << 64) | seat;
+            assertEq(craps.betOf(betId).chips, PACKED_SEVEN, "a reserved day did not store the named board");
         }
-        assertEq(dropped, 9, "the discarded excess was not announced");
+    }
+
+    /// @dev The bought door takes the same board the credit door does.
+    function test_aBoughtRunNamesItsBoardToo() public {
+        uint24 target = _today() + 1;
+        uint256 daySlot = uint256(target) * craps.BONUS_SLOTS_PER_DAY();
+        // The first seat on an untouched future day is seat one, so the slip event is exact.
+        vm.expectEmit(address(craps));
+        emit CrapsSlipPlaced(
+            alice,
+            uint256(PACKED_SEVEN) | (((daySlot << 64) | 1) << 32)
+                | (craps.SYBIL_SCORE_FLOOR() << 190)
+        );
+        vm.prank(alice);
+        craps.buyFutureCrapsDays(target, 1, false, PACKED_SEVEN);
+        uint256 betId = (daySlot << 64) | craps.daySeatNumberOf(target, alice);
+        assertEq(craps.betOf(betId).chips, PACKED_SEVEN, "the bought day did not store the named board");
+    }
+
+    /// @dev A named board is held to the very rules the live doors enforce: seven chips or none,
+    ///      four to a leg, one side of the line — vetted before anything burns or debits.
+    function test_aReservedBoardMustBeSevenLegalChips() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 4, 0);
+        uint24 start = _today() + 2;
+
+        // Three chips are neither blank nor a full pick.
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        craps.applyCrapsPasses(start, 1, false, 3);
+
+        // Five on one leg breaks the per-leg cap even inside seven total.
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
+        craps.applyCrapsPasses(start, 1, false, uint32(5 << 3) | 2);
+
+        // Backing the shooter and fading them at once is refused at this door like every other.
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
+        craps.applyCrapsPasses(start, 1, false, uint32(4 | (3 << 27)));
+
+        (uint256 n,) = craps.passCreditsOf(alice);
+        assertEq(n, 4, "a refused board still spent a credit");
+
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        craps.buyFutureCrapsDays(start, 1, false, 3);
+        assertEq(flip.burned(alice), 0, "a refused board still burned the fixed price");
+    }
+
+    /// @dev The one slip serves the run, but each DAY is still its own ticket: re-spreading one
+    ///      reserved day in its own period zero moves that day alone.
+    function test_aReservedBoardStillAmendsDayByDay() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 2, 0);
+        uint24 start = _today() + 1;
+        vm.prank(alice);
+        craps.applyCrapsPasses(start, 2, false, PACKED_SEVEN);
+
+        // Into the FIRST reserved day's period zero, where its slip may still be re-spread.
+        _warpToDayStart();
+        assertEq(_today(), start, "the fixture did not land on the first reserved day");
+        uint256 firstId = ((uint256(start) * craps.BONUS_SLOTS_PER_DAY()) << 64)
+            | craps.daySeatNumberOf(start, alice);
+        uint32 respread = 2 | (2 << 9) | (3 << 15);
+        vm.prank(alice);
+        craps.amendSlip(firstId, respread);
+
+        assertEq(craps.betOf(firstId).chips, respread, "the first day did not take the new spread");
+        uint256 secondId = ((uint256(start + 1) * craps.BONUS_SLOTS_PER_DAY()) << 64)
+            | craps.daySeatNumberOf(start + 1, alice);
+        assertEq(craps.betOf(secondId).chips, PACKED_SEVEN, "amending one day moved its neighbour");
+    }
+
+    /// @dev A FUTURE reservation's board is its holder's to move until the day's own opener
+    ///      closes: amendable days ahead (standing refreshing with it), still amendable at the
+    ///      boundary — the target day's own period zero — and locked one period later, exactly
+    ///      where the live ticket has always locked.
+    function test_aFutureReservationsBoardAmendsUntilItsOwnOpenerCloses() public {
+        _warpToDayStart();
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 1, 0);
+        uint24 target = _today() + 3;
+        vm.prank(alice);
+        craps.applyCrapsPasses(target, 1, false, PACKED_SEVEN);
+        uint256 betId = ((uint256(target) * craps.BONUS_SLOTS_PER_DAY()) << 64)
+            | craps.daySeatNumberOf(target, alice);
+
+        // Days ahead of the clock: the board moves and the standing rides with it.
+        uint32 respread = 2 | (2 << 9) | (3 << 15);
+        game.setScore(alice, craps.SYBIL_SCORE_FLOOR() + 3);
+        vm.prank(alice);
+        craps.amendSlip(betId, respread);
+        assertEq(craps.betOf(betId).chips, respread, "a future day's board did not move");
+        assertEq(
+            craps.betOf(betId).standing,
+            craps.SYBIL_SCORE_FLOOR() + 3,
+            "the amendment did not refresh standing"
+        );
+
+        // Future or not, it is still nobody else's.
+        vm.prank(bob);
+        vm.expectRevert(CrapsBattle.NotYourBet.selector);
+        craps.amendSlip(betId, PACKED_SEVEN);
+
+        // The boundary itself — the target day's own period zero — still amends.
+        vm.warp(vm.getBlockTimestamp() + 3 days);
+        assertEq(_today(), target, "the fixture did not land on the target day");
+        vm.prank(alice);
+        craps.amendSlip(betId, PACKED_SEVEN);
+        assertEq(craps.betOf(betId).chips, PACKED_SEVEN, "period zero of the day itself stopped amending");
+
+        // One period later the day's first window has shut its door, and so has the ticket's.
+        vm.warp(vm.getBlockTimestamp() + craps.BONUS_EVENT_CLOSE() + craps.BONUS_CLOCK_ALIGN() + 1);
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.BetLocked.selector);
+        craps.amendSlip(betId, respread);
     }
 
     // ── Committing credits ──────────────────────────────────────────────────

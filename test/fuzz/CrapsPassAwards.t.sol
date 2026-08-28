@@ -19,7 +19,6 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 ///         coinflip credit; a sub-pass roll whose fraction loses pays the WWXRP dud.
 contract CrapsPassAwards is DeployProtocol {
     event CrapsPassesCredited(address indexed player, bool highRoller, uint256 count);
-    event CrapsPassesDropped(address indexed player, bool highRoller, uint256 count);
     event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount);
 
     uint256 private constant WHALE_EARLY_PRICE = 2.4 ether;
@@ -128,8 +127,6 @@ contract CrapsPassAwards is DeployProtocol {
         vm.prank(address(game));
         crapsBattle.creditPasses(buyer, type(uint32).max, 0);
 
-        vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesDropped(buyer, false, 2);
         _buyWhale(buyer, 2, WHALE_EARLY_PRICE);
 
         (uint256 normal,) = crapsBattle.passCreditsOf(buyer);

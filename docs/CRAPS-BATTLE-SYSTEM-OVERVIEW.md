@@ -437,6 +437,35 @@ Scheduled windows do not allow multi-entry. A day ticket or future reservation b
 seat by that address in every window of the day. A caller also cannot buy a day ticket after first
 entering one of its windows separately.
 
+### Upgrading a normal day ticket, window by window
+
+`upgradeDayWindows(day, periodMask)` upgrades chosen windows of the caller's own whole-day ticket
+to the day's high-roller lane. The ticket already supplies one copy of each window's run, so the
+upgrade burns only the missing `(H - 1) x (bankroll + bounty)` per selected window — after which
+that window settles exactly as a native high seat: `H` copies of the one run (same board, dice,
+and rounding), one main-scoreboard entry, one bounty in the main pot, `H - 1` in the lane, and
+`H x bankroll` booked as both total and high action.
+
+- Bits 0..6 of the mask name periods 0..6; anything above reverts.
+- Every newly selected window must still be joinable — open, unarmed, and its period still to
+  come. A window closed by the clock is locked even before anyone arms it. One locked selection
+  reverts the whole batch; nothing burns.
+- Bits already high are ignored, never recharged; a mask with nothing new reverts
+  `NothingToUpgrade`.
+- Only the ticket's holder can reach it (the seat lookup is keyed to the caller), the day must be
+  open (so a banked pass or an unworded future reservation has no calculable terms to upgrade at),
+  and no quest streak, downgrade, transfer, or refund exists.
+- `CrapsDayWindowsUpgraded(player, day, upgradedMask, burned)` reports exactly the new bits and
+  the exact delta burned.
+
+Internally the day-ticket word (`_dayTickets`) holds the total in its low 32 bits and one
+high-roller count per period above it, 32 bits each; a whole-day high entry bumps all seven, an
+upgrade bumps only its own, and each window folds in its own period's count when it arms. The bet
+word carries seven high flags (bits 217..223, one per period); a whole-day high ticket sets all
+seven, and window-local slips keep the single bit-217 flag. `_daySeated` stores the holder's seat
+number — still the nonzero one-seat latch everywhere it is read, and what lets the upgrade find
+the caller's ticket without a walk.
+
 ## 11. Day Passes and Future Seats
 
 Pass awards are seats, not coupons requiring later redemption.
@@ -459,21 +488,29 @@ Credits arrive from four sources, all through the table's `OnlyGame` credit door
 
 - `deliverPasses` first tries to reserve tomorrow immediately, preferring a high pass if both
   denominations arrived. Leftovers become banked normal/high credits.
-- `applyCrapsPasses(startDay, count, high)` spends banked credits and writes blank whole-day seats
-  for consecutive strictly future days.
-- `buyFutureCrapsDays(startDay, count, high)` burns the fixed price now and writes the same seats.
+- `applyCrapsPasses(startDay, count, high, chips)` spends banked credits and writes whole-day
+  seats for consecutive strictly future days — on the packed board `chips` names, or blank for
+  zero. The board is held to the live doors' rules (seven chips or none, four to a leg, one side
+  of the line), vetted before anything is debited, and the same initial slip serves every day of
+  the run.
+- `buyFutureCrapsDays(startDay, count, high, chips)` burns the fixed price now and writes the
+  same seats, same board rules.
 - Each range is all-or-nothing. An occupied, worded, past/current, or overflowing day reverts the
   entire run.
 - A high reservation automatically uses the future day's eventual 10x/100x draw; no multiplier is
   stored early.
 - The seat is already live when the day opens. There is no redemption function and no expiry due
   to failing to return.
-- The early seat starts blank. Its owner may amend it after the day opens and before the first
-  window closes, which also refreshes standing.
+- The early seat starts on the board its reservation named, or blank. Its owner may amend any
+  single reserved day at any time until that day's first window closes — days ahead of the clock
+  included — which also refreshes standing. A lootbox-delivered automatic seat always starts
+  blank.
 
 ## 12. High-Roller Lane
 
-Every high seat joins the ordinary main scoreboard and a second high-only scoreboard.
+Every high seat joins the ordinary main scoreboard and a second high-only scoreboard. For day
+tickets the lane is per window: a whole-day high ticket rides all seven lanes, an upgraded normal
+ticket only the windows its mask names, and each window reads its own period's flag and count.
 
 ### No high seats
 
@@ -788,6 +825,9 @@ Important event distinctions:
 - `CrapsBattlePaid.amount`: actual main-pot credit.
 - `CrapsHighRollerPaid`: sole rider or contested-lane payment, distinguished by
   `bankrollRider`.
+- `CrapsDayWindowsUpgraded(player, day, upgradedMask, burned)`: a day ticket's newly upgraded
+  period bits and the exact delta burned for them. The ticket's `CrapsSlipPlaced` predates its
+  upgrades, so this stream is what carries a day seat's high-lane membership per window.
 - `CrapsBonusOpened.seed`: maximum 100x scheduled quote, not a guaranteed payment.
 - `CrapsHighRollerDayOpened.mainBoostBudget`: the **ladder half** the day's seven windows share.
   Its other half is in `CrapsProgressiveFunded`, and the two sum to the raw allocation.
