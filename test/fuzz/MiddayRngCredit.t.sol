@@ -29,6 +29,9 @@ contract MiddayRngCreditTest is DeployProtocol {
     /// @dev Coordinator's LINK premium on mainnet, read from s_config: 20%.
     uint256 private constant LINK_PREMIUM_NUM = 120;
     uint256 private constant LINK_PREMIUM_DEN = 100;
+    /// @dev The two subscription floors, mirrored on the same terms as the constants above.
+    uint96 private constant LOOTBOX_LINK_FLOOR = 40 ether;
+    uint96 private constant CRAPS_LINK_FLOOR = 10 ether;
 
     event MiddayRngCredited(address indexed donor, uint256 added, uint256 balance);
     event MiddayRngCreditSpent(address indexed spender, uint256 charged, uint256 balance);
@@ -90,6 +93,15 @@ contract MiddayRngCreditTest is DeployProtocol {
     function _expectedCharge() internal view returns (uint256) {
         uint256 weiPerLink = admin.linkAmountToEth(1 ether);
         return (BILLED_GAS * block.basefee * CHARGE_MULT * 1 ether) / weiPerLink;
+    }
+
+    /// @dev Pin the subscription's reported LINK balance for a floor test.
+    function _mockSubscriptionLink(uint96 balance) internal {
+        vm.mockCall(
+            address(mockVRF),
+            abi.encodeWithSignature("getSubscription(uint256)", uint256(1)),
+            abi.encode(balance, uint96(0), uint64(0), address(admin), new address[](0))
+        );
     }
 
     /// @dev Mint credit through the ADMIN-gated entrypoint, as the donation hook does.
@@ -290,6 +302,84 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(game.middayRngCredits(donor), charge, "below-threshold waiver mispriced");
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    // The craps exemption
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice The craps table clears an entirely empty queue with no credit at all: it is
+    ///         buying the word that settles a window already bound to the next index, and the
+    ///         lootbox queue's value has nothing to say about that.
+    function test_crapsClearsAnEmptyQueueWithoutCredit() public {
+        uint48 before_ = crapsBattle.currentIndex();
+        assertEq(game.middayRngCredits(address(crapsBattle)), 0, "harness: craps starts with credit");
+
+        vm.prank(address(crapsBattle));
+        game.requestLootboxRng();
+
+        assertEq(crapsBattle.currentIndex(), before_ + 1, "craps was refused an empty-queue request");
+        assertEq(game.middayRngCredits(address(crapsBattle)), 0, "the exemption charged credit");
+    }
+
+    /// @notice The same for a queue that exists but sits under the threshold.
+    function test_crapsClearsABelowThresholdQueue() public {
+        _purchaseBelowThreshold();
+        uint48 before_ = crapsBattle.currentIndex();
+
+        vm.prank(address(crapsBattle));
+        game.requestLootboxRng();
+
+        assertEq(crapsBattle.currentIndex(), before_ + 1, "craps was refused a below-threshold request");
+    }
+
+    /// @notice Craps answers to its own, lower LINK floor: a balance between the two floors
+    ///         refuses every other caller and passes craps.
+    function test_crapsClearsTheLowerLinkFloorWhereOthersAreRefused() public {
+        _purchaseAboveThreshold(); // so only the LINK floor can refuse either caller
+        _mockSubscriptionLink(CRAPS_LINK_FLOOR + 1 ether);
+
+        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
+        game.requestLootboxRng();
+
+        uint48 before_ = crapsBattle.currentIndex();
+        vm.prank(address(crapsBattle));
+        game.requestLootboxRng();
+        assertEq(crapsBattle.currentIndex(), before_ + 1, "craps was refused above its own floor");
+    }
+
+    /// @notice The floor is lowered, not removed — craps is still refused below it, so the
+    ///         never-gated daily word always keeps a reserve.
+    function test_crapsIsStillRefusedBelowItsOwnLinkFloor() public {
+        _purchaseAboveThreshold();
+        _mockSubscriptionLink(CRAPS_LINK_FLOOR - 1);
+
+        vm.prank(address(crapsBattle));
+        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
+        game.requestLootboxRng();
+    }
+
+    /// @notice Credit buys no relief from the floor craps gets — the lower reserve is bound to
+    ///         the caller, not to the request.
+    function test_creditHolderDoesNotInheritTheCrapsLinkFloor() public {
+        _grantCredit(donor, 500 ether);
+        _mockSubscriptionLink(CRAPS_LINK_FLOOR + 1 ether);
+
+        vm.prank(donor);
+        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
+        game.requestLootboxRng();
+
+        assertEq(game.middayRngCredits(donor), 500 ether, "credit charged below the LINK floor");
+    }
+
+    /// @notice Nor the basefee ceiling: an expensive block holds the craps request back exactly
+    ///         as it holds anyone else's, which is what the arm's fail-open catch expects.
+    function test_crapsDoesNotWaiveTheBasefeeCeiling() public {
+        vm.fee(6 gwei); // default ceiling is 5 gwei
+
+        vm.prank(address(crapsBattle));
+        vm.expectRevert(bytes4(keccak256("GasTooHigh()")));
+        game.requestLootboxRng();
+    }
+
     /// @notice A request that already clears the gates costs a credit holder nothing.
     function test_clearingRequestDoesNotChargeCredit() public {
         _purchaseAboveThreshold();
@@ -360,18 +450,8 @@ contract MiddayRngCreditTest is DeployProtocol {
         uint256 granted = 500 ether;
         _grantCredit(donor, granted);
 
-        // Force the subscription under the 40-LINK floor.
-        vm.mockCall(
-            address(mockVRF),
-            abi.encodeWithSignature("getSubscription(uint256)", uint256(1)),
-            abi.encode(
-                uint96(1 ether),
-                uint96(0),
-                uint64(0),
-                address(admin),
-                new address[](0)
-            )
-        );
+        // Force the subscription one juel under the floor this caller answers to.
+        _mockSubscriptionLink(LOOTBOX_LINK_FLOOR - 1);
 
         vm.prank(donor);
         vm.expectRevert(bytes4(keccak256("InsufficientLink()")));

@@ -207,6 +207,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
     bytes32 private constant BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS");
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
+    /// @dev The same floor for the craps table, set to the reserve the never-gated daily word
+    ///      actually needs rather than a comfortable multiple of it. At MIDDAY_RNG_BILLED_GAS,
+    ///      the coordinator's 20% premium and LINK near 0.004 ETH, one word runs about 0.3 LINK
+    ///      at 5 gwei and 6 at 100, so this reserve keeps a daily request funded to roughly 165
+    ///      gwei and the lootbox floor above it to roughly 660. Craps reaches deeper because its
+    ///      request settles a table already holding staked FLIP, where a lootbox queue can simply
+    ///      wait for the daily word it would have shared anyway.
+    uint96 private constant MIN_LINK_FOR_CRAPS_RNG = 10 ether;
     uint48 private constant MIDDAY_RNG_STALL_TIMEOUT = 4 hours;
 
     /// @dev Per-call afking process-STAGE gas-weight budget. Every day is uniform: the streak is
@@ -1305,9 +1313,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         if (rngRequestTime != 0) revert RngInFlight();
 
+        // Which floors this caller answers to. Read once: it picks the LINK reserve here and
+        // waives the pending-value gates below, and both want the same answer.
+        bool crapsCall = msg.sender == ContractAddresses.CRAPS;
+
         // LINK balance check
         (uint96 linkBal,,,,) = vrfCoordinator.getSubscription(vrfSubscriptionId);
-        if (linkBal < MIN_LINK_FOR_LOOTBOX_RNG) revert InsufficientLink();
+        if (linkBal < (crapsCall ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) {
+            revert InsufficientLink();
+        }
 
         // Threshold check: pending ETH must clear the owner-tunable threshold. This gates
         // only the mid-day fast path — the daily advance assigns the day's word to
@@ -1326,7 +1340,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // still gets the specific gate as the revert. Ordered after the LINK floor above
         // so credit is never charged for a request the subscription cannot pay for.
         if (noPending || (threshold != 0 && totalEthEquivalent < threshold)) {
-            if (!_tryChargeMiddayCredit()) {
+            // The craps table is exempt from both. It shuts a bonus window by binding it to the
+            // NEXT index, so its request is not buying a word for the lootbox queue — it is buying
+            // the word that settles a table already holding staked FLIP, and a queue it has no
+            // stake in cannot price it. Checked before the credit charge so craps never pays for
+            // the ADMIN price call it would fail anyway, holding no credit. Every other gate above
+            // — the daily lock, mid-day processing, the basefee ceiling, the pre-reset minute, one
+            // request in flight — still binds on it exactly as on anyone else, and the LINK floor
+            // binds at its own level rather than not at all.
+            if (!crapsCall && !_tryChargeMiddayCredit()) {
                 if (noPending) revert NoPendingLootbox();
                 revert BelowThreshold();
             }

@@ -63,8 +63,9 @@ interface IGameSlotReader {
 ///      There is no escrow, no token, and no payout here — this is the randomness binding and the
 ///      resolver, nothing more. Settlement timing is also not this contract's to give: the index
 ///      only advances when someone calls the protocol's permissionless `requestLootboxRng()` and
-///      its pending-value threshold, basefee ceiling, and daily-RNG lock all allow it. A hand
-///      settles on the protocol's cadence, which may be a while.
+///      its basefee ceiling and daily-RNG lock allow it. The pending-value gates that lane applies
+///      to its own queue are waived for this contract's calls, so an arm never waits on lootbox
+///      volume — but a hand still settles on the protocol's cadence, which may be a while.
 contract LootboxCraps is Craps {
     /// @notice No word has landed on this index yet, so nothing can be resolved from it.
     error RngNotReady();

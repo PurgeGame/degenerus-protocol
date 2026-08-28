@@ -292,6 +292,9 @@ interface IDegenerusGame {
     /// @notice Request lootbox RNG when activity threshold is met.
     /// @dev Standalone function for mid-day lootbox RNG requests.
     ///      Reverts if daily RNG locked, request pending, threshold not met, or VRF fails.
+    ///      The craps table clears the pending-value gates unconditionally and answers to a
+    ///      lower LINK floor — it requests to settle a bound window, not to drain the lootbox
+    ///      queue. Every timing gate still binds on it.
     function requestLootboxRng() external;
 
     /// @notice Mint mid-day RNG credit to a LINK donor.

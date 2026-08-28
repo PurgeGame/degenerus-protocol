@@ -2196,7 +2196,8 @@ abstract contract DegenerusGameStorage {
     ///      redemption bills more than it charged. What bounds the subscription's exposure
     ///      is the mid-day LINK floor rather than this multiple — requests stop below
     ///      MIN_LINK_FOR_LOOTBOX_RNG, leaving that balance to the daily word, which is
-    ///      never gated.
+    ///      never gated. The craps table answers to MIN_LINK_FOR_CRAPS_RNG instead, a
+    ///      reserve sized to one daily word rather than to a queue that can wait for it.
     uint256 internal constant MIDDAY_RNG_CHARGE_MULT = 6;
 
     /// @dev Scale factor for ETH/LINK packing (0.001 resolution).

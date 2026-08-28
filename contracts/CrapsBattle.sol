@@ -2481,10 +2481,11 @@ contract CrapsBattle is LootboxCraps {
                 if (dayHigh != 0) _highField[w.key] += dayHigh;
             }
         }
-        // Shutting a window also asks the protocol for the word that will settle it. Fail-open:
-        // if the lootbox lane cannot request right now — LINK, gas ceiling, a request already in
-        // flight — the index still fills on that lane's own schedule, and closing on the clock
-        // must not be hostage to it.
+        // Shutting a window also asks the protocol for the word that will settle it. The lootbox
+        // queue's pending-value gates do not apply to this caller — the word settles a table, not
+        // a queue — but the temporary ones do. Fail-open: if the lootbox lane cannot request right
+        // now — LINK, gas ceiling, the daily lock, a request already in flight — the index still
+        // fills on that lane's own schedule, and closing on the clock must not be hostage to it.
         try IGameLootboxRng(_GAME).requestLootboxRng() {} catch {}
         emit CrapsBonusArmed(w.key, uint48(slot), index);
     }
