@@ -36,6 +36,18 @@ The same future-day reservation surface also lets a player prepay directly in FL
 per normal day or 450,000 FLIP per high-roller day. The complete fixed price is burned when the
 reservation is made, before the target day's word or high-roller multiplier is known.
 
+Pass credits also arrive from three award lanes outside the regular lootbox conversion: a
+whale-pass purchase below level 10 credits one normal pass per pass bought; every deity-pass
+purchase credits one pass — high-roller below level 10 (funded by halving that purchase's
+lootbox to 5% of price), normal from level 10 on; and the presale box's FLIP branch
+tosses a committed coin — half the boxes pay their roll as coinflip credit untouched, half
+denominate the WHOLE roll into passes at this specification's units (Section 4) with the
+same twenty-normal-unit denomination switch and Bernoulli fractional rounding, capped at
+twelve high-roller passes per box with the rest of the roll staying coinflip credit, and a
+sub-pass roll whose fraction loses paying the box's WWXRP dud. All three land through the same
+`creditPasses` credit-only door and behave exactly like lootbox-banked credits from the
+moment they are banked.
+
 A pass may be committed only to a future protocol day whose daily word has not landed. It covers
 one early full-day entry across all seven scheduled Bonus Battle windows. A normal pass covers a
 1x day entry; a high-roller pass covers the target day's genuine 10x-or-100x high-roller entry.

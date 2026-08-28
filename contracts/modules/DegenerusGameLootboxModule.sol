@@ -151,7 +151,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 flip,
         uint256 dgnrs,
         uint256 wwxrp,
-        bool closing
+        bool closing,
+        uint32 normalPasses,
+        uint32 highPasses
     );
 
     /// @notice Unified lootbox reward event for boon awards
@@ -286,6 +288,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint32 private constant PRESALE_BOX_FLIP_HIGH_BASE_BPS = 74_534;
     /// @dev Step BPS per roll for high presale-box FLIP path.
     uint32 private constant PRESALE_BOX_FLIP_HIGH_STEP_BPS = 22_890;
+
+    /// @dev Ceiling on high-roller passes one presale box can denominate; the budget above it
+    ///      stays coinflip credit.
+    uint256 private constant PRESALE_BOX_HIGH_PASS_CAP = 12;
+
+    /// @dev Extractor tag for the presale box's coin toss between the FLIP reward and the
+    ///      all-passes denomination.
+    uint256 private constant PRESALE_BOX_PASS_TAG = 0x5061737353696465; // "PassSide"
 
     // ---- Coin-presale-box DGNRS curve (5 tiers x 10 ETH cumulative box volume) ----
     // Relative DGNRS-per-ETH rates [3.0, 2.5, 2.0, 1.5, 1.0] x base, base = poolStart/40.
@@ -1392,6 +1402,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 flipOut;
         uint256 dgnrsOut;
         uint256 wwxrpOut;
+        uint32 passNormal;
+        uint32 passHigh;
         if (outcome < 50) {
             // 50% FLIP: variance band recentered on a 400% branch mean.
             uint256 varianceRoll = uint16(seed >> 80) % 20;
@@ -1414,6 +1426,43 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             flipOut = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(seed, FLIP_ROUND_TAG))
                 : FlipRoundLib.floorWholeFlip(flipOut);
+            // A committed coin toss decides the reward's denomination: half the boxes pay
+            // the collapsed roll as coinflip credit untouched, the other half denominate
+            // the WHOLE roll into Craps day passes at the regular box pass units —
+            // 22,800-FLIP normal passes, switching wholly to 19x high-roller passes above
+            // twenty normal units. The fractional pass is Bernoulli-rounded on its own
+            // extractor exactly like the box pass roll; from the twelve-high cap up the
+            // count pins there and the rest of the roll stays coinflip credit. A sub-pass
+            // roll whose fraction loses pays the box's WWXRP dud, so no box resolves to
+            // nothing.
+            if (flipOut != 0 && EntropyLib.hash2(seed, PRESALE_BOX_PASS_TAG) & 1 == 1) {
+                bool highPass = flipOut > 20 * NORMAL_DAY_PASS_VALUE;
+                uint256 passUnit = highPass ? HIGH_ROLLER_DAY_PASS_VALUE : NORMAL_DAY_PASS_VALUE;
+                uint256 passCount = flipOut / passUnit;
+                uint256 flipRest;
+                if (highPass && passCount >= PRESALE_BOX_HIGH_PASS_CAP) {
+                    passCount = PRESALE_BOX_HIGH_PASS_CAP;
+                    flipRest = flipOut - PRESALE_BOX_HIGH_PASS_CAP * HIGH_ROLLER_DAY_PASS_VALUE;
+                } else {
+                    uint256 rem = flipOut % passUnit;
+                    if (rem != 0 && EntropyLib.hash2(seed, BOX_PASS_ROUND_TAG) % passUnit < rem) {
+                        ++passCount;
+                    }
+                }
+                flipOut = flipRest;
+                if (passCount != 0) {
+                    ICrapsPassDelivery(ContractAddresses.CRAPS).creditPasses(
+                        player,
+                        highPass ? 0 : uint32(passCount),
+                        highPass ? uint32(passCount) : 0
+                    );
+                    if (highPass) passHigh = uint32(passCount);
+                    else passNormal = uint32(passCount);
+                } else {
+                    wwxrpOut = LOOTBOX_WWXRP_PRIZE;
+                    wwxrp.mintPrize(player, wwxrpOut);
+                }
+            }
             if (flipOut != 0) {
                 coinflip.creditFlip(player, flipOut);
             }
@@ -1437,7 +1486,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
         }
 
-        emit PresaleBoxOpened(player, index, amount, flipOut, dgnrsOut, wwxrpOut, closing);
+        emit PresaleBoxOpened(player, index, amount, flipOut, dgnrsOut, wwxrpOut, closing, passNormal, passHigh);
     }
 
     /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/40,

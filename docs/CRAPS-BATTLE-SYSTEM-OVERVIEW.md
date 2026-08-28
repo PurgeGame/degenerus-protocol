@@ -441,6 +441,22 @@ entering one of its windows separately.
 
 Pass awards are seats, not coupons requiring later redemption.
 
+Credits arrive from four sources, all through the table's `OnlyGame` credit doors:
+
+- The regular lootbox's day-pass conversion (`deliverPasses`, which first tries to seat
+  tomorrow and banks the rest).
+- A whale-pass purchase below level 10: one normal pass credit per pass bought
+  (`creditPasses`; the purchase's 10% lootbox is untouched).
+- A deity-pass purchase: one high-roller credit below level 10, funded by halving that
+  purchase's lootbox to 5% of price; one normal credit from level 10 on, with the lootbox
+  at the full 10%.
+- A presale box's FLIP branch: a committed coin toss pays half the boxes their roll as
+  coinflip credit untouched, and denominates the other half's WHOLE roll into passes at
+  the regular box units (22,800-FLIP normal, switching wholly to 19x high-roller above
+  twenty normal units, the fraction Bernoulli-rounded), capped at twelve high passes per
+  box with the rest of the roll staying coinflip credit; a sub-pass roll whose fraction
+  loses pays the box's WWXRP dud.
+
 - `deliverPasses` first tries to reserve tomorrow immediately, preferring a high pass if both
   denominations arrived. Leftovers become banked normal/high credits.
 - `applyCrapsPasses(startDay, count, high)` spends banked credits and writes blank whole-day seats

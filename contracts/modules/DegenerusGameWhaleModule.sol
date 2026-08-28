@@ -32,6 +32,13 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 
+/// @dev CrapsBattle's credit-only pass door. OnlyGame-gated; this module runs as a delegatecall
+///      inside the Game, so the external call reaches the table with msg.sender == GAME. The
+///      door makes no external calls and saturates at the lane cap instead of reverting.
+interface ICrapsPassCredit {
+    function creditPasses(address player, uint32 normal, uint32 high) external;
+}
+
 /**
  * @title DegenerusGameWhaleModule
  * @author Burnie Degenerus
@@ -163,8 +170,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Whale pass lootbox share (10%).
     uint16 private constant WHALE_LOOTBOX_BPS = 1000;
 
-    /// @dev Deity pass lootbox share (10%).
+    /// @dev Deity pass lootbox share (10%) from level 10 on.
     uint16 private constant DEITY_LOOTBOX_BPS = 1000;
+
+    /// @dev Deity pass lootbox share below level 10 (5%): the halved lootbox funds the
+    ///      high-roller Craps pass the early purchase banks.
+    uint16 private constant DEITY_EARLY_LOOTBOX_BPS = 500;
 
     /// @dev Deity pass base price (24 ETH, unscaled). Actual price = 24 + T(n) where T(n) = n*(n+1)/2, n = passes sold so far.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
@@ -184,6 +195,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        is awarded as whole tickets (4 entries each): quantity/2 tickets on every level, plus
      *        one ticket every 2nd level when quantity is odd (1 pass = 1 whole ticket per 2 levels).
      *      - Lootbox: 10% of price.
+     *      - Below level 10: one Craps day-pass credit per pass purchased, banked at the
+     *        table (credit-only, spendable via applyCrapsPasses). Keys on passes bought,
+     *        not price paid, so a boon-discounted purchase earns the same.
      *      - Distributes DGNRS minter rewards to the buyer.
      *      - Affiliate: fresh 25% (levels 0-3) or 20% (levels 4+), 5% recycled, of the price
      *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
@@ -429,6 +443,15 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Lootbox: 10% of price
         uint256 lootboxAmount = (totalPrice * WHALE_LOOTBOX_BPS) / 10_000;
         _recordLootboxEntry(buyer, lootboxAmount);
+        // Below level 10 (passLevel == level + 1, invariant across this call) every pass
+        // bought banks one Craps day-pass credit on the table's credit-only door.
+        if (passLevel <= 10) {
+            ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses(
+                buyer,
+                uint32(quantity),
+                0
+            );
+        }
         _grantSeatCoin(buyer);
     }
 
@@ -632,6 +655,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      Price: 24 + T(n) ETH where n = passes sold so far, T(n) = n*(n+1)/2.
      *      First pass costs 24 ETH, last (32nd) costs 520 ETH.
      *
+     *      Craps award (every deity purchase): below level 10 the lootbox is 5% of price
+     *      and the buyer banks one HIGH-ROLLER Craps pass credit; from level 10 the
+     *      lootbox is 10% and the credit is one normal day pass.
+     *
      *      - Affiliate: no FLIP commission — the conferred whale pass below is the affiliate's
      *        compensation. A supplied code only binds the buyer's referrer (when they have none
      *        yet) so that pass and the DGNRS uplines reach the right address.
@@ -799,9 +826,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             );
         }
 
-        // Lootbox: 10% of price
-        uint256 lootboxAmount = (totalPrice * DEITY_LOOTBOX_BPS) / 10_000;
+        // Craps award rides every deity purchase: below level 10 the lootbox drops to 5%
+        // and the buyer banks one HIGH-ROLLER pass credit; from level 10 the lootbox is
+        // the full 10% and the credit is a normal day pass.
+        bool earlyDeity = passLevel <= 10;
+        uint256 lootboxAmount = (totalPrice
+            * (earlyDeity ? DEITY_EARLY_LOOTBOX_BPS : DEITY_LOOTBOX_BPS)) / 10_000;
         _recordLootboxEntry(buyer, lootboxAmount);
+        ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses(
+            buyer,
+            earlyDeity ? 0 : 1,
+            earlyDeity ? 1 : 0
+        );
 
         emit DeityPassPurchased(buyer, symbolId, totalPrice, passLevel);
         // Only the buyer takes a seat: the affiliate's pass is conferred by someone else's
