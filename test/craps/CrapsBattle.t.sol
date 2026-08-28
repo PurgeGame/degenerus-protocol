@@ -1418,8 +1418,8 @@ contract CrapsBattleTest is CrapsPins {
     /// @dev THE TWO LANES ARE RATED THE SAME AND NEVER SHARE A WEI. Regular action is worth 12%
     ///      to the main lane. High action is worth 12% too, split two parts in five to the main
     ///      lane (4.8%) and three to the lane that earned it (7.2%). Mixed action is booked once:
-    ///      `_highStaked` is subtracted out of `_dayStaked` before the regular component is taken,
-    ///      so no unit of action can pay into both.
+    ///      the packed high half is subtracted from the packed total before the regular component
+    ///      is taken, so no unit of action can pay into both.
     function test_theTwoLanesAreRatedTheSameAndNeverShareAWei() public {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         uint24 today = craps.currentDayIndex();

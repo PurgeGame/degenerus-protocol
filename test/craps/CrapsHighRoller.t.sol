@@ -6,6 +6,7 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins} from "./CrapsPins.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title The high-roller lane
 /// @notice One optional lane per battle. A seat takes it by paying the field's multiple on the
@@ -399,8 +400,12 @@ contract CrapsHighRollerTest is CrapsPins {
         // The LANE PAYS ITSELF OUT during the settlement that finishes the field — the same call
         // that pays the main pot — so what a claim used to collect is now one entry in this
         // stream.
-        PaidOut[] memory lane = _resolveForLane(craps, slot, WHOLE_FIELD, false);
+        vm.recordLogs();
+        craps.resolveSlot(slot, WHOLE_FIELD);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        PaidOut[] memory lane = _lanePaymentsIn(logs, false);
         assertEq(lane.length, 1, "a contested lane paid other than once");
+        assertEq(_lanePaymentsIn(logs, true).length, 0, "contested seats emitted empty rider payments");
 
         bytes32 key = craps.battleKeyOf(a);
         (uint32 heads,, uint64 seat, bool rider, bool done) = craps.highFieldOf(key);
@@ -740,14 +745,14 @@ contract CrapsHighRollerGasTest is CrapsPins {
     ///
     ///      So what §11.1 actually asks for is asserted DIRECTLY, against the storage the batch
     ///      touched. That is the property the gas budget was a proxy for: the lane adds ONE word
-    ///      per battle and ONE accumulator per day, and no per-entrant storage at all.
+    ///      per battle and ONE packed action accumulator per day, and no per-entrant storage at all.
     ///      PINNED slot numbers, so they go stale the moment a mapping is added or removed above
     ///      them. The pair of tests below is what catches that: the negative one asserts the lane
     ///      slots are never written and would pass against any wrong slot, while the positive one
     ///      asserts they ARE — so a stale pin turns the positive test red rather than quietly
     ///      hollowing out the negative. Keep them together.
     uint256 internal constant _HIGH_FIELD_SLOT = 12;
-    uint256 internal constant _HIGH_STAKED_SLOT = 13;
+    uint256 internal constant _DAY_STAKED_SLOT = 10;
 
     function _slotOfMapping(bytes32 key, uint256 base) internal pure returns (bytes32) {
         return keccak256(abi.encode(key, base));
@@ -758,8 +763,8 @@ contract CrapsHighRollerGasTest is CrapsPins {
     }
 
     /// @dev A batch holding NO high seat writes NOTHING of the lane's — not the sideboard, not the
-    ///      day's high-action accumulator — and reads it exactly ONCE, on the seat that finishes
-    ///      the field.
+    ///      sideboard. Its ordinary action still writes the day's ONE packed accumulator, whose
+    ///      high half remains zero, and reads the sideboard exactly once on the finishing seat.
     ///
     ///      That one read is the price of paying at finalization: the batch that finishes a field
     ///      pays it, and it cannot know whether a lane is standing beside it without asking. It is
@@ -776,11 +781,12 @@ contract CrapsHighRollerGasTest is CrapsPins {
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(craps));
 
         bytes32 field = _slotOfMapping(key, _HIGH_FIELD_SLOT);
-        bytes32 staked = _slotOfMapping(bytes32(uint256(craps.currentDayIndex())), _HIGH_STAKED_SLOT);
+        uint24 day = craps.currentDayIndex();
+        bytes32 staked = _slotOfMapping(bytes32(uint256(day)), _DAY_STAKED_SLOT);
         assertEq(_countWrites(writes, field), 0, "an ordinary field wrote the sideboard");
         assertEq(_countWrites(reads, field), 1, "an ordinary field read the sideboard other than once");
-        assertEq(_countWrites(writes, staked), 0, "an ordinary field booked high action");
-        assertEq(_countWrites(reads, staked), 0, "an ordinary field read the day's high action");
+        assertEq(_countWrites(writes, staked), 1, "ordinary action was not booked in one packed write");
+        assertEq(craps.highStakedOf(day), 0, "ordinary action spilled into the packed high half");
     }
 
     /// @dev A batch that DOES hold high seats touches exactly ONE sideboard word, however many of
@@ -797,9 +803,11 @@ contract CrapsHighRollerGasTest is CrapsPins {
         (, bytes32[] memory writes) = vm.accesses(address(craps));
 
         bytes32 field = _slotOfMapping(key, _HIGH_FIELD_SLOT);
-        bytes32 staked = _slotOfMapping(bytes32(uint256(craps.currentDayIndex())), _HIGH_STAKED_SLOT);
+        uint24 day = craps.currentDayIndex();
+        bytes32 staked = _slotOfMapping(bytes32(uint256(day)), _DAY_STAKED_SLOT);
         assertGt(_countWrites(writes, field), 0, "three high seats wrote no sideboard");
         assertEq(_countWrites(writes, staked), 1, "the day's high action was booked more than once");
+        assertGt(craps.highStakedOf(day), 0, "the packed high half recorded no high action");
 
         // And the whole lane is those two slots: no third slot in either mapping was written.
         uint256 laneWrites;

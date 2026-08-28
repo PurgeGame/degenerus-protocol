@@ -318,11 +318,11 @@ contract CrapsViews is CrapsBattle {
     }
 
     function highStakedOf(uint24 day) external view returns (uint256) {
-        return _highStaked[day];
+        return _dayStaked[day] >> _DAY_HIGH_SHIFT;
     }
 
     function highActionRateOf(uint24 day) external view returns (uint256) {
-        return (_highStaked[day] * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
+        return ((_dayStaked[day] >> _DAY_HIGH_SHIFT) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
     }
 
     function highBudgetOf(uint24 day) external view returns (uint256) {
@@ -451,7 +451,7 @@ contract CrapsViews is CrapsBattle {
 
     // ── Day action and budget ───────────────────────────────────────────────
     function dayStaked(uint24 day) external view returns (uint256) {
-        return _dayStaked[day];
+        return uint128(_dayStaked[day]);
     }
 
     function dayActionRate(uint24 day) external view returns (uint256) {

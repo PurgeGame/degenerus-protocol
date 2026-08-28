@@ -278,7 +278,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
 
         // The engine's own regression ceiling is the other half of the argument: a seat cannot
         // outrun it however the dice fall, so the bound holds for seats this search never drew.
-        uint256 structural = uint256(KEEPER_ALLOWANCE) + 2_250_000 + 600_000 + ROUTER_TAIL_MEASURED;
+        uint256 structural = uint256(KEEPER_ALLOWANCE) + 1_500_000 + 600_000 + ROUTER_TAIL_MEASURED;
         emit log_named_uint("STRUCTURAL bound at the engine cap", structural);
         assertLt(bound, 16_700_000, "the measured hard bound passed the protocol ceiling");
         assertLt(structural, 16_700_000, "the structural hard bound passed the protocol ceiling");

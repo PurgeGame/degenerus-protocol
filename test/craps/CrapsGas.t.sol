@@ -128,7 +128,7 @@ contract CrapsGasTest is CrapsPins {
 
         emit log_named_uint("engine worst-case run gas", used);
         assertEq(result.handsPlayed, craps.MAX_SLIP_HANDS(), "benchmark did not reach the shooter cap");
-        assertLt(used, 2_250_000, "the engine's worst case regressed past its gas budget");
+        assertLt(used, 1_500_000, "the engine's worst case regressed past its gas budget");
 
         // AND WITH A SCHEDULE ON, which is what every protocol window runs. The draw fires on
         // about one shooter in seven here, so this is the cost the guarantee actually has to
@@ -140,7 +140,7 @@ contract CrapsGasTest is CrapsPins {
         emit log_named_uint("engine worst-case run gas, scheduled", usedBoosted);
         emit log_named_uint("  the schedule's own cost", usedBoosted - used);
         assertEq(boosted.handsPlayed, craps.MAX_SLIP_HANDS(), "the scheduled benchmark stopped early");
-        assertLt(usedBoosted, 2_250_000, "the scheduled worst case regressed past its gas budget");
+        assertLt(usedBoosted, 1_500_000, "the scheduled worst case regressed past its gas budget");
     }
 
     /// @dev And the real surface: a max-legal slip (ten rounds of the board) placed and settled
@@ -163,7 +163,7 @@ contract CrapsGasTest is CrapsPins {
         uint256 used = g - gasleft();
 
         emit log_named_uint("max-legal slip settle gas", used);
-        assertLt(used, 300_000, "a max-legal slip regressed past its gas budget");
+        assertLt(used, 210_000, "a max-legal slip regressed past its gas budget");
     }
 
     /// @dev Mass settlement. Every bet in a batch at ONE table re-reads the same VRF word through
@@ -201,6 +201,9 @@ contract CrapsGasTest is CrapsPins {
         emit log_named_uint("field of 20, total        ", batch);
         emit log_named_uint("field of 20, per bet      ", batch / n);
         emit log_named_uint("saved per bet by the field", single - batch / n);
+        assertLt(single, 240_000, "a cold one-seat settlement regressed");
+        assertLt(batch, 2_050_000, "a twenty-seat settlement regressed");
+        assertLt(batch / n, 105_000, "the warm marginal seat regressed");
     }
 
     function _ids(uint64 a) internal pure returns (uint64[] memory out) {
@@ -244,7 +247,7 @@ contract CrapsGasTest is CrapsPins {
         emit log_named_uint("enterBattle, later seat   ", nextSeat);
         emit log_named_uint("closeBattle               ", close);
         emit log_named_uint("resolveSlot, field of 2   ", settle);   // pays, too
-        assertLt(settle, 1_200_000, "the one-transaction field settle regressed");
+        assertLt(settle, 260_000, "the one-transaction field settle regressed");
     }
 
     function test_marginalShooterCost() public {
@@ -294,8 +297,17 @@ contract CrapsGasTest is CrapsPins {
         // doing its job and this fails rather than quietly shipping an unsettleable slip.
         assertLt(
             (marginalGas / marginalHands) * craps.MAX_SLIP_HANDS(),
-            2_250_000,
+            1_500_000,
             "a cap-length run regressed past its gas budget"
         );
+    }
+
+    /// @dev Gas wins are irrelevant if the production wrapper no longer deploys. Keep a small
+    ///      explicit margin under EIP-170's 24,576-byte runtime ceiling; the richer test harness
+    ///      itself is intentionally much larger and is not what ships.
+    function test_productionRuntimeFitsEip170() public {
+        CrapsBattle production = new CrapsBattle();
+        emit log_named_uint("CrapsBattle runtime bytes", address(production).code.length);
+        assertLe(address(production).code.length, 24_400, "CrapsBattle runtime left too little deployment headroom");
     }
 }

@@ -66,17 +66,6 @@ pragma solidity 0.8.34;
 ///          switch bought a player nothing but a decision to get wrong.
 ///        * Payouts are floored. Stakes in multiples of 30 FLIP make every payout exact.
 contract Craps {
-    // ---------------------------------------------------------------------------------------
-    // Bet legs
-    // ---------------------------------------------------------------------------------------
-
-    /// @dev Place indexes, ordered by dice total: 4, 5, 6, 8, 9, 10.
-    uint256 internal constant PLACE_4 = 0;
-    uint256 internal constant PLACE_5 = 1;
-    uint256 internal constant PLACE_6 = 2;
-    uint256 internal constant PLACE_8 = 3;
-    uint256 internal constant PLACE_9 = 4;
-
     /// @dev 1 FLIP in wei. Stakes are stored in whole FLIP; every payout computation scales here
     ///      first, so the math is identical to wei-denominated stakes.
     uint256 internal constant FLIP = 1 ether;
@@ -273,21 +262,23 @@ contract Craps {
         r.bankrollIn = bankroll;
         uint256 initialState = _settlementState(b);
         uint256 unitsPlayed;
-        // Indexes 0..5 are the place legs' WINNINGS, by place index; index 6 is the whole figure a
-        // winning Don't Pass returns — its own stake plus the 3:4, floored once. Computed here so
-        // the roll loop pays out of memory rather than redoing a division per hit.
-        uint256[7] memory wins;
+        // Cache place winnings by dice total, plus the whole figure a winning Don't Pass returns
+        // at index zero. Sized to the highest total the dice can throw, so the resolvers' indexed
+        // read is in bounds for every roll rather than only for the totals a live place bit can
+        // name. Keeping the board pointer in the resolver is deliberate: via-IR otherwise inlines
+        // the whole hand machine through the battle wrapper and exhausts its stack.
+        uint256[13] memory wins;
         unchecked {
             if (initialState & ST_PLACE_ANY != 0) {
-                wins[0] = uint256(b.place4) * (2 * FLIP);
-                wins[1] = (uint256(b.place5) * (3 * FLIP)) / 2;
-                wins[2] = (uint256(b.place6) * (7 * FLIP)) / 6;
-                wins[3] = (uint256(b.place8) * (7 * FLIP)) / 6;
-                wins[4] = (uint256(b.place9) * (3 * FLIP)) / 2;
-                wins[5] = uint256(b.place10) * (2 * FLIP);
+                wins[4] = uint256(b.place4) * (2 * FLIP);
+                wins[5] = (uint256(b.place5) * (3 * FLIP)) / 2;
+                wins[6] = (uint256(b.place6) * (7 * FLIP)) / 6;
+                wins[8] = (uint256(b.place8) * (7 * FLIP)) / 6;
+                wins[9] = (uint256(b.place9) * (3 * FLIP)) / 2;
+                wins[10] = uint256(b.place10) * (2 * FLIP);
             }
             if (initialState & ST_DONT_LIVE != 0) {
-                wins[6] = uint256(b.dontPass) * FLIP + (uint256(b.dontPass) * (3 * FLIP)) / 4;
+                wins[0] = uint256(b.dontPass) * FLIP + (uint256(b.dontPass) * (3 * FLIP)) / 4;
             }
         }
 
@@ -416,7 +407,7 @@ contract Craps {
     ///      `test/craps` grades this against an independent implementation of the same rules off
     ///      the identical seed; that differential is what stands in for the per-leg assertions the
     ///      scalar return cannot make on its own.
-    function _runSettlement(Bets memory b, bytes32 seed, uint256 logPos, uint256 st, uint256[7] memory wins)
+    function _runSettlement(Bets memory b, bytes32 seed, uint256 logPos, uint256 st, uint256[13] memory wins)
         private
         pure
         returns (uint256 packed)
@@ -440,73 +431,64 @@ contract Craps {
                     mstore(0x20, i)
                     w := keccak256(0x00, 0x40)
                 }
-                uint256 d1 = (uint256(uint32(w)) % 6) + 1;
-                uint256 d2 = (uint256(uint32(w >> 32)) % 6) + 1;
-                uint256 t = d1 + d2;
-                bool comeOut = (st & ST_POINT_MASK) == 0;
-                ++logPos;
+                uint256 t = (uint256(uint32(w)) % 6) + (uint256(uint32(w >> 32)) % 6) + 2;
 
-                // A point-phase seven ends the hand before any LIGHT bet can pay: every live
-                // stake there is swept by the seven-out, so nothing after the break needs the
-                // roll. The dark side is the exception — the seven that kills the table is the
-                // seven it was waiting for — so it collects here, before the break.
-                if (t == 7 && !comeOut) {
-                    if (st & ST_DONT_LIVE != 0) {
-                        returned += wins[6];
-                        st |= ST_DONT_WON;
-                    }
-                    st |= ST_SEVEN_OUT;
-                    break;
-                }
-
-                if (!comeOut) {
-                    if (st & ST_PLACE_ANY != 0 && st & (1 << t) != 0) {
-                        returned += _cachedPlaceWin(wins, t);
-                    }
-
-                    if (st & (ST_HARD4_LIVE | ST_HARD8_LIVE) != 0) {
-                        if (t == 4 && st & ST_HARD4_LIVE != 0) {
-                            if (d1 == d2) {
-                                returned += uint256(b.hard4) * (7 * FLIP);
-                            } else {
-                                st &= ~ST_HARD4_LIVE;
-                            }
-                        } else if (t == 8 && st & ST_HARD8_LIVE != 0) {
-                            if (d1 == d2) {
-                                returned += uint256(b.hard8) * (9 * FLIP);
-                            } else {
-                                st &= ~ST_HARD8_LIVE;
-                            }
-                        }
-                    }
-                }
-
-                if (comeOut) {
+                uint256 point = st & ST_POINT_MASK;
+                if (point == 0) {
                     if (t == 7 || t == 11) {
                         if (st & ST_PASS_LIVE != 0) returned += uint256(b.passLine) * FLIP;
-                        // A come-out natural is the dark side's loss and NOT a seven-out: the
-                        // shooter rolls on, with that wager retired for the rest of the hand.
                         st &= ~ST_DONT_LIVE;
                     } else if (t == 12) {
-                        // Bar the twelve. The line dies; the dark side neither wins nor loses and
-                        // the same wager stays up for the come-out that follows.
                         st &= ~ST_PASS_LIVE;
                     } else if (t == 2 || t == 3) {
                         st &= ~ST_PASS_LIVE;
                         if (st & ST_DONT_LIVE != 0) {
-                            returned += wins[6];
+                            returned += wins[0];
                             st = (st | ST_DONT_WON) & ~ST_DONT_LIVE;
                         }
                     } else {
                         st |= t << ST_POINT;
                     }
-                } else if (t == (st >> ST_POINT) & 0xF) {
-                    if (st & ST_PASS_LIVE != 0) returned += uint256(b.passLine) * FLIP;
-                    // The point made is the dark side's other death, and the table returns to a
-                    // come-out with it already retired.
-                    st &= ~(ST_DONT_LIVE | ST_POINT_MASK);
+                } else {
+                    // A point-phase seven ends the hand before any light bet can pay. Don't Pass
+                    // is the exception: this is the decision it was waiting for.
+                    if (t == 7) {
+                        if (st & ST_DONT_LIVE != 0) {
+                            returned += wins[0];
+                            st |= ST_DONT_WON;
+                        }
+                        st |= ST_SEVEN_OUT;
+                        break;
+                    }
+                    // Place winnings are indexed directly by dice total. Totals without a live
+                    // place bit never touch memory.
+                    if (st & (1 << t) != 0) {
+                        assembly ("memory-safe") {
+                            returned := add(returned, mload(add(wins, shl(5, t))))
+                        }
+                    }
+                    if (st & (ST_HARD4_LIVE | ST_HARD8_LIVE) != 0) {
+                        if (t == 4 && st & ST_HARD4_LIVE != 0) {
+                            if (uint32(w) % 6 == uint32(w >> 32) % 6) {
+                                returned += uint256(b.hard4) * (7 * FLIP);
+                            }
+                            else st &= ~ST_HARD4_LIVE;
+                        } else if (t == 8 && st & ST_HARD8_LIVE != 0) {
+                            if (uint32(w) % 6 == uint32(w >> 32) % 6) {
+                                returned += uint256(b.hard8) * (9 * FLIP);
+                            }
+                            else st &= ~ST_HARD8_LIVE;
+                        }
+                    }
+                    if (t << ST_POINT == point) {
+                        if (st & ST_PASS_LIVE != 0) returned += uint256(b.passLine) * FLIP;
+                        st &= ~(ST_DONT_LIVE | ST_POINT_MASK);
+                    }
                 }
             }
+            // Seven-out is the loop's only early exit. Accumulate the cursor once per hand rather
+            // than once per roll.
+            logPos += st & ST_SEVEN_OUT == 0 ? _MAX_ROLLS : i + 1;
 
             // ELIGIBLE PROFIT, banked before the refunds below can dilute it. What is in
             // `returned` at this point is everything the dice PAID: the light side's winnings,
@@ -517,9 +499,12 @@ contract Craps {
 
             if (st & ST_SEVEN_OUT == 0) {
                 if (st & ST_PASS_LIVE != 0) returned += uint256(b.passLine) * FLIP;
-                for (uint256 k = 0; k < 6; ++k) {
-                    if (st & (1 << _placeTotal(k)) != 0) returned += _placeWei(b, k);
-                }
+                if (st & (1 << 4) != 0) returned += uint256(b.place4) * FLIP;
+                if (st & (1 << 5) != 0) returned += uint256(b.place5) * FLIP;
+                if (st & (1 << 6) != 0) returned += uint256(b.place6) * FLIP;
+                if (st & (1 << 8) != 0) returned += uint256(b.place8) * FLIP;
+                if (st & (1 << 9) != 0) returned += uint256(b.place9) * FLIP;
+                if (st & (1 << 10) != 0) returned += uint256(b.place10) * FLIP;
                 if (st & ST_HARD4_LIVE != 0) returned += uint256(b.hard4) * FLIP;
                 if (st & ST_HARD8_LIVE != 0) returned += uint256(b.hard8) * FLIP;
                 // A hand cut off by the roll cap owes an UNDECIDED dark wager its stake back, and
@@ -547,7 +532,7 @@ contract Craps {
     }
 
     /// @dev Place/hardway specialization selected when the board has no pass line.
-    function _runSideSettlement(Bets memory b, bytes32 seed, uint256 logPos, uint256 st, uint256[7] memory wins)
+    function _runSideSettlement(Bets memory b, bytes32 seed, uint256 logPos, uint256 st, uint256[13] memory wins)
         private
         pure
         returns (uint256 packed)
@@ -563,42 +548,9 @@ contract Craps {
                     mstore(0x20, i)
                     w := keccak256(0x00, 0x40)
                 }
-                uint256 d1 = (uint256(uint32(w)) % 6) + 1;
-                uint256 d2 = (uint256(uint32(w >> 32)) % 6) + 1;
-                uint256 t = d1 + d2;
-                ++logPos;
+                uint256 t = (uint256(uint32(w)) % 6) + (uint256(uint32(w >> 32)) % 6) + 2;
 
-                uint256 point = (st >> ST_POINT) & 0xF;
-                if (t == 7 && point != 0) {
-                    if (st & ST_DONT_LIVE != 0) {
-                        returned += wins[6];
-                        st |= ST_DONT_WON;
-                    }
-                    st |= ST_SEVEN_OUT;
-                    break;
-                }
-
-                if (point != 0) {
-                    if (st & ST_PLACE_ANY != 0 && st & (1 << t) != 0) {
-                        returned += _cachedPlaceWin(wins, t);
-                    }
-                    if (st & (ST_HARD4_LIVE | ST_HARD8_LIVE) != 0) {
-                        if (t == 4 && st & ST_HARD4_LIVE != 0) {
-                            if (d1 == d2) {
-                                returned += uint256(b.hard4) * (7 * FLIP);
-                            } else {
-                                st &= ~ST_HARD4_LIVE;
-                            }
-                        } else if (t == 8 && st & ST_HARD8_LIVE != 0) {
-                            if (d1 == d2) {
-                                returned += uint256(b.hard8) * (9 * FLIP);
-                            } else {
-                                st &= ~ST_HARD8_LIVE;
-                            }
-                        }
-                    }
-                }
-
+                uint256 point = st & ST_POINT_MASK;
                 if (point == 0) {
                     if (_POINT_TOTALS_MASK & (1 << t) != 0) {
                         st |= t << ST_POINT;
@@ -606,23 +558,53 @@ contract Craps {
                         // A come-out that is not a point is the dark side's whole decision: 2 or 3
                         // wins, 7 or 11 loses, and the barred 12 leaves the wager up.
                         if (t == 2 || t == 3) {
-                            returned += wins[6];
+                            returned += wins[0];
                             st = (st | ST_DONT_WON) & ~ST_DONT_LIVE;
                         } else if (t != 12) {
                             st &= ~ST_DONT_LIVE;
                         }
                     }
-                } else if (t == point) {
-                    st &= ~(ST_DONT_LIVE | ST_POINT_MASK);
+                } else {
+                    if (t == 7) {
+                        if (st & ST_DONT_LIVE != 0) {
+                            returned += wins[0];
+                            st |= ST_DONT_WON;
+                        }
+                        st |= ST_SEVEN_OUT;
+                        break;
+                    }
+                    if (st & (1 << t) != 0) {
+                        assembly ("memory-safe") {
+                            returned := add(returned, mload(add(wins, shl(5, t))))
+                        }
+                    }
+                    if (st & (ST_HARD4_LIVE | ST_HARD8_LIVE) != 0) {
+                        if (t == 4 && st & ST_HARD4_LIVE != 0) {
+                            if (uint32(w) % 6 == uint32(w >> 32) % 6) {
+                                returned += uint256(b.hard4) * (7 * FLIP);
+                            }
+                            else st &= ~ST_HARD4_LIVE;
+                        } else if (t == 8 && st & ST_HARD8_LIVE != 0) {
+                            if (uint32(w) % 6 == uint32(w >> 32) % 6) {
+                                returned += uint256(b.hard8) * (9 * FLIP);
+                            }
+                            else st &= ~ST_HARD8_LIVE;
+                        }
+                    }
+                    if (t << ST_POINT == point) st &= ~(ST_DONT_LIVE | ST_POINT_MASK);
                 }
             }
+            logPos += st & ST_SEVEN_OUT == 0 ? _MAX_ROLLS : i + 1;
 
             uint256 elig = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
 
             if (st & ST_SEVEN_OUT == 0) {
-                for (uint256 k = 0; k < 6; ++k) {
-                    if (st & (1 << _placeTotal(k)) != 0) returned += _placeWei(b, k);
-                }
+                if (st & (1 << 4) != 0) returned += uint256(b.place4) * FLIP;
+                if (st & (1 << 5) != 0) returned += uint256(b.place5) * FLIP;
+                if (st & (1 << 6) != 0) returned += uint256(b.place6) * FLIP;
+                if (st & (1 << 8) != 0) returned += uint256(b.place8) * FLIP;
+                if (st & (1 << 9) != 0) returned += uint256(b.place9) * FLIP;
+                if (st & (1 << 10) != 0) returned += uint256(b.place10) * FLIP;
                 if (st & ST_HARD4_LIVE != 0) returned += uint256(b.hard4) * FLIP;
                 if (st & ST_HARD8_LIVE != 0) returned += uint256(b.hard8) * FLIP;
                 if (st & ST_DONT_LIVE != 0) returned += uint256(b.dontPass) * FLIP;
@@ -661,11 +643,7 @@ contract Craps {
     ///      inputs were fixed before the seed existed — the word is the table's and the player is
     ///      who placed the slip — so nobody could know the schedule while entry was still open,
     ///      and settlement order cannot change it afterwards.
-    function _boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance)
-        internal
-        pure
-        returns (bool)
-    {
+    function _boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance) internal pure returns (bool) {
         return _playerDraw(SHOOTER_BOOST_TAG, seed, n, player) % 100 < chance;
     }
 
@@ -679,37 +657,6 @@ contract Craps {
             mstore(add(ptr, 0x40), n)
             mstore(add(ptr, 0x60), player)
             draw := keccak256(ptr, 0x80)
-        }
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // Tables
-    // ---------------------------------------------------------------------------------------
-
-    /// @dev Place index (0..5) -> dice total: 0,1,2 -> 4,5,6 and 3,4,5 -> 8,9,10.
-    function _placeTotal(uint256 idx) private pure returns (uint256) {
-        return idx < 3 ? idx + 4 : idx + 5;
-    }
-
-    /// @dev The stake on place index `idx`, in wei. The struct's named fields are what buy the
-    ///      one-slot packing; this is the array view the resolver's index math wants.
-    function _placeWei(Bets memory b, uint256 idx) private pure returns (uint256) {
-        unchecked {
-            if (idx == PLACE_4) return uint256(b.place4) * FLIP;
-            if (idx == PLACE_5) return uint256(b.place5) * FLIP;
-            if (idx == PLACE_6) return uint256(b.place6) * FLIP;
-            if (idx == PLACE_8) return uint256(b.place8) * FLIP;
-            if (idx == PLACE_9) return uint256(b.place9) * FLIP;
-            return uint256(b.place10) * FLIP;
-        }
-    }
-
-    function _cachedPlaceWin(uint256[7] memory wins, uint256 t) private pure returns (uint256 amount) {
-        unchecked {
-            uint256 idx = t < 7 ? t - 4 : t - 5;
-            assembly ("memory-safe") {
-                amount := mload(add(wins, shl(5, idx)))
-            }
         }
     }
 }
