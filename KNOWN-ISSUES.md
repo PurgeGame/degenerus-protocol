@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `09413eb0` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `d5e87795` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -141,23 +141,56 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,909
-results / 101 detectors over 178 contracts at tree `09413eb0`; 176 High / 510 Medium / 510 Low /
-2,661 Informational / 52 Optimization, and the "High" tier is dominated by 134 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (3,968
+results / 101 detectors over 177 contracts at tree `d5e87795`; 177 High / 516 Medium / 515 Low /
+2,708 Informational / 52 Optimization, and the "High" tier is dominated by 134 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
-units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 22 Low, category-identical
-to the prior tree apart from one new `dead-code` Low on the Craps reader surface — internal view
-helpers consumed only by the test-only reader shim, not on chain).
+units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (9 High / 22 Low, tier- and
+category-identical to the prior tree).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `09413eb0`, not carried forward from an earlier scan.
-The immediately preceding freeze tree `41f04be2` (tag `degenerus-c4a`) re-scanned in the same
-environment reproduced 3,697 / 171 High / 447 Medium / 433 Low / 2,594 Informational / 52
+These counts were measured directly at tree `d5e87795`, not carried forward from an earlier scan.
+The immediately preceding freeze tree `09413eb0` (the prior `degenerus-c4a`) re-scanned in the same
+environment reproduced 3,909 / 176 High / 510 Medium / 510 Low / 2,661 Informational / 52
 Optimization exactly, tier for tier — the figure recorded for it at that freeze — so the delta
 across this span is a measurement rather than an assumption.
 
-That delta is **+212 results and +5 High**, effectively the whole of it the addition of the Craps
-table — `CrapsBattle` plus its `Craps` / `LootboxCraps` bases, new to the audited scope this freeze
+That delta is **+59 results and +1 High** across the eleven-commit span: the Dice Run high-water
+redesign, the progressive's window-class schedule, the craps bankroll-payout boons, the
+protocol-wallet pass bank, the fifth (dice-run) record category, and the excision of the
+ticket-volume parimutuel market. The contract count moves 178 -> 177: the `IQuestStreak` interface
+stub retired with the quest-streak call that the burn's flag-byte report replaced.
+
+The one net High is `weak-prng` at 19 -> 20, and it is a three-for-two swap rather than a new draw:
+**+3** in `CrapsBattle` — `_isEventSlot` (`slot % 8`, a schedule-position test), `_poolShare`
+(divide-and-remainder basis-point arithmetic) and `keepScheduled` (the keeper cursor's `% 8`
+window derivation) — each a modulo on a non-entropy quantity with nothing drawn from it, the same
+benign class as `requestLootboxRng`; and **−2** in `DegenerusParimutuel`, the `_openVolumeRound` /
+`volumeBetCredit` time-of-day gates deleted with the volume market (the same two entries recorded
+as that detector's +2 at the 2026-07-28 freeze). `uninitialized-state` is unchanged at 134 and
+every other High detector class is composition-identical (arbitrary-send-eth 6, delegatecall-loop
+4, encode-packed-collision 2, incorrect-exp 2, reentrancy-balance 6, reentrancy-eth 3). No new
+detector class entered any tier.
+
+The Medium (+6), Low (+5) and Informational (+47) net movement is fully attributed, keyed
+line-insensitively on (check, impact, subject): `incorrect-equality` +7, all strict equalities on
+the new craps comparators (`_boonBonus`'s one-hot masks, `_compositeOf` / `_decodeBest`'s goal
+bit, `_isEventSlot`, `_payProgressive`'s target test, `_shooterBoostTerms`) — packed-field and
+enum tests, not balance comparisons; `reentrancy-events` +3 and `reentrancy-no-eth` +1 on the
+reshaped craps settlement logs; `timestamp` +3 on the day-lane clock gates; `unused-state` +45,
+dominated by `DeityBoonViewer` (37) whose ordered weight table became declarative when its roll
+mapping was restated as the boon module's weight-balanced tree — the exhaustive 2,856-roll
+`BoonRollTreeParity` suite holds the two statements together — plus craps boon-weight and storage
+constants of the same declarative kind; `missing-inheritance` +2 (`Coinflip` / `FLIP` against the
+caller-local `ICoinflipStake` / `IFlipCoin` stubs declared in `CrapsBattle.sol`); and `dead-code`
+−1, the removed `_flipToEthValue` helper. Every new finding names craps, boon, record or quest
+code the span actually touched; nothing else moved.
+
+The paragraphs below record the accumulated attribution of the standing false-positive classes
+across the earlier freeze chain, and remain accurate as history.
+
+At the preceding freeze, the delta `41f04be2` -> `09413eb0` was **+212 results and +5 High**, effectively the whole of it the addition of the Craps
+table — `CrapsBattle` plus its `Craps` / `LootboxCraps` bases, new to the audited scope at that freeze
 (deploy set 29 → 30, appended last so no predicted address moved) — net of a refactor of the daily
 advance. The contract count moves 163 → 178 for the craps compilation units.
 
@@ -179,8 +212,6 @@ body, `timestamp` on the table's clock gates, `calls-loop` on `_payout` / `_exts
 `divide-before-multiply` / `incorrect-equality` on the craps preset and progressive math. Every
 new finding names craps code or the refactored advance/lootbox path; nothing else moved.
 
-The paragraphs below record the accumulated attribution of the standing false-positive classes
-across the earlier freeze chain, and remain accurate as history.
 
 Across the wider chain from `33ccd5b9`, the High tier gained no new detector class and one retired
 entirely. A single finding was added —
