@@ -43,16 +43,7 @@ contract BattleHarness is CrapsViews {
         Window memory w;
         w.key = key;
         w.stakeUnits = stakeUnits;
-        _scoreBattle(w, score, seat, 0, 0);
-    }
-
-    /// @dev The same tap, carrying a roll count, so a suite can drive what the scoreboard stores
-    ///      beside the seat without running a whole field through the engine.
-    function scoreRolls(bytes32 key, uint256 score, uint64 seat, uint256 stakeUnits, uint256 rolls) external {
-        Window memory w;
-        w.key = key;
-        w.stakeUnits = stakeUnits;
-        _scoreBattle(w, score, seat, 0, rolls);
+        _scoreBattle(w, score, seat, 0);
     }
 
     /// @dev The seed field's ceiling, in stake units. Internal on the contract, so the harness is
@@ -71,17 +62,19 @@ contract BattleHarness is CrapsViews {
         Window memory w;
         w.key = key;
         w.stakeUnits = stakeUnits;
-        _scoreBattle(w, score, seat, word, 0);
+        _scoreBattle(w, score, seat, word);
     }
 
-    /// @dev The composite the fold actually compares: rank, then the money it came home with,
-    ///      then the entrant's standing. Restated here so the suite can assert the ladder.
-    function compositeOf(uint256 rank, uint256 wonFlip, uint256 standing) external pure returns (uint256) {
-        return (rank << _SC_RANK_SHIFT) | ((wonFlip & _SC_WON_MASK) << _SC_WON_SHIFT) | standing;
-    }
-
-    function rankAt(Craps.SlipStop stop, uint256 hands) external pure returns (uint256) {
-        return _rankOf(stop, hands);
+    /// @dev The composite the fold actually compares: the goal flag, then the primary its
+    ///      product ranks on, then the money it came home with, then the entrant's standing.
+    ///      Restated here so the suite can assert the ladder.
+    function compositeOf(bool goal, uint256 primary, uint256 wonFlip, uint256 standing)
+        external
+        pure
+        returns (uint256)
+    {
+        return (goal ? _SC_GOAL_BIT : 0) | ((primary & _SC_PRIMARY_MASK) << _SC_PRIMARY_SHIFT)
+            | ((wonFlip & _SC_WON_MASK) << _SC_WON_SHIFT) | standing;
     }
 
     /// @dev The board a slip actually PLAYS: its chips grown by the ones the dice place. No slip
@@ -332,12 +325,13 @@ contract CrapsBattleTest is CrapsPins {
         delete _fixtureSlot[_slotKey(bank, goal, su)];
     }
 
-    /// @dev The battle rules, restated independently of the contract's rank scalar: a goal beats
-    ///      every bust, faster goals beat slower ones, later busts beat earlier ones.
-    ///      `g` = reached goal.
-    function _beats(bool gA, uint256 hA, bool gB, uint256 hB) internal pure returns (bool) {
+    /// @dev The battle rules, restated independently of the contract's composite: a goal beats
+    ///      every bust, a HIGHER goal beats a lower one, and later busts beat earlier ones.
+    ///      `g` = reached goal, `p` = the run's PRIMARY — its whole-FLIP high point for a goal,
+    ///      its shooter count for a bust.
+    function _beats(bool gA, uint256 pA, bool gB, uint256 pB) internal pure returns (bool) {
         if (gA != gB) return gA;
-        return gA ? hA < hB : hA > hB;
+        return pA > pB;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -482,28 +476,34 @@ contract CrapsBattleTest is CrapsPins {
             bytes32 key = craps.battleKeyOf(ids[0]);
 
             // The expected verdict, off the engine's own account of each run but ranked by the
-            // independent comparator — rank first, then the money, then the standing.
+            // independent comparator — the primary first, then the money, then the standing. A
+            // goal's primary is its whole-FLIP HIGH POINT; a bust's is its shooter count.
             bool[3] memory g;
             uint256[3] memory h;
+            uint256[3] memory prim;
             uint256[3] memory w;
             for (uint256 k = 0; k < 3; ++k) {
                 CrapsBattle.Settlement memory st = craps.settlementAt(ids[k]);
                 g[k] = st.stop == Craps.SlipStop.Goal;
                 h[k] = st.handsPlayed;
+                prim[k] = g[k] ? st.peak / 1 ether : st.handsPlayed;
                 w[k] = st.won;
             }
             // Rank, then the money, then — when those are dead level, which is the whole
             // composite here since the three share a standing — the word's own coin.
             uint256 best = 0;
             for (uint256 k = 1; k < 3; ++k) {
-                bool level = g[k] == g[best] && h[k] == h[best] && w[k] / 1 ether == w[best] / 1 ether;
+                bool level = g[k] == g[best] && prim[k] == prim[best] && w[k] / 1 ether == w[best] / 1 ether;
                 bool takes = level
                     ? _tag(word, ids[k]) > _tag(word, ids[best])
-                    : _beatsFully(g[k], h[k], w[k], g[best], h[best], w[best]);
+                    : _beatsFully(g[k], prim[k], w[k], g[best], prim[best], w[best]);
                 if (takes) best = k;
             }
             for (uint256 k = 0; k < 3; ++k) {
-                if (k != best && !_beats(g[best], h[best], g[k], h[k]) && !_beats(g[k], h[k], g[best], h[best])) {
+                if (
+                    k != best && !_beats(g[best], prim[best], g[k], prim[k])
+                        && !_beats(g[k], prim[k], g[best], prim[best])
+                ) {
                     ++sawTieOnRank;
                 }
             }
@@ -525,7 +525,10 @@ contract CrapsBattleTest is CrapsPins {
                 uint8(g[best] ? Craps.SlipStop.Goal : Craps.SlipStop.Bust),
                 "winning stop class"
             );
-            assertEq(info.winningHands, h[best], "winning hand count");
+            // A GOAL RANKS ON ITS HIGH POINT, so the composite carries no shooter count for one;
+            // a BUST's primary IS its shooter count.
+            assertEq(info.winningHands, g[best] ? 0 : h[best], "winning hand count");
+            assertEq(info.winningEnd, w[best] / 1 ether, "the winner's ending bankroll");
 
             assertEq(pot.betId, ids[best], "the pot went to a seat other than the winner");
             assertEq(pot.player, craps.betOf(ids[best]).player, "the pot reached the wrong address");
@@ -546,13 +549,13 @@ contract CrapsBattleTest is CrapsPins {
         return uint256(keccak256(abi.encode(word, uint64(betId))));
     }
 
-    function _beatsFully(bool gA, uint256 hA, uint256 wA, bool gB, uint256 hB, uint256 wB)
+    function _beatsFully(bool gA, uint256 pA, uint256 wA, bool gB, uint256 pB, uint256 wB)
         internal
         pure
         returns (bool)
     {
-        if (_beats(gA, hA, gB, hB)) return true;
-        if (_beats(gB, hB, gA, hA)) return false;
+        if (_beats(gA, pA, gB, pB)) return true;
+        if (_beats(gB, pB, gA, pA)) return false;
         return wA > wB;
     }
 
@@ -627,7 +630,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      answer is exactly the one the tag order predicts — so the coin is real, it is the
     ///      dice's, and anyone holding the word can replay it.
     function test_aDeadLevelScoreGoesToTheCoin() public {
-        uint256 score = craps.compositeOf(600, 4000, 12);
+        uint256 score = craps.compositeOf(false, 600, 4000, 12);
 
         uint64[3] memory seats = [uint64(1), uint64(2), uint64(3)];
         uint256[2] memory words = [uint256(keccak256("coin-a")), uint256(keccak256("coin-b"))];
@@ -653,9 +656,9 @@ contract CrapsBattleTest is CrapsPins {
     ///      arrival order. Driven through the shipped fold because settlement itself fixes order.
     function test_theFoldIsOrderInvariantOnDistinctScores() public {
         uint256[3] memory sc = [
-            craps.compositeOf(uint256(_RANK_GOAL_BASE), 900, 5),
-            craps.compositeOf(40, 1200, 5),
-            craps.compositeOf(40, 800, 9)
+            craps.compositeOf(true, 12, 900, 5),
+            craps.compositeOf(false, 40, 1200, 5),
+            craps.compositeOf(false, 40, 800, 9)
         ];
         uint64[6][6] memory orders;
         uint256 n;
@@ -679,8 +682,6 @@ contract CrapsBattleTest is CrapsPins {
             assertEq(info.winnerId, 1, "arrival order moved the verdict");
         }
     }
-
-    uint256 internal constant _RANK_GOAL_BASE = 512;
 
 
     /// @dev A BUST IS DELETED. A run that goes broke chasing its target does not get the crumbs it
@@ -1016,13 +1017,24 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(flip.burned(alice), burnedBefore, "an amendment burned FLIP");
         assertEq(flip.minted(alice), 0, "an amendment minted FLIP");
 
-        // Seven chips or nothing moves: a stack of a different size is refused, so the round
-        // played, the money and the seat are all exactly what they were.
+        // SEVEN CHIPS OR NONE: a stack of any other size is refused, so the round played, the
+        // money and the seat are all exactly what they were.
         Craps.Bets memory wider = _boardB();
         wider.passLine = 1;
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BoardTotalChanged.selector);
+        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
         craps.amendSlip(betId, wider);
+
+        // BUT A PICKED BOARD MAY BE HANDED BACK TO THE DICE. Zero chips is the blank ticket, and
+        // an amendment is the same choice the entry door offered — so a seat that picked can
+        // change its mind about picking, not merely about where.
+        vm.prank(alice);
+        craps.amendSlip(betId, uint32(0));
+        assertEq(craps.betOf(betId).chips, 0, "the slip did not become a blank ticket");
+        // And back again, which was always allowed.
+        vm.prank(alice);
+        craps.amendSlip(betId, _boardA());
+        assertGt(craps.betOf(betId).chips, 0, "a blank ticket could not pick a board again");
 
         // Only the owner, and only while the slot is open.
         vm.prank(bob);
@@ -1305,7 +1317,7 @@ contract CrapsBattleTest is CrapsPins {
         // An amendment cannot smuggle a wrong count into a seated battle either.
         uint256 betId = _placeBattle(carol, _boardA(), LW * 2, LW * 10, SU);
         vm.prank(carol);
-        vm.expectRevert(CrapsBattle.BoardTotalChanged.selector);
+        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
         craps.amendSlip(betId, six);
 
         // A seven-chip re-spread of the same stack is fine, and lands on the legs it named.
@@ -3189,12 +3201,10 @@ contract CrapsBattleTest is CrapsPins {
 
     /// @dev The tournament's shape, held to its definition so it cannot drift: a single table
     ///      bet; ten chips of it are the BASE a round puts down and seven of them are what an
-    ///      entrant posts; the bankroll runs some whole number of those bases deep; and the
-    ///      target is some whole multiple of the bankroll. Swept over every window of many days,
-    ///      so this pins the format itself rather than one draw of it.
-    function test_tournamentFormatIsChipsBaseDepthTarget() public {
-        bool sawDepth2;
-        bool sawDepth10;
+    ///      entrant posts; the bankroll runs FIVE of those bases deep; and the target is 5x or
+    ///      20x that bankroll. Swept over every window of many days, so this pins the format
+    ///      itself rather than one draw of it.
+    function test_tournamentFormatIsChipsBaseFiveDeepOnTwoTargets() public {
         bool sawNearTarget;
         bool sawFarTarget;
 
@@ -3207,27 +3217,24 @@ contract CrapsBattleTest is CrapsPins {
 
                 // The posted stack is seven whole chips; ten of that chip make the base.
                 assertEq(stackFlip % 7, 0, "the posted stack is not seven whole chips");
-                uint256 baseFlip = stackFlip / 7 * 10;
+                uint256 baseFlip = (stackFlip / 7) * 10;
                 assertGt(baseFlip, 0, "the chip rounded away to nothing");
 
-                // The bankroll is a whole number of bases deep, and one of the offered depths.
+                // THE DEPTH IS THE FORMAT NOW, not a draw: five bases, every window, every day.
                 assertEq(bankFlip % baseFlip, 0, "the bankroll is not a whole number of bases");
-                uint256 depth = bankFlip / baseFlip;
-                assertTrue(depth == 2 || depth == 5 || depth == 10, "an unoffered bankroll depth");
-                if (depth == 2) sawDepth2 = true;
-                if (depth == 10) sawDepth10 = true;
+                assertEq(bankFlip / baseFlip, craps.SCHED_BANK_MULT(), "a scheduled bankroll is not five deep");
 
-                // The target is a whole multiple of the bankroll, and one of the offered ones.
+                // The target is a whole multiple of the bankroll, and one of the two offered.
                 assertEq(uint256(goal) % uint256(bank), 0, "the target is not a multiple of the bankroll");
                 uint256 mult = uint256(goal) / uint256(bank);
-                assertTrue(mult == 5 || mult == 10 || mult == 20 || mult == 50, "an unoffered target");
-                if (mult == 5) sawNearTarget = true;
-                if (mult == 50) sawFarTarget = true;
+                assertTrue(mult == craps.SCHED_GOAL_LOW() || mult == craps.SCHED_GOAL_HIGH(), "an unoffered target");
+                if (mult == craps.SCHED_GOAL_LOW()) sawNearTarget = true;
+                if (mult == craps.SCHED_GOAL_HIGH()) sawFarTarget = true;
             }
         }
 
-        // Both ends of both draws actually turn up, so neither is a constant in disguise.
-        assertTrue(sawDepth2 && sawDepth10, "the bankroll depth never varied across its range");
+        // Both ends of the one remaining draw actually turn up, so it is not a constant in
+        // disguise — the depth deliberately is one.
         assertTrue(sawNearTarget && sawFarTarget, "the target never varied across its range");
     }
 

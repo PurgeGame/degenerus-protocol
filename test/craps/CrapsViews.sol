@@ -42,7 +42,13 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant SYBIL_SCORE_FLOOR = _SYBIL_SCORE_FLOOR;
     uint256 public constant MAX_ROLLS = _MAX_ROLLS;
     uint256 public constant SLIP_ROLL_BUDGET = _SLIP_ROLL_BUDGET;
+    uint256 public constant SLIP_ROLL_CEILING = _SLIP_ROLL_CEILING;
     uint256 public constant ESC_HANDS = _ESC_HANDS;
+    uint256 public constant ESC_CAP = _ESC_CAP;
+    uint256 public constant SCHED_BANK_MULT = _SCHED_BANK_MULT;
+    uint256 public constant SCHED_GOAL_LOW = _SCHED_GOAL_LOW;
+    uint256 public constant SCHED_GOAL_HIGH = _SCHED_GOAL_HIGH;
+    uint256 public constant DICE_RUN_RECORD_FLOOR = _DICE_RUN_RECORD_FLOOR;
     bytes32 public constant CRAPS_SEED_DOMAIN = _CRAPS_SEED_DOMAIN;
     uint256 public constant HIGH_MULT = _HIGH_MULT;
     uint256 public constant HIGH_MULT_TAIL = _HIGH_MULT_TAIL;
@@ -171,11 +177,6 @@ contract CrapsViews is CrapsBattle {
     ///      rather than inferred from a random run's payout.
     function boonBonusOf(uint256 mask, uint256 basePaid) external pure returns (uint256) {
         return _boonBonus(mask, basePaid);
-    }
-
-    /// @dev Whether a slip's boon applies at this window — the structural period-0 anchor.
-    function boonAnchoredAt(uint256 slot, uint256 bound) external pure returns (bool) {
-        return _boonAnchored(slot, bound);
     }
 
     function battleKeyOf(uint256 betId) external view returns (bytes32) {
@@ -394,15 +395,41 @@ contract CrapsViews is CrapsBattle {
         (, contribution) = _splitMainBudget(m);
     }
 
-    /// @dev The nine formats' roll cutoffs, indexed the way `_payProgressive` indexes them.
-    function progressiveThresholds(uint256 depth, uint256 goalMult)
+    /// @dev The two formats' HIGH-POINT cutoffs, as inclusive multiples of the run's own starting
+    ///      bankroll — exactly the pair `_payProgressive` applies.
+    function progressiveThresholds(uint256 goalMult) external pure returns (uint256 common, uint256 rare) {
+        bool high = goalMult == _SCHED_GOAL_HIGH;
+        return (high ? _PROG_COMMON_20X : _PROG_COMMON_5X, high ? _PROG_RARE_20X : _PROG_RARE_5X);
+    }
+
+    /// @dev The comparator, restated: everything but the entrant's standing.
+    function compositeOf(Settlement memory s) external pure returns (uint256) {
+        return _compositeOf(s);
+    }
+
+    /// @dev A composite back into what it says, as `_payout` reads it.
+    function decodeBest(uint256 best)
         external
         pure
-        returns (uint256 common, uint256 rare)
+        returns (Craps.SlipStop stop, uint256 hands, uint256 peakFlip, uint256 endFlip)
     {
-        uint256 i = 16 * (3 * (depth == 2 ? 0 : (depth == 5 ? 1 : 2)) + (goalMult == 5 ? 0 : (goalMult == 10 ? 1 : 2)));
-        return ((_PROG_COMMON >> i) & 0xFFFF, (_PROG_RARE >> i) & 0xFFFF);
+        return _decodeBest(best);
     }
+
+    /// @dev The escalator itself, so its boundaries and its ceiling are pinned on the shipped
+    ///      function rather than on a run that happens to reach them.
+    function escOf(uint256 hand) external pure returns (uint256) {
+        return _escOf(hand);
+    }
+
+    /// @dev The whole settlement of a bet, high point included — what the paying path computes.
+    function settlementOf(uint256 betId) external view returns (Settlement memory) {
+        uint256 header = _bets[betId];
+        uint256 slot = betId >> 64;
+        return _settlementOf(betId, header, _slotWindow(slot), _wordAt(_indexOf(slot)));
+    }
+
+
 
     function PROG_COMMON_DIV() external pure returns (uint256) {
         return _PROG_COMMON_DIV;
@@ -480,6 +507,12 @@ contract CrapsViews is CrapsBattle {
 
     /// @dev A slot's match key without owning a seat in it. `battleKeyOf` needs a bet, and a
     ///      fixture that only wants the scoreboard has no reason to place one.
+    /// @dev The table index a slot shut onto — what a fixture needs to move the word under a
+    ///      field it has already armed.
+    function indexOfSlot(uint64 slot) external view returns (uint48) {
+        return _indexOf(slot);
+    }
+
     function keyOfSlot(uint64 slot) external view returns (bytes32) {
         return _slotWindow(slot).key;
     }

@@ -104,6 +104,14 @@
     "typeLabel": "uint24"
   },
   {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "recordDayDiceRun",
+    "offset": 22,
+    "slot": 4,
+    "typeLabel": "uint24"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "bafDrawHeader",
@@ -132,6 +140,14 @@
     "encoding": "inplace",
     "label": "biggestBuyEver",
     "offset": 0,
+    "slot": 7,
+    "typeLabel": "uint128"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "biggestDiceRunEver",
+    "offset": 16,
     "slot": 7,
     "typeLabel": "uint128"
   },

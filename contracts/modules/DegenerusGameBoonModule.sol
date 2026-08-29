@@ -561,7 +561,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      busted run pays no bonus.
     uint8 private constant BOON_CRAPS_5 = 41;
     uint8 private constant BOON_CRAPS_10 = 42;
-    uint8 private constant BOON_CRAPS_25 = 43;
+    uint8 private constant BOON_CRAPS_15 = 43;
     /// @dev Weight for 5% coinflip boon
     uint16 private constant BOON_WEIGHT_COINFLIP_5 = 200;
     /// @dev Weight for 10% coinflip boon
@@ -631,7 +631,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @dev Craps stake-boon weights, taken from the coinflip family they mirror.
     uint16 private constant BOON_WEIGHT_CRAPS_5 = 200;
     uint16 private constant BOON_WEIGHT_CRAPS_10 = 40;
-    uint16 private constant BOON_WEIGHT_CRAPS_25 = 8;
+    uint16 private constant BOON_WEIGHT_CRAPS_15 = 8;
     /// @dev Fixed nominal deity-pass price for the boon-chance normalization (mid-curve k=16:
     ///      BASE + 16·17/2 ether). The live triangular price is collectively player-movable
     ///      (pass purchases), so it must not reach `totalChance` — a constant keeps the hit
@@ -649,8 +649,13 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      family collapses to 3270 times the live ticket price; lazy discounts collapse to
     ///      6 times the ten-level lazy-pass value. Activity, quest-shield and WWXRP boons carry
     ///      weight but intentionally contribute zero value.
+    ///
+    ///      The craps bankroll-payout family contributes the 912 of it: `200 x 3,000 + 40 x 6,000
+    ///      + 8 x 9,000 = 912,000`, over the 1,000-FLIP ticket unit. Its top tier pays 15% of a
+    ///      60,000-FLIP base — 9,000, not the 15,000 a 25% tier would — because the boon lifts
+    ///      EVERY window a ticket plays, and a whole-day ticket plays seven.
     uint256 private constant BOON_FIXED_WEIGHTED_MAX = 1568 ether;
-    uint256 private constant BOON_PRICE_WEIGHT = 4230;
+    uint256 private constant BOON_PRICE_WEIGHT = 4182;
     uint256 private constant BOON_LAZY_WEIGHT = 6;
 
     /// @dev Ten-level lazy-pass sums in 0.01-ETH units, packed one byte per start offset.
@@ -1286,7 +1291,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         }
         if (roll < 2808) return BOON_CRAPS_5;
         if (roll < 2848) return BOON_CRAPS_10;
-        return BOON_CRAPS_25;
+        return BOON_CRAPS_15;
     }
 
     /// @dev Exact weighted-average max value of the static boon table. This is algebraically

@@ -46,7 +46,7 @@ pragma solidity 0.8.34;
  */
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
-import {RECORD_KIND_FLIP, RECORD_KIND_SPIN, RECORD_KIND_LUCKBOX} from "./interfaces/ICoinflip.sol";
+import {RECORD_KIND_FLIP, RECORD_KIND_SPIN, RECORD_KIND_LUCKBOX, RECORD_KIND_DICE_RUN} from "./interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
@@ -181,6 +181,7 @@ contract Coinflip {
     error OnlyFLIP();
     error OnlysDGNRS();
     error OnlyDegenerusGame();
+    error OnlyCraps();
     error AutoRebuyNotEnabled();
     error AutoRebuyAlreadyEnabled();
     error RngLocked();
@@ -205,9 +206,13 @@ contract Coinflip {
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant RECYCLE_BONUS_BPS = 75;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-    /// @dev Daily drip into the shared record pool, applied at settlement.
+    /// @dev Daily drip into the shared record pool, applied at settlement. Adding the
+    ///      dice-run category adds no drip and no take rate: it is a fifth way to claim
+    ///      from the pool this line funds, not a fifth pool.
+
     uint256 private constant RECORD_POOL_DAILY_FLIP = 2_000 ether;
-    /// @dev A record claim must clear the standing mark by mark/5 (a fifth).
+    /// @dev A record claim must clear the standing mark by mark/5 (a fifth) — for the
+    ///      four ORIGINAL kinds. The dice run claims on any strict improvement.
     uint256 private constant RECORD_BEAT_DIV = 5;
     /// @dev Claim share of the pool: a 5% floor, +0.5% per day the record's own
     ///      category has gone unclaimed, capped at 75% (reached 140 days after a
@@ -222,6 +227,11 @@ contract Coinflip {
     ///      could not have beaten it anyway. The game-side records gate their own floors
     ///      at their call sites.
     uint256 private constant BIGGEST_FLIP_MIN = 200_000 ether;
+    /// @dev Entry floor for the DICE RUN record: a 100x high point against the run's
+    ///      own starting bankroll, in score basis points (10,000 = 1x). The craps
+    ///      table gates it at the call site too, so a field that never got near a
+    ///      record does not pay for the call.
+    uint256 private constant BIGGEST_DICE_RUN_MIN = 1_000_000;
     /// @dev Domain tag for the BAF weighted-draw winner roll.
     bytes32 private constant BAF_DRAW_TAG = "COINFLIP_BAF_DRAW_WINNER";
     uint16 private constant COIN_CLAIM_DAYS = 365;
@@ -267,16 +277,18 @@ contract Coinflip {
     mapping(address => PlayerCoinflipState) internal playerState;
 
 
-    // All-time record pool: one FLIP pool shared by the four biggest-* records
-    // (flip deposit, degenerette spin, lootbox deposit, ticket buy). Grows by a
-    // daily settlement drip and by level-transition funding; a record beaten by
-    // a fifth claims an accruing share of it (RECORD_SHARE_*). The three
-    // game-armed marks sit at the end of the storage section so every prior
-    // slot keeps its index.
+    // All-time record pool: ONE FLIP pool shared by the five biggest-* records
+    // (flip deposit, degenerette spin, lootbox deposit, ticket buy, dice run).
+    // Grows by a daily settlement drip and by level-transition funding. The four
+    // original kinds claim an accruing share of it (RECORD_SHARE_*) when a record
+    // is beaten by a fifth; the dice run claims on any strict improvement above
+    // its own floor, at most once a day (see armDiceRunRecord). The game-armed
+    // marks sit at the end of the storage section so every prior slot keeps its
+    // index.
     uint128 public recordPool = 10_000 ether;
     uint128 public biggestFlipEver;
 
-    // RNG state + the four per-category record claim clocks (all pack into one slot)
+    // RNG state + the five per-category record claim clocks (all pack into one slot)
     uint24 internal flipsClaimableDay;
     /// @dev One-shot latch: sDGNRS perpetual auto-rebuy arms once the final seeded day settles.
     bool internal sdgnrsAutoRebuyArmed;
@@ -296,6 +308,13 @@ contract Coinflip {
     /// @dev Highest century (level / SEED_CENTURY_LEVELS) whose seed window has been armed.
     ///      Appended into this slot's free bytes, so every later slot keeps its index.
     uint24 internal lastSeededCentury;
+    /// @dev The DICE RUN category's claim clock, stamped on every hit. Appended into
+    ///      the same slot's remaining free bytes, so every later slot keeps its index.
+    ///      It accrues the claim share exactly as the other four clocks do, and — since
+    ///      this kind claims on ANY strict improvement rather than on a fifth — the
+    ///      reset it performs is also what prices a second hit on the same day at the
+    ///      5% floor of an already-reduced pool.
+    uint24 internal recordDayDiceRun;
 
     // BAF weighted draw. Book-kept only for the armed day (the x0 level's last
     // purchase day stakes it): every direct self-funded deposit staking that day
@@ -313,6 +332,10 @@ contract Coinflip {
     uint128 public biggestSpinEver;
     uint128 public biggestLuckboxEver;
     uint128 public biggestBuyEver;
+    /// @dev THE BIGGEST DICE RUN, in score basis points: the winning scheduled craps
+    ///      run's high point over its own starting bankroll, 10,000 = 1x. Packed into
+    ///      biggestBuyEver's free half, so it moves no slot.
+    uint128 public biggestDiceRunEver;
 
     /// @dev One packed interval entry per (armed day, index):
     ///      bits [0..95]   cumulative weight endpoint (exclusive, whole FLIP)
@@ -336,6 +359,7 @@ contract Coinflip {
         recordDaySpin = recordStartDay;
         recordDayLuckbox = recordStartDay;
         recordDayBuy = recordStartDay;
+        recordDayDiceRun = recordStartDay;
 
         for (uint24 d = 1; d <= SEED_FLIP_DAYS; ) {
             _setFlipStake(d, ContractAddresses.VAULT, SEED_FLIP_DAILY);
@@ -1045,6 +1069,78 @@ contract Coinflip {
         uint256 candidate
     ) external onlyDegenerusGameContract returns (uint256) {
         return _armBigRecord(kind, player, candidate);
+    }
+
+    /// @notice Arm THE BIGGEST DICE RUN with `candidate`, the winning scheduled craps
+    ///         run's high point over its own starting bankroll in score basis points.
+    /// @dev CRAPS ONLY, and this kind only. It is deliberately NOT the generic
+    ///      `armRecord` door: that one is the GAME's and carries the four existing
+    ///      kinds' rule that a claim must beat the standing mark by a fifth, which is
+    ///      not this kind's rule and must not become it. Nothing here funds the pool,
+    ///      adds a drip, or changes a take rate — the dice run is a fifth way to CLAIM
+    ///      from a pool that already exists.
+    ///
+    ///      THE CLAIM RULE. Every strict improvement at or above the floor ratchets the
+    ///      mark, moves the trophy, and claims the accruing share — 5% plus half a point
+    ///      per elapsed day, capped at 75% — and then stamps the clock to today.
+    ///
+    ///      THE CLOCK IS THE ANTI-STACKING RULE, and it needs no second one. Craps fields
+    ///      close on their own schedule and are finalized by whoever cranks them, so a
+    ///      keeper walking several already-closed fields in ASCENDING order of high point
+    ///      makes each of them a strict improvement. The reset is what prices that: the
+    ///      first claim of a day takes its accrued share, and every further claim that day
+    ///      takes 5% of what the previous one left. Stacking `k` claims in a day therefore
+    ///      costs the pool `1 - 0.95^k` beyond the first rather than `k` accrued shares,
+    ///      and every one of them had to be a genuine new record.
+    ///
+    ///      What ordering cannot move: the day's final MARK and the trophy holder are the
+    ///      maximum over the day's candidates however the fields were resolved.
+    ///
+    ///      The claim is CREDITED HERE rather than returned: unlike the other kinds,
+    ///      nothing on the craps side is already paying this player in the same call, so
+    ///      handing the figure back would only buy a second cross-contract hop. The
+    ///      sDGNRS leg rides the same accrued share as every other record's.
+    /// @param player The winning scheduled run's owner.
+    /// @param candidate The high-point score in basis points (10,000 = 1x).
+    /// @return claimed FLIP credited out of the shared record pool; zero for a ratchet
+    ///         that claimed nothing.
+    function armDiceRunRecord(
+        address player,
+        uint256 candidate
+    ) external returns (uint256 claimed) {
+        if (msg.sender != ContractAddresses.CRAPS) revert OnlyCraps();
+        if (candidate < BIGGEST_DICE_RUN_MIN) return 0;
+        uint128 mark = biggestDiceRunEver;
+        if (candidate <= mark) return 0;
+        biggestDiceRunEver = uint128(candidate);
+
+        uint24 today = GameTimeLib.currentDayIndex();
+        uint256 stamped = recordDayDiceRun;
+        uint256 shareBps = RECORD_SHARE_FLOOR_BPS +
+            (uint256(today) > stamped ? uint256(today) - stamped : 0) *
+            RECORD_SHARE_PER_DAY_BPS;
+        if (shareBps > RECORD_SHARE_CEIL_BPS) {
+            shareBps = RECORD_SHARE_CEIL_BPS;
+        }
+        uint128 pool = recordPool;
+        uint128 paid = uint128((uint256(pool) * shareBps) / 10_000);
+        if (paid != 0) {
+            recordPool = pool - paid;
+            _addDailyFlip(player, paid, 0);
+        }
+        // The sDGNRS leg rides the same accrued share at 1/500 scale, exactly as the
+        // other four kinds' does. A record is a record: the dice run claims from the
+        // shared pool on its own rule, and is paid alongside it on everyone else's.
+        uint256 sdgnrsPaid = degenerusGame.payRecordSdgnrs(player, shareBps);
+        recordDayDiceRun = today;
+        emit BigRecordUpdated(RECORD_KIND_DICE_RUN, player, candidate, paid, sdgnrsPaid);
+
+        IDegenerusRecordBounty(ContractAddresses.RECORD_BOUNTY).recordSet(
+            RECORD_KIND_DICE_RUN,
+            player,
+            candidate
+        );
+        return paid;
     }
 
     /// @notice Arm this century's seed window: SEED_FLIP_DAILY per day for

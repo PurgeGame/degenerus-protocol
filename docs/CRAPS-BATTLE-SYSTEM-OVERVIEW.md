@@ -1,9 +1,16 @@
 # Craps Battle System: Current Implementation
 
-> Code snapshot reviewed 2026-08-27. This document describes the contracts as written in the
+> Code snapshot reviewed 2026-08-28. This document describes the contracts as written in the
 > working tree, especially [`Craps.sol`](../contracts/Craps.sol),
 > [`CrapsBattle.sol`](../contracts/CrapsBattle.sol), and
 > [`LootboxCraps.sol`](../contracts/LootboxCraps.sol). The deployed bytecode, if different, wins.
+>
+> **THE TABLE SETTLES TWO PRODUCTS.** A protocol-scheduled **Dice Run** runs a fixed five-round
+> bankroll at 5x or 20x, latches its target instead of stopping on it, ranks on the HIGH POINT it
+> reached, funds and draws the Goal-Jackpot, and can set THE BIGGEST DICE RUN. A **custom battle**
+> is the legacy product unchanged: it stops at its target, races on speed, and touches none of the
+> protocol's shared money. They share the engine and the plumbing and nothing else; where this
+> document says "scheduled" or "custom", the difference is load-bearing.
 
 The system is a winner-take-all tournament built around a deterministic multi-shooter craps run.
 Every entrant in a field receives the same bankroll, target, round size, bounty, settlement word,
@@ -14,10 +21,11 @@ wins the field's bounty pot and any boost or donation.
 ```text
 terms open -> entries and boards lock -> future RNG table is bound -> word arrives
     -> each board is scattered -> every run uses the shared shooters
-    -> individual Goal/Bust result and raw remainder are computed
+    -> individual Goal/Bust result, high point and raw remainder are computed
     -> individual Goal returns are credited; Bust returns are deleted
     -> main and high scoreboards finalize -> pots are credited
-    -> bankroll action is booked for future scheduled boosts
+    -> the winner's high point is offered to the jackpot and to the record
+    -> SCHEDULED bankroll action is booked for future boosts (custom books nothing)
 ```
 
 ## 1. Components and Assets
@@ -120,19 +128,25 @@ successive shooters until Goal or Bust.
 
 ### Mandatory escalator
 
-The board multiplier is:
+ONE RULE SET. Every slip this engine settles — a custom table and a protocol-scheduled Dice Run
+alike — doubles its board every **three** shooters and climbs to `uint32.max`.
 
 ```text
-hands 0-4:    1x
-hands 5-9:    2x
-hands 10-14:  4x
-hands 15-19:  8x
+hands 0-2:              1x
+hands 3-5:              2x
+hands 6-8:              4x
 ...
-cap:          65,535x
+hands 93-95:  2,147,483,648x
+hands 96+:    4,294,967,295x  (cap)
 ```
 
 The multiplier is linear: the engine runs the base board once for that shooter and scales the
 stake and return by the mandatory multiplier.
+
+The two products differ only in MONEY, never in how the dice are played: a custom table pays no
+shooter boost, stakes nothing into the day, draws no ladder subsidy, and can win neither the
+progressive nor a record. The engine is told the hand cap, the roll budget and the boost schedule
+outright; it infers nothing about which product it is settling.
 
 ### Affordability and survival flip
 
@@ -164,14 +178,15 @@ boost    = floor(baseHandEligibleProfit x pct / 100)
 
 The schedule is fixed — there is no jitter — and depends only on the ticket class and the Goal:
 
-| Stored ticket | Eligible shooters | Goal 5x | Goal 10x | Goal 50x |
-|---|---:|---:|---:|---:|
-| Blank/random | 15% | +25% | +30% | +40% |
-| Picked | 5% | +6% | +20% | +35% |
+| Stored ticket | Eligible shooters | Goal 5x | Goal 20x |
+|---|---:|---:|---:|
+| Blank/random | 15% | +33% | +45% |
+| Picked | 5% | +20% | +50% |
 
 The class comes from the **stored, pre-scatter** chip word: a blank ticket stays blank however the
-dice fill its board. The crossover is deliberate — picking is worth more at 5x and 10x, where a
-board can shorten a run, and leaving the ten chips to the dice is worth more at 50x.
+dice fill its board. The crossover is deliberate — picking is worth more at 5x, where a board can
+shorten a run, and leaving the ten chips to the dice is worth more at 20x, where the length of the
+run is what decides it.
 
 **Eligible profit is winnings only.** Pass profit, Place 4/5/6/8/9/10 profit, Hard 4 and Hard 8
 profit, and only the 3:4 portion of a winning Don't Pass. It excludes every wager principal, the
@@ -189,11 +204,35 @@ while entry or amendment is open: the settlement seed comes from a future table 
 
 ### Stops and bounds
 
-At the top of each loop, Goal is checked first. A bankroll already at or above target is a Goal.
-Otherwise the run Busts if it has reached 256 shooters or its 4,096-roll slip budget. The roll
-budget is checked only between shooters, so no shooter is cut in half.
+At the top of each loop, Goal is checked first. The Goal is not a finish line: it LATCHES and the
+run plays on — see *The high-water lifecycle* below.
 
-There is no separate `Cap` outcome: execution bounds are Busts.
+Every run's bounds are 512 shooters and an 8,192-roll budget.
+
+The roll budget is checked only between shooters, so no shooter is cut in half — which means the
+absolute total-roll ceiling is `budget - 1 + 512`, not the budget: **8,703** rolls.
+
+There is no separate `Cap` outcome: an execution bound reached BEFORE the goal is a Bust, and one
+reached after a run has latched its Goal is that Goal.
+
+### The high-water lifecycle
+
+The first time a run is at or above its target at a completed-shooter boundary, it permanently
+latches Goal qualification — and does not stop.
+
+- **The Goal becomes a protected reserve.** Before each later shooter the engine computes the next
+  mandatory stake `need` and plays that shooter exactly when `bankroll - need >= goal`. Equality is
+  playable; anything short of it retires the run as a Goal without posting.
+- **The survival coin is never taken again.** Past the latch the reserve, not a coin, decides
+  affordability — and bounded loss makes the win unlosable: the worst a posted shooter can do is
+  give back `need`, which lands exactly on the Goal.
+- **`bankrollOut` is the bankroll at the actual stop.** A qualified player is credited that ending
+  figure after the usual rounding. A post-Goal losing shooter can lower the payout and can never
+  lower it below the Goal.
+- **The high point is a separate figure.** `peakBankroll` starts at the initial bankroll and is
+  sampled once per shooter, after that shooter's return and boost have landed — never before a
+  stake, never after one, never mid-hand. It is what a field RANKS on, what the progressive
+  qualifies on, and what the record reads. **It is never paid.**
 
 ## 5. Individual Settlement, Bust Deletion, and Rounding
 
@@ -217,18 +256,34 @@ funding transfer; it simply is not recreated as Coinflip credit.
 ## 6. Battle Ranking
 
 Every field ranks, including a zero-bounty custom field. Main and contested high scoreboards use
-the same unscaled score:
+the same unscaled composite — one 105-bit lexicographic scalar, most significant first:
+
+```text
+bit  104     GOAL          every Goal beats every Bust
+bits 60..103 PRIMARY       any Goal: the HIGH POINT in whole FLIP
+                           any Bust: shootersPlayed
+bits 16..59  MONEY         the raw ENDING bankroll in whole FLIP
+bits  0..15  STANDING      the entrant's activity score, frozen at entry
+```
+
+So the ladder is:
 
 1. Every Goal beats every Bust.
-2. Among Goals, fewer shooters wins.
+2. Among Goals, the larger high point wins.
 3. Among Busts, more shooters wins.
-4. If the stop and shooter count tie, larger **raw ending bankroll floored to whole FLIP** wins.
+4. If the primary ties, larger **raw ending bankroll floored to whole FLIP** wins.
 5. If still tied, larger entry-frozen standing wins.
 6. If exactly tied, a deterministic hash of the table word and seat gives a uniform total order.
+
+A Bust's high point reaches neither field: the Goal bit is clear, so its primary is its shooter
+count, and nothing about a temporary peak can enter an all-Bust race.
 
 Therefore the remainder is not only a win tiebreaker. It breaks ties among Busts too—but only
 after Bust longevity. A 12-hand Bust with zero remainder beats an 11-hand Bust with any remainder;
 between two 12-hand Busts, the larger remainder wins.
+
+Both money components **saturate** at their field rather than masking into it: a figure past the
+horizon still ranks at the top of the ladder instead of wrapping to the bottom of it.
 
 High multiples never improve rank. A high roller buys copies of one unscaled run, not a better
 score. A high seat can win both the main field and the high sideboard.
@@ -382,8 +437,11 @@ Its bounty is 25%-50% of bankroll in five-point steps, floored to a 100-FLIP gra
 
 ### Terms common to all seven
 
-- Bankroll depth is 2, 5, or 10 rounds.
-- Goal is 5x, 10x, or 50x bankroll.
+- Bankroll depth is **five rounds**, fixed. It used to be a three-way draw, back when a run stopped
+  the moment it reached its target and the depth was what decided how long that took; a high-water
+  run does not stop there, so the depth stopped separating the formats and the schedule stopped
+  drawing it.
+- Goal is **5x or 20x** bankroll, drawn evenly.
 - Round size is a whole ten-chip amount derived from bankroll and depth.
 - The scheduled standing bar is zero; standing affects boost payout and late ranking only.
 - The day high multiple is 10x on 90% of days and 100x on 10%.
@@ -641,9 +699,9 @@ remainders, ladder under-realisation and rounding dust all stay exactly where th
 
 ## 13a. The Progressive
 
-**One pool, shared by all nine scheduled depth/Goal formats and by every day.** It is funded once
-when a protocol day opens — half the day's raw main allocation — and topped up by the standing
-forfeitures above. Custom battles neither fund it nor draw on it.
+**One pool, shared by both scheduled formats and by every day.** It is funded once when a protocol
+day opens — half the day's raw main allocation — and topped up by the standing forfeitures above.
+Custom battles neither fund it nor draw on it.
 
 ### Qualification
 
@@ -652,36 +710,40 @@ main battle:
 
 1. the battle is a protocol-scheduled main battle;
 2. the recipient is the final main battle winner the existing comparator named — never a runner-up;
-3. that winner's stop is `Goal` — a Bust never qualifies, however far it ran;
-4. its cumulative `totalRolls` is compared against the cutoffs for that window's bankroll depth and
-   Goal multiple; and
+3. that winner's stop is `Goal` — a Bust never qualifies, however high it got;
+4. its **high point** is compared against the cutoffs for that window's Goal multiple; and
 5. rare is tested first and **overrides** — a field never pays both rungs.
 
-Cutoffs are inclusive cumulative dice-roll counts:
+Cutoffs are inclusive multiples of the run's own starting bankroll, held in the contract as score
+basis points (10,000 = 1x):
 
-| Bankroll depth | Goal 5x common / rare | Goal 10x common / rare | Goal 50x common / rare |
-|---:|---:|---:|---:|
-| 2x | 150 / 185 | 205 / 245 | 340 / 395 |
-| 5x | 215 / 260 | 275 / 320 | 405 / 455 |
-| 10x | 265 / 315 | 325 / 375 | 455 / 500 |
+| Goal | Common | Rare |
+|---:|---:|---:|
+| 5x | 25x (250,000 bps) | 120x (1,200,000 bps) |
+| 20x | 50x (500,000 bps) | 225x (2,250,000 bps) |
 
-The battle's dice are shared: shooter `n` begins and ends on the same roll for every entrant still
-in it, so this criterion adds no per-player roll and no jackpot RNG — it measures the shared
-cumulative roll prefix at which the winning ticket stopped. The deliberate consequence is that a
-very long final shooter can push a winning ticket over a cutoff on relatively few shooters, and
-many short shooters need not qualify merely because their count is high.
+The high point is a figure the settlement already computed — the largest bankroll the run held at a
+completed-shooter boundary — so this criterion adds no per-player roll and no jackpot RNG. It
+replaces the old cumulative roll-count cutoffs, which measured how LONG a run took rather than how
+far it got; a high-water run is not trying to be quick, so the roll prefix stopped saying anything
+about it.
 
-**Rolls do not rank.** The comparator remains Goal before Bust, fewer hands for Goals, more hands
-for Busts, then the existing tiebreakers. The roll count is qualification metadata carried beside
-the winning seat on the scoreboard, and it moves only when the lead does. A Goal is tested between
-shooters, so the qualifying count includes the winner's complete final shooter. The engine's
-512-roll shooter cap and 4,096-roll slip budget give a hard maximum of 4,607 cumulative rolls.
+Both sides of the comparison are in whole FLIP: every scheduled bankroll is a whole-FLIP multiple
+of 300 and the scoreboard floors the peak the same way, so every cutoff on the schedule lands on an
+exact figure. In the contract the test is made in basis points, which is the same test without the
+multiplication: for integers, `floor(peak * 10_000 / start) >= cutoff` is exactly
+`peak * 10_000 >= cutoff * start`.
+
+**A Bust never qualifies, structurally.** The composite's primary field is a high point only when
+the Goal bit is set and the field is scheduled, so a Bust and a custom battle both reach the award
+branch with a zero peak — below every cutoff and below the record floor. Neither gate is a
+condition that could be widened somewhere else.
 
 ### Award
 
 ```text
-if Goal and rolls >= rareCutoff:    candidate = floor(pool / 2)
-elif Goal and rolls >= commonCutoff: candidate = floor(pool / 10)
+if Goal and score >= rareCutoff:    candidate = floor(pool / 2)
+elif Goal and score >= commonCutoff: candidate = floor(pool / 10)
 else:                                candidate = 0
 
 paid  = standingShare(candidate, winnerStanding)
@@ -706,10 +768,47 @@ external call.
 - `progressivePool()` — the live balance, and the second reader production ships. It is the one
   figure of the system that is not a pure function of published inputs.
 - `CrapsProgressiveFunded(day, contribution, balance)` — once per opened day.
-- `CrapsProgressivePaid(betId, battleKey, player, rare, rolls, candidate, paid, retained, balance)`.
+- `CrapsProgressivePaid(betId, battleKey, player, rare, goalMult, peak, scoreBps, candidate, paid,
+  retained, balance)` — `peak` in whole FLIP, `scoreBps` the same figure over the starting bankroll.
 - `CrapsProgressiveRolled(battleKey, source, amount, balance)` — source 1 main ladder, 2 contested
   high lane, 3 sole high rider.
-- `CrapsBattleFinalized` and the `Battle` view both carry `winningRolls` beside `winningHands`.
+- `CrapsBattleFinalized` carries `winningPeak`, `winningEnd` and `winningScoreBps`; the `Battle`
+  view carries `winningPeak` and `winningEnd` beside `winningHands`.
+
+## 13b. THE BIGGEST DICE RUN
+
+The scheduled Dice Run is the **fifth category of the record `Coinflip` already owns** — the same
+shared FLIP pool the flip, degenerette, luckbox and pack records claim from, the same soulbound
+trophy contract, one more tokenId. It adds no pool, no daily drip, and no take rate: it is a fifth
+way to claim from a pool that already exists.
+
+- **Candidate:** the finalized scheduled main winner's unscaled high point over its own starting
+  bankroll, in score basis points.
+- **Entry floor:** **100x** (`1,000,000` bps). Below it the table makes no call at all.
+- **Eligibility** is scheduled fields only, and Goal is implicit: a 100x high point has necessarily
+  crossed either scheduled target and the qualification has latched.
+- **Any strict improvement** over the standing mark is a hit. The four existing kinds keep their
+  rule that a claim must beat the mark by a fifth; this one does not have it.
+- **Claim share:** 5% of the pool immediately after a hit, plus half a percentage point per elapsed
+  protocol day, capped at 75%. A hit stamps the category's clock.
+- Custom battles contribute nothing to it, can never set it, and never read it.
+
+**The reset is the anti-stacking rule.** Craps fields close on their own schedule and are finalized
+by whoever cranks them, so a keeper walking several already-closed fields in ascending order of
+high point makes each of them a strict improvement. What that costs is bounded by the clock: the
+first claim of a day takes its accrued share and every further claim that day takes 5% of what the
+previous one left, so `k` claims cost the pool `1 - 0.95^k` beyond the first rather than `k` accrued
+shares — and every one of them had to be a genuine new record above the floor. What ordering cannot
+move at all is the day's final mark or the trophy holder: both are the maximum over the day's
+candidates however the fields were resolved.
+
+The table's side of this is one call, made once per finalized field — never per entrant — through a
+CRAPS-only door on `Coinflip`, deliberately separate from the GAME-only `armRecord` so the four
+existing kinds' claim rule cannot be reached by it. `Coinflip` credits the claim itself and logs it
+in `BigRecordUpdated(kind=4, player, value, paid, sdgnrsPaid)`. The sDGNRS leg rides the same
+accrued share at 1/500 scale, exactly as the other four kinds' does — a record is a record.
+
+### What it is worth
 
 ### What it is worth
 
@@ -766,6 +865,26 @@ Custom battles have no protocol boost, so their main pot is entrant bounties plu
 
 ## 15. Custom Battles
 
+A custom battle is a SECOND PRODUCT that shares the engine and the RULES, and differs only in
+MONEY. Its dice, escalator, high-water latch, bounds and comparator are the scheduled ones exactly
+— the Goal latches and the run plays on, goals rank on the high point, busts on shooters. What a
+custom battle does not get is every protocol payment:
+
+- it is handed a ZERO shooter-boost schedule, whatever its numbers;
+- it receives no ladder seed and no protocol subsidy;
+- it neither funds nor draws on the Goal-Jackpot progressive;
+- it can never set, ratchet or claim THE BIGGEST DICE RUN;
+- and it books **nothing** to `_dayStaked` — not to its close day, not to its settlement day, not
+  to a day of its own. The day books are what size the protocol's own subsidy, and letting a table
+  anyone can open at any depth feed that denominator would let custom volume mint scheduled
+  emission.
+
+Only its entrants' own bounties, its creator's terms and explicit donations pay its pots.
+
+The product is chosen by the SLOT the field lives at — below `2^40` is scheduled, at or above it
+is custom. The engine is never told which it is settling: it plays one rule set, and the wrapper
+alone decides what money the result is worth.
+
 The Vault majority owner always may create them and may grant/revoke other creator addresses.
 Creation fixes:
 
@@ -821,7 +940,12 @@ Important event distinctions:
 - `CrapsBetSettled.won`: raw run bankroll (scaled for high); `paid`: actual individual credit,
   including a sole-high rider.
 - `CrapsBattleFinalized.pot`: the raw advertised bounty/boost/donation figure before activity
-  ration and boost rounding.
+  ration and boost rounding. `winningPeak` and `winningEnd` are in whole FLIP and `winningScoreBps`
+  is the peak over the run's own starting bankroll; a custom field reports a zero peak and a zero
+  score, since its comparator ranks on speed. The shooter count is not restated in this log — it is
+  still in the composite the scoreboard holds, and `Battle.winningHands` decodes it.
+- `BigRecordUpdated(kind=4, ...)` on `Coinflip`: the dice-run record's ratchet and claim. The craps
+  table itself logs nothing for it — one call, one log, at the contract that owns the pool.
 - `CrapsBattlePaid.amount`: actual main-pot credit.
 - `CrapsHighRollerPaid`: sole rider or contested-lane payment, distinguished by
   `bankrollRider`.
@@ -831,9 +955,6 @@ Important event distinctions:
 - `CrapsBonusOpened.seed`: maximum 100x scheduled quote, not a guaranteed payment.
 - `CrapsHighRollerDayOpened.mainBoostBudget`: the **ladder half** the day's seven windows share.
   Its other half is in `CrapsProgressiveFunded`, and the two sum to the raw allocation.
-- `CrapsBattleFinalized.winningRolls`: the winner's cumulative dice rolls. It decides nothing about
-  the rank — `winningStop` then `winningHands` do — and is carried so a reader can check the
-  progressive's cutoffs without replaying the run.
 - `CrapsProgressiveFunded` / `CrapsProgressivePaid` / `CrapsProgressiveRolled`: see section 13a.
   Together with `CrapsHighRollerDayOpened` they reconstruct the pool from genesis.
 - `CrapsBattlePaid.amount` is the **pot and only the pot**. A progressive award riding the same
@@ -861,15 +982,25 @@ the events.
 - Half of that allocation never reaches a window. The 50,000 base therefore buys a 25,000/day
   ladder and a 25,000/day progressive contribution, and the thin-field emission is the whole
   50,000 — the split changes when players see the money, not how much is created.
-- The progressive makes the long-run reward distribution far heavier-tailed than the ladder alone:
-  about ten awards a year across a forty-ticket field, one of them rare roughly every seven years,
-  against a pool that settles near 21M FLIP. It rewards surviving a long shared shooter prefix,
-  which is a different thing from winning quickly.
+- The progressive makes the long-run reward distribution far heavier-tailed than the ladder alone,
+  and it now rewards how FAR a run got rather than how long it took: a target is a floor to build
+  from, not a finish line to sprint to.
+- A scheduled run's decision problem changed shape with it. Reaching the target no longer ends the
+  run; it converts the target into capital the run may not stake and leaves everything above it in
+  play. The whole of the remaining game is therefore played out of the surplus, and the escalator —
+  doubling every three shooters to `uint32.max` — is what eventually retires every run that does
+  not first give its surplus back.
 - Pass-funded or protocol seats still book nominal action and can win returns and pots; their
   upstream funding provenance is outside this contract's battle ledger.
 
-Quantitative results, including the 3:4 strategic sweep and setting-by-setting engine edges, are
-in [`CRAPS-SYSTEM-SIMULATION.md`](CRAPS-SYSTEM-SIMULATION.md).
+Quantitative results for the high-water system — calibration, population sensitivities, gas tails
+and economic risks — are in
+[`CRAPS-HIGH-WATER-SYSTEM-SIMULATION.md`](CRAPS-HIGH-WATER-SYSTEM-SIMULATION.md), whose model is
+`scripts/craps-high-water-system-sim.cpp`. `scripts/check-craps-progressive-parity.sh` holds the
+contract and that model together on source text: the base subsidy, both rung divisors, all four
+high-point cutoffs, and the escalator's period, ceiling, shooter cap and roll budget.
+[`CRAPS-SYSTEM-SIMULATION.md`](CRAPS-SYSTEM-SIMULATION.md) describes the SUPERSEDED
+stop-at-goal system and its nine depth/target formats.
 
 ## 19. Source-of-Truth Checklist
 
@@ -879,13 +1010,19 @@ When inspecting a live result, reconstruct it in this order:
 2. Confirm entry closed and find its bound table index and word.
 3. Decode the submitted board; apply owner-keyed scatter.
 4. Derive the window-keyed shared shooter stream and owner-keyed survival flips.
-5. Run the escalator to Goal or Bust, retaining raw bankroll even on Bust.
-6. Apply individual rounding, then delete Bust payment.
-7. Build the composite rank from stop, hands, raw whole-FLIP remainder, and frozen standing.
+5. Run the escalator to Goal or Bust, retaining raw bankroll even on Bust and tracking the high
+   point at completed-shooter boundaries only. Latch the Goal and keep playing out of the surplus.
+6. Apply individual rounding, then delete Bust payment. A qualified run is paid its ENDING
+   bankroll; the high point is never paid.
+7. Build the composite from the goal bit, the primary (Goal: the whole-FLIP high point; Bust:
+   shooters), the raw whole-FLIP ending bankroll, and the frozen standing.
 8. Resolve the main and any high scoreboard; apply the deterministic final tie hash.
 9. Separate bounties, scheduled boost, and donation; ration/round only scheduled boost, and bank
    what the ration denied in the progressive.
-10. If the winner reached Goal, compare its cumulative rolls against its format's cutoffs; test
-    rare first, take the rung off the live pool, and deduct only what standing actually credits.
-11. Credit Coinflip stake and book bankroll action to the correct day. Progressive funding,
-    rollovers and awards never enter that action book.
+10. If the winner reached Goal on a SCHEDULED field, compare its high point against its target's
+    cutoffs; test rare first, take the rung off the live pool, and deduct only what standing
+    actually credits.
+11. If that same high point is at or above 100x its own starting bankroll, offer it to THE BIGGEST
+    DICE RUN — once for the field, never per entrant.
+12. Credit Coinflip stake and book bankroll action to the correct day — for a SCHEDULED field only.
+    Custom action, progressive funding, rollovers and awards never enter that action book.

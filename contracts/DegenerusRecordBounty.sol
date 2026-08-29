@@ -55,13 +55,13 @@ interface IRecordBountyRendererV1 {
 }
 
 /// @title DegenerusRecordBounty
-/// @notice Soulbound ERC721 trophy for the four all-time record bounties
+/// @notice Soulbound ERC721 trophy for the five all-time record bounties
 ///         (tokenId = RECORD_KIND_*: 0 flip, 1 degenerette spin, 2 luckbox
-///         deposit, 3 ticket buy). All four mint at deploy to CREATOR; from
-///         then on Coinflip force-moves a trophy to whoever ratchets that
-///         record's mark — every new mark moves it, clearing the claim bar is
-///         not required. Holders can never transfer. Cosmetic only: nothing
-///         game-side reads this contract.
+///         deposit, 3 ticket buy, 4 dice run). All five mint at deploy to
+///         CREATOR; from then on Coinflip force-moves a trophy to whoever
+///         ratchets that record's mark — every new mark moves it, clearing the
+///         claim bar is not required. Holders can never transfer. Cosmetic only:
+///         nothing game-side reads this contract.
 contract DegenerusRecordBounty {
     // -------------------------------------------------------------------------
     // Errors
@@ -85,15 +85,18 @@ contract DegenerusRecordBounty {
     // Storage
     // -------------------------------------------------------------------------
 
-    /// @dev Current holder per record kind (tokenId 0-3).
-    address[4] private _holders;
+    /// @dev How many record kinds there are — tokenIds 0..KINDS-1.
+    uint256 private constant KINDS = 5;
+    /// @dev Current holder per record kind (tokenId 0-4).
+    address[5] private _holders;
     /// @dev The standing mark per kind, in that record's unit (flip: FLIP wei;
-    ///      spin and luckbox: ETH wei; buy: whole tickets). Display-only mirror
-    ///      of Coinflip's biggest*Ever marks.
-    uint128[4] private _marks;
+    ///      spin and luckbox: ETH wei; buy: whole tickets; dice run: score basis
+    ///      points, 10,000 = 1x). Display-only mirror of Coinflip's biggest*Ever
+    ///      marks.
+    uint128[5] private _marks;
     /// @dev Day the CURRENT holder took the trophy (holder clock, not mark
     ///      clock: a holder out-ratcheting their own record keeps their day).
-    uint24[4] private _sinceDays;
+    uint24[5] private _sinceDays;
     mapping(address => uint256) private _balances;
 
     IDegenerusVaultOwner private constant vault = IDegenerusVaultOwner(ContractAddresses.VAULT);
@@ -108,11 +111,11 @@ contract DegenerusRecordBounty {
     }
 
     constructor() {
-        // All four trophies start with the protocol creator; the first player
-        // to put a mark on a record takes its trophy from there.
+        // Every trophy starts with the protocol creator; the first player to put
+        // a mark on a record takes its trophy from there.
         uint24 today = GameTimeLib.currentDayIndex();
-        _balances[ContractAddresses.CREATOR] = 4;
-        for (uint256 i; i < 4; ++i) {
+        _balances[ContractAddresses.CREATOR] = KINDS;
+        for (uint256 i; i < KINDS; ++i) {
             _holders[i] = ContractAddresses.CREATOR;
             _sinceDays[i] = today;
             emit Transfer(address(0), ContractAddresses.CREATOR, i);
@@ -142,13 +145,13 @@ contract DegenerusRecordBounty {
     ///      inside deposits and bets and must never depend on recipient code.
     ///      A holder beating their own mark keeps their since-day (the days-held
     ///      clock measures the holder, not the mark).
-    /// @param kind Record kind = tokenId (0-3).
+    /// @param kind Record kind = tokenId (0-4).
     /// @param to The player who set the new mark.
     /// @param value The new mark, in the record's unit (uint128-bound by every
     ///        arming path — see Coinflip._armBigRecord).
     function recordSet(uint8 kind, address to, uint256 value) external {
         if (msg.sender != ContractAddresses.COINFLIP) revert NotAuthorized();
-        if (kind >= 4) revert InvalidToken();
+        if (kind >= KINDS) revert InvalidToken();
         if (to == address(0)) revert ZeroAddress();
 
         _marks[kind] = uint128(value);
@@ -169,7 +172,7 @@ contract DegenerusRecordBounty {
     // -------------------------------------------------------------------------
 
     /// @notice A trophy's live record state.
-    /// @param tokenId Record kind (0-3).
+    /// @param tokenId Record kind (0-4).
     /// @return holder Current record holder.
     /// @return mark The standing mark, in the record's unit.
     /// @return sinceDay Day the current holder took the trophy.
@@ -177,7 +180,7 @@ contract DegenerusRecordBounty {
     function recordInfo(
         uint256 tokenId
     ) public view returns (address holder, uint128 mark, uint24 sinceDay, uint256 daysHeld) {
-        if (tokenId >= 4) revert InvalidToken();
+        if (tokenId >= KINDS) revert InvalidToken();
         holder = _holders[tokenId];
         mark = _marks[tokenId];
         sinceDay = _sinceDays[tokenId];
@@ -273,7 +276,8 @@ contract DegenerusRecordBounty {
         if (tokenId == 0) return "The Biggest Flip";
         if (tokenId == 1) return "The Biggest Degenerette";
         if (tokenId == 2) return "The Biggest Luckbox";
-        return "The Biggest Pack Ripped";
+        if (tokenId == 3) return "The Biggest Pack Ripped";
+        return "The Biggest Dice Run";
     }
 
     /// @dev All-caps card label per kind (the website's record-rail labels).
@@ -281,18 +285,27 @@ contract DegenerusRecordBounty {
         if (tokenId == 0) return "BIGGEST FLIP";
         if (tokenId == 1) return "BIGGEST DEGENERETTE";
         if (tokenId == 2) return "BIGGEST LUCKBOX";
-        return "BIGGEST PACK RIPPED";
+        if (tokenId == 3) return "BIGGEST PACK RIPPED";
+        return "BIGGEST DICE RUN";
     }
 
     /// @dev The mark in display units: flip in whole FLIP (records sit at or
     ///      above the 200k-FLIP floor, so wei dust is noise), the two ETH-wei
-    ///      records with 4 decimals, the buy record as its raw ticket count.
+    ///      records with 4 decimals, the buy record as its raw ticket count, and
+    ///      the dice run as the multiple its score basis points name.
     function _formatMark(uint256 tokenId, uint128 mark) private pure returns (string memory) {
         if (tokenId == 0) {
             return string(abi.encodePacked(Strings.toString(uint256(mark) / 1 ether), " FLIP"));
         }
         if (tokenId == 3) {
             return string(abi.encodePacked(Strings.toString(uint256(mark)), " tickets"));
+        }
+        if (tokenId == 4) {
+            bytes memory d = new bytes(2);
+            uint256 frac2 = (uint256(mark) % 10_000) / 100;
+            d[1] = bytes1(uint8(48 + (frac2 % 10)));
+            d[0] = bytes1(uint8(48 + (frac2 / 10)));
+            return string(abi.encodePacked(Strings.toString(uint256(mark) / 10_000), ".", d, "x"));
         }
         uint256 whole = uint256(mark) / 1 ether;
         uint256 frac4 = (uint256(mark) % 1 ether) / 1e14;
@@ -392,12 +405,12 @@ contract DegenerusRecordBounty {
     }
 
     function ownerOf(uint256 tokenId) external view returns (address ownerAddr) {
-        if (tokenId >= 4) revert InvalidToken();
+        if (tokenId >= KINDS) revert InvalidToken();
         ownerAddr = _holders[tokenId];
     }
 
     function getApproved(uint256 tokenId) external view returns (address) {
-        if (tokenId >= 4) revert InvalidToken();
+        if (tokenId >= KINDS) revert InvalidToken();
         return address(0);
     }
 

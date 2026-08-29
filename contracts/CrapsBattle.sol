@@ -39,6 +39,16 @@ interface IGameActivityScore {
 interface ICoinflipStake {
     function creditFlip(address player, uint256 amount) external;
     function creditFlipBatch(address[] calldata players, uint256[] calldata amounts) external;
+    /// @notice Arm THE BIGGEST DICE RUN — the fifth category of the shared BIGGEST record.
+    /// @dev CRAPS only, and this kind only: the generic `armRecord` door is the GAME's and
+    ///      carries the four existing kinds' 20%-improvement claim rule, which is not this one's.
+    ///      Coinflip credits the claim itself, so a finalization makes ONE call and the player
+    ///      takes ONE credit.
+    /// @param candidate The winner's high point over its starting bankroll, in basis points.
+    /// @dev DECLARED WITHOUT ITS RETURN, deliberately. `Coinflip` returns the FLIP it claimed and
+    ///      logs it in `BigRecordUpdated`; nothing on this side of the call needs the figure, so
+    ///      the table does not pay to decode one. The selector is the same either way.
+    function armDiceRunRecord(address player, uint256 candidate) external;
 }
 
 /// @title CrapsBattle
@@ -84,8 +94,6 @@ contract CrapsBattle is LootboxCraps {
     error NotYourBet();
     /// @notice The bet's slot has closed: its table is bound, its word is in flight.
     error BetLocked();
-    /// @notice An amendment may re-spread the board but never change its seven-chip count.
-    error BoardTotalChanged();
     /// @notice The entry multiple is neither one copy of the run nor the field's high-roller
     ///         multiple. Nothing between the two is a legal entry.
     error BadEntryMultiple();
@@ -201,6 +209,23 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _BOOST_BLANK_CHANCE = 15;
     uint256 internal constant _BOOST_PICKED_CHANCE = 5;
 
+    /// @notice THE SCHEDULED FORMAT, and the whole of it. Every protocol-scheduled Dice Run runs
+    ///         a bankroll FIVE rounds deep and chases one of two targets, drawn evenly. Depth and
+    ///         target used to be three-way draws each; a high-water run ranks on how far it got
+    ///         rather than how fast it arrived, and nine formats of that are eight more than the
+    ///         thing needs. A CUSTOM battle still names its own depth and target — these are the
+    ///         schedule's, never a test of eligibility.
+    uint256 internal constant _SCHED_BANK_MULT = 5;
+    uint256 internal constant _SCHED_GOAL_LOW = 5;
+    uint256 internal constant _SCHED_GOAL_HIGH = 20;
+
+    /// @notice THE DICE RUN RECORD FLOOR, in score basis points: a 100x high point against the
+    ///         run's own starting bankroll. Below it a scheduled winner never reads the shared
+    ///         BIGGEST mark at all.
+    /// @dev The one figure in this format the product discussion described rather than named. It
+    ///      is a single constant and a single test vector on purpose, so moving it is cheap.
+    uint256 internal constant _DICE_RUN_RECORD_FLOOR = 1_000_000;
+
     /// @notice THE LINEAR RATE A DAY'S BUDGET IS DRAWN AT, in basis points of ACTION.
     ///
     ///         Twelve percent of the bankroll the table's seats put up, and NOTHING is halved
@@ -301,25 +326,27 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _PROG_COMMON_DIV = 10;
     uint256 internal constant _PROG_RARE_DIV = 2;
 
-    /// @dev THE ROLL CUTOFFS, nine scheduled formats and one 16-bit inclusive threshold each,
-    ///      indexed `depth * 3 + target` with depth in (2, 5, 10) and target in (5x, 10x, 50x):
+    /// @dev THE HIGH-POINT CUTOFFS, one pair per scheduled target, in SCORE BASIS POINTS — the
+    ///      winner's high point over its own starting bankroll, 10,000 being 1x. INCLUSIVE:
     ///
-    ///        depth   5x common/rare   10x common/rare   50x common/rare
-    ///           2      150 /  185       205 /  245        340 /  395
-    ///           5      215 /  260       275 /  320        405 /  455
-    ///          10      265 /  315       325 /  375        455 /  500
+    ///        target   common          rare
+    ///           5x    250,000 (25x)   1,200,000 (120x)
+    ///          20x    500,000 (50x)   2,250,000 (225x)
     ///
-    ///      CUMULATIVE DICE ROLLS, not shooters, and the winning ticket's own. The dice are the
-    ///      field's — shooter `n` starts and ends on the same roll for everyone still in — so this
-    ///      adds no draw of its own: it reads the shared roll prefix the winner stopped on. A run
-    ///      that reached its goal on a long final shooter can therefore clear a cutoff on few
-    ///      hands, and one that took many short shooters need not clear it on many.
+    ///      A MULTIPLE, not a roll count. The old cutoffs read the winner's cumulative roll
+    ///      prefix, which measured how LONG a run took rather than how far it got; a high-water
+    ///      run is not trying to be quick, so the roll prefix stopped saying anything about it.
+    ///      The high point adds no draw of its own either — it is a figure the settlement already
+    ///      computed — and it rewards exactly the thing the format is now about.
     ///
-    ///      Calibrated at 3,000,000 blank/random runs per format and rounded to the nearest five;
-    ///      conditional on reaching Goal, common lands 6.97%-8.66% of the time and rare
-    ///      0.335%-0.892%.
-    uint256 internal constant _PROG_COMMON = 0x1C7014501090195011300D7015400CD0096;
-    uint256 internal constant _PROG_RARE = 0x1F40177013B01C701400104018B00F500B9;
+    ///      TESTED IN BASIS POINTS, not in FLIP, and the two are the same test: the score is
+    ///      `floor(peak * 10_000 / start)`, and for integers `floor(a/b) >= c` is exactly
+    ///      `a >= c * b`. So comparing the floored score to a bps cutoff is comparing the whole
+    ///      high point to a multiple of the bankroll, without the multiplication.
+    uint256 internal constant _PROG_COMMON_5X = 250_000;
+    uint256 internal constant _PROG_RARE_5X = 1_200_000;
+    uint256 internal constant _PROG_COMMON_20X = 500_000;
+    uint256 internal constant _PROG_RARE_20X = 2_250_000;
 
     /// @dev Where a `CrapsProgressiveRolled` came from: the main ladder, a contested high lane,
     ///      or the boost capital a sole high rider's standing would not admit.
@@ -368,13 +395,6 @@ contract CrapsBattle is LootboxCraps {
     uint256 private constant _CB_SCORE_SHIFT = 61;
     uint256 private constant _CB_CLOSE_SHIFT = 73;
     uint256 private constant _CB_CLOSE_MASK = 0xFFFFFFFFFF;
-
-    /// @notice Shooter cap on a bet slip; bust or goal is the real stop, and the escalator makes
-    ///         even approaching this cap need an astronomical bankroll. At ~6.5k gas per full-board
-    ///         shooter a cap-length settlement runs under 2M gas — and the engine's `_SLIP_ROLL_BUDGET`
-    ///         makes the worst case a hard ceiling of the same order, however long the shooters
-    ///         run.
-    uint256 internal constant _MAX_SLIP_HANDS = 256;
 
     /// @notice Granularity of battle stakes, seeds and tier boosts.
     uint256 internal constant _BATTLE_STAKE_UNIT = 100 ether;
@@ -454,7 +474,7 @@ contract CrapsBattle is LootboxCraps {
     ///      the id ends at 159 and a byte does not fit in two bits.
     uint256 internal constant _EV_MULT_SHIFT = 160;
 
-    /// @dev Bits 206..208: the craps boon riding this slip, ONE-HOT — 1 = 5%, 2 = 10%, 4 = 25%,
+    /// @dev Bits 206..208: the craps boon riding this slip, ONE-HOT — 1 = 5%, 2 = 10%, 4 = 15%,
     ///      0 = none. Carried at the SAME shift in storage and on `CrapsSlipPlaced`, so the log
     ///      and the word cannot drift. Bits 209..213 remain unused.
     ///
@@ -514,16 +534,16 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev The high-roller sideboard, ONE word per battle that actually takes a high seat:
     ///        bits   0.. 31  how many high seats the field holds
-    ///        bits  32..101  the best composite among them, the SAME 70-bit score the main
+    ///        bits  32..136  the best composite among them, the SAME 105-bit score the main
     ///                       scoreboard ranks on, so neither lane can rank on money it scaled
-    ///        bits 102..133  the seat holding that lead
-    ///        bit  134       done: the sole rider settled, or the competitive award was paid
+    ///        bits 137..168  the seat holding that lead
+    ///        bit  169       done: the sole rider settled, or the competitive award was paid
     ///      Nothing else is needed. Main finalization proves every high score has been folded,
     ///      the head count is known from entry, and the principal follows from `H`, the bounty
     ///      and that count.
     uint256 internal constant _HF_SCORE_SHIFT = 32;
-    uint256 internal constant _HF_WINNER_SHIFT = 102;
-    uint256 internal constant _HF_DONE_BIT = 1 << 134;
+    uint256 internal constant _HF_WINNER_SHIFT = 137;
+    uint256 internal constant _HF_DONE_BIT = 1 << 169;
 
     /// @dev A day's ticket word holds EIGHT counts in ONE slot: the total in the low 32 bits and
     ///      one high-roller count PER PERIOD above it, 32 bits each — period `p`'s at bits
@@ -565,37 +585,49 @@ contract CrapsBattle is LootboxCraps {
 
     // Battle scoreboard packing — one battle's entire shared state in one word.
     //   bits   0.. 31  entrants        bits  32.. 63  resolved
-    //   bits  64..133  the leading COMPOSITE score
-    //   bits 134..165  the SEAT holding it            bits 166..178  that seat's ROLL count
-    //   bits 179..199  free
-    //   bits 200..217  battle stake granules (echo, for views)
-    //   bits 218..248  seed granules   bits 250..251  tier            bit  249  free
+    //   bits  64..168  the leading COMPOSITE score
+    //   bits 169..200  the SEAT holding it
+    //   bits 201..218  battle stake granules (echo, for views)
+    //   bits 219..249  seed granules   bits 250..251  tier
+    //   bits 252..255  free
     //
-    // THE SEAT AND THE ROLLS SHARE ONE SIXTY-FOUR-BIT REGION and are always written together. A
-    // seat is an index into `1..entrants` and entrants is a uint32 field, so the top half of that
-    // region was structurally dead; the roll count now lives in thirteen of those bits, which the
-    // engine's `_SLIP_ROLL_BUDGET + _MAX_ROLLS` ceiling of 4,607 fits with room over. Every read
-    // of the seat therefore masks to 32 bits, and the one write clears the whole region.
+    // THE ROLL SLICE IS GONE. It held thirteen bits, which a scheduled run's 8,703-roll ceiling no
+    // longer fits, and nothing ranks or qualifies on rolls any more — the progressive reads the
+    // winner's HIGH POINT, which the composite already carries. Its bits went to the composite,
+    // which needs them: a high-water verdict is a goal flag, a high point, an ending bankroll and
+    // a standing, and no two of those may share a field.
     uint256 internal constant _BG_RESOLVED_SHIFT = 32;
     uint256 internal constant _BG_BEST_SHIFT = 64;
-    uint256 internal constant _BG_WINNER_SHIFT = 134;
-    uint256 internal constant _BG_ROLLS_SHIFT = 166;
-    uint256 internal constant _BG_ROLLS_MASK = 0x1FFF;
-    uint256 internal constant _BG_STAKE_SHIFT = 200;
+    uint256 internal constant _BG_WINNER_SHIFT = 169;
+    uint256 internal constant _BG_STAKE_SHIFT = 201;
     uint256 internal constant _MASK32 = 0xFFFFFFFF;
 
-    /// @dev The merit verdict as one lexicographic scalar, so the common fold is one comparison.
-    ///      Most significant first:
-    ///      RANK decides — a goal beats every bust, a faster goal beats a slower one, a longer
-    ///      bust beats a shorter one. Level on that, the MONEY decides: two runs that ended on
-    ///      the same shooter almost never came home with the same bankroll. Level on that too —
-    ///      which is where a field of busts that all lost the same coin lands — the entrant's
-    ///      STANDING decides. Exact equality is resolved separately by the table word's
-    ///      deterministic ordering of bet ids, so settlement order cannot choose the winner.
-    uint256 internal constant _SC_RANK_SHIFT = 60;
+    /// @dev THE MERIT VERDICT as one lexicographic scalar, so the common fold is one comparison.
+    ///      One hundred and five bits, most significant first:
+    ///
+    ///        bit  104     GOAL. Every goal beats every bust.
+    ///        bits 60..103 THE PRIMARY, read one way for each stop:
+    ///                       * a goal ranks on its HIGH POINT, in whole FLIP;
+    ///                       * a bust ranks on shooters completed.
+    ///        bits 16..59  THE MONEY: the raw ENDING bankroll in whole FLIP — a goal's payout
+    ///                     figure, a bust's surviving remainder — never the high point.
+    ///        bits  0..15  the entrant's STANDING, frozen at entry.
+    ///
+    ///      Exact equality is resolved separately by the table word's deterministic ordering of
+    ///      bet ids, so settlement order cannot choose the winner.
+    ///
+    ///      BOTH MONEY FIELDS SATURATE rather than mask. A mask would wrap a seventeen-trillion-
+    ///      FLIP figure to a small one and rank it WORSE; saturating can only ever fail to
+    ///      separate two runs that are already past the horizon, and the comparison then falls
+    ///      through to the next field. The largest bankroll the schedule can hand out is 60,000
+    ///      FLIP, so reaching the field's ceiling means a 2.9e8x run — the same order of
+    ///      unreachable as the engine's own 512-roll hand bound.
+    uint256 internal constant _SC_GOAL_BIT = 1 << 104;
+    uint256 internal constant _SC_PRIMARY_SHIFT = 60;
+    uint256 internal constant _SC_PRIMARY_MASK = 0xFFFFFFFFFFF;
     uint256 internal constant _SC_WON_SHIFT = 16;
     uint256 internal constant _SC_WON_MASK = 0xFFFFFFFFFFF;
-    uint256 internal constant _SC_BEST_MASK = 0x3FFFFFFFFFFFFFFFFF;
+    uint256 internal constant _SC_BEST_MASK = (1 << 105) - 1;
     // The bonus seed lives in the battle's OWN word, not in a global "currently armed" pointer:
     // a seeded battle can still be settling long after the next arm, and its pot must not depend
     // on what is armed by then. In `_BATTLE_STAKE_UNIT` granules.
@@ -607,14 +639,8 @@ contract CrapsBattle is LootboxCraps {
     ///      battle with no tier — a custom one, or the day's event — and those pay the seed the
     ///      word actually holds. A zeroed battle word therefore reads as "no tier", which is what
     ///      makes an unseeded custom battle indistinguishable from an unwritten one.
-    uint256 internal constant _BG_SEED_SHIFT = 218;
+    uint256 internal constant _BG_SEED_SHIFT = 219;
     uint256 internal constant _BG_SEED_MASK = 0x7FFFFFFF;
-    uint256 internal constant _MASK64 = 0xFFFFFFFFFFFFFFFF;
-
-    // A battle rank is one comparable scalar: any surviving goal (512 | spare hands) beats any
-    // bust (its hand count), faster goals and later busts rank higher, and zero means unrecorded —
-    // a placed slip always plays hand 0, so a real rank is never zero.
-    uint256 private constant _RANK_GOAL_BASE = 512;
 
     /// @notice A placed bet slip, decoded — what `_betOf` returns. Storage keeps one packed word,
     ///         under the key `(slot << 64) | seat`.
@@ -650,10 +676,16 @@ contract CrapsBattle is LootboxCraps {
     /// @param winnerId     The winning seat within this slot; combine it with the slot for the bet id.
     /// @param finalized    Every entrant resolved: the scoreboard is the verdict.
     /// @param winningStop  The winning outcome class, meaningful once finalized.
-    /// @param winningHands The winning hand count, meaningful once finalized.
-    /// @param winningRolls The leading seat's cumulative DICE ROLLS. Tracked with `winnerId`
-    ///                     rather than with the stop, so it is the running leader's while a field
-    ///                     is still settling and the winner's once it is not.
+    /// @param winningHands The winning hand count — meaningful once finalized, and only where the
+    ///                     composite encodes it: a BUST, whose primary is its shooter count. A
+    ///                     goal ranks on its high point instead and reports zero here.
+    /// @param winningPeak  The winner's HIGH POINT in whole FLIP, once finalized.
+    /// @param winningEnd   The winner's raw ENDING bankroll in whole FLIP, once finalized — what
+    ///                     it was actually paid on, which a goal's peak may sit well above.
+    /// @dev The high point AS A MULTIPLE is not restated here: a battle key is a hash, so this
+    ///      reader cannot recover the starting bankroll to divide by. `CrapsBattleFinalized`
+    ///      carries `winningScoreBps` for exactly that reason, and a caller holding the window's
+    ///      terms divides `winningPeak` by them.
     /// @param battleStake  One entrant's stake (wei).
     /// @param seed         House money banked on this battle (wei); zero for an unseeded custom one.
     ///                     Every field that forms pays it out — there is no head count below which
@@ -667,7 +699,8 @@ contract CrapsBattle is LootboxCraps {
         bool finalized;
         Craps.SlipStop winningStop;
         uint16 winningHands;
-        uint16 winningRolls;
+        uint256 winningPeak;
+        uint256 winningEnd;
         uint256 battleStake;
         uint256 seed;
         uint256 pot;
@@ -675,18 +708,30 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev One settlement's whole account, carried between the engine and the paying/preview
     ///      paths as a single memory pointer — the resolver is sensitive to stack pressure.
+    ///      Its layout deliberately matches `Craps.SlipResult`: `paid` reuses the dead
+    ///      `bankrollIn` word, `won` aliases `bankrollOut`, and `unitsPlayed` keeps the otherwise
+    ///      unused fifth word in place. `_settlementOf` can therefore reuse the engine result
+    ///      directly instead of allocating and copying a second struct for every seat.
     struct Settlement {
+        /// @dev What is actually credited. A bust pays ZERO: whatever it was still holding is
+        ///      deleted, not returned to the player and not moved into anyone else's pot.
+        uint256 paid;
         /// @dev The RAW bankroll the table returned, unscaled and unrounded, a busted run's
         ///      remainder included. It is what the scoreboard ranks on and what `CrapsBetSettled`
         ///      reports; it is deliberately NOT what a bust is paid.
         uint256 won;
-        /// @dev What is actually credited. A bust pays ZERO: whatever it was still holding is
-        ///      deleted, not returned to the player and not moved into anyone else's pot.
-        uint256 paid;
+        /// @dev THE HIGH POINT, raw and unscaled: the largest bankroll this run held at a
+        ///      completed-shooter boundary. A scheduled goal RANKS on it and the records read it;
+        ///      it is never what the run is paid, and a bust's peak reaches neither — the
+        ///      comparator drops it the moment the goal bit is clear.
+        uint256 peak;
         uint256 handsPlayed;
-        /// @dev Dice rolls across the run. It ranks NOTHING — the comparator is hands, and stays
-        ///      hands — and exists only so the finalizing field can test the winner's cumulative
-        ///      prefix against the progressive's cutoffs.
+        /// @dev Retained to preserve `SlipResult`'s memory layout. The resolver does not rank or
+        ///      charge on escalated units, but keeping the word avoids a five-word copy per seat.
+        uint256 unitsPlayed;
+        /// @dev Dice rolls across the run. It ranks NOTHING and qualifies nothing — the
+        ///      progressive reads the high point now — and survives only as the settle walk's
+        ///      work-unit charge and as telemetry.
         uint256 totalRolls;
         Craps.SlipStop stop;
     }
@@ -866,7 +911,8 @@ contract CrapsBattle is LootboxCraps {
 
     /// @notice An open slip's chips were re-spread by its owner. `chips` is the same thirty-bit
     ///         word `CrapsSlipPlaced` carries in its low bits — ten counts, the dark side at
-    ///         27..29. Every other term of the slip is the slot's and cannot move.
+    ///         27..29, and ZERO for a blank ticket that has handed its board back to the dice.
+    ///         Every other term of the slip is the slot's and cannot move.
     event CrapsSlipAmended(uint256 indexed betId, uint256 chips);
 
     /// @notice A wager settled.
@@ -883,15 +929,24 @@ contract CrapsBattle is LootboxCraps {
     /// @notice Every entrant of the battle resolved: the scoreboard is the verdict.
     ///         Emitted by whichever settlement happened to be the last one.
     /// @param winnerId The winning seat within this battle's slot, not the full packed bet id.
-    /// @param winningRolls The winner's cumulative DICE ROLLS. It decides NOTHING about the rank —
-    ///        that is `winningStop` then `winningHands`, exactly as before — and is carried so a
-    ///        reader can check the progressive's cutoffs without replaying the run.
+    /// @param winningPeak The winner's HIGH POINT in whole FLIP: the largest bankroll it held at
+    ///        a completed-shooter boundary. What a scheduled field ranks on.
+    /// @dev THE SHOOTER COUNT IS NOT RESTATED HERE. It is still in the composite the scoreboard
+    ///      holds — a bust's primary is its shooter count and a CUSTOM goal's is its speed rank —
+    ///      and `Battle.winningHands` decodes it; the log carries the figures the two products
+    ///      actually differ on and leaves the derivable one in the word it came from.
+    /// @param winningEnd The winner's raw ENDING bankroll in whole FLIP — what it was paid on. A
+    ///        goal that gave ground after latching ends BELOW its peak and above its target.
+    /// @param winningScoreBps The high point over the run's own starting bankroll, in basis
+    ///        points: 10,000 is 1x. Zero on a custom field. This REPLACES the old cumulative roll
+    ///        count, which ranked nothing and now qualifies nothing either.
     event CrapsBattleFinalized(
         bytes32 indexed battleKey,
         Craps.SlipStop winningStop,
-        uint16 winningHands,
-        uint16 winningRolls,
         uint64 winnerId,
+        uint256 winningPeak,
+        uint256 winningEnd,
+        uint256 winningScoreBps,
         uint256 pot
     );
 
@@ -980,11 +1035,18 @@ contract CrapsBattle is LootboxCraps {
     /// @param balance The pool AFTER the contribution.
     event CrapsProgressiveFunded(uint24 indexed day, uint256 contribution, uint256 balance);
 
-    /// @notice A finalized scheduled battle cleared a roll cutoff and drew on the progressive.
+    /// @notice A finalized scheduled battle cleared a high-point cutoff and drew on the
+    ///         progressive.
     /// @dev NO SEPARATE DRAW DECIDES THIS. The winner is the one the ordinary comparator already
-    ///      named, and the qualification is that winner's cumulative roll prefix against its
-    ///      window's format. A Bust never qualifies however far it ran.
+    ///      named, and the qualification is that winner's HIGH POINT against its window's target.
+    ///      A Bust never qualifies however far it ran, and a custom battle never reaches here.
     /// @param rare True for the half-pool rung, false for the tenth. Never both.
+    /// @param goalMult The scheduled target this field ran, 5 or 20 — which of the two cutoff
+    ///        pairs was applied.
+    /// @param peak The winner's high point in whole FLIP, the figure that was tested.
+    /// @param scoreBps That high point over the run's own starting bankroll, in basis points:
+    ///        10,000 is 1x, and the cutoffs are 250,000 / 1,200,000 at 5x and 500,000 / 2,250,000
+    ///        at 20x.
     /// @param candidate The rung's whole figure, before the winner's standing is applied.
     /// @param paid What was actually credited — `candidate` at full standing, less below it.
     /// @param retained `candidate - paid`. It was never removed from the pool, so it needs no
@@ -996,7 +1058,9 @@ contract CrapsBattle is LootboxCraps {
         bytes32 indexed battleKey,
         address indexed player,
         bool rare,
-        uint16 rolls,
+        uint16 goalMult,
+        uint256 peak,
+        uint256 scoreBps,
         uint256 candidate,
         uint256 paid,
         uint256 retained,
@@ -1215,7 +1279,7 @@ contract CrapsBattle is LootboxCraps {
     /// @param chips Where its seven chips go; the draw places the remaining three.
     /// @custom:reverts NotYourBet If the caller does not own the slip.
     /// @custom:reverts BetLocked If the slot has closed, or a day-wide entry's first window has.
-    /// @custom:reverts BoardTotalChanged If the new board is not seven chips.
+    /// @custom:reverts BadRandomCount If the new board is neither seven chips nor blank.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     function amendSlip(uint256 betId, uint32 chips) public {
         uint256 header = _bets[betId];
@@ -1240,8 +1304,12 @@ contract CrapsBattle is LootboxCraps {
             // field that was already public and frozen. Nobody who entered on time had that move.
             _joinableSlot(slot);
         }
-        (uint256 packed, uint256 count) = _packChips(chips);
-        if (count != _RSEL_PICK7_KEPT) revert BoardTotalChanged();
+        // SEVEN CHIPS OR NONE, the same shape every entry door takes — so an amendment can move a
+        // slip BETWEEN the two ticket classes, not merely re-spread one. A picked board handed
+        // back to the dice becomes a blank ticket in every respect the settlement reads: the draw
+        // places all ten chips, and the slip takes the blank shooter schedule. The class is read
+        // off this stored word, so there is nothing else to clear.
+        uint256 packed = _sevenOrNone(chips);
 
         // THE STANDING MOVES WITH THE BOARD. A seat may now be written days before its day opens,
         // so the standing frozen at that moment is the holder's oldest rather than their current
@@ -1415,14 +1483,18 @@ contract CrapsBattle is LootboxCraps {
             // Booked to the day the field PLAYED, not the day someone got round to settling it.
             // Settlement is permissionless and unbounded in time, so keying the books to `now`
             // would let a holder of unsettled slots choose which day's boost budget their action
-            // inflates. A custom battle is not on the day clock and books where it lands.
+            // inflates.
+            //
+            // A CUSTOM BATTLE IS NOT BOOKED AT ALL — not to its close day, not to its settlement
+            // day, not to a day of its own. Its bankroll is its creator's terms and its entrants'
+            // burn, and the day books are what SIZE the protocol's own subsidy: letting a table
+            // anyone can open at any depth feed that denominator would let custom volume mint
+            // scheduled emission. So the two products share the engine and share nothing else.
             //
             // `done` is the last seat ACTUALLY resolved, never the end the batch was offered:
             // the cursor, the action and the credit arrays all key off the same figure, so a
             // budget that stops early can never book work it did not do or skip work it did.
-            _bookDay(
-                slot < _CUSTOM_SLOT_BASE ? uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY) : _currentDayIndex(), put, hi
-            );
+            if (slot < _CUSTOM_SLOT_BASE) _bookDay(uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY), put, hi);
         }
     }
 
@@ -1861,8 +1933,7 @@ contract CrapsBattle is LootboxCraps {
         // way, and the only thing that falls out at the end is the payment.
         uint256 sc;
         unchecked {
-            sc = (_rankOf(s.stop, s.handsPlayed) << _SC_RANK_SHIFT) | (_wonComponent(s.won) << _SC_WON_SHIFT)
-                | ((header >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK);
+            sc = _compositeOf(s) | ((header >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK);
         }
         // THE LANE FOLDS FIRST, and the ordering is load-bearing: scoring the main board is what
         // finalizes the field, and finalization is what PAYS — so the last high seat has to be in
@@ -1876,7 +1947,7 @@ contract CrapsBattle is LootboxCraps {
                 high = staked;
             }
         }
-        _scoreBattle(w, sc, seat, word, s.totalRolls);
+        _scoreBattle(w, sc, seat, word);
 
         // ONLY NOW does the multiple apply. The composite above folded the UNSCALED return on
         // purpose: a seat buys copies of a run, never a better one, so 256 times the bankroll must
@@ -1899,10 +1970,12 @@ contract CrapsBattle is LootboxCraps {
             // the rider, the lane, the ranking, the pots or `staked` — and `won` below stays the
             // unboosted scaled result. It moves `paid`, and nothing else.
             uint256 basePaid = s.paid * scale;
-            paid = basePaid + ride;
-            if (_boonAnchored(betId >> 64, w.bound)) {
-                paid += _boonBonus((header >> _BET_BOON_SHIFT) & _BET_BOON_MASK, basePaid);
-            }
+            // THE BOON RIDES EVERY WINDOW THE TICKET PLAYS. It was bought with the burn, and a
+            // DAY ticket's burn paid for all seven — so a boon spent on a day purchase lifts all
+            // seven bankroll payments rather than one of them. Settlement order cannot reach it:
+            // the lift is a function of the run and the mask, so every window's answer is fixed
+            // before any of them is cranked.
+            paid = basePaid + ride + _boonBonus((header >> _BET_BOON_SHIFT) & _BET_BOON_MASK, basePaid);
             if (staked == 0) staked = uint256(w.bankroll) * scale;
 
             // A contested lane pays one winner when the field closes; its individual high seats
@@ -1920,21 +1993,24 @@ contract CrapsBattle is LootboxCraps {
     ///      `_settleSlip` reads it: the eligible-shooter percentage in the low byte, the percent
     ///      added to an eligible shooter's PROFIT in the byte above.
     ///
-    ///      THE CROSSOVER IS THE POINT. A blank ticket is boosted three times as often AND paid
-    ///      more for it at every target; a picked one is paid almost nothing at the short target
-    ///      and nearly as much at the long one. So a board worth picking is worth picking chasing
-    ///      5x or 10x, where knowing what you are doing shortens the run — and at 50x, where
-    ///      nothing survives on skill, the ten chips are better left to the dice.
+    ///        ticket           eligible shooters    5x       20x
+    ///        blank/random           15%           +33%     +45%
+    ///        picked                  5%           +20%     +50%
     ///
-    ///      Only the three SCHEDULED targets are named, because only a scheduled window is ever
-    ///      handed a schedule: a custom battle is passed zero and plays the bare engine.
+    ///      THE CROSSOVER IS THE POINT. A blank ticket is boosted three times as often and paid
+    ///      more for it at the short target; a picked one is paid least where the run is short
+    ///      enough for a chosen board to matter, and most at 20x, where the length of the run is
+    ///      what decides it and the chips may as well be the dice's.
+    ///
+    ///      Only the two SCHEDULED targets are named, because only a scheduled window is ever
+    ///      handed a schedule: a custom battle is passed zero and plays the bare engine, whatever
+    ///      numbers its creator copied off the schedule.
     function _shooterBoostTerms(bool blank, uint256 goalMult) internal pure returns (uint256) {
         unchecked {
-            // Three packed uint16 schedules, ordered 5x, 10x, 50x. Each low byte is the draw
-            // chance and each high byte its profit uplift, exactly as `_settleSlip` reads it.
-            uint256 table = blank ? 0x280F1E0F190F : 0x230514050605;
-            uint256 shift = goalMult == 5 ? 0 : (goalMult == 10 ? 16 : 32);
-            return (table >> shift) & 0xFFFF;
+            // Two packed uint16 schedules, 5x low and 20x high. Each low byte is the draw chance
+            // and each high byte its profit uplift, exactly as `_settleSlip` reads it.
+            uint256 table = blank ? 0x2D0F210F : 0x32051405;
+            return (table >> (goalMult == _SCHED_GOAL_LOW ? 0 : 16)) & 0xFFFF;
         }
     }
 
@@ -1980,6 +2056,15 @@ contract CrapsBattle is LootboxCraps {
         // what it always was. The ticket is classified from the word it was STORED with — before
         // the scatter, which is what the dice did to it — so a blank ticket cannot be mistaken
         // for a picked one by the ten chips it ends up playing.
+        //
+        // ONE ENGINE, ONE SET OF RULES. Both products latch the goal, hold it as a protected
+        // reserve, escalate every three shooters to `uint32.max`, and run to the same bounds — a
+        // custom table plays the same GAME, and the boundary between the two is entirely about
+        // MONEY. The one thing the slot decides here is the SHOOTER BOOST, which is house money
+        // and therefore the protocol's own windows' alone. Nothing reads the goal, the depth or
+        // the schedule to decide which is which: a custom battle may legally copy every number a
+        // scheduled one draws, and a future scheduled format could legally carry a zero boost.
+        bool scheduled = w.bound < _CUSTOM_SLOT_BASE;
         SlipResult memory sr = _settleSlip(
             board,
             _crapsSeed(word, w.bound),
@@ -1988,12 +2073,14 @@ contract CrapsBattle is LootboxCraps {
             _MAX_SLIP_HANDS,
             _SLIP_ROLL_BUDGET,
             address(uint160(header)),
-            w.bound < _CUSTOM_SLOT_BASE ? _shooterBoostTerms(packed == 0, w.goal / w.bankroll) : 0
+            scheduled ? _shooterBoostTerms(packed == 0, w.goal / w.bankroll) : 0
         );
-        s.won = sr.bankrollOut;
-        s.handsPlayed = sr.handsPlayed;
-        s.totalRolls = sr.totalRolls;
-        s.stop = sr.stop;
+        // `Settlement` is the same seven-word memory shape as `SlipResult`. The first word —
+        // bankrollIn — is dead after the engine returns and becomes `paid` below; every other
+        // field is already at the offset its settlement reader expects.
+        assembly ("memory-safe") {
+            s := sr
+        }
 
         // Paid exactly what the table returned. The only coin in the game is the MID-RUN second
         // chance inside `_settleSlip`, and it is the owner's alone; a run that lost one came home
@@ -2879,12 +2966,11 @@ contract CrapsBattle is LootboxCraps {
             uint256 boardFlip;
             uint256 bountyFlip;
             uint256 bankrollFlip;
-            // How deep the bankroll runs over one round: two, five or ten of them. Drawn on its
-            // own and never out of what was paid to enter, which is what makes two windows on the
-            // same board different games — two deep chasing five times is a sprint, ten deep
-            // chasing fifty is a lottery.
-            uint256 pick = (roll >> 24) % 3;
-            uint256 bankMult = pick == 0 ? 2 : (pick == 1 ? 5 : 10);
+            // FIXED AT FIVE. The depth used to be a three-way draw, back when a run stopped the
+            // moment it reached its target and the depth was what decided how long that took. A
+            // scheduled run does not stop there any more — it latches the win and plays on — so
+            // the depth stopped separating the formats and the schedule stopped drawing it.
+            uint256 bankMult = _SCHED_BANK_MULT;
 
             if (period == _BONUS_PERIODS_PER_DAY - 1) {
                 // The day's EVENT, and its last window. The draw names the PLAYING BANKROLL
@@ -2950,12 +3036,13 @@ contract CrapsBattle is LootboxCraps {
             boardStake = boardFlip * 1 ether;
             stakeUnits = (bountyFlip * 1 ether) / _BATTLE_STAKE_UNIT;
 
-            // The target: a simple multiple of the bankroll, nothing more. Three rungs, drawn
-            // EVENLY — the shooter schedule is what separates them now, paying a picked board
-            // most of its edge back at 5x and 10x and a blank one most of its edge back at 50x,
-            // so weighting the draw as well would subsidise one target twice.
-            pick = (roll >> 32) % 3;
-            goal = uint128(bankrollFlip * (pick == 0 ? 5 : (pick == 1 ? 10 : 50)) * 1 ether);
+            // The target: a simple multiple of the bankroll, nothing more. TWO rungs, drawn
+            // EVENLY — the shooter schedule is what separates them, paying a picked board most of
+            // its edge back at 20x and a blank one most of its edge back at 5x, so weighting the
+            // draw as well would subsidise one target twice.
+            goal = uint128(
+                bankrollFlip * ((roll >> 32) % 2 == 0 ? _SCHED_GOAL_LOW : _SCHED_GOAL_HIGH) * 1 ether
+            );
         }
     }
 
@@ -2980,9 +3067,15 @@ contract CrapsBattle is LootboxCraps {
     }
 
     /// @dev The craps boon's payout-base ceiling. The percentage runs on the bankroll payment up
-    ///      to this much, so the three tiers top out at 3,000 / 6,000 / 15,000 FLIP. A SHARED base
-    ///      ceiling rather than three separate caps: capping each tier at 15,000 would flatten all
-    ///      three to the same number on a big enough return and delete the tier spread.
+    ///      to this much, so the three tiers top out at 3,000 / 6,000 / 9,000 FLIP PER WINDOW — a
+    ///      whole-day ticket plays seven, and its boon lifts every one of them, which is what its
+    ///      seven-window burn paid for. The TOP TIER is 15%, not the 25% a one-window anchor
+    ///      could afford: seven windows at a quarter would have let one boon add 105,000 FLIP,
+    ///      and 15% holds the whole-ticket ceiling near where the anchored quarter sat.
+    ///
+    ///      A SHARED base ceiling rather than three separate caps: capping each tier at 9,000
+    ///      would flatten all three to the same number on a big enough return and delete the
+    ///      tier spread.
     uint256 internal constant _BOON_PAYOUT_BASE_CAP = 60_000 ether;
 
     /// @dev What a stored boon mask adds to an already-rounded, already-scaled bankroll payment.
@@ -2994,27 +3087,12 @@ contract CrapsBattle is LootboxCraps {
         uint256 bps;
         if (mask == 1) bps = 500;
         else if (mask == 2) bps = 1000;
-        else if (mask == 4) bps = 2500;
+        else if (mask == 4) bps = 1500;
         else return 0;
         unchecked {
             uint256 base = basePaid > _BOON_PAYOUT_BASE_CAP ? _BOON_PAYOUT_BASE_CAP : basePaid;
             return (base * bps) / _BPS_DENOMINATOR;
         }
-    }
-
-    /// @dev Does the boon on this slip apply at THIS window? One boon buys upside on ONE committed
-    ///      run, and the run is fixed by the bet's structure rather than by settlement order —
-    ///      settlement is permissionless once the words are public, so "the first window resolved"
-    ///      would let a caller pick the most favourable known outcome, or grief the holder with the
-    ///      least. A window-local or custom slip answers for itself; a DAY ticket answers at period
-    ///      0 and nowhere else.
-    ///
-    ///      The `_CUSTOM_SLOT_BASE` guard is load-bearing: custom slots run sequentially from a
-    ///      multiple of eight, so every eighth one also has remainder zero and the remainder alone
-    ///      would read it as a day ticket.
-    function _boonAnchored(uint256 slot, uint256 bound) internal pure returns (bool) {
-        if (slot >= _CUSTOM_SLOT_BASE || slot % _BONUS_SLOTS_PER_DAY != 0) return true;
-        return bound % _BONUS_SLOTS_PER_DAY == 1;
     }
 
     /// @dev Tag a craps price with its action flags. The low byte of every eligible price is zero
@@ -3026,15 +3104,29 @@ contract CrapsBattle is LootboxCraps {
         return cost | flags;
     }
 
-    /// @dev A run's battle rank: a goal beats every bust, a faster goal beats a slower one, and
-    ///      among busts the one that lasted longer wins.
-    function _rankOf(Craps.SlipStop stop, uint256 handsPlayed) internal pure returns (uint256) {
-        if (stop == Craps.SlipStop.Goal) {
-            unchecked {
-                return _RANK_GOAL_BASE | (_MAX_SLIP_HANDS - handsPlayed);
+    /// @dev THE COMPARATOR, as one lexicographic scalar (see `_SC_GOAL_BIT`) — everything but the
+    ///      entrant's standing, which the caller folds into the low bits.
+    ///
+    ///      A GOAL BEATS EVERY BUST, and there is ONE comparator for both products:
+    ///
+    ///        * GOALS race on the HIGH POINT, then on the ending bankroll. A run does not stop
+    ///          when it wins any more, so how fast it got there stopped being a merit; how far it
+    ///          got is.
+    ///        * BUSTS race on shooters completed, then on the remainder still held. A bust's high
+    ///          point reaches neither field: the goal bit is clear, so the primary is its hand
+    ///          count and nothing about a temporary peak can enter an all-Bust race.
+    function _compositeOf(Settlement memory s) internal pure returns (uint256) {
+        unchecked {
+            uint256 primary;
+            uint256 goalBit;
+            if (s.stop == Craps.SlipStop.Goal) {
+                goalBit = _SC_GOAL_BIT;
+                primary = _wonComponent(s.peak);
+            } else {
+                primary = s.handsPlayed;
             }
+            return goalBit | (primary << _SC_PRIMARY_SHIFT) | (_wonComponent(s.won) << _SC_WON_SHIFT);
         }
-        return handsPlayed;
     }
 
     /// @dev The money component of a composite score: whole FLIP, SATURATED at the field rather
@@ -3048,11 +3140,19 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @dev A stored rank back into what it says. Only ever called on a competitive rank.
-    function _decodeRank(uint256 rank) private pure returns (Craps.SlipStop stop, uint256 hands) {
+    /// @dev A stored composite back into what it says. `hands` is recoverable for a BUST, whose
+    ///      primary is its shooter count, and reads zero for a goal, whose primary is its high
+    ///      point instead.
+    function _decodeBest(uint256 best)
+        internal
+        pure
+        returns (Craps.SlipStop stop, uint256 hands, uint256 peakFlip, uint256 endFlip)
+    {
         unchecked {
-            if (rank >= _RANK_GOAL_BASE) return (Craps.SlipStop.Goal, _MAX_SLIP_HANDS - (rank - _RANK_GOAL_BASE));
-            return (Craps.SlipStop.Bust, rank);
+            uint256 primary = (best >> _SC_PRIMARY_SHIFT) & _SC_PRIMARY_MASK;
+            endFlip = (best >> _SC_WON_SHIFT) & _SC_WON_MASK;
+            if (best & _SC_GOAL_BIT == 0) return (Craps.SlipStop.Bust, primary, 0, endFlip);
+            return (Craps.SlipStop.Goal, 0, primary, endFlip);
         }
     }
 
@@ -3068,7 +3168,7 @@ contract CrapsBattle is LootboxCraps {
         return _hash2(word, challenger) > _hash2(word, leader);
     }
 
-    function _scoreBattle(Window memory w, uint256 score, uint64 betId, uint256 word, uint256 rolls) internal {
+    function _scoreBattle(Window memory w, uint256 score, uint64 betId, uint256 word) internal {
         bytes32 key = w.key;
         uint256 g = _battles[key];
         unchecked {
@@ -3079,12 +3179,12 @@ contract CrapsBattle is LootboxCraps {
             uint64 leader = uint64(uint32(g >> _BG_WINNER_SHIFT));
             uint256 standing = (g >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
             if (score > standing || leader == 0 || (score == standing && _tieBreak(word, betId, leader))) {
-                // THE SEAT AND ITS ROLL COUNT MOVE TOGETHER, in one clear-and-replace: the 64-bit
-                // clear covers both slices, so a displaced leader can never leave its rolls behind
-                // for the seat that beat it. The rolls rank nothing — `score` alone decides who is
-                // here — they are only carried along by whoever is.
-                g = (g & ~((_SC_BEST_MASK << _BG_BEST_SHIFT) | (_MASK64 << _BG_WINNER_SHIFT)))
-                    | (score << _BG_BEST_SHIFT) | (uint256(betId) << _BG_WINNER_SHIFT) | (rolls << _BG_ROLLS_SHIFT);
+                // ONE CLEAR-AND-REPLACE over the composite and the seat holding it. Everything a
+                // finalization reports about the winner — its stop, its high point, its ending
+                // bankroll — is inside the composite, so a displaced leader leaves nothing behind
+                // for the seat that beat it.
+                g = (g & ~((_SC_BEST_MASK << _BG_BEST_SHIFT) | (uint256(_MASK32) << _BG_WINNER_SHIFT)))
+                    | (score << _BG_BEST_SHIFT) | (uint256(betId) << _BG_WINNER_SHIFT);
             }
             uint256 entrants = g & _MASK32;
             // BANKED BEFORE ANYTHING LEAVES THE CONTRACT. `_payout` takes `g` by value and reads
@@ -3447,17 +3547,27 @@ contract CrapsBattle is LootboxCraps {
             // The main boost is shared by the finalization log and the payout. Its derivation
             // reads the day's budget and hashes the settling word, so compute it once here.
             uint256 boost = _boostUnits(w, word);
+            bool scheduled = slot < _CUSTOM_SLOT_BASE;
             uint256 best = (g >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
-            (Craps.SlipStop stop, uint256 hands) = _decodeRank(best >> _SC_RANK_SHIFT);
+            (Craps.SlipStop stop,, uint256 peakFlip, uint256 endFlip) = _decodeBest(best);
+            // THE SCORE, drawn once here and reused by everything downstream that reads a high
+            // point: the finalization log, the progressive's rung and the record's candidate.
+            // BOTH SIDES IN WHOLE FLIP — every scheduled bankroll is a whole-FLIP multiple of 300
+            // and the scoreboard floors the peak the same way, so every cutoff on the schedule
+            // lands on an exact figure and the flooring can only discard sub-FLIP dust.
+            uint256 score = (peakFlip * _BPS_DENOMINATOR) / (uint256(w.bankroll) / 1 ether);
+            // DONATED GRANULES AND THE WINNING SEAT, read once each: both the finalization log and
+            // the payment below want them, and a battle word is one warm slot either way.
             // The pot this field pays out, seed and boost included. Every finished field carries
             // the whole pot: a window nobody else wanted is still a race, and what is on it is what
             // its winner takes.
             emit CrapsBattleFinalized(
                 w.key,
                 stop,
-                uint16(hands),
-                uint16((g >> _BG_ROLLS_SHIFT) & _BG_ROLLS_MASK),
                 uint64(uint32(g >> _BG_WINNER_SHIFT)),
+                peakFlip,
+                endFlip,
+                score,
                 (entrants * w.stakeUnits + boost + ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK)) * _BATTLE_STAKE_UNIT
             );
             // The winning seat is an index into the same own-then-day range the settle walk used,
@@ -3483,7 +3593,7 @@ contract CrapsBattle is LootboxCraps {
             // allocated to this window, so it is banked in the progressive — in GRANULES, at the
             // same rounding stage the payment lands on, which is what makes `paid + rolled` equal
             // the full-standing award to the wei.
-            if (slot < _CUSTOM_SLOT_BASE) {
+            if (scheduled) {
                 uint256 got = _roundBoost(_boostShare(boost, (winnerWord >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK));
                 _rollIn(w.key, _ROLL_SRC_MAIN, (_roundBoost(boost) - got) * _BATTLE_STAKE_UNIT);
                 boost = got;
@@ -3525,7 +3635,29 @@ contract CrapsBattle is LootboxCraps {
             // else. Every rollover this field can produce — the ladder's and both lane shapes' —
             // is already in the pool by here, so the rung is measured against the balance the
             // whole field left rather than against a partial one.
-            _payProgressive(w, g, winnerId, winnerWord, winner);
+            //
+            // THEN THE RECORD, on the same finalized figures and once for the whole field. Never
+            // per entrant: the candidate is the winner the comparator named, and the field is
+            // closed by the time either of these can read it.
+            //
+            // BOTH ARE THE PROTOCOL'S OWN MONEY, so both are SCHEDULED-ONLY. A custom battle
+            // plays the same game and races on the same comparator; what it does not do is fund
+            // or draw on anything the protocol allocates. The single scheduled branch below
+            // carries that guard for the progressive, repeat-victory stamp and record alike.
+            // `peakFlip` is zero for a bust in either product, so the goal gate needs no restating.
+            //
+            // THE BIGGEST DICE RUN is the FIFTH category of the record `Coinflip` already owns,
+            // not a pool of its own: nothing here funds a record pool, adds craps action, or
+            // touches the four existing kinds. A 100x high point has necessarily crossed either
+            // scheduled target, so the floor does the whole eligibility test. Below it NOTHING is
+            // called — a field that never got near a record does not pay for a cross-contract
+            // read to be told so — and `Coinflip` logs the claim it makes.
+            if (scheduled) {
+                _payProgressive(w, peakFlip, score, winnerId, winnerWord, winner);
+                if (score >= _DICE_RUN_RECORD_FLOOR) {
+                    ICoinflipStake(ContractAddresses.COINFLIP).armDiceRunRecord(winner, score);
+                }
+            }
         }
     }
 
@@ -3540,40 +3672,47 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @dev THE PROGRESSIVE AWARD, and the whole of it. Reached once per finalized field, from
-    ///      `_payout` alone, so it cannot pay twice however the settlement batches were cut.
+    /// @dev THE PROGRESSIVE AWARD, and the whole of it. Reached once per finalized SCHEDULED
+    ///      field, from `_payout`'s single scheduled branch, so it cannot pay twice however the
+    ///      settlement batches were cut and a custom field can never reach the pool.
     ///
     ///      IT ADDS NO RANDOMNESS. The recipient is the winner the ordinary comparator already
-    ///      named; the qualification is that winner's cumulative roll prefix against its window's
-    ///      format; and the amount is a division of the live pool. Nothing is re-run and no
-    ///      runner-up is ever considered.
+    ///      named; the qualification is that winner's HIGH POINT against its window's target; and
+    ///      the amount is a division of the live pool. Nothing is re-run and no runner-up is ever
+    ///      considered.
     ///
-    ///      A BUST NEVER QUALIFIES, however far it ran. A custom battle neither draws on the pool
-    ///      nor funds it — its terms are its creator's, so the cutoffs would mean nothing against
-    ///      them.
-    function _payProgressive(Window memory w, uint256 g, uint256 winnerId, uint256 winnerWord, address winner)
-        internal
-    {
-        if (w.bound >= _CUSTOM_SLOT_BASE) return;
+    ///      A BUST NEVER QUALIFIES, however high it got: its `peakFlip` is zero, which is below
+    ///      every cutoff. A custom battle neither draws on the pool nor funds it and is excluded
+    ///      by the caller before this helper is reached.
+    /// @param peakFlip The finalized winner's HIGH POINT in whole FLIP, straight off the
+    ///        scoreboard the field just closed. Nothing is re-run to obtain it.
+    /// @param score That high point over the run's own starting bankroll, in basis points — the
+    ///        same figure the finalization log carries, computed once by the caller.
+    function _payProgressive(
+        Window memory w,
+        uint256 peakFlip,
+        uint256 score,
+        uint256 winnerId,
+        uint256 winnerWord,
+        address winner
+    ) internal {
         unchecked {
-            uint256 rank = ((g >> _BG_BEST_SHIFT) & _SC_BEST_MASK) >> _SC_RANK_SHIFT;
-            if (rank < _RANK_GOAL_BASE) return;
-            uint256 rolls = (g >> _BG_ROLLS_SHIFT) & _BG_ROLLS_MASK;
-            // The format, straight off the window's own terms. Both ratios are exact for every
-            // scheduled preset — every bankroll the schedule draws is a multiple of 300 FLIP and
-            // every round is that bankroll over its depth over the ten chips — so neither division
-            // can land between rungs.
-            uint256 depth = uint256(w.bankroll) / w.played;
-            uint256 mult = uint256(w.goal) / uint256(w.bankroll);
-            uint256 i = 16 * (3 * (depth == 2 ? 0 : (depth == 5 ? 1 : 2)) + (mult == 5 ? 0 : (mult == 10 ? 1 : 2)));
-            // RARE FIRST, and it OVERRIDES. The rare cutoff is above the common one at every
-            // format, so a run that clears it has cleared both — and takes the half, never the
-            // half and the tenth.
+            // The format, straight off the window's own terms. The ratio is exact for every
+            // scheduled preset — every bankroll the schedule draws is a whole-FLIP multiple of 300
+            // — so it cannot land between the two targets. The pair of cutoffs rides one word so
+            // the target is read once rather than at each rung.
+            uint256 goalMult = uint256(w.goal) / uint256(w.bankroll);
+            uint256 cuts = goalMult == _SCHED_GOAL_HIGH
+                ? (_PROG_RARE_20X << 32) | _PROG_COMMON_20X
+                : (_PROG_RARE_5X << 32) | _PROG_COMMON_5X;
+            // RARE FIRST, and it OVERRIDES. The rare cutoff is above the common one at both
+            // targets, so a run that clears it has cleared both — and takes the half, never the
+            // half and the tenth. Both cutoffs are INCLUSIVE.
             uint256 pool = _progressive;
-            bool rare = rolls >= ((_PROG_RARE >> i) & 0xFFFF);
+            bool rare = score >= (cuts >> 32);
             uint256 candidate;
             if (rare) candidate = pool / _PROG_RARE_DIV;
-            else if (rolls >= ((_PROG_COMMON >> i) & 0xFFFF)) candidate = pool / _PROG_COMMON_DIV;
+            else if (score >= (cuts & _MASK32)) candidate = pool / _PROG_COMMON_DIV;
             else return;
             if (candidate == 0) return;
             // THE CANDIDATE IS ALREADY IN THE POOL, so the standing curve applies to it directly
@@ -3583,7 +3722,17 @@ contract CrapsBattle is LootboxCraps {
             pool -= paid;
             _progressive = pool;
             emit CrapsProgressivePaid(
-                winnerId, w.key, winner, rare, uint16(rolls), candidate, paid, candidate - paid, pool
+                winnerId,
+                w.key,
+                winner,
+                rare,
+                uint16(goalMult),
+                peakFlip,
+                score,
+                candidate,
+                paid,
+                candidate - paid,
+                pool
             );
             // State first, credit second. A scoreless winner takes nothing, and a call for nothing
             // is a call not worth making.
@@ -3624,9 +3773,6 @@ contract CrapsBattle is LootboxCraps {
         info.entrants = uint32(g);
         info.resolved = uint32(g >> _BG_RESOLVED_SHIFT);
         info.winnerId = uint64(uint32(g >> _BG_WINNER_SHIFT));
-        // Tracked with the seat, not with the stop: while a field is still settling this is the
-        // RUNNING leader's roll count, which is what makes a displacement observable.
-        info.winningRolls = uint16((g >> _BG_ROLLS_SHIFT) & _BG_ROLLS_MASK);
         info.finalized = info.entrants != 0 && info.resolved == info.entrants;
         info.battleStake = ((g >> _BG_STAKE_SHIFT) & _BSTAKE_MAX) * _BATTLE_STAKE_UNIT;
         // DONATIONS ONLY. A window's own seed is a function of the day's word, and a key is a
@@ -3635,10 +3781,12 @@ contract CrapsBattle is LootboxCraps {
         info.seed = ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK) * _BATTLE_STAKE_UNIT;
         info.pot = info.battleStake * info.entrants + info.seed;
         if (info.finalized) {
-            (Craps.SlipStop stop, uint256 hands) =
-                _decodeRank(((g >> _BG_BEST_SHIFT) & _SC_BEST_MASK) >> _SC_RANK_SHIFT);
+            (Craps.SlipStop stop, uint256 hands, uint256 peakFlip, uint256 endFlip) =
+                _decodeBest((g >> _BG_BEST_SHIFT) & _SC_BEST_MASK);
             info.winningStop = stop;
             info.winningHands = uint16(hands);
+            info.winningPeak = peakFlip;
+            info.winningEnd = endFlip;
         }
     }
 
@@ -3689,9 +3837,7 @@ contract CrapsBattle is LootboxCraps {
             won = s.won * scale;
             paid = s.paid * scale;
             // `paid` is still the bare scaled payment here, so it doubles as the boon base.
-            if (_boonAnchored(betId >> 64, w.bound)) {
-                paid += _boonBonus((header >> _BET_BOON_SHIFT) & _BET_BOON_MASK, paid);
-            }
+            paid += _boonBonus((header >> _BET_BOON_SHIFT) & _BET_BOON_MASK, paid);
             // A SOLE high roller's extra bounties and its lane's boost ride this same run, so a
             // preview that left them out would under-quote the one seat they belong to. A
             // CONTESTED lane is paid to one of its seats when the field finishes, not returned by

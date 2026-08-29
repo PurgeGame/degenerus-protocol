@@ -69,7 +69,7 @@ contract EngineProbe is Craps {
         pure
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, seed, bankroll, goal, 256, 4096, address(0), 0);
+        return _settleSlip(b, seed, bankroll, goal, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, address(0), 0);
     }
 }
 

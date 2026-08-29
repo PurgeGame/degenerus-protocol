@@ -109,22 +109,22 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertLt(_p(seats, 100), FIELD, "the field ran out before the budget did");
     }
 
-    /// @dev ALL NINE SCHEDULED FORMATS, one sweep each, on the picked board the plan names. The
-    ///      day word is searched so every (depth, goal) pair is actually reached — the schedule
-    ///      draws them, so a fixture that does not search grades whichever three it happened to
+    /// @dev BOTH SCHEDULED FORMATS, one sweep each, on the picked board the plan names. The depth
+    ///      is fixed at five now, so the format IS the target — the day word is searched so both
+    ///      5x and 20x are actually reached rather than whichever one the fixture happened to
     ///      land on.
     function test_theBudgetHoldsAcrossEveryScheduledFormat() public {
-        bool[9] memory seen;
+        bool[2] memory seen;
         uint256 worst;
         uint256 covered;
-        for (uint256 d = 0; d < 400 && covered < 9; ++d) {
+        for (uint256 d = 0; d < 400 && covered < 2; ++d) {
             uint256 dayWord = uint256(keccak256(abi.encode("format", d)));
             uint24 today = crapsBattle.currentDayIndex();
             _landDayWord(today, dayWord);
             (uint128 bank, uint128 goal, uint256 posted,,,) = crapsBattle.bonusTermsFor(today, 1);
-            uint256 depth = uint256(bank) / ((posted * 10) / 7);
+            assertEq(uint256(bank) / ((posted * 10) / 7), 5, "a scheduled window is not five rounds deep");
             uint256 mult = uint256(goal) / uint256(bank);
-            uint256 idx = 3 * (depth == 2 ? 0 : (depth == 5 ? 1 : 2)) + (mult == 5 ? 0 : (mult == 10 ? 1 : 2));
+            uint256 idx = mult == 5 ? 0 : 1;
             if (seen[idx]) continue;
             seen[idx] = true;
             ++covered;
@@ -134,8 +134,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             if (p95 > worst) worst = p95;
             vm.revertToState(snap);
         }
-        assertEq(covered, 9, "the search never reached all nine scheduled formats");
-        emit log_named_uint("WORST resolveSlot p95 over nine formats", worst);
+        assertEq(covered, 2, "the search never reached both scheduled formats");
+        emit log_named_uint("WORST resolveSlot p95 over both formats", worst);
         emit log_named_uint("  + measured router tail             ", worst + ROUTER_TAIL_MEASURED);
         assertLt(worst + ROUTER_TAIL_MEASURED, 9_500_000, "the worst format's p95 crank passed the 9.5M target");
     }
@@ -143,23 +143,27 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     /// @dev THE POINT OF THE CHANGE, stated as a comparison a seat count cannot make: the SAME
     ///      allowance walks materially more seats on a bust-heavy field than on a paying one.
     function test_theSameAllowanceWalksFarMoreSeatsOnACheapField() public {
-        // TWO SHOOTERS DEEP CHASING FIFTY is the cheapest cell there is — the bankroll cannot
-        // survive long enough to be expensive, so almost every seat is a short bust that writes
-        // no credit. FIVE DEEP CHASING TEN is the dearest: long enough to run and often enough
-        // to pay. The old flat count priced neither.
+        // THE 5x TARGET IS THE CHEAP ONE NOW, and the high-water lifecycle is why. A 5x run
+        // latches early and then may stake only its SURPLUS above the reserve — which is usually
+        // thin, so it retires soon after winning. A 20x run rarely latches at all and simply plays
+        // until the escalator busts it, which takes longer and throws more dice. The old flat
+        // count priced neither.
+        // ONE TIER, so the only thing that differs is the target: the round scales with the
+        // bankroll, so run length is otherwise scale-invariant.
         // MEDIANS, not one word. A single shared word is one draw of a correlated field, and the
         // comparison this makes is about the formats rather than about that draw.
-        uint256 cheapSeats = _medianSeats(_findFormat(2, 50));
-        uint256 dearSeats = _medianSeats(_findFormat(5, 10));
+        uint256 cheapSeats = _medianSeats(_findFormat(3000, 5));
+        uint256 dearSeats = _medianSeats(_findFormat(3000, 20));
 
-        emit log_named_uint("median seats, depth 2 goal 50x", cheapSeats);
-        emit log_named_uint("median seats, depth 5 goal 10x", dearSeats);
-        emit log_named_uint("ratio, x100                   ", (cheapSeats * 100) / dearSeats);
-        // A FIXED SEAT COUNT CANNOT SAY THIS. Under one allowance the cheap field walks multiples
-        // of the dear one's seats, which is the whole reason the count was replaced.
-        // 1.5x is the claim worth defending across word sets; the measured ratio sits near 2x
-        // and drifts with the day key the windows draw under.
-        assertGt(cheapSeats * 100, dearSeats * 150, "one allowance did not buy 1.5x the cheap seats");
+        emit log_named_uint("median seats, 3000 FLIP goal 5x ", cheapSeats);
+        emit log_named_uint("median seats, 3000 FLIP goal 20x", dearSeats);
+        emit log_named_uint("ratio, x100                     ", (cheapSeats * 100) / dearSeats);
+        // A FIXED SEAT COUNT CANNOT SAY THIS. Under one allowance the cheap field walks materially
+        // more seats than the dear one, which is the whole reason the count was replaced.
+        // The spread NARROWED with the format: the depth draw is gone, so the two formats differ
+        // only in their target and the measured ratio sits near 1.3x rather than the old 2x. 1.15x
+        // is the claim worth defending across word sets.
+        assertGt(cheapSeats * 100, dearSeats * 115, "one allowance did not buy 1.15x the cheap seats");
     }
 
     /// @dev Seat one deep field on `dayWord` and settle it at the keeper's allowance against
@@ -185,7 +189,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     ///      subtracts a reserve before handing the allowance down. This is that reserve measured:
     ///      the same field settled through `game.mineFlip()` and through `resolveSlot` directly.
     function test_probe_theRouterTailOverTheResolver() public {
-        uint256 dayWord = _findFormat(5, 10);
+        uint256 dayWord = _findFormat(3000, 5);
         uint256 word = uint256(keccak256("router-tail"));
 
         uint256 snap = vm.snapshotState();
@@ -217,13 +221,16 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     }
 
     /// @dev The day word whose period-1 window draws exactly this format.
-    function _findFormat(uint256 wantDepth, uint256 wantMult) internal returns (uint256) {
+    /// @dev A day word whose period-1 window draws `wantMult` at the ONE scheduled depth, and
+    ///      whose SMALL tier is the one asked for. The depth is no longer a draw, so the target
+    ///      and the tier are what a fixture can still select on.
+    function _findFormat(uint256 wantBankrollFlip, uint256 wantMult) internal returns (uint256) {
         uint24 today = crapsBattle.currentDayIndex();
-        for (uint256 i = 0; i < 2000; ++i) {
-            uint256 dayWord = uint256(keccak256(abi.encode("find", wantDepth, wantMult, i)));
+        for (uint256 i = 0; i < 4000; ++i) {
+            uint256 dayWord = uint256(keccak256(abi.encode("find", wantBankrollFlip, wantMult, i)));
             _landDayWord(today, dayWord);
-            (uint128 bank, uint128 goal, uint256 posted,,,) = crapsBattle.bonusTermsFor(today, 1);
-            if (uint256(bank) / ((posted * 10) / 7) == wantDepth && uint256(goal) / uint256(bank) == wantMult) {
+            (uint128 bank, uint128 goal,,,,) = crapsBattle.bonusTermsFor(today, 1);
+            if (uint256(bank) / 1 ether == wantBankrollFlip && uint256(goal) / uint256(bank) == wantMult) {
                 return dayWord;
             }
         }
@@ -243,7 +250,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     ///      longest odds), PAID, FIELD-FINALIZING (so it carries the pot, the progressive and the
     ///      lane), and a HIGH seat. This searches for it rather than asserting it exists.
     function test_theHardBoundHoldsWithAWholeSeatOfOvershoot() public {
-        uint256 dayWord = _findFormat(10, 50);
+        uint256 dayWord = _findFormat(3000, 20);
         uint256 worstSeat;
         uint256 worstFinal;
 

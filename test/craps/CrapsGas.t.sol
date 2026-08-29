@@ -21,11 +21,10 @@ contract GasHarness is CrapsViews {
         return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0), 0);
     }
 
-    /// @dev The same worst case UNDER A SCHEDULE, at the dearest terms a scheduled window can
-    ///      hand it: the blank ticket's 15-in-a-hundred draw at the 50x target's +40%. A boosted
-    ///      shooter costs one extra keccak and one multiply-divide, so the guarantee has to be
-    ///      measured with the schedule on — an unboosted ceiling proves nothing about the common
-    ///      case.
+    /// @dev The same worst case UNDER A SCHEDULE, at the dearest one a window can hand it: the
+    ///      blank ticket's 15-in-a-hundred draw at the 20x target's +45%. A boosted shooter costs
+    ///      one extra keccak and one multiply-divide, so the guarantee has to be measured with the
+    ///      schedule on — an unboosted ceiling proves nothing about the common case.
     function engineRunBoosted(Craps.Bets calldata b, uint48 index, uint256 bankroll)
         external
         view
@@ -39,7 +38,26 @@ contract GasHarness is CrapsViews {
             MAX_SLIP_HANDS,
             SLIP_ROLL_BUDGET,
             address(0),
-            _shooterBoostTerms(true, 50)
+            _shooterBoostTerms(true, SCHED_GOAL_HIGH)
+        );
+    }
+
+    /// @dev The scheduled engine with the high-water lifecycle actually ON — a live goal, so the
+    ///      run latches and plays past it under the protected reserve.
+    function engineRunScheduled(Craps.Bets calldata b, uint48 index, uint256 bankroll, uint256 goal, address player)
+        external
+        view
+        returns (Craps.SlipResult memory)
+    {
+        return _settleSlip(
+            b,
+            _seedFor(index),
+            bankroll,
+            goal,
+            MAX_SLIP_HANDS,
+            SLIP_ROLL_BUDGET,
+            player,
+            _shooterBoostTerms(true, SCHED_GOAL_HIGH)
         );
     }
 }
@@ -61,9 +79,13 @@ contract CrapsGasTest is CrapsPins {
     uint24 internal constant U = 120;
 
     uint256 internal constant TABLES = 24;
-    /// @dev Covers the escalator's worst case to the cap: mandatory units over 256 hands sum to
-    ///      6,946,710 even if every round loses everything.
-    uint256 internal constant CAP_ROUNDS = 7_100_000;
+    /// @dev The bankroll, in base-board rounds, that funds a run all the way to its 512-shooter
+    ///      cap. The escalator doubles every three shooters and tops out at
+    ///      `uint32.max` from shooter 96, so the whole book is
+    ///      `3 * (2^32 - 1) + 416 * (2^32 - 1)`, a little under 1.8e12 rounds — three orders of
+    ///      magnitude past anything the schedule can hand a player, which is exactly what makes
+    ///      it the engine's worst case rather than a reachable one.
+    uint256 internal constant CAP_ROUNDS_TO_SHOOTER_CAP = 1_800_000_000_000;
 
     address internal player = makeAddr("player");
 
@@ -121,26 +143,37 @@ contract CrapsGasTest is CrapsPins {
         Craps.Bets memory b = _fullBoard();
         _setWord(70_000, uint256(keccak256("capslip")));
 
-        uint256 bankroll = craps.stakeFor(b) * CAP_ROUNDS;
+        uint256 bankroll = craps.stakeFor(b) * CAP_ROUNDS_TO_SHOOTER_CAP;
         uint256 g = gasleft();
         Craps.SlipResult memory result = craps.engineRun(b, 70_000, bankroll);
         uint256 used = g - gasleft();
 
         emit log_named_uint("engine worst-case run gas", used);
         assertEq(result.handsPlayed, craps.MAX_SLIP_HANDS(), "benchmark did not reach the shooter cap");
-        assertLt(used, 1_500_000, "the engine's worst case regressed past its gas budget");
+        assertLt(used, 3_000_000, "the engine's worst case regressed past its gas budget");
 
-        // AND WITH A SCHEDULE ON, which is what every protocol window runs. The draw fires on
-        // about one shooter in seven here, so this is the cost the guarantee actually has to
-        // cover — the unboosted figure above is the floor under it, not the ceiling.
+        // AND THE SAME RUN WITH A SCHEDULE ON, which is what every protocol window runs: a draw
+        // on about one shooter in seven, each costing an extra keccak and a multiply-divide. The
+        // unboosted figure above is the floor under it, not the ceiling.
         g = gasleft();
         Craps.SlipResult memory boosted = craps.engineRunBoosted(b, 70_000, bankroll);
         uint256 usedBoosted = g - gasleft();
 
         emit log_named_uint("engine worst-case run gas, scheduled", usedBoosted);
-        emit log_named_uint("  the schedule's own cost", usedBoosted - used);
+        emit log_named_uint("  shooters                          ", boosted.handsPlayed);
+        emit log_named_uint("  rolls                             ", boosted.totalRolls);
         assertEq(boosted.handsPlayed, craps.MAX_SLIP_HANDS(), "the scheduled benchmark stopped early");
-        assertLt(usedBoosted, 1_500_000, "the scheduled worst case regressed past its gas budget");
+        assertLt(usedBoosted, 3_000_000, "the scheduled worst case regressed past its gas budget");
+
+        // THE ABSOLUTE ROLL CEILING is not the budget: the budget is judged BETWEEN shooters, so
+        // the last shooter it admits may still run a full hand of its own.
+        assertLe(boosted.totalRolls, craps.SLIP_ROLL_CEILING(), "a run passed the absolute roll ceiling");
+        assertEq(
+            craps.SLIP_ROLL_CEILING(),
+            craps.SLIP_ROLL_BUDGET() - 1 + craps.MAX_ROLLS(),
+            "the stated ceiling is not budget - 1 + one whole hand"
+        );
+        assertEq(craps.SLIP_ROLL_CEILING(), 8703, "the roll ceiling moved");
     }
 
     /// @dev And the real surface: a max-legal slip (ten rounds of the board) placed and settled
@@ -274,7 +307,7 @@ contract CrapsGasTest is CrapsPins {
             gasSmall += g - gasleft();
 
             g = gasleft();
-            Craps.SlipResult memory big = craps.engineRun(b, idx, stake * CAP_ROUNDS);
+            Craps.SlipResult memory big = craps.engineRun(b, idx, stake * CAP_ROUNDS_TO_SHOOTER_CAP);
             gasBig += g - gasleft();
 
             handsSmall += small.handsPlayed;
@@ -297,7 +330,7 @@ contract CrapsGasTest is CrapsPins {
         // doing its job and this fails rather than quietly shipping an unsettleable slip.
         assertLt(
             (marginalGas / marginalHands) * craps.MAX_SLIP_HANDS(),
-            1_500_000,
+            3_000_000,
             "a cap-length run regressed past its gas budget"
         );
     }

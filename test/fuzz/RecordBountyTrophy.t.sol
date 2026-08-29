@@ -74,9 +74,9 @@ contract RecordBountyTrophyTest is DeployProtocol {
     // Deploy state
     // ---------------------------------------------------------------------
 
-    function testAllFourMintToCreatorAtDeploy() public view {
-        assertEq(recordBounty.balanceOf(CREATOR), 4, "creator holds all four");
-        for (uint256 i; i < 4; ++i) {
+    function testAllFiveMintToCreatorAtDeploy() public view {
+        assertEq(recordBounty.balanceOf(CREATOR), 5, "creator holds all five");
+        for (uint256 i; i < 5; ++i) {
             assertEq(recordBounty.ownerOf(i), CREATOR, "creator owns trophy");
             (address holder, uint128 mark, uint24 sinceDay, ) = recordBounty.recordInfo(i);
             assertEq(holder, CREATOR, "recordInfo holder");
@@ -102,7 +102,7 @@ contract RecordBountyTrophyTest is DeployProtocol {
     function testRecordSetRejectsBadKindAndZeroHolder() public {
         vm.startPrank(ContractAddresses.COINFLIP);
         vm.expectRevert(DegenerusRecordBounty.InvalidToken.selector);
-        recordBounty.recordSet(4, player, 1 ether);
+        recordBounty.recordSet(5, player, 1 ether);
         vm.expectRevert(DegenerusRecordBounty.ZeroAddress.selector);
         recordBounty.recordSet(RECORD_KIND_SPIN, address(0), 1 ether);
         vm.stopPrank();
@@ -137,7 +137,7 @@ contract RecordBountyTrophyTest is DeployProtocol {
         coinflip.armRecord(RECORD_KIND_SPIN, player, 1 ether);
 
         assertEq(recordBounty.ownerOf(RECORD_KIND_SPIN), player, "trophy moved to setter");
-        assertEq(recordBounty.balanceOf(CREATOR), 3, "creator down to three");
+        assertEq(recordBounty.balanceOf(CREATOR), 4, "creator down to four");
         assertEq(recordBounty.balanceOf(player), 1, "player holds one");
         (, uint128 mark, uint24 sinceDay, uint256 daysHeld) =
             recordBounty.recordInfo(RECORD_KIND_SPIN);

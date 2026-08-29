@@ -13,8 +13,9 @@ import { ZERO_ADDRESS } from "../helpers/testUtils.js";
  * Contract: contracts/DegenerusRecordBounty.sol
  *
  * Architecture summary:
- *   - Soulbound ERC721 "BIGGEST" with 4 trophies (tokenId = RECORD_KIND_*)
- *   - All four mint to CREATOR at deploy; Coinflip force-moves a trophy on
+ *   - Soulbound ERC721 "BIGGEST" with 5 trophies (tokenId = RECORD_KIND_*),
+ *     the fifth being the scheduled Dice Run's high-point record
+ *   - All five mint to CREATOR at deploy; Coinflip force-moves a trophy on
  *     every record ratchet via recordSet (COINFLIP-only)
  *   - Holder transfers/approvals always revert (soulbound)
  *   - tokenURI carries the record name, the standing mark in the record's own
@@ -78,11 +79,11 @@ describe("DegenerusRecordBounty", function () {
   // ---------------------------------------------------------------------------
 
   describe("deploy state", function () {
-    it("mints all four trophies to CREATOR with unset marks", async function () {
+    it("mints all five trophies to CREATOR with unset marks", async function () {
       const f = await getFixture();
       const bounty = await getBounty(f);
-      expect(await bounty.balanceOf(f.deployer.address)).to.equal(4n);
-      for (let i = 0; i < 4; i++) {
+      expect(await bounty.balanceOf(f.deployer.address)).to.equal(5n);
+      for (let i = 0; i < 5; i++) {
         expect(await bounty.ownerOf(i)).to.equal(f.deployer.address);
         const [holder, mark, , daysHeld] = await bounty.recordInfo(i);
         expect(holder).to.equal(f.deployer.address);
@@ -121,7 +122,7 @@ describe("DegenerusRecordBounty", function () {
       const bounty = await getBounty(f);
       const signer = await impersonate(f.deployedAddrs.get("COINFLIP"));
       await expect(
-        bounty.connect(signer).recordSet(4, f.alice.address, 1n)
+        bounty.connect(signer).recordSet(5, f.alice.address, 1n)
       ).to.be.revertedWithCustomError(bounty, "InvalidToken");
       await expect(
         bounty.connect(signer).recordSet(0, ZERO_ADDRESS, 1n)
@@ -138,7 +139,7 @@ describe("DegenerusRecordBounty", function () {
         .to.emit(bounty, "Transfer")
         .withArgs(f.deployer.address, f.alice.address, 1n);
       expect(await bounty.ownerOf(1)).to.equal(f.alice.address);
-      expect(await bounty.balanceOf(f.deployer.address)).to.equal(3n);
+      expect(await bounty.balanceOf(f.deployer.address)).to.equal(4n);
       expect(await bounty.balanceOf(f.alice.address)).to.equal(1n);
     });
 
@@ -214,8 +215,9 @@ describe("DegenerusRecordBounty", function () {
         "The Biggest Degenerette",
         "The Biggest Luckbox",
         "The Biggest Pack Ripped",
+        "The Biggest Dice Run",
       ];
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 5; i++) {
         const json = decodeTokenURI(await bounty.tokenURI(i));
         expect(json.name).to.equal(names[i]);
         expect(json.description).to.equal(
@@ -239,6 +241,8 @@ describe("DegenerusRecordBounty", function () {
         f, bounty, 2, f.alice.address, hre.ethers.parseEther("5")
       );
       await recordSetViaCoinflip(f, bounty, 3, f.alice.address, 123n);
+      // The dice run's unit is SCORE BASIS POINTS: 1,234,500 is a 123.45x high point.
+      await recordSetViaCoinflip(f, bounty, 4, f.alice.address, 1_234_500n);
 
       expect(attr(decodeTokenURI(await bounty.tokenURI(0)), "Record Size"))
         .to.equal("215000 FLIP");
@@ -248,6 +252,8 @@ describe("DegenerusRecordBounty", function () {
         .to.equal("5.0000 ETH");
       expect(attr(decodeTokenURI(await bounty.tokenURI(3)), "Record Size"))
         .to.equal("123 tickets");
+      expect(attr(decodeTokenURI(await bounty.tokenURI(4)), "Record Size"))
+        .to.equal("123.45x");
     });
 
     it("counts days held as a numeric attribute", async function () {
@@ -272,10 +278,24 @@ describe("DegenerusRecordBounty", function () {
       expect(svg).to.include("#d9d9d9");
     });
 
-    it("reverts InvalidToken for tokenId >= 4", async function () {
+    it("renders the dice run's own label", async function () {
       const f = await getFixture();
       const bounty = await getBounty(f);
-      await expect(bounty.tokenURI(4)).to.be.revertedWithCustomError(
+      const json = decodeTokenURI(await bounty.tokenURI(4));
+      const svg = Buffer.from(json.image.split(",")[1], "base64").toString("utf8");
+      expect(svg).to.include("BIGGEST DICE RUN");
+    });
+
+    it("reverts InvalidToken for tokenId >= 5", async function () {
+      const f = await getFixture();
+      const bounty = await getBounty(f);
+      await expect(bounty.tokenURI(5)).to.be.revertedWithCustomError(
+        bounty, "InvalidToken"
+      );
+      await expect(bounty.ownerOf(5)).to.be.revertedWithCustomError(
+        bounty, "InvalidToken"
+      );
+      await expect(bounty.getApproved(5)).to.be.revertedWithCustomError(
         bounty, "InvalidToken"
       );
     });

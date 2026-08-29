@@ -88,7 +88,7 @@ contract DeityBoonViewer {
     uint8 private constant DEITY_BOON_DEGEN_WWXRP_12 = 40;
     uint8 private constant DEITY_BOON_CRAPS_5 = 41;
     uint8 private constant DEITY_BOON_CRAPS_10 = 42;
-    uint8 private constant DEITY_BOON_CRAPS_25 = 43;
+    uint8 private constant DEITY_BOON_CRAPS_15 = 43;
 
     // Boon weights
     uint16 private constant W_COINFLIP_5 = 200;
@@ -128,7 +128,7 @@ contract DeityBoonViewer {
     uint16 private constant W_DEGEN_WWXRP_12 = 200;
     uint16 private constant W_CRAPS_5 = 200;
     uint16 private constant W_CRAPS_10 = 40;
-    uint16 private constant W_CRAPS_25 = 8;
+    uint16 private constant W_CRAPS_15 = 8;
     uint16 private constant W_TOTAL = 2856;
     uint16 private constant W_PRE_DECIMATOR = 982;
     uint16 private constant W_DECIMATOR_ALL = 50;
@@ -254,6 +254,6 @@ contract DeityBoonViewer {
         if (roll < cursor) return DEITY_BOON_CRAPS_5;
         cursor += W_CRAPS_10;
         if (roll < cursor) return DEITY_BOON_CRAPS_10;
-        return DEITY_BOON_CRAPS_25;
+        return DEITY_BOON_CRAPS_15;
     }
 }

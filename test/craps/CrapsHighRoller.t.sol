@@ -785,8 +785,12 @@ contract CrapsHighRollerGasTest is CrapsPins {
         bytes32 staked = _slotOfMapping(bytes32(uint256(day)), _DAY_STAKED_SLOT);
         assertEq(_countWrites(writes, field), 0, "an ordinary field wrote the sideboard");
         assertEq(_countWrites(reads, field), 1, "an ordinary field read the sideboard other than once");
-        assertEq(_countWrites(writes, staked), 1, "ordinary action was not booked in one packed write");
-        assertEq(craps.highStakedOf(day), 0, "ordinary action spilled into the packed high half");
+        // A CUSTOM BATTLE BOOKS NO ACTION AT ALL. The day accumulator sizes the protocol's own
+        // subsidy; a table anyone may open on terms of their own is not allowed to feed it, so
+        // the settle walk does not touch the slot in either direction.
+        assertEq(_countWrites(writes, staked), 0, "a custom battle booked action to a day");
+        assertEq(craps.dayStaked(day), 0, "a custom battle moved a day's action");
+        assertEq(craps.highStakedOf(day), 0, "a custom battle moved a day's high action");
     }
 
     /// @dev A batch that DOES hold high seats touches exactly ONE sideboard word, however many of
@@ -806,21 +810,24 @@ contract CrapsHighRollerGasTest is CrapsPins {
         uint24 day = craps.currentDayIndex();
         bytes32 staked = _slotOfMapping(bytes32(uint256(day)), _DAY_STAKED_SLOT);
         assertGt(_countWrites(writes, field), 0, "three high seats wrote no sideboard");
-        assertEq(_countWrites(writes, staked), 1, "the day's high action was booked more than once");
-        assertGt(craps.highStakedOf(day), 0, "the packed high half recorded no high action");
+        // CUSTOM AGAIN: a lane on someone else's table is still someone else's table, so the high
+        // half of the day accumulator does not move either.
+        assertEq(_countWrites(writes, staked), 0, "a custom lane booked high action to a day");
+        assertEq(craps.highStakedOf(day), 0, "a custom lane moved a day's high action");
 
-        // And the whole lane is those two slots: no third slot in either mapping was written.
+        // And the whole lane is that ONE slot: no second slot in the sideboard mapping was
+        // written however many high seats the field held.
         uint256 laneWrites;
         for (uint256 i = 0; i < writes.length; ++i) {
-            if (writes[i] == field || writes[i] == staked) ++laneWrites;
+            if (writes[i] == field) ++laneWrites;
         }
         uint256 distinct;
         for (uint256 i = 0; i < writes.length; ++i) {
             bool seen;
             for (uint256 j = 0; j < i; ++j) if (writes[j] == writes[i]) seen = true;
-            if (!seen && (writes[i] == field || writes[i] == staked)) ++distinct;
+            if (!seen && writes[i] == field) ++distinct;
         }
-        assertEq(distinct, 2, "the lane wrote something other than its one word and one accumulator");
+        assertEq(distinct, 1, "the lane wrote something other than its one word");
         assertGt(laneWrites, 0, "the lane wrote nothing");
     }
 

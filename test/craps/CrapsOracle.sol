@@ -90,14 +90,24 @@ contract CrapsOracle {
     ///      hypothetical 256-shooter slip averages ~2,200 rolls; legal terms stop much earlier,
     ///      making 4,096 effectively unreachable. Hitting it is an ordinary bust between shooters;
     ///      every shooter still settles whole, and the budget never cuts a hand mid-roll.
-    uint256 public constant SLIP_ROLL_BUDGET = 4096;
+    uint256 public constant SLIP_ROLL_BUDGET = 8192;
+
+    /// @notice THE ABSOLUTE TOTAL-ROLL CEILING: the budget is judged BETWEEN shooters, so the
+    ///         last shooter it admits may still run a whole hand of its own.
+    uint256 public constant SLIP_ROLL_CEILING = SLIP_ROLL_BUDGET - 1 + MAX_ROLLS;
 
     /// @notice Shooters between each mandatory doubling of a slip's base wager.
-    /// @dev The escalator: rounds 0..4 wager 1x the board, 5..9 wager 2x, 10..14 wager 4x, and so
-    ///      on, capped at the 65,535-unit table limit. A slip that cannot cover the doubled wager
-    ///      busts between shooters with its remainder intact. Deterministic in the hand ordinal, so
-    ///      the whole run is still recomputable from the base-board ledger alone.
-    uint256 public constant ESC_HANDS = 5;
+    /// @dev The escalator: shooters 0-2 wager 1x the board, 3-5 wager 2x, and so on, capped at
+    ///      `ESC_CAP`. A slip that cannot cover the doubled wager stops between shooters with its
+    ///      remainder intact. Deterministic in the hand ordinal, so the whole run is still
+    ///      recomputable from the base-board ledger alone.
+    uint256 public constant ESC_HANDS = 3;
+
+    /// @notice The escalator ceiling, in base-board units.
+    uint256 public constant ESC_CAP = type(uint32).max;
+
+    /// @notice The shooter cap the wrapper hands the engine.
+    uint256 public constant MAX_SLIP_HANDS = 512;
 
     /// @notice Domain tag for the table's survival coin (see `_slip`). Held independently from the
     ///         production engine, at the same value, so the differential proves the two agree.
@@ -208,6 +218,10 @@ contract CrapsOracle {
     /// @param bankrollIn   What the slip started with.
     /// @param bankrollOut  What was left when it stopped — the settlement figure. Includes any
     ///                     sub-stake remainder; stopping never confiscates it.
+    /// @param peakBankroll THE HIGH POINT: the largest bankroll held at a COMPLETED shooter
+    ///                     boundary, starting at `bankrollIn`. Sampled after the shooter's return
+    ///                     and boost have landed and never mid-round, so a stake that leaves and
+    ///                     comes back cannot register as a peak on its way past.
     /// @param handsPlayed  Shooters actually played.
     /// @param unitsPlayed  Base-board units wagered across the run — the sum of each round's
     ///                     escalating mandatory multiplier, which is the true handle and what theo
@@ -223,6 +237,7 @@ contract CrapsOracle {
     struct SlipResult {
         uint256 bankrollIn;
         uint256 bankrollOut;
+        uint256 peakBankroll;
         uint256 handsPlayed;
         uint256 unitsPlayed;
         uint256 totalRolls;
@@ -425,6 +440,21 @@ contract CrapsOracle {
         return _slip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, true, true, player, boost);
     }
 
+    /// @notice The same run under caller-chosen bounds — the door the high-water differential
+    ///         uses when it wants to drive the shooter cap or the roll budget directly.
+    function resolveSlipUnder(
+        Craps.Bets calldata b,
+        bytes32 seed,
+        uint256 bankroll,
+        uint256 goal,
+        uint256 cap,
+        uint256 rollBudget,
+        address player,
+        uint256 boost
+    ) external pure returns (SlipResult memory) {
+        return _slip(b, seed, bankroll, goal, cap, rollBudget, true, true, player, boost);
+    }
+
     /// @dev The slip engine. Stop conditions are judged BETWEEN shooters, in this order: goal first
     ///      (so a run that is simultaneously at goal and out of the next stake counts as a win), then
     ///      the hard bounds, then affordability. A round short of even half its wager busts; one it can cover
@@ -458,6 +488,7 @@ contract CrapsOracle {
         uint256 stake = stakeFor(b);
 
         r.bankrollIn = bankroll;
+        r.peakBankroll = bankroll;
         if (withLedger) r.ledger = new HandRecord[](cap);
 
         // Allocation order matters — see `simulate`: everything outliving the rewind comes first.
@@ -477,32 +508,42 @@ contract CrapsOracle {
         // escalating minimum is scoped to the check and packed into `cur`, rather than kept live
         // across `_run`, because the via-IR frame has no spare stack slot there.
         unchecked {
-            uint256 cur;
+            // HELD OPEN, not packed. The production engine folds the hand count, the multiplier,
+            // the roll cursor and the goal latch into one stack word because via-IR leaves it no
+            // choice; this twin keeps them apart on purpose, so the differential grades two
+            // different encodings of the same run rather than one encoding twice.
+            uint256 hands;
+            uint256 logPos;
+            bool qualified;
             while (true) {
-                if (goal != 0 && bankroll >= goal) {
+                // THE GOAL is not a finish line: the win LATCHES and the goal becomes a reserve
+                // the run may no longer stake.
+                if (!qualified && goal != 0 && bankroll >= goal) {
                     r.stop = SlipStop.Goal;
-                    break;
+                    qualified = true;
                 }
-                // A hard bound is an ordinary bust. Bust is enum zero, so a bare break mirrors the
-                // lean engine's cheapest path. The packed cursor is total rolls plus one terminator
-                // per completed hand.
-                if (cur & 0xFFFF == cap || (cur >> 32) - (cur & 0xFFFF) >= rollBudget) {
-                    break;
-                }
+                // A hard bound is an ordinary bust before the goal and an ordinary stop after it.
+                // Bust is enum zero and a latched goal has already written its verdict, so a bare
+                // break says both. `logPos` is total rolls plus one terminator per completed hand.
+                if (hands == cap || logPos - hands >= rollBudget) break;
 
+                uint256 q = _escOf(hands);
                 {
-                    uint256 q = _escOf(cur & 0xFFFF);
                     uint256 need = stake * q;
-                    if (bankroll * 2 < need) {
+                    if (qualified) {
+                        // THE PROTECTED RESERVE: a shooter is posted only out of what the run
+                        // holds ABOVE the goal, equality included, so bounded loss makes the win
+                        // unlosable and the survival coin is never reached again.
+                        if (bankroll - goal < need) break;
+                    } else if (bankroll * 2 < need) {
                         // Short of even half the round: no second chance, the slip busts.
                         r.stop = SlipStop.Bust;
                         break;
-                    }
-                    if (bankroll < need) {
+                    } else if (bankroll < need) {
                         // Between half and a full round: the table's survival coin for this round —
                         // the same one that decides a run of this length at the end — rides the
                         // whole bankroll. Survive doubles it and plays on, lose zeroes it.
-                        if (_survived(seed, cur & 0xFFFF, player)) {
+                        if (_survived(seed, hands, player)) {
                             bankroll += bankroll;
                         } else {
                             bankroll = 0;
@@ -510,47 +551,48 @@ contract CrapsOracle {
                             break;
                         }
                     }
-                    cur = (cur & ~uint256(0xFFFF0000)) | (q << 16);
                 }
 
                 // This round's wager, in base-board units: the escalating mandatory multiple the
                 // affordability check above already proved covered.
-                bankroll -= ((cur >> 16) & 0xFFFF) * stake;
+                bankroll -= q * stake;
 
-                uint256 end = _run(b, handSeed(seed, cur & 0xFFFF), noScript, false, log, cur >> 32, o);
+                uint256 end = _run(b, handSeed(seed, hands), noScript, false, log, logPos, o);
                 // THE SHOOTER PROFIT BOOST, folded into the base hand before the round's multiple
                 // scales it and before the ledger records it, so a boosted hand's line still says
                 // what that hand was worth. Floored once, on winnings alone.
-                if (boost != 0 && _boostedShooter(seed, cur & 0xFFFF, player, boost & 0xFF)) {
+                if (boost != 0 && _boostedShooter(seed, hands, player, boost & 0xFF)) {
                     uint256 add = (o.profit * (boost >> 8)) / 100;
                     o.returned += add;
                     o.net += int256(add);
                 }
-                bankroll += ((cur >> 16) & 0xFFFF) * o.returned;
-                r.unitsPlayed += (cur >> 16) & 0xFFFF;
+                bankroll += q * o.returned;
+                r.unitsPlayed += q;
 
-                if (withLedger) _record(r.ledger, cur & 0xFFFF, o);
-                cur = ((end + 1) << 32) | (cur & 0xFFFF0000) | ((cur & 0xFFFF) + 1);
+                if (withLedger) _record(r.ledger, hands, o);
+                logPos = end + 1;
+                ++hands;
+                // THE HIGH POINT, taken only here: one whole shooter behind it, its return and its
+                // boost already banked, and the next round's stake not yet gone.
+                if (bankroll > r.peakBankroll) r.peakBankroll = bankroll;
                 assembly ("memory-safe") {
                     mstore(0x40, mark)
                 }
             }
 
-            r.handsPlayed = cur & 0xFFFF;
+            r.handsPlayed = hands;
             r.bankrollOut = bankroll;
-            r.totalRolls = (cur >> 32) - (cur & 0xFFFF);
+            r.totalRolls = logPos - hands;
             if (withLedger) {
                 // Trim the cap-sized ledger down to the hands actually played.
                 HandRecord[] memory led = r.ledger;
-                uint256 played = cur & 0xFFFF;
                 assembly ("memory-safe") {
-                    mstore(led, played)
+                    mstore(led, hands)
                 }
             }
             if (withLog) {
-                uint256 pos = cur >> 32;
                 assembly ("memory-safe") {
-                    mstore(log, pos)
+                    mstore(log, logPos)
                 }
                 r.rollLog = log;
             }
@@ -935,13 +977,14 @@ contract CrapsOracle {
     }
 
     /// @dev THE ESCALATOR: the mandatory wager for shooter `hand`, in base-board units — doubling
-    ///      every `ESC_HANDS` shooters, capped at the 65,535-unit table limit. Surviving the table
+    ///      every `ESC_HANDS` shooters, capped at `ESC_CAP`. Surviving the table
     ///      means outracing this: a slip cannot flat-grind forever, because the floor under its
     ///      wager keeps rising.
     function _escOf(uint256 hand) private pure returns (uint256 esc) {
         unchecked {
-            esc = 1 << (hand / ESC_HANDS);
-            if (esc > 0xFFFF) esc = 0xFFFF;
+            uint256 shift = hand / ESC_HANDS;
+            esc = shift < 32 ? 1 << shift : ESC_CAP;
+            if (esc > ESC_CAP) esc = ESC_CAP;
         }
     }
 

@@ -116,6 +116,31 @@ contract MockCoinflip {
 
     uint256 public batches;
 
+    /// @dev THE BIGGEST DICE RUN's own door, mirrored: the shared record pool, the 100x floor, the
+    ///      strict-improvement ratchet, and the accruing share with its reset. The real Coinflip
+    ///      credits the claim itself, so this one does too — a settle walk makes one call and the
+    ///      winner takes one credit.
+    uint128 public recordPool = 10_000 ether;
+    uint256 public biggestDiceRunEver;
+    uint24 public recordDayDiceRun;
+    uint256 public diceRunArms;
+
+    function armDiceRunRecord(address player, uint256 candidate) external returns (uint256 claimed) {
+        ++diceRunArms;
+        if (candidate < 1_000_000) return 0;
+        if (candidate <= biggestDiceRunEver) return 0;
+        biggestDiceRunEver = candidate;
+        uint24 today = uint24(block.timestamp / 1 days);
+        uint256 shareBps = 500 + (today > recordDayDiceRun ? uint256(today - recordDayDiceRun) : 0) * 50;
+        if (shareBps > 7_500) shareBps = 7_500;
+        claimed = (uint256(recordPool) * shareBps) / 10_000;
+        if (claimed != 0) {
+            recordPool -= uint128(claimed);
+            _credit(player, claimed);
+        }
+        recordDayDiceRun = today;
+    }
+
     function _credit(address player, uint256 amount) private {
         staked[player] += amount;
         totalCredited += amount;

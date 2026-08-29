@@ -124,7 +124,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         uint256 wordSalt = uint256(keccak256("equivalence"));
         uint256[3] memory pool;
         uint64[3] memory winner;
-        uint16[3] memory rolls;
+        uint256[3] memory peak;
         uint256[3] memory action;
         uint256[3] memory credited;
         uint256[3] memory cursor;
@@ -146,7 +146,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             assertTrue(b.finalized, "a chunking left the field unfinished");
             pool[mode] = craps.progressivePool();
             winner[mode] = b.winnerId;
-            rolls[mode] = b.winningRolls;
+            peak[mode] = b.winningPeak;
             action[mode] = craps.dayStaked(day);
             credited[mode] = coinflip.totalCredited();
             cursor[mode] = craps.bonusCursorOf(slot);
@@ -155,7 +155,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
 
         for (uint256 m = 1; m < 3; ++m) {
             assertEq(winner[m], winner[0], "the chunking chose a different winner");
-            assertEq(rolls[m], rolls[0], "the chunking stored a different roll count");
+            assertEq(peak[m], peak[0], "the chunking stored a different high point");
             assertEq(pool[m], pool[0], "the chunking moved the progressive by a different amount");
             assertEq(action[m], action[0], "the chunking booked a different amount of action");
             assertEq(credited[m], credited[0], "the chunking credited a different total");

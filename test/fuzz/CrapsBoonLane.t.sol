@@ -50,7 +50,7 @@ contract CrapsBoonViewerHarness is DeityBoonViewer {
 ///            craps types must be reachable through it, since a deity gift of a craps boon is a
 ///            live award.
 ///         3. LANE DECODE. The lane shares its 24-bit encoding with a degenerette lane but decodes
-///            5/10/25% off the coinflip table, not tier x 400. A slip here silently pays the wrong
+/// 5/10/15% off the coinflip table, not tier x 400. A slip here silently pays the wrong
 ///            bonus, which no weight-table test would catch.
 ///         4. LANE DISJOINTNESS. One selector serves two lanes and the caller names which. COINFLIP
 ///            must never reach the craps lane and COIN must never reach the coinflip lane.
@@ -65,7 +65,7 @@ contract CrapsBoonLane is Test {
     uint16 private constant W_PRE_DEITY_PASS = 1072;
 
     uint8 private constant BOON_CRAPS_5 = 41;
-    uint8 private constant BOON_CRAPS_25 = 43;
+    uint8 private constant BOON_CRAPS_15 = 43;
 
     /// @dev Lane encoding shared with the degenerette lanes: [day:21 | isDeity:1 | tier:2].
     uint256 private constant LANE_MASK = 0xFFFFFF;
@@ -100,8 +100,8 @@ contract CrapsBoonLane is Test {
         assertEq(module_.tree(2807), 41, "craps 5% band end");
         assertEq(module_.tree(2808), 42, "craps 10% band start");
         assertEq(module_.tree(2847), 42, "craps 10% band end");
-        assertEq(module_.tree(2848), 43, "craps 25% band start");
-        assertEq(module_.tree(W_TOTAL - 1), 43, "table does not end on craps 25%");
+        assertEq(module_.tree(2848), 43, "craps 15% band start");
+        assertEq(module_.tree(W_TOTAL - 1), 43, "table does not end on craps 15%");
     }
 
     // ---------------------------------------------------------------------
@@ -118,7 +118,7 @@ contract CrapsBoonLane is Test {
             uint8 t = module_.tree(roll);
             assertTrue(t < 13 || t > 15, "deity roll reached a decimator tier");
             assertTrue(t < 25 || t > 27, "deity roll reached a deity-pass tier");
-            if (t >= BOON_CRAPS_5 && t <= BOON_CRAPS_25) sawCraps = true;
+            if (t >= BOON_CRAPS_5 && t <= BOON_CRAPS_15) sawCraps = true;
         }
         assertTrue(sawCraps, "craps unreachable as a deity gift");
     }

@@ -31,13 +31,17 @@ pragma solidity 0.8.34;
  *      Integrates with FLIP for burn/mint operations and DegenerusGame for game state.
  */
 
-/// @dev All-time record kinds. Coinflip owns the four records and the shared pool;
+/// @dev All-time record kinds. Coinflip owns the records and the ONE shared pool;
 ///      the game modules arm the three game-side kinds via armRecord. The flip
-///      record arms internally on direct deposits and is not reachable externally.
+///      record arms internally on direct deposits and is not reachable externally,
+///      and the dice-run record has its own CRAPS-only door — its claim rule is not
+///      the other four's, so it never reaches armRecord.
 uint8 constant RECORD_KIND_FLIP = 0;
 uint8 constant RECORD_KIND_SPIN = 1;
 uint8 constant RECORD_KIND_LUCKBOX = 2;
 uint8 constant RECORD_KIND_BUY = 3;
+uint8 constant RECORD_KIND_DICE_RUN = 4;
+uint8 constant RECORD_KINDS = 5;
 
 interface ICoinflip {
     /// @notice Emitted whenever a player's coinflip claim-state changes (claimable + carry + claim

@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import hre from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
+import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
   deployFullProtocol,
   restoreAddresses,
@@ -408,6 +408,179 @@ describe("Coinflip", function () {
       await expect(
         coinflip.connect(alice).fundRecordPool(eth(1))
       ).to.be.revertedWithCustomError(coinflip, "OnlyDegenerusGame");
+    });
+  });
+
+  // =========================================================================
+  // 4b. THE BIGGEST DICE RUN — the fifth category of the SAME shared pool.
+  // =========================================================================
+  describe("Dice Run record", function () {
+    // The scheduled craps table's own door. Its claim rule is not the other four's — any strict
+    // improvement above the floor claims, rather than one that beats the mark by a fifth — which
+    // is exactly why it is a separate entry point rather than a fifth kind on armRecord.
+    async function asCraps(f) {
+      const craps = f.deployedAddrs.get("CRAPS");
+      await hre.network.provider.request({
+        method: "hardhat_impersonateAccount",
+        params: [craps],
+      });
+      await hre.network.provider.send("hardhat_setBalance", [
+        craps,
+        "0x56BC75E2D63100000",
+      ]);
+      return hre.ethers.getSigner(craps);
+    }
+
+    const FLOOR = 1_000_000n; // 100x, in score basis points
+
+    it("is CRAPS-only", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      await expect(
+        f.coinflip.connect(f.alice).armDiceRunRecord(f.alice.address, FLOOR)
+      ).to.be.revertedWithCustomError(f.coinflip, "OnlyCraps");
+    });
+
+    it("ignores a candidate below the 100x floor and never reads the mark", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const craps = await asCraps(f);
+      const poolBefore = await f.coinflip.recordPool();
+      const tx = await f.coinflip.connect(craps).armDiceRunRecord(f.alice.address, FLOOR - 1n);
+      expect((await getEvents(tx, f.coinflip, "BigRecordUpdated")).length).to.equal(0);
+      expect(await f.coinflip.biggestDiceRunEver()).to.equal(0n);
+      expect(await f.coinflip.recordPool()).to.equal(poolBefore);
+    });
+
+    it("claims on ANY strict improvement — there is no 20% bar on this kind", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const craps = await asCraps(f);
+      await f.coinflip.connect(craps).armDiceRunRecord(f.alice.address, FLOOR);
+      expect(await f.coinflip.biggestDiceRunEver()).to.equal(FLOOR);
+
+      // A day later, a candidate one basis point above the mark. The other four kinds would pay
+      // nothing here — a fifth of 1,000,000 is 200,000 — and this one pays its accrued share.
+      await time.increase(86400);
+      const poolBefore = await f.coinflip.recordPool();
+      const tx = await f.coinflip.connect(craps).armDiceRunRecord(f.bob.address, FLOOR + 1n);
+      const evs = await getEvents(tx, f.coinflip, "BigRecordUpdated");
+      expect(evs.length).to.equal(1);
+      expect(evs[0].args.kind).to.equal(4n);
+      expect(evs[0].args.player).to.equal(f.bob.address);
+      expect(evs[0].args.value).to.equal(FLOOR + 1n);
+      // 5% floor + half a point for the one elapsed day.
+      expect(evs[0].args.paid).to.equal((poolBefore * 550n) / 10_000n);
+      expect(await f.coinflip.recordPool()).to.equal(poolBefore - evs[0].args.paid);
+      expect(await f.coinflip.biggestDiceRunEver()).to.equal(FLOOR + 1n);
+    });
+
+    it("pays nothing for a candidate at or below the standing mark", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const craps = await asCraps(f);
+      await f.coinflip.connect(craps).armDiceRunRecord(f.alice.address, 2_000_000n);
+      await time.increase(86400);
+      const poolBefore = await f.coinflip.recordPool();
+      const mark = await f.coinflip.biggestDiceRunEver();
+
+      for (const candidate of [2_000_000n, 1_500_000n]) {
+        const tx = await f.coinflip.connect(craps).armDiceRunRecord(f.bob.address, candidate);
+        expect((await getEvents(tx, f.coinflip, "BigRecordUpdated")).length).to.equal(0);
+      }
+      expect(await f.coinflip.biggestDiceRunEver()).to.equal(mark);
+      expect(await f.coinflip.recordPool()).to.equal(poolBefore);
+    });
+
+    it("prices a second hit the same day at the 5% floor of what the first left", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const craps = await asCraps(f);
+      await time.increase(86400);
+      await f.coinflip.connect(craps).armDiceRunRecord(f.alice.address, FLOOR);
+      const afterFirst = await f.coinflip.recordPool();
+
+      // A SECOND improvement the same day claims again — every strict improvement above the floor
+      // is a hit, exactly as specified — but the first claim reset the clock, so this one takes
+      // the 5% FLOOR of an already-reduced pool rather than a second accrued share. That reset is
+      // the whole anti-stacking rule: k claims in one day cost the pool 1 - 0.95^k beyond the
+      // first, and every one of them had to be a genuine new record.
+      const tx = await f.coinflip.connect(craps).armDiceRunRecord(f.bob.address, 9_000_000n);
+      const evs = await getEvents(tx, f.coinflip, "BigRecordUpdated");
+      expect(evs.length).to.equal(1);
+      expect(evs[0].args.paid).to.equal((afterFirst * 500n) / 10_000n);
+      expect(await f.coinflip.biggestDiceRunEver()).to.equal(9_000_000n);
+      expect(await f.coinflip.recordPool()).to.equal(afterFirst - evs[0].args.paid);
+
+      // And the next day accrues again from that reset.
+      await time.increase(86400);
+      const poolBefore = await f.coinflip.recordPool();
+      const next = await f.coinflip.connect(craps).armDiceRunRecord(f.alice.address, 9_000_001n);
+      const paid = (await getEvents(next, f.coinflip, "BigRecordUpdated"))[0].args.paid;
+      expect(paid).to.equal((poolBefore * 550n) / 10_000n);
+    });
+
+    it("leaves the final mark and the trophy holder independent of resolution order", async function () {
+      // The pool debit is NOT order-independent — ascending resolution claims once per genuine
+      // record — but the mark and the trophy are the maximum over the day's candidates whichever
+      // way a permissionless keeper walked the already-closed fields.
+      const cohort = [1_500_000n, 4_000_000n, 2_500_000n];
+      const marks = [];
+      const holders = [];
+      for (const order of [[0, 1, 2], [2, 1, 0], [1, 0, 2]]) {
+        const f = await loadFixture(deployFullProtocol);
+        const craps = await asCraps(f);
+        const bounty = await hre.ethers.getContractAt(
+          "DegenerusRecordBounty",
+          f.deployedAddrs.get("RECORD_BOUNTY")
+        );
+        const who = [f.alice, f.bob, f.carol];
+        for (const i of order) {
+          await f.coinflip.connect(craps).armDiceRunRecord(who[i].address, cohort[i]);
+        }
+        marks.push(await f.coinflip.biggestDiceRunEver());
+        holders.push(await bounty.ownerOf(4));
+      }
+      expect(marks[1]).to.equal(marks[0]);
+      expect(marks[2]).to.equal(marks[0]);
+      expect(marks[0]).to.equal(4_000_000n);
+      expect(holders[1]).to.equal(holders[0]);
+      expect(holders[2]).to.equal(holders[0]);
+    });
+
+    it("caps the accrued share at 75%", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const craps = await asCraps(f);
+      // 140 days at half a point a day is 70 points over the 5% floor — past the ceiling.
+      await time.increase(200 * 86400);
+      const poolBefore = await f.coinflip.recordPool();
+      const tx = await f.coinflip.connect(craps).armDiceRunRecord(f.alice.address, FLOOR);
+      const paid = (await getEvents(tx, f.coinflip, "BigRecordUpdated"))[0].args.paid;
+      expect(paid).to.equal((poolBefore * 7_500n) / 10_000n);
+      expect(await f.coinflip.recordPool()).to.equal(poolBefore - paid);
+    });
+
+    it("moves the fifth trophy and leaves the other four alone", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const craps = await asCraps(f);
+      const bounty = await hre.ethers.getContractAt(
+        "DegenerusRecordBounty",
+        f.deployedAddrs.get("RECORD_BOUNTY")
+      );
+      await f.coinflip.connect(craps).armDiceRunRecord(f.alice.address, 1_234_500n);
+      expect(await bounty.ownerOf(4)).to.equal(f.alice.address);
+      const [holder, mark] = await bounty.recordInfo(4);
+      expect(holder).to.equal(f.alice.address);
+      expect(mark).to.equal(1_234_500n);
+      for (let i = 0; i < 4; i++) {
+        expect(await bounty.ownerOf(i)).to.equal(f.deployer.address);
+      }
+    });
+
+    it("leaves the four existing kinds' rules untouched", async function () {
+      const f = await loadFixture(deployFullProtocol);
+      const craps = await asCraps(f);
+      await f.coinflip.connect(craps).armDiceRunRecord(f.alice.address, 5_000_000n);
+      // The spin record still bootstraps and ratchets on its own terms and its own mark.
+      expect(await f.coinflip.biggestSpinEver()).to.equal(0n);
+      expect(await f.coinflip.biggestFlipEver()).to.equal(0n);
+      expect(await f.coinflip.biggestLuckboxEver()).to.equal(0n);
+      expect(await f.coinflip.biggestBuyEver()).to.equal(0n);
     });
   });
 

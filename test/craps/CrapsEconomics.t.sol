@@ -276,9 +276,12 @@ contract CrapsEconomicsTest is CrapsPins {
     ///         no positive divisor is a floor on what a seat burns when a seat may legally play a
     ///         fair game.
     ///
-    ///         Second, STATISTICALLY: that same fair board is still a net burn once it is a RUN,
-    ///         because a bust pays nothing and what it was holding is deleted. So the protocol's
-    ///         income survives the fair legs; it just no longer comes from them.
+    ///         Second, STATISTICALLY: that same fair ticket is still a net burn once it is a RUN,
+    ///         and by two independent margins — the three chips the dice throw onto it carry an
+    ///         edge that the escalator's forced action multiplies into a large slice of the
+    ///         bankroll, and on top of that a bust pays nothing and what it was holding is
+    ///         deleted. So the protocol's income survives the fair legs; it just no longer comes
+    ///         from them.
     function test_aFairBoardCarriesNoEdgeAndIsStillANetBurn() public {
         CrapsOracle oracle = new CrapsOracle();
 
@@ -345,19 +348,33 @@ contract CrapsEconomicsTest is CrapsPins {
         emit log_named_uint("fair: deleted   ", busted);
         emit log_named_uint("fair: minted    ", minted);
 
-        // The deletion is REAL and it is the whole margin: what busted runs were still holding
-        // accounts for the gap between the raw result and what was minted, to within the award
-        // rounding — which is EV-neutral and pinned by `test_theRoundingIsEvNeutralInAggregate`.
+        // The deletion is REAL and it is measurable on its own: what busted runs were still
+        // holding accounts for the gap between the raw result and what was minted, to within the
+        // award rounding — which is EV-neutral and pinned by
+        // `test_theRoundingIsEvNeutralInAggregate`.
         assertGt(busted, 0, "no run busted holding anything: the test proves nothing");
         assertApproxEqRel(rawWon - busted, minted, 0.005e18, "the deleted remainders did not account for the gap");
-        // THE SHARP ONE. Add the deleted remainders back and this board is NOT a net burn: the
-        // raw result clears what was burned. So on a board built out of true-odds legs the old
-        // per-leg argument does not merely weaken, it fails outright — and the deletion is the
-        // entire reason the table still comes out ahead. Deterministic seeds, so this is a fact
-        // about a fixed sample rather than a probabilistic claim.
-        assertGt(minted + busted, burned, "the fair board was a net burn even without the deletion");
-        // And with the deletion, it is.
+        // THE SHARP ONE, AND IT NO LONGER TURNS ON THE DELETION. Add every deleted remainder back
+        // and the board is STILL a net burn: on this sample the raw result comes home at 83% of
+        // what was burned, so the engine retains ~17% before a single bust is forfeited, and the
+        // deletion adds a further ~16% on top of that.
+        //
+        // The seven chips carry no edge — asserted to the wei above — so all of that retention is
+        // the THREE THROWN chips, multiplied by how much action the run puts through. That is the
+        // escalator's doing: a wager that doubles every three shooters forces a run to move many
+        // times its own bankroll across the table, and a per-round edge measured against the
+        // action is a large number measured against the bankroll. The old five-shooter run turned
+        // over far less and its raw result cleared the burn, which is why the deletion used to be
+        // the whole margin.
+        //
+        // The ~17% matches the calibrated `effective_edge_pct` in
+        // `docs/CRAPS-HIGH-WATER-CALIBRATION.tsv` (17.07 at goal 5x), so the chain and the model
+        // agree on it. Deterministic seeds, so this is a fact about a fixed sample rather than a
+        // probabilistic claim.
+        assertLt(minted + busted, burned, "the raw result cleared the burn before any deletion");
+        // And the deletion only widens it.
         assertLt(minted, burned, "a fair board out-minted its burn");
+        assertLt(minted, minted + busted, "the deletion took nothing");
         emit log_named_int("fair: raw residual", int256(burned) - int256(rawWon));
     }
 }

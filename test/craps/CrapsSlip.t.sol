@@ -126,7 +126,7 @@ contract CrapsSlipHarness is CrapsViews {
         view
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, _seedFor(index), bankroll, 0, 256, budget, player, 0);
+        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, budget, player, 0);
     }
 
     /// @dev The same engine under a SCHEDULE. `boost` is the packed pair `_settleSlip` reads —
@@ -142,6 +142,21 @@ contract CrapsSlipHarness is CrapsViews {
         uint256 boost
     ) external pure returns (Craps.SlipResult memory) {
         return _settleSlip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, player, boost);
+    }
+
+    /// @dev The engine under caller-chosen bounds, so a fixture can drive the shooter cap and the
+    ///      roll budget directly.
+    function slipUnder(
+        Craps.Bets calldata b,
+        bytes32 seed,
+        uint256 bankroll,
+        uint256 goal,
+        uint256 cap,
+        uint256 rollBudget,
+        address player,
+        uint256 boost
+    ) external pure returns (Craps.SlipResult memory) {
+        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, player, boost);
     }
 }
 
@@ -1002,11 +1017,16 @@ contract CrapsSlipTest is CrapsPins {
         _setWord(idx, uint256(keccak256("shared-shooter")));
 
         // A bankroll deep enough that the escalator never puts a round inside the coin's band.
+        // TWENTY-FOUR SHOOTERS, not sixty-four: the escalator doubles every THREE, so shooter 63
+        // would want 2,097,152x the board and no bankroll this side of the field's ceiling covers
+        // it. At 24 the deepest round is 128x against a 4,096x bankroll, and the worst case the
+        // whole run can lose — 3 x (1 + 2 + ... + 128) = 765x — still leaves six times the last
+        // round standing, so no shooter ever lands in the coin's band.
         uint256 deep = uint256(craps.stakeFor(b)) * 4096;
-        CrapsOracle.SlipResult memory ra = craps.resolveSlipAtFor(b, idx, deep, 0, 64, alice);
-        CrapsOracle.SlipResult memory rb = craps.resolveSlipAtFor(b, idx, deep, 0, 64, bob);
+        CrapsOracle.SlipResult memory ra = craps.resolveSlipAtFor(b, idx, deep, 0, 24, alice);
+        CrapsOracle.SlipResult memory rb = craps.resolveSlipAtFor(b, idx, deep, 0, 24, bob);
 
-        assertEq(ra.handsPlayed, 64, "the fixture dipped into the coin's band");
+        assertEq(ra.handsPlayed, 24, "the fixture dipped into the coin's band");
         assertEq(ra.handsPlayed, rb.handsPlayed, "the two owners played different lengths");
         assertEq(ra.bankrollOut, rb.bankrollOut, "the two owners came home with different money");
         assertEq(keccak256(ra.rollLog), keccak256(rb.rollLog), "the shooter differed by owner");

@@ -85,19 +85,49 @@ contract Craps {
     /// @notice Total dice rolls a bet slip may consume, judged between shooters.
     /// @dev This is what makes a slip settlement's gas a GUARANTEE instead of a probability. The
     ///      shooter cap alone leaves a bounded-but-huge worst case (cap x _MAX_ROLLS rolls); with
-    ///      this budget the hard ceiling is `_SLIP_ROLL_BUDGET - 1 + _MAX_ROLLS` rolls — under two
-    ///      million gas in the measured settlement engine — however the dice fall. Even a
-    ///      hypothetical 256-shooter slip averages ~2,200 rolls; legal terms stop much earlier,
-    ///      making 4,096 effectively unreachable. Hitting it is an ordinary bust between shooters;
-    ///      every shooter still settles whole, and the budget never cuts a hand mid-roll.
-    uint256 internal constant _SLIP_ROLL_BUDGET = 4096;
+    ///      this budget the hard ceiling is `_SLIP_ROLL_CEILING` rolls however the dice fall.
+    ///      Hitting it is an ordinary stop between shooters; every shooter still settles whole,
+    ///      and the budget never cuts a hand mid-roll.
+    uint256 internal constant _SLIP_ROLL_BUDGET = 8192;
+
+    /// @notice Shooter cap on a bet slip. A run does not stop when it wins — it latches the goal
+    ///         and plays on — so it needs room to: the escalator reaches its ceiling at shooter
+    ///         96, and twice that is where the cap belongs.
+    uint256 internal constant _MAX_SLIP_HANDS = 512;
+
+    /// @notice THE ABSOLUTE TOTAL-ROLL CEILING, and the figure the gas and work-unit bounds are
+    ///         sized on. NOT the budget: the budget is judged BETWEEN shooters, so the last
+    ///         shooter it admits may still run a full `_MAX_ROLLS` hand of its own.
+    uint256 internal constant _SLIP_ROLL_CEILING = _SLIP_ROLL_BUDGET - 1 + _MAX_ROLLS;
 
     /// @notice Shooters between each mandatory doubling of a slip's base wager.
-    /// @dev The escalator: rounds 0..4 wager 1x the board, 5..9 wager 2x, 10..14 wager 4x, and so
-    ///      on, capped at the 65,535-unit table limit. A slip that cannot cover the doubled wager
-    ///      busts between shooters with its remainder intact. Deterministic in the hand ordinal, so
-    ///      the whole run is still recomputable from the base board and the seed alone.
-    uint256 internal constant _ESC_HANDS = 5;
+    /// @dev The escalator: shooters 0-2 wager 1x the board, 3-5 wager 2x, 6-8 wager 4x, and so on,
+    ///      capped at `_ESC_CAP`. A slip that cannot cover the doubled wager stops between
+    ///      shooters with its remainder intact. Deterministic in the hand ordinal, so the whole
+    ///      run is still recomputable from the base board and the seed alone.
+    uint256 internal constant _ESC_HANDS = 3;
+
+    /// @notice The escalator ceiling, in base-board units. A 16-bit lane would flatten the
+    ///         mandatory wager from the 48th shooter on, which would cap the RUN rather than the
+    ///         dice; at `uint32.max` the escalator is the binding term for as long as a slip can
+    ///         survive it — shooters 93-95 wager 2,147,483,648x and 96 onward wagers the ceiling.
+    uint256 internal constant _ESC_CAP = type(uint32).max;
+
+    /// @dev The slip loop's own cursor, one stack word (see the note in `_settleSlip`):
+    ///        bits  0..14  hands played
+    ///        bit  15      GOAL QUALIFIED, latched
+    ///        bits 16..47  this round's mandatory multiplier
+    ///        bits 48..79  the roll-log cursor
+    ///      The latch sits UNDER the log rather than over it so the log stays the top of the word
+    ///      and every read of it is a bare shift. Fifteen bits is four times the widest hand cap
+    ///      either product uses.
+    uint256 private constant _CUR_HANDS_MASK = 0x7FFF;
+    uint256 private constant _CUR_QUALIFIED = 1 << 15;
+    uint256 private constant _CUR_MULT_SHIFT = 16;
+    uint256 private constant _CUR_MULT_MASK = 0xFFFFFFFF;
+    uint256 private constant _CUR_LOG_SHIFT = 48;
+    /// @dev The two slices the next round inherits from this one: the latch and the multiplier.
+    uint256 private constant _CUR_CARRY_MASK = (_CUR_MULT_MASK << _CUR_MULT_SHIFT) | _CUR_QUALIFIED;
 
     /// @notice Domain tag for the mid-run second-chance coin, separated from the dice stream.
     uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
@@ -196,6 +226,11 @@ contract Craps {
     /// @param bankrollIn   What the slip started with.
     /// @param bankrollOut  What was left when it stopped — the settlement figure. Includes any
     ///                     sub-stake remainder; stopping never confiscates it.
+    /// @param peakBankroll THE HIGH POINT: the largest bankroll the run ever held at a COMPLETED
+    ///                     shooter boundary, starting at `bankrollIn`. Sampled once per shooter,
+    ///                     after that shooter's return and boost have landed — never before a
+    ///                     stake, never after one, never mid-hand. It is a RANKING figure and a
+    ///                     record candidate; it is never what a slip is paid.
     /// @param handsPlayed  Shooters actually played.
     /// @param unitsPlayed  Base-board units wagered across the run — the sum of each round's
     ///                     escalating mandatory multiplier. Only equals `handsPlayed` before the
@@ -205,6 +240,7 @@ contract Craps {
     struct SlipResult {
         uint256 bankrollIn;
         uint256 bankrollOut;
+        uint256 peakBankroll;
         uint256 handsPlayed;
         uint256 unitsPlayed;
         uint256 totalRolls;
@@ -229,6 +265,21 @@ contract Craps {
     ///      makes the escrow subtraction safe unchecked after the affordability check. A busted
     ///      bankroll keeps its remainder.
     ///
+    ///      THE HIGH WATER. The goal is not a finish line: the first time the bankroll reaches it
+    ///      between shooters, the win LATCHES and the run plays ON. Every slip this engine settles
+    ///      works this way — a custom table and a protocol-scheduled Dice Run play by the same
+    ///      rules, and differ only in what the WRAPPER does with the result:
+    ///
+    ///        * the goal becomes a PROTECTED RESERVE. A later shooter is posted only when
+    ///          `bankroll - need >= goal`, equality included, so a losing shooter can lower the
+    ///          payout and can never lower it through the goal;
+    ///        * the survival coin is never taken again — the reserve rule, not a coin, decides
+    ///          affordability from the latch on;
+    ///        * a hard bound reached AFTER the latch stops as Goal, and one reached before it is
+    ///          the ordinary bust it always was;
+    ///        * `bankrollOut` is the bankroll at the ACTUAL stop. The high point ranks the run and
+    ///          feeds the records; it is never paid.
+    ///
     ///      Because every payout is linear in the stakes, a q-unit round is EXACTLY q times the
     ///      base hand: the engine rolls the base board once and scales, which is what keeps the
     ///      dice log that of the base board however far the escalator has climbed.
@@ -242,9 +293,9 @@ contract Craps {
     ///      bankroll before the next goal, bound and affordability check — it may cross a goal a
     ///      shooter early, or buy a round the run could not otherwise afford, on purpose.
     ///
-    ///      Loop state note: `cur` packs the hand counter (bits 0..15), the round's mandatory
-    ///      multiplier (16..31), and the ROLL counter (32+) into one stack slot — via-IR runs
-    ///      out of stack here with them separate.
+    ///      Loop state note: `cur` packs the hand counter, the round's mandatory multiplier, the
+    ///      roll cursor and the goal latch into one stack slot (see `_CUR_HANDS_MASK`) — via-IR
+    ///      runs out of stack here with them separate.
     /// @param boost Packed schedule: the eligible-shooter percentage in bits 0..7 and the percent
     ///              added to an eligible shooter's profit in bits 8..15. Zero is no schedule.
     function _settleSlip(
@@ -260,8 +311,8 @@ contract Craps {
         uint256 stake = _stakeFor(b);
 
         r.bankrollIn = bankroll;
+        r.peakBankroll = bankroll;
         uint256 initialState = _settlementState(b);
-        uint256 unitsPlayed;
         // Cache place winnings by dice total, plus the whole figure a winning Don't Pass returns
         // at index zero. Sized to the highest total the dice can throw, so the resolvers' indexed
         // read is in bounds for every roll rather than only for the totals a live place bit can
@@ -285,30 +336,42 @@ contract Craps {
         unchecked {
             uint256 cur;
             while (true) {
-                if (goal != 0 && bankroll >= goal) {
+                // THE GOAL, judged once. The slip does not stop on it — it LATCHES and plays
+                // on, and the latch is what every branch below then reads.
+                if (cur & _CUR_QUALIFIED == 0 && goal != 0 && bankroll >= goal) {
                     r.stop = SlipStop.Goal;
-                    break;
+                    cur |= _CUR_QUALIFIED;
                 }
-                // A hard bound is an ordinary bust. Bust is enum zero, so a bare break is the
-                // cheapest path; the battle wrapper forfeits a busted run's remainder.
-                if (cur & 0xFFFF == cap || (cur >> 32) - (cur & 0xFFFF) >= rollBudget) {
+                // A hard bound is an ordinary bust BEFORE the goal and an ordinary stop after it.
+                // Bust is enum zero and a latched goal has already written its verdict, so a bare
+                // break says both; the battle wrapper forfeits a busted run's remainder.
+                if (
+                    cur & _CUR_HANDS_MASK == cap
+                        || (cur >> _CUR_LOG_SHIFT) - (cur & _CUR_HANDS_MASK) >= rollBudget
+                ) {
                     break;
                 }
 
                 {
-                    uint256 q = _escOf(cur & 0xFFFF);
+                    uint256 q = _escOf(cur & _CUR_HANDS_MASK);
                     uint256 need = stake * q;
-                    if (bankroll * 2 < need) {
+                    if (cur & _CUR_QUALIFIED != 0) {
+                        // THE PROTECTED RESERVE. Past the goal the run wagers only what it holds
+                        // ABOVE it, so the bounded-loss invariant makes the win unlosable: the
+                        // worst this shooter can do is give back `need`, which lands exactly on
+                        // the goal. Equality is playable; anything short of it retires the run.
+                        if (bankroll - goal < need) break;
+                    } else if (bankroll * 2 < need) {
                         // Short of even half the round: no second chance, the slip busts.
                         r.stop = SlipStop.Bust;
                         break;
-                    }
-                    if (bankroll < need) {
+                    } else if (bankroll < need) {
                         // Between half and a full round: the table's survival coin for this round —
                         // the same double-or-nothing that would decide a run of this length at the
                         // end — rides the whole bankroll. Surviving doubles it, enough to cover
                         // exactly this round, and play continues; losing ends the slip with nothing.
-                        if (_survived(seed, cur & 0xFFFF, player)) {
+                        // It is a PRE-GOAL instrument only: past the latch the reserve decides.
+                        if (_survived(seed, cur & _CUR_HANDS_MASK, player)) {
                             bankroll += bankroll;
                         } else {
                             bankroll = 0;
@@ -316,28 +379,36 @@ contract Craps {
                             break;
                         }
                     }
-                    cur = (cur & ~uint256(0xFFFF0000)) | (q << 16);
+                    cur = (cur & ~(_CUR_MULT_MASK << _CUR_MULT_SHIFT)) | (q << _CUR_MULT_SHIFT);
                 }
 
-                bankroll -= ((cur >> 16) & 0xFFFF) * stake;
+                bankroll -= ((cur >> _CUR_MULT_SHIFT) & _CUR_MULT_MASK) * stake;
 
-                uint256 handOut = _runSettlement(b, handSeed(seed, cur & 0xFFFF), cur >> 32, initialState, wins);
+                uint256 handOut = _runSettlement(
+                    b,
+                    handSeed(seed, cur & _CUR_HANDS_MASK), cur >> _CUR_LOG_SHIFT, initialState, wins
+                );
                 // THE SHOOTER PROFIT BOOST. House money on the base hand's ELIGIBLE PROFIT and on
                 // nothing else, floored ONCE here so the round's escalating multiple below scales
                 // one boosted base figure rather than drawing a schedule per copy.
-                if (boost != 0 && _boostedShooter(seed, cur & 0xFFFF, player, boost & 0xFF)) {
+                if (boost != 0 && _boostedShooter(seed, cur & _CUR_HANDS_MASK, player, boost & 0xFF)) {
                     handOut += ((handOut >> _HR_PROFIT_SHIFT) * (boost >> 8)) / 100;
                 }
-                bankroll += ((cur >> 16) & 0xFFFF) * (handOut & _HR_AMOUNT_MASK);
-                unitsPlayed += (cur >> 16) & 0xFFFF;
-                cur = ((((handOut >> _HR_LOG_SHIFT) & _HR_LOG_MASK) + 1) << 32) | (cur & 0xFFFF0000)
-                    | ((cur & 0xFFFF) + 1);
+                bankroll += ((cur >> _CUR_MULT_SHIFT) & _CUR_MULT_MASK) * (handOut & _HR_AMOUNT_MASK);
+                // ACCUMULATED IN MEMORY, not on the stack. The loop's live set is what decides
+                // whether via-IR can allocate this frame at all, and the running handle is the one
+                // figure in it that nothing inside the loop reads back.
+                r.unitsPlayed += (cur >> _CUR_MULT_SHIFT) & _CUR_MULT_MASK;
+                // THE HIGH POINT, sampled here and nowhere else: one completed shooter, its return
+                // and its boost already banked, before the next round's stake leaves again.
+                if (bankroll > r.peakBankroll) r.peakBankroll = bankroll;
+                cur = ((((handOut >> _HR_LOG_SHIFT) & _HR_LOG_MASK) + 1) << _CUR_LOG_SHIFT)
+                    | (cur & _CUR_CARRY_MASK) | ((cur & _CUR_HANDS_MASK) + 1);
             }
 
-            r.handsPlayed = cur & 0xFFFF;
+            r.handsPlayed = cur & _CUR_HANDS_MASK;
             r.bankrollOut = bankroll;
-            r.unitsPlayed = unitsPlayed;
-            r.totalRolls = (cur >> 32) - (cur & 0xFFFF);
+            r.totalRolls = (cur >> _CUR_LOG_SHIFT) - (cur & _CUR_HANDS_MASK);
         }
     }
 
@@ -614,13 +685,18 @@ contract Craps {
     }
 
     /// @dev THE ESCALATOR: the mandatory wager for shooter `hand`, in base-board units — doubling
-    ///      every `_ESC_HANDS` shooters, capped at the 65,535-unit table limit. Surviving the table
-    ///      means outracing this: a slip cannot flat-grind forever, because the floor under its
-    ///      wager keeps rising.
-    function _escOf(uint256 hand) private pure returns (uint256 esc) {
+    ///      every `_ESC_HANDS` shooters, capped at `_ESC_CAP`. Surviving the table means
+    ///      outracing this: a slip cannot flat-grind forever, because the floor under its wager
+    ///      keeps rising.
+    ///
+    ///      The shift is never taken past 31. The ceiling fits a uint32, so a 32nd doubling has
+    ///      already passed it — which makes the branch exact rather than defensive, and keeps a
+    ///      wide hand cap from shifting a literal off the end of the word.
+    function _escOf(uint256 hand) internal pure returns (uint256 esc) {
         unchecked {
-            esc = 1 << (hand / _ESC_HANDS);
-            if (esc > 0xFFFF) esc = 0xFFFF;
+            uint256 shift = hand / _ESC_HANDS;
+            esc = shift < 32 ? 1 << shift : _ESC_CAP;
+            if (esc > _ESC_CAP) esc = _ESC_CAP;
         }
     }
 
