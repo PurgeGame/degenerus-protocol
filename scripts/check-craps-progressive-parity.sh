@@ -15,7 +15,10 @@
 #   1. `_BASE_MAIN_BUDGET` (ether)  == `kDefaultMainBase` (whole FLIP)
 #   2. `_PROG_COMMON_5X`  == `kGoal5CommonPeakBps`   `_PROG_RARE_5X`  == `kGoal5RarePeakBps`
 #      `_PROG_COMMON_20X` == `kGoal20CommonPeakBps`  `_PROG_RARE_20X` == `kGoal20RarePeakBps`
-#   3. `_PROG_COMMON_DIV` / `_PROG_RARE_DIV` == `kProgCommonDiv` / `kProgRareDiv`
+#   3. the four RUNG shares (routine/event x common/rare, in bps of the live pool)
+#      == `kProgRoutineCommonBps` / `kProgRoutineRareBps` / `kProgEventCommonBps` /
+#         `kProgEventRareBps`. The event's repeat double is a `x2` on the event rungs in both
+#         files and carries no constant of its own.
 #   4. the escalator and bounds == `gEscHands` / `gEscCap` / `kMaxHands` / `kRollBudget`
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -89,13 +92,49 @@ if 'uint32' not in (one(r'_ESC_CAP\s*=\s*([^;]+);', sol, '_ESC_CAP') or ''):
     bad.append("escalator ceiling: the contract no longer names uint32.max")
 
 for label, sol_name, cpp_name in (
-    ("common", "_PROG_COMMON_DIV", "kProgCommonDiv"),
-    ("rare", "_PROG_RARE_DIV", "kProgRareDiv"),
+    ("routine common", "_PROG_ROUTINE_COMMON_BPS", "kProgRoutineCommonBps"),
+    ("routine rare", "_PROG_ROUTINE_RARE_BPS", "kProgRoutineRareBps"),
+    ("event common", "_PROG_EVENT_COMMON_BPS", "kProgEventCommonBps"),
+    ("event rare", "_PROG_EVENT_RARE_BPS", "kProgEventRareBps"),
 ):
-    a = one(rf'{sol_name}\s*=\s*(\d+)\s*;', sol, sol_name)
-    b = one(rf'{cpp_name}\s*=\s*(\d+)\s*;', cpp, cpp_name)
-    if a and b and a != b:
-        bad.append(f"{label} divisor: contract {a} vs model {b}")
+    a = num(sol, rf'{sol_name}\s*=\s*([0-9_]+)\s*;', sol_name)
+    b = num(cpp, rf"{cpp_name}\s*=\s*([0-9']+)\s*;", cpp_name)
+    if a is not None and b is not None and a != b:
+        bad.append(f"{label} rung: contract {a} bps vs model {b} bps")
+
+# THE CONTRACT PAYS BY DOUBLINGS of the routine common rung, and the four named rungs above are
+# the same table written out. Hold them together: without this a rung could be retuned in the
+# names — which is all this gate and the model compare — while the award kept paying the old
+# figure, and the gate would stay green through it.
+base = num(sol, r'_PROG_ROUTINE_COMMON_BPS\s*=\s*([0-9_]+)\s*;', '_PROG_ROUTINE_COMMON_BPS')
+rd = num(sol, r'_PROG_RARE_DOUBLINGS\s*=\s*([0-9_]+)\s*;', '_PROG_RARE_DOUBLINGS')
+ed = num(sol, r'_PROG_EVENT_DOUBLINGS\s*=\s*([0-9_]+)\s*;', '_PROG_EVENT_DOUBLINGS')
+if None not in (base, rd, ed):
+    for name, want in (
+        ('_PROG_ROUTINE_RARE_BPS', base << rd),
+        ('_PROG_EVENT_COMMON_BPS', base << ed),
+        ('_PROG_EVENT_RARE_BPS', base << (rd + ed)),
+    ):
+        got = num(sol, rf'{name}\s*=\s*([0-9_]+)\s*;', name)
+        if got is not None and got != want:
+            bad.append(f"{name}: named {got} bps, but the award's doublings pay {want}")
+
+# THE REPEAT DOUBLE carries no constant — it is a doubling of the event rung, written the same way
+# in both files. Hold the two SHAPES together, so a rule that silently stops doubling on one side
+# cannot pass.
+if '++shift;' not in sol:
+    bad.append("the contract no longer doubles the event rung on a repeat victory")
+if '++shift;' not in cpp:
+    bad.append("the model no longer doubles the event rung on a repeat victory")
+# ...and the model counts its doublings the same way the contract does.
+for label, sol_name, cpp_name in (
+    ("rare", "_PROG_RARE_DOUBLINGS", "kProgRareDoublings"),
+    ("event", "_PROG_EVENT_DOUBLINGS", "kProgEventDoublings"),
+):
+    a = num(sol, rf'{sol_name}\s*=\s*([0-9_]+)\s*;', sol_name)
+    b = num(cpp, rf"{cpp_name}\s*=\s*([0-9']+)\s*;", cpp_name)
+    if a is not None and b is not None and a != b:
+        bad.append(f"{label} doublings: contract {a} vs model {b}")
 
 for line in bad:
     print(f"MISMATCH {line}")
@@ -107,6 +146,6 @@ if [ $rc -ne 0 ]; then
 fi
 
 if [ $fail -eq 0 ]; then
-  echo "${GREEN}PASS${OFF} craps progressive: base subsidy, both divisors, all four high-point cutoffs and the escalator agree with the model"
+  echo "${GREEN}PASS${OFF} craps progressive: base subsidy, all four rungs and the repeat double, all four high-point cutoffs and the escalator agree with the model"
 fi
 exit $fail

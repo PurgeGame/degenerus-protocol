@@ -781,13 +781,38 @@ Only the finalized **main winner** of a scheduled field can qualify:
 
 ### Award
 
-~~~text
-rare:   candidate = floor(livePool / 2)
-common: candidate = floor(livePool / 10)
+The share depends on which window finalized. A day's seventh and last window (period 6) is its
+**main event**; periods 0-5 are **routine**.
 
-paid = standingShare(candidate)
+| Window | Common | Rare |
+|---|---:|---:|
+| Routine (periods 0-5) | 5% | 10% |
+| Main event (period 6) | 20% | 40% |
+| Main event, after a repeat victory | 40% | 80% |
+
+The main event doubles when its winner already won a **routine** field the same protocol day with
+that field's winning stop being **Goal**. The qualifying victory must be a distinct routine field
+finalized before the event, the same address must have been its **main bounty winner**, and it need
+not have triggered the progressive itself. One victory is enough and they never stack; the event
+cannot qualify itself; and the state is read at resolution time, so an event resolved before the
+routine victory does not double.
+
+**A routine window never doubles.** The 5% and 10% figures are the routine schedule, not a
+first-win rate that a repeat lifts.
+
+~~~text
+isEvent = (slot % 8 == 7)
+base    = isEvent ? (rare ? 4_000 : 2_000) : (rare ? 1_000 : 500)   // basis points
+bps     = isEvent and wonARoutineGoalToday(winner) ? base * 2 : base
+
+candidate = floor(livePool * bps / 10_000)
+paid      = standingShare(candidate)
 livePool -= paid
 ~~~
+
+The pool percentage is applied **before** the standing adjustment. The candidate is computed by
+splitting the pool at the denominator first, which is exactly `floor(livePool * bps / 10_000)` and
+cannot overflow at the 80% rung. Custom battles are excluded from the whole schedule.
 
 Only the actual credit leaves the pool. The standing-retained portion was already in the pool and
 stays there.
@@ -997,7 +1022,7 @@ appear in seven `CrapsBetSettled` events.
 | `CrapsHighRollerPaid` | Sole rider or contested high-lane payment. |
 | `CrapsProgressiveFunded` | Daily contribution into the global progressive. |
 | `CrapsProgressiveRolled` | Standing-denied ladder value moved into the progressive. |
-| `CrapsProgressivePaid` | Progressive tier, candidate, paid/retained split, and pool after. |
+| `CrapsProgressivePaid` | Progressive tier, the applied `poolBps` rung, candidate, credit, and pool after. What standing denied is `candidate - paid`. |
 | `BigRecordUpdated` on Coinflip | Dice Run record mark and shared-pool claim. |
 
 The event stream is the main integration surface. The contract intentionally avoids restating
@@ -1032,7 +1057,8 @@ The result is:
 - high-point score: 30x, or 300,000 bps;
 - individual payment base: the 1,800-FLIP ending bankroll, not 9,000;
 - main ranking measure: 9,000-FLIP peak;
-- common progressive qualification: yes, because 30x exceeds the 25x 5x-Goal cutoff;
+- common progressive qualification: yes, because 30x exceeds the 25x 5x-Goal cutoff — which pays
+  5% of the live pool on a routine window and 20% on the day's main event;
 - rare qualification: no, because it is below 120x; and
 - Dice Run record eligibility: no, because it is below 100x.
 

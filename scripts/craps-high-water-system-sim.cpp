@@ -49,9 +49,24 @@ constexpr i64 kDefaultMainBase = 50'000;
 // exactly as `_splitMainBudget` floors it, so the two always sum back to the raw figure.
 inline i64 ladderHalf(i64 rawMain) { return rawMain / 2; }
 inline i64 progressiveHalf(i64 rawMain) { return rawMain - rawMain / 2; }
-// The progressive's two rungs, as divisors of the LIVE pool.
-constexpr i64 kProgCommonDiv = 10;
-constexpr i64 kProgRareDiv = 2;
+// THE PROGRESSIVE'S RUNGS, in BASIS POINTS of the LIVE pool. Two rungs and two window classes:
+// the day's EVENT (period 6) is its headline and pays four times what a routine window does, and
+// doubles again where its winner already took a routine field as Goal earlier the same day. A
+// ROUTINE window never doubles. Rare overrides common.
+constexpr i64 kProgRoutineCommonBps = 500;
+constexpr i64 kProgRoutineRareBps = 1'000;
+constexpr i64 kProgEventCommonBps = 2'000;
+constexpr i64 kProgEventRareBps = 4'000;
+// The same four rungs as DOUBLINGS of the routine common share, which is how the award applies
+// them and how the contract computes them: rare is worth one, the event two more, and a repeat
+// victory at the event one further.
+constexpr int kProgRareDoublings = 1;
+constexpr int kProgEventDoublings = 2;
+// `floor(pool * bps / 10_000)` the way the contract's `_poolShare` computes it: split at the
+// denominator first, so the multiplication is bounded by the result rather than by pool * bps.
+inline i64 poolShare(i64 pool, i64 bps) {
+    return (pool / kBpsDenominator) * bps + ((pool % kBpsDenominator) * bps) / kBpsDenominator;
+}
 // THE ROLL CUTOFFS, indexed `depthIndex * 3 + goalIndex` with depth in (2, 5, 10) and target in
 // (5x, 10x, 50x). Cumulative dice rolls, inclusive, and the WINNING ticket's own.
 constexpr int kProgCommon[9] = {150, 205, 340, 215, 275, 405, 265, 325, 455};
@@ -954,6 +969,10 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
         i64 dayRegular = 0;
         i64 dayHigh = 0;
         long double dayBoostPaid = 0;
+        // THE DAY'S ROUTINE GOAL VICTORS, cleared with the day exactly as the contract's
+        // day-stamped map goes stale with it. Only a routine field writes here, so the event can
+        // never qualify itself, and the flag is read at the moment the event resolves.
+        std::vector<char> routineGoalWinner(seats.size(), 0);
 
         if (count) {
             out.days += 1;
@@ -1052,6 +1071,11 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
             // THE PROGRESSIVE. No draw of its own: the recipient is the winner the comparator
             // already named, the qualification is that winner's cumulative roll prefix against
             // this window's format, and a bust never qualifies however far it ran.
+            // A ROUTINE GOAL VICTORY qualifies this day's event, whether or not it clears a
+            // cutoff of its own — so it is recorded on the VICTORY, ahead of the award below.
+            if (p + 1 != kWindows && runs[mainWinner].run.stop == Stop::Goal) {
+                routineGoalWinner[mainWinner] = 1;
+            }
             if (runs[mainWinner].run.stop == Stop::Goal) {
                 int fi = progFormatIndex(t.depth, t.goalMult);
                 int rolls = runs[mainWinner].run.rolls;
@@ -1068,8 +1092,18 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                     rare = rolls >= kProgRare[fi];
                     common = rolls >= kProgCommon[fi];
                 }
-                if (rare) candidate = pool / kProgRareDiv;
-                else if (common) candidate = pool / kProgCommonDiv;
+                // THE RUNG, COUNTED IN DOUBLINGS of the routine common share, exactly as the
+                // contract counts it: rare is one doubling, the day's event two more, and a
+                // repeat victory at the event one further.
+                if (rare || common) {
+                    int shift = rare ? kProgRareDoublings : 0;
+                    if (p + 1 == kWindows) {
+                        shift += kProgEventDoublings;
+                        // THE REPEAT DOUBLE, on the event alone and never stacking past 2x.
+                        if (routineGoalWinner[mainWinner]) ++shift;
+                    }
+                    candidate = poolShare(pool, kProgRoutineCommonBps << shift);
+                }
                 if (candidate > 0) {
                     // The candidate is ALREADY in the pool, so the curve applies to it directly
                     // and only the credit is deducted. What is denied never left.

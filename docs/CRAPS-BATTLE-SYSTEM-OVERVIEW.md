@@ -741,14 +741,52 @@ condition that could be widened somewhere else.
 
 ### Award
 
-```text
-if Goal and score >= rareCutoff:    candidate = floor(pool / 2)
-elif Goal and score >= commonCutoff: candidate = floor(pool / 10)
-else:                                candidate = 0
+The share depends on WHICH WINDOW finalized. A day's seventh and last window is its **main
+event**; periods 0-5 are **routine**.
 
-paid  = standingShare(candidate, winnerStanding)
-pool -= paid
+| Window | Common | Rare |
+|---|---:|---:|
+| Routine (periods 0-5) | 5% | 10% |
+| Main event (period 6) | 20% | 40% |
+| Main event, after a repeat victory | 40% | 80% |
+
+**The repeat double is the event's alone.** A routine window never doubles, whatever its winner did
+earlier in the day: the double is what makes the headline worth chasing from the day's first
+window, and a routine rung that could double would pay for that chase twice.
+
+The main event doubles when its winner **already won a routine field that same protocol day, and
+that field's winning stop was Goal**. Precisely:
+
+- a **distinct routine field**, finalized **before** the main event;
+- the same address was that field's **main bounty winner** — reaching Goal behind the winner
+  qualifies nobody;
+- that field's winning stop was **Goal**; and
+- it need **not** have triggered the progressive itself. The qualification is written on the
+  victory, not on the award, so a routine winner whose peak fell short of every cutoff still
+  doubles its day's event.
+
+One qualifying victory is enough and **they never stack**: this is a doubling, not a count, so six
+routine wins pay the same 2x one does. The **main event cannot qualify itself** — only routine
+windows ever write the qualification. The state is read at **resolution time**: settlement is
+permissionless once the words are public, so an event cranked ahead of the routine victory does not
+double, and the victory landing afterwards does not reach back.
+
+```text
+isEvent = (slot % 8 == 7)
+base    = isEvent ? (rare ? 40% : 20%) : (rare ? 10% : 5%)
+bps     = isEvent and wonARoutineGoalToday(winner) ? base * 2 : base
+
+candidate = floor(pool * bps / 10_000)
+paid      = standingShare(candidate, winnerStanding)
+pool     -= paid
 ```
+
+Rare continues to override common, and the pool percentage is applied **before** the standing
+adjustment. Custom battles remain excluded from the whole schedule in both directions.
+
+The candidate is computed by splitting the pool at the denominator first — `(pool / 10_000) * bps +
+(pool % 10_000) * bps / 10_000` — which is exactly `floor(pool * bps / 10_000)` and cannot overflow
+at the 80% rung however large the pool grows.
 
 The candidate is already in the pool, so the standing curve applies to it directly and **only the
 credit is deducted** — what the curve denies never left and is not added back. At full standing
@@ -768,8 +806,13 @@ external call.
 - `progressivePool()` — the live balance, and the second reader production ships. It is the one
   figure of the system that is not a pure function of published inputs.
 - `CrapsProgressiveFunded(day, contribution, balance)` — once per opened day.
-- `CrapsProgressivePaid(betId, battleKey, player, rare, goalMult, peak, scoreBps, candidate, paid,
-  retained, balance)` — `peak` in whole FLIP, `scoreBps` the same figure over the starting bankroll.
+- `CrapsProgressivePaid(betId, battleKey, player, rare, poolBps, goalMult, peak, scoreBps,
+  candidate, paid, balance)` — `peak` in whole FLIP, `scoreBps` the same figure over the starting
+  bankroll. What the standing denied is `candidate - paid`; it never left the pool, so it carries
+  no field of its own. **`poolBps` is the rung actually applied** — 500/1,000 routine, 2,000/4,000
+  event, 4,000/8,000 event doubled — so an indexer reads the schedule and the repeat status
+  straight off the log. Read with `rare` it is unambiguous: a 4,000 that is not `rare` is a doubled
+  common event rung, and one that is `rare` is an undoubled rare one.
 - `CrapsProgressiveRolled(battleKey, source, amount, balance)` — source 1 main ladder, 2 contested
   high lane, 3 sole high rider.
 - `CrapsBattleFinalized` carries `winningPeak`, `winningEnd` and `winningScoreBps`; the `Battle`

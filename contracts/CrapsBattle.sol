@@ -320,11 +320,34 @@ contract CrapsBattle is LootboxCraps {
     ///         that SETTLES the table — which does not exist while anyone can still enter.
     uint256 internal constant _BOOST_MAX_MULT = 100;
 
-    /// @notice THE PROGRESSIVE'S TWO RUNGS, as divisors of the LIVE pool at the moment a field
-    ///         finalizes. A common result takes a tenth, a rare one a half; the rare rung is
-    ///         tested first and OVERRIDES, so a field never pays both.
-    uint256 internal constant _PROG_COMMON_DIV = 10;
-    uint256 internal constant _PROG_RARE_DIV = 2;
+    /// @notice THE PROGRESSIVE'S RUNGS, in BASIS POINTS of the LIVE pool at the moment a field
+    ///         finalizes. Two rungs, and two window classes — because the day's EVENT is its
+    ///         headline and is paid for being one:
+    ///
+    ///           window                     common   rare
+    ///           routine (periods 0..5)        5%     10%
+    ///           event   (period 6)           20%     40%
+    ///           event, after a repeat        40%     80%
+    ///
+    ///         THE REPEAT DOUBLE IS THE EVENT'S ALONE. A routine window never doubles, whatever
+    ///         its winner did earlier in the day: the double is what makes the headline worth
+    ///         chasing from the day's FIRST window, and a routine rung that could double would be
+    ///         paying for that chase twice over.
+    ///
+    ///         The rare rung is tested first and OVERRIDES, so a field never pays both. Note that
+    ///         a doubled common event rung and an undoubled rare one are the same 40% — the
+    ///         `rare` flag on the award log is what separates them.
+    uint256 internal constant _PROG_ROUTINE_COMMON_BPS = 500;
+    uint256 internal constant _PROG_ROUTINE_RARE_BPS = 1000;
+    uint256 internal constant _PROG_EVENT_COMMON_BPS = 2000;
+    uint256 internal constant _PROG_EVENT_RARE_BPS = 4000;
+
+    /// @dev The same four rungs as DOUBLINGS of the routine common share, which is how the award
+    ///      applies them: rare is worth one, the event two more, and a repeat victory one further.
+    ///      `_PROG_ROUTINE_COMMON_BPS << shift` reproduces the table above exactly, and
+    ///      `CrapsProgressive.t.sol` holds the two statements of it together.
+    uint256 internal constant _PROG_RARE_DOUBLINGS = 1;
+    uint256 internal constant _PROG_EVENT_DOUBLINGS = 2;
 
     /// @dev THE HIGH-POINT CUTOFFS, one pair per scheduled target, in SCORE BASIS POINTS — the
     ///      winner's high point over its own starting bankroll, 10,000 being 1x. INCLUSIVE:
@@ -855,6 +878,24 @@ contract CrapsBattle is LootboxCraps {
     ///      finished; dead days are refunded in kind; nothing is stranded either way.
     uint64 internal _keeperSlot;
 
+    /// @dev THE DAY'S ROUTINE GOAL VICTORS: the protocol day on which this address last took a
+    ///      ROUTINE field's main bounty with its run finishing as GOAL, stored PLUS ONE so that a
+    ///      never-seen address and day zero cannot be confused.
+    ///
+    ///      Read once a day, by that day's EVENT, to decide whether its progressive rung doubles.
+    ///
+    ///      KEYED BY ADDRESS ALONE, not by (day, address), because only the LATEST day can ever
+    ///      be asked about: the event reads its OWN day and nothing else, so a later day's win
+    ///      simply overwrites a spent one and the map never needs clearing. A stale entry from
+    ///      any earlier day fails the equality and is indistinguishable from never having won.
+    ///
+    ///      WRITTEN ON THE VICTORY, NOT ON THE AWARD. A routine winner qualifies its day whether
+    ///      or not its own run cleared a progressive cutoff, so the write lives where the field
+    ///      is finalized rather than inside the award, which returns early on a short score.
+    ///
+    ///      DECLARED LAST, so it takes a fresh slot and moves none of the ones above it.
+    mapping(address => uint256) internal _routineGoalDay;
+
     /// @dev What a future day costs bought outright, per day. FIXED constants, deliberately not
     ///      derived from the pass denominations or from each other: the pass is a lootbox award
     ///      priced at the expectation, while these are a retail price with the protocol's margin
@@ -1045,7 +1086,12 @@ contract CrapsBattle is LootboxCraps {
     /// @dev NO SEPARATE DRAW DECIDES THIS. The winner is the one the ordinary comparator already
     ///      named, and the qualification is that winner's HIGH POINT against its window's target.
     ///      A Bust never qualifies however far it ran, and a custom battle never reaches here.
-    /// @param rare True for the half-pool rung, false for the tenth. Never both.
+    /// @param rare True for the rare rung, false for the common one. Never both.
+    /// @param poolBps The rung ACTUALLY APPLIED, in basis points of the live pool: 500/1,000 on a
+    ///        routine window, 2,000/4,000 on the day's event, and 4,000/8,000 where the event
+    ///        doubled on a repeat victory. Read with `rare` this is the whole decision — a 4,000
+    ///        that is not `rare` is a doubled common event rung, and one that is `rare` is an
+    ///        undoubled rare one.
     /// @param goalMult The scheduled target this field ran, 5 or 20 — which of the two cutoff
     ///        pairs was applied.
     /// @param peak The winner's high point in whole FLIP, the figure that was tested.
@@ -1054,21 +1100,20 @@ contract CrapsBattle is LootboxCraps {
     ///        at 20x.
     /// @param candidate The rung's whole figure, before the winner's standing is applied.
     /// @param paid What was actually credited — `candidate` at full standing, less below it.
-    /// @param retained `candidate - paid`. It was never removed from the pool, so it needs no
-    ///        second funding log; it is stated so a reader can reconcile without re-deriving the
-    ///        standing curve.
+    ///        What the standing DENIED is `candidate - paid`; it was never removed from the pool,
+    ///        so it needs no funding log and no field of its own.
     /// @param balance The pool AFTER the credit.
     event CrapsProgressivePaid(
         uint256 indexed betId,
         bytes32 indexed battleKey,
         address indexed player,
         bool rare,
+        uint16 poolBps,
         uint16 goalMult,
         uint256 peak,
         uint256 scoreBps,
         uint256 candidate,
         uint256 paid,
-        uint256 retained,
         uint256 balance
     );
 
@@ -3669,7 +3714,12 @@ contract CrapsBattle is LootboxCraps {
             // scheduled target, so the floor does the whole eligibility test. Below it NOTHING is
             // called — a field that never got near a record does not pay for a cross-contract
             // read to be told so — and `Coinflip` logs the claim it makes.
+            //
+            // A ROUTINE GOAL VICTORY IS REMEMBERED FOR THIS DAY'S EVENT. Only the main bounty
+            // winner reaches here, which is the whole of "won the field" — reaching Goal behind
+            // somebody else qualifies nobody.
             if (scheduled) {
+                _noteRoutineVictory(slot, stop, winner);
                 _payProgressive(w, peakFlip, score, winnerId, winnerWord, winner);
                 if (score >= _DICE_RUN_RECORD_FLOOR) {
                     ICoinflipStake(ContractAddresses.COINFLIP).armDiceRunRecord(winner, score);
@@ -3689,14 +3739,53 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
+    /// @dev Remember a ROUTINE field's GOAL victory against the day it happened on, so that day's
+    ///      EVENT can double its progressive rung. Called from `_payout` for every finalized
+    ///      SCHEDULED field with that field's own winner.
+    ///
+    ///      WRITTEN ON THE VICTORY, NOT ON THE AWARD: an earlier win qualifies the day whether or
+    ///      not its own run cleared a progressive cutoff, and the award returns early on a short
+    ///      score. Only ROUTINE windows write, which is what stops the event qualifying itself,
+    ///      and only a Goal counts — a bust that ran high is still a bust.
+    function _noteRoutineVictory(uint256 slot, Craps.SlipStop stop, address winner) internal {
+        if (stop != Craps.SlipStop.Goal || _isEventSlot(slot)) return;
+        unchecked {
+            _routineGoalDay[winner] = slot / _BONUS_SLOTS_PER_DAY + 1;
+        }
+    }
+
+    /// @dev Whether a SCHEDULED slot is its day's EVENT — the seventh and last window, and the
+    ///      only one whose progressive rung can double. Slots run `day * 8 + period + 1`, so the
+    ///      event's remainder is 7 and a routine window's is 1..6. Callers have already excluded
+    ///      custom slots and the reserved day slot, whose remainder is 0.
+    function _isEventSlot(uint256 slot) private pure returns (bool) {
+        unchecked {
+            return slot % _BONUS_SLOTS_PER_DAY == _BONUS_PERIODS_PER_DAY;
+        }
+    }
+
+    /// @dev `floor(pool * bps / 10_000)` that CANNOT overflow, whatever the pool comes to hold.
+    ///      Dividing at the denominator FIRST bounds the multiplication by the result — which is
+    ///      at most the pool itself — where a bare `pool * bps` would wrap silently inside an
+    ///      unchecked block at the 80% rung.
+    ///
+    ///      EXACT, not an approximation: write `pool = 10_000q + r`. Then
+    ///      `floor(pool * bps / 10_000)` is `q * bps + floor(r * bps / 10_000)`, which is
+    ///      term-for-term what this returns. Floor semantics are preserved at every rung.
+    function _poolShare(uint256 pool, uint256 bps) internal pure returns (uint256) {
+        unchecked {
+            return (pool / _BPS_DENOMINATOR) * bps + ((pool % _BPS_DENOMINATOR) * bps) / _BPS_DENOMINATOR;
+        }
+    }
+
     /// @dev THE PROGRESSIVE AWARD, and the whole of it. Reached once per finalized SCHEDULED
     ///      field, from `_payout`'s single scheduled branch, so it cannot pay twice however the
     ///      settlement batches were cut and a custom field can never reach the pool.
     ///
     ///      IT ADDS NO RANDOMNESS. The recipient is the winner the ordinary comparator already
     ///      named; the qualification is that winner's HIGH POINT against its window's target; and
-    ///      the amount is a division of the live pool. Nothing is re-run and no runner-up is ever
-    ///      considered.
+    ///      the amount is a fixed share of the live pool, chosen by the rung and by whether this
+    ///      is the day's event. Nothing is re-run and no runner-up is ever considered.
     ///
     ///      A BUST NEVER QUALIFIES, however high it got: its `peakFlip` is zero, which is below
     ///      every cutoff. A custom battle neither draws on the pool nor funds it and is excluded
@@ -3723,14 +3812,29 @@ contract CrapsBattle is LootboxCraps {
                 ? (_PROG_RARE_20X << 32) | _PROG_COMMON_20X
                 : (_PROG_RARE_5X << 32) | _PROG_COMMON_5X;
             // RARE FIRST, and it OVERRIDES. The rare cutoff is above the common one at both
-            // targets, so a run that clears it has cleared both — and takes the half, never the
-            // half and the tenth. Both cutoffs are INCLUSIVE.
+            // targets, so a run that clears it has cleared both — and takes the rare rung alone,
+            // never both. Both cutoffs are INCLUSIVE.
             uint256 pool = _progressive;
             bool rare = score >= (cuts >> 32);
-            uint256 candidate;
-            if (rare) candidate = pool / _PROG_RARE_DIV;
-            else if (score >= (cuts & _MASK32)) candidate = pool / _PROG_COMMON_DIV;
-            else return;
+            // THE RUNG, COUNTED IN DOUBLINGS of the routine common share, because that is what
+            // the schedule actually is: RARE is worth one doubling, the day's EVENT two more, and
+            // a repeat victory at the event one further. So `500 << shift` is the whole table —
+            // 500/1,000 routine, 2,000/4,000 event, 4,000/8,000 event doubled — and the four
+            // named rungs below it are the same four figures written out.
+            uint256 shift;
+            if (rare) shift = _PROG_RARE_DOUBLINGS;
+            else if (score < (cuts & _MASK32)) return;
+            if (_isEventSlot(w.bound)) {
+                shift += _PROG_EVENT_DOUBLINGS;
+                // THE REPEAT DOUBLE, on the EVENT alone. Its state is read at RESOLUTION time: a
+                // routine field that has not been finalized yet has qualified nobody, so an event
+                // cranked ahead of the routine victory does not double. One earlier victory is
+                // enough and a second cannot stack — this is a doubling, not a count — and the
+                // event cannot qualify itself because only routine windows ever write the map.
+                if (_routineGoalDay[winner] == uint256(w.bound) / _BONUS_SLOTS_PER_DAY + 1) ++shift;
+            }
+            uint256 bps = _PROG_ROUTINE_COMMON_BPS << shift;
+            uint256 candidate = _poolShare(pool, bps);
             if (candidate == 0) return;
             // THE CANDIDATE IS ALREADY IN THE POOL, so the standing curve applies to it directly
             // and only the credit is deducted. What the standing denies is not added back — it
@@ -3739,17 +3843,7 @@ contract CrapsBattle is LootboxCraps {
             pool -= paid;
             _progressive = pool;
             emit CrapsProgressivePaid(
-                winnerId,
-                w.key,
-                winner,
-                rare,
-                uint16(goalMult),
-                peakFlip,
-                score,
-                candidate,
-                paid,
-                candidate - paid,
-                pool
+                winnerId, w.key, winner, rare, uint16(bps), uint16(goalMult), peakFlip, score, candidate, paid, pool
             );
             // State first, credit second. A scoreless winner takes nothing, and a call for nothing
             // is a call not worth making.

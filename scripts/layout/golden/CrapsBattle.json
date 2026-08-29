@@ -150,5 +150,13 @@
     "offset": 0,
     "slot": 18,
     "typeLabel": "uint64"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_routineGoalDay",
+    "offset": 0,
+    "slot": 19,
+    "typeLabel": "mapping(address => uint256)"
   }
 ]

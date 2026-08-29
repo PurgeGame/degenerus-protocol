@@ -444,13 +444,51 @@ contract CrapsViews is CrapsBattle {
 
 
 
-    function PROG_COMMON_DIV() external pure returns (uint256) {
-        return _PROG_COMMON_DIV;
+    function PROG_ROUTINE_COMMON_BPS() external pure returns (uint256) {
+        return _PROG_ROUTINE_COMMON_BPS;
     }
 
-    function PROG_RARE_DIV() external pure returns (uint256) {
-        return _PROG_RARE_DIV;
+    function PROG_ROUTINE_RARE_BPS() external pure returns (uint256) {
+        return _PROG_ROUTINE_RARE_BPS;
     }
+
+    function PROG_EVENT_COMMON_BPS() external pure returns (uint256) {
+        return _PROG_EVENT_COMMON_BPS;
+    }
+
+    function PROG_EVENT_RARE_BPS() external pure returns (uint256) {
+        return _PROG_EVENT_RARE_BPS;
+    }
+
+    function PROG_RARE_DOUBLINGS() external pure returns (uint256) {
+        return _PROG_RARE_DOUBLINGS;
+    }
+
+    function PROG_EVENT_DOUBLINGS() external pure returns (uint256) {
+        return _PROG_EVENT_DOUBLINGS;
+    }
+
+    /// @dev The exact share the contract takes of a pool at a rung, so a suite states the rung it
+    ///      expects rather than restating the floor arithmetic beside it.
+    function poolShareOf(uint256 pool, uint256 bps) external pure returns (uint256) {
+        return _poolShare(pool, bps);
+    }
+
+    /// @dev The SHIPPED write rule, driven directly: what `_payout` calls for every finalized
+    ///      scheduled field, with that field's own winner. Taps the gate rather than restating it,
+    ///      so a suite grading "the event cannot qualify itself" or "a bust never qualifies" is
+    ///      grading production's own branch.
+    function noteRoutineVictory(uint64 slot, bool goal, address winner) external {
+        _noteRoutineVictory(slot, goal ? Craps.SlipStop.Goal : Craps.SlipStop.Bust, winner);
+    }
+
+    /// @dev The day (as stored, plus one) on which this address last won a ROUTINE field as Goal.
+    ///      Zero where it never has. Storage-internal on the contract, like the rest of the
+    ///      reader surface.
+    function routineGoalDayOf(address player) external view returns (uint256) {
+        return _routineGoalDay[player];
+    }
+
 
     /// @dev The composite's money component, clamp included.
     function wonComponentOf(uint256 won) external pure returns (uint256) {
