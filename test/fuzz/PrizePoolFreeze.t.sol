@@ -10,7 +10,7 @@ contract FreezeHarness is DegenerusGameAdvanceModule {
     // --- Freeze / Unfreeze ---
     function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
         _swapTicketSlot();
-        _freezePool(1);
+        _freezePool();
     }
 
     function exposed_unfreezePool() external {

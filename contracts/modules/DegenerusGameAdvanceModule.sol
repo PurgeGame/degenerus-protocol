@@ -442,7 +442,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                                 if (!preFound) {
                                     _swapTicketSlot();
                                 }
-                                _freezePool(day);
+                                _freezePool();
                                 stage = STAGE_RNG_REQUESTED;
                                 break;
                             }
@@ -576,7 +576,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (!locked) {
                     _swapTicketSlot();
                 }
-                _freezePool(day);
+                _freezePool();
                 stage = STAGE_RNG_REQUESTED;
                 break;
             }
@@ -2009,21 +2009,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      during freeze without waiting for bet inflow. Unconsumed remainder rolls back to
     ///      futurePool via _unfreezePool. If already frozen (jackpot phase), accumulators keep
     ///      growing.
-    ///
-    ///      The freeze is the volume round's crossover: buys route to pending from here,
-    ///      so the live counter is final and is pushed to the market before the unfreeze
-    ///      overwrites it. A re-entered freeze closes no round and pushes nothing.
-    /// @param round The round closing at this crossover.
-    function _freezePool(uint24 round) internal {
+    function _freezePool() internal {
         if (!prizePoolFrozen) {
             prizePoolFrozen = true;
-            parimutuel.recordVolume(round, _getLiveTicketVolume());
             uint256 futureBal = _getFuturePrizePool();
             uint256 seed = futureBal / 100;
             _setFuturePrizePool(futureBal - seed);
-            // Full reset: the seed lands in the pending future half and the volume counter
-            // starts the new round at zero.
-            _resetPendingPools(0, uint128(seed));
+            // The seed opens the pending buffer; buys route here until the unfreeze.
+            _setPendingPools(0, uint128(seed));
         }
     }
 
@@ -2035,18 +2028,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Fold pending into live and clear freeze; no-op if not frozen. One read and
-    ///      one write per slot: the halves ADD (saturating), the volume counter ROLLS —
-    ///      its outgoing value was already scored at the freeze.
+    ///      one write per slot: each half ADDS into its own, saturating independently on
+    ///      the same never-revert grounds as the purchase path.
     function _unfreezePool() internal {
         if (!prizePoolFrozen) return;
         uint256 pending = prizePoolPendingPacked;
         uint256 live = prizePoolsPacked;
+        // Masked operands: both sums must evaluate in uint256, or the saturating fold
+        // would revert exactly where it is meant to clamp.
         uint256 next = (live & POOL_HALF_MAX) + (pending & POOL_HALF_MAX);
-        uint256 future =
-            ((live >> POOL_FUTURE_SHIFT) & POOL_HALF_MAX) + ((pending >> POOL_FUTURE_SHIFT) & POOL_HALF_MAX);
+        uint256 future = (live >> POOL_FUTURE_SHIFT) + (pending >> POOL_FUTURE_SHIFT);
         if (next > POOL_HALF_MAX) next = POOL_HALF_MAX;
         if (future > POOL_HALF_MAX) future = POOL_HALF_MAX;
-        prizePoolsPacked = (pending & ~POOL_HALVES_MASK) | (future << POOL_FUTURE_SHIFT) | next;
+        prizePoolsPacked = (future << POOL_FUTURE_SHIFT) | next;
         prizePoolPendingPacked = 0;
         prizePoolFrozen = false;
     }

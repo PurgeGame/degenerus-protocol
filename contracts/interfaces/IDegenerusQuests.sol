@@ -251,13 +251,13 @@ interface IDegenerusQuests {
     /// @return paid The FLIP actually credited (0 when ineligible or already completed).
     function recordGrowthBet(address player, uint24 lvl, uint256 reward) external returns (uint256 paid);
 
-    /// @notice The two gates a parimutuel market applies to a bet.
+    /// @notice The two gates the parimutuel growth market applies to a bet.
     /// @dev Read-only. earnsReward is recordGrowthBet's eligibility; mayBet is the weaker
     ///      lifetime bar — has this address ever bought anything.
     /// @param player The player to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
-    /// @return earnsReward True if the placement also earns its quest or credit.
+    /// @return earnsReward True if the placement also earns the growth quest.
     function marketBetGates(address player, uint24 lvl)
         external
         view

@@ -24,7 +24,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
     uint256 private constant SLOT_0 = 0;
     uint256 private constant JACKPOT_PHASE_SHIFT = 120; // byte 15: jackpotPhaseFlag
     uint256 private constant RNG_LOCKED_SHIFT = 152; // byte 19: rngLockedFlag
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [volume:48][future:104][next:104]
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
     uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23; // mapping(uint24 => uint256)
 
     uint256 private simTime;
@@ -60,7 +60,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         return
             uint256(
                 vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT))
-            ) & ((uint256(1) << 104) - 1);
+            ) & ((uint256(1) << 128) - 1);
     }
 
     /// @dev Raise nextPrizePool to `targetNext` (never lowers; preserves future half).
@@ -68,11 +68,11 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         uint256 packed = uint256(
             vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT))
         );
-        if ((packed & ((uint256(1) << 104) - 1)) >= targetNext) return;
+        if ((packed & ((uint256(1) << 128) - 1)) >= targetNext) return;
         vm.store(
             address(game),
             bytes32(PRIZE_POOLS_PACKED_SLOT),
-            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | targetNext)
         );
     }
 

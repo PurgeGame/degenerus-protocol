@@ -62,12 +62,12 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         uint256 packed = uint256(
             vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT))
         );
-        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        uint256 currentNext = packed & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
         vm.store(
             address(game),
             bytes32(PRIZE_POOLS_PACKED_SLOT),
-            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | targetNext)
         );
     }
 
@@ -75,12 +75,12 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         uint256 packed = uint256(
             vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT))
         );
-        uint256 currentFuture = (packed >> 104) & ((uint256(1) << 104) - 1);
+        uint256 currentFuture = (packed >> 128) & ((uint256(1) << 128) - 1);
         if (currentFuture >= targetFuture) return;
         vm.store(
             address(game),
             bytes32(PRIZE_POOLS_PACKED_SLOT),
-            bytes32((packed & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104))
+            bytes32((packed & ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128))
         );
     }
 

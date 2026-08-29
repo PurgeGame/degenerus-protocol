@@ -7,63 +7,72 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 /// @title Solvency-arithmetic symbolic proofs (pre-C4A hardening, track 3)
 /// @notice Proves for ALL inputs the conservation/bound properties the audit agents
 ///         argued informally:
-///         (1) the v61 packed-pool halves round-trip with no cross-half corruption;
+///         (1) the packed-pool halves round-trip with no cross-half corruption;
 ///         (2) bucketShares never distributes MORE than the pool (no over-payment /
 ///             insolvency — a counterexample = ETH paid out > pool drawn from).
 /// @dev halmos --contract SolvencyArithmeticTest --solver-timeout-assertion 120000
 contract SolvencyArithmeticTest is Test {
     // -------------------------------------------------------------------------
-    // (1) Packed pool slots — mirrors DegenerusGameStorage's
-    //     [volume:48 | future:104 | next:104] layout: _setPrizePools (saturating,
-    //     counter-preserving), _addPrizeContribution's packed write, and the
-    //     _unfreezePool fold (halves add saturating, the volume counter rolls).
-    //     No division → proves cleanly for all inputs.
+    // (1) Packed pool slots — mirrors DegenerusGameStorage's [future:128 | next:128]
+    //     layout: _setPrizePools's whole-word write, _addPrizeContribution's saturating
+    //     packed write, and the _unfreezePool fold (each half adds, saturating on its
+    //     own). No division → proves cleanly for all inputs.
     // -------------------------------------------------------------------------
-    uint256 private constant HALF = (uint256(1) << 104) - 1; // POOL_HALF_MAX
-    uint256 private constant FUT = 104; // POOL_FUTURE_SHIFT
-    uint256 private constant VOL = 208; // POOL_VOLUME_SHIFT
-    uint256 private constant HALVES = (uint256(1) << VOL) - 1; // POOL_HALVES_MASK
+    uint256 private constant HALF = (uint256(1) << 128) - 1; // POOL_HALF_MAX
+    uint256 private constant FUT = 128; // POOL_FUTURE_SHIFT
 
-    function check_packed_pool_roundtrip(uint48 vol, uint256 next, uint256 future)
+    function check_packed_pool_roundtrip(uint256 next, uint256 future) public pure {
+        next &= HALF;
+        future &= HALF;
+        uint256 packed = (future << FUT) | next;
+        assert((packed & HALF) == next);
+        assert((packed >> FUT) == future);
+    }
+
+    /// @notice The half-setter (mirrors _setPrizePools): a whole-word write in which each
+    ///         half lands exactly, with no bleed between them and nothing else to keep.
+    function check_packed_pool_set_keeps_halves_separate(uint128 next, uint128 future)
         public
         pure
     {
-        next &= HALF;
-        future &= HALF;
-        uint256 packed = (uint256(vol) << VOL) | (future << FUT) | next;
+        uint256 packed = (uint256(future) << FUT) | uint256(next);
         assert((packed & HALF) == next);
-        assert(((packed >> FUT) & HALF) == future);
-        assert(uint48(packed >> VOL) == vol);
+        assert((packed >> FUT) == future);
     }
 
-    /// @notice The saturating half-setter (mirrors _setPrizePools): clamps at uint104,
-    ///         never reverts, and never disturbs the volume counter above the halves.
-    function check_packed_pool_set_saturates_and_preserves_volume(
+    /// @notice The purchase-path add (mirrors _addPrizeContribution): each half saturates
+    ///         on its own, never wraps, and never carries into the other.
+    function check_packed_pool_add_saturates_per_half(
         uint256 slot,
-        uint128 next,
-        uint128 future
+        uint128 nextAdd,
+        uint128 futureAdd
     ) public pure {
-        uint256 n = next > HALF ? HALF : next;
-        uint256 f = future > HALF ? HALF : future;
-        uint256 packed2 = (slot & ~HALVES) | (f << FUT) | n;
-        assert((packed2 >> VOL) == (slot >> VOL)); // counter intact
-        assert((packed2 & HALF) <= HALF); // halves in range by construction
-        assert(((packed2 >> FUT) & HALF) == f); // no bleed between fields
-        assert((packed2 & HALF) == n);
+        uint256 next = (slot & HALF) + nextAdd;
+        uint256 future = (slot >> FUT) + futureAdd;
+        if (next > HALF) next = HALF;
+        if (future > HALF) future = HALF;
+        uint256 packed = (future << FUT) | next;
+        assert((packed & HALF) == next);
+        assert((packed >> FUT) == future);
+        // Each half is at least what it started at: an add can only raise or clamp it.
+        assert((packed & HALF) >= (slot & HALF));
+        assert((packed >> FUT) >= (slot >> FUT));
     }
 
     /// @notice The unfreeze fold (mirrors _unfreezePool): halves ADD with saturation and
-    ///         can never bleed into a neighbouring field; the live volume counter is
-    ///         REPLACED by the pending one; pending zeroes.
+    ///         can never bleed into one another; pending zeroes.
     function check_packed_pool_fold(uint256 live, uint256 pending) public pure {
         uint256 next = (live & HALF) + (pending & HALF);
-        uint256 future = ((live >> FUT) & HALF) + ((pending >> FUT) & HALF);
+        uint256 future = (live >> FUT) + (pending >> FUT);
         if (next > HALF) next = HALF;
         if (future > HALF) future = HALF;
-        uint256 folded = (pending & ~HALVES) | (future << FUT) | next;
+        uint256 folded = (future << FUT) | next;
         assert((folded & HALF) == next);
-        assert(((folded >> FUT) & HALF) == future);
-        assert((folded >> VOL) == (pending >> VOL)); // the counter rolls pending -> live
+        assert((folded >> FUT) == future);
+        // The fold never loses value: each folded half is at least the live half it
+        // started from, and at least the pending half it absorbed.
+        assert((folded & HALF) >= (live & HALF) || next == HALF);
+        assert((folded >> FUT) >= (live >> FUT) || future == HALF);
     }
 
     // NOTE: there is no winner-total cap function to prove. The total is bounded

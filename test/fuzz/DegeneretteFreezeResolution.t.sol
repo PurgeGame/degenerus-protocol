@@ -1175,16 +1175,16 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // Internal Helpers
     // =========================================================================
 
-    /// @notice Read futurePrizePool from packed slot (future half, bits 104-207 of prizePoolsPacked, slot 2).
+    /// @notice Read futurePrizePool from packed slot (future half, bits 128-255 of prizePoolsPacked, slot 2).
     function _readFuturePrizePool() internal view returns (uint256) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        return (packed >> 104) & ((uint256(1) << 104) - 1);
+        return (packed >> 128) & ((uint256(1) << 128) - 1);
     }
 
-    /// @notice Read pending future from packed slot (future half, bits 104-207 of prizePoolPendingPacked, slot 11).
+    /// @notice Read pending future from packed slot (future half, bits 128-255 of prizePoolPendingPacked, slot 11).
     function _readPendingFuture() internal view returns (uint256) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PENDING_PACKED_SLOT))));
-        return (packed >> 104) & ((uint256(1) << 104) - 1);
+        return (packed >> 128) & ((uint256(1) << 128) - 1);
     }
 
     /// @notice Read prizePoolFrozen from slot 0, bit 208.
@@ -1193,19 +1193,19 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         return ((s0 >> FROZEN_BIT_SHIFT) & 0xFF) != 0;
     }
 
-    /// @notice Seed futurePrizePool (future half, bits 104-207 of prizePoolsPacked, slot 2).
-    /// @dev Preserves the next half and the volume counter.
+    /// @notice Seed futurePrizePool (future half, bits 128-255 of prizePoolsPacked, slot 2).
+    /// @dev Preserves the next half.
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 newPacked = (currentPacked & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
+        uint256 newPacked = (currentPacked & ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128);
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 
-    /// @notice Seed pending future (future half, bits 104-207 of prizePoolPendingPacked, slot 11).
-    /// @dev Preserves the next half and the volume counter.
+    /// @notice Seed pending future (future half, bits 128-255 of prizePoolPendingPacked, slot 11).
+    /// @dev Preserves the next half.
     function _seedPendingFuture(uint256 targetFuture) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PENDING_PACKED_SLOT))));
-        uint256 newPacked = (currentPacked & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
+        uint256 newPacked = (currentPacked & ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128);
         vm.store(address(game), bytes32(uint256(PENDING_PACKED_SLOT)), bytes32(newPacked));
     }
 

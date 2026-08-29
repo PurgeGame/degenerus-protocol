@@ -690,9 +690,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 PRIZE_POOLS_PACKED_SLOT = 2;
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT)));
-        uint256 currentNext = currentPacked & ((uint256(1) << 104) - 1);
+        uint256 currentNext = currentPacked & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
-        uint256 newPacked = (currentPacked & ~((uint256(1) << 104) - 1)) | targetNext;
+        uint256 newPacked = (currentPacked & ~((uint256(1) << 128) - 1)) | targetNext;
         vm.store(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT), bytes32(newPacked));
     }
 

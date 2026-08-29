@@ -141,17 +141,17 @@ contract BafFarFutureTicketsTest is DeployProtocol {
 
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        uint256 currentNext = packed & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
-        uint256 newPacked = (packed & ~((uint256(1) << 104) - 1)) | targetNext;
+        uint256 newPacked = (packed & ~((uint256(1) << 128) - 1)) | targetNext;
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 currentFuture = (packed >> 104) & ((uint256(1) << 104) - 1);
+        uint256 currentFuture = (packed >> 128) & ((uint256(1) << 128) - 1);
         if (currentFuture >= targetFuture) return;
-        uint256 newPacked = (packed & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
+        uint256 newPacked = (packed & ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128);
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 

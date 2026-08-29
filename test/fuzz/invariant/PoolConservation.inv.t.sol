@@ -42,7 +42,7 @@ import {PoolFlowHandler} from "../handlers/PoolFlowHandler.sol";
 ///
 ///         FALSIFIABILITY. A focused test seeds the exact T-381-05-01 bug shape — a pool inflated WITHOUT any
 ///         real ETH inflow (a transfer that mints unbacked credit) — by field-isolated vm.store-ing an
-///         increment into futurePrizePool (slot 2 future half, bits 104-207) with NO matching balance/inflow, then asserts BOTH
+///         increment into futurePrizePool (slot 2 future half, bits 128-255) with NO matching balance/inflow, then asserts BOTH
 ///         the backing bound AND the conservation bound now register the break. Restoring the slot returns both
 ///         to green. A passing assertion proves the wired conservation property is genuinely falsifiable, not
 ///         vacuously true.
@@ -58,7 +58,7 @@ contract PoolConservation is DeployProtocol {
     // exceed (what was already there) + (real ETH that entered through buys).
     uint256 public startingBacking;
 
-    // Slot 2 holds prizePoolsPacked = [volume:48 | future:104 | next:104] (forge inspect, authoritative).
+    // Slot 2 holds prizePoolsPacked = [future:128 | next:128] (forge inspect, authoritative).
     // Used ONLY by the focused falsifiability test to inject unbacked credit into futurePrizePool.
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
@@ -199,7 +199,7 @@ contract PoolConservation is DeployProtocol {
 
     /// @notice The T-381-05-01 bug shape the net catches: an internal transfer (consolidation/skim/jackpot)
     ///         that mints unbacked credit — inflating a pool total with NO matching real ETH inflow. We simulate
-    ///         that by field-isolated vm.store-ing an increment into futurePrizePool (slot 2 future half, bits 104-207) WITHOUT
+    ///         that by field-isolated vm.store-ing an increment into futurePrizePool (slot 2 future half, bits 128-255) WITHOUT
     ///         dealing any ETH or recording any inflow, then assert BOTH conservation bounds register the break:
     ///         the summed obligation now exceeds the ETH+stETH backing AND exceeds startingBacking + inflow.
     ///         Restoring the slot returns both bounds to green. If the invariant were vacuous (never reading the
@@ -212,13 +212,13 @@ contract PoolConservation is DeployProtocol {
 
         // Capture the real prizePoolsPacked slot.
         uint256 before = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT)));
-        uint256 nextLow = before & ((uint256(1) << 104) - 1);
-        uint256 futureHigh = (before >> 104) & ((uint256(1) << 104) - 1);
+        uint256 nextLow = before & ((uint256(1) << 128) - 1);
+        uint256 futureHigh = (before >> 128) & ((uint256(1) << 128) - 1);
 
         // The bug: inflate futurePrizePool by an amount that exceeds ALL backing — a transfer minting credit
         // out of thin air, with NO ETH dealt and NO inflow recorded.
         uint256 injected = startingBacking + handler.ghost_realInflow() + 1_000 ether;
-        uint256 broken = ((futureHigh + injected) << 104) | nextLow;
+        uint256 broken = ((futureHigh + injected) << 128) | nextLow;
         vm.store(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT), bytes32(broken));
 
         // Both bounds must now register the break (the futurePrizePool inflation has no backing).

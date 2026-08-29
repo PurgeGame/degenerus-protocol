@@ -38,7 +38,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///     `assertEq(wordD1, wordD)` PASSES on buggy HEAD (the reuse), and would
 ///     FAIL once the deferred jackpot is completed before rngGate sees D+1.
 contract RngReuseJackpotStraddleTest is DeployProtocol {
-    /// @dev prizePoolsPacked slot (confirmed via the BAF/RngRetry tests): [volume:48 | future:104 | next:104].
+    /// @dev prizePoolsPacked slot (confirmed via the BAF/RngRetry tests): [future:128 | next:128].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     /// @dev AdvanceModule stage emitted when payDailyJackpot(true) sets the pending and breaks (no unlock).
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 10;
@@ -279,12 +279,12 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        uint256 currentNext = packed & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
         vm.store(
             address(game),
             bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)),
-            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | targetNext)
         );
     }
 }

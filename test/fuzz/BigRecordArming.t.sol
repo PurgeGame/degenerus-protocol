@@ -348,7 +348,7 @@ contract BigRecordArmingTest is DeployProtocol {
             vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)))
         );
         uint256 newPacked = (currentPacked &
-            ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
+            ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128);
         vm.store(
             address(game),
             bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)),

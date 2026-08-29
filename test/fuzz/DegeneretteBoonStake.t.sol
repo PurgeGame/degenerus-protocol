@@ -183,12 +183,12 @@ contract DegeneretteBoonStake is DeployProtocol {
         revert("DegeneretteBetPlaced not emitted");
     }
 
-    /// @dev futurePrizePool occupies bits [104..207] (POOL_FUTURE_SHIFT = 104, 104-bit halves).
+    /// @dev futurePrizePool occupies bits [128..255] (POOL_FUTURE_SHIFT = 128, uint128 halves).
     function _futurePrizePool() internal view returns (uint256) {
         uint256 pools = uint256(
             vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)))
         );
-        return (pools >> 104) & ((uint256(1) << 104) - 1);
+        return (pools >> 128) & ((uint256(1) << 128) - 1);
     }
 
     // =========================================================================

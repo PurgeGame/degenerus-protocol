@@ -41,7 +41,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 ///         Run: forge test --match-path test/repro/AdvancePrepareCursorStall.t.sol -vv
 contract AdvancePrepareCursorStall is DeployProtocol {
-    /// @dev prizePoolsPacked slot: [volume:48 | future:104 | next:104].
+    /// @dev prizePoolsPacked slot: [future:128 | next:128].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     /// @dev ticketQueue mapping root slot (forge inspect DegenerusGame storageLayout).
     uint256 private constant TICKETQUEUE_SLOT = 12;
@@ -208,12 +208,12 @@ contract AdvancePrepareCursorStall is DeployProtocol {
 
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        uint256 currentNext = packed & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
         vm.store(
             address(game),
             bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)),
-            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | targetNext)
         );
     }
 

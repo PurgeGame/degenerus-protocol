@@ -458,13 +458,11 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // Each uint256 occupies its own 32-byte slot. These track ETH/token flows.
 
-    /// @dev Packed live prize pools plus the in-progress day's ticket volume, counted in
-    ///      raw purchase units (400 = 1 whole ticket, so a uint48 holds ~7e11 tickets):
-    ///      [208:256] ticketVolume | [104:208] futurePrizePool | [0:104] nextPrizePool
-    ///      uint104 max ~= 2.03e31 wei -- ~169,000x total ETH supply.
-    ///      Saves 1 SSTORE on every purchase (all three written together): the volume
-    ///      counter rides the pool RMW the purchase already performs, so counting a
-    ///      ticket buy costs no marginal gas.
+    /// @dev Packed live prize pools:
+    ///      [128:256] futurePrizePool | [0:128] nextPrizePool
+    ///      uint128 max ~= 3.4e38 wei -- ~2.8e21x total ETH supply.
+    ///      Saves 1 SSTORE on every purchase: both halves are written together, so the
+    ///      pool split costs one RMW rather than two.
     ///
     ///      SECURITY: All access through _getPrizePools()/_setPrizePools() helpers.
     ///      Direct reads of this variable will get corrupted data.
@@ -557,11 +555,8 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Packed pending accumulators for purchase revenue during prize pool freeze.
-    ///      [208:256] ticketVolume | [104:208] futurePending | [0:104] nextPending
+    ///      [128:256] futurePending | [0:128] nextPending
     ///      Accumulated while prizePoolFrozen == true; applied atomically by _unfreezePool().
-    ///      Buys landing inside the RNG lock window belong to the day that opens at the
-    ///      unfreeze, so their volume accumulates here and becomes the live counter's
-    ///      opening value when the sealed day rolls.
     ///
     ///      SECURITY: Zeroed at freeze start (if not already frozen) and at unfreeze.
     ///      During multi-day jackpot phase, accumulators grow across all 5 days.
@@ -1080,36 +1075,17 @@ abstract contract DegenerusGameStorage {
     // Packed Prize Pool Helpers
     // =========================================================================
 
-    /// @dev Bit offset of the ticket-volume counter inside both packed pool slots.
-    uint256 private constant POOL_VOLUME_SHIFT = 208;
-
     /// @dev Bit offset of the future half inside both packed pool slots.
-    uint256 internal constant POOL_FUTURE_SHIFT = 104;
+    uint256 internal constant POOL_FUTURE_SHIFT = 128;
 
     /// @dev Largest value either pool half holds, and the mask that extracts one.
-    ///      uint104 ~= 2.03e31 wei, ~169,000x total ETH supply.
-    uint256 internal constant POOL_HALF_MAX = type(uint104).max;
+    ///      uint128 ~= 3.4e38 wei, ~2.8e21x total ETH supply.
+    uint256 internal constant POOL_HALF_MAX = type(uint128).max;
 
-    /// @dev Selects both pool halves, clearing the volume counter.
-    uint256 internal constant POOL_HALVES_MASK =
-        (uint256(1) << POOL_VOLUME_SHIFT) - 1;
-
-    /// @dev Writes both pool halves, preserving the slot's volume counter.
-    ///
-    ///      SATURATES rather than reverting. uint104 is ~169,000x the total ETH supply, so
-    ///      neither half can reach the ceiling from real value — but the write sits on the
-    ///      purchase hot path and inside the daily advance, and a revert there would brick
-    ///      the game outright rather than degrade it. Clamping trades an impossible
-    ///      accounting error for guaranteed liveness: past the ceiling the ledger would
-    ///      under-report what is owed, which leaves the contract over-collateralised rather
-    ///      than insolvent, and every solvency check still reads balance >= obligations.
+    /// @dev Writes both pool halves. Each half owns exactly half the slot, so the write
+    ///      is a whole-word overwrite with nothing to preserve.
     function _setPrizePools(uint128 next, uint128 future) internal {
-        if (next > POOL_HALF_MAX) next = uint128(POOL_HALF_MAX);
-        if (future > POOL_HALF_MAX) future = uint128(POOL_HALF_MAX);
-        prizePoolsPacked =
-            (prizePoolsPacked & ~POOL_HALVES_MASK) |
-            (uint256(future) << POOL_FUTURE_SHIFT) |
-            uint256(next);
+        prizePoolsPacked = (uint256(future) << POOL_FUTURE_SHIFT) | uint256(next);
     }
 
     function _getPrizePools()
@@ -1118,16 +1094,12 @@ abstract contract DegenerusGameStorage {
         returns (uint128 next, uint128 future)
     {
         uint256 packed = prizePoolsPacked;
-        next = uint128(packed & POOL_HALF_MAX);
-        future = uint128((packed >> POOL_FUTURE_SHIFT) & POOL_HALF_MAX);
+        next = uint128(packed);
+        future = uint128(packed >> POOL_FUTURE_SHIFT);
     }
 
-    /// @dev Saturating, on the same grounds as _setPrizePools.
     function _setPendingPools(uint128 next, uint128 future) internal {
-        if (next > POOL_HALF_MAX) next = uint128(POOL_HALF_MAX);
-        if (future > POOL_HALF_MAX) future = uint128(POOL_HALF_MAX);
         prizePoolPendingPacked =
-            (prizePoolPendingPacked & ~POOL_HALVES_MASK) |
             (uint256(future) << POOL_FUTURE_SHIFT) |
             uint256(next);
     }
@@ -1138,63 +1110,37 @@ abstract contract DegenerusGameStorage {
         returns (uint128 next, uint128 future)
     {
         uint256 packed = prizePoolPendingPacked;
-        next = uint128(packed & POOL_HALF_MAX);
-        future = uint128((packed >> POOL_FUTURE_SHIFT) & POOL_HALF_MAX);
-    }
-
-    /// @dev Writes both pending halves and clears the pending volume counter. The freeze
-    ///      starts a fresh day accumulating in the pending half, so the counter must not
-    ///      carry anything across the boundary.
-    function _resetPendingPools(uint128 next, uint128 future) internal {
-        if (next > POOL_HALF_MAX) next = uint128(POOL_HALF_MAX);
-        if (future > POOL_HALF_MAX) future = uint128(POOL_HALF_MAX);
-        prizePoolPendingPacked =
-            (uint256(future) << POOL_FUTURE_SHIFT) |
-            uint256(next);
-    }
-
-    /// @dev Ticket volume accumulated for the day currently in progress.
-    function _getLiveTicketVolume() internal view returns (uint48) {
-        return uint48(prizePoolsPacked >> POOL_VOLUME_SHIFT);
+        next = uint128(packed);
+        future = uint128(packed >> POOL_FUTURE_SHIFT);
     }
 
     /// @dev Add a combined prize contribution to the active accumulator in ONE RMW. The purchase
     ///      path computes each leg's next/future split (ticket and lootbox legs use different
     ///      ratios), sums the post-split totals, and lands both in a single packed slot — the
     ///      pending buffer while the pool is frozen, otherwise the live pools.
-    ///      The ticket leg's volume rides the same RMW: it lands in whichever accumulator
-    ///      the ETH does, so lock-window buys count toward the day that opens at the
-    ///      unfreeze. The zero-check covers all three fields — an ETH purchase that lands a
-    ///      zero prize contribution still queues real tickets and must still be counted.
-    /// @param ticketUnits Ticket leg only, in raw purchase units (400 = 1 whole ticket);
-    ///        the lootbox leg contributes ETH but no ticket volume.
-    function _addPrizeContribution(
-        uint128 nextAdd,
-        uint128 futureAdd,
-        uint48 ticketUnits
-    ) internal {
-        if (nextAdd == 0 && futureAdd == 0 && ticketUnits == 0) return;
+    ///
+    ///      SATURATES rather than reverting. uint128 is ~2.8e21x the total ETH supply, so
+    ///      neither half can reach the ceiling from real value — but the write sits on the
+    ///      purchase hot path, and a revert there would brick the game outright rather than
+    ///      degrade it. Clamping trades an impossible accounting error for guaranteed
+    ///      liveness: past the ceiling the ledger would under-report what is owed, which
+    ///      leaves the contract over-collateralised rather than insolvent, and every
+    ///      solvency check still reads balance >= obligations.
+    function _addPrizeContribution(uint128 nextAdd, uint128 futureAdd) internal {
+        if (nextAdd == 0 && futureAdd == 0) return;
         bool frozen = prizePoolFrozen;
         uint256 slot = frozen ? prizePoolPendingPacked : prizePoolsPacked;
 
-        // Both addends are uint128-bounded and both bases uint104-bounded, so neither sum
-        // can wrap uint256; the clamp is the only ceiling either needs. Saturating for the
-        // reason _setPrizePools gives — this is the purchase path, and it must not revert.
+        // Masked and shifted operands keep both sums in uint256 — adding a uint128 half
+        // to a uint128 addend would evaluate in uint128 and revert exactly where the
+        // clamp is meant to catch it — so the clamp is the only ceiling either half
+        // needs, and neither can carry into the other.
         uint256 next = (slot & POOL_HALF_MAX) + nextAdd;
-        uint256 future = ((slot >> POOL_FUTURE_SHIFT) & POOL_HALF_MAX) +
-            futureAdd;
+        uint256 future = (slot >> POOL_FUTURE_SHIFT) + futureAdd;
         if (next > POOL_HALF_MAX) next = POOL_HALF_MAX;
         if (future > POOL_HALF_MAX) future = POOL_HALF_MAX;
 
-        // The counter carries one day, never a running total, and the day-seal resets it —
-        // a uint48 of units holds ~7e11 tickets, so the truncation is unreachable.
-        uint256 vol = uint48(
-            (slot >> POOL_VOLUME_SHIFT) + uint256(ticketUnits)
-        );
-
-        uint256 packed = (vol << POOL_VOLUME_SHIFT) |
-            (future << POOL_FUTURE_SHIFT) |
-            next;
+        uint256 packed = (future << POOL_FUTURE_SHIFT) | next;
         if (frozen) {
             prizePoolPendingPacked = packed;
         } else {

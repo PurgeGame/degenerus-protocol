@@ -15,8 +15,8 @@ contract DecimatorClaimDeliveryParity is DeployProtocol {
     uint256 internal constant SLOT_DEC_OFFSET_PACKED = 43;
     uint256 internal constant SLOT_PENDING_POOLS_PACKED = 11;
 
-    uint256 internal constant POOL_FUTURE_SHIFT = 104;
-    uint256 internal constant POOL_HALF_MASK = (uint256(1) << 104) - 1;
+    uint256 internal constant POOL_FUTURE_SHIFT = 128;
+    uint256 internal constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
     uint256 internal constant HALF_PASS_PRICE = 2.25 ether;
     bytes32 internal constant LOOTBOX_OPENED_TOPIC =
         keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");

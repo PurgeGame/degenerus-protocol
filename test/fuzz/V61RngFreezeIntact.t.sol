@@ -50,7 +50,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     uint256 private constant BALANCES_PACKED_SLOT = 7; // [afking:hi128 | claimable:lo128]
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant PRIZE_POOLS_SLOT = 2; // prizePoolsPacked [volume:48 | future:104 | next:104]
+    uint256 private constant PRIZE_POOLS_SLOT = 2; // prizePoolsPacked [future:128 | next:128]
     uint256 private constant PRIZE_POOL_PENDING_SLOT = 11; // prizePoolPendingPacked (frozen-phase sink)
     uint256 private constant MINTPACKED_SLOT = 9;
 
@@ -383,10 +383,10 @@ contract V61RngFreezeIntact is DeployProtocol {
         uint256 active = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_SLOT))));
         uint256 pending = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOL_PENDING_SLOT))));
         return
-            (active & ((uint256(1) << 104) - 1)) +
-            ((active >> 104) & ((uint256(1) << 104) - 1)) +
-            (pending & ((uint256(1) << 104) - 1)) +
-            ((pending >> 104) & ((uint256(1) << 104) - 1));
+            (active & ((uint256(1) << 128) - 1)) +
+            ((active >> 128) & ((uint256(1) << 128) - 1)) +
+            (pending & ((uint256(1) << 128) - 1)) +
+            ((pending >> 128) & ((uint256(1) << 128) - 1));
     }
 
     function _afkingSpentAmount(address who) internal returns (uint256) {

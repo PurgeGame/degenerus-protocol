@@ -26,7 +26,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract WwxrpIncineratorTest is DeployProtocol {
     uint256 private constant SLOT_0 = 0;
     uint256 private constant LEVEL_SHIFT = 96; // slot 0 bytes [12:15): level (uint24)
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [volume:48][future:104][next:104]
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
 
     bytes32 private constant DOM_INCIN_WINNER = "WWXRP_INCIN_WINNER";
     uint256 private constant BPS = 10_000;
@@ -383,17 +383,17 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        uint256 currentNext = packed & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
-        uint256 newPacked = (packed & ~((uint256(1) << 104) - 1)) | targetNext;
+        uint256 newPacked = (packed & ~((uint256(1) << 128) - 1)) | targetNext;
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 currentFuture = (packed >> 104) & ((uint256(1) << 104) - 1);
+        uint256 currentFuture = (packed >> 128) & ((uint256(1) << 128) - 1);
         if (currentFuture >= targetFuture) return;
-        uint256 newPacked = (packed & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
+        uint256 newPacked = (packed & ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128);
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 

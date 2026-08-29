@@ -24,7 +24,7 @@ import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 ///      fixture really reaches a final-jackpot request that DOES roll the forced quest, so a
 ///      green retry test cannot be an artifact of never arming the roll at all.
 contract QuestRetryDoubleRoll is DeployProtocol {
-    /// @dev prizePoolsPacked slot: [volume:48 | future:104 | next:104] (see RngRetryLootboxStall).
+    /// @dev prizePoolsPacked slot: [future:128 | next:128] (see RngRetryLootboxStall).
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
     uint8 private constant QUEST_TYPE_MINT_ETH = 1;
@@ -176,12 +176,12 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        uint256 currentNext = packed & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
         vm.store(
             address(game),
             bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)),
-            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | targetNext)
         );
     }
 }

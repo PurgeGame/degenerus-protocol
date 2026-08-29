@@ -2732,8 +2732,8 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      bonus, it is a counter credit only, never the daily activity marker.
     uint16 private constant GROWTH_QUEST_STREAK_BONUS = 1;
 
-    /// @notice The two gates a parimutuel market applies to a bet. Read-only — no quest
-    ///         ledger writes.
+    /// @notice The two gates the parimutuel growth market applies to a bet. Read-only —
+    ///         no quest ledger writes.
     /// @dev earnsReward = recordGrowthBet's own eligibility (level quest or active
     ///      afking). mayBet = that, or an ever-written mintPacked_ word with the curse
     ///      counter masked out — the one field a third party can write into a stranger's
@@ -2741,7 +2741,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param player The player to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
-    /// @return earnsReward True if the placement also earns its quest or credit.
+    /// @return earnsReward True if the placement also earns the growth quest.
     function marketBetGates(address player, uint24 lvl)
         external
         view

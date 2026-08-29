@@ -37,7 +37,7 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     // Slot positions (confirmed via `forge inspect DegenerusGame storageLayout`).
     uint256 private constant SLOT_0 = 0;
     uint256 private constant LEVEL_SHIFT = 96; // slot 0 bytes [12:15): level (uint24)
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [volume:48][future:104][next:104]
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
     uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23; // mapping(uint24 => uint256)
     uint256 private constant CENTURY_POOLS_SLOT = 66; // uint128[] centuryPrizePools
 
@@ -107,7 +107,7 @@ contract CenturyPoolDoublingTest is DeployProtocol {
         vm.store(
             address(game),
             bytes32(PRIZE_POOLS_PACKED_SLOT),
-            bytes32((packed & ~((uint256(1) << 104) - 1)) | uint256(next))
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | uint256(next))
         );
     }
 

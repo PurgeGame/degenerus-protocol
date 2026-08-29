@@ -146,27 +146,27 @@ contract BafRebuyReconciliationTest is DeployProtocol {
 
     // ==================== Internal Helpers ====================
 
-    /// @notice Read futurePrizePool (future half, bits 104-207 of slot 2).
+    /// @notice Read futurePrizePool (future half, bits 128-255 of slot 2).
     function _readFuturePrizePool() internal view returns (uint256) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        return (packed >> 104) & ((uint256(1) << 104) - 1);
+        return (packed >> 128) & ((uint256(1) << 128) - 1);
     }
 
-    /// @notice Seed the next prize pool (low 104 bits of slot 2) to accelerate level transitions.
-    /// @dev Preserves the future half and the volume counter.
+    /// @notice Seed the next prize pool (low 128 bits of slot 2) to accelerate level transitions.
+    /// @dev Preserves the future half.
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 currentNext = currentPacked & ((uint256(1) << 104) - 1);
+        uint256 currentNext = currentPacked & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
-        uint256 newPacked = (currentPacked & ~((uint256(1) << 104) - 1)) | targetNext;
+        uint256 newPacked = (currentPacked & ~((uint256(1) << 128) - 1)) | targetNext;
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 
-    /// @notice Seed futurePrizePool (future half, bits 104-207 of slot 2) to a known value.
-    /// @dev Preserves the next half and the volume counter.
+    /// @notice Seed futurePrizePool (future half, bits 128-255 of slot 2) to a known value.
+    /// @dev Preserves the next half.
     function _seedFuturePrizePool(uint256 targetFuture) internal {
         uint256 currentPacked = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));
-        uint256 newPacked = (currentPacked & ~(((uint256(1) << 104) - 1) << 104)) | (targetFuture << 104);
+        uint256 newPacked = (currentPacked & ~(((uint256(1) << 128) - 1) << 128)) | (targetFuture << 128);
         vm.store(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT)), bytes32(newPacked));
     }
 

@@ -1162,15 +1162,15 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     }
 
     /// @dev Raise nextPrizePool over the live target so the next drive latches a
-    ///      transition. Slot 2 packs [volume:48 | future:104 | next:104]; replace the next
+    ///      transition. Slot 2 packs [future:128 | next:128]; replace the next
     ///      half only.
     function _seedNextPool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(2))));
-        if ((packed & ((uint256(1) << 104) - 1)) >= targetNext) return;
+        if ((packed & ((uint256(1) << 128) - 1)) >= targetNext) return;
         vm.store(
             address(game),
             bytes32(uint256(2)),
-            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | targetNext)
         );
     }
 

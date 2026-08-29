@@ -40,11 +40,23 @@ contract StorageHarness is DegenerusGameAdvanceModule {
 
     function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
         _swapTicketSlot();
-        _freezePool(1);
+        _freezePool();
     }
 
     function exposed_unfreezePool() external {
         _unfreezePool();
+    }
+
+    function exposed_addPrizeContribution(uint128 nextAdd, uint128 futureAdd) external {
+        _addPrizeContribution(nextAdd, futureAdd);
+    }
+
+    function exposed_rawLivePools() external view returns (uint256) {
+        return prizePoolsPacked;
+    }
+
+    function exposed_rawPendingPools() external view returns (uint256) {
+        return prizePoolPendingPacked;
     }
 
     // --- Direct field access ---
@@ -129,43 +141,107 @@ contract StorageFoundationTest is Test {
     }
 
     /// @dev Verify prizePoolsPacked at Slot 2 and prizePoolPendingPacked at Slot 11, and
-    ///      that both decode as [volume:48 | future:104 | next:104] — the volume counter
-    ///      rides the top of each slot so a ticket buy counts inside the pool RMW it
-    ///      already performs.
+    ///      that both decode as [future:128 | next:128] — each half owns exactly half the
+    ///      slot, so the halves can never carry into one another.
     function testPackedPoolSlotsUnshifted() public {
         // Write a known value to Slot 2 via vm.store, then read back via harness getter
         uint256 sentinel2 = 0xDEADBEEF00000000000000000000000100000000000000000000000000000002;
         vm.store(address(harness), bytes32(uint256(2)), bytes32(sentinel2));
         (uint128 next2, uint128 future2) = harness.exposed_getPrizePools();
         assertEq(uint256(next2), sentinel2 & POOL_HALF, "prizePoolsPacked not at slot 2 (next)");
-        assertEq(uint256(future2), (sentinel2 >> 104) & POOL_HALF, "prizePoolsPacked not at slot 2 (future)");
+        assertEq(uint256(future2), sentinel2 >> 128, "prizePoolsPacked not at slot 2 (future)");
 
         // Write a known value to Slot 11 via vm.store, then read back via harness getter
         uint256 sentinel11 = 0x0000000000000000000000000000000300000000000000000000000000000004;
         vm.store(address(harness), bytes32(uint256(11)), bytes32(sentinel11));
         (uint128 next11, uint128 future11) = harness.exposed_getPendingPools();
         assertEq(uint256(next11), sentinel11 & POOL_HALF, "prizePoolPendingPacked not at slot 11 (next)");
-        assertEq(uint256(future11), (sentinel11 >> 104) & POOL_HALF, "prizePoolPendingPacked not at slot 11 (future)");
+        assertEq(uint256(future11), sentinel11 >> 128, "prizePoolPendingPacked not at slot 11 (future)");
     }
 
-    /// @dev Widest value either pool half holds. The halves are uint104 so the top 48 bits
-    ///      of each slot can carry the day's ticket-volume counter.
-    uint256 private constant POOL_HALF = type(uint104).max;
+    /// @dev Widest value either pool half holds. Each half is a full uint128 — ~3.4e38
+    ///      wei, ~2.8e21x the total ETH supply — so the ceiling is unreachable from real
+    ///      value and exists only as a liveness backstop.
+    uint256 private constant POOL_HALF = type(uint128).max;
 
-    /// @dev A write above the half's ceiling SATURATES rather than reverting: the setters
-    ///      sit on the purchase path and inside the daily advance, where a revert would
-    ///      brick the game. uint104 is ~169,000x the total ETH supply, so the clamp is
-    ///      unreachable from real value.
-    function testPoolHalvesSaturateAboveCeiling() public {
+    /// @dev Both halves round-trip their full range, in both slots. A setter has nothing
+    ///      to clamp: its arguments are already uint128 and each owns half the word.
+    function testPoolHalvesRoundTripFullRange() public {
         harness.exposed_setPrizePools(type(uint128).max, type(uint128).max);
         (uint128 n, uint128 f) = harness.exposed_getPrizePools();
-        assertEq(uint256(n), POOL_HALF, "next saturates at uint104");
-        assertEq(uint256(f), POOL_HALF, "future saturates at uint104");
+        assertEq(uint256(n), POOL_HALF, "next must hold a full uint128");
+        assertEq(uint256(f), POOL_HALF, "future must hold a full uint128");
 
         harness.exposed_setPendingPools(type(uint128).max, type(uint128).max);
         (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
-        assertEq(uint256(pn), POOL_HALF, "pending next saturates at uint104");
-        assertEq(uint256(pf), POOL_HALF, "pending future saturates at uint104");
+        assertEq(uint256(pn), POOL_HALF, "pending next must hold a full uint128");
+        assertEq(uint256(pf), POOL_HALF, "pending future must hold a full uint128");
+
+        // A maxed word is exactly both halves set, with no bits left over.
+        assertEq(harness.exposed_rawLivePools(), type(uint256).max, "live word is two halves");
+        assertEq(harness.exposed_rawPendingPools(), type(uint256).max, "pending word is two halves");
+    }
+
+    /// @dev The purchase-path adder SATURATES rather than reverting: it sits on the hot
+    ///      path, where a revert would brick the game outright. Each half clamps on its
+    ///      own and neither carries into the other.
+    function testAddPrizeContributionClampsEachHalfIndependently() public {
+        // next at the ceiling, future far below it: only next clamps.
+        harness.exposed_setPrizePools(type(uint128).max, 1 ether);
+        harness.exposed_addPrizeContribution(5 ether, 2 ether);
+        (uint128 n, uint128 f) = harness.exposed_getPrizePools();
+        assertEq(uint256(n), POOL_HALF, "next must clamp, not wrap");
+        assertEq(uint256(f), 3 ether, "a clamped next must not touch future");
+
+        // Mirrored: future at the ceiling, next below it.
+        harness.exposed_setPrizePools(1 ether, type(uint128).max);
+        harness.exposed_addPrizeContribution(2 ether, 5 ether);
+        (n, f) = harness.exposed_getPrizePools();
+        assertEq(uint256(n), 3 ether, "a clamped future must not touch next");
+        assertEq(uint256(f), POOL_HALF, "future must clamp, not wrap");
+
+        // Both at the ceiling: both clamp, and the word stays two saturated halves.
+        harness.exposed_setPrizePools(type(uint128).max, type(uint128).max);
+        harness.exposed_addPrizeContribution(1, 1);
+        (n, f) = harness.exposed_getPrizePools();
+        assertEq(uint256(n), POOL_HALF, "next stays clamped");
+        assertEq(uint256(f), POOL_HALF, "future stays clamped");
+    }
+
+    /// @dev The zero fast path: an add of nothing writes nothing and disturbs neither half.
+    function testAddPrizeContributionZeroIsANoOp() public {
+        harness.exposed_setPrizePools(7 ether, 9 ether);
+        harness.exposed_addPrizeContribution(0, 0);
+        (uint128 n, uint128 f) = harness.exposed_getPrizePools();
+        assertEq(uint256(n), 7 ether, "a zero add must leave next alone");
+        assertEq(uint256(f), 9 ether, "a zero add must leave future alone");
+    }
+
+    /// @dev A frozen add routes to the pending buffer, and the fold ADDS each half into
+    ///      its own, saturating independently, then zeroes the pending slot.
+    function testFoldAddsHalvesSaturatingAndZeroesPending() public {
+        harness.exposed_setPrizePools(2 ether, 1 ether);
+        harness.setPrizePoolFrozen(true);
+        harness.exposed_addPrizeContribution(5 ether, 3 ether);
+
+        (uint128 n, uint128 f) = harness.exposed_getPrizePools();
+        assertEq(uint256(n), 2 ether, "a frozen add must not move the live next");
+        assertEq(uint256(f), 1 ether, "a frozen add must not move the live future");
+
+        harness.exposed_unfreezePool();
+        (n, f) = harness.exposed_getPrizePools();
+        assertEq(uint256(n), 7 ether, "the fold must add the next halves");
+        assertEq(uint256(f), 4 ether, "the fold must add the future halves");
+        assertEq(harness.exposed_rawPendingPools(), 0, "the fold must zero the pending slot");
+
+        // A fold that would overflow a half clamps it, and leaves the other half exact.
+        harness.exposed_setPrizePools(type(uint128).max, 1 ether);
+        harness.exposed_setPendingPools(type(uint128).max, 2 ether);
+        harness.setPrizePoolFrozen(true);
+        harness.exposed_unfreezePool();
+        (n, f) = harness.exposed_getPrizePools();
+        assertEq(uint256(n), POOL_HALF, "the fold must clamp next, not wrap");
+        assertEq(uint256(f), 3 ether, "a clamped next must not disturb future");
     }
 
     /// @dev Pin the post-v62 consolidated tail pack `levelDgnrsPacked` to slot 25 with the

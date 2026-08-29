@@ -160,15 +160,15 @@ contract BafDrawArming is DeployProtocol {
         }
     }
 
-    /// @dev Seed the live next-pool half (slot 2, low 104 bits) up to targetNext.
+    /// @dev Seed the live next-pool half (slot 2, low 128 bits) up to targetNext.
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(2))));
-        uint256 currentNext = packed & ((uint256(1) << 104) - 1);
+        uint256 currentNext = packed & ((uint256(1) << 128) - 1);
         if (currentNext >= targetNext) return;
         vm.store(
             address(game),
             bytes32(uint256(2)),
-            bytes32((packed & ~((uint256(1) << 104) - 1)) | targetNext)
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | targetNext)
         );
     }
 
