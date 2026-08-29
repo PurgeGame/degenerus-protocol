@@ -910,17 +910,22 @@ so the entire round must fit the engine's `uint24` per-leg type.
 
 At day opening, sDGNRS and the Vault are handled as whole-day seats.
 
+**Both bodies are banked twenty normal day passes at deployment.** The day lane spends a banked
+pass before it burns anything, so the opening stretch seats both of them out of that bank rather
+than out of the reserve — which is what those days need, because the lootbox lanes that normally
+hand these two their passes have not paid one yet. The credits are banked, not reserved: they
+never expire and are spent one day at a time by whichever days actually open.
+
 - An already reserved future seat is left alone.
 - The Vault board is read before funding. It may be blank, a legal seven-chip/max-four board, or
   the OFF sentinel. OFF prevents a new automatic seat but cannot erase a seat already reserved.
-- The current funding order is **ordinary FLIP burn first**, then a banked high pass, then a banked
-  normal pass if the burn failed.
-- A high pass makes the protocol body a high roller at the day's exact draw. A successful FLIP
-  fallback is always an ordinary seat.
+- The funding order is **banked passes first** — a high pass, then a normal one — and an ordinary
+  FLIP burn only when the bank is empty.
+- A high pass makes the protocol body a high roller at the day's exact draw. The FLIP fallback is
+  always an ordinary seat.
 
-Thus the Vault can join the high lane through a pre-reserved high day or a high pass used after its
-ordinary burn fails. Merely holding a high credit does not force high entry while its ordinary
-FLIP burn succeeds.
+Thus the Vault joins the high lane through a pre-reserved high day or through a banked high pass,
+and a body holding a high credit spends it rather than burning FLIP.
 
 The Vault board is a genuine strategic choice. It competes for player-funded bounties using the
 same ranking as players; it is not neutral liquidity.

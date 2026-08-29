@@ -101,6 +101,12 @@ contract CrapsSystemEconTest is CrapsPins {
 
     struct Ledger {
         uint256 burned; // liquid FLIP destroyed at the door
+        /// @dev PREPAID PRINCIPAL: the day bills the two protocol bodies paid with a banked PASS
+        ///      rather than with FLIP. A pass is a day already bought — its FLIP was burned at the
+        ///      lootbox door that awarded it — so for this table's own books it is a burn like any
+        ///      other, and the identity below adds it to `burned`. Counting it as protocol money
+        ///      instead would read twenty seeded days as a subsidy nobody paid for.
+        uint256 passFunded;
         uint256 credited; // every coinflip credit the table handed back
         uint256 minted; // liquid FLIP created — must stay zero
         uint256 action; // bankroll the settled seats put up, all lanes
@@ -191,9 +197,23 @@ contract CrapsSystemEconTest is CrapsPins {
             uint24 day = craps.currentDayIndex();
             _setDailyWord(day, uint256(keccak256(abi.encode("day", salt, d))));
 
+            // ONE BODY'S DAY BILL: every window's bankroll and its bounty, which is exactly what
+            // `_seatBody` burns when FLIP is what pays. Readable as soon as the word is set.
+            uint256 dayBill;
+            for (uint256 p = 0; p < PERIODS; ++p) {
+                (uint128 bankroll,,, uint256 bounty,,) = craps.bonusTermsFor(day, p);
+                dayBill += uint256(bankroll) + bounty;
+            }
+            (uint256 hb,) = craps.passCreditsOf(ContractAddresses.SDGNRS);
+            (uint256 vb,) = craps.passCreditsOf(ContractAddresses.VAULT);
+
             vm.prank(ContractAddresses.GAME);
             craps.openBonusDay();
             L.budget += craps.boostBudgetOf(day);
+            // Whichever bodies paid out of the bank rather than out of FLIP.
+            (uint256 ha,) = craps.passCreditsOf(ContractAddresses.SDGNRS);
+            (uint256 va,) = craps.passCreditsOf(ContractAddresses.VAULT);
+            L.passFunded += (hb - ha + vb - va) * dayBill;
 
             if (f.onlyGoalMult == 0) {
                 uint256 hm = craps.highMultForDay(day);
@@ -555,7 +575,13 @@ contract CrapsSystemEconTest is CrapsPins {
         Ledger memory L = _play(f, 40, 0xF1);
 
         // The bounty leg of the pots is a pure transfer, so it must cancel exactly.
-        int256 net = int256(L.burned) - int256(L.credited);
+        //
+        // A PASS-FUNDED SEAT IS A FLIP-FUNDED SEAT. Both bodies are banked twenty day passes at
+        // deployment and the day lane spends the bank before it burns, so the opening days are
+        // paid for with passes — days that were bought at the lootbox door, whose FLIP was burned
+        // there. Adding that prepaid principal here is what makes the identity independent of
+        // which of the two funded any given seat.
+        int256 net = int256(L.burned + L.passFunded) - int256(L.credited);
         int256 retention = int256(L.action) - int256(L.runCredit);
         // HOUSE MONEY IS THE BOOSTS ALONE. Everything else in a pot — the main bounty every seat
         // posted, and the extra bounties a contested lane plays for — was burned by a seat and
@@ -563,6 +589,7 @@ contract CrapsSystemEconTest is CrapsPins {
         int256 houseMoney =
             int256(L.potCredit) - int256(L.bounty) + int256(L.laneCredit) - int256(L.lanePrincipal);
 
+        emit log_named_uint("prepaid principal", L.passFunded);
         emit log_named_int("net burn        ", net);
         emit log_named_int("engine retention", retention);
         emit log_named_int("house money paid", houseMoney);

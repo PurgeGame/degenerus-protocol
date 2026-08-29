@@ -2588,9 +2588,15 @@ contract CrapsBattleTest is CrapsPins {
     ///      window always has a field even before anyone turns up — and a lone player arrives to a
     ///      race rather than to an empty table. The house buys its seat out of sDGNRS's settled
     ///      coinflip backing, bankroll and bounty both.
+    ///
+    ///      THE BANK IS EMPTIED FIRST, so it is the FLIP leg being graded here. Deployment banks
+    ///      both bodies twenty passes and the ladder spends those before it burns, so a seat taken
+    ///      out of the bank would burn nothing and the bill below would read zero.
     function test_openingTheDaySeatsTheHouseAndTheVaultEverywhere() public {
         address house = ContractAddresses.SDGNRS;
         address vault = ContractAddresses.VAULT;
+        craps.setPassCredits(house, 0, 0);
+        craps.setPassCredits(vault, 0, 0);
         _openDay();
 
         uint256 periods = craps.BONUS_PERIODS_PER_DAY();
@@ -2673,6 +2679,41 @@ contract CrapsBattleTest is CrapsPins {
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }
 
+    /// @dev DEPLOYMENT BANKS BOTH BODIES TWENTY DAYS. The lootbox lanes that hand sDGNRS and the
+    ///      vault their passes have paid nothing on the day the contract is born, and the day lane
+    ///      seats both of them every day from the first one — so without a seed the opening
+    ///      stretch comes straight out of the reserve. Banked rather than reserved: credit never
+    ///      expires, so it is spent one day at a time by whichever days actually open, and a
+    ///      protocol that stalls for a month has not burned any of it.
+    ///
+    ///      NORMAL passes only. A high pass is worth nineteen of these, and seeding the high lane
+    ///      would put both bodies in the high sideboard for twenty days running.
+    function test_deploymentBanksBothBodiesTheirSeedPasses() public {
+        uint256 seed = craps.SEED_PASSES();
+        assertEq(seed, 20, "the seed moved");
+
+        (uint256 hn, uint256 hh) = craps.passCreditsOf(ContractAddresses.SDGNRS);
+        (uint256 vn, uint256 vh) = craps.passCreditsOf(ContractAddresses.VAULT);
+        assertEq(hn, seed, "the house was not banked its seed");
+        assertEq(vn, seed, "the vault was not banked its seed");
+        assertEq(hh, 0, "the house was seeded into the high lane");
+        assertEq(vh, 0, "the vault was seeded into the high lane");
+
+        // And the seed is SPENT by the day lane, not merely held: a day opened with no FLIP behind
+        // either body still seats both, and costs each exactly one credit.
+        flip.setBurnRefused(ContractAddresses.SDGNRS, true);
+        flip.setBurnRefused(ContractAddresses.VAULT, true);
+        _openDay();
+        uint24 day = craps.currentDayIndex();
+        assertEq(craps.dayTicketsOf(day), 2, "the seed did not seat both bodies");
+        (hn,) = craps.passCreditsOf(ContractAddresses.SDGNRS);
+        (vn,) = craps.passCreditsOf(ContractAddresses.VAULT);
+        assertEq(hn, seed - 1, "the house's day did not come out of the bank");
+        assertEq(vn, seed - 1, "the vault's day did not come out of the bank");
+        assertEq(flip.burned(ContractAddresses.SDGNRS), 0, "a banked day still burned");
+        assertEq(flip.burned(ContractAddresses.VAULT), 0, "a banked day still burned");
+    }
+
     /// @dev PASSES BEFORE FLIP, FOR BOTH PROTOCOL BODIES. sDGNRS and the vault both open lootboxes
     ///      — the vault buys them, sDGNRS resolves its own self-subscription boxes — so both are
     ///      handed day passes like any other winner. Neither can reach the doors that spend one:
@@ -2681,9 +2722,11 @@ contract CrapsBattleTest is CrapsPins {
     ///      names: a reservation already standing on today, then a banked credit, then cash.
     ///
     ///      Two passes each buys exactly that sequence: the first takes tomorrow as a reservation,
-    ///      the second banks, and the day after that has nothing left to spend.
-    function test_theDayLaneSpendsFlipBeforePasses() public {
+    ///      the second banks and pays the day after, and the day after THAT has nothing left to
+    ///      spend and burns.
+    function test_theDayLaneSpendsPassesBeforeFlip() public {
         address house = ContractAddresses.SDGNRS;
+        craps.setPassCredits(house, 0, 0); // the deployment seed aside: two passes, three days
         vm.prank(ContractAddresses.GAME);
         craps.deliverPasses(house, 2, 0);
 
@@ -2697,22 +2740,22 @@ contract CrapsBattleTest is CrapsPins {
         _nextWordedDay();
         _openDay();
         assertEq(flip.burned(house), hb, "the house paid for a day its pass had already taken");
+        (banked,) = craps.passCreditsOf(house);
+        assertEq(banked, 1, "a day already seated still spent the bank");
 
-        // Day two: FLIP is available, so FLIP is what pays — the banked pass is kept.
+        // Day two: the bank pays, and FLIP is untouched beside it. A pass buys a day and nothing
+        // else, so a body holding one has no reason to burn.
         _nextWordedDay();
         _openDay();
-        assertGt(flip.burned(house), hb, "the house spent a pass while it still had FLIP");
+        assertEq(flip.burned(house), hb, "the house burned FLIP while it still held a pass");
         (banked,) = craps.passCreditsOf(house);
-        assertEq(banked, 1, "a banked pass was spent while FLIP was available");
+        assertEq(banked, 0, "the banked pass was not what paid");
+        assertEq(craps.dayStateOf(craps.currentDayIndex(), house), craps.DAY_SEATED(), "the pass seated nobody");
 
-        // Day three: FLIP refused, so the banked pass is what remains and it pays.
-        flip.setBurnRefused(house, true);
-        hb = flip.burned(house);
+        // Day three: the bank is empty, so FLIP is what remains and it pays.
         _nextWordedDay();
         _openDay();
-        assertEq(flip.burned(house), hb, "a refused burn still charged the house");
-        (banked,) = craps.passCreditsOf(house);
-        assertEq(banked, 0, "the pass was not spent once FLIP failed");
+        assertGt(flip.burned(house), hb, "an empty bank did not fall through to FLIP");
         assertEq(craps.dayStateOf(craps.currentDayIndex(), house), craps.DAY_SEATED(), "the house did not sit");
     }
 
@@ -2722,6 +2765,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      ordinary seat would spend a pass worth nineteen normal ones on a 1x run.
     function test_aHighPassSeatsTheHouseInTheHighLane() public {
         address house = ContractAddresses.SDGNRS;
+        craps.setPassCredits(house, 0, 0);
         vm.prank(ContractAddresses.GAME);
         craps.deliverPasses(house, 0, 1);
         uint24 target = craps.currentDayIndex() + 1;
@@ -2968,6 +3012,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      spent, and there is nothing left to decline.
     function test_standingDownSpendsNoBankedPass() public {
         address vault = ContractAddresses.VAULT;
+        craps.setPassCredits(vault, 0, 0);
         vm.prank(ContractAddresses.GAME);
         craps.deliverPasses(vault, 2, 0); // one takes tomorrow outright, one banks
         (uint256 banked,) = craps.passCreditsOf(vault);
@@ -3019,6 +3064,10 @@ contract CrapsBattleTest is CrapsPins {
     ///      running at all — one seat, visible as a `CrapsSlipPlaced` with no matching burn.
     function test_aStarvedHouseIsCompedAndTheVaultIsNot() public {
         address house = ContractAddresses.SDGNRS;
+        // STARVED means the WHOLE ladder is empty, bank included — the deployment seed would
+        // otherwise pay for both of these seats and there would be nothing to comp.
+        craps.setPassCredits(house, 0, 0);
+        craps.setPassCredits(ContractAddresses.VAULT, 0, 0);
         flip.setBurnRefused(house, true);
         flip.setBurnRefused(ContractAddresses.VAULT, true);
 
@@ -3042,6 +3091,8 @@ contract CrapsBattleTest is CrapsPins {
     ///      is one the field's own bounties cover.
     function test_aStarvedHouseWithAPassStillSits() public {
         address house = ContractAddresses.SDGNRS;
+        craps.setPassCredits(house, 0, 0);
+        craps.setPassCredits(ContractAddresses.VAULT, 0, 0);
         vm.prank(ContractAddresses.GAME);
         craps.deliverPasses(house, 2, 0);
         flip.setBurnRefused(house, true);

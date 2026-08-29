@@ -259,6 +259,19 @@ contract CrapsViews is CrapsBattle {
         return (w & _PASS_MAX, (w >> _PASS_HIGH_SHIFT) & _PASS_MAX);
     }
 
+    /// @dev Overwrite a body's pass bank. Test-only. The constructor banks `_SEED_PASSES` normal
+    ///      passes to sDGNRS and the Vault, which is production state every suite inherits — so a
+    ///      test whose claim is about the FLIP leg of the funding ladder says here that the bank
+    ///      is empty, rather than leaving the reader to wonder which leg actually paid.
+    function setPassCredits(address player, uint32 normal, uint32 high) external {
+        _passCredits[player] = uint256(normal) | (uint256(high) << _PASS_HIGH_SHIFT);
+    }
+
+    /// @dev The deployment seed, so a suite can state the figure rather than repeat the literal.
+    function SEED_PASSES() external pure returns (uint256) {
+        return _SEED_PASSES;
+    }
+
     /// @dev A day's ticket counts in the SHAPE the suite has always read them: the total in the
     ///      low 32 bits, a high-roller count above. The stored word now carries one high count
     ///      per period; the shape is reconstructed from period zero's, which equals the old

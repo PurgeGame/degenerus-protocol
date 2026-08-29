@@ -872,6 +872,11 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _CRAPS_FLAG_NORMAL = 0x4;
     uint256 internal constant _CRAPS_FLAG_HIGH = 0x8;
 
+    /// @dev Normal day passes banked to sDGNRS and the Vault at deployment, each. Enough to cover
+    ///      the opening stretch on its own while the lootbox lanes that feed these two start
+    ///      paying, and small enough that the field it banks into is nowhere near its ceiling.
+    uint256 internal constant _SEED_PASSES = 20;
+
     uint256 internal constant _NORMAL_FUTURE_DAY_PRICE = 25_000 ether;
     uint256 internal constant _HIGH_FUTURE_DAY_PRICE = 450_000 ether;
 
@@ -1102,6 +1107,16 @@ contract CrapsBattle is LootboxCraps {
             _bonus = uint256(genesis) + 1;
             _keeperSlot = uint64(_daySlotOf(uint256(genesis) + 1));
         }
+
+        // TWENTY SEED DAYS EACH, banked to the two protocol bodies. The day lane seats both of
+        // them every day and spends a banked pass before it burns anything, so this is twenty days
+        // of protocol seats bought at deployment rather than out of the reserve — which is what
+        // the opening days need, because the lootboxes that normally feed these two lanes have not
+        // paid a pass yet. Banked rather than reserved: credit never expires, so it is spent one
+        // day at a time by whichever days actually open. Written from INIT code, so the runtime
+        // carries none of it.
+        _credit(ContractAddresses.SDGNRS, false, _SEED_PASSES);
+        _credit(ContractAddresses.VAULT, false, _SEED_PASSES);
 
         address ensReg = ContractAddresses.ENS_REVERSE_REGISTRAR;
         if (ensReg != address(0)) {
@@ -2805,22 +2820,24 @@ contract CrapsBattle is LootboxCraps {
             chips = _vaultBoard;
             if (chips == _VAULT_BOARD_OFF) return;
         }
-        // FLIP FIRST, THE BANK SECOND. A pass is a stored claim on a day and FLIP is liquid, so
-        // the liquid side goes first and the stored one is what remains when it cannot. The burn
-        // covers the whole day — every window's bankroll AND its bounty.
+        // THE BANK FIRST, FLIP SECOND. A pass is a claim on a day that is already bought and
+        // cannot be spent on anything else, so it is what the seat reaches for; FLIP is liquid and
+        // is only burned for a day the bank cannot cover. The burn pays the whole day — every
+        // window's bankroll AND its bounty.
         bool high;
         bool funded;
-        try IFlipCoin(ContractAddresses.COIN).burnCoin(body, cost) {
+        uint256 credits = _passCredits[body];
+        if (credits >> _PASS_HIGH_SHIFT != 0) {
+            (high, funded) = (true, true);
+        } else if (credits & _PASS_MAX != 0) {
             funded = true;
-        } catch {}
-        if (!funded) {
-            uint256 credits = _passCredits[body];
-            if (credits >> _PASS_HIGH_SHIFT != 0) {
-                (high, funded) = (true, true);
-            } else if (credits & _PASS_MAX != 0) {
+        }
+        if (funded) {
+            _takeCredits(body, high, 1);
+        } else {
+            try IFlipCoin(ContractAddresses.COIN).burnCoin(body, cost) {
                 funded = true;
-            }
-            if (funded) _takeCredits(body, high, 1);
+            } catch {}
         }
         if (!funded) {
             // THE HOUSE SITS ANYWAY, bounty included. A bonus that waits on the reserve is a bonus

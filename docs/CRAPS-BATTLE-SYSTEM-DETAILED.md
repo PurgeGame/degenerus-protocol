@@ -588,11 +588,14 @@ transfer, refund, or additional quest credit.
 
 ### Protocol day seats
 
+The constructor banks **twenty normal day passes to each body**, so the opening days are seated
+out of that bank instead of the reserve.
+
 At day opening, sDGNRS and the Vault may receive whole-day seats:
 
 - an existing reservation is honored without another charge;
-- otherwise the contract tries a direct FLIP burn first;
-- if the burn fails, it tries a high pass and then a normal pass;
+- otherwise the contract spends a banked pass first, a high pass ahead of a normal one;
+- if the bank is empty, it tries a direct FLIP burn;
 - the Vault skips the day if none can fund it;
 - sDGNRS is the one fail-soft house seat and is still seated if unfunded; and
 - the Vault may use a legal picked board, a blank board, or the OFF sentinel.
