@@ -469,8 +469,8 @@ contract CrapsBattle is LootboxCraps {
     //   bits   0..159  player
     //   bits 160..189  ten three-bit chip counts; all ten zero means draw all ten
     //   bits 190..205  entry-time standing
-    //   bits 206..213  unused (the entry multiple is carried on the event, never stored)
-    //   bits 214..216  the period a day-wide entry began at, plus one
+    //   bits 206..208  the craps boon riding this slip, one-hot (see _BET_BOON_SHIFT)
+    //   bits 209..216  unused (the entry multiple is carried on the event, never stored)
     //   bits 217..223  high-roller flags: bit 217 alone on a window-local slip, bit 217 + p per
     //                  period on a day ticket
     //   bits 224..255  unused
@@ -499,13 +499,13 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev Bits 206..208: the craps boon riding this slip, ONE-HOT — 1 = 5%, 2 = 10%, 4 = 15%,
     ///      0 = none. Carried at the SAME shift in storage and on `CrapsSlipPlaced`, so the log
-    ///      and the word cannot drift. Bits 209..213 remain unused.
+    ///      and the word cannot drift.
     ///
     ///      A one-hot tier rather than a two-bit index because an invalid word must fail CLOSED:
     ///      3, 5, 6 and 7 are unreachable through the trusted writer and pay nothing if a value
     ///      ever reached storage another way, where a two-bit field would silently mean something.
     ///
-    ///      Bits 209..216 are unused. A day-wide entry is ONE slip now — the whole day or a single
+    ///      Bits 209..216 are unused. A day-wide entry is ONE slip — the whole day or a single
     ///      window — so no slip carries a set to be locked as one, and nothing stamps a span.
     uint256 internal constant _BET_BOON_SHIFT = 206;
     uint256 internal constant _BET_BOON_MASK = 7;
@@ -611,8 +611,8 @@ contract CrapsBattle is LootboxCraps {
     //   bits  64..168  the leading COMPOSITE score
     //   bits 169..200  the SEAT holding it
     //   bits 201..218  battle stake granules (echo, for views)
-    //   bits 219..249  seed granules   bits 250..251  tier
-    //   bits 252..255  free
+    //   bits 219..249  seed granules
+    //   bits 250..255  free
     //
     // THE ROLL SLICE IS GONE. It held thirteen bits, which a scheduled run's 8,703-roll ceiling no
     // longer fits, and nothing ranks or qualifies on rolls any more — the progressive reads the
@@ -653,15 +653,8 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _SC_BEST_MASK = (1 << 105) - 1;
     // The bonus seed lives in the battle's OWN word, not in a global "currently armed" pointer:
     // a seeded battle can still be settling long after the next arm, and its pot must not depend
-    // on what is armed by then. In `_BATTLE_STAKE_UNIT` granules.
-    /// @dev A non-house entrant has joined. House seats are seeded automatically, so counting
-    ///      heads cannot tell a contest from an empty room the protocol sat down in by itself —
-    ///      and a seed that pays out to nothing but house seats is a subsidy paid to the house.
-    ///      Every payout and every rollover keys on this instead of on the head count.
-    /// @dev Which tier's boost this battle rolls when it settles: 1 small, 2 medium, 3 large. ZERO is a
-    ///      battle with no tier — a custom one, or the day's event — and those pay the seed the
-    ///      word actually holds. A zeroed battle word therefore reads as "no tier", which is what
-    ///      makes an unseeded custom battle indistinguishable from an unwritten one.
+    // on what is armed by then. In `_BATTLE_STAKE_UNIT` granules — DONATIONS ONLY: a window's
+    // own seed is a function of the day's word and is never stored here.
     uint256 internal constant _BG_SEED_SHIFT = 219;
     uint256 internal constant _BG_SEED_MASK = 0x7FFFFFFF;
 
@@ -984,8 +977,9 @@ contract CrapsBattle is LootboxCraps {
     /// @param winningEnd The winner's raw ENDING bankroll in whole FLIP — what it was paid on. A
     ///        goal that gave ground after latching ends BELOW its peak and above its target.
     /// @param winningScoreBps The high point over the run's own starting bankroll, in basis
-    ///        points: 10,000 is 1x. Zero on a custom field. This REPLACES the old cumulative roll
-    ///        count, which ranked nothing and now qualifies nothing either.
+    ///        points: 10,000 is 1x. Carried for every field, custom ones included; zero when the
+    ///        winner busted, since a bust's peak reaches no reader. Only a scheduled field's
+    ///        score goes on to qualify anything.
     event CrapsBattleFinalized(
         bytes32 indexed battleKey,
         Craps.SlipStop winningStop,
@@ -2438,9 +2432,10 @@ contract CrapsBattle is LootboxCraps {
         unchecked {
             for (uint256 i = 0; i < count; ++i) {
                 uint256 d = uint256(startDay) + i;
-                // ONE boon, ONE settlement: a multi-day purchase marks only its first reserved
-                // day, and that day applies it only to period 0. Anything else would multiply one
-                // boon over a run of independent windows.
+                // ONE boon, ONE ticket: a multi-day purchase marks only its first reserved day,
+                // and the boon rides that day's seat exactly as a day ticket's does — every
+                // window the seat plays. Marking more days would multiply one boon over a run of
+                // independent tickets.
                 if (
                     d > type(uint24).max
                         || !_reserveDay(msg.sender, uint24(d), high, standing, packed, i == 0 ? boonMask : 0)
@@ -3352,8 +3347,8 @@ contract CrapsBattle is LootboxCraps {
                 (uint256 lane, uint256 denied) = _laneBoostSplit(w, word, header);
                 _rollIn(w.key, _ROLL_SRC_HIGH_SOLE, denied);
                 ride = _ride(p, extra + lane, w.bankroll);
-                // Marked here, inside the same write the fold makes, so no later call can find an
-                // unprocessed sole lane however the batches were cut.
+                // The lane's final disposition, recorded in the same write the fold makes; the
+                // resolve cursor is what keeps a later call from re-walking the seat.
                 f |= _HF_DONE_BIT;
             }
             _highField[w.key] = f;
@@ -3436,8 +3431,6 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @notice Total bankroll the table's settled seats put up on `day`.
-
     /// @notice What a day's action contributes to a later budget: `dayStaked * _BOOST_ACTION_BPS`.
     ///         Drawn from the HANDLE rather than from the realised result, so it does not move
     ///         with the dice and a lucky week cannot starve the next one. It measures no burn and
@@ -3447,9 +3440,6 @@ contract CrapsBattle is LootboxCraps {
             return (uint256(uint128(_dayStaked[day])) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
         }
     }
-
-    /// @notice The bonus budget a day opened with, shared by its seven windows. Zero for a day
-    ///         that never opened.
 
     /// @dev THE DAY'S RAW ALLOCATION: `_BASE_MAIN_BUDGET` plus `_BOOST_ACTION_BPS` of the average
     ///      daily action of the seven days before `day`. The base is ADDED, never a floor — a day

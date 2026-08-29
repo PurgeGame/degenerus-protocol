@@ -119,8 +119,8 @@ contract Craps {
     ///        bits 16..47  this round's mandatory multiplier
     ///        bits 48..79  the roll-log cursor
     ///      The latch sits UNDER the log rather than over it so the log stays the top of the word
-    ///      and every read of it is a bare shift. Fifteen bits is four times the widest hand cap
-    ///      either product uses.
+    ///      and every read of it is a bare shift. Fifteen bits is sixty-four times the widest
+    ///      hand cap either product uses.
     uint256 private constant _CUR_HANDS_MASK = 0x7FFF;
     uint256 private constant _CUR_QUALIFIED = 1 << 15;
     uint256 private constant _CUR_MULT_SHIFT = 16;
@@ -696,7 +696,6 @@ contract Craps {
         unchecked {
             uint256 shift = hand / _ESC_HANDS;
             esc = shift < 32 ? 1 << shift : _ESC_CAP;
-            if (esc > _ESC_CAP) esc = _ESC_CAP;
         }
     }
 

@@ -96,7 +96,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @dev Spend the craps lane — slot1's low 24 bits, so no shift on this path. An expired
     ///      lane pays nothing and is cleared here, matching every other consumption site.
-    ///      The tier decodes 5/10/25% off the coinflip table the family mirrors.
+    ///      The tier decodes to the coinflip family's 500/1000/2500 bps wire values; FLIP maps
+    ///      those to the one-hot mask the craps table pays at 5/10/15%.
     function _consumeCrapsBoon(address player) private returns (uint16 boonBps) {
         BoonPacked storage bp = boonPacked[player];
         uint256 s1 = bp.slot1;
@@ -556,7 +557,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint8 private constant BOON_DEGEN_WWXRP_8 = 39;
     uint8 private constant BOON_DEGEN_WWXRP_12 = 40;
     /// @dev Craps stake boons. A successful self-funded craps purchase burns in full and carries
-    ///      the boon onto its slip; the tier then boosts that slip's BANKROLL RETURN by 5/10/25%
+    ///      the boon onto its slip; the tier then boosts that slip's BANKROLL RETURN by 5/10/15%
     ///      when it settles, off a base capped at 60,000 FLIP. Nothing is credited at entry, and a
     ///      busted run pays no bonus.
     uint8 private constant BOON_CRAPS_5 = 41;
@@ -680,16 +681,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      whale-discount 40), in full-table coordinates after the dec skip re-adds 50.
     uint16 private constant BOON_WEIGHT_PRE_DEITY_PASS = 1072;
     uint32 private constant WHALE_PASS_ENTRIES_PER_LEVEL = 2;
-
-    /// @dev Convert FLIP amount to ETH value using current price (`priceWei` is
-    ///      always a non-zero price-table constant).
-    function _flipToEthValue(
-        uint256 flipAmount,
-        uint256 priceWei
-    ) private pure returns (uint256 valueWei) {
-        if (flipAmount == 0) return 0;
-        valueWei = (flipAmount * priceWei) / PRICE_COIN_UNIT;
-    }
 
     /// @dev Coinflip boon cap for max deposit (100k FLIP) used in EV estimation.
     uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000 ether;
@@ -1134,8 +1125,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         }
 
         // Craps stake boons (types 41-43) — slot1's LOW lane, the same 24-bit encoding a
-        // degenerette lane uses. One lane, spent by the next paid craps burn; the tier decodes
-        // 5/10/25% off the coinflip table this family mirrors.
+        // degenerette lane uses. One lane, spent by the next paid craps burn; the tier rides the
+        // coinflip family's wire values and the craps table pays it at 5/10/15%.
         if (boonType >= BOON_CRAPS_5) {
             uint8 newTier = boonType - BOON_CRAPS_5 + 1;
             uint256 s1 = bp.slot1;

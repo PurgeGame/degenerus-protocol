@@ -2542,7 +2542,8 @@ abstract contract DegenerusGameStorage {
     ///                  masked values, wrapping after ~5,700 years)
     ///
     /// Tier decode is per-family and NOT part of the encoding: a degenerette lane reads
-    /// tier x 400 (+4/8/12%), the craps lane reads _coinflipTierToBps (5/10/25%).
+    /// tier x 400 (+4/8/12%), the craps lane reads _coinflipTierToBps on the wire
+    /// (500/1000/2500) and the craps table pays it at 5/10/15%.
     ///
     /// A degenerette lane is one INDEPENDENT per-currency stake boon — lanes coexist and only a
     /// boon of the same currency can displace one — and is spent by the next bet in its own

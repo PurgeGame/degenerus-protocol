@@ -282,9 +282,9 @@ contract Coinflip {
     // Grows by a daily settlement drip and by level-transition funding. The four
     // original kinds claim an accruing share of it (RECORD_SHARE_*) when a record
     // is beaten by a fifth; the dice run claims on any strict improvement above
-    // its own floor, at most once a day (see armDiceRunRecord). The game-armed
-    // marks sit at the end of the storage section so every prior slot keeps its
-    // index.
+    // its own floor, with same-day repeats priced at the 5% floor of the already-
+    // reduced pool (see armDiceRunRecord). The game-armed marks sit at the end of
+    // the storage section so every prior slot keeps its index.
     uint128 public recordPool = 10_000 ether;
     uint128 public biggestFlipEver;
 

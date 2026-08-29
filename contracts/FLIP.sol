@@ -654,7 +654,7 @@ contract FLIP {
     /// @param player The buyer.
     /// @param grossAndFlags The undiscounted price with the action flags in its low byte.
     /// @return boonMask One-hot tier for the caller to store on the slip — 1, 2 or 4 for the
-    ///         5/10/25% tiers, and 0 on every burn that did not consume a boon.
+    ///         tiers the table pays at 5/10/15%, and 0 on every burn that did not consume a boon.
     /// @custom:reverts OnlyGame If the caller is not the craps table.
     function burnCoinForCraps(address player, uint256 grossAndFlags)
         external
