@@ -175,85 +175,86 @@ contract DeityBoonViewer {
         }
     }
 
-    /// @dev Map a weighted random roll to a boon type ID over the static full table.
+    /// @dev Map a weighted random roll to a boon type ID over the static full table — the same
+    ///      weight-balanced tree `DegenerusGameBoonModule._boonFromRoll` walks, restated here
+    ///      because neither contract can read the other. `BoonRollTreeParity` holds the two
+    ///      statements and the W_* weights above together on every reachable roll.
     /// @param roll Random value in [0, W_TOTAL).
     /// @return Boon type ID constant.
     function _boonFromRoll(uint256 roll) internal pure returns (uint8) {
-        uint256 cursor = 0;
-        cursor += W_COINFLIP_5;
-        if (roll < cursor) return DEITY_BOON_COINFLIP_5;
-        cursor += W_COINFLIP_10;
-        if (roll < cursor) return DEITY_BOON_COINFLIP_10;
-        cursor += W_COINFLIP_25;
-        if (roll < cursor) return DEITY_BOON_COINFLIP_25;
-        cursor += W_LOOTBOX_5;
-        if (roll < cursor) return DEITY_BOON_LOOTBOX_5;
-        cursor += W_LOOTBOX_15;
-        if (roll < cursor) return DEITY_BOON_LOOTBOX_15;
-        cursor += W_LOOTBOX_25;
-        if (roll < cursor) return DEITY_BOON_LOOTBOX_25;
-        cursor += W_PURCHASE_5;
-        if (roll < cursor) return DEITY_BOON_PURCHASE_5;
-        cursor += W_PURCHASE_15;
-        if (roll < cursor) return DEITY_BOON_PURCHASE_15;
-        cursor += W_PURCHASE_25;
-        if (roll < cursor) return DEITY_BOON_PURCHASE_25;
-        cursor += W_DECIMATOR_10;
-        if (roll < cursor) return DEITY_BOON_DECIMATOR_10;
-        cursor += W_DECIMATOR_25;
-        if (roll < cursor) return DEITY_BOON_DECIMATOR_25;
-        cursor += W_DECIMATOR_50;
-        if (roll < cursor) return DEITY_BOON_DECIMATOR_50;
-        cursor += W_WHALE_10;
-        if (roll < cursor) return DEITY_BOON_WHALE_10;
-        cursor += W_WHALE_20;
-        if (roll < cursor) return DEITY_BOON_WHALE_20;
-        cursor += W_WHALE_35;
-        if (roll < cursor) return DEITY_BOON_WHALE_35;
-        cursor += W_DEITY_PASS_10;
-        if (roll < cursor) return DEITY_BOON_DEITY_PASS_10;
-        cursor += W_DEITY_PASS_20;
-        if (roll < cursor) return DEITY_BOON_DEITY_PASS_20;
-        cursor += W_DEITY_PASS_35;
-        if (roll < cursor) return DEITY_BOON_DEITY_PASS_35;
-        cursor += W_ACTIVITY_10;
-        if (roll < cursor) return DEITY_BOON_ACTIVITY_10;
-        cursor += W_ACTIVITY_25;
-        if (roll < cursor) return DEITY_BOON_ACTIVITY_25;
-        cursor += W_ACTIVITY_50;
-        if (roll < cursor) return DEITY_BOON_ACTIVITY_50;
-        cursor += W_QUEST_SHIELD;
-        if (roll < cursor) return DEITY_BOON_QUEST_SHIELD;
-        cursor += W_WHALE_PASS;
-        if (roll < cursor) return DEITY_BOON_WHALE_PASS;
-        cursor += W_LAZY_PASS_10;
-        if (roll < cursor) return DEITY_BOON_LAZY_PASS_10;
-        cursor += W_LAZY_PASS_25;
-        if (roll < cursor) return DEITY_BOON_LAZY_PASS_25;
-        cursor += W_LAZY_PASS_50;
-        if (roll < cursor) return DEITY_BOON_LAZY_PASS_50;
-        cursor += W_DEGEN_ETH_4;
-        if (roll < cursor) return DEITY_BOON_DEGEN_ETH_4;
-        cursor += W_DEGEN_ETH_8;
-        if (roll < cursor) return DEITY_BOON_DEGEN_ETH_8;
-        cursor += W_DEGEN_ETH_12;
-        if (roll < cursor) return DEITY_BOON_DEGEN_ETH_12;
-        cursor += W_DEGEN_FLIP_4;
-        if (roll < cursor) return DEITY_BOON_DEGEN_FLIP_4;
-        cursor += W_DEGEN_FLIP_8;
-        if (roll < cursor) return DEITY_BOON_DEGEN_FLIP_8;
-        cursor += W_DEGEN_FLIP_12;
-        if (roll < cursor) return DEITY_BOON_DEGEN_FLIP_12;
-        cursor += W_DEGEN_WWXRP_4;
-        if (roll < cursor) return DEITY_BOON_DEGEN_WWXRP_4;
-        cursor += W_DEGEN_WWXRP_8;
-        if (roll < cursor) return DEITY_BOON_DEGEN_WWXRP_8;
-        cursor += W_DEGEN_WWXRP_12;
-        if (roll < cursor) return DEITY_BOON_DEGEN_WWXRP_12;
-        cursor += W_CRAPS_5;
-        if (roll < cursor) return DEITY_BOON_CRAPS_5;
-        cursor += W_CRAPS_10;
-        if (roll < cursor) return DEITY_BOON_CRAPS_10;
+        if (roll < 1246) {
+            if (roll < 486) {
+                if (roll < 240) {
+                    if (roll < 200) return DEITY_BOON_COINFLIP_5;
+                    return DEITY_BOON_COINFLIP_10;
+                }
+                if (roll < 448) {
+                    if (roll < 248) return DEITY_BOON_COINFLIP_25;
+                    return DEITY_BOON_LOOTBOX_5;
+                }
+                if (roll < 478) return DEITY_BOON_LOOTBOX_15;
+                return DEITY_BOON_LOOTBOX_25;
+            }
+            if (roll < 886) return DEITY_BOON_PURCHASE_5;
+            if (roll < 1070) {
+                if (roll < 982) {
+                    if (roll < 966) return DEITY_BOON_PURCHASE_15;
+                    return DEITY_BOON_PURCHASE_25;
+                }
+                if (roll < 1022) return DEITY_BOON_DECIMATOR_10;
+                if (roll < 1032) {
+                    if (roll < 1030) return DEITY_BOON_DECIMATOR_25;
+                    return DEITY_BOON_DECIMATOR_50;
+                }
+                if (roll < 1060) return DEITY_BOON_WHALE_10;
+                return DEITY_BOON_WHALE_20;
+            }
+            if (roll < 1112) {
+                if (roll < 1100) {
+                    if (roll < 1072) return DEITY_BOON_WHALE_35;
+                    return DEITY_BOON_DEITY_PASS_10;
+                }
+                if (roll < 1110) return DEITY_BOON_DEITY_PASS_20;
+                return DEITY_BOON_DEITY_PASS_35;
+            }
+            if (roll < 1212) return DEITY_BOON_ACTIVITY_10;
+            if (roll < 1242) return DEITY_BOON_ACTIVITY_25;
+            return DEITY_BOON_ACTIVITY_50;
+        }
+
+        if (roll < 1948) {
+            if (roll < 1688) {
+                if (roll < 1478) {
+                    if (roll < 1446) return DEITY_BOON_QUEST_SHIELD;
+                    if (roll < 1448) return DEITY_BOON_WHALE_PASS;
+                    return DEITY_BOON_LAZY_PASS_10;
+                }
+                if (roll < 1488) {
+                    if (roll < 1486) return DEITY_BOON_LAZY_PASS_25;
+                    return DEITY_BOON_LAZY_PASS_50;
+                }
+                return DEITY_BOON_DEGEN_ETH_4;
+            }
+            if (roll < 1748) {
+                if (roll < 1738) return DEITY_BOON_DEGEN_ETH_8;
+                return DEITY_BOON_DEGEN_ETH_12;
+            }
+            return DEITY_BOON_DEGEN_FLIP_4;
+        }
+
+        if (roll < 2208) {
+            if (roll < 2008) {
+                if (roll < 1998) return DEITY_BOON_DEGEN_FLIP_8;
+                return DEITY_BOON_DEGEN_FLIP_12;
+            }
+            return DEITY_BOON_DEGEN_WWXRP_4;
+        }
+        if (roll < 2608) {
+            if (roll < 2408) return DEITY_BOON_DEGEN_WWXRP_8;
+            return DEITY_BOON_DEGEN_WWXRP_12;
+        }
+        if (roll < 2808) return DEITY_BOON_CRAPS_5;
+        if (roll < 2848) return DEITY_BOON_CRAPS_10;
         return DEITY_BOON_CRAPS_15;
     }
 }

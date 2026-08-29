@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
+import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
 
 contract BoonRollTreeHarness is DegenerusGameBoonModule {
     function tree(uint256 roll) external pure returns (uint8) {
@@ -10,16 +11,32 @@ contract BoonRollTreeHarness is DegenerusGameBoonModule {
     }
 }
 
+contract DeityBoonViewerTreeHarness is DeityBoonViewer {
+    function tree(uint256 roll) external pure returns (uint8) {
+        return _boonFromRoll(roll);
+    }
+}
+
 contract BoonRollTreeParity is Test {
     BoonRollTreeHarness private harness;
+    DeityBoonViewerTreeHarness private viewerHarness;
 
     function setUp() public {
         harness = new BoonRollTreeHarness();
+        viewerHarness = new DeityBoonViewerTreeHarness();
     }
 
     function testEveryReachableWeightedRollMatchesCanonicalReference() public view {
         for (uint256 roll; roll < 2856; ++roll) {
             assertEq(harness.tree(roll), _reference(roll), "boon boundary drift");
+        }
+    }
+
+    /// @dev The viewer restates the module's tree because neither contract can read the other;
+    ///      this is what holds the two statements together on every reachable roll.
+    function testViewerTreeMatchesCanonicalReferenceEverywhere() public view {
+        for (uint256 roll; roll < 2856; ++roll) {
+            assertEq(viewerHarness.tree(roll), _reference(roll), "viewer boundary drift");
         }
     }
 
