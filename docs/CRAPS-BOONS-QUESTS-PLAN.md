@@ -5,7 +5,8 @@
 > The quest design, boon IDs/weights/lifecycle, and completed packed-boon-lane work remain in force.
 > Where the two documents conflict, the bankroll-payout amendment controls.
 
-**Status:** DESIGN CAPTURED — not implemented.
+**Status:** BUILT — the boon lane, quests and the bankroll-payout amendment all shipped in
+`484024ab4`.
 **Created:** 2026-08-28. **Revised:** 2026-08-28 (verified against the working tree; see §11).
 **Type:** ECONOMIC + CONTRACT + GAS-SENSITIVE.
 **Repository artifact:** Standalone implementation plan.
@@ -564,10 +565,10 @@ Use the existing VRF-derived boon entropy; add no new randomness source.
 
 Observable identities:
 
-- `LootBoxReward.rewardType = 14`, with `amount` identifying boon ID 41, 42, or 43. (2, 4, 5, 6 and
-  8-13 are in use; 14 is the next free value.)
-- A new `BoonConsumed` category for Craps: **6**, not 5. Categories 1-5 already ship — 1 coinflip,
-  2 purchase, 3 decimator, 4 degenerette, 5 activity.
+- `LootBoxReward.rewardType = 14`, with `amount` identifying boon ID 41, 42, or 43 — as built.
+  (2, 4, 5, 6 and 8-13 were already in use; 14 was the next free value.)
+- A new `BoonConsumed` category for Craps: **6**, not 5 — as built. Categories 1-5 already shipped
+  — 1 coinflip, 2 purchase, 3 decimator, 4 degenerette, 5 activity.
 - Existing `CoinflipStakeUpdated` reports the resulting bonus stake credit.
 
 The craps family is always deliverable, so `_deliverBoon` needs no new discard branch — only the
@@ -879,7 +880,8 @@ direct source read:
 - `_enterDayLane` has one caller and always burns; reservations bypass it.
 - Every eligible Craps price is a whole-FLIP multiple.
 - `Coinflip.creditFlip` passes `recordAmount == 0`; `QUESTS` is an authorized creditor.
-- `BoonConsumed` categories 1-5 and `LootBoxReward` types 2, 4, 5, 6, 8-13 are occupied.
+- `BoonConsumed` categories 1-5 and `LootBoxReward` types 2, 4, 5, 6, 8-13 were occupied when this
+  was written; the craps family took category 6 and type 14, both now shipped.
 - In `DegenerusGameAdvanceModule`, `openBonusDay()` precedes `rollDailyQuest(...)` under the same
   wall-day guard; the second `rollDailyQuest` site passes entropy 0 with `forceFoil`.
 - `_currentBonusSlot` reports `period == _BONUS_PERIODS_PER_DAY` for the final `_EVENT_LEAD`

@@ -2584,7 +2584,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant BP_DEITY_WHALE_DAY_SHIFT = 224;
     uint256 internal constant BP_WHALE_TIER_SHIFT = 248;
 
-    // ---- Slot 1 shifts (bits 0-71 are free) ----
+    // ---- Slot 1 shifts (the craps lane owns bits 0-23; bits 24-71 are free) ----
     uint256 internal constant BP_DEITY_PASS_TIER_SHIFT = 72;
     uint256 internal constant BP_DEITY_PASS_DAY_SHIFT = 80;
     uint256 internal constant BP_DEITY_DEITY_PASS_DAY_SHIFT = 104;

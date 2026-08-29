@@ -1,7 +1,7 @@
 # PLAN — Craps Boons as Bankroll-Payout Boosts
 
-**Status:** DESIGN READY — implementation not authorized by this plan.
-**Created:** 2026-08-28.
+**Status:** BUILT — shipped in `484024ab4` (craps boons as bankroll-payout boosts).
+**Created:** 2026-08-28. **Built:** 2026-08-28.
 **Type:** CONTRACT + ECONOMIC + PACKING + GAS-SENSITIVE.
 **Supersedes:** The immediate Coinflip-credit semantics and plumbing in
 `CRAPS-BOONS-QUESTS-PLAN.md`. It does not supersede that plan's quest design, boon IDs, draw

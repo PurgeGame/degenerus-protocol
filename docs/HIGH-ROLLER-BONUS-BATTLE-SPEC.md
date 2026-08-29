@@ -313,9 +313,11 @@ The ticket stores its high-roller flag once. Its normal day count and high-rolle
 folded into each window when that window is armed, preserving the current no-per-window-write
 purchase path.
 
-The existing late-day behavior remains: after period zero, enterBonusDay places separate entries
-only into the remaining joinable windows. Each such entry uses the same H_day and updates that
-window's high-roller count directly.
+The day lane is period-zero only: `enterBonusDay` reverts with `BonusPeriodSpent` once the day's
+first window has closed, because a whole-day ticket is a commitment made before any of the day is
+spent. After period zero the remaining windows are entered one at a time through
+`enterBonusBattle`, each such entry using the same H_day and updating that window's high-roller
+count directly.
 
 House and vault day tickets remain normal and pay only the existing sum of R_p + B_p.
 
@@ -961,8 +963,8 @@ documented exception with measured before/after gas. It must not be silently wai
    - Current: One early day ticket is folded into seven main fields at arm time.
    - Target: One stored high-roller flag/count is also folded into all seven side fields and the
      ticket pays the shared H across the complete day.
-   - Acceptance: DAY-01 through DAY-07 prove exact cost, one ticket write, seven counts, late-day
-     behavior, house/vault exclusion, and arm idempotency.
+   - Acceptance: DAY-01 through DAY-07 prove exact cost, one ticket write, seven counts, the
+     period-zero-only day lane, house/vault exclusion, and arm idempotency.
 
 7. **Creator-set custom mode**
    - Current: Custom terms contain no high-roller modifier.
@@ -1098,8 +1100,8 @@ documented exception with measured before/after gas. It must not be silently wai
 - [ ] **DAY-04:** Arming each of the seven windows adds that day high count exactly once.
 - [ ] **DAY-05:** Every resulting day-seat run uses the same H while keeping window-specific R,
   B, goal, and board.
-- [ ] **DAY-06:** Late-day bulk entry affects only remaining joinable windows and uses H_day for
-  each.
+- [ ] **DAY-06:** Bulk day entry is refused with `BonusPeriodSpent` once the first window has
+  closed; the remaining windows are entered singly through `enterBonusBattle`, each using H_day.
 - [ ] **DAY-07:** House and vault day tickets never set the high flag or increment high counts.
 
 ### Custom Battles

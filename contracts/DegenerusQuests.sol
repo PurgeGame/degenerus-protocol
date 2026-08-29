@@ -945,8 +945,8 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Craps action flags, packed into the low byte of the burn amount by `CrapsBattle` and
-    ///      forwarded here by FLIP. A late `enterBonusDay` bundle reports its join once: FLIP
-    ///      elides the repeats transiently, so a six-window bundle pays for one handler call.
+    ///      forwarded here by FLIP. One door, one burn, one handler call: the day lane buys all
+    ///      seven windows in a single burn, so a whole-day ticket reports its join exactly once.
     uint8 private constant CRAPS_FLAG_JOIN = 0x1;
     uint8 private constant CRAPS_FLAG_PASS = 0x2;
     uint8 private constant CRAPS_FLAG_STREAK_NORMAL = 0x4;

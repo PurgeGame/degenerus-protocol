@@ -2560,12 +2560,17 @@ contract CrapsBattle is LootboxCraps {
         return _enterWindow(w, chips, multiple);
     }
 
-    /// @notice Enter EVERY one of today's still-joinable windows with the same chip allocation,
-    ///         in one call. Each window scales the allocation to its own chip, so a single board
-    ///         is a legal entry at all of them however differently they are sized — which is the
-    ///         whole reason the allocation is counted in chips rather than in FLIP. An all-zero
+    /// @notice Enter EVERY one of today's windows with the same chip allocation, in one call.
+    ///         Each window scales the allocation to its own chip, so a single board is a legal
+    ///         entry at all of them however differently they are sized — which is the whole
+    ///         reason the allocation is counted in chips rather than in FLIP. An all-zero
     ///         allocation takes the whole day blind, every chip of every window left to the dice.
+    ///
+    ///         Sold only while the first window is still taking bets: a whole-day ticket is a
+    ///         commitment made before any of the day is spent. Past that, take what is left one
+    ///         window at a time through `enterBonusBattle`.
     /// @return placed How many windows took the entry.
+    /// @custom:reverts BonusPeriodSpent If the day's first window has already closed.
     function enterBonusDay(uint32 chips, uint16 multiple) public returns (uint256 placed) {
         (uint24 today, uint256 period,) = _currentBonusSlot();
         uint256 word = _dailyWordAt(today);
