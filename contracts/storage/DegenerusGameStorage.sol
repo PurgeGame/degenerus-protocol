@@ -2573,8 +2573,10 @@ abstract contract DegenerusGameStorage {
     ///   [224-247] deityWhaleDay        uint24   Deity-source day for whale boon
     ///   [248-255] whaleTier            uint8    0=none, 1=10%, 2=20%, 3=35%
     ///
-    /// Slot 1 (bits 72-255 used; bits 0-71 free):
-    ///   [0-71]    (free)                        Activity awards are credited to player
+    /// Slot 1 (bits 0-23 and 72-255 used; bits 24-71 free):
+    ///   [0-23]    craps                uint24   Craps stake-boon lane (the LOW lane, so the
+    ///                                           consumption hot path masks without shifting)
+    ///   [24-71]   (free)                        Activity awards are credited to player
     ///                                           stats on award and hold no boon state
     ///   [72-79]   deityPassTier        uint8    0=none, 1=10%, 2=20%, 3=35%
     ///   [80-103]  deityPassDay         uint24   Day deity pass boon was awarded
@@ -2586,13 +2588,19 @@ abstract contract DegenerusGameStorage {
     ///   [208-231] degeneretteFlip      uint24   FLIP degenerette stake-boon lane
     ///   [232-255] degeneretteWwxrp     uint24   WWXRP degenerette stake-boon lane
     ///
-    /// Each degenerette lane is one INDEPENDENT per-currency stake boon — lanes coexist
-    /// and only a boon of the same currency can displace one — packed as
-    ///   [0-1]  tier    0=none, 1=+4%, 2=+8%, 3=+12% (bps = tier x 400)
+    /// The craps lane and the three degenerette lanes share ONE 24-bit encoding:
+    ///   [0-1]  tier    0=none, else 1..3 — the family decodes the size
     ///   [2]    isDeity deity-granted boons die at midnight of their day
     ///   [3-23] day     low 21 bits of the award day (lootbox-rolled boons live
-    ///                  DEGENERETTE_BOON_EXPIRY_DAYS past it; comparisons run on
+    ///                  BOON_LANE_EXPIRY_DAYS past it; comparisons run on
     ///                  masked values, wrapping after ~5,700 years)
+    ///
+    /// Tier decode is per-family and NOT part of the encoding: a degenerette lane reads
+    /// tier x 400 (+4/8/12%), the craps lane reads _coinflipTierToBps (5/10/25%).
+    ///
+    /// A degenerette lane is one INDEPENDENT per-currency stake boon — lanes coexist and only a
+    /// boon of the same currency can displace one — and is spent by the next bet in its own
+    /// currency. The craps lane is single and is spent by the next paid craps burn.
     struct BoonPacked {
         uint256 slot0;
         uint256 slot1;
@@ -2638,13 +2646,14 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant BP_DEITY_LAZY_PASS_DAY_SHIFT = 152;
     uint256 internal constant BP_LAZY_PASS_TIER_SHIFT = 176;
     uint256 internal constant BP_DEGEN_LANE0_SHIFT = 184;
-    uint256 internal constant BP_DEGEN_LANE_MASK = 0xFFFFFF;
-    uint256 internal constant BP_DEGEN_LANE_TIER_MASK = 0x3;
-    uint256 internal constant BP_DEGEN_LANE_DEITY_BIT = 0x4;
-    uint256 internal constant BP_DEGEN_LANE_DAY_SHIFT = 3;
-    uint256 internal constant BP_DEGEN_LANE_DAY_MASK = 0x1FFFFF;
-    /// @dev Days a lootbox-rolled degenerette boon lives past its stamp day.
-    uint24 internal constant DEGENERETTE_BOON_EXPIRY_DAYS = 2;
+    uint256 internal constant BP_LANE_MASK = 0xFFFFFF;
+    uint256 internal constant BP_LANE_TIER_MASK = 0x3;
+    uint256 internal constant BP_LANE_DEITY_BIT = 0x4;
+    uint256 internal constant BP_LANE_DAY_SHIFT = 3;
+    uint256 internal constant BP_LANE_DAY_MASK = 0x1FFFFF;
+    /// @dev Days a lootbox-rolled lane boon lives past its stamp day. Shared by the degenerette
+    ///      and craps lanes, which carry the same two-day life as the coinflip boon.
+    uint24 internal constant BOON_LANE_EXPIRY_DAYS = 2;
     /// @dev Stake-bonus base caps for the degenerette boon (+4/8/12% of the bet's total,
     ///      up to the cap). WWXRP has NO cap — it is worthless by design, so an uncapped
     ///      percentage on it moves no real value. Shared by the Degenerette module (the
@@ -2758,18 +2767,18 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Is this degenerette lane's boon live on `currentDay`? A deity-granted boon
     ///      dies at midnight of its day; a lootbox-rolled one lives
-    ///      DEGENERETTE_BOON_EXPIRY_DAYS past its stamp (a day-0 stamp is exempt from
+    ///      BOON_LANE_EXPIRY_DAYS past its stamp (a day-0 stamp is exempt from
     ///      the stamp rule, mirroring the sibling families). Day fields are 21-bit, so
     ///      both sides compare masked.
-    function _degeneretteLaneLive(
+    function _boonLaneLive(
         uint256 lane,
         uint24 currentDay
     ) internal pure returns (bool) {
-        if (lane & BP_DEGEN_LANE_TIER_MASK == 0) return false;
-        uint256 day = (lane >> BP_DEGEN_LANE_DAY_SHIFT) & BP_DEGEN_LANE_DAY_MASK;
-        uint256 nowDay = currentDay & BP_DEGEN_LANE_DAY_MASK;
-        if (lane & BP_DEGEN_LANE_DEITY_BIT != 0) return day == nowDay;
-        return day == 0 || nowDay <= day + DEGENERETTE_BOON_EXPIRY_DAYS;
+        if (lane & BP_LANE_TIER_MASK == 0) return false;
+        uint256 day = (lane >> BP_LANE_DAY_SHIFT) & BP_LANE_DAY_MASK;
+        uint256 nowDay = currentDay & BP_LANE_DAY_MASK;
+        if (lane & BP_LANE_DEITY_BIT != 0) return day == nowDay;
+        return day == 0 || nowDay <= day + BOON_LANE_EXPIRY_DAYS;
     }
 
     /// @dev Decode lazy pass boon tier to BPS. Tier: 0=0, 1=1000, 2=2500, 3=5000.

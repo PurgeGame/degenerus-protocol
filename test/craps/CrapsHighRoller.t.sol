@@ -198,9 +198,9 @@ contract CrapsHighRollerTest is CrapsPins {
         craps.createBattle(L, 2, 10, SU, 0, close, true, 0);
         craps.createBattle(L, 2, 10, SU, 0, close, true, 2);
         craps.createBattle(L, 2, 10, SU, 0, close, true, 256);
-        vm.expectRevert(CrapsBattle.BadHighRollerMultiplier.selector);
+        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
         craps.createBattle(L, 2, 10, SU, 0, close, true, 1);
-        vm.expectRevert(CrapsBattle.BadHighRollerMultiplier.selector);
+        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
         craps.createBattle(L, 2, 10, SU, 0, close, true, 257);
         vm.stopPrank();
     }

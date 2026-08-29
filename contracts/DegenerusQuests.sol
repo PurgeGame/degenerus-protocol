@@ -262,8 +262,17 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      with Solidity's default mapping value (0), which signals "no quest rolled".
     uint8 private constant QUEST_TYPE_MINT_FLIP = 9;
 
-    /// @dev Total number of quest types for iteration bounds.
-    uint8 private constant QUEST_TYPE_COUNT = 10;
+    /// @dev Quest type: join a paid craps battle. Random daily slot 1 only.
+    uint8 private constant QUEST_TYPE_CRAPS_JOIN = 10;
+
+    /// @dev Quest type: buy a craps full-day pass. Level quest only.
+    uint8 private constant QUEST_TYPE_CRAPS_DAY_PASS = 11;
+
+    /// @dev Iteration bound over the BASE types (0..9) — the ones carried in the weight array.
+    ///      The two craps types sit outside it: each is offered as a context-specific weight-1
+    ///      TAIL by whichever roll may produce it, so neither widens the array or the walk, and
+    ///      neither can surface in the other's context.
+    uint8 private constant QUEST_TYPE_BASE_COUNT = 10;
 
     /// @dev The level the deploy-time seeded quest belongs to. The game opens at `level == 0`
     ///      and its first purchase phase runs for `level + 1`, so that level is provably 1.
@@ -278,6 +287,10 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Fixed foil-pack target in whole packs (buy one foil pack).
     uint32 private constant QUEST_FOIL_TARGET = 1;
+
+    /// @dev Fixed craps target: one qualifying action. Both craps quests are pass/fail, counted
+    ///      like FOIL rather than accumulated, so their stored unit is a raw count.
+    uint32 private constant QUEST_CRAPS_TARGET = 1;
 
     /// @dev Fixed FLIP target for flip/decimator/degenerette-FLIP quests (2x price in FLIP).
     uint256 private constant QUEST_FLIP_TARGET = 2 * PRICE_COIN_UNIT;
@@ -569,7 +582,8 @@ contract DegenerusQuests is IDegenerusQuests {
             bonusType = _bonusQuestType(
                 bonusEntropy,
                 QUEST_TYPE_MINT_ETH,
-                _canRollDecimatorQuest()
+                _canRollDecimatorQuest(),
+                QUEST_TYPE_CRAPS_JOIN
             );
         }
         _seedQuestType(quests[1], day, bonusType);
@@ -597,6 +611,13 @@ contract DegenerusQuests is IDegenerusQuests {
         // CRAPS sits beside GAME here, the same way it does on FLIP's mint and Coinflip's credit:
         // taking the whole-day craps ticket is a daily commitment the streak is meant to count.
         if (msg.sender != ContractAddresses.GAME && msg.sender != ContractAddresses.CRAPS) revert OnlyGame();
+        _awardStreakBonus(player, amount, currentDay);
+    }
+
+    /// @dev The streak-bonus body, callable from inside this contract. `recordCrapsAction` reaches
+    ///      it for the whole-day craps ticket so the period-0 purchase keeps its +1/+5 without a
+    ///      second Craps->Quests call on top of the burn it already routes through FLIP.
+    function _awardStreakBonus(address player, uint16 amount, uint24 currentDay) private {
         if (player == address(0) || amount == 0 || currentDay == 0) return;
 
         PlayerQuestState storage state = questPlayerState[player];
@@ -921,6 +942,118 @@ contract DegenerusQuests is IDegenerusQuests {
         if (completed && reward != 0) {
             coinflip.creditFlip(player, reward);
         }
+    }
+
+    /// @dev Craps action flags, packed into the low byte of the burn amount by `CrapsBattle` and
+    ///      forwarded here by FLIP. A late `enterBonusDay` bundle reports its join once: FLIP
+    ///      elides the repeats transiently, so a six-window bundle pays for one handler call.
+    uint8 private constant CRAPS_FLAG_JOIN = 0x1;
+    uint8 private constant CRAPS_FLAG_PASS = 0x2;
+    uint8 private constant CRAPS_FLAG_STREAK_NORMAL = 0x4;
+    uint8 private constant CRAPS_FLAG_STREAK_HIGH = 0x8;
+
+    /// @dev Streak credit for keeping a whole craps day. A HIGH seat buys the same day at the
+    ///      day's own multiple — the largest single commitment the table sells — so it counts for
+    ///      five. Bounded to one credit per address per day by the table's own `_daySeated` latch.
+    uint16 private constant CRAPS_DAY_STREAK = 1;
+    uint16 private constant CRAPS_DAY_STREAK_HIGH = 5;
+
+    /**
+     * @notice Record a paid craps action: quest progress and the whole-day streak credit.
+     * @dev Access: COIN (FLIP) only — the burn lane is the single reporter, so the quest surface
+     *      never widens to CRAPS itself and no existing handler gains a caller comparison.
+     *
+     *      NO BOON VALUE PASSES THROUGH HERE. A craps boon boosts the slip's bankroll return when
+     *      it settles; it is carried to the table as a one-hot mask on the bet word and never
+     *      becomes entry-time coinflip credit. This handler owns quest rewards only, and those
+     *      keep their existing credit path.
+     *
+     *      Both craps quests are PASS/FAIL: one qualifying action completes them, counted the way
+     *      FOIL is rather than accumulated.
+     * @param player The player who paid for the action.
+     * @param actionFlags CRAPS_FLAG_* bits describing what the burn bought.
+     * @custom:reverts OnlyCoin When caller is not the COIN contract.
+     */
+    function recordCrapsAction(address player, uint8 actionFlags) external {
+        if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
+        if (player == address(0) || actionFlags == 0) return;
+
+        // Sync the day-lapse state ONCE, before either quest leg. `_handleLevelQuestProgress`
+        // credits the streak on completion and, exactly like every other handler's call into it,
+        // requires the current quest day to already be live; the streak and join legs re-enter the
+        // same sync idempotently. Without this the pass-only path — a `buyFutureCrapsDays` burn —
+        // would bump a streak that a missed day should have reset.
+        uint24 questDay = _currentQuestDayFast();
+        if (questDay != 0) _questSyncState(questPlayerState[player], player, questDay);
+
+        // The whole-day ticket's streak credit. Reached through the private body so the period-0
+        // purchase keeps its +1/+5 off the burn it already routes here.
+        if (actionFlags & (CRAPS_FLAG_STREAK_NORMAL | CRAPS_FLAG_STREAK_HIGH) != 0) {
+            _awardStreakBonus(
+                player,
+                actionFlags & CRAPS_FLAG_STREAK_HIGH != 0
+                    ? CRAPS_DAY_STREAK_HIGH
+                    : CRAPS_DAY_STREAK,
+                GameTimeLib.currentDayIndex()
+            );
+        }
+
+        if (actionFlags & CRAPS_FLAG_PASS != 0) {
+            _handleLevelQuestProgress(player, QUEST_TYPE_CRAPS_DAY_PASS, QUEST_CRAPS_TARGET, 0);
+        }
+
+        if (actionFlags & CRAPS_FLAG_JOIN != 0) {
+            uint256 reward = _crapsJoinQuest(player);
+            if (reward != 0) coinflip.creditFlip(player, reward);
+        }
+    }
+
+    /// @dev The daily join quest's own leg, shaped exactly like `_handleFoilPackQuest`: pass/fail,
+    ///      one action, no accumulation. Private so `recordCrapsAction` can fold its reward into
+    ///      the same coinflip credit the boon rides.
+    /// @return reward FLIP earned, for the caller to credit (0 when nothing completed).
+    function _crapsJoinQuest(address player) private returns (uint256 reward) {
+        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
+        uint24 currentDay = _currentQuestDay(quests);
+        if (currentDay == 0) return 0;
+        PlayerQuestState storage state = questPlayerState[player];
+        _questSyncState(state, player, currentDay);
+
+        (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(
+            quests,
+            currentDay,
+            QUEST_TYPE_CRAPS_JOIN
+        );
+        if (slotIndex == type(uint8).max) return 0;
+
+        uint16 progressAfter = _clampedAddU16(
+            _questSyncProgress(state, slotIndex, currentDay),
+            uint16(_toStoredProgress(quest.questType, QUEST_CRAPS_TARGET))
+        );
+        _setProgressOf(state, slotIndex, progressAfter);
+        uint256 target = _questTargetValue(quest, slotIndex, 0);
+        emit QuestProgressUpdated(
+            player,
+            currentDay,
+            slotIndex,
+            quest.questType,
+            uint128(_toNativeProgress(quest.questType, progressAfter)),
+            _toNativeProgress(quest.questType, target)
+        );
+        if (progressAfter < target) return 0;
+        if (_secondaryLocked(state, slotIndex)) return 0;
+
+        bool completed;
+        (reward, , , completed) = _questCompleteWithPair(
+            player,
+            state,
+            quests,
+            slotIndex,
+            quest,
+            currentDay,
+            0
+        );
+        if (!completed) reward = 0;
     }
 
     /// @dev Foil secondary-quest progression (see handleFoilPurchase). Private so the streak
@@ -1583,7 +1716,11 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function _questRequirements(DailyQuest memory quest, uint8 slot) private view returns (QuestRequirements memory req) {
         uint8 qType = quest.questType;
-        if (qType == QUEST_TYPE_MINT_FLIP || qType == QUEST_TYPE_FOIL) {
+        if (
+            qType == QUEST_TYPE_MINT_FLIP ||
+            qType == QUEST_TYPE_FOIL ||
+            qType >= QUEST_TYPE_CRAPS_JOIN
+        ) {
             req.mints = uint32(_questTargetValue(quest, slot, 0));
         } else {
             uint256 currentPrice = 0;
@@ -1714,8 +1851,12 @@ contract DegenerusQuests is IDegenerusQuests {
         ) {
             return 1e15; // milli-ETH
         }
-        if (questType == QUEST_TYPE_MINT_FLIP || questType == QUEST_TYPE_FOIL) {
-            return 1; // ticket / foil-pack count
+        if (
+            questType == QUEST_TYPE_MINT_FLIP ||
+            questType == QUEST_TYPE_FOIL ||
+            questType >= QUEST_TYPE_CRAPS_JOIN
+        ) {
+            return 1; // ticket / foil-pack / craps-action count
         }
         return 1e18; // whole FLIP: FLIP / DECIMATOR / AFFILIATE / DEGENERETTE_FLIP
     }
@@ -2007,6 +2148,8 @@ contract DegenerusQuests is IDegenerusQuests {
             nativeTarget = QUEST_MINT_TARGET;
         } else if (qType == QUEST_TYPE_FOIL) {
             nativeTarget = QUEST_FOIL_TARGET;
+        } else if (qType >= QUEST_TYPE_CRAPS_JOIN) {
+            nativeTarget = QUEST_CRAPS_TARGET;
         } else if (qType == QUEST_TYPE_AFFILIATE) {
             nativeTarget = QUEST_AFFILIATE_TARGET;
         } else if (
@@ -2047,12 +2190,13 @@ contract DegenerusQuests is IDegenerusQuests {
     function _bonusQuestType(
         uint256 entropy,
         uint8 primaryType,
-        bool decAllowed
+        bool decAllowed,
+        uint8 tailType
     ) private pure returns (uint8) {
-        uint16[QUEST_TYPE_COUNT] memory weights;
+        uint16[QUEST_TYPE_BASE_COUNT] memory weights;
         uint16 total;
 
-        for (uint8 candidate; candidate < QUEST_TYPE_COUNT; ) {
+        for (uint8 candidate; candidate < QUEST_TYPE_BASE_COUNT; ) {
             // Skip primary type (no duplicates)
             if (candidate == primaryType) {
                 unchecked {
@@ -2101,14 +2245,14 @@ contract DegenerusQuests is IDegenerusQuests {
             }
         }
 
-        // Fallback if no valid types (shouldn't happen in practice)
-        if (total == 0) {
-            return primaryType == QUEST_TYPE_MINT_ETH ? QUEST_TYPE_AFFILIATE : QUEST_TYPE_MINT_ETH;
-        }
+        // The caller's context-specific tail rides at weight 1, outside the array. It is answered
+        // only after the walk falls through, so it costs one add and one compare rather than an
+        // extra iteration, and a type offered by one roll can never surface in the other's.
+        total += 1;
 
         // Weighted random selection
         uint256 roll = entropy % uint256(total);
-        for (uint8 candidate; candidate < QUEST_TYPE_COUNT; ) {
+        for (uint8 candidate; candidate < QUEST_TYPE_BASE_COUNT; ) {
             uint16 weight = weights[candidate];
             if (weight != 0) {
                 if (roll < weight) {
@@ -2121,7 +2265,7 @@ contract DegenerusQuests is IDegenerusQuests {
             }
         }
 
-        return primaryType == QUEST_TYPE_MINT_ETH ? QUEST_TYPE_AFFILIATE : QUEST_TYPE_MINT_ETH;
+        return tailType;
     }
 
     // -------------------------------------------------------------------------
@@ -2418,7 +2562,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param entropy VRF-derived entropy for quest type selection.
     function rollLevelQuest(uint256 entropy) external override onlyGame {
         bool decAllowed = _canRollDecimatorQuest();
-        uint8 rolled = _bonusQuestType(entropy, type(uint8).max, decAllowed);
+        uint8 rolled = _bonusQuestType(entropy, type(uint8).max, decAllowed, QUEST_TYPE_CRAPS_DAY_PASS);
         levelQuestType = rolled;
         uint24 questLevel;
         unchecked {
@@ -2481,6 +2625,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param mintPrice Current mint price in wei.
     /// @return Target value in the same units as handler progress deltas.
     function _levelQuestTargetValue(uint8 questType, uint256 mintPrice) internal pure returns (uint256) {
+        if (questType == QUEST_TYPE_CRAPS_DAY_PASS) return QUEST_CRAPS_TARGET;
         if (questType == QUEST_TYPE_MINT_FLIP) return 10;
         if (questType == QUEST_TYPE_MINT_ETH) return mintPrice * 10;
         if (questType == QUEST_TYPE_LOOTBOX || questType == QUEST_TYPE_DEGENERETTE_ETH) {
@@ -2533,6 +2678,10 @@ contract DegenerusQuests is IDegenerusQuests {
         progress = _clampedAdd128(progress, delta);
 
         uint256 target = _levelQuestTargetValue(lqType, mintPrice);
+        // A type with no target entry falls through that lookup as 0, and `progress >= 0` would
+        // complete the quest off any delta at all. Unreachable while every rollable type is listed;
+        // the guard is what keeps adding a type from silently paying out.
+        if (target == 0) return;
         if (uint256(progress) >= target) {
             // Gate eligibility only at completion; the level is fetched once and
             // shared with the completion event.

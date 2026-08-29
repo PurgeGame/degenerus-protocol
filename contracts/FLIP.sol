@@ -631,6 +631,58 @@ contract FLIP {
         _burn(target, amount - consumed);
     }
 
+    /// @dev Action flags ride the LOW BYTE of the craps burn amount. Every eligible craps price is
+    ///      an integer multiple of 1 ether — the three cost expressions in `CrapsBattle` contain no
+    ///      division, and their only wei atoms are `1 ether` and the 100-FLIP bounty granule — and
+    ///      256 divides 1e18, so that byte is always zero before tagging. `CrapsBattle` guards the
+    ///      property at the tag site rather than trusting it here.
+    uint256 private constant CRAPS_FLAG_MASK = 0xFF;
+
+    /// @notice Burn a paid craps purchase, spend any craps boon on it, and report the action.
+    /// @dev Access: CRAPS only. The craps twin of `burnCoin`, kept separate so the ordinary burn
+    ///      — Game, Parimutuel, donations, upgrades, protocol seats — gains neither a caller
+    ///      branch nor a storage read.
+    ///
+    ///      ONE BOON, ONE BURN, enforced by the Game's own storage rather than by anything here:
+    ///      consuming the lane clears it, so a second craps burn — batched into the same
+    ///      transaction by a smart wallet, or made in any later one — finds it empty and comes
+    ///      back zero. Every craps door burns exactly once, so there is nothing to cache.
+    ///
+    ///      THE FULL GROSS IS ALWAYS BURNED. The boon is not a discount and pays nothing here: it
+    ///      is carried back to the table as a one-hot mask and boosts only that slip's BANKROLL
+    ///      RETURN when it settles, so nothing is credited until a run actually comes home.
+    /// @param player The buyer.
+    /// @param grossAndFlags The undiscounted price with the action flags in its low byte.
+    /// @return boonMask One-hot tier for the caller to store on the slip — 1, 2 or 4 for the
+    ///         5/10/25% tiers, and 0 on every burn that did not consume a boon.
+    /// @custom:reverts OnlyGame If the caller is not the craps table.
+    function burnCoinForCraps(address player, uint256 grossAndFlags)
+        external
+        returns (uint8 boonMask)
+    {
+        if (msg.sender != ContractAddresses.CRAPS) revert OnlyGame();
+
+        uint256 gross = grossAndFlags & ~CRAPS_FLAG_MASK;
+        uint8 flags = uint8(grossAndFlags & CRAPS_FLAG_MASK);
+
+        // CEI: the burn lands before any downstream trusted call, exactly as `decimatorBurn` does.
+        uint256 consumed = _consumeCoinflipShortfall(player, gross);
+        _burn(player, gross - consumed);
+
+        // The Game façade authorizes COIN on this selector and the boon module reads the caller to
+        // pick the lane, so arriving here as COIN spends the CRAPS boon and can never reach the
+        // coinflip one. The bps come back off the coinflip table the family mirrors; the table
+        // stores a one-hot tier, not a rate, so translate here.
+        uint16 boonBps = degenerusGame.consumeCoinflipBoon(player);
+        if (boonBps == 500) boonMask = 1;
+        else if (boonBps == 1000) boonMask = 2;
+        else if (boonBps == 2500) boonMask = 4;
+
+        // Quest progress and the day-streak credit only. No value is computed or forwarded here —
+        // the boon's whole effect is the mask returned above.
+        if (flags != 0) questModule.recordCrapsAction(player, flags);
+    }
+
     /// @notice Burn `amount` of `target`'s FLIP for a far-future salvage swap, draining all sources.
     /// @dev Access: GAME only. The salvage twin of burnCoin: where burnCoin stops at held + settled
     ///      claimable, this also reaches the auto-rebuy carry (held -> claimable -> carry), matching the

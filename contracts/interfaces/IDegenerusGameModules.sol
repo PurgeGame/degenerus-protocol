@@ -507,7 +507,10 @@ interface IDegenerusGameBoonModule {
     /// @notice Issues a deity boon from a deity to a recipient
     function issueDeityBoon(address deity, address recipient, uint8 slot) external;
 
-    /// @notice Consumes a player's coinflip boon and returns its value
+    /// @notice Consumes a player's coinflip OR craps boon and returns its value
+    /// @dev ONE selector, two disjoint lanes, named by the caller: COINFLIP spends the coinflip
+    ///      boon, COIN (FLIP) spends the craps boon. The Game façade authorizes exactly those two
+    ///      and delegatecall preserves the original caller, so the module reads it directly.
     /// @param player Address of the player
     /// @return boonBps Boon value in basis points
     function consumeCoinflipBoon(address player) external returns (uint16 boonBps);

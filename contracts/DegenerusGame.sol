@@ -1157,7 +1157,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Consume coinflip boon for next coinflip stake bonus.
-    /// @dev Access: COIN or COINFLIP contract only.
+    /// @dev Access: COIN or COINFLIP contract only. The CALLER NAMES THE LANE inside the module:
+    ///      COINFLIP spends the coinflip boon, COIN (FLIP) spends the craps boon. Both are already
+    ///      authorized here, and delegatecall preserves the original caller, so the craps family
+    ///      needs no second wrapper on this size-critical façade.
     ///      Signature: consumeCoinflipBoon(address player) — the player whose boon to consume.
     ///      The signature matches the module function exactly (identical selector), so the
     ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for

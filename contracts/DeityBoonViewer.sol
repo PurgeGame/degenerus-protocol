@@ -86,6 +86,9 @@ contract DeityBoonViewer {
     uint8 private constant DEITY_BOON_DEGEN_WWXRP_4 = 38;
     uint8 private constant DEITY_BOON_DEGEN_WWXRP_8 = 39;
     uint8 private constant DEITY_BOON_DEGEN_WWXRP_12 = 40;
+    uint8 private constant DEITY_BOON_CRAPS_5 = 41;
+    uint8 private constant DEITY_BOON_CRAPS_10 = 42;
+    uint8 private constant DEITY_BOON_CRAPS_25 = 43;
 
     // Boon weights
     uint16 private constant W_COINFLIP_5 = 200;
@@ -123,7 +126,10 @@ contract DeityBoonViewer {
     uint16 private constant W_DEGEN_WWXRP_4 = 200;
     uint16 private constant W_DEGEN_WWXRP_8 = 200;
     uint16 private constant W_DEGEN_WWXRP_12 = 200;
-    uint16 private constant W_TOTAL = 2608;
+    uint16 private constant W_CRAPS_5 = 200;
+    uint16 private constant W_CRAPS_10 = 40;
+    uint16 private constant W_CRAPS_25 = 8;
+    uint16 private constant W_TOTAL = 2856;
     uint16 private constant W_PRE_DECIMATOR = 982;
     uint16 private constant W_DECIMATOR_ALL = 50;
     uint16 private constant W_PRE_DEITY_PASS = 1072;
@@ -172,7 +178,7 @@ contract DeityBoonViewer {
     /// @dev Map a weighted random roll to a boon type ID over the static full table.
     /// @param roll Random value in [0, W_TOTAL).
     /// @return Boon type ID constant.
-    function _boonFromRoll(uint256 roll) private pure returns (uint8) {
+    function _boonFromRoll(uint256 roll) internal pure returns (uint8) {
         uint256 cursor = 0;
         cursor += W_COINFLIP_5;
         if (roll < cursor) return DEITY_BOON_COINFLIP_5;
@@ -242,6 +248,12 @@ contract DeityBoonViewer {
         if (roll < cursor) return DEITY_BOON_DEGEN_WWXRP_4;
         cursor += W_DEGEN_WWXRP_8;
         if (roll < cursor) return DEITY_BOON_DEGEN_WWXRP_8;
-        return DEITY_BOON_DEGEN_WWXRP_12;
+        cursor += W_DEGEN_WWXRP_12;
+        if (roll < cursor) return DEITY_BOON_DEGEN_WWXRP_12;
+        cursor += W_CRAPS_5;
+        if (roll < cursor) return DEITY_BOON_CRAPS_5;
+        cursor += W_CRAPS_10;
+        if (roll < cursor) return DEITY_BOON_CRAPS_10;
+        return DEITY_BOON_CRAPS_25;
     }
 }

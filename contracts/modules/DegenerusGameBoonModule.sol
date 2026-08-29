@@ -61,11 +61,18 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     // Boon Consumption Functions
     // =========================================================================
 
-    /// @notice Consume a player's coinflip boon and return the bonus BPS
+    /// @notice Consume a player's coinflip OR craps boon and return the bonus BPS.
+    /// @dev ONE trusted selector, two lanes, named by the caller. The Game façade authorizes
+    ///      exactly COIN and COINFLIP on this selector and delegatecall preserves the original
+    ///      caller, so COINFLIP spends the coinflip boon on a manual deposit and COIN (FLIP)
+    ///      spends the craps boon on a paid craps burn. The lanes are disjoint and neither
+    ///      caller can reach the other's. Sharing the selector is what lets the craps family
+    ///      ship without a byte of new code in the size-critical Game façade.
     /// @param player The player address to consume boon for
     /// @return boonBps The bonus in basis points (0 if no boon, 500/1000/2500 otherwise)
     function consumeCoinflipBoon(address player) external returns (uint16 boonBps) {
         if (player == address(0)) return 0;
+        if (msg.sender == ContractAddresses.COIN) return _consumeCrapsBoon(player);
         BoonPacked storage bp = boonPacked[player];
         uint256 s0 = bp.slot0;
         uint8 tier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
@@ -85,6 +92,24 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         boonBps = _coinflipTierToBps(tier);
         bp.slot0 = s0 & BP_COINFLIP_CLEAR;
         emit BoonConsumed(player, 1, boonBps);
+    }
+
+    /// @dev Spend the craps lane — slot1's low 24 bits, so no shift on this path. An expired
+    ///      lane pays nothing and is cleared here, matching every other consumption site.
+    ///      The tier decodes 5/10/25% off the coinflip table the family mirrors.
+    function _consumeCrapsBoon(address player) private returns (uint16 boonBps) {
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s1 = bp.slot1;
+        uint256 lane = s1 & BP_LANE_MASK;
+        uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
+        if (tier == 0) return 0;
+        if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) {
+            bp.slot1 = s1 & ~BP_LANE_MASK;
+            return 0;
+        }
+        boonBps = _coinflipTierToBps(tier);
+        bp.slot1 = s1 & ~BP_LANE_MASK;
+        emit BoonConsumed(player, 6, boonBps);
     }
 
     /// @notice Consume a player's purchase boost and return the bonus BPS
@@ -163,15 +188,15 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         BoonPacked storage bp = boonPacked[player];
         uint256 s1 = bp.slot1;
         uint256 shift = _degeneretteLaneShift(currency);
-        uint256 lane = (s1 >> shift) & BP_DEGEN_LANE_MASK;
-        uint8 tier = uint8(lane & BP_DEGEN_LANE_TIER_MASK);
+        uint256 lane = (s1 >> shift) & BP_LANE_MASK;
+        uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
         if (tier == 0) return 0;
-        if (!_degeneretteLaneLive(lane, uint24(_simulatedDayIndex()))) {
-            bp.slot1 = s1 & ~(BP_DEGEN_LANE_MASK << shift);
+        if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) {
+            bp.slot1 = s1 & ~(BP_LANE_MASK << shift);
             return 0;
         }
         boostBps = _degeneretteTierToBps(tier);
-        bp.slot1 = s1 & ~(BP_DEGEN_LANE_MASK << shift);
+        bp.slot1 = s1 & ~(BP_LANE_MASK << shift);
         emit BoonConsumed(player, 4, boostBps);
     }
 
@@ -320,16 +345,30 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             }
         }
 
+        // --- Slot 1: Craps (the low lane) ---
+        bool crapsLive;
+        {
+            uint256 lane = s1 & BP_LANE_MASK;
+            if (lane & BP_LANE_TIER_MASK != 0) {
+                if (_boonLaneLive(lane, currentDay)) {
+                    crapsLive = true;
+                } else {
+                    s1 = s1 & ~BP_LANE_MASK;
+                    changed1 = true;
+                }
+            }
+        }
+
         // --- Slot 1: Degenerette lanes (one independent boon per bet currency) ---
         bool degeneretteLive;
         for (uint256 i; i < 3; ++i) {
             uint256 laneShift = BP_DEGEN_LANE0_SHIFT + i * 24;
-            uint256 lane = (s1 >> laneShift) & BP_DEGEN_LANE_MASK;
-            if (lane & BP_DEGEN_LANE_TIER_MASK == 0) continue;
-            if (_degeneretteLaneLive(lane, currentDay)) {
+            uint256 lane = (s1 >> laneShift) & BP_LANE_MASK;
+            if (lane & BP_LANE_TIER_MASK == 0) continue;
+            if (_boonLaneLive(lane, currentDay)) {
                 degeneretteLive = true;
             } else {
-                s1 = s1 & ~(BP_DEGEN_LANE_MASK << laneShift);
+                s1 = s1 & ~(BP_LANE_MASK << laneShift);
                 changed1 = true;
             }
         }
@@ -345,6 +384,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             purchaseTierLocal != 0 ||
             decimatorTierLocal != 0 ||
             degeneretteLive ||
+            crapsLive ||
             deityPassTierLocal != 0);
     }
 
@@ -515,6 +555,13 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint8 private constant BOON_DEGEN_WWXRP_4 = 38;
     uint8 private constant BOON_DEGEN_WWXRP_8 = 39;
     uint8 private constant BOON_DEGEN_WWXRP_12 = 40;
+    /// @dev Craps stake boons. A successful self-funded craps purchase burns in full and carries
+    ///      the boon onto its slip; the tier then boosts that slip's BANKROLL RETURN by 5/10/25%
+    ///      when it settles, off a base capped at 60,000 FLIP. Nothing is credited at entry, and a
+    ///      busted run pays no bonus.
+    uint8 private constant BOON_CRAPS_5 = 41;
+    uint8 private constant BOON_CRAPS_10 = 42;
+    uint8 private constant BOON_CRAPS_25 = 43;
     /// @dev Weight for 5% coinflip boon
     uint16 private constant BOON_WEIGHT_COINFLIP_5 = 200;
     /// @dev Weight for 10% coinflip boon
@@ -581,22 +628,29 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_4 = 200;
     uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_8 = 200;
     uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_12 = 200;
+    /// @dev Craps stake-boon weights, taken from the coinflip family they mirror.
+    uint16 private constant BOON_WEIGHT_CRAPS_5 = 200;
+    uint16 private constant BOON_WEIGHT_CRAPS_10 = 40;
+    uint16 private constant BOON_WEIGHT_CRAPS_25 = 8;
     /// @dev Fixed nominal deity-pass price for the boon-chance normalization (mid-curve k=16:
     ///      BASE + 16·17/2 ether). The live triangular price is collectively player-movable
     ///      (pass purchases), so it must not reach `totalChance` — a constant keeps the hit
     ///      boundary a pure function of committed inputs. The mis-pricing only moves boon
-    ///      FREQUENCY, never a payout amount, and is bounded by the deity tiers' 40/2608
+    ///      FREQUENCY, never a payout amount, and is bounded by the deity tiers' 40/2856
     ///      weight share.
     uint256 private constant DEITY_PASS_NOMINAL_PRICE = DEITY_PASS_BASE + 136 ether;
     /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
-    uint16 private constant BOON_WEIGHT_TOTAL = 2608;
+    ///      The three craps families are appended at the TAIL of the walk (band 2608..2855), so
+    ///      every boundary below them is unmoved and the deity roll's two skip bands
+    ///      (pre-decimator, pre-deity-pass) need no adjustment.
+    uint16 private constant BOON_WEIGHT_TOTAL = 2856;
     /// @dev Exact closed form of the weighted max-value table used to normalize boon frequency.
     ///      Every fixed-price family contributes 1568 ETH of weight*value; every FLIP-priced
     ///      family collapses to 3270 times the live ticket price; lazy discounts collapse to
     ///      6 times the ten-level lazy-pass value. Activity, quest-shield and WWXRP boons carry
     ///      weight but intentionally contribute zero value.
     uint256 private constant BOON_FIXED_WEIGHTED_MAX = 1568 ether;
-    uint256 private constant BOON_PRICE_WEIGHT = 3270;
+    uint256 private constant BOON_PRICE_WEIGHT = 4230;
     uint256 private constant BOON_LAZY_WEIGHT = 6;
 
     /// @dev Ten-level lazy-pass sums in 0.01-ETH units, packed one byte per start offset.
@@ -1050,27 +1104,54 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             uint8 newTier = (offset % 3) + 1;
             uint256 laneShift = BP_DEGEN_LANE0_SHIFT + uint256(offset / 3) * 24;
             uint256 s1 = bp.slot1;
-            uint256 lane = (s1 >> laneShift) & BP_DEGEN_LANE_MASK;
+            uint256 lane = (s1 >> laneShift) & BP_LANE_MASK;
             // A dead lane never blocks a fresh award: the deity gift path applies without
             // the box-roll expiry sweep, so liveness is re-checked here, not assumed swept.
-            uint8 heldTier = _degeneretteLaneLive(lane, uint24(currentDay))
-                ? uint8(lane & BP_DEGEN_LANE_TIER_MASK)
+            uint8 heldTier = _boonLaneLive(lane, uint24(currentDay))
+                ? uint8(lane & BP_LANE_TIER_MASK)
                 : 0;
             // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > heldTier) {
                 uint256 stamp = (isDeity ? uint256(uint24(day)) : uint256(uint24(currentDay))) &
-                    BP_DEGEN_LANE_DAY_MASK;
-                uint256 fresh = (stamp << BP_DEGEN_LANE_DAY_SHIFT) |
-                    (isDeity ? BP_DEGEN_LANE_DEITY_BIT : 0) |
+                    BP_LANE_DAY_MASK;
+                uint256 fresh = (stamp << BP_LANE_DAY_SHIFT) |
+                    (isDeity ? BP_LANE_DEITY_BIT : 0) |
                     newTier;
-                bp.slot1 = (s1 & ~(BP_DEGEN_LANE_MASK << laneShift)) | (fresh << laneShift);
+                bp.slot1 = (s1 & ~(BP_LANE_MASK << laneShift)) | (fresh << laneShift);
             }
             if (!isDeity) {
                 // The value field is the rolled boonType itself (32-40): unlike bps —
                 // identical across currencies — it identifies both the currency and size.
                 emit LootBoxReward(player, 13, originalAmount, boonType);
             }
+            return;
+        }
+
+        // Craps stake boons (types 41-43) — slot1's LOW lane, the same 24-bit encoding a
+        // degenerette lane uses. One lane, spent by the next paid craps burn; the tier decodes
+        // 5/10/25% off the coinflip table this family mirrors.
+        if (boonType >= BOON_CRAPS_5) {
+            uint8 newTier = boonType - BOON_CRAPS_5 + 1;
+            uint256 s1 = bp.slot1;
+            uint256 lane = s1 & BP_LANE_MASK;
+            // A dead lane never blocks a fresh award: the deity gift path applies without
+            // the box-roll expiry sweep, so liveness is re-checked here, not assumed swept.
+            uint8 heldTier = _boonLaneLive(lane, uint24(currentDay))
+                ? uint8(lane & BP_LANE_TIER_MASK)
+                : 0;
+            // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
+            // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
+            if (newTier > heldTier) {
+                uint256 stamp = (isDeity ? uint256(uint24(day)) : uint256(uint24(currentDay))) &
+                    BP_LANE_DAY_MASK;
+                bp.slot1 = (s1 & ~BP_LANE_MASK) |
+                    (stamp << BP_LANE_DAY_SHIFT) |
+                    (isDeity ? BP_LANE_DEITY_BIT : 0) |
+                    newTier;
+            }
+            // The value field is the rolled boonType (41-43), which names the tier directly.
+            if (!isDeity) emit LootBoxReward(player, 14, originalAmount, boonType);
             return;
         }
 
@@ -1199,8 +1280,13 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             }
             return BOON_DEGEN_WWXRP_4;
         }
-        if (roll < 2408) return BOON_DEGEN_WWXRP_8;
-        return BOON_DEGEN_WWXRP_12;
+        if (roll < 2608) {
+            if (roll < 2408) return BOON_DEGEN_WWXRP_8;
+            return BOON_DEGEN_WWXRP_12;
+        }
+        if (roll < 2808) return BOON_CRAPS_5;
+        if (roll < 2848) return BOON_CRAPS_10;
+        return BOON_CRAPS_25;
     }
 
     /// @dev Exact weighted-average max value of the static boon table. This is algebraically
@@ -1325,7 +1411,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @param day The day index
     /// @param slot The slot index (0-2)
     /// @param rngWord The day's VRF word (`rngWordByDay[day]`, nonzero-checked by the caller)
-    /// @return boonType The boon type (1-40; 10-12 and 20-21 are unused)
+    /// @return boonType The boon type (1-43; 10-12 and 20-21 are unused)
     /// @dev Static modulus + static mapping: the day's three-slot menu is fixed the moment
     ///      the word lands. Eligibility must not reach the modulus — the issuer controls
     ///      issuance timing, so any live term here would let a deity re-map a slot by
@@ -1334,7 +1420,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      live term): a gift slot must never arrive dead, so those types are
     ///      lootbox-only and every menu slot is always issuable to any valid recipient.
     ///      The reduced roll skips both bands arithmetically — the composed mapping is
-    ///      exactly the renormalized 2,518-weight table over the same walk.
+    ///      exactly the renormalized 2,766-weight table over the same walk.
     function _deityBoonForSlot(
         address deity,
         uint24 day,

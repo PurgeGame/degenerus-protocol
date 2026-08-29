@@ -452,7 +452,7 @@ contract CrapsBattleTest is CrapsPins {
         // The bounty rides alongside the bankroll rather than out of it, and may not exceed it —
         // proven once, at the door that fixes it for the whole field.
         vm.prank(vaultOwner);
-        vm.expectRevert(CrapsBattle.BadBattleStake.selector);
+        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
         craps.createBattle(
             uint32(LW / 1 ether), 2, 5, uint24((LW * 2) / GRANULE) + 1, 0, uint40(block.timestamp + 1 hours), false
         , 0);
@@ -908,6 +908,26 @@ contract CrapsBattleTest is CrapsPins {
 
     /// @dev PICK A SIDE. A ticket may not back the shooter and fade them at once — refused at
     ///      every door that takes one, and at the amendment too.
+    /// @notice THE DAY LANE IS SOLD ONLY WHILE THE DAY IS WHOLE. A whole-day ticket is a
+    ///         commitment made before any of the day is spent, so the door shuts the moment the
+    ///         opener stops taking bets. What is left is taken one window at a time — the same
+    ///         seats at the same prices — so no entry ever produces a SET of slips that has to be
+    ///         stamped with where it began, locked as one and amended as one.
+    function test_theDayLaneClosesOnceTheDayIsPartSpent() public {
+        _openDay();
+        game.setScore(alice, type(uint96).max);
+
+        // The fixture clock already sits past the opener's close, so the day is part-spent.
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        craps.enterBonusDay(_seven(), 1);
+
+        // And the windows still open remain takeable one at a time.
+        vm.prank(alice);
+        craps.enterBonusBattle(PER, _seven(), 1);
+        assertEq(craps.battleOf(_keyOf(PER)).entrants, 1, "the window door refused a part-spent day");
+    }
+
     function test_aTicketMayNotPlayBothSidesOfTheLine() public {
         uint64 slot = _slotFor(LW * 2, LW * 10, SU);
         Craps.Bets memory both;
@@ -923,10 +943,6 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
         craps.enterBonusBattle(PER, both, 1);
-
-        vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
-        craps.enterBonusDay(both, 1);
 
         // And an amendment cannot smuggle it in after the fact.
         uint256 betId = _placeBattle(bob, _boardA(), LW * 2, LW * 10, SU);
@@ -1811,70 +1827,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(quests.streakAwarded(alice), 5, "a refused high re-entry credited a second streak");
     }
 
-    /// @dev A DAY-WIDE ENTRY SHUTS AS ONE. `enterBonusDay` is a single commitment spread over
-    ///      every window still open, so the whole set locks the moment the first of it binds a
-    ///      table — otherwise the windows still running could be re-tuned against a result an
-    ///      earlier one had already published. Taking the same windows ONE AT A TIME is a
-    ///      different bet and keeps its own per-window deadline, which is the contrast this pins.
-    function test_aDayWideEntryLocksWhenItsFirstWindowDoes() public {
-        _openDay();
-        game.setScore(alice, type(uint96).max);
-        game.setScore(bob, type(uint96).max);
 
-        vm.prank(alice);
-        uint256 placed = craps.enterBonusDay(_seven(), 1);
-        assertGt(placed, 2, "the day-wide entry took too few windows");
-        // Bob takes the same two windows the long way round.
-        vm.prank(bob);
-        craps.enterBonusBattle(PER, _seven(), 1);
-        vm.prank(bob);
-        craps.enterBonusBattle(PER + 2, _seven(), 1);
-
-        uint256 aliceLate = _seatOf(PER + 2, alice);
-        uint256 bobLate = _seatOf(PER + 2, bob);
-
-        // Before anything binds, both are open orders.
-        vm.prank(alice);
-        craps.amendSlip(aliceLate, _boardB());
-        assertEq(craps.betOf(aliceLate).chips, (uint256(4) << 9) | (uint256(3) << 12), "a live set refused a reshape");
-
-        // The set's FIRST window binds. Nothing else has: `PER + 2` is still taking entries.
-        _warpPastClose(PER);
-        craps.armBonusWindow(_slotAt(PER));
-        (, uint48 lateIndex,, bool joinable) = craps.bonusWindowOf(PER + 2);
-        assertEq(lateIndex, 0, "the late window bound too");
-        assertTrue(joinable, "the late window stopped taking entries");
-
-        // Alice's later windows went with it. Bob's did not.
-        vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BetLocked.selector);
-        craps.amendSlip(aliceLate, _boardC());
-
-        vm.prank(bob);
-        craps.amendSlip(bobLate, _boardC());
-        assertEq(craps.betOf(bobLate).chips, (uint256(4) << 3) | (uint256(3) << 24), "a one-at-a-time slip locked");
-    }
-
-    /// @dev The set locks on ITS OWN first window, never on one that had already shut when the
-    ///      entry was placed. A day-wide entry taken halfway through the day is a set of the
-    ///      windows still running, and the mornings's spent windows say nothing about it.
-    function test_aDayWideEntryIgnoresWindowsThatShutBeforeIt() public {
-        _openDay();
-        // Bind the opener, then take the day from a period that is still live.
-        _warpPastClose(PER);
-        craps.armBonusWindow(_slotAt(PER));
-
-        game.setScore(alice, type(uint96).max);
-        vm.prank(alice);
-        uint256 placed = craps.enterBonusDay(_seven(), 1);
-        assertGt(placed, 1, "the day-wide entry took too few windows");
-
-        // An already-bound window from before the entry must not lock it.
-        uint256 betId = _seatOf(PER + 2, alice);
-        vm.prank(alice);
-        craps.amendSlip(betId, _boardB());
-        assertEq(craps.betOf(betId).chips, (uint256(4) << 9) | (uint256(3) << 12), "a spent window locked a later set");
-    }
 
     // ---------------------------------------------------------------------------------------
     // The bonus day
@@ -2836,7 +2789,7 @@ contract CrapsBattleTest is CrapsPins {
         craps.createBattle(widest, 1, 5, 0, 0, close, false, 0);
 
         vm.prank(vaultOwner);
-        vm.expectRevert(CrapsBattle.BoardNotWholeStack.selector);
+        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
         craps.createBattle(widest + 10, 1, 5, 0, 0, close, false, 0);
     }
 
@@ -3334,34 +3287,6 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.battleOf(craps.battleKeyOf((uint256(slot) << 64) | 1)).entrants, 2, "a second entry was refused");
     }
 
-    /// @dev One allocation, every window still open. Each scales the same seven chips to its own
-    ///      chip, which is the whole reason the door counts chips rather than FLIP — and windows
-    ///      whose period has already passed, or that this player already sits in, are skipped
-    ///      rather than costing them the rest of the day.
-    function test_oneCallEntersEveryWindowStillOpen() public {
-        vm.prank(ContractAddresses.GAME);
-        craps.openBonusDay();
-        (uint24 day,,) = craps.currentBonusSlot();
-        uint256 periods = craps.BONUS_PERIODS_PER_DAY();
-
-        // The bar differs window to window, so meet the largest of them.
-        uint256 bar;
-        for (uint256 p = 0; p < periods; ++p) {
-            (,,,,, uint256 need) = craps.bonusTermsFor(day, p);
-            if (need > bar) bar = need;
-        }
-        game.setScore(alice, bar);
-
-        vm.prank(alice);
-        assertEq(craps.enterBonusDay(_seven(), 1), periods - PER, "the day entry missed a window");
-        for (uint256 p = 0; p < periods; ++p) {
-            assertEq(craps.battleOf(_keyOf(p)).entrants, p >= PER ? 1 : 0, "wrong field size");
-        }
-
-        // A second call takes nothing rather than reverting the lot.
-        vm.prank(alice);
-        assertEq(craps.enterBonusDay(_seven(), 1), 0, "a second day entry double-seated");
-    }
 
     /// @dev Anyone may put money ONTO a window: the donor takes nothing back, gains no seat and
     ///      cannot reach it again, which is what makes it permissionless. It banks on top of

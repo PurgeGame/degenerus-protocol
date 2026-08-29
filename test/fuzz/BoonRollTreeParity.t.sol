@@ -18,7 +18,7 @@ contract BoonRollTreeParity is Test {
     }
 
     function testEveryReachableWeightedRollMatchesCanonicalReference() public view {
-        for (uint256 roll; roll < 2608; ++roll) {
+        for (uint256 roll; roll < 2856; ++roll) {
             assertEq(harness.tree(roll), _reference(roll), "boon boundary drift");
         }
     }
@@ -59,6 +59,9 @@ contract BoonRollTreeParity is Test {
         if (roll < 2008) return 37;
         if (roll < 2208) return 38;
         if (roll < 2408) return 39;
-        return 40;
+        if (roll < 2608) return 40;
+        if (roll < 2808) return 41;
+        if (roll < 2848) return 42;
+        return 43;
     }
 }

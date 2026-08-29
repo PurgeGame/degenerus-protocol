@@ -746,7 +746,7 @@ contract DegenerusGameDegeneretteModule is
         if (
             selfFunded &&
             ((boonPacked[player].slot1 >> _degeneretteLaneShift(currency)) &
-                BP_DEGEN_LANE_TIER_MASK) != 0
+                BP_LANE_TIER_MASK) != 0
         ) {
             boonBps = _consumeDegeneretteBoon(player, currency);
         }

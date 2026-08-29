@@ -97,7 +97,12 @@ contract BoonStaticDiscard is DeployProtocol {
         vm.deal(player, 10 ether);
 
         uint256 decDiscards;
-        for (uint256 i = 1; i <= 150; i++) {
+        // The decimator band is 50 weight of the static table, so a draw hits it about one time
+        // in fifty-seven and the non-vacuity check below needs enough draws to be near-certain
+        // rather than seed-lucky. The sample is sized off the table TOTAL: widening the table
+        // dilutes every band's share without moving its boundaries, and a fixture pinned to the
+        // old share silently becomes a coin-flip rather than a guard.
+        for (uint256 i = 1; i <= 400; i++) {
             uint256 vrfWord = uint256(keccak256(abi.encode("staticDiscard", i)));
             uint48 index = uint48(5000 + i);
             _setupLootbox(player, index, 10 ether, vrfWord);

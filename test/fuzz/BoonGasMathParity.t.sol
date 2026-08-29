@@ -96,6 +96,11 @@ contract BoonGasMathParity is Test {
         weighted += 50 * _flipValue(8000 ether, priceWei);
         weighted += 10 * _flipValue(12_000 ether, priceWei);
 
-        return weighted / 2608;
+        // Craps bankroll-payout boons: 5/10/25% of a 60k-FLIP payout base, weights 200/40/8.
+        weighted += 200 * _flipValue(3000 ether, priceWei);
+        weighted += 40 * _flipValue(6000 ether, priceWei);
+        weighted += 8 * _flipValue(15_000 ether, priceWei);
+
+        return weighted / 2856;
     }
 }

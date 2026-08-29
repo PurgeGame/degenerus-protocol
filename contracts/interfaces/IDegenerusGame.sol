@@ -124,8 +124,10 @@ interface IDegenerusGame {
             uint8 phaseDay
         );
 
-    /// @notice Consume coinflip boon for next coinflip stake bonus.
-    /// @dev Grants bonus to the next coinflip deposit.
+    /// @notice Consume the caller's boon lane for the next stake bonus.
+    /// @dev Access: COIN or COINFLIP. The caller names the lane — COINFLIP grants the bonus to the
+    ///      next coinflip deposit, COIN (FLIP) grants it to the paid craps burn in flight. The two
+    ///      lanes are disjoint and neither caller can reach the other's.
     /// @param player The player consuming the boon.
     /// @return boostBps Boost amount in basis points.
     function consumeCoinflipBoon(address player) external returns (uint16 boostBps);

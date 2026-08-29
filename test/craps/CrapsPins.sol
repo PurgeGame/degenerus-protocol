@@ -5,6 +5,7 @@ import {CrapsViews} from "./CrapsViews.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 
 /// @dev The two things craps reads out of the live game: the raw lootbox-RNG slots and the
@@ -65,6 +66,32 @@ contract MockFlip {
     function mintForGame(address to, uint256 amount) external {
         minted[to] += amount;
         totalMinted += amount;
+    }
+
+    /// @dev The paid-craps lane. The price arrives with its action flags in the LOW BYTE, so the
+    ///      untagged gross is what gets recorded — burn totals stay comparable with `burnCoin`.
+    ///      Returns the boon mask a test armed, and clears it: the real lane spends the Game's
+    ///      boon lane on the first burn, so a second burn in the same transaction comes back empty.
+    uint8 public nextBoonMask;
+    uint8 public lastCrapsFlags;
+    uint256 public crapsBurns;
+
+    function setNextBoonMask(uint8 mask) external {
+        nextBoonMask = mask;
+    }
+
+    function burnCoinForCraps(address target, uint256 grossAndFlags) external returns (uint8 mask) {
+        if (burnRefused[target]) revert MockBurnRefused();
+        uint256 gross = grossAndFlags & ~uint256(0xFF);
+        lastCrapsFlags = uint8(grossAndFlags);
+        burned[target] += gross;
+        totalBurned += gross;
+        ++crapsBurns;
+        mask = nextBoonMask;
+        nextBoonMask = 0;
+        // The table no longer writes to the quest ledger itself: the burn lane reports the action,
+        // so the mock forwards it the same way real FLIP does.
+        if (lastCrapsFlags != 0) MockQuests(ContractAddresses.QUESTS).recordCrapsAction(target, lastCrapsFlags);
     }
 }
 
@@ -134,6 +161,24 @@ contract MockQuests {
         streakAwarded[player] += amount;
         ++streakCalls[player];
         lastDay = currentDay;
+    }
+
+    /// @dev The combined craps report FLIP now makes. Bit 2 is the normal day-kept credit and bit 3
+    ///      the high one, carrying the same +1/+5 the real ledger applies, so a suite still proves
+    ///      the streak cadence through the path the table actually drives.
+    uint256 public crapsActions;
+    uint8 public lastCrapsFlags;
+
+    function recordCrapsAction(address player, uint8 actionFlags) external {
+        ++crapsActions;
+        lastCrapsFlags = actionFlags;
+        if (actionFlags & 0xC != 0) {
+            streakAwarded[player] += (actionFlags & 0x8) != 0 ? 5 : 1;
+            ++streakCalls[player];
+            // The real ledger reads the clock itself rather than being told the day, so the mock
+            // does too — same library, same boundary.
+            lastDay = GameTimeLib.currentDayIndex();
+        }
     }
 }
 

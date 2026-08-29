@@ -1,0 +1,550 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.26;
+
+import {CrapsPins} from "./CrapsPins.sol";
+import {CrapsViews} from "./CrapsViews.sol";
+import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {Craps} from "../../contracts/Craps.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {Vm} from "forge-std/Vm.sol";
+
+contract BoonPayoutHarness is CrapsViews {}
+
+/// @title CrapsBoonPayout -- the craps boon as a BANKROLL-PAYOUT boost
+/// @notice The boon buys no discount and pays no entry-time credit. It rides the slip as a one-hot
+///         mask in bet-word bits 206..208 and lifts ONLY that slip's bankroll return when it
+///         settles. Four things this owns:
+///
+///         1. THE SLICE. 206..208 was free space between the standing field and the day-span byte.
+///            A writer that spills into a neighbour would corrupt a standing or a high-lane flag
+///            silently, so the surrounding word is graded, not just the mask.
+///         2. THE FORMULA. `min(basePaid, 60,000) * bps`, so the tiers top out at 3,000 / 6,000 /
+///            15,000 FLIP. A SHARED base ceiling rather than three separate caps: capping each
+///            tier at 15,000 would flatten all three on a big enough return.
+///         3. FAIL CLOSED. Only 1, 2 and 4 mean anything. 3, 5, 6 and 7 are unreachable through
+///            the trusted writer and must pay nothing if they ever reach storage another way,
+///            where a two-bit index would silently mean something.
+///         4. THE ANCHOR. One boon buys upside on ONE run, fixed by the bet's structure rather
+///            than by settlement order -- settlement is permissionless once the words are public,
+///            so "the first window resolved" would let a caller choose the outcome. A day ticket
+///            answers at period 0 and nowhere else, and the custom-slot guard is load-bearing
+///            because custom slots run from a multiple of eight.
+contract CrapsBoonPayoutTest is CrapsPins {
+    BoonPayoutHarness internal craps;
+
+    address internal alice = makeAddr("alice");
+    address internal bob = makeAddr("bob");
+
+    uint24 internal constant PLAYED = 600;
+    uint128 internal constant BANK = 600e18;
+    uint128 internal constant GOAL = 6000e18;
+    uint256 internal constant PER = 1;
+
+    uint256 internal constant MASK_5 = 1;
+    uint256 internal constant MASK_10 = 2;
+    uint256 internal constant MASK_25 = 4;
+
+    function setUp() public {
+        _installPins();
+        craps = new BoonPayoutHarness();
+        vm.warp(block.timestamp + 1 days);
+        _setIndex(4);
+        uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
+        game.setScore(alice, floor_);
+        game.setScore(bob, floor_);
+    }
+
+    function _seven() internal pure returns (Craps.Bets memory c) {
+        c.passLine = 2;
+        c.place4 = 1;
+        c.place5 = 1;
+        c.place6 = 1;
+        c.place8 = 1;
+        c.place9 = 1;
+    }
+
+    function _customSlot() internal returns (uint64 slot) {
+        vm.prank(vaultOwner);
+        slot = craps.createBattle(PLAYED, 4, 10, 0, 0, uint40(block.timestamp + 1 days), true, 0);
+    }
+
+    // ---------------------------------------------------------------------
+    // 1. The slice
+    // ---------------------------------------------------------------------
+
+    function test_theMaskRoundTripsThroughStorageAtItsOwnSlice() public {
+        uint64 slot = _customSlot();
+        uint256[3] memory masks = [MASK_5, MASK_10, MASK_25];
+        for (uint256 i; i < 3; ++i) {
+            address who = address(uint160(uint256(keccak256(abi.encode("mask", i)))));
+            game.setScore(who, craps.SYBIL_SCORE_FLOOR());
+            flip.setNextBoonMask(uint8(masks[i]));
+            vm.prank(who);
+            uint256 betId = craps.enterBattle(slot, _seven(), 1);
+            assertEq(craps.boonMaskOf(betId), masks[i], "the mask did not reach its slice");
+        }
+    }
+
+    function test_anUnboonedEntryLeavesTheSliceClear() public {
+        uint64 slot = _customSlot();
+        vm.prank(alice);
+        uint256 betId = craps.enterBattle(slot, _seven(), 1);
+        assertEq(craps.boonMaskOf(betId), 0, "an unbooned slip carries a mask");
+    }
+
+    /// @dev The neighbours matter more than the mask: 206..208 sits directly above the standing
+    ///      field and below the high-lane flags, and a one-bit spill either way is silent.
+    function test_theMaskDisturbsNoNeighbouringField() public {
+        uint64 slot = _customSlot();
+
+        vm.prank(alice);
+        uint256 plain = craps.enterBattle(slot, _seven(), 1);
+        flip.setNextBoonMask(uint8(MASK_25));
+        vm.prank(bob);
+        uint256 booned = craps.enterBattle(slot, _seven(), 1);
+
+        // Same board, same standing, same slot, different holder. Mask off the player and the
+        // boon slice and EVERY other bit must be identical -- which is the whole claim: writing
+        // 206..208 touched nothing above or below it.
+        uint256 ignore = (craps.BET_BOON_MASK() << craps.BET_BOON_SHIFT()) | uint256(type(uint160).max);
+        assertEq(
+            craps.betWordOf(plain) & ~ignore,
+            craps.betWordOf(booned) & ~ignore,
+            "the boon slice disturbed a neighbouring field"
+        );
+        assertEq(craps.betOf(booned).standing, craps.betOf(plain).standing, "standing moved");
+        assertEq(craps.betOf(booned).chips, craps.betOf(plain).chips, "chips moved");
+    }
+
+    function test_amendSlipPreservesTheMask() public {
+        uint64 slot = _customSlot();
+        flip.setNextBoonMask(uint8(MASK_10));
+        vm.prank(alice);
+        uint256 betId = craps.enterBattle(slot, _seven(), 1);
+
+        Craps.Bets memory other;
+        other.dontPass = 4;
+        other.place6 = 3;
+        vm.prank(alice);
+        craps.amendSlip(betId, other);
+        assertEq(craps.boonMaskOf(betId), MASK_10, "an amendment dropped the boon");
+    }
+
+    // ---------------------------------------------------------------------
+    // 2. The formula and its ceiling
+    // ---------------------------------------------------------------------
+
+    function test_theThreeTiersPayTheirExactPercentageBelowTheCeiling() public view {
+        uint256 basePaid = 1000 ether;
+        assertEq(craps.boonBonusOf(MASK_5, basePaid), 50 ether, "5% tier");
+        assertEq(craps.boonBonusOf(MASK_10, basePaid), 100 ether, "10% tier");
+        assertEq(craps.boonBonusOf(MASK_25, basePaid), 250 ether, "25% tier");
+    }
+
+    function test_theBaseCeilingCapsEveryTierAndKeepsTheirSpread() public view {
+        uint256 cap = craps.BOON_PAYOUT_BASE_CAP();
+        assertEq(cap, 60_000 ether, "the payout base ceiling moved");
+
+        // At the ceiling exactly, and far above it, the answer is the same -- and the three tiers
+        // stay 3,000 / 6,000 / 15,000 rather than flattening onto one number.
+        for (uint256 i; i < 2; ++i) {
+            uint256 basePaid = i == 0 ? cap : cap * 1000;
+            assertEq(craps.boonBonusOf(MASK_5, basePaid), 3_000 ether, "5% ceiling");
+            assertEq(craps.boonBonusOf(MASK_10, basePaid), 6_000 ether, "10% ceiling");
+            assertEq(craps.boonBonusOf(MASK_25, basePaid), 15_000 ether, "25% ceiling");
+        }
+
+        // One wei under the ceiling still scales, so the cap bites exactly where it says.
+        assertEq(craps.boonBonusOf(MASK_25, cap - 4), (cap - 4) / 4, "the ceiling bit early");
+    }
+
+    function test_aZeroPaymentPaysNoBonusSoABustCannotBecomeACredit() public view {
+        assertEq(craps.boonBonusOf(MASK_25, 0), 0, "a bust drew a bonus");
+    }
+
+    function test_onlyOneHotMasksPayAndTheRestFailClosed() public view {
+        uint256 basePaid = 1000 ether;
+        uint256[4] memory invalid = [uint256(0), 3, 5, 6];
+        for (uint256 i; i < 4; ++i) {
+            assertEq(craps.boonBonusOf(invalid[i], basePaid), 0, "an invalid mask paid");
+        }
+        assertEq(craps.boonBonusOf(7, basePaid), 0, "mask 7 paid");
+    }
+
+    function testFuzz_theBonusIsNeverMoreThanAQuarterOfTheCappedBase(uint256 basePaid, uint8 raw) public view {
+        basePaid = bound(basePaid, 0, type(uint128).max);
+        uint256 mask = bound(raw, 0, 7);
+        uint256 cap = craps.BOON_PAYOUT_BASE_CAP();
+        uint256 got = craps.boonBonusOf(mask, basePaid);
+        uint256 base = basePaid > cap ? cap : basePaid;
+        assertLe(got, base / 4, "a bonus exceeded the top tier on its capped base");
+        assertLe(got, 15_000 ether, "a bonus exceeded the protocol ceiling");
+    }
+
+    // ---------------------------------------------------------------------
+    // 3. The anchor
+    // ---------------------------------------------------------------------
+
+    function test_aWindowOrCustomSlipAnswersForItself() public view {
+        uint256 slotsPerDay = craps.BONUS_SLOTS_PER_DAY();
+        // Every real window of a day -- remainder 1..7 -- is its own anchor.
+        for (uint256 p = 1; p <= 7; ++p) {
+            uint256 slot = 5 * slotsPerDay + p;
+            assertTrue(craps.boonAnchoredAt(slot, slot), "a window slip lost its own boon");
+        }
+    }
+
+    function test_aDayTicketAnchorsOnPeriodZeroAndNowhereElse() public view {
+        uint256 slotsPerDay = craps.BONUS_SLOTS_PER_DAY();
+        uint256 daySlot = 5 * slotsPerDay; // remainder 0 -- the day-ticket slot
+        for (uint256 p = 0; p < 7; ++p) {
+            uint256 bound_ = daySlot + p + 1; // _slotOf(day, p)
+            bool anchored = craps.boonAnchoredAt(daySlot, bound_);
+            assertEq(anchored, p == 0, "a day ticket anchored on the wrong window");
+        }
+    }
+
+    /// @dev THE TRAP. Custom slots run sequentially from `1 << 40`, which is itself a multiple of
+    ///      eight, so every eighth custom battle has remainder zero and the remainder ALONE would
+    ///      read it as a day ticket -- silently moving its boon onto a window it never played.
+    function test_customSlotsAreNeverMistakenForDayTicketsAcrossTheModuloBoundary() public view {
+        uint256 base = craps.CUSTOM_SLOT_BASE();
+        assertEq(base % craps.BONUS_SLOTS_PER_DAY(), 0, "the custom base is no longer eight-aligned");
+        for (uint256 i; i < 24; ++i) {
+            uint256 slot = base + i;
+            // `bound` is meaningless for a custom battle; whatever it is, the slip anchors.
+            assertTrue(craps.boonAnchoredAt(slot, 0), "a custom slot lost its boon");
+            assertTrue(craps.boonAnchoredAt(slot, slot), "a custom slot lost its boon");
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // 4. Entry paths: who may carry a boon at all
+    // ---------------------------------------------------------------------
+
+    function test_aFutureRunMarksOnlyItsFirstReservedDay() public {
+        uint24 today = craps.currentDayIndex();
+        flip.setNextBoonMask(uint8(MASK_25));
+        vm.prank(alice);
+        craps.buyFutureCrapsDays(today + 1, 3, false);
+
+        uint256 slotsPerDay = craps.BONUS_SLOTS_PER_DAY();
+        for (uint256 i; i < 3; ++i) {
+            uint24 day = uint24(uint256(today) + 1 + i);
+            uint256 seat = craps.daySeatNumberOf(day, alice);
+            assertGt(seat, 0, "the run did not reserve its day");
+            uint256 betId = ((uint256(day) * slotsPerDay) << 64) | seat;
+            assertEq(craps.boonMaskOf(betId), i == 0 ? MASK_25 : 0, "the run spread one boon over many days");
+        }
+    }
+
+    function test_redemptionAndDeliveryCarryNoBoon() public {
+        uint24 today = craps.currentDayIndex();
+        uint256 slotsPerDay = craps.BONUS_SLOTS_PER_DAY();
+
+        // A DELIVERED pass is not a purchase.
+        vm.prank(ContractAddresses.GAME);
+        craps.deliverPasses(bob, 1, 0);
+        uint256 seat = craps.daySeatNumberOf(today + 1, bob);
+        assertGt(seat, 0, "the delivery did not seat tomorrow");
+        uint256 betId = ((uint256(today + 1) * slotsPerDay) << 64) | seat;
+        assertEq(craps.boonMaskOf(betId), 0, "a delivered pass carried a boon");
+
+        // Nor is SPENDING a banked credit, even with a boon armed.
+        vm.prank(ContractAddresses.GAME);
+        craps.deliverPasses(alice, 2, 0);
+        flip.setNextBoonMask(uint8(MASK_25));
+        vm.prank(alice);
+        craps.applyCrapsPasses(today + 5, 1, false);
+        uint256 aSeat = craps.daySeatNumberOf(today + 5, alice);
+        uint256 aBet = ((uint256(today + 5) * slotsPerDay) << 64) | aSeat;
+        assertEq(craps.boonMaskOf(aBet), 0, "a redeemed pass carried a boon");
+    }
+
+    // ---------------------------------------------------------------------
+    // 5. The seam: `_resolve` joining the mask to the payment
+    // ---------------------------------------------------------------------
+
+    /// @dev The formula and the plumbing are graded above; this grades the JOIN. The same run is
+    ///      previewed with and without a boon — the only way to do that is to rewrite the stored
+    ///      word, because seats are seeded individually and two slips would be two different runs.
+    ///      Sweeps seeds until it has both a paying run and a busted one, so the pair covers the
+    ///      credit case and the "a bust stays a bust" case on real settlements.
+    function test_theBoonLiftsPaidByExactlyItsBonusAndNeverTouchesWon() public {
+        uint256 shift = craps.BET_BOON_SHIFT();
+        bool sawPaying;
+        bool sawBust;
+
+        for (uint256 i; i < 24 && !(sawPaying && sawBust); ++i) {
+            uint64 slot = _openBattle(craps, PLAYED, 4, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0);
+            vm.prank(alice);
+            uint256 betId = craps.enterBattle(slot, _seven(), 1);
+            _closeOn(craps, slot, uint48(9_000 + i), uint256(keccak256(abi.encode("seam", i))));
+
+            (uint256 wonPlain, uint256 paidPlain) = craps.previewSettlement(betId);
+            uint256 word = craps.betWordOf(betId);
+            craps.setBetWord(betId, word | (MASK_25 << shift));
+            (uint256 wonBooned, uint256 paidBooned) = craps.previewSettlement(betId);
+
+            assertEq(wonBooned, wonPlain, "the boon moved the run's own result");
+            assertEq(
+                paidBooned - paidPlain,
+                craps.boonBonusOf(MASK_25, paidPlain),
+                "paid did not move by exactly the bonus"
+            );
+
+            if (paidPlain == 0) {
+                assertEq(paidBooned, 0, "a boon turned a bust into a credit");
+                sawBust = true;
+            } else {
+                assertGt(paidBooned, paidPlain, "a paying run drew no bonus");
+                sawPaying = true;
+            }
+        }
+        assertTrue(sawPaying, "the sweep never found a paying run");
+        assertTrue(sawBust, "the sweep never found a busted run");
+    }
+
+    /// @dev An unreachable mask reaching storage another way must pay nothing rather than mean
+    ///      something — the whole reason the field is one-hot instead of a two-bit index.
+    function test_anInvalidStoredMaskPaysNothingAtSettlement() public {
+        uint256 shift = craps.BET_BOON_SHIFT();
+        uint64 slot = _openBattle(craps, PLAYED, 4, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0);
+        vm.prank(alice);
+        uint256 betId = craps.enterBattle(slot, _seven(), 1);
+        _closeOn(craps, slot, 9_500, uint256(keccak256("invalid-mask")));
+
+        (, uint256 paidPlain) = craps.previewSettlement(betId);
+        uint256 word = craps.betWordOf(betId);
+        uint256[4] memory bad = [uint256(3), 5, 6, 7];
+        for (uint256 i; i < 4; ++i) {
+            craps.setBetWord(betId, word | (bad[i] << shift));
+            (, uint256 paidBad) = craps.previewSettlement(betId);
+            assertEq(paidBad, paidPlain, "an invalid mask paid at settlement");
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // 6. The high lane: the base is the SCALED payment
+    // ---------------------------------------------------------------------
+
+    /// @dev A high seat buys H copies of ONE run, so the percentage must run on the SCALED
+    ///      payment and the 60,000 ceiling must bite on that. Taking the base pre-scale and
+    ///      multiplying after would pay `H x boonBonus(s.paid)` -- at H = 256 that is hundreds of
+    ///      thousands of FLIP instead of the 15,000 ceiling, so the two readings are nowhere near
+    ///      each other and this pins the right one.
+    ///
+    ///      The lane is CONTESTED on purpose: a sole high rider's return is added after the boon,
+    ///      and with two high seats there is no rider, so `paid` is the scaled payment exactly and
+    ///      the delta is readable without unpicking a rider.
+    function test_aHighSeatTakesItsBonusOffTheScaledPaymentAndTheCeilingBitesThere() public {
+        uint256 shift = craps.BET_BOON_SHIFT();
+        uint256 cap = craps.BOON_PAYOUT_BASE_CAP();
+        uint16 h = uint16(craps.MAX_HIGH_MULT());
+        bool sawCapped;
+
+        for (uint256 i; i < 24 && !sawCapped; ++i) {
+            uint64 slot = _openHigh(craps, PLAYED, 4, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0, h);
+            vm.prank(alice);
+            uint256 betId = craps.enterBattle(slot, _seven(), h);
+            vm.prank(bob);
+            craps.enterBattle(slot, _seven(), h); // contest the lane, so neither seat rides
+            _closeOn(craps, slot, uint48(11_000 + i), uint256(keccak256(abi.encode("high", i))));
+
+            (, uint256 paidPlain) = craps.previewSettlement(betId);
+            if (paidPlain == 0) continue;
+
+            uint256 word = craps.betWordOf(betId);
+            craps.setBetWord(betId, word | (MASK_25 << shift));
+            (, uint256 paidBooned) = craps.previewSettlement(betId);
+
+            assertEq(
+                paidBooned - paidPlain,
+                craps.boonBonusOf(MASK_25, paidPlain),
+                "the bonus was not taken off the scaled payment"
+            );
+            if (paidPlain > cap) {
+                assertEq(paidBooned - paidPlain, 15_000 ether, "the ceiling did not bite on the scaled base");
+                sawCapped = true;
+            }
+        }
+        assertTrue(sawCapped, "no high run large enough to test the ceiling");
+    }
+
+    /// @dev THE BOON MATH IS WRITTEN TWICE — once in `_resolve`, once in `previewSettlement` —
+    ///      so a divergence between them is invisible to any test that reads only one, and a
+    ///      quote that over-promises is worse than no quote. Hold the two to the same number, on
+    ///      an ordinary seat and on a high one, since only the high path exercises the scale.
+    function test_thePreviewQuotesExactlyWhatSettlementPays() public {
+        uint16 h = uint16(craps.MAX_HIGH_MULT());
+        bool sawPlainPay;
+        bool sawHighPay;
+
+        for (uint256 i; i < 24 && !(sawPlainPay && sawHighPay); ++i) {
+            uint64 slot = _openHigh(craps, PLAYED, 4, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0, h);
+
+            flip.setNextBoonMask(uint8(MASK_25));
+            vm.prank(alice);
+            uint256 ordinary = craps.enterBattle(slot, _seven(), 1);
+            flip.setNextBoonMask(uint8(MASK_25));
+            vm.prank(bob);
+            uint256 high = craps.enterBattle(slot, _seven(), h);
+            // A second high seat, so neither rides and the quote is the scaled payment alone.
+            address third = address(uint160(uint256(keccak256(abi.encode("third", i)))));
+            game.setScore(third, craps.SYBIL_SCORE_FLOOR());
+            vm.prank(third);
+            craps.enterBattle(slot, _seven(), h);
+
+            _closeOn(craps, slot, uint48(13_000 + i), uint256(keccak256(abi.encode("parity", i))));
+
+            (, uint256 quotedOrdinary) = craps.previewSettlement(ordinary);
+            (, uint256 quotedHigh) = craps.previewSettlement(high);
+
+            vm.recordLogs();
+            craps.resolveSlot(slot, WHOLE_FIELD);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+
+            assertEq(_settledPaidOf(logs, ordinary), quotedOrdinary, "the quote missed an ordinary settlement");
+            assertEq(_settledPaidOf(logs, high), quotedHigh, "the quote missed a high settlement");
+            if (quotedOrdinary != 0) sawPlainPay = true;
+            if (quotedHigh != 0) sawHighPay = true;
+        }
+        assertTrue(sawPlainPay, "no ordinary run paid");
+        assertTrue(sawHighPay, "no high run paid");
+    }
+
+    function _settledPaidOf(Vm.Log[] memory logs, uint256 betId) internal pure returns (uint256) {
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics.length == 3 && logs[i].topics[0] == sig && uint256(logs[i].topics[1]) == betId) {
+                (, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256));
+                return paid;
+            }
+        }
+        revert("that bet never settled");
+    }
+
+    // ---------------------------------------------------------------------
+    // 7. The day ticket: the period-0 anchor, at settlement
+    // ---------------------------------------------------------------------
+
+    /// @dev Walk the clock onto PERIOD ZERO, the only window in which the day lane is sold. Steps
+    ///      rather than computing the boundary, so it stays right if the schedule is ever retuned.
+    function _warpToPeriodZero() internal {
+        for (uint256 i; i < 1500; ++i) {
+            (, uint256 period,) = craps.currentBonusSlot();
+            if (period == 0) return;
+            vm.warp(vm.getBlockTimestamp() + 1 minutes);
+        }
+        revert("no period-zero window found within a day");
+    }
+
+    function _dayTicketWithBoon(uint256 mask) internal returns (uint24 day, uint256 betId) {
+        _warpToPeriodZero();
+        day = craps.currentDayIndex();
+        _setDailyWord(day, uint256(keccak256("day-anchor-word")));
+        vm.prank(ContractAddresses.GAME);
+        craps.openBonusDay();
+
+        Craps.Bets memory blank;
+        flip.setNextBoonMask(uint8(mask));
+        vm.prank(alice);
+        craps.enterBonusDay(blank, 1);
+
+        uint256 seat = craps.daySeatNumberOf(day, alice);
+        betId = ((uint256(day) * craps.BONUS_SLOTS_PER_DAY()) << 64) | seat;
+        assertEq(craps.boonMaskOf(betId), mask, "the day ticket did not carry the boon");
+    }
+
+    /// @dev A window is armed only once it has STOPPED taking bets, so step the clock past its
+    ///      close first. Stepping rather than computing the boundary keeps this right if the
+    ///      schedule is retuned.
+    function _warpPastPeriod(uint256 period) internal {
+        for (uint256 i; i < 200; ++i) {
+            (, uint256 p,) = craps.currentBonusSlot();
+            if (p > period) return;
+            vm.warp(vm.getBlockTimestamp() + 10 minutes);
+        }
+        revert("window never closed");
+    }
+
+    function _paidAt(uint24 day, uint256 period, uint256 betId) internal returns (uint256) {
+        _warpPastPeriod(period);
+        uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + period + 1);
+        uint48 index = craps.armBonusWindow(slot);
+        _setIndex(index);
+        _setWord(index, uint256(keccak256(abi.encode("settle", period))));
+        vm.recordLogs();
+        craps.resolveSlot(slot, WHOLE_FIELD);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics.length == 3 && logs[i].topics[0] == sig && uint256(logs[i].topics[1]) == betId) {
+                (, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256));
+                return paid;
+            }
+        }
+        revert("the day ticket did not settle in that window");
+    }
+
+    /// @dev ONE boon, ONE settlement. A whole-day ticket plays seven windows off one stored slip,
+    ///      so an unanchored boon would pay seven times. The anchor is STRUCTURAL — period 0 — and
+    ///      not "whichever window settles first", because settlement is permissionless once the
+    ///      words are public and a caller could otherwise choose the outcome it lands on.
+    ///
+    ///      Each leg runs twice off one snapshot: once with the boon and once with the slice
+    ///      cleared, so the comparison is the SAME run rather than two different ones.
+    function test_aDayTicketIsBoostedAtPeriodZeroAndAtNoOtherWindow() public {
+        uint256 shift = craps.BET_BOON_SHIFT();
+        (uint24 day, uint256 betId) = _dayTicketWithBoon(MASK_25);
+        uint256 cleared = craps.betWordOf(betId) & ~(craps.BET_BOON_MASK() << shift);
+
+        // PERIOD 0 -- the anchor. The boon must lift it by exactly its bonus.
+        uint256 snap = vm.snapshotState();
+        uint256 boonedAtZero = _paidAt(day, 0, betId);
+        vm.revertToState(snap);
+        craps.setBetWord(betId, cleared);
+        uint256 plainAtZero = _paidAt(day, 0, betId);
+        assertEq(
+            boonedAtZero - plainAtZero,
+            craps.boonBonusOf(MASK_25, plainAtZero),
+            "the anchor window was not boosted by its bonus"
+        );
+
+        // A LATER WINDOW -- untouched, however the day is settled. Two of them is the whole
+        // claim at this level; that the rule holds for all seven is graded exhaustively against
+        // the predicate itself in `test_aDayTicketAnchorsOnPeriodZeroAndNowhereElse`, and the
+        // day's last window closes on the day boundary where a stepping fixture cannot follow it.
+        for (uint256 p = 1; p < 3; ++p) {
+            vm.revertToState(snap);
+            uint256 booned = _paidAt(day, p, betId);
+            vm.revertToState(snap);
+            craps.setBetWord(betId, cleared);
+            uint256 plain = _paidAt(day, p, betId);
+            assertEq(booned, plain, "a later window of the day ticket drew a bonus");
+        }
+    }
+
+    /// @dev Upgrading windows to the high lane rewrites the high-flag byte of the same word the
+    ///      boon sits under. It must not disturb the slice.
+    function test_upgradingDayWindowsPreservesTheMask() public {
+        (uint24 day, uint256 betId) = _dayTicketWithBoon(MASK_10);
+        vm.prank(alice);
+        craps.upgradeDayWindows(day, uint8(1 << 2));
+        assertEq(craps.boonMaskOf(betId), MASK_10, "an upgrade dropped the boon");
+    }
+
+    /// @dev The burn lane is the only door a boon comes through, so a purchase that reverts must
+    ///      leave nothing behind -- no seat, and no spent boon on the mock's side either.
+    function test_aRevertedPurchaseLeavesNoSeatAndNoSpentBoon() public {
+        uint24 today = craps.currentDayIndex();
+        flip.setNextBoonMask(uint8(MASK_25));
+        // A run that reaches into the past cannot be reserved; the whole call unwinds.
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        craps.buyFutureCrapsDays(today, 2, false);
+
+        assertEq(craps.daySeatNumberOf(today, alice), 0, "a refused run still seated a day");
+        assertEq(flip.nextBoonMask(), MASK_25, "a refused run still spent the boon");
+    }
+}

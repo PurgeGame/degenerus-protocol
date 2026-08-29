@@ -185,6 +185,15 @@ interface IDegenerusQuests {
     /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
     function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external;
 
+    /// @notice Record a paid craps action: quest progress and the whole-day streak credit.
+    /// @dev Access: COIN only. FLIP is the single reporter for the whole craps surface, so no
+    ///      other quest handler gains a caller comparison. Carries no boon value — a craps boon
+    ///      boosts the slip's bankroll return at settlement, never entry-time coinflip credit.
+    /// @param player The player who paid for the action.
+    /// @param actionFlags Bit 0 paid join, bit 1 paid day pass, bit 2 normal day streak,
+    ///        bit 3 high day streak.
+    function recordCrapsAction(address player, uint8 actionFlags) external;
+
     /// @notice Grant quest streak shields to a player (each absorbs one missed day)
     /// @dev GAME-only. Used by the lootbox quest-shield boon.
     /// @param player The address of the player to grant shields to

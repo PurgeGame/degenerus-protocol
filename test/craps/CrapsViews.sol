@@ -21,6 +21,7 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant BONUS_PERIOD = _BONUS_PERIOD;
     uint256 public constant BONUS_PERIODS_PER_DAY = _BONUS_PERIODS_PER_DAY;
     uint256 public constant BONUS_SLOTS_PER_DAY = _BONUS_SLOTS_PER_DAY;
+    uint256 public constant CUSTOM_SLOT_BASE = _CUSTOM_SLOT_BASE;
     uint256 public constant BONUS_EVENT_CLOSE = _BONUS_EVENT_CLOSE;
     uint256 public constant BONUS_SMALL_BANKROLL = _BONUS_SMALL_BANKROLL;
     uint256 public constant BONUS_MED_BANKROLL = _BONUS_MED_BANKROLL;
@@ -134,6 +135,47 @@ contract CrapsViews is CrapsBattle {
     // ── Bets and battles ────────────────────────────────────────────────────
     function betOf(uint256 betId) external view returns (Bet memory) {
         return _betOf(betId);
+    }
+
+    /// @dev The RAW stored bet word, so a suite can grade the packed slices — the boon mask at
+    ///      206..208 above all — rather than only the decoded struct.
+    function betWordOf(uint256 betId) external view returns (uint256) {
+        return _bets[betId];
+    }
+
+    /// @dev Overwrite a stored bet word. Test-only, and the ONLY way to grade a settlement with
+    ///      and without a boon on the SAME run: seats are seeded individually, so two slips are
+    ///      two different runs and could never be compared.
+    function setBetWord(uint256 betId, uint256 word) external {
+        _bets[betId] = word;
+    }
+
+    /// @dev The craps boon riding a slip, one-hot as stored.
+    function boonMaskOf(uint256 betId) external view returns (uint256) {
+        return (_bets[betId] >> BET_BOON_SHIFT()) & BET_BOON_MASK();
+    }
+
+    function BET_BOON_SHIFT() public pure returns (uint256) {
+        return _BET_BOON_SHIFT;
+    }
+
+    function BET_BOON_MASK() public pure returns (uint256) {
+        return _BET_BOON_MASK;
+    }
+
+    function BOON_PAYOUT_BASE_CAP() external pure returns (uint256) {
+        return _BOON_PAYOUT_BASE_CAP;
+    }
+
+    /// @dev The settlement bonus itself, so the cap and the three tiers can be graded exactly
+    ///      rather than inferred from a random run's payout.
+    function boonBonusOf(uint256 mask, uint256 basePaid) external pure returns (uint256) {
+        return _boonBonus(mask, basePaid);
+    }
+
+    /// @dev Whether a slip's boon applies at this window — the structural period-0 anchor.
+    function boonAnchoredAt(uint256 slot, uint256 bound) external pure returns (bool) {
+        return _boonAnchored(slot, bound);
     }
 
     function battleKeyOf(uint256 betId) external view returns (bytes32) {
