@@ -50,15 +50,18 @@ contract EmptyRenderer {
 
 /// @title RecordBountyTrophyTest — pins the soulbound record-bounty trophy.
 ///
-/// @notice Four trophies (tokenId = RECORD_KIND_*) mint to CREATOR at deploy.
-///         Coinflip's _armBigRecord moves a trophy on EVERY mark ratchet — the
-///         claim bar gates only the pool share, never the trophy — through the
-///         real armRecord surface, so these tests also pin the deploy wiring
-///         (a mispredicted RECORD_BOUNTY address would leave the trophy parked
-///         at CREATOR while the mark ratchets).
+/// @notice All five trophies (tokenId = RECORD_KIND_*) mint to the VAULT at
+///         deploy — the protocol itself, not its deployer. Coinflip's
+///         _armBigRecord moves a trophy on EVERY mark ratchet — the claim bar
+///         gates only the pool share, never the trophy — through the real
+///         armRecord surface, so these tests also pin the deploy wiring (a
+///         mispredicted RECORD_BOUNTY address would leave the trophy parked at
+///         the vault while the mark ratchets).
 contract RecordBountyTrophyTest is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
-    address internal constant CREATOR = ContractAddresses.CREATOR;
+    /// @dev Where every trophy starts: the VAULT, which is the protocol's own body rather than
+    ///      the deployer's wallet.
+    address internal constant HOME = ContractAddresses.VAULT;
 
     address private player;
     address private rival;
@@ -74,12 +77,15 @@ contract RecordBountyTrophyTest is DeployProtocol {
     // Deploy state
     // ---------------------------------------------------------------------
 
-    function testAllFiveMintToCreatorAtDeploy() public view {
-        assertEq(recordBounty.balanceOf(CREATOR), 5, "creator holds all five");
+    function testAllFiveMintToTheVaultAtDeploy() public view {
+        assertEq(recordBounty.balanceOf(HOME), 5, "the vault holds all five");
+        // And NOT the deployer, which is the whole of the change: an unclaimed record parks with
+        // the protocol's own body rather than with a person.
+        assertEq(recordBounty.balanceOf(ContractAddresses.CREATOR), 0, "the creator was minted a trophy");
         for (uint256 i; i < 5; ++i) {
-            assertEq(recordBounty.ownerOf(i), CREATOR, "creator owns trophy");
+            assertEq(recordBounty.ownerOf(i), HOME, "the vault owns trophy");
             (address holder, uint128 mark, uint24 sinceDay, ) = recordBounty.recordInfo(i);
-            assertEq(holder, CREATOR, "recordInfo holder");
+            assertEq(holder, HOME, "recordInfo holder");
             assertEq(mark, 0, "mark starts unset");
             assertEq(sinceDay, 1, "since-day stamps the deploy day");
         }
@@ -109,35 +115,35 @@ contract RecordBountyTrophyTest is DeployProtocol {
     }
 
     function testSoulboundSurface() public {
-        vm.startPrank(CREATOR);
+        vm.startPrank(HOME);
         vm.expectRevert(DegenerusRecordBounty.Soulbound.selector);
         recordBounty.approve(player, 0);
         vm.expectRevert(DegenerusRecordBounty.Soulbound.selector);
         recordBounty.setApprovalForAll(player, true);
         vm.expectRevert(DegenerusRecordBounty.Soulbound.selector);
-        recordBounty.transferFrom(CREATOR, player, 0);
+        recordBounty.transferFrom(HOME, player, 0);
         vm.expectRevert(DegenerusRecordBounty.Soulbound.selector);
-        recordBounty.safeTransferFrom(CREATOR, player, 0);
+        recordBounty.safeTransferFrom(HOME, player, 0);
         vm.expectRevert(DegenerusRecordBounty.Soulbound.selector);
-        recordBounty.safeTransferFrom(CREATOR, player, 0, "");
+        recordBounty.safeTransferFrom(HOME, player, 0, "");
         vm.stopPrank();
 
         assertEq(recordBounty.getApproved(0), address(0), "no approvals exist");
-        assertFalse(recordBounty.isApprovedForAll(CREATOR, player), "no operators exist");
+        assertFalse(recordBounty.isApprovedForAll(HOME, player), "no operators exist");
     }
 
     // ---------------------------------------------------------------------
     // Trophy movement through the real record path
     // ---------------------------------------------------------------------
 
-    /// @notice A first mark takes the trophy from CREATOR through armRecord —
+    /// @notice A first mark takes the trophy from the VAULT through armRecord —
     ///         the end-to-end wiring, not a direct recordSet.
     function testFirstMarkTakesTheTrophy() public {
         vm.prank(GAME);
         coinflip.armRecord(RECORD_KIND_SPIN, player, 1 ether);
 
         assertEq(recordBounty.ownerOf(RECORD_KIND_SPIN), player, "trophy moved to setter");
-        assertEq(recordBounty.balanceOf(CREATOR), 4, "creator down to four");
+        assertEq(recordBounty.balanceOf(HOME), 4, "the vault down to four");
         assertEq(recordBounty.balanceOf(player), 1, "player holds one");
         (, uint128 mark, uint24 sinceDay, uint256 daysHeld) =
             recordBounty.recordInfo(RECORD_KIND_SPIN);
@@ -195,8 +201,8 @@ contract RecordBountyTrophyTest is DeployProtocol {
 
         assertEq(recordBounty.ownerOf(RECORD_KIND_SPIN), player, "spin trophy");
         assertEq(recordBounty.ownerOf(RECORD_KIND_BUY), rival, "buy trophy");
-        assertEq(recordBounty.ownerOf(0), CREATOR, "flip trophy parked");
-        assertEq(recordBounty.ownerOf(2), CREATOR, "luckbox trophy parked");
+        assertEq(recordBounty.ownerOf(0), HOME, "flip trophy parked");
+        assertEq(recordBounty.ownerOf(2), HOME, "luckbox trophy parked");
     }
 
     function testTokenUriRendersForAllKinds() public view {

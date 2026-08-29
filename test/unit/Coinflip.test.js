@@ -567,8 +567,9 @@ describe("Coinflip", function () {
       const [holder, mark] = await bounty.recordInfo(4);
       expect(holder).to.equal(f.alice.address);
       expect(mark).to.equal(1_234_500n);
+      // The other four are still parked where every trophy starts: the VAULT.
       for (let i = 0; i < 4; i++) {
-        expect(await bounty.ownerOf(i)).to.equal(f.deployer.address);
+        expect(await bounty.ownerOf(i)).to.equal(f.deployedAddrs.get("VAULT"));
       }
     });
 

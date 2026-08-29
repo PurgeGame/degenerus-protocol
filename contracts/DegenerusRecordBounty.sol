@@ -57,8 +57,8 @@ interface IRecordBountyRendererV1 {
 /// @title DegenerusRecordBounty
 /// @notice Soulbound ERC721 trophy for the five all-time record bounties
 ///         (tokenId = RECORD_KIND_*: 0 flip, 1 degenerette spin, 2 luckbox
-///         deposit, 3 ticket buy, 4 dice run). All five mint at deploy to
-///         CREATOR; from then on Coinflip force-moves a trophy to whoever
+///         deposit, 3 ticket buy, 4 dice run). All five mint at deploy to the
+///         VAULT; from then on Coinflip force-moves a trophy to whoever
 ///         ratchets that record's mark — every new mark moves it, clearing the
 ///         claim bar is not required. Holders can never transfer. Cosmetic only:
 ///         nothing game-side reads this contract.
@@ -111,14 +111,16 @@ contract DegenerusRecordBounty {
     }
 
     constructor() {
-        // Every trophy starts with the protocol creator; the first player to put
-        // a mark on a record takes its trophy from there.
+        // Every trophy starts with the VAULT — the protocol itself, not a person —
+        // and the first player to put a mark on a record takes its trophy from
+        // there. An unclaimed record parks with the body that owns the protocol's
+        // other unassigned property rather than with its deployer.
         uint24 today = GameTimeLib.currentDayIndex();
-        _balances[ContractAddresses.CREATOR] = KINDS;
+        _balances[ContractAddresses.VAULT] = KINDS;
         for (uint256 i; i < KINDS; ++i) {
-            _holders[i] = ContractAddresses.CREATOR;
+            _holders[i] = ContractAddresses.VAULT;
             _sinceDays[i] = today;
-            emit Transfer(address(0), ContractAddresses.CREATOR, i);
+            emit Transfer(address(0), ContractAddresses.VAULT, i);
         }
 
         // Register this contract's ENS reverse name (best-effort; skipped when the

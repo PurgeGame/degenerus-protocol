@@ -15,7 +15,7 @@ import { ZERO_ADDRESS } from "../helpers/testUtils.js";
  * Architecture summary:
  *   - Soulbound ERC721 "BIGGEST" with 5 trophies (tokenId = RECORD_KIND_*),
  *     the fifth being the scheduled Dice Run's high-point record
- *   - All five mint to CREATOR at deploy; Coinflip force-moves a trophy on
+ *   - All five mint to the VAULT at deploy; Coinflip force-moves a trophy on
  *     every record ratchet via recordSet (COINFLIP-only)
  *   - Holder transfers/approvals always revert (soulbound)
  *   - tokenURI carries the record name, the standing mark in the record's own
@@ -79,14 +79,18 @@ describe("DegenerusRecordBounty", function () {
   // ---------------------------------------------------------------------------
 
   describe("deploy state", function () {
-    it("mints all five trophies to CREATOR with unset marks", async function () {
+    it("mints all five trophies to the VAULT with unset marks", async function () {
       const f = await getFixture();
       const bounty = await getBounty(f);
-      expect(await bounty.balanceOf(f.deployer.address)).to.equal(5n);
+      const home = f.deployedAddrs.get("VAULT");
+      expect(await bounty.balanceOf(home)).to.equal(5n);
+      // And not the deployer: an unclaimed record parks with the protocol's own
+      // body rather than with a person.
+      expect(await bounty.balanceOf(f.deployer.address)).to.equal(0n);
       for (let i = 0; i < 5; i++) {
-        expect(await bounty.ownerOf(i)).to.equal(f.deployer.address);
+        expect(await bounty.ownerOf(i)).to.equal(home);
         const [holder, mark, , daysHeld] = await bounty.recordInfo(i);
-        expect(holder).to.equal(f.deployer.address);
+        expect(holder).to.equal(home);
         expect(mark).to.equal(0n);
         expect(daysHeld).to.equal(0n);
       }
@@ -137,9 +141,9 @@ describe("DegenerusRecordBounty", function () {
       );
       await expect(tx)
         .to.emit(bounty, "Transfer")
-        .withArgs(f.deployer.address, f.alice.address, 1n);
+        .withArgs(f.deployedAddrs.get("VAULT"), f.alice.address, 1n);
       expect(await bounty.ownerOf(1)).to.equal(f.alice.address);
-      expect(await bounty.balanceOf(f.deployer.address)).to.equal(4n);
+      expect(await bounty.balanceOf(f.deployedAddrs.get("VAULT"))).to.equal(4n);
       expect(await bounty.balanceOf(f.alice.address)).to.equal(1n);
     });
 
