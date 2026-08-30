@@ -2310,8 +2310,10 @@ contract CrapsBattle is LootboxCraps {
         w.key = _battleKey(w.bound, w.bankroll, w.goal, w.played, w.terms);
     }
 
-    /// @notice GAME-only: deliver a lootbox batch's day-pass award. Reserves ONE pass on tomorrow
-    ///         where tomorrow is free, and banks everything else as credit.
+    /// @notice GAME or VAULT: deliver a day-pass award. Reserves ONE pass on tomorrow where
+    ///         tomorrow is free, and banks everything else as credit. The vault comps a seat
+    ///         through the same door a lootbox award takes, so a comped ticket and a rolled one
+    ///         are the same object and nothing downstream can tell them apart.
     /// @dev ONE CALL PER BATCH, and it is also the eligibility test. Whether tomorrow is already
     ///      taken and whether its word has landed are both facts about state held here, so the
     ///      Game does not pre-screen either — asking twice would either duplicate the rule in two
@@ -2328,9 +2330,9 @@ contract CrapsBattle is LootboxCraps {
     /// @param normal Normal passes the batch rolled.
     /// @param high High-roller passes the batch rolled.
     /// @return day The day a pass was reserved on, or zero if none was.
-    /// @custom:reverts OnlyGame If the caller is not the pinned game.
+    /// @custom:reverts OnlyGame If the caller is neither the pinned game nor the pinned vault.
     function deliverPasses(address player, uint32 normal, uint32 high) external returns (uint24 day) {
-        if (msg.sender != _GAME) revert OnlyGame();
+        if (msg.sender != _GAME && msg.sender != ContractAddresses.VAULT) revert OnlyGame();
         unchecked {
             uint256 tomorrow = uint256(_currentDayIndex()) + 1;
             // A day index that will not fit is not a day anyone can reserve; the award simply

@@ -55,9 +55,11 @@ contract CrapsPassesTest is CrapsPins {
 
     // ── Delivery ────────────────────────────────────────────────────────────
 
-    /// @dev THE GAME AND NOBODY ELSE awards passes. They are lootbox output, so a player who could
-    ///      mint their own would be minting free entries into the protocol's own windows.
-    function test_onlyTheGameMayDeliverPasses() public {
+    /// @dev THE GAME AND THE VAULT, AND NOBODY ELSE, award passes. They are lootbox output and comp
+    ///      allowance, so a player who could mint their own would be minting free entries into the
+    ///      protocol's own windows. Both callers are pinned immutable contracts, and the table
+    ///      keeps no count of its own: what bounds the vault's comps is metered in the vault.
+    function test_onlyTheGameOrTheVaultMayDeliverPasses() public {
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.OnlyGame.selector);
         craps.deliverPasses(alice, 1, 0);
@@ -67,6 +69,39 @@ contract CrapsPassesTest is CrapsPins {
         (uint256 n,) = craps.passCreditsOf(alice);
         assertEq(n, 0, "the delivered pass was banked instead of seated");
         assertEq(craps.dayStateOf(_today() + 1, alice), craps.DAY_SEATED(), "tomorrow was not taken");
+
+        vm.prank(ContractAddresses.VAULT);
+        craps.deliverPasses(bob, 1, 0);
+        assertEq(craps.dayStateOf(_today() + 1, bob), craps.DAY_SEATED(), "the vault's comp did not seat");
+    }
+
+    /// @dev A comped seat is an ORDINARY seat. Nothing on the ticket records that the vault paid
+    ///      for it, so it takes the same dense day-seat number a rolled award would have taken and
+    ///      every rule downstream — duplicates, refunds, conversion — reads one kind of pass.
+    function test_aCompedSeatIsIndistinguishableFromARolledOne() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.deliverPasses(alice, 1, 0);
+        vm.prank(ContractAddresses.VAULT);
+        craps.deliverPasses(bob, 1, 0);
+
+        uint24 day = _today() + 1;
+        assertEq(craps.daySeatNumberOf(day, alice), 1, "the rolled award did not take the first seat");
+        assertEq(craps.daySeatNumberOf(day, bob), 2, "the comp did not take the next dense seat");
+
+        // The comp is subject to the same one-ticket-a-day bar as anything else.
+        vm.prank(ContractAddresses.VAULT);
+        craps.deliverPasses(bob, 1, 0);
+        (uint256 n,) = craps.passCreditsOf(bob);
+        assertEq(n, 1, "a second comp on a taken day should have banked, not seated");
+    }
+
+    /// @dev The CREDIT lane stays GAME-only. The vault comps through delivery, which reserves or
+    ///      banks on the table's own terms; a door that banked unconditionally would let a comp
+    ///      skip the strictly-future, unworded test that makes every commitment blind.
+    function test_theVaultCannotReachTheBareCreditLane() public {
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(CrapsBattle.OnlyGame.selector);
+        craps.creditPasses(alice, 1, 0);
     }
 
     /// @dev One pass goes straight onto tomorrow; everything else banks. That is what makes a box
