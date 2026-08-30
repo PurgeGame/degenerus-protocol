@@ -531,7 +531,7 @@ the caller's ticket without a walk.
 
 Pass awards are seats, not coupons requiring later redemption.
 
-Credits arrive from four Game-side sources, all through the table's `OnlyGame` credit doors:
+Credits arrive from five Game-side sources, all through the table's `OnlyGame` credit doors:
 
 - The regular lootbox's day-pass conversion (`deliverPasses`, which first tries to seat
   tomorrow and banks the rest).
@@ -540,6 +540,10 @@ Credits arrive from four Game-side sources, all through the table's `OnlyGame` c
 - A deity-pass purchase: one high-roller credit below level 10, funded by halving that
   purchase's lootbox to 5% of price; one normal credit from level 10 on, with the lootbox
   at the full 10%.
+- The daily coin jackpot's comp quadrant: when a quarter of the near-future FLIP budget funds
+  at least one normal pass, one VRF-chosen quadrant pays whole normal day-pass comps
+  (`creditPasses`, at most six ticket-weighted slots, every funded comp issued, normal-only;
+  unbanked value stays in the other quadrants' FLIP shares).
 - A presale box's FLIP branch: a committed coin toss pays half the boxes their roll as
   coinflip credit untouched, and denominates the other half's WHOLE roll into passes at
   the regular box units (22,800-FLIP normal, switching wholly to 19x high-roller above

@@ -157,10 +157,10 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
     it("[01a] site 1 `_awardDailyCoinToTraitWinners`", function () {
       const body = bodyOf(JACKPOT, "function _awardDailyCoinToTraitWinners(");
       expect(
-        /uint256\s+units\s*=\s*coinBudget\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
+        /uint256\s+units\s*=\s*\(\s*coinBudget\s*-\s*spent\s*\)\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
           body
         ),
-        "site 1 must split the budget into whole 100-FLIP units"
+        "site 1 must split the unbanked budget into whole 100-FLIP units"
       ).to.equal(true);
       expect(
         /if\s*\(\s*cap\s*==\s*0\s*\)\s*return\s*;/.test(body),

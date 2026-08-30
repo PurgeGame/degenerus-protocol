@@ -62,7 +62,12 @@ independently and none of it touches player-funded money. And **`convertNormalTo
 player convert their own uncommitted normal credits into high credits at exactly nineteen
 normals per high — the value ratio of the two units, not the 18:1 the retail prepaid prices
 imply — atomically, one-way, reservations untouched. Credits arriving through either mover are
-indistinguishable from lootbox-banked credits from the moment they are banked.
+indistinguishable from lootbox-banked credits from the moment they are banked. The daily coin
+jackpot adds one more Game-side source: when one nominal quadrant of its near-future leg funds
+at least one normal pass, that quadrant pays **whole normal day-pass comps** through the same
+`creditPasses` door instead of FLIP — at most six ticket-weighted winner slots, every funded
+whole comp issued, normal-only, with everything not actually banked staying in the other
+quadrants' FLIP shares (see JACKPOT-PAYOUT-REFERENCE, "Near-Future Craps-Comp Mode").
 
 A pass may be committed only to a future protocol day whose daily word has not landed. It covers
 one early full-day entry across all seven scheduled Bonus Battle windows. A normal pass covers a

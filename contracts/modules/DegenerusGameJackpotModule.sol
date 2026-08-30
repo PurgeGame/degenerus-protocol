@@ -39,6 +39,17 @@ interface IWwxrpMintPrize {
     function mintPrize(address to, uint256 amount) external;
 }
 
+/// @dev Return-aware surface of the craps credit door, for the comp lane alone: the returned
+///      count is what actually banked after lane saturation, and only banked value is charged
+///      against the FLIP budget. Every other caller keeps its no-return interface and keeps
+///      ignoring the pair. Called BARE — no stipend, no try/catch — because `creditPasses` is
+///      revert-free for the Game by contract, and this call rides the daily advance.
+interface ICrapsCompPassCredit {
+    function creditPasses(address player, uint32 normal, uint32 high)
+        external
+        returns (uint32 normalCredited);
+}
+
 /**
  * @title DegenerusGameJackpotModule
  * @author Burnie Degenerus
@@ -121,6 +132,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 indexed level,
         uint8 indexed traitId,
         uint256 amount,
+        uint256 entryIndex
+    );
+
+    /// @notice One comp-quadrant winning slot of the daily coin jackpot banked Craps day passes
+    ///         instead of FLIP. `level`, `traitId` and `entryIndex` mean exactly what they mean
+    ///         on `JackpotFlipWin`; the quadrant is `traitId >> 6`. `normalCompCount` is the
+    ///         count Craps ACTUALLY banked — the adjacent Craps-address `CrapsPassesCredited`
+    ///         log is the authoritative balance mutation, and value the lane refused stayed in
+    ///         the other quadrants' FLIP budget. Never emitted for a zero credit.
+    event JackpotCrapsCompWin(
+        address indexed winner,
+        uint24 indexed level,
+        uint8 indexed traitId,
+        uint32 normalCompCount,
         uint256 entryIndex
     );
 
@@ -313,6 +338,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Domain separator for far-future coin jackpot entropy derivation.
     bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
+
+    /// @dev Most winning slots the comp quadrant may spread its passes across. Comps are
+    ///      indivisible, so unlike the FLIP legs' equal shares, every funded whole pass is
+    ///      issued: slot counts differ by at most one before saturation.
+    uint256 private constant CRAPS_COMP_MAX_SLOTS = 6;
+
+    /// @dev Domain separators: which quadrant pays comps today, and where the +1 extra-comp
+    ///      window starts among the found slots. Both derive from the day's existing VRF word —
+    ///      no new randomness, no user-controllable input.
+    bytes32 private constant FLIP_CRAPS_COMP_TAG = keccak256("coin-craps-comp");
+    bytes32 private constant FLIP_CRAPS_COMP_EXTRA_TAG = keccak256("coin-craps-comp-extra");
 
     /// @dev Maximum winners per ticket jackpot distribution (gas safety);
     ///      the daily, carryover, and early-bird legs each apply it separately.
@@ -2017,21 +2053,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 randomWord
     ) private {
         if (coinBudget == 0) return;
-        // Flooring the pull count to the whole 100-FLIP units the budget covers makes
-        // every pull worth at least one unit, so the split is plain integer arithmetic
-        // and no winner is ever credited zero.
-        uint256 units = coinBudget / FlipRoundLib.FLIP_ROUND_UNIT;
-        uint256 cap = units < DAILY_COIN_MAX_WINNERS
-            ? units
-            : DAILY_COIN_MAX_WINNERS;
-        if (cap == 0) return;
 
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
         );
 
         // Per-trait deity cache: deityBySymbol is level-independent, so one read per trait
-        // serves all 50 pulls of that trait.
+        // serves every pull of that trait.
         address[4] memory deityCache;
         for (uint8 t; t < 4; ) {
             uint8 trait = traitIds[t];
@@ -2042,21 +2070,62 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             unchecked { ++t; }
         }
 
-        // Every paid pull carries the SAME amount. The `units % cap` leftover is simply
-        // not minted: an equal share is worth more than a fully-spent budget, because no
-        // winner can hold their pull against a neighbour's and find it short. The
-        // discarded tail is under one unit per pull.
+        // COMP MODE, iff one nominal quadrant — a quarter of the budget — independently funds
+        // at least one whole normal Craps day pass. The chosen quadrant pays whole day-pass
+        // comps instead of FLIP, and only what Craps ACTUALLY banked leaves the FLIP budget.
+        // Quadrant 4 is the DISABLED sentinel: no pull index is 4 mod 4, so the skip in the
+        // shared loop below goes dead and the historical path runs unchanged.
+        uint256 compQuadrant = 4;
+        uint256 spent;
+        if (coinBudget >= 4 * NORMAL_DAY_PASS_VALUE) {
+            compQuadrant = EntropyLib.hash2(randomWord, uint256(FLIP_CRAPS_COMP_TAG)) & 3;
+            spent = _payCrapsComps(
+                minLevel,
+                maxLevel,
+                traitIds[compQuadrant],
+                deityCache[compQuadrant],
+                compQuadrant,
+                coinBudget / (4 * NORMAL_DAY_PASS_VALUE),
+                randomWord
+            );
+        }
+
+        // Flooring the pull count to the whole 100-FLIP units the budget covers makes every
+        // pull worth at least one unit, so the split is plain integer arithmetic and no winner
+        // is ever credited zero. In comp mode the divisor is the SCHEDULED non-comp pull count
+        // — 37 where quadrant 0 or 1 went comp, 38 where 2 or 3 did — and it needs no
+        // min(units, pulls) clamp: at least three quarters of a four-pass budget remains, 684
+        // whole units against at most 38 pulls, so the share can never floor to zero.
+        uint256 units = (coinBudget - spent) / FlipRoundLib.FLIP_ROUND_UNIT;
+        uint256 cap;
+        uint256 end;
+        if (compQuadrant == 4) {
+            cap = units < DAILY_COIN_MAX_WINNERS ? units : DAILY_COIN_MAX_WINNERS;
+            end = cap;
+        } else {
+            cap = 37 + (compQuadrant >> 1);
+            end = DAILY_COIN_MAX_WINNERS;
+        }
+        if (cap == 0) return;
+
+        // Every paid pull carries the SAME amount. The `units % cap` leftover is simply not
+        // minted: an equal share is worth more than a fully-spent budget, because no winner can
+        // hold their pull against a neighbour's and find it short.
         uint256 amount = (units / cap) * FlipRoundLib.FLIP_ROUND_UNIT;
         uint24 range = maxLevel - minLevel + 1;
 
-        // Winners accumulate into one creditFlipBatch call after the loop
-        // (per-item semantics match creditFlip; empty slots are skipped).
+        // Winners pack densely behind a cursor and the arrays shrink to the packed count, so
+        // the one batch call carries no zero pairs for skipped or comp-quadrant pulls.
         address[] memory batchPlayers = new address[](cap);
         uint256[] memory batchAmounts = new uint256[](cap);
-        bool anyWinner;
+        uint256 found;
 
-        for (uint256 i; i < cap; ) {
+        for (uint256 i; i < end; ) {
             uint8 traitIdx = uint8(i % 4);
+            if (traitIdx == compQuadrant) {
+                unchecked { ++i; }
+                continue;
+            }
             uint8 trait_i = traitIds[traitIdx];
 
             uint24 lvlPrime = minLevel + uint24(uint256(keccak256(
@@ -2068,15 +2137,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             address deity = deityCache[traitIdx];
             uint256 effectiveLen = len + _deityVirtualCount(trait_i, len, deity);
             if (effectiveLen == 0) {
-                unchecked {
-                    ++i;
-                }
+                unchecked { ++i; }
                 continue;
             }
 
-            uint256 idx = uint256(keccak256(
-                abi.encode(randomWord, trait_i, lvlPrime, i)
-            )) % effectiveLen;
+            uint256 idx = EntropyLib.hash4(randomWord, trait_i, lvlPrime, i) % effectiveLen;
             address winner;
             uint256 ticketIdx;
             if (idx < len) {
@@ -2088,25 +2153,101 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
 
             if (winner != address(0)) {
-                emit JackpotFlipWin(
-                    winner,
-                    lvlPrime,
-                    trait_i,
-                    amount,
-                    ticketIdx
-                );
-                batchPlayers[i] = winner;
-                batchAmounts[i] = amount;
-                anyWinner = true;
+                emit JackpotFlipWin(winner, lvlPrime, trait_i, amount, ticketIdx);
+                batchPlayers[found] = winner;
+                batchAmounts[found] = amount;
+                unchecked { ++found; }
             }
 
-            unchecked {
-                ++i;
-            }
+            unchecked { ++i; }
         }
 
-        if (anyWinner) {
+        if (found != 0) {
+            // Shrink the arrays to the packed winner count — writes only the length fields of
+            // this function's own allocations.
+            assembly ("memory-safe") {
+                mstore(batchPlayers, found)
+                mstore(batchAmounts, found)
+            }
             coinflip.creditFlipBatch(batchPlayers, batchAmounts);
+        }
+    }
+
+    /// @dev The comp quadrant's own leg: walk its scheduled pull indices in ascending order —
+    ///      the same level and holder hashes, the same deity weighting, the same duplicate
+    ///      semantics as the FLIP path — until `min(fundableComps, 6)` nonzero winning slots
+    ///      are found or the pulls run out. Every funded whole comp is then spread over the
+    ///      slots actually found, counts differing by at most one, with the +1 window's start
+    ///      rotated by its own domain hash so array position confers no standing advantage.
+    /// @return spent The FLIP value Craps actually banked — credited counts only, so a
+    ///         saturated lane's refusal stays in the caller's FLIP budget.
+    function _payCrapsComps(
+        uint24 minLevel,
+        uint24 maxLevel,
+        uint8 trait,
+        address deity,
+        uint256 quadrant,
+        uint256 fundableComps,
+        uint256 randomWord
+    ) private returns (uint256 spent) {
+        address[CRAPS_COMP_MAX_SLOTS] memory winners;
+        uint24[CRAPS_COMP_MAX_SLOTS] memory levels;
+        uint256[CRAPS_COMP_MAX_SLOTS] memory ticketIdxs;
+        uint256 found;
+        uint256 target =
+            fundableComps < CRAPS_COMP_MAX_SLOTS ? fundableComps : CRAPS_COMP_MAX_SLOTS;
+        uint24 range = maxLevel - minLevel + 1;
+
+        for (uint256 i = quadrant; i < DAILY_COIN_MAX_WINNERS && found < target; ) {
+            uint24 lvlPrime = minLevel + uint24(uint256(keccak256(
+                abi.encode(randomWord, FLIP_LEVEL_TAG, i)
+            )) % range);
+
+            address[] storage holders = lvlTraitEntry[lvlPrime][trait];
+            uint256 len = holders.length;
+            uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
+            if (effectiveLen != 0) {
+                uint256 idx = EntropyLib.hash4(randomWord, trait, lvlPrime, i) % effectiveLen;
+                address winner;
+                uint256 ticketIdx;
+                if (idx < len) {
+                    winner = holders[idx];
+                    ticketIdx = idx;
+                } else {
+                    winner = deity;
+                    ticketIdx = type(uint256).max;
+                }
+                if (winner != address(0)) {
+                    winners[found] = winner;
+                    levels[found] = lvlPrime;
+                    ticketIdxs[found] = ticketIdx;
+                    unchecked { ++found; }
+                }
+            }
+            unchecked { i += 4; }
+        }
+        if (found == 0) return 0;
+
+        uint256 base = fundableComps / found;
+        uint256 extra = fundableComps % found;
+        uint256 extraStart = extra == 0
+            ? 0
+            : EntropyLib.hash2(randomWord, uint256(FLIP_CRAPS_COMP_EXTRA_TAG)) % found;
+
+        for (uint256 s; s < found; ) {
+            uint256 count = base + (((s + found - extraStart) % found) < extra ? 1 : 0);
+            // Unreachable at any real budget — the cap merely makes the cast provable.
+            if (count > type(uint32).max) count = type(uint32).max;
+            uint32 credited = ICrapsCompPassCredit(ContractAddresses.CRAPS).creditPasses(
+                winners[s],
+                uint32(count),
+                0
+            );
+            if (credited != 0) {
+                spent += uint256(credited) * NORMAL_DAY_PASS_VALUE;
+                emit JackpotCrapsCompWin(winners[s], levels[s], trait, credited, ticketIdxs[s]);
+            }
+            unchecked { ++s; }
         }
     }
 

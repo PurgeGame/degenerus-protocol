@@ -588,6 +588,44 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(flip.burned(alice), spent, "the holder paid twice for one day");
     }
 
+    // ── The credit door's return values ─────────────────────────────────────
+
+    /// @dev The door reports what actually banked, lane by lane — `(normal, high)` on a clear
+    ///      lane, only the remaining capacity against a nearly full one, zero against a full one.
+    ///      The jackpot's comp lane prices spent value off this pair, so the pair and the
+    ///      adjacent `CrapsPassesCredited` logs must agree exactly.
+    function test_creditPassesReturnsWhatActuallyBanked() public {
+        vm.startPrank(ContractAddresses.GAME);
+        assertEq(craps.creditPasses(alice, 3, 0), 3, "a clear normal lane did not bank the whole request");
+        assertEq(craps.creditPasses(alice, 0, 2), 0, "a high-only call reported a normal credit");
+        assertEq(craps.creditPasses(alice, 5, 7), 5, "a mixed call shorted the normal lane");
+        assertEq(craps.creditPasses(alice, 0, 0), 0, "an empty call reported a credit");
+        vm.stopPrank();
+        // The high lane still banked in full — its record is the credit log and the balance.
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 8, "the normal lane balance disagrees with the returns");
+        assertEq(h, 9, "the unreported high lane did not bank");
+    }
+
+    function test_creditPassesReturnsOnlyTheCapacityASaturatedLaneHad() public {
+        craps.setPassCredits(alice, type(uint32).max - 2, type(uint32).max);
+        vm.recordLogs();
+        vm.prank(ContractAddresses.GAME);
+        assertEq(
+            craps.creditPasses(alice, 9, 9),
+            2,
+            "a nearly full normal lane did not report just its remaining capacity"
+        );
+
+        // The returns and the logs are the same figures.
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 2, "the two lane credits did not log once each");
+        (, uint256 c0) = abi.decode(logs[0].data, (bool, uint256));
+        (, uint256 c1) = abi.decode(logs[1].data, (bool, uint256));
+        assertEq(c0, 2, "the normal log disagrees with the return");
+        assertEq(c1, 0, "the high log disagrees with the return");
+    }
+
     // ── Normal-to-high conversion ───────────────────────────────────────────
 
     bytes32 internal constant _CONVERTED_SIG = keccak256("CrapsNormalPassesConverted(address,uint256,uint256)");

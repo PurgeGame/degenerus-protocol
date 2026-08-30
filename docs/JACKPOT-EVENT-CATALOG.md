@@ -159,6 +159,37 @@ event JackpotWhalePassWin(
 
 ---
 
+### C2. JackpotCrapsCompWin
+
+**Solidity signature:**
+
+```solidity
+event JackpotCrapsCompWin(
+    address indexed winner,
+    uint24 indexed level,
+    uint8 indexed traitId,
+    uint32 normalCompCount,
+    uint256 entryIndex
+);
+```
+
+**Declared:** `DegenerusGameJackpotModule.sol` (beside `JackpotFlipWin`)
+
+**Field descriptions:**
+
+| Field | Type | Indexed | Description |
+|-------|------|---------|-------------|
+| `winner` | `address` | Yes | Recipient of the Craps day-pass credits |
+| `level` | `uint24` | Yes | The pull's sampled level — same meaning as `JackpotFlipWin.level` |
+| `traitId` | `uint8` | Yes | Winning trait of the comp quadrant (`traitId >> 6` is the quadrant) |
+| `normalCompCount` | `uint32` | No | Normal passes Craps ACTUALLY banked for this slot |
+| `entryIndex` | `uint256` | No | Holder index in the trait bucket — same meaning as `JackpotFlipWin.entryIndex` |
+
+One per comp-quadrant winning slot of the daily coin jackpot's comp mode; never emitted for a
+zero credit. The value is `normalCompCount * 22,800 FLIP` of pass credit, NOT liquid FLIP — the
+adjacent Craps-address `CrapsPassesCredited` log is the authoritative balance mutation, and an
+indexer must not double count the pair.
+
 ### F. FarFutureFlipJackpotWinner
 
 **Solidity signature:**
@@ -358,6 +389,7 @@ event TerminalDecBurnRecorded(
 | `JackpotEthWin` | X | X | X | X | -- | X | -- |
 | `JackpotTicketWin` | X | X | X | -- | -- | X | -- |
 | `JackpotFlipWin` | -- | -- | -- | -- | -- | -- | X (near) |
+| `JackpotCrapsCompWin` | -- | -- | -- | -- | -- | -- | X (near, comp mode) |
 | `JackpotWhalePassWin` | X | X | X | X | -- | X | -- |
 | `FarFutureFlipJackpotWinner` | -- | -- | -- | -- | -- | -- | X (far) |
 | `Advance` | X | X | -- | -- | -- | -- | -- |

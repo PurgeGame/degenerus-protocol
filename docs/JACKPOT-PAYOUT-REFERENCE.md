@@ -286,15 +286,45 @@ BAF pool from external `DegenerusJackpots` contract. Up to 107 winners (1 top BA
 
 ### Near-Future Distribution
 
-Up to `DAILY_COIN_MAX_WINNERS` = 50 trait-matched winners at a random level in [lvl, lvl+4]. Each gets `baseAmount = coinBudget / cap` (with modular extra distribution for remainder). Payout via `coinflip.creditFlip`.
+Up to `DAILY_COIN_MAX_WINNERS` = 50 scheduled pulls, rotating `i % 4` across the day's four
+winning traits (one per quadrant). Each pull samples its own random level in [minLevel,
+maxLevel] (the advance passes [purchaseLevel+1, purchaseLevel+4]; level 1 runs [1,1] plus a
+salted [2,5] call) and one ticket-weighted holder of that quadrant's trait there. Every paid
+pull receives the SAME whole-100-FLIP amount, `floor(units / cap) * 100 FLIP` where
+`units = floor(nearBudget / 100 FLIP)` and `cap = min(units, 50)`; empty `(level, trait)`
+cells skip unpaid and the equal-share remainder is not minted. Duplicate wallets are separate
+winning slots. Payout lands as one `coinflip.creditFlipBatch`.
+
+### Near-Future Craps-Comp Mode
+
+When one nominal quadrant — a quarter of the near budget — independently funds at least one
+normal Craps day pass (`floor(nearBudget / 4) >= 22,800 FLIP`), one quadrant chosen by
+`keccak256(randWord, keccak256("coin-craps-comp")) & 3` pays **whole normal Craps day-pass
+credits instead of FLIP**:
+
+- winner selection is unchanged — the quadrant's own scheduled pull indices, walked in
+  ascending order with the existing level/holder hashes, deity weighting and duplicate
+  semantics — until `min(floor(Q / 22,800), 6)` nonzero slots are found;
+- every funded whole comp is issued: slots take `base` or `base + 1` comps (counts differ by
+  at most one), with the +1 window's start rotated by its own domain hash;
+- comps bank through the Game-only `CrapsBattle.creditPasses` door as ordinary uncommitted
+  normal pass credits — no reservation, no expiry, normal-only (never high);
+- ONLY value Craps actually banked leaves the FLIP budget: the sub-comp remainder, an empty
+  comp quadrant and any pass-lane saturation refusal all stay in the other three quadrants'
+  FLIP leg, which runs today's equal-share rule over its own 37/38 scheduled pulls;
+- the comp quadrant receives no FLIP that day, and the far-future leg is untouched.
+
+The `creditPasses` call is made bare — no gas stipend, no try/catch — because the door is
+revert-free for the Game by contract; a broken wire fails the advance loudly and atomically.
 
 ### Far-Future Distribution
 
-Up to `FAR_FUTURE_FLIP_SAMPLES` = 10 winners drawn from `ticketQueue` for levels 5-99 ahead of current. One winner per sampled level. Payout split evenly via `coinflip.creditFlipBatch`.
+Up to `FAR_FUTURE_FLIP_SAMPLES` = 10 winners drawn from `ticketQueue` for levels 5-99 ahead of current. One winner per sampled level. Payout split evenly via `coinflip.creditFlipBatch`. Never enters comp mode.
 
 ### Events Emitted
 
-- `JackpotFlipWin` -- near-future winners
+- `JackpotFlipWin` -- near-future FLIP winners
+- `JackpotCrapsCompWin` -- comp-quadrant winners (day-pass credits; count, not FLIP)
 - `FarFutureFlipJackpotWinner` -- far-future winners
 
 ---

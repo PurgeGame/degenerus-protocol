@@ -132,20 +132,31 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
     it("[01a] derives `units` from the budget against `FlipRoundLib.FLIP_ROUND_UNIT`", function () {
       const body = loadBody();
       expect(
-        /uint256\s+units\s*=\s*coinBudget\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
+        /uint256\s+units\s*=\s*\(\s*coinBudget\s*-\s*spent\s*\)\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
           body
         ),
-        "`units` must be `coinBudget / FlipRoundLib.FLIP_ROUND_UNIT`"
+        "`units` must be `(coinBudget - spent) / FlipRoundLib.FLIP_ROUND_UNIT` — the FLIP leg " +
+          "splits only what the comp leg did not actually bank"
+      ).to.equal(true);
+      // `spent` moves in exactly one place: the comp branch's actual-credit figure. Below the
+      // comp threshold it stays zero and the historical formula is untouched.
+      expect(
+        (body.match(/\bspent\s*=/g) || []).length,
+        "`spent` must be assigned exactly once, by the comp leg's actually-banked figure"
+      ).to.equal(1);
+      expect(
+        /spent\s*=\s*_payCrapsComps\(/.test(body),
+        "`spent` must come from `_payCrapsComps` — the actually-credited value, never the target"
       ).to.equal(true);
     });
 
     it("[01b] floors the pull count to `min(units, DAILY_COIN_MAX_WINNERS)` and bails at zero", function () {
       const body = loadBody();
       expect(
-        /uint256\s+cap\s*=\s*units\s*<\s*DAILY_COIN_MAX_WINNERS\s*\?\s*units\s*:\s*DAILY_COIN_MAX_WINNERS\s*;/.test(
+        /cap\s*=\s*units\s*<\s*DAILY_COIN_MAX_WINNERS\s*\?\s*units\s*:\s*DAILY_COIN_MAX_WINNERS\s*;/.test(
           body
         ),
-        "`cap` must be `min(units, DAILY_COIN_MAX_WINNERS)`"
+        "`cap` must be `min(units, DAILY_COIN_MAX_WINNERS)` on the non-comp branch"
       ).to.equal(true);
       expect(
         /if\s*\(\s*cap\s*==\s*0\s*\)\s*return\s*;/.test(body),
@@ -204,12 +215,17 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
             `\`units % cap\` leftover is deliberately not minted`
         ).to.equal(false);
       }
-      // The split consumes no entropy whatsoever now.
+      // The SHARE consumes no entropy. The one hash2 in the body picks the comp quadrant —
+      // which pulls convert — never how much any FLIP pull pays.
       const hashCount = (body.match(/EntropyLib\.hash2\(/g) || []).length;
       expect(
         hashCount,
-        "the equal-share split must draw no entropy at all — nothing about the amount is random"
-      ).to.equal(0);
+        "exactly one hash2 — the comp-quadrant pick; the equal share itself draws no entropy"
+      ).to.equal(1);
+      expect(
+        /EntropyLib\.hash2\(randomWord,\s*uint256\(FLIP_CRAPS_COMP_TAG\)\)/.test(body),
+        "the one hash2 must be the domain-separated comp-quadrant pick"
+      ).to.equal(true);
     });
 
     it("[01f] the winner guard no longer carries a dead `amount != 0` clause", function () {
@@ -230,11 +246,14 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
         /\brandomWord\b/.test(body),
         "`randomWord` must still appear — it drives the level and holder draws"
       ).to.equal(true);
-      const keccakDraws = (body.match(/abi\.encode\(randomWord,/g) || []).length;
       expect(
-        keccakDraws,
-        "`randomWord` must feed both keccak draws (level sample + holder index)"
-      ).to.be.gte(2);
+        (body.match(/abi\.encode\(randomWord,\s*FLIP_LEVEL_TAG/g) || []).length,
+        "`randomWord` must feed the level-sample keccak"
+      ).to.be.gte(1);
+      expect(
+        (body.match(/EntropyLib\.hash4\(randomWord,/g) || []).length,
+        "`randomWord` must feed the holder-index draw (hash4 is byte-identical to the abi.encode form)"
+      ).to.be.gte(1);
     });
 
     it("[01h] both `++i` loop increments are intact (empty-bucket continue + loop tail)", function () {
@@ -242,8 +261,8 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
       const incCount = (body.match(/\+\+i\s*;/g) || []).length;
       expect(
         incCount,
-        "both `++i` increments (empty-bucket continue branch + loop tail) must survive"
-      ).to.equal(2);
+        "all three `++i` increments (comp-skip continue + empty-bucket continue + loop tail) must survive"
+      ).to.equal(3);
     });
   });
 
@@ -256,11 +275,11 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
       );
       const guardIdx = body.search(/if\s*\(\s*winner\s*!=\s*address\(0\)\s*\)/);
       const emitIdx = body.indexOf("emit JackpotFlipWin(");
-      const accumIdx = body.indexOf("batchPlayers[i] = winner");
+      const accumIdx = body.indexOf("batchPlayers[found] = winner");
       const batchCallIdx = body.indexOf(
         "coinflip.creditFlipBatch(batchPlayers, batchAmounts)"
       );
-      const anyWinnerGateIdx = body.search(/if\s*\(\s*anyWinner\s*\)/);
+      const anyWinnerGateIdx = body.search(/if\s*\(\s*found\s*!=\s*0\s*\)/);
 
       expect(
         capReturnIdx,
@@ -273,7 +292,7 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
       expect(emitIdx, "`JackpotFlipWin` emit not found").to.be.greaterThan(-1);
       expect(
         accumIdx,
-        "`batchPlayers[i] = winner` batch accumulation not found"
+        "`batchPlayers[found] = winner` cursor-packed batch accumulation not found"
       ).to.be.greaterThan(-1);
       expect(
         batchCallIdx,
@@ -281,7 +300,7 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
       ).to.be.greaterThan(-1);
       expect(
         anyWinnerGateIdx,
-        "`if (anyWinner)` gate on the batch call not found"
+        "`if (found != 0)` gate on the batch call not found"
       ).to.be.greaterThan(-1);
 
       expect(
@@ -298,7 +317,7 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
       ).to.be.lessThan(accumIdx);
       expect(
         anyWinnerGateIdx,
-        "the `anyWinner` gate must precede the batch call so an all-skipped loop makes no external call"
+        "the `found != 0` gate must precede the batch call so an all-skipped loop makes no external call"
       ).to.be.lessThan(batchCallIdx);
       expect(
         accumIdx,

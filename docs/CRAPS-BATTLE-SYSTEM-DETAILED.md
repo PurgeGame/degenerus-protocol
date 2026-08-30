@@ -566,7 +566,11 @@ Passes are future seats, not discount coupons:
 A future high reservation adopts that future day's eventual 10x/100x multiple. It does not store
 a guessed multiple in advance.
 
-Two more doors move banked credits, both inside `CrapsBattle` itself:
+The daily coin jackpot's comp mode banks credits through the same Game-only door: an eligible
+day converts one VRF-chosen quadrant's FLIP into whole normal day-pass comps at 22,800 FLIP a
+pass, at most six winner slots, only actually banked value leaving the FLIP budget (the
+jackpot docs carry the full rule). Two more doors move banked credits, both inside
+`CrapsBattle` itself:
 
 - **The protocol-award split.** Half of each eligible protocol-funded award — the admitted main
   ladder award, a contested lane's admitted boost, the sole rider's protocol-boost ride, the

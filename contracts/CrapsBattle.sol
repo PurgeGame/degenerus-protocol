@@ -1811,9 +1811,20 @@ contract CrapsBattle is LootboxCraps {
     ///         attempt, no external call, no way to revert past the saturation the credit lane
     ///         already announces. The lootbox module's LAST resort when the full delivery lane
     ///         fails: a pass the table has banked is a pass nobody can lose.
-    function creditPasses(address player, uint32 normal, uint32 high) external {
+    /// @dev REVERT-FREE for the authorized caller, and that is load-bearing: the jackpot's comp
+    ///      lane calls this bare from inside the daily advance, so a new revert path here is an
+    ///      advance-liveness regression, not a local style choice.
+    /// @return normalCredited What the normal lane actually banked after saturation — a caller
+    ///         pricing value off it never charges for a credit the ceiling refused. Only the
+    ///         normal lane reports: the one pricing caller sends normals alone, and the high
+    ///         lane's `CrapsPassesCredited` log already carries its actual count.
+    function creditPasses(address player, uint32 normal, uint32 high)
+        external
+        returns (uint32 normalCredited)
+    {
         if (msg.sender != _GAME) revert OnlyGame();
-        if (normal != 0) _credit(player, false, normal);
+        // `_credit` returns at most `_PASS_MAX`, so the cast is exact.
+        if (normal != 0) normalCredited = uint32(_credit(player, false, normal));
         if (high != 0) _credit(player, true, high);
     }
 
