@@ -49,6 +49,15 @@ constexpr i64 kDefaultMainBase = 50'000;
 // exactly as `_splitMainBudget` floors it, so the two always sum back to the raw figure.
 inline i64 ladderHalf(i64 rawMain) { return rawMain / 2; }
 inline i64 progressiveHalf(i64 rawMain) { return rawMain - rawMain / 2; }
+// THE PROTOCOL-AWARD PASS SPLIT. Half of each eligible protocol award — the admitted main boost,
+// a contested lane's boost, the sole rider's protocol ride, the progressive award — converts to
+// whole day-pass credits at the lootbox's own denominations; everything the flooring, the
+// thirty-high cap or the (unmodeled) lane ceiling refuses pays out liquid. Deterministic: no
+// entropy, no Bernoulli rounding.
+constexpr i64 kNormalPassValue = 22'800;
+constexpr i64 kHighPassValue = 19 * kNormalPassValue;
+constexpr i64 kPassHighSwitch = 20 * kNormalPassValue;
+constexpr i64 kMaxHighPassesPerAward = 30;
 // THE PROGRESSIVE'S RUNGS, in BASIS POINTS of the LIVE pool. Two rungs and two window classes:
 // the day's EVENT (period 6) is its headline and pays four times what a routine window does, and
 // doubles again where its winner already took a routine field as Goal earlier the same day. A
@@ -851,6 +860,18 @@ struct Totals {
     long double progressivePaid{};
     long double progressiveCommonAwards{};
     long double progressiveRareAwards{};
+    /// THE PASS SPLIT'S BOOK, by source: 0 main ladder, 1 contested high, 2 sole rider,
+    /// 3 progressive — the same numbering the contract's split event freezes. Pass value is
+    /// award value delivered in a different shape, so every credit ledger above still carries
+    /// the full gross and the split moves none of them; these count what changed shape.
+    std::array<long double, 4> passNormal{};
+    std::array<long double, 4> passHigh{};
+    std::array<long double, 4> passValue{};
+    long double passCapHits{};
+    /// What ONE seat of each kind puts through the table per day, summed over counted days —
+    /// the redemption-side figure a banked pass-day later adds to action when it is used.
+    long double ordinarySeatDayAction{};
+    long double highSeatDayAction{};
     /// The pool's balance at the end of the counted run, and its trajectory.
     long double progressiveEnd{};
     std::vector<long double> progressiveDaily;
@@ -869,6 +890,26 @@ i64 boostShare(i64 units, int standing) {
     if (standing >= kScoreFloor) return units;
     if (standing == 0) return 0;
     return units / (kScoreFloor - standing);
+}
+
+// The contract's deterministic award split, applied to one gross figure: half of it is the pass
+// target, floored to whole passes — HIGH above twenty normal units, at most thirty of them — and
+// the return is the pass VALUE that changed shape. The caller's credit figures are left whole.
+i64 splitAward(i64 gross, int source, Totals& out) {
+    i64 budget = gross / 2;
+    bool high = budget > kPassHighSwitch;
+    i64 unit = high ? kHighPassValue : kNormalPassValue;
+    i64 wanted = budget / unit;
+    if (high && wanted > kMaxHighPassesPerAward) {
+        wanted = kMaxHighPassesPerAward;
+        out.passCapHits += 1;
+    }
+    if (wanted == 0) return 0;
+    if (high) out.passHigh[source] += static_cast<long double>(wanted);
+    else out.passNormal[source] += static_cast<long double>(wanted);
+    i64 value = wanted * unit;
+    out.passValue[source] += static_cast<long double>(value);
+    return value;
 }
 
 i64 roundBoostUnits(i64 units) {
@@ -984,6 +1025,10 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
             out.mainBudget += rawMain;
             out.highBudget += highBudget;
             out.progressiveFunded += contribution;
+            for (int p = 0; p < kWindows; ++p) {
+                out.ordinarySeatDayAction += static_cast<long double>(terms[p].bankroll);
+                out.highSeatDayAction += static_cast<long double>(terms[p].bankroll) * highMult;
+            }
             for (int g = 0; g < static_cast<int>(scenario.cohorts.size()); ++g) {
                 const Cohort& c = scenario.cohorts[g];
                 if (c.funding == Funding::Prepaid) {
@@ -1060,6 +1105,7 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                 out.totalCredit += mainPot;
                 out.bountyReturned += mainBounties;
                 out.mainBoostPaid += mainBoost;
+                splitAward(mainBoost, 0, out);
                 out.progressiveRolled += mainDenied;
                 dayBoostPaid += mainBoost;
                 GroupTotals& gt = out.groups[seats[mainWinner].group];
@@ -1112,6 +1158,7 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                     if (count) {
                         out.totalCredit += award;
                         out.progressivePaid += award;
+                        splitAward(award, 3, out);
                         if (rare) out.progressiveRareAwards += 1;
                         else out.progressiveCommonAwards += 1;
                         GroupTotals& gt = out.groups[seats[mainWinner].group];
@@ -1137,6 +1184,7 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                     out.totalCredit += rider;
                     out.bountyReturned += rider - boostPart;
                     out.highBoostPaid += boostPart;
+                    splitAward(boostPart, 2, out);
                     dayBoostPaid += boostPart;
                     GroupTotals& gt = out.groups[seats[h].group];
                     gt.potCredit += rider;
@@ -1159,6 +1207,7 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                     out.totalCredit += lanePot;
                     out.bountyReturned += laneBounties;
                     out.highBoostPaid += laneBoost;
+                    splitAward(laneBoost, 1, out);
                     dayBoostPaid += laneBoost;
                     GroupTotals& gt = out.groups[seats[highWinner].group];
                     gt.potCredit += lanePot;
@@ -1569,6 +1618,17 @@ void printSystemMatrix(int days, u64 seed) {
                  "\traw_main_allocation_per_day\tallocation_pct_action\tprogressive_funded_per_day"
                  "\tprogressive_paid_per_day\tladder_paid_per_day\tnet_accrual_after_allocation_per_day"
                  "\tnet_cash_per_day\tprogressive_pool_end\tcommon_per_year\trare_per_year\n";
+    // THE PASS SPLIT'S REPORT rides the same matrix walk. Sources use the contract's frozen
+    // numbering: 1 main ladder, 2 contested high, 3 sole rider, 4 progressive. Outstanding
+    // pass-days assume ZERO redemption over the horizon — the upper bound on the float — and the
+    // feedback column prices FULL redemption instead: every issued pass-day replayed at this
+    // run's mean per-seat day action, times the schedule's 12% action rate, is what the split
+    // hands back to future budgets.
+    std::cout << "PASS_SPLIT_HEADER\tcomposition\theads"
+                 "\tnormal_by_source_1_2_3_4\thigh_by_source_1_2_3_4"
+                 "\tpasses_per_day\tpass_value_per_day\tliquid_change_per_day"
+                 "\tthirty_high_caps_per_year\toutstanding_pass_days_end"
+                 "\tredeemed_action_per_day\tbudget_feedback_per_day\n";
     for (std::size_t ci = 0; ci < compositions.size(); ++ci) {
         for (int n : heads) {
             Scenario s = matrixScenario(compositions[ci], n);
@@ -1595,6 +1655,34 @@ void printSystemMatrix(int days, u64 seed) {
                       << static_cast<double>(t.progressiveEnd) << '\t'
                       << static_cast<double>(365 * t.progressiveCommonAwards / d) << '\t'
                       << static_cast<double>(365 * t.progressiveRareAwards / d) << "\n";
+            long double normals = 0;
+            long double highs = 0;
+            long double value = 0;
+            for (int src = 0; src < 4; ++src) {
+                normals += t.passNormal[src];
+                highs += t.passHigh[src];
+                value += t.passValue[src];
+            }
+            long double gross = t.mainBoostPaid + t.highBoostPaid + t.progressivePaid;
+            long double meanOrdinaryDay = t.ordinarySeatDayAction / d;
+            long double meanHighDay = t.highSeatDayAction / d;
+            long double redeemedAction = (normals * meanOrdinaryDay + highs * meanHighDay) / d;
+            std::cout << "PASS_SPLIT\t" << matrixCompositionName(compositions[ci]) << '\t' << n << '\t'
+                      << static_cast<double>(t.passNormal[0]) << '/'
+                      << static_cast<double>(t.passNormal[1]) << '/'
+                      << static_cast<double>(t.passNormal[2]) << '/'
+                      << static_cast<double>(t.passNormal[3]) << '\t'
+                      << static_cast<double>(t.passHigh[0]) << '/'
+                      << static_cast<double>(t.passHigh[1]) << '/'
+                      << static_cast<double>(t.passHigh[2]) << '/'
+                      << static_cast<double>(t.passHigh[3]) << '\t'
+                      << static_cast<double>((normals + highs) / d) << '\t'
+                      << static_cast<double>(value / d) << '\t'
+                      << static_cast<double>((gross - value) / d) << '\t'
+                      << static_cast<double>(365 * t.passCapHits / d) << '\t'
+                      << static_cast<double>(normals + highs) << '\t'
+                      << static_cast<double>(redeemedAction) << '\t'
+                      << static_cast<double>(redeemedAction * kActionBps / kBpsDenominator) << "\n";
         }
     }
 }
@@ -2434,6 +2522,7 @@ void printShockTable() {
 void usage(const char* argv0) {
     std::cerr << "Usage: " << argv0
               << " [--days N] [--worlds N] [--calibration N] [--schedule N] [--settings N]"
+                 " [--setting-depths a,b,c] [--setting-goals x,y]"
                  " [--high-water-goal 0|1] [--jackpot-calibration N]"
                  " [--winner-calibration N]"
                  " [--bounty-matchup N]"
@@ -2466,6 +2555,8 @@ int main(int argc, char** argv) {
     int calibrationSamples = 250'000;
     int scheduleSamples = 500'000;
     int settingSamples = 0;
+    std::string settingDepthsArg;
+    std::string settingGoalsArg;
     int boardSearchSamples = 0;
     int searchRefineSamples = 0;
     int searchTop = 20;
@@ -2497,6 +2588,8 @@ int main(int argc, char** argv) {
         else if (arg == "--calibration") calibrationSamples = std::stoi(argv[++i]);
         else if (arg == "--schedule") scheduleSamples = std::stoi(argv[++i]);
         else if (arg == "--settings") settingSamples = std::stoi(argv[++i]);
+        else if (arg == "--setting-depths") settingDepthsArg = argv[++i];
+        else if (arg == "--setting-goals") settingGoalsArg = argv[++i];
         else if (arg == "--high-water-goal") gHighWaterGoal = std::stoi(argv[++i]) != 0;
         else if (arg == "--jackpot-calibration") jackpotCalibrationSamples = std::stoi(argv[++i]);
         else if (arg == "--winner-calibration") winnerCalibrationFields = std::stoi(argv[++i]);
@@ -2752,8 +2845,21 @@ int main(int argc, char** argv) {
     if (settingSamples != 0) {
         std::cout << "SETTING_HEADER\tstrategy\tdepth\tgoal_multiple\teffective_edge_pct"
                      "\tpre_forfeit_engine_drag_pct\tbust_deletion_pct\tbust_rate_pct\tgoal_rate_pct\tmean_hands\n";
-        constexpr std::array<int, 1> depths{5};
-        constexpr std::array<int, 2> goals{5, 20};
+        auto parseIntList = [](const std::string& text) {
+            std::vector<int> out;
+            std::size_t pos = 0;
+            while (pos < text.size()) {
+                std::size_t comma = text.find(',', pos);
+                if (comma == std::string::npos) comma = text.size();
+                out.push_back(std::stoi(text.substr(pos, comma - pos)));
+                pos = comma + 1;
+            }
+            return out;
+        };
+        std::vector<int> depths{5};
+        std::vector<int> goals{5, 20};
+        if (!settingDepthsArg.empty()) depths = parseIntList(settingDepthsArg);
+        if (!settingGoalsArg.empty()) goals = parseIntList(settingGoalsArg);
         for (std::size_t si = 0; si < strategies.size(); ++si) {
             if (!settingStrategyFilter.empty() && strategies[si] != strategyFromName(settingStrategyFilter)) continue;
             for (int depth : depths) {

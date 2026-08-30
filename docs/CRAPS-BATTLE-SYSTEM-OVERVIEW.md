@@ -312,6 +312,9 @@ entrants x bounty + adjusted scheduled boost + exact donations
 ```
 
 All Bust remainders stay outside this pot. The winner may itself be a Bust if nobody reaches Goal.
+Half of the adjusted scheduled boost — protocol money, and only it — is targeted at day-pass
+credits (Section 11); the pot the winner is actually credited is the bounties, the donations and
+the boost's liquid remainder, with the banked pass value announced beside it.
 
 ## 8. Randomness, Closing, and Settlement
 
@@ -528,7 +531,7 @@ the caller's ticket without a walk.
 
 Pass awards are seats, not coupons requiring later redemption.
 
-Credits arrive from four sources, all through the table's `OnlyGame` credit doors:
+Credits arrive from four Game-side sources, all through the table's `OnlyGame` credit doors:
 
 - The regular lootbox's day-pass conversion (`deliverPasses`, which first tries to seat
   tomorrow and banks the rest).
@@ -564,6 +567,34 @@ Credits arrive from four sources, all through the table's `OnlyGame` credit door
   included — which also refreshes standing. A lootbox-delivered automatic seat always starts
   blank.
 
+### Protocol awards pay half in passes
+
+The table itself banks credits from its own protocol-funded awards. Half of each eligible award
+— the scheduled main boost a winner's standing admitted, a contested high lane's admitted boost,
+the sole rider's protocol-boost ride, and the progressive award — is targeted at passes:
+`floor(A / 2)`, floored to whole passes at the box units (22,800-FLIP normal; the whole portion
+switches to 19x high-roller strictly above twenty normal units, at most thirty highs per award).
+Everything the flooring, the cap or a saturated lane refuses stays in the winner's liquid
+Coinflip credit in the same transaction — deterministic, with no entropy and no Bernoulli
+rounding, so `liquid + pass value == A` exactly. Player money never converts: entrant bounties,
+high-lane extra bounties, donations, bankroll returns and custom-battle pots always pay liquid
+and whole. Each award splits independently; a winner taking the main boost and the progressive
+in one finalization gets two independently denominated splits, never a pooled one. Every split
+is announced by `CrapsProtocolAwardSplit` (sources: 1 main ladder, 2 contested high, 3 sole
+rider, 4 progressive) immediately after the `CrapsPassesCredited` log that carries the banked
+denomination and count. Pass issuance is not an emission event — the award was already funded;
+the pass is that award paying in a different shape.
+
+### Converting normals to highs
+
+`convertNormalToHigh(highCount)` converts a player's own uncommitted normal credits into
+high-roller credits at nineteen normals per high — the credits' exact value ratio (19 x 22,800 =
+433,200), deliberately not the 18:1 the retail future-day prices imply, which would subsidize
+conversion. The debit and credit land in one packed write, all-or-nothing; committed
+reservations are unreachable; the conversion is one-way and emits the single
+`CrapsNormalPassesConverted` log. Zero counts, short balances and a high lane that cannot hold
+the result all revert with nothing moved.
+
 ## 12. High-Roller Lane
 
 Every high seat joins the ordinary main scoreboard and a second high-only scoreboard. For day
@@ -584,7 +615,10 @@ ride = floor(individual paid / bankroll x (extra bounties + adjusted high boost)
 ```
 
 A Bust has zero individual paid and therefore receives zero rider. This sole-lane capital is
-booked as high action because it was actually at risk.
+booked as high action because it was actually at risk. The boost's own pro-rata copy —
+`floor(paid / bankroll x adjusted high boost)`, the protocol part of the ride — is what the pass
+split halves (Section 11); the bounty part of the ride always pays liquid and whole, and the
+combined-floor figure above is preserved to the wei.
 
 ### Two or more high seats
 
@@ -594,9 +628,10 @@ The best high score receives:
 high heads x (H - 1) x bounty + standing-adjusted high boost
 ```
 
-The player-funded extra bounties pay whole; only the protocol boost is standing-rationed. The same
-boost rung drives main and high. A high player can win both pots, and if all high players Bust the
-best-ranked Bust wins the lane.
+The player-funded extra bounties pay whole; only the protocol boost is standing-rationed — and
+only it feeds the pass split (Section 11), so the liquid payment is the whole principal plus the
+boost's liquid remainder. The same boost rung drives main and high. A high player can win both
+pots, and if all high players Bust the best-ranked Bust wins the lane.
 
 ## 13. Boost Budget and Lottery
 
@@ -778,7 +813,8 @@ bps     = isEvent and wonARoutineGoalToday(winner) ? base * 2 : base
 
 candidate = floor(pool * bps / 10_000)
 paid      = standingShare(candidate, winnerStanding)
-pool     -= paid
+pool     -= paid                      # the WHOLE gross award leaves the pool
+liquid    = paid - passValue(paid)    # half of it targets passes (Section 11); the rest is credited
 ```
 
 Rare continues to override common, and the pool percentage is applied **before** the standing
@@ -815,6 +851,11 @@ external call.
   common event rung, and one that is `rare` is an undoubled rare one.
 - `CrapsProgressiveRolled(battleKey, source, amount, balance)` — source 1 main ladder, 2 contested
   high lane, 3 sole high rider.
+- `CrapsProtocolAwardSplit(battleKey, player, source, grossProtocol, liquidFlip)` — one per award
+  that banked at least one pass; source 1 main ladder, 2 contested high, 3 sole rider,
+  4 progressive. `grossProtocol - liquidFlip` is the exact pass value, and the
+  `CrapsPassesCredited` log immediately before it carries the denomination and count.
+  `CrapsProgressivePaid.paid` remains the pool debit — gross, not liquid.
 - `CrapsBattleFinalized` carries `winningPeak`, `winningEnd` and `winningScoreBps`; the `Battle`
   view carries `winningPeak` and `winningEnd` beside `winningHands`.
 

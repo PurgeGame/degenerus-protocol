@@ -48,6 +48,22 @@ sub-pass roll whose fraction loses paying the box's WWXRP dud. All three land th
 `creditPasses` credit-only door and behave exactly like lootbox-banked credits from the
 moment they are banked.
 
+Two further credit movers live inside `CrapsBattle` itself, outside every lootbox lane. The
+**protocol-award pass split** targets half of each eligible protocol-funded Craps award —
+the standing-admitted scheduled main boost, a contested high lane's admitted boost, the sole
+high rider's protocol-boost ride, and the progressive award — at passes: `floor(A / 2)` floored
+to whole passes at this specification's units with the same strictly-above-twenty-normal-units
+denomination switch, capped at thirty high passes per award, with every fractional remainder,
+cap excess and lane-saturation refusal staying in the winner's liquid Coinflip credit in the
+same transaction. Unlike the lootbox conversion it is fully deterministic — no VRF read, no
+Bernoulli fractional rounding, no WWXRP consolation — because the winner is already receiving
+FLIP in that transaction and the fraction simply rides home as change. Each award source splits
+independently and none of it touches player-funded money. And **`convertNormalToHigh`** lets a
+player convert their own uncommitted normal credits into high credits at exactly nineteen
+normals per high — the value ratio of the two units, not the 18:1 the retail prepaid prices
+imply — atomically, one-way, reservations untouched. Credits arriving through either mover are
+indistinguishable from lootbox-banked credits from the moment they are banked.
+
 A pass may be committed only to a future protocol day whose daily word has not landed. It covers
 one early full-day entry across all seven scheduled Bonus Battle windows. A normal pass covers a
 1x day entry; a high-roller pass covers the target day's genuine 10x-or-100x high-roller entry.

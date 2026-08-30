@@ -141,6 +141,9 @@ contract CrapsBattle is LootboxCraps {
     /// @notice A reservation run asked for no days at all.
     error BadPassCount();
 
+    /// @notice A conversion would carry the high-roller credit lane past its ceiling.
+    error PassLaneFull();
+
     /// @notice A day in the run is already spoken for, has already drawn its word, or is not in
     ///         the future. A commitment has to be blind to be worth anything, so a day whose terms
     ///         are knowable is not one anybody may reserve.
@@ -372,10 +375,13 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _PROG_RARE_20X = 2_250_000;
 
     /// @dev Where a `CrapsProgressiveRolled` came from: the main ladder, a contested high lane,
-    ///      or the boost capital a sole high rider's standing would not admit.
-    uint8 internal constant _ROLL_SRC_MAIN = 1;
-    uint8 internal constant _ROLL_SRC_HIGH_CONTESTED = 2;
-    uint8 internal constant _ROLL_SRC_HIGH_SOLE = 3;
+    ///      or the boost capital a sole high rider's standing would not admit. Carried to
+    ///      `_rollIn` in the TOP BYTE of the amount — an amount is FLIP wei and nowhere near
+    ///      2^248, and the packing keeps every call's arguments opaque enough that the optimizer
+    ///      shares one copy of the bank instead of specializing three.
+    uint256 internal constant _ROLL_SRC_MAIN = uint256(1) << 248;
+    uint256 internal constant _ROLL_SRC_HIGH_CONTESTED = uint256(2) << 248;
+    uint256 internal constant _ROLL_SRC_HIGH_SOLE = uint256(3) << 248;
 
     /// @notice House money lands on a ROUND figure. It is already counted in 100-FLIP granules,
     ///         so anything up to forty of them is round already; past that it goes to the nearest
@@ -828,7 +834,8 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev A player's UNCOMMITTED day-pass credits, both denominations in one word: the normal
     ///      count in the low 32 bits, the high-roller count above `_PASS_HIGH_SHIFT`. Awarded by
-    ///      the lootbox and spent by committing one to a future day.
+    ///      the lootbox and by the pass half of a protocol payout, spent by committing one to a
+    ///      future day, and movable one way — normals into highs — at the credits' value ratio.
     ///
     ///      HELD HERE RATHER THAN IN THE GAME, and that placement is forced. A credit is spent by
     ///      `applyCrapsPasses`, which writes the reserved days — Craps state — so holding the
@@ -920,6 +927,31 @@ contract CrapsBattle is LootboxCraps {
     /// @dev The ceiling on either lane. A lootbox sweep is permissionless and must never revert on
     ///      a full lane, so an award saturates here and reports what it dropped.
     uint256 internal constant _PASS_MAX = 0xFFFFFFFF;
+
+    /// @dev What one banked pass is WORTH when a protocol award pays in passes — the lootbox's own
+    ///      expected-cost figures, restated so an award and a box price the same credit
+    ///      identically. The denomination switch mirrors the lootbox rule exactly: a pass budget
+    ///      strictly above twenty normal units pays high, and a high award banks at most thirty.
+    uint256 internal constant _NORMAL_PASS_VALUE = 22_800 ether;
+    uint256 internal constant _HIGH_PASS_VALUE = 19 * _NORMAL_PASS_VALUE;
+    uint256 internal constant _PASS_HIGH_SWITCH = 20 * _NORMAL_PASS_VALUE;
+    uint256 internal constant _MAX_HIGH_PASSES_PER_AWARD = 30;
+
+    /// @dev Normal credits one high credit costs in `convertNormalToHigh` — the passes' own 19:1
+    ///      value ratio, so conversion moves value exactly and subsidizes nothing. Deliberately
+    ///      NOT the 18:1 the retail future-day prices imply; those carry margins the credits
+    ///      never did.
+    uint256 internal constant _PASSES_PER_HIGH = 19;
+
+    /// @dev `CrapsProtocolAwardSplit.source` values, frozen — carried to `_splitAward` in the
+    ///      TOP BYTE of the award argument. An award is FLIP wei and nowhere near 2^248, so the
+    ///      byte is always free, and packing the tag keeps the argument opaque enough that the
+    ///      optimizer shares ONE copy of the split instead of specializing four.
+    uint256 internal constant _SPLIT_SRC_MAIN = uint256(1) << 248;
+    uint256 internal constant _SPLIT_SRC_HIGH_CONTESTED = uint256(2) << 248;
+    uint256 internal constant _SPLIT_SRC_HIGH_SOLE = uint256(3) << 248;
+    uint256 internal constant _SPLIT_SRC_PROGRESSIVE = uint256(4) << 248;
+    uint256 internal constant _SPLIT_GROSS_MASK = (uint256(1) << 248) - 1;
 
     /// @notice A bet slip took a seat at a slot.
     /// @param bet The whole slip in one word:
@@ -1017,7 +1049,9 @@ contract CrapsBattle is LootboxCraps {
         uint24 indexed day, uint16 multiplier, uint256 mainBoostBudget, uint256 highRollerBoostBudget
     );
 
-    /// @notice A high-roller allocation went home.
+    /// @notice A high-roller allocation went home. `amount` is the LIQUID coinflip credit, after
+    ///         any slice of the lane's protocol boost banked as pass credit under
+    ///         `CrapsProtocolAwardSplit`.
     /// @param bankrollRider True where the field held exactly ONE high seat, so the allocation
     ///        rode that seat's own run instead of being contested — in which case `amount` is what
     ///        the run returned on it, and zero is a real and expected outcome.
@@ -1060,9 +1094,31 @@ contract CrapsBattle is LootboxCraps {
     /// @notice Uncommitted day-pass credits were banked for `player`.
     event CrapsPassesCredited(address indexed player, bool highRoller, uint256 count);
 
+    /// @notice Half of a protocol-funded award was targeted at day-pass credits; everything that
+    ///         did not convert to whole passes stayed liquid. `grossProtocol` is the award the
+    ///         source admitted and `liquidFlip` what went to Coinflip, so their difference is the
+    ///         exact FLIP value of the passes banked. The `CrapsPassesCredited` log emitted
+    ///         immediately before this one carries their denomination and count — correlate the
+    ///         two by position; nothing is restated. Emitted only where at least one pass banked.
+    /// @param source 1 main ladder, 2 contested high lane, 3 sole high rider, 4 progressive.
+    event CrapsProtocolAwardSplit(
+        bytes32 indexed battleKey,
+        address indexed player,
+        uint8 indexed source,
+        uint256 grossProtocol,
+        uint256 liquidFlip
+    );
+
+    /// @notice `normalSpent` uncommitted normal pass credits became `highReceived` high-roller
+    ///         credits, at the credits' own 19:1 value ratio. The ONLY log a conversion emits —
+    ///         both lane deltas live here, and no `CrapsPassesCredited` rides along to
+    ///         double-count the high addition.
+    event CrapsNormalPassesConverted(address indexed player, uint256 normalSpent, uint256 highReceived);
+
     /// @notice A battle's pot went to its winner, as coinflip credit. A progressive award riding
     ///         the same finalization is a SEPARATE credit and a separate log — this figure is the
-    ///         pot and only the pot, exactly as it always was.
+    ///         pot and only the pot: the LIQUID figure, after any slice of a scheduled boost
+    ///         banked as pass credit under `CrapsProtocolAwardSplit`.
     event CrapsBattlePaid(uint256 indexed betId, bytes32 indexed battleKey, address indexed player, uint256 amount);
 
     /// @notice A protocol day banked its half of the main allocation in the progressive.
@@ -1093,10 +1149,13 @@ contract CrapsBattle is LootboxCraps {
     ///        10,000 is 1x, and the cutoffs are 250,000 / 1,200,000 at 5x and 500,000 / 2,250,000
     ///        at 20x.
     /// @param candidate The rung's whole figure, before the winner's standing is applied.
-    /// @param paid What was actually credited — `candidate` at full standing, less below it.
-    ///        What the standing DENIED is `candidate - paid`; it was never removed from the pool,
-    ///        so it needs no funding log and no field of its own.
-    /// @param balance The pool AFTER the credit.
+    /// @param paid What actually LEFT the pool — `candidate` at full standing, less below it —
+    ///        so `poolBefore - poolAfter` reconstructs from this figure alone. A slice of it can
+    ///        bank as pass credit rather than Coinflip money; the `CrapsProtocolAwardSplit` log
+    ///        riding the same finalization carries that liquid/pass breakdown. What the standing
+    ///        DENIED is `candidate - paid`; it was never removed from the pool, so it needs no
+    ///        funding log and no field of its own.
+    /// @param balance The pool AFTER the debit.
     event CrapsProgressivePaid(
         uint256 indexed betId,
         bytes32 indexed battleKey,
@@ -1218,8 +1277,7 @@ contract CrapsBattle is LootboxCraps {
             // one. Exactly one of those bounties stays in the main pot; the other `H - 1` are what
             // the high lane plays for. Bounded far below 2^256: a uint128 bankroll by 256 is 136
             // bits.
-            boonMask = IFlipCoin(ContractAddresses.COIN).burnCoinForCraps(
-                msg.sender,
+            boonMask = _burnForCraps(
                 _tag((uint256(w.bankroll) + w.stakeUnits * _BATTLE_STAKE_UNIT) * multiple, _CRAPS_FLAG_JOIN)
             );
             // The id IS the seat: this battle's slot, and this entrant's place in its field.
@@ -1424,8 +1482,7 @@ contract CrapsBattle is LootboxCraps {
 
         // ONE tagged burn buys the whole day: the join, the day pass and the day-kept streak all
         // ride the same report, so the table no longer calls the quest ledger itself.
-        uint8 boonMask = IFlipCoin(ContractAddresses.COIN).burnCoinForCraps(
-            msg.sender,
+        uint8 boonMask = _burnForCraps(
             _tag(cost, _CRAPS_FLAG_JOIN | _CRAPS_FLAG_PASS | (high ? _CRAPS_FLAG_HIGH : _CRAPS_FLAG_NORMAL))
         );
         _writeDaySeat(daySlot, msg.sender, packed, standing, high, multiple - 1, boonMask);
@@ -2317,6 +2374,24 @@ contract CrapsBattle is LootboxCraps {
         return true;
     }
 
+    /// @dev ONE encoder for every coinflip credit the table pays. Shared so three payment sites
+    ///      do not each carry their own copy of the call plumbing.
+    function _creditFlip(address player, uint256 amount) private {
+        ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(player, amount);
+    }
+
+    /// @dev ONE encoder for every tagged craps burn, always on the caller — the three paid doors
+    ///      share this plumbing the same way the payment sites share `_creditFlip`.
+    function _burnForCraps(uint256 grossAndFlags) private returns (uint8) {
+        return IFlipCoin(ContractAddresses.COIN).burnCoinForCraps(msg.sender, grossAndFlags);
+    }
+
+    /// @dev ONE encoder for the plain self-burns. The lapse sweep's guarded burn stays direct —
+    ///      a `try` needs the external call in its own hands.
+    function _burnCoin(uint256 amount) private {
+        IFlipCoin(ContractAddresses.COIN).burnCoin(msg.sender, amount);
+    }
+
     /// @dev The caller's standing, clamped to the field the bet word carries.
     function _standingOf(address player) private view returns (uint256 standing) {
         standing = IGameActivityScore(_GAME).playerActivityScore(player);
@@ -2326,7 +2401,10 @@ contract CrapsBattle is LootboxCraps {
     /// @dev Bank credits, SATURATING at the lane's ceiling. A lootbox sweep is permissionless and
     ///      must never revert on a full lane, so the excess is dropped and announced rather than
     ///      thrown — and the ceiling is four billion passes, which no box can approach.
-    function _credit(address player, bool high, uint256 add) private {
+    /// @return got What actually banked, which is `add` everywhere short of the ceiling. The
+    ///         award split prices its pass slice off this figure, so a saturated lane leaves the
+    ///         refused units' value liquid rather than deleting it.
+    function _credit(address player, bool high, uint256 add) private returns (uint256 got) {
         unchecked {
             uint256 word = _passCredits[player];
             uint256 shift = high ? _PASS_HIGH_SHIFT : 0;
@@ -2337,7 +2415,35 @@ contract CrapsBattle is LootboxCraps {
             // the lane packed above this one. `CrapsPassesCredited` reports what actually banked.
             if (sum > _PASS_MAX) sum = _PASS_MAX;
             _passCredits[player] = (word & ~(_PASS_MAX << shift)) | (sum << shift);
-            emit CrapsPassesCredited(player, high, sum - held);
+            got = sum - held;
+            emit CrapsPassesCredited(player, high, got);
+        }
+    }
+
+    /// @dev Split one protocol-funded award between pass credit and liquid FLIP: HALF of it is
+    ///      the pass target, floored to whole passes, and every wei the flooring, the high cap or
+    ///      a saturated lane refuses simply stays liquid — the caller subtracts only `banked`, so
+    ///      `liquid + banked == gross` exactly, by construction, and nothing here can delete
+    ///      value. The denomination is the lootbox's own switch: a budget strictly above twenty
+    ///      normal units pays HIGH, at most thirty of them, and one award never mixes lanes.
+    ///      DETERMINISTIC on purpose — the winner is receiving FLIP in this same transaction, so
+    ///      fractional dust rides home as change and no coin is tossed.
+    /// @param taggedGross The award in FLIP wei, with its `_SPLIT_SRC_*` tag in the top byte.
+    /// @return banked The exact FLIP value of the passes actually credited — what the caller
+    ///         removes from the liquid payment. Zero banks nothing and emits nothing.
+    function _splitAward(bytes32 key, address player, uint256 taggedGross) internal returns (uint256 banked) {
+        unchecked {
+            uint256 gross = taggedGross & _SPLIT_GROSS_MASK;
+            uint256 budget = gross / 2;
+            bool high = budget > _PASS_HIGH_SWITCH;
+            uint256 unit = high ? _HIGH_PASS_VALUE : _NORMAL_PASS_VALUE;
+            uint256 wanted = budget / unit;
+            if (wanted == 0) return 0;
+            if (high && wanted > _MAX_HIGH_PASSES_PER_AWARD) wanted = _MAX_HIGH_PASSES_PER_AWARD;
+            banked = _credit(player, high, wanted) * unit;
+            if (banked != 0) {
+                emit CrapsProtocolAwardSplit(key, player, uint8(taggedGross >> 248), gross, gross - banked);
+            }
         }
     }
 
@@ -2385,8 +2491,7 @@ contract CrapsBattle is LootboxCraps {
         if (count == 0) revert BadPassCount();
         uint8 boonMask;
         unchecked {
-            boonMask = IFlipCoin(ContractAddresses.COIN).burnCoinForCraps(
-                msg.sender,
+            boonMask = _burnForCraps(
                 _tag(
                     uint256(count) * (high ? _HIGH_FUTURE_DAY_PRICE : _NORMAL_FUTURE_DAY_PRICE),
                     _CRAPS_FLAG_PASS
@@ -2398,6 +2503,33 @@ contract CrapsBattle is LootboxCraps {
         // nothing, and the rule lives in one place instead of being restated in a pre-walk that
         // could drift from the writer.
         _reserveRun(startDay, count, high, chips, boonMask);
+    }
+
+    /// @notice Convert your own uncommitted normal pass credits into high-roller credits, at
+    ///         nineteen normals per high — the credits' own value ratio, exactly.
+    /// @dev ONE PACKED WRITE moves both lanes, so the debit and the credit are all-or-nothing by
+    ///      construction and no failure can leave either lane half-moved. Only BANKED credits are
+    ///      reachable: a reservation already committed to a day lives in that day's seat word,
+    ///      not here. ONE-WAY — a high credit never breaks back into normals.
+    /// @param highCount How many high-roller credits to buy. Costs `19 * highCount` normals.
+    /// @custom:reverts BadPassCount If `highCount` is zero.
+    /// @custom:reverts PassLaneFull If the high lane cannot hold the result.
+    /// @custom:reverts Panic(0x11) If the caller holds fewer than `19 * highCount` normals.
+    function convertNormalToHigh(uint32 highCount) external {
+        if (highCount == 0) revert BadPassCount();
+        uint256 word = _passCredits[msg.sender];
+        uint256 cost;
+        uint256 highs;
+        unchecked {
+            cost = uint256(highCount) * _PASSES_PER_HIGH;
+            highs = ((word >> _PASS_HIGH_SHIFT) & _PASS_MAX) + highCount;
+        }
+        if (highs > _PASS_MAX) revert PassLaneFull();
+        // Deliberately CHECKED, exactly as `_takeCredits`: the underflow IS the balance test.
+        uint256 normals = (word & _PASS_MAX) - cost;
+        _passCredits[msg.sender] =
+            (word & ~(_PASS_MAX | (_PASS_MAX << _PASS_HIGH_SHIFT))) | (highs << _PASS_HIGH_SHIFT) | normals;
+        emit CrapsNormalPassesConverted(msg.sender, cost, highCount);
     }
 
     /// @dev Spend `count` credits from one lane. CHECKED: an insufficient balance underflows and
@@ -2499,7 +2631,7 @@ contract CrapsBattle is LootboxCraps {
                 counters += 1 << (_DT_HIGH_SHIFT * (p + 1));
             }
         }
-        IFlipCoin(ContractAddresses.COIN).burnCoin(msg.sender, burned);
+        _burnCoin(burned);
         _bets[betId] = header | (newMask << _BET_HIGH_SHIFT);
         unchecked {
             _dayTickets[daySlot] += counters;
@@ -2753,7 +2885,7 @@ contract CrapsBattle is LootboxCraps {
             amount = uint256(granules) * _BATTLE_STAKE_UNIT;
         }
         if (seed > _BG_SEED_MASK) revert SeedAboveMax();
-        IFlipCoin(ContractAddresses.COIN).burnCoin(msg.sender, amount);
+        _burnCoin(amount);
         _battles[w.key] = (g & ~(_BG_SEED_MASK << _BG_SEED_SHIFT)) | (seed << _BG_SEED_SHIFT);
         emit CrapsBonusDonated(w.key, msg.sender, amount, seed * _BATTLE_STAKE_UNIT);
     }
@@ -3345,8 +3477,16 @@ contract CrapsBattle is LootboxCraps {
                 // the table, so nothing here manufactures a hypothetical winning run: only the
                 // admitted boost rides, and the rest is banked before the dice are consulted.
                 (uint256 lane, uint256 denied) = _laneBoostSplit(w, word, header);
-                _rollIn(w.key, _ROLL_SRC_HIGH_SOLE, denied);
+                _rollIn(w.key, _ROLL_SRC_HIGH_SOLE | denied);
                 ride = _ride(p, extra + lane, w.bankroll);
+                // The pass slice comes off the PROTOCOL's part of the ride alone, measured as its
+                // own pro-rata copy — never by flooring the bounty and boost rides separately,
+                // whose floors could sum away from the combined figure the seat is owed. The
+                // bounty part is player money and stays liquid whole, and a Bust rides nothing
+                // and so awards nothing: its protocol ride is zero and zero banks zero.
+                ride -= _splitAward(
+                    w.key, address(uint160(header)), _SPLIT_SRC_HIGH_SOLE | _ride(p, lane, w.bankroll)
+                );
                 // The lane's final disposition, recorded in the same write the fold makes; the
                 // resolve cursor is what keeps a later call from re-walking the seat.
                 f |= _HF_DONE_BIT;
@@ -3647,7 +3787,7 @@ contract CrapsBattle is LootboxCraps {
             // the full-standing award to the wei.
             if (scheduled) {
                 uint256 got = _roundBoost(_boostShare(boost, (winnerWord >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK));
-                _rollIn(w.key, _ROLL_SRC_MAIN, (_roundBoost(boost) - got) * _BATTLE_STAKE_UNIT);
+                _rollIn(w.key, _ROLL_SRC_MAIN | ((_roundBoost(boost) - got) * _BATTLE_STAKE_UNIT));
                 boost = got;
             } else {
                 boost = _roundBoost(boost);
@@ -3656,8 +3796,15 @@ contract CrapsBattle is LootboxCraps {
             // deleted where it busted.
             uint256 pot = (w.stakeUnits * entrants + boost + donated) * _BATTLE_STAKE_UNIT;
             address winner = address(uint160(winnerWord));
+            // ONLY the protocol's own admitted boost can pay in passes — split AFTER the standing
+            // ration, so a pass can never carry what the ration denied. The bounties and donated
+            // granules are player money and stay liquid whole, custom battles hold no house money
+            // at all, and what banks as passes comes off the liquid pot to the wei.
+            if (scheduled) {
+                pot -= _splitAward(w.key, winner, _SPLIT_SRC_MAIN | (boost * _BATTLE_STAKE_UNIT));
+            }
             if (pot != 0) {
-                ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(winner, pot);
+                _creditFlip(winner, pot);
                 emit CrapsBattlePaid(winnerId, w.key, winner, pot);
             }
             // THE LANE. Only a contested one pays here — a field of one settled its lane on that
@@ -3674,11 +3821,14 @@ contract CrapsBattle is LootboxCraps {
                 // principal always pays out whole, and the rationed part is banked exactly as the
                 // main lane's is.
                 (uint256 lane, uint256 denied) = _laneBoostSplit(w, word, hWord);
-                _rollIn(w.key, _ROLL_SRC_HIGH_CONTESTED, denied);
-                uint256 lanePot = heads * (w.highMult - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT + lane;
+                _rollIn(w.key, _ROLL_SRC_HIGH_CONTESTED | denied);
+                // The extra bounties are the seats' own posted money and pay out whole; only the
+                // admitted lane boost is protocol money, so only it can pay in passes.
+                uint256 lanePot = heads * (w.highMult - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT + lane
+                    - _splitAward(w.key, address(uint160(hWord)), _SPLIT_SRC_HIGH_CONTESTED | lane);
                 if (lanePot != 0) {
                     address hWinner = address(uint160(hWord));
-                    ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(hWinner, lanePot);
+                    _creditFlip(hWinner, lanePot);
                     emit CrapsHighRollerPaid(hId, w.key, hWinner, lanePot, false);
                 }
             }
@@ -3720,12 +3870,13 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev Bank protocol money a winner's standing would not admit. Zero is the common case and
     ///      costs nothing but the branch — a full-standing field never reaches the write.
-    function _rollIn(bytes32 key, uint8 source, uint256 amount) internal {
+    function _rollIn(bytes32 key, uint256 taggedAmount) internal {
+        uint256 amount = taggedAmount & _SPLIT_GROSS_MASK;
         if (amount == 0) return;
         unchecked {
             uint256 pool = _progressive + amount;
             _progressive = pool;
-            emit CrapsProgressiveRolled(key, source, amount, pool);
+            emit CrapsProgressiveRolled(key, uint8(taggedAmount >> 248), amount, pool);
         }
     }
 
@@ -3830,6 +3981,8 @@ contract CrapsBattle is LootboxCraps {
             // and only the credit is deducted. What the standing denies is not added back — it
             // never left.
             uint256 paid = _boostShare(candidate, (winnerWord >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK);
+            // The WHOLE gross award leaves the pool, pass slice included — a pass is this award
+            // paying in a different shape, and leaving its value behind would count it twice.
             pool -= paid;
             _progressive = pool;
             emit CrapsProgressivePaid(
@@ -3837,7 +3990,8 @@ contract CrapsBattle is LootboxCraps {
             );
             // State first, credit second. A scoreless winner takes nothing, and a call for nothing
             // is a call not worth making.
-            if (paid != 0) ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(winner, paid);
+            paid -= _splitAward(w.key, winner, _SPLIT_SRC_PROGRESSIVE | paid);
+            if (paid != 0) _creditFlip(winner, paid);
         }
     }
 

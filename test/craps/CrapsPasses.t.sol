@@ -6,6 +6,8 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins} from "./CrapsPins.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {stdError} from "forge-std/Test.sol";
 
 /// @title Day passes, prepaid future days, and the seat they redeem into
 /// @notice A pass is a commitment made BLIND: it is bought or awarded before the target day's word
@@ -584,5 +586,291 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(craps.dayStateOf(target, alice), craps.DAY_SEATED(), "a late open dropped the seat");
         assertEq(craps.dayTicketsOf(target), 3, "the day lost the prepaid seat or the house bodies");
         assertEq(flip.burned(alice), spent, "the holder paid twice for one day");
+    }
+
+    // ── Normal-to-high conversion ───────────────────────────────────────────
+
+    bytes32 internal constant _CONVERTED_SIG = keccak256("CrapsNormalPassesConverted(address,uint256,uint256)");
+
+    /// @dev NINETEEN NORMALS BUY ONE HIGH — the credits' own value ratio, so the conversion moves
+    ///      value exactly. The retail future-day prices imply 18:1; that pair carries margins the
+    ///      credits never did, and pricing off it would subsidize every conversion.
+    function test_nineteenNormalsConvertToOneHigh() public {
+        craps.setPassCredits(alice, 19, 0);
+        vm.prank(alice);
+        craps.convertNormalToHigh(1);
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 0, "the nineteen normals were not all spent");
+        assertEq(h, 1, "the high credit did not arrive");
+    }
+
+    /// @dev The handoff's own worked example: 38 normal and 4 high become 0 and 6, atomically.
+    function test_thirtyEightNormalsConvertToTwoHighs() public {
+        craps.setPassCredits(alice, 38, 4);
+        vm.prank(alice);
+        craps.convertNormalToHigh(2);
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 0, "the two conversions did not spend all thirty-eight normals");
+        assertEq(h, 6, "the high lane did not gain exactly two");
+    }
+
+    function test_aZeroConversionReverts() public {
+        craps.setPassCredits(alice, 19, 0);
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.BadPassCount.selector);
+        craps.convertNormalToHigh(0);
+    }
+
+    /// @dev EIGHTEEN CANNOT BUY ONE. The rate is nineteen exactly, and a short balance reverts on
+    ///      the debit itself with neither lane moved.
+    function test_eighteenNormalsCannotBuyAHigh() public {
+        craps.setPassCredits(alice, 18, 7);
+        vm.prank(alice);
+        vm.expectRevert(stdError.arithmeticError);
+        craps.convertNormalToHigh(1);
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 18, "a refused conversion still debited normals");
+        assertEq(h, 7, "a refused conversion still credited a high");
+    }
+
+    /// @dev A SHORT MULTI-COUNT is refused whole: 37 normals cannot buy two highs, and the one
+    ///      conversion they could have bought is not quietly delivered instead.
+    function test_aShortBalanceConvertsNothingNotPart() public {
+        craps.setPassCredits(alice, 37, 0);
+        vm.prank(alice);
+        vm.expectRevert(stdError.arithmeticError);
+        craps.convertNormalToHigh(2);
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 37, "a refused conversion moved the normal lane");
+        assertEq(h, 0, "a refused conversion moved the high lane");
+    }
+
+    /// @dev A FULL HIGH LANE refuses the conversion BEFORE the debit — all or nothing, so an
+    ///      overflow cannot burn normals for credits that were never banked.
+    function test_aFullHighLaneRevertsWithoutDebitingNormals() public {
+        craps.setPassCredits(alice, 19, type(uint32).max);
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.PassLaneFull.selector);
+        craps.convertNormalToHigh(1);
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 19, "an overflowing conversion still debited normals");
+        assertEq(h, type(uint32).max, "the full lane moved");
+    }
+
+    /// @dev ONE LOG AND ONLY ONE. Both lane deltas live in the conversion event; a
+    ///      `CrapsPassesCredited` alongside it would hand an indexer the high addition twice.
+    function test_aConversionEmitsExactlyOneCanonicalLog() public {
+        craps.setPassCredits(alice, 57, 0);
+        vm.recordLogs();
+        vm.prank(alice);
+        craps.convertNormalToHigh(3);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 1, "a conversion logged other than once");
+        assertEq(logs[0].topics[0], _CONVERTED_SIG, "the one log is not the conversion event");
+        assertEq(address(uint160(uint256(logs[0].topics[1]))), alice, "the log named another player");
+        (uint256 spent, uint256 received) = abi.decode(logs[0].data, (uint256, uint256));
+        assertEq(spent, 57, "the log misstates the normals spent");
+        assertEq(received, 3, "the log misstates the highs received");
+    }
+
+    /// @dev ONLY BANKED CREDITS ARE REACHABLE. A pass already committed to a day lives in that
+    ///      day's seat word, and converting the remaining bank neither touches the reservation
+    ///      nor claws the committed pass back.
+    function test_aConversionCannotReachACommittedReservation() public {
+        craps.setPassCredits(alice, 20, 0);
+        uint24 target = _today() + 2;
+        vm.prank(alice);
+        craps.applyCrapsPasses(target, 1, false);
+        assertEq(craps.dayStateOf(target, alice), craps.DAY_SEATED(), "the fixture's reservation did not land");
+
+        vm.prank(alice);
+        craps.convertNormalToHigh(1);
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 0, "the conversion did not spend the remaining bank");
+        assertEq(h, 1, "the conversion did not bank the high");
+        assertEq(craps.dayStateOf(target, alice), craps.DAY_SEATED(), "a conversion disturbed a reserved day");
+        assertEq(craps.daySeatIsHigh(target, alice), false, "a conversion re-denominated a reserved day");
+    }
+
+    /// @dev NOTHING BURNS, MINTS OR MOVES COINFLIP MONEY. A conversion is a pure re-denomination
+    ///      of banked credits.
+    function test_aConversionTouchesNoOutsideLedger() public {
+        craps.setPassCredits(alice, 19, 0);
+        uint256 burnedBefore = flip.burned(alice);
+        uint256 creditsBefore = coinflip.credits();
+        vm.prank(alice);
+        craps.convertNormalToHigh(1);
+        assertEq(flip.burned(alice), burnedBefore, "a conversion burned FLIP");
+        assertEq(coinflip.credits(), creditsBefore, "a conversion moved coinflip credit");
+    }
+}
+
+/// @title The protocol-award pass split — the deterministic half-to-passes formula
+/// @notice Half of an eligible protocol award is targeted at pass credits; only WHOLE passes are
+///         issued, and every fractional remainder, cap excess and saturation refusal stays in the
+///         winner's liquid FLIP in the same transaction. The formula is a pure function of the
+///         award — no word, no entropy, no coin toss — and these tests grade it boundary by
+///         boundary through the shipped `_splitAward`, the same code every payout site calls.
+contract CrapsAwardSplitTest is CrapsPins {
+    CrapsViews internal craps;
+
+    address internal alice = makeAddr("alice");
+    address internal bob = makeAddr("bob");
+
+    bytes32 internal constant KEY = keccak256("split-under-test");
+    bytes32 internal constant _CREDITED_SIG = keccak256("CrapsPassesCredited(address,bool,uint256)");
+    bytes32 internal constant _SPLIT_SIG =
+        keccak256("CrapsProtocolAwardSplit(bytes32,address,uint8,uint256,uint256)");
+
+    uint256 internal N;
+    uint256 internal H;
+
+    function setUp() public {
+        _installPins();
+        craps = new CrapsViews();
+        vm.warp(block.timestamp + 1 days);
+        _setIndex(4);
+        N = craps.NORMAL_PASS_VALUE();
+        H = craps.HIGH_PASS_VALUE();
+    }
+
+    /// @dev One split, graded whole: the banked value, the resulting credits, and the exact
+    ///      conservation `liquid + banked == gross` that every case below must close.
+    function _grade(uint256 gross, uint256 wantNormal, uint256 wantHigh) internal {
+        address player = makeAddr(string(abi.encodePacked("grade", gross)));
+        uint256 banked = craps.splitAward(KEY, player, 1, gross);
+        (uint256 n, uint256 h) = craps.passCreditsOf(player);
+        assertEq(n, wantNormal, "the normal pass count is wrong");
+        assertEq(h, wantHigh, "the high pass count is wrong");
+        assertEq(banked, wantNormal * N + wantHigh * H, "the banked value is not the credited passes' value");
+        // The liquid remainder is `gross - banked` by construction; what the identity adds is
+        // that the banked side never exceeds the half-award target and never mixes denominations.
+        assertLe(banked, gross / 2, "the pass slice overran the half-award target");
+        assertTrue(wantNormal == 0 || wantHigh == 0, "one award mixed denominations");
+    }
+
+    /// @dev Below one whole pass nothing banks: the entire award stays liquid, with no log.
+    function test_underOneUnitSplitsNothing() public {
+        vm.recordLogs();
+        assertEq(craps.splitAward(KEY, alice, 1, 0), 0, "an empty award banked something");
+        assertEq(craps.splitAward(KEY, alice, 1, 2 * N - 2), 0, "a sub-unit budget banked a pass");
+        assertEq(vm.getRecordedLogs().length, 0, "a splitless award still logged");
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n + h, 0, "a splitless award still banked credits");
+    }
+
+    /// @dev `A = 2N` is the smallest converting award: one normal pass, exactly N liquid.
+    function test_theSmallestAwardBanksOneNormal() public {
+        _grade(2 * N, 1, 0);
+    }
+
+    /// @dev EXACTLY the switch: a 20N budget is still NORMAL — twenty normal passes, never one
+    ///      high — and one wei more flips the whole portion to a single high pass.
+    function test_theDenominationCliffIsStrict() public {
+        _grade(40 * N, 20, 0);
+        _grade(40 * N + 2, 0, 1);
+    }
+
+    /// @dev The handoff's worked example: a 1,000,000 FLIP award has a 500,000 target, above
+    ///      456,000 — ONE high pass worth 433,200 and 566,800 liquid. Not twenty-one normals,
+    ///      and no random second high.
+    function test_theWorkedMillionFlipExample() public {
+        uint256 gross = 1_000_000 ether;
+        uint256 banked = craps.splitAward(KEY, alice, 2, gross);
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 0, "the high award issued normals");
+        assertEq(h, 1, "the award did not bank exactly one high pass");
+        assertEq(banked, 433_200 ether, "the pass value is not one high pass");
+        assertEq(gross - banked, 566_800 ether, "the liquid change is not the remainder");
+    }
+
+    /// @dev Fractional remainders return as FLIP exactly, in both denominations.
+    function test_fractionalRemaindersStayLiquid() public {
+        _grade(2 * N + 12_345, 1, 0);
+        _grade(50 * N + 7, 0, 1);
+    }
+
+    /// @dev The thirty-high boundary holds and the thirty-first is refused: the cap floors the
+    ///      COUNT, and the capped units' value stays liquid rather than vanishing.
+    function test_theThirtyHighCap() public {
+        _grade(60 * H, 0, 30);
+        _grade(62 * H + 4, 0, 30);
+    }
+
+    /// @dev A SATURATED LANE CANNOT DELETE VALUE. What the lane refuses never leaves the liquid
+    ///      side: a full lane banks nothing, a partial one banks only what fits, and the banked
+    ///      figure prices off the ACTUAL credit either way.
+    function test_aFullOrPartialLaneOnlyBanksWhatFits() public {
+        craps.setPassCredits(alice, type(uint32).max, 0);
+        vm.recordLogs();
+        assertEq(craps.splitAward(KEY, alice, 1, 40 * N), 0, "a full lane still charged the award");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; ++i) {
+            assertTrue(logs[i].topics[0] != _SPLIT_SIG, "a split that banked nothing still announced one");
+        }
+
+        craps.setPassCredits(bob, type(uint32).max - 5, 0);
+        uint256 banked = craps.splitAward(KEY, bob, 1, 40 * N);
+        assertEq(banked, 5 * N, "a partial lane did not price off the actual credit");
+        (uint256 n,) = craps.passCreditsOf(bob);
+        assertEq(n, type(uint32).max, "the partial credit did not top the lane off");
+    }
+
+    /// @dev NO WORD, NO ENTROPY: the same award splits identically whatever the day's word says.
+    function test_theSplitIsDeterministicAcrossWords() public {
+        uint256 gross = 3 * N + 777;
+        _setDailyWord(craps.currentDayIndex(), uint256(keccak256("word-one")));
+        uint256 a = craps.splitAward(KEY, alice, 1, gross);
+        _setDailyWord(craps.currentDayIndex(), uint256(keccak256("word-two")));
+        uint256 b = craps.splitAward(KEY, bob, 1, gross);
+        assertEq(a, b, "two words split one award differently");
+        (uint256 na,) = craps.passCreditsOf(alice);
+        (uint256 nb,) = craps.passCreditsOf(bob);
+        assertEq(na, nb, "two words banked different counts");
+        assertEq(na, 1, "the award did not bank its one whole pass");
+    }
+
+    /// @dev THE LOG ORDER IS THE CONTRACT: `CrapsPassesCredited` lands immediately before the
+    ///      split event, carrying the denomination and count; the split carries gross and liquid.
+    ///      An indexer correlates the pair by position, so the pair — and nothing else — is what
+    ///      one converting award may emit.
+    function test_theSplitLogsCreditThenSplitAndNothingElse() public {
+        uint256 gross = 2 * N + 9;
+        vm.recordLogs();
+        craps.splitAward(KEY, alice, 4, gross);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 2, "one converting award logged other than twice");
+
+        assertEq(logs[0].topics[0], _CREDITED_SIG, "the first log is not the pass credit");
+        assertEq(address(uint160(uint256(logs[0].topics[1]))), alice, "the credit named another player");
+        (bool high, uint256 count) = abi.decode(logs[0].data, (bool, uint256));
+        assertFalse(high, "a normal award credited the high lane");
+        assertEq(count, 1, "the credit misstates the count");
+
+        assertEq(logs[1].topics[0], _SPLIT_SIG, "the second log is not the split");
+        assertEq(logs[1].topics[1], KEY, "the split named another battle");
+        assertEq(address(uint160(uint256(logs[1].topics[2]))), alice, "the split named another player");
+        assertEq(uint256(logs[1].topics[3]), 4, "the split misnamed its source");
+        (uint256 g, uint256 liquid) = abi.decode(logs[1].data, (uint256, uint256));
+        assertEq(g, gross, "the split misstates the gross award");
+        assertEq(liquid, gross - N, "the split misstates the liquid remainder");
+    }
+
+    /// @dev TWO SOURCES NEVER POOL. A 2N main award and a 50N progressive award to the same
+    ///      winner denominate independently — one normal and one high — where a pooled 52N would
+    ///      have gone all high. The discriminating outcome is exactly the two-event shape.
+    function test_twoAwardsToOneWinnerSplitIndependently() public {
+        vm.recordLogs();
+        craps.splitAward(KEY, alice, 1, 2 * N);
+        craps.splitAward(KEY, alice, 4, 50 * N);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 1, "the main award did not bank its normal pass");
+        assertEq(h, 1, "the progressive award did not bank its high pass");
+        uint256 splits;
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics[0] == _SPLIT_SIG) ++splits;
+        }
+        assertEq(splits, 2, "two awards did not announce two independent splits");
     }
 }

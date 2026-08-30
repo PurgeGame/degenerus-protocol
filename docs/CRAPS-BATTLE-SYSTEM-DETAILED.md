@@ -566,6 +566,26 @@ Passes are future seats, not discount coupons:
 A future high reservation adopts that future day's eventual 10x/100x multiple. It does not store
 a guessed multiple in advance.
 
+Two more doors move banked credits, both inside `CrapsBattle` itself:
+
+- **The protocol-award split.** Half of each eligible protocol-funded award — the admitted main
+  ladder award, a contested lane's admitted boost, the sole rider's protocol-boost ride, the
+  progressive award — is targeted at passes: `floor(A / 2)` floored to whole passes at the
+  22,800-FLIP normal unit, the whole portion switching to the 433,200-FLIP high unit strictly
+  above twenty normal units, capped at thirty highs per award. Every wei the flooring, the cap or
+  a saturated credit lane refuses stays in the winner's liquid Coinflip credit in the same
+  transaction, so `liquid + pass value == A` exactly. Deterministic — no entropy and no Bernoulli
+  rounding, unlike the lootbox's fractional coin. Each source splits independently and never
+  pools with another. Player money — bounties, extra high bounties, donations, bankroll returns,
+  custom-battle pots — never converts.
+- **`convertNormalToHigh(highCount)`.** A player converts their own uncommitted normal credits to
+  high credits at exactly nineteen normals per high, the credits' value ratio (not the 18:1 the
+  retail prepaid prices imply, which would subsidize conversion). One packed write moves both
+  lanes all-or-nothing; committed reservations are unreachable; the conversion is one-way; the
+  single `CrapsNormalPassesConverted(player, normalSpent, highReceived)` log carries both deltas
+  and no `CrapsPassesCredited` rides along. Zero counts, short balances and a high lane that
+  cannot hold the result revert with nothing moved.
+
 The seat exists immediately when reserved. There is no later redemption transaction or failure to
 return that causes expiry. Its initial board may be blank or picked and can be amended until that
 day's opener closes.
@@ -632,7 +652,11 @@ main pot
     + exact donations
 ~~~
 
-Deleted Bust remainders do not enter this pot.
+Deleted Bust remainders do not enter this pot. The standing-adjusted ladder award — protocol
+money, and only it — then feeds the pass split (Section 11): the pot actually credited is the
+bounties, the donations and the award's liquid remainder, with the banked pass value announced
+by `CrapsProtocolAwardSplit`. `CrapsBattleFinalized.pot` continues to advertise the pre-standing
+figure; `CrapsBattlePaid.amount` is the liquid credit.
 
 ### Donations
 
@@ -741,6 +765,12 @@ rider = floor(
 A Bust has zero individual payment and therefore returns zero rider. The standing-denied portion
 of the offered boost enters the progressive before the rider is calculated.
 
+The pass split takes half of the PROTOCOL part of that ride —
+`floor(individualSingleCopyPaid / bankroll * admittedHighBoost)`, its own pro-rata copy, never a
+separate floor of the combined figure — and the liquid rider paid is the combined-floor figure
+above minus the banked pass value. The bounty part of the ride always pays liquid and whole; a
+Bust rides nothing and banks nothing.
+
 ### Two or more high seats
 
 The best high score receives:
@@ -754,6 +784,8 @@ The high field uses the same comparator and exact-tie hash as the main field. A 
 both scoreboards. If every high seat Busts, the best-ranked Bust wins the high lane.
 
 Only the protocol-funded high-lane amount is standing-rationed; extra player bounties pay whole.
+The same protocol-funded amount — and only it — feeds the pass split (Section 11): the lane pays
+the whole principal plus the admitted boost's liquid remainder.
 
 ## 15. Goal-Jackpot progressive
 
@@ -807,7 +839,8 @@ bps     = isEvent and wonARoutineGoalToday(winner) ? base * 2 : base
 
 candidate = floor(livePool * bps / 10_000)
 paid      = standingShare(candidate)
-livePool -= paid
+livePool -= paid                      // the WHOLE gross award leaves the pool
+liquid    = paid - passValue(paid)    // half of `paid` targets passes (Section 11)
 ~~~
 
 The pool percentage is applied **before** the standing adjustment. The candidate is computed by
@@ -821,6 +854,10 @@ Awards use the live balance sequentially. A high seat receives one progressive a
 the main field; `H` does not multiply it. Winning only the high sideboard does not qualify.
 
 The progressive is paid as a separate Coinflip credit and has separate events from the main pot.
+The pool debit is the GROSS `paid` — the pass slice included, since a pass is the award paying in
+a different shape — so `poolBefore - poolAfter == CrapsProgressivePaid.paid` still reconstructs
+exactly. The Coinflip credit is only the liquid remainder; the `CrapsProtocolAwardSplit` log in
+the same finalization carries the liquid/pass breakdown.
 
 ## 16. THE BIGGEST DICE RUN
 
@@ -1018,11 +1055,14 @@ appear in seven `CrapsBetSettled` events.
 | `CrapsBonusArmed` | Battle key, slot, and future table index. |
 | `CrapsBetSettled` | Raw scaled ending bankroll and actual individual credit. |
 | `CrapsBattleFinalized` | Winner, Goal/Bust, peak, end, score, and advertised pot. |
-| `CrapsBattlePaid` | Actual main-pot credit. |
-| `CrapsHighRollerPaid` | Sole rider or contested high-lane payment. |
+| `CrapsBattlePaid` | Actual liquid main-pot credit, after any pass split of the ladder award. |
+| `CrapsHighRollerPaid` | Sole rider or contested high-lane liquid payment, after any pass split of the lane boost. |
 | `CrapsProgressiveFunded` | Daily contribution into the global progressive. |
 | `CrapsProgressiveRolled` | Standing-denied ladder value moved into the progressive. |
-| `CrapsProgressivePaid` | Progressive tier, the applied `poolBps` rung, candidate, credit, and pool after. What standing denied is `candidate - paid`. |
+| `CrapsProgressivePaid` | Progressive tier, the applied `poolBps` rung, candidate, the GROSS pool debit `paid`, and pool after. What standing denied is `candidate - paid`. |
+| `CrapsPassesCredited` | Banked day-pass credits: denomination and actual count, saturation already applied. |
+| `CrapsProtocolAwardSplit` | One per award that banked a pass: source (1 main, 2 contested high, 3 sole rider, 4 progressive), gross protocol award, liquid credit. `gross - liquid` is the pass value; the `CrapsPassesCredited` immediately before it is its count record. |
+| `CrapsNormalPassesConverted` | A player's normals became highs at 19:1 — the only log a conversion emits. |
 | `BigRecordUpdated` on Coinflip | Dice Run record mark and shared-pool claim. |
 
 The event stream is the main integration surface. The contract intentionally avoids restating

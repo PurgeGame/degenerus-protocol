@@ -272,6 +272,29 @@ contract CrapsViews is CrapsBattle {
         return _SEED_PASSES;
     }
 
+    /// @dev THE SHIPPED AWARD SPLIT, driven directly, so the deterministic formula is gradable on
+    ///      each of its boundaries without staging a field whose boost lands exactly there. The
+    ///      tap packs the tag the way every payout site does.
+    function splitAward(bytes32 key, address player, uint8 source, uint256 gross)
+        external
+        returns (uint256 banked)
+    {
+        return _splitAward(key, player, (uint256(source) << 248) | gross);
+    }
+
+    /// @dev The award split's denominations and cap, stated once for the suites.
+    function NORMAL_PASS_VALUE() external pure returns (uint256) {
+        return _NORMAL_PASS_VALUE;
+    }
+
+    function HIGH_PASS_VALUE() external pure returns (uint256) {
+        return _HIGH_PASS_VALUE;
+    }
+
+    function MAX_HIGH_PASSES_PER_AWARD() external pure returns (uint256) {
+        return _MAX_HIGH_PASSES_PER_AWARD;
+    }
+
     /// @dev A day's ticket counts in the SHAPE the suite has always read them: the total in the
     ///      low 32 bits, a high-roller count above. The stored word now carries one high count
     ///      per period; the shape is reconstructed from period zero's, which equals the old
@@ -578,6 +601,11 @@ contract CrapsViews is CrapsBattle {
     // ── Day action and budget ───────────────────────────────────────────────
     function dayStaked(uint24 day) external view returns (uint256) {
         return uint128(_dayStaked[day]);
+    }
+
+    /// @dev The live progressive pool, for the conservation invariants.
+    function progressiveOf() external view returns (uint256) {
+        return _progressive;
     }
 
     function dayActionRate(uint24 day) external view returns (uint256) {

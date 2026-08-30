@@ -98,7 +98,7 @@ contract ProgHarness is CrapsViews {
     }
 
     function rollIn(bytes32 key, uint8 source, uint256 amount) external {
-        _rollIn(key, source, amount);
+        _rollIn(key, (uint256(source) << 248) | amount);
     }
 
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
@@ -1866,6 +1866,303 @@ contract CrapsProgressiveTest is CrapsPins {
             return (winner, peak, end, scoreBps);
         }
         revert("no finalization log for that battle");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // G. THE PASS SPLIT — half of each protocol award banks as passes, per source.
+    // ════════════════════════════════════════════════════════════════════════
+
+    bytes32 internal constant _SPLIT_SIG =
+        keccak256("CrapsProtocolAwardSplit(bytes32,address,uint8,uint256,uint256)");
+
+    /// @dev Every split a resolve announced for `source`: how many, and the summed gross/liquid.
+    function _splitsIn(Vm.Log[] memory logs, uint8 source)
+        internal
+        pure
+        returns (uint256 count, uint256 gross, uint256 liquid)
+    {
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics[0] != _SPLIT_SIG || uint256(logs[i].topics[3]) != source) continue;
+            (uint256 g, uint256 l) = abi.decode(logs[i].data, (uint256, uint256));
+            ++count;
+            gross += g;
+            liquid += l;
+        }
+    }
+
+    /// @dev The summed pass VALUE every split banked for `who`, whatever the source.
+    function _splitValueTo(Vm.Log[] memory logs, address who) internal pure returns (uint256 total) {
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics[0] != _SPLIT_SIG) continue;
+            if (address(uint160(uint256(logs[i].topics[2]))) != who) continue;
+            (uint256 g, uint256 l) = abi.decode(logs[i].data, (uint256, uint256));
+            total += g - l;
+        }
+    }
+
+    function _freshDayWithMainAction() internal {
+        vm.warp(_dayStart() + 10 days + _closeOf(PER - 1));
+        uint24 today = craps.currentDayIndex();
+        for (uint256 i = 1; i <= craps.BOOST_ACTION_WINDOW_DAYS(); ++i) {
+            craps.bookDay(today - uint24(i), 40_000_000 ether);
+        }
+        _setDailyWord(today, PLAIN_WORD);
+        _openDay();
+    }
+
+    /// @dev THE PROGRESSIVE DEBITS GROSS AND PAYS LIQUID PLUS PASSES. The pool falls by the whole
+    ///      standing-admitted award — a pass is that award paying in a different shape — while
+    ///      the Coinflip credit is only the liquid remainder, and the two conserve the gross.
+    function test_aProgressiveAwardDebitsGrossAndPaysLiquidPlusPasses() public {
+        uint256 pool = 1_000_000 ether;
+        craps.seedProgressive(pool);
+        uint256 candidate = craps.poolShareOf(pool, craps.PROG_ROUTINE_COMMON_BPS());
+        uint256 before = coinflip.staked(alice);
+        vm.recordLogs();
+        uint256 debited =
+            craps.awardAt(TAP_SLOT, TAP_BANKROLL, 20, true, TAP_BANKROLL * 50, uint16(craps.SYBIL_SCORE_FLOOR()), alice);
+
+        // PROG-01/02: the gross award and the pool debit are exactly what they always were.
+        assertEq(debited, candidate, "the pool debit is not the gross standing-admitted award");
+        assertEq(craps.progressivePool(), pool - candidate, "the pool retained the pass slice");
+
+        // A 50,000 target halves to 25,000 — one normal pass, and the rest of the gross liquid.
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 1, "the award did not bank its one normal pass");
+        assertEq(h, 0, "a normal-denomination award banked a high");
+        assertEq(
+            coinflip.staked(alice) - before,
+            candidate - craps.NORMAL_PASS_VALUE(),
+            "the liquid credit is not the gross minus the pass value"
+        );
+
+        (uint256 count, uint256 g, uint256 l) = _splitsIn(vm.getRecordedLogs(), 4);
+        assertEq(count, 1, "the progressive did not announce exactly one split");
+        assertEq(g, candidate, "the split misstates the gross award");
+        assertEq(l, candidate - craps.NORMAL_PASS_VALUE(), "the split misstates the liquid remainder");
+    }
+
+    /// @dev A HUGE PROGRESSIVE AWARD CAPS AT THIRTY HIGHS, and the cap deletes nothing: the pool
+    ///      still falls by the whole gross, and everything the cap refused pays out liquid.
+    function test_aHugeProgressiveAwardCapsAtThirtyHighs() public {
+        uint256 pool = 600_000_000 ether;
+        craps.seedProgressive(pool);
+        uint256 candidate = craps.poolShareOf(pool, craps.PROG_ROUTINE_COMMON_BPS());
+        uint256 before = coinflip.staked(alice);
+        uint256 debited =
+            craps.awardAt(TAP_SLOT, TAP_BANKROLL, 20, true, TAP_BANKROLL * 50, uint16(craps.SYBIL_SCORE_FLOOR()), alice);
+
+        assertEq(debited, candidate, "the pool debit is not the gross award");
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, 0, "a high-denomination award banked normals");
+        assertEq(h, craps.MAX_HIGH_PASSES_PER_AWARD(), "the cap did not hold at thirty");
+        assertEq(
+            coinflip.staked(alice) - before,
+            candidate - 30 * craps.HIGH_PASS_VALUE(),
+            "the capped excess did not return as liquid FLIP"
+        );
+    }
+
+    /// @dev A PUMPED MAIN BOOST SPLITS AND THE BOUNTIES STAY LIQUID. On a day whose action funds
+    ///      a converting boost, the winner's pot is the bounties plus only the LIQUID part of the
+    ///      admitted boost; the pass value banks beside it and the three conserve exactly.
+    function test_aPumpedMainBoostSplitsAndTheBountiesStayLiquid() public {
+        _freshDayWithMainAction();
+        _seat(alice, PER, uint16(craps.SYBIL_SCORE_FLOOR()));
+        _warpPastClose(PER);
+        uint48 index = _armAt(PER);
+        uint64 slot = _slotAt(PER);
+        bytes32 key = craps.keyOfSlot(slot);
+
+        bool found;
+        uint256 drew;
+        Vm.Log[] memory logs;
+        uint256 snap = vm.snapshotState();
+        for (uint256 i = 0; i < 96 && !found; ++i) {
+            _setWord(index, uint256(keccak256(abi.encode("mainsplit", i))));
+            drew = craps.roundBoostFor(craps.boostUnitsAt(slot)) * craps.BATTLE_STAKE_UNIT();
+            // A boost too small to convert proves nothing here; the boundary suite owns that case.
+            if (drew < 2 * craps.NORMAL_PASS_VALUE()) continue;
+            vm.recordLogs();
+            craps.resolveSlot(slot, WHOLE_FIELD);
+            if (craps.betOf(_idAt(slot, craps.battleOf(key).winnerId)).player == alice) {
+                logs = vm.getRecordedLogs();
+                found = true;
+            } else {
+                vm.revertToState(snap);
+                snap = vm.snapshotState();
+            }
+        }
+        assertTrue(found, "no word gave alice a converting boosted win: the fixture proves nothing");
+
+        (uint256 count, uint256 g, uint256 l) = _splitsIn(logs, 1);
+        assertEq(count, 1, "the main ladder did not announce exactly one split");
+        assertEq(g, drew, "the split's gross is not the admitted boost");
+        uint256 banked = g - l;
+        assertGt(banked, 0, "a converting boost banked nothing");
+
+        // The pot: every bounty whole, plus only the liquid part of the boost.
+        CrapsBattle.Battle memory done = craps.battleOf(key);
+        uint256 stakes = done.battleStake * done.entrants;
+        PaidOut[] memory pots = _potsIn(logs);
+        assertEq(pots.length, 1, "the field paid other than one pot");
+        assertEq(pots[0].amount, stakes + drew - banked, "the pot is not bounties plus the liquid boost");
+
+        // And the banked value is exactly the passes alice now holds.
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(
+            n * craps.NORMAL_PASS_VALUE() + h * craps.HIGH_PASS_VALUE(),
+            _splitValueTo(logs, alice),
+            "the banked credits do not price back to the split value"
+        );
+    }
+
+    /// @dev A SCORE-ZERO WINNER CONVERTS NOTHING even on a pumped day: the ration runs first, the
+    ///      denied boost rolls into the progressive as it always did, and no pass rides what the
+    ///      standing refused.
+    function test_aScoreZeroWinnerBanksNoPassesOnAPumpedDay() public {
+        _freshDayWithMainAction();
+        _seat(alice, PER, 0);
+        _warpPastClose(PER);
+        uint48 index = _armAt(PER);
+        uint64 slot = _slotAt(PER);
+        bytes32 key = craps.keyOfSlot(slot);
+
+        bool found;
+        Vm.Log[] memory logs;
+        uint256 snap = vm.snapshotState();
+        for (uint256 i = 0; i < 96 && !found; ++i) {
+            _setWord(index, uint256(keccak256(abi.encode("zerosplit", i))));
+            if (craps.boostUnitsAt(slot) == 0) continue;
+            vm.recordLogs();
+            craps.resolveSlot(slot, WHOLE_FIELD);
+            if (craps.betOf(_idAt(slot, craps.battleOf(key).winnerId)).player == alice) {
+                logs = vm.getRecordedLogs();
+                found = true;
+            } else {
+                vm.revertToState(snap);
+                snap = vm.snapshotState();
+            }
+        }
+        assertTrue(found, "no word gave the scoreless player a boosted win: the fixture proves nothing");
+
+        (uint256 count,,) = _splitsIn(logs, 1);
+        assertEq(count, 0, "a fully denied boost still split");
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n + h, 0, "a scoreless winner banked passes");
+        assertGt(_rolledIn(logs, 1), 0, "the denied boost no longer rolls into the pool");
+    }
+
+    /// @dev A SOLE RIDER'S PROTOCOL RIDE SPLITS AND THE BOUNTY RIDE STAYS WHOLE. The pass slice
+    ///      is priced off the pro-rata copy the LANE BOOST alone earned; the extra bounties'
+    ///      ride pays out liquid in full, and the combined-floor figure is preserved to the wei.
+    function test_aSoleRidersProtocolRideSplitsAndTheBountyRideStaysWhole() public {
+        _freshDayWithHighAction();
+        uint64 slot = _slotAt(PER);
+        _seatHigh(alice, PER, uint16(craps.SYBIL_SCORE_FLOOR()));
+        _warpPastClose(PER);
+        uint48 index = _armAt(PER);
+
+        bool found;
+        uint256 lane;
+        Vm.Log[] memory logs;
+        uint256 snap = vm.snapshotState();
+        for (uint256 i = 0; i < 256 && !found; ++i) {
+            _setWord(index, uint256(keccak256(abi.encode("solesplit", i))));
+            lane = craps.roundBoostFor(craps.highBoostUnitsOf(slot, craps.wordAt(index)))
+                * craps.BATTLE_STAKE_UNIT();
+            if (lane == 0) continue;
+            vm.recordLogs();
+            craps.resolveSlot(slot, WHOLE_FIELD);
+            logs = vm.getRecordedLogs();
+            // The claim needs a CONVERTING protocol ride — a run good enough that half its
+            // lane-boost copy buys at least one pass.
+            (uint256 c,,) = _splitsIn(logs, 3);
+            if (c == 1) {
+                found = true;
+            } else {
+                vm.revertToState(snap);
+                snap = vm.snapshotState();
+            }
+        }
+        assertTrue(found, "no word produced a converting sole ride: the fixture proves nothing");
+
+        PaidOut[] memory rides = _lanePaymentsIn(logs, true);
+        assertEq(rides.length, 1, "the sole lane did not settle exactly once");
+        CrapsBattle.Settlement memory s = craps.settlementIn(rides[0].betId, slot);
+        uint256 extra = (craps.highMultOfSlot(slot) - 1) * craps.battleOf(craps.keyOfSlot(slot)).battleStake;
+        (uint128 bank,,,,,) = craps.bonusTermsFor(craps.currentDayIndex(), PER);
+
+        // The combined floor first: what rode home plus the pass value is the WHOLE ride, the
+        // same single-floor figure the seat was always owed.
+        (, uint256 g, uint256 l) = _splitsIn(logs, 3);
+        assertEq(g, craps.rideOf(s.paid, lane, bank), "the split's gross is not the protocol ride");
+        assertEq(
+            rides[0].amount + (g - l),
+            craps.rideOf(s.paid, extra + lane, bank),
+            "liquid ride plus pass value is not the combined-floor ride"
+        );
+        // And the bounty ride is untouched: the liquid payment covers it in full.
+        assertGe(rides[0].amount, craps.rideOf(s.paid, extra, bank), "the pass slice ate into the bounty ride");
+    }
+
+    /// @dev A CONTESTED LANE SPLITS ONLY ITS BOOST. Every seat posted the same extra bounties and
+    ///      that principal pays out whole and liquid; only the admitted protocol boost halves
+    ///      into passes.
+    function test_aContestedLanesBoostSplitsAndThePrincipalPaysWhole() public {
+        _freshDayWithHighAction();
+        uint64 slot = _slotAt(PER);
+        _seatHigh(alice, PER, uint16(craps.SYBIL_SCORE_FLOOR()));
+        _seatHigh(bob, PER, uint16(craps.SYBIL_SCORE_FLOOR()));
+        _warpPastClose(PER);
+        uint48 index = _armAt(PER);
+
+        uint256 lane;
+        for (uint256 i = 0; i < 512; ++i) {
+            _setWord(index, uint256(keccak256(abi.encode("contestedsplit", i))));
+            lane = craps.roundBoostFor(craps.highBoostUnitsOf(slot, craps.wordAt(index)))
+                * craps.BATTLE_STAKE_UNIT();
+            if (lane >= 2 * craps.NORMAL_PASS_VALUE()) break;
+        }
+        assertGe(lane, 2 * craps.NORMAL_PASS_VALUE(), "the day funded no converting lane: the fixture proves nothing");
+
+        (uint32 heads,,,,) = craps.highFieldOf(craps.keyOfSlot(slot));
+        assertEq(heads, 2, "the lane is not contested");
+        uint256 principal =
+            uint256(heads) * (craps.highMultOfSlot(slot) - 1) * craps.battleOf(craps.keyOfSlot(slot)).battleStake;
+
+        vm.recordLogs();
+        craps.resolveSlot(slot, WHOLE_FIELD);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        (uint256 count, uint256 g, uint256 l) = _splitsIn(logs, 2);
+        assertEq(count, 1, "the contested lane did not announce exactly one split");
+        assertEq(g, lane, "the split's gross is not the admitted lane boost");
+        assertGt(g - l, 0, "a converting lane banked nothing");
+
+        PaidOut[] memory paid = _lanePaymentsIn(logs, false);
+        assertEq(paid.length, 1, "a contested lane did not pay exactly once");
+        assertEq(paid[0].amount, principal + l, "the lane paid other than principal plus the liquid boost");
+    }
+
+    /// @dev A CUSTOM BATTLE NEVER SPLITS. It carries no house money, so there is no protocol
+    ///      award to halve: the pot pays whole, no split is announced and no pass is banked.
+    function test_aCustomBattleSplitsNothing() public {
+        uint64 slot = _openBattle(craps, 600, 2, 5, 3);
+        vm.prank(alice);
+        craps.enterBattle(slot, 4 | (uint32(3) << 9), 1);
+        vm.prank(bob);
+        craps.enterBattle(slot, 4 | (uint32(3) << 12), 1);
+        _closeOn(craps, slot, 7, uint256(keccak256("custom-split-word")));
+        vm.recordLogs();
+        craps.resolveSlot(slot, WHOLE_FIELD);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; ++i) {
+            assertTrue(logs[i].topics[0] != _SPLIT_SIG, "a custom battle announced a split");
+        }
+        (uint256 an, uint256 ah) = craps.passCreditsOf(alice);
+        (uint256 bn, uint256 bh) = craps.passCreditsOf(bob);
+        assertEq(an + ah + bn + bh, 0, "a custom battle banked passes");
     }
 }
 
