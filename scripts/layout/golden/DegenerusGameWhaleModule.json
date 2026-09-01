@@ -344,6 +344,14 @@
     "typeLabel": "uint96"
   },
   {
+    "bytes": "20",
+    "encoding": "inplace",
+    "label": "presaleCloser",
+    "offset": 12,
+    "slot": 16,
+    "typeLabel": "address"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "presaleBoxCredit",

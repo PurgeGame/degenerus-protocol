@@ -141,7 +141,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param index The box's RNG index.
     /// @param amount The box ETH resolved.
     /// @param flip FLIP credited (0 if not a FLIP roll).
-    /// @param dgnrs DGNRS paid (roll award + any closing-box sweep).
+    /// @param dgnrs DGNRS paid by the roll.
     /// @param wwxrp WWXRP minted (0 unless the 10% dud roll).
     /// @param closing True iff this was the 50-ETH-crossing closing box.
     event PresaleBoxOpened(
@@ -155,6 +155,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint32 normalPasses,
         uint32 highPasses
     );
+
+    /// @notice The Pool.PresaleBox remainder paid to the closing box's buyer once every presale
+    ///         box has been opened (the sweep advanced past the close index).
+    /// @param player The closing box's buyer.
+    /// @param dgnrs DGNRS swept (the pool's whole remaining balance).
+    event PresaleBoxRemainderSwept(address indexed player, uint256 dgnrs);
 
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
@@ -300,7 +306,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // ---- Coin-presale-box DGNRS curve (5 tiers x 10 ETH cumulative box volume) ----
     // Relative DGNRS-per-ETH rates [3.0, 2.5, 2.0, 1.5, 1.0] x base, base = poolStart/40.
     // Over 50 ETH the full deterministic draw sums to 100*base = 2.5*poolStart; with the
-    // ~40% DGNRS branch rate the pool drains through the boxes (closing sweep clamps to dust).
+    // ~40% DGNRS branch rate the pool drains through the boxes (the drain sweep clamps to dust).
     /// @dev DGNRS tier multipliers in tenths (3.0x .. 1.0x), by cumulative box volume.
     uint16 private constant PRESALE_BOX_DGNRS_TIER1_TENTHS = 30;
     uint16 private constant PRESALE_BOX_DGNRS_TIER2_TENTHS = 25;
@@ -1375,12 +1381,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Presale is fully drained once the cursor has advanced PAST the close index (every box at
         // indices <= presaleCloseIndex is now opened). One-way, sweep-only; gated on presaleOver so
         // it never fires before the close index is meaningful (zero while presale is open / never
-        // closed). Thereafter every open path skips the cold presaleBoxEth SLOAD.
-        if (presaleOver && checkPresale && idx > presaleCloseIndex) presaleDrained = true;
+        // closed). Thereafter every open path skips the cold presaleBoxEth SLOAD. The drain is
+        // the one moment every presale roll has drawn, so the pool remainder paid here to the
+        // closing buyer is the curve's variance dust: no box opened out of order can move
+        // another box's DGNRS into it.
+        if (presaleOver && checkPresale && idx > presaleCloseIndex) {
+            presaleDrained = true;
+            uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
+            if (remaining != 0) {
+                address closer = presaleCloser;
+                emit PresaleBoxRemainderSwept(
+                    closer, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, closer, remaining)
+                );
+            }
+        }
     }
 
     /// @dev Resolve a presale box: 50% FLIP / 40% DGNRS / 10% WWXRP off the salted
-    ///      committed word. The closing box also sweeps the Pool.PresaleBox remainder.
+    ///      committed word. The pool remainder is paid by the sweep's drain latch, not here.
     /// @param player Box owner.
     /// @param index The box's RNG index (event tag).
     /// @param stored Packed record: [bit255 closing][96:191 soldBefore][0:95 amount].
@@ -1473,17 +1491,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // 10% WWXRP: 1 token flavor "dud".
             wwxrpOut = LOOTBOX_WWXRP_PRIZE;
             wwxrp.mintPrize(player, wwxrpOut);
-        }
-
-        // Closing box: sweep ALL remaining Pool.PresaleBox DGNRS to this buyer, ON TOP
-        // of the roll, regardless of outcome — zeroes the pool for a clean wrap-up.
-        uint256 swept;
-        if (closing) {
-            uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
-            if (remaining != 0) {
-                swept = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, player, remaining);
-                dgnrsOut += swept;
-            }
         }
 
         emit PresaleBoxOpened(player, index, amount, flipOut, dgnrsOut, wwxrpOut, closing, passNormal, passHigh);

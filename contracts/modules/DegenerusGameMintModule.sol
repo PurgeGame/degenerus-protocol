@@ -1869,8 +1869,12 @@ contract DegenerusGameMintModule is
         presaleBoxEthSold = uint96(sold + applied);
         if (closing) {
             // Latch the terminal in the crossing buy (stops further credit accrual
-            // and box buys). The swept pool remainder is paid at this box's open.
+            // and box buys). The pool remainder is paid to this buyer when the sweep
+            // drains presale, not at this box's open: a box opens per (player, index)
+            // in any order, so a sweep at the open could run ahead of unresolved boxes
+            // and take the DGNRS their rolls are about to draw.
             presaleOver = true;
+            presaleCloser = buyer;
             // This crossing buy sits at the highest index any presale box can occupy. The sweep
             // flips presaleDrained once it advances past this index (all presale boxes opened),
             // after which the open paths skip the cold presaleBoxEth SLOAD.

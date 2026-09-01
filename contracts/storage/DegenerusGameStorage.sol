@@ -413,6 +413,7 @@ abstract contract DegenerusGameStorage {
     ///      cold slot access: once set, the post-presale sweep AND manual opens skip the presaleBoxEth
     ///      SLOAD. Flipped only by the in-order sweep (never the manual path), so an out-of-order
     ///      manual open of the closing box cannot trip it early and strand a still-queued box.
+    ///      The flip also pays the Pool.PresaleBox remainder to presaleCloser.
     bool internal presaleDrained;
 
     /// @dev FLIP ticket purchase window latch. redeemFlip lazily opens it the moment the prize
@@ -1552,9 +1553,15 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Cumulative ETH spent on coin-presale boxes. Read+written per box buy
     ///      during the presale to enforce the 50-ETH cap and detect the crossing
-    ///      (last-buyer DGNRS sweep + presaleOver latch). Never read after the
+    ///      (presaleOver latch + presaleCloser stamp). Never read after the
     ///      latch, so its cold-slot cost is confined to the presale window.
     uint96 internal presaleBoxEthSold;
+
+    /// @dev Buyer of the 50-ETH-crossing box. Receives the Pool.PresaleBox remainder once the
+    ///      auto-open sweep has advanced past presaleCloseIndex — after EVERY presale box has
+    ///      drawn, so the remainder is variance dust and no open order can pull another box's
+    ///      DGNRS into it. Packs into presaleBoxEthSold's slot (warm at the crossing buy).
+    address internal presaleCloser;
 
     /// @dev Spendable presale-box credit accrued per player from ETH buys while
     ///      the presale is open (presaleBoxCredit += 0.25 * purchaseEth). Consumed
@@ -1568,7 +1575,7 @@ abstract contract DegenerusGameStorage {
     ///      Packed: [bit 255: closing][bits 96:191: soldBefore][bits 0:95: applied ETH].
     ///      soldBefore (cumulative box ETH before this buy) freezes the DGNRS-tier
     ///      curve input. Bit 255 (PRESALE_BOX_CLOSING_FLAG) marks the 50-ETH-crossing
-    ///      box, whose resolution sweeps the Pool.PresaleBox remainder to that buyer.
+    ///      box (event tag); its buyer is stamped in presaleCloser for the remainder sweep.
     mapping(uint48 => mapping(address => uint256)) internal presaleBoxEth;
 
     /// @dev Sentinel OR'd into presaleBoxEth marking the 50-ETH-crossing box.
