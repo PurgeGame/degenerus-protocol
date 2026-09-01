@@ -1,12 +1,12 @@
 # Craps Battle System: Current Implementation
 
-> Code snapshot reviewed 2026-08-28. This document describes the contracts as written in the
+> Code snapshot reviewed 2026-08-31. This document describes the contracts as written in the
 > working tree, especially [`Craps.sol`](../contracts/Craps.sol),
 > [`CrapsBattle.sol`](../contracts/CrapsBattle.sol), and
 > [`LootboxCraps.sol`](../contracts/LootboxCraps.sol). The deployed bytecode, if different, wins.
 >
 > **THE TABLE SETTLES TWO PRODUCTS.** A protocol-scheduled **Dice Run** runs a fixed five-round
-> bankroll at 5x or 20x, latches its target instead of stopping on it, ranks on the HIGH POINT it
+> bankroll at a fixed 5x target, latches its target instead of stopping on it, ranks on the HIGH POINT it
 > reached, funds and draws the Goal-Jackpot, and can set THE BIGGEST DICE RUN. A **custom battle**
 > is the legacy product unchanged: it stops at its target, races on speed, and touches none of the
 > protocol's shared money. They share the engine and the plumbing and nothing else; where this
@@ -14,9 +14,9 @@
 
 The system is a winner-take-all tournament built around a deterministic multi-shooter craps run.
 Every entrant in a field receives the same bankroll, target, round size, bounty, settlement word,
-and shooter sequence. Players choose a seven-chip board (or choose a blank board), but the protocol
-adds random chips. Each individual run may return Coinflip credit, and the best-ranked run also
-wins the field's bounty pot and any boost or donation.
+and shooter sequence. Players place any number of chips from zero through seven, and the protocol
+randomly scatters the complement to complete the ten-chip board. Each individual run may return
+Coinflip credit, and the best-ranked run also wins the field's bounty pot and any boost or donation.
 
 ```text
 terms open -> entries and boards lock -> future RNG table is bound -> word arrives
@@ -97,25 +97,25 @@ same dice, not independent casino trials.
 
 ## 3. Player Boards and Random Scatter
 
-A field fixes a ten-chip round. An entrant has two board modes:
+A field fixes a ten-chip round. An entrant may submit any total from zero through seven selected
+chip counts. Settlement scatters `10 - placed` chips, so every accepted choice plays the same
+ten-chip round and remains in the same field.
 
-1. Submit exactly seven selected chip counts; settlement scatters the remaining three.
-2. Submit all zeroes; settlement scatters all ten.
+For a submitted board:
 
-For a selected board:
-
-- exactly seven chips must be named;
-- no submitted spot may hold more than **four** chips;
+- at most seven chips may be named;
+- no submitted spot may hold more than **three** chips;
 - submitted Pass and Don't Pass cannot both be nonzero; and
 - the counts describe proportions, not FLIP amounts. Every window scales them to its chip size.
 
-The four-chip cap applies only to the submitted seven. Scatter may put the resolved board above
-four on a spot, and may add the opposite line after a player selected Pass or Don't Pass. That is
+The three-chip cap applies only to the submitted chips. Scatter may put the resolved board above
+three on a spot, and may add the opposite line after a player selected Pass or Don't Pass. That is
 allowed because it is the draw, not a player choosing both sides.
 
 Scatter is keyed by the settlement word and owner. Players at the same table therefore share the
-shooters but normally receive different random additions. A blank board receives ten independent
-leg draws; a selected board receives three.
+shooters but normally receive different random additions. A zero-chip board receives ten
+independent leg draws; a seven-chip board receives three; intermediate choices receive the exact
+complement.
 
 Boards are visible on-chain and may be amended by their owner until the relevant entry closes.
 Amendment changes only the chip slice and refreshes frozen standing; it cannot change the seat,
@@ -176,17 +176,22 @@ eligible = keccak256(SHOOTER_BOOST_TAG, settlementSeed, player, handOrdinal) % 1
 boost    = floor(baseHandEligibleProfit x pct / 100)
 ```
 
-The schedule is fixed — there is no jitter — and depends only on the ticket class and the Goal:
+The schedule is fixed — there is no jitter — and depends only on the number of chips in the stored,
+pre-scatter ticket:
 
-| Stored ticket | Eligible shooters | Goal 5x | Goal 20x |
-|---|---:|---:|---:|
-| Blank/random | 15% | +33% | +45% |
-| Picked | 5% | +20% | +50% |
+| Chips placed | Chips scattered | Eligible shooters | Profit uplift |
+|---:|---:|---:|---:|
+| 0 | 10 | 15% | +33% |
+| 1 | 9 | 14% | +30% |
+| 2 | 8 | 12% | +30% |
+| 3 | 7 | 11% | +30% |
+| 4 | 6 | 9% | +30% |
+| 5 | 5 | 8% | +25% |
+| 6 | 4 | 6% | +25% |
+| 7 | 3 | 5% | +20% |
 
-The class comes from the **stored, pre-scatter** chip word: a blank ticket stays blank however the
-dice fill its board. The crossover is deliberate — picking is worth more at 5x, where a board can
-shorten a run, and leaving the ten chips to the dice is worth more at 20x, where the length of the
-run is what decides it.
+The row comes from the **stored, pre-scatter** count: the random additions cannot reclassify a
+ticket. Custom battles accept the same 0–7 range but always pass a zero boost schedule.
 
 **Eligible profit is winnings only.** Pass profit, Place 4/5/6/8/9/10 profit, Hard 4 and Hard 8
 profit, and only the 3:4 portion of a winning Don't Pass. It excludes every wager principal, the
@@ -444,7 +449,7 @@ Its bounty is 25%-50% of bankroll in five-point steps, floored to a 100-FLIP gra
   the moment it reached its target and the depth was what decided how long that took; a high-water
   run does not stop there, so the depth stopped separating the formats and the schedule stopped
   drawing it.
-- Goal is **5x or 20x** bankroll, drawn evenly.
+- Goal is **5x** bankroll, fixed.
 - Round size is a whole ten-chip amount derived from bankroll and depth.
 - The scheduled standing bar is zero; standing affects boost payout and late ranking only.
 - The day high multiple is 10x on 90% of days and 100x on 10%.
@@ -554,10 +559,9 @@ Credits arrive from five Game-side sources, all through the table's `OnlyGame` c
 - `deliverPasses` first tries to reserve tomorrow immediately, preferring a high pass if both
   denominations arrived. Leftovers become banked normal/high credits.
 - `applyCrapsPasses(startDay, count, high, chips)` spends banked credits and writes whole-day
-  seats for consecutive strictly future days — on the packed board `chips` names, or blank for
-  zero. The board is held to the live doors' rules (seven chips or none, four to a leg, one side
-  of the line), vetted before anything is debited, and the same initial slip serves every day of
-  the run.
+  seats for consecutive strictly future days on the packed board `chips` names. The board is held
+  to the live doors' rules (zero through seven chips, three to a leg, one side of the line), vetted
+  before anything is debited, and the same initial slip serves every day of the run.
 - `buyFutureCrapsDays(startDay, count, high, chips)` burns the fixed price now and writes the
   same seats, same board rules.
 - Each range is all-or-nothing. An occupied, worded, past/current, or overflowing day reverts the
@@ -738,7 +742,7 @@ remainders, ladder under-realisation and rounding dust all stay exactly where th
 
 ## 13a. The Progressive
 
-**One pool, shared by both scheduled formats and by every day.** It is funded once when a protocol
+**One pool, shared by every scheduled window and every day.** It is funded once when a protocol
 day opens — half the day's raw main allocation — and topped up by the standing forfeitures above.
 Custom battles neither fund it nor draw on it.
 
@@ -750,16 +754,15 @@ main battle:
 1. the battle is a protocol-scheduled main battle;
 2. the recipient is the final main battle winner the existing comparator named — never a runner-up;
 3. that winner's stop is `Goal` — a Bust never qualifies, however high it got;
-4. its **high point** is compared against the cutoffs for that window's Goal multiple; and
+4. its **high point** is compared against the fixed scheduled cutoffs; and
 5. rare is tested first and **overrides** — a field never pays both rungs.
 
 Cutoffs are inclusive multiples of the run's own starting bankroll, held in the contract as score
 basis points (10,000 = 1x):
 
-| Goal | Common | Rare |
+| Scheduled Goal | Common | Rare |
 |---:|---:|---:|
 | 5x | 25x (250,000 bps) | 120x (1,200,000 bps) |
-| 20x | 50x (500,000 bps) | 225x (2,250,000 bps) |
 
 The high point is a figure the settlement already computed — the largest bankroll the run held at a
 completed-shooter boundary — so this criterion adds no per-player roll and no jackpot RNG. It
@@ -846,7 +849,7 @@ external call.
 - `progressivePool()` — the live balance, and the second reader production ships. It is the one
   figure of the system that is not a pure function of published inputs.
 - `CrapsProgressiveFunded(day, contribution, balance)` — once per opened day.
-- `CrapsProgressivePaid(betId, battleKey, player, rare, poolBps, goalMult, peak, scoreBps,
+- `CrapsProgressivePaid(betId, battleKey, player, rare, poolBps, peak, scoreBps,
   candidate, paid, balance)` — `peak` in whole FLIP, `scoreBps` the same figure over the starting
   bankroll. What the standing denied is `candidate - paid`; it never left the pool, so it carries
   no field of its own. **`poolBps` is the rung actually applied** — 500/1,000 routine, 2,000/4,000
@@ -874,7 +877,7 @@ way to claim from a pool that already exists.
   bankroll, in score basis points.
 - **Entry floor:** **100x** (`1,000,000` bps). Below it the table makes no call at all.
 - **Eligibility** is scheduled fields only, and Goal is implicit: a 100x high point has necessarily
-  crossed either scheduled target and the qualification has latched.
+  crossed the fixed scheduled target and the qualification has latched.
 - **Any strict improvement** over the standing mark is a hit. The four existing kinds keep their
   rule that a claim must beat the mark by a fifth; this one does not have it.
 - **Claim share:** 5% of the pool immediately after a hit, plus half a percentage point per elapsed
@@ -898,11 +901,10 @@ accrued share at 1/500 scale, exactly as the other four kinds' does — a record
 
 ### What it is worth
 
-### What it is worth
-
-Measured on the committed `mixed_40_cohort` scenario — forty daily tickets, twenty blank/random and
-five each of fixed Place 4/10, mixed, Pass-heavy and 3:4 Don't-Pass-heavy — over 500 independent
-730-day worlds:
+The last committed `mixed_40_cohort` run used the retired binary blank/seven boost schedule and
+allowed four selected chips on one spot. Its 500 independent 730-day worlds are retained below as
+historical provenance, not as a forecast for the current 0–7 continuum and three-per-spot cap. The
+current model must be rerun before these quantities are used for economic calibration:
 
 | Quantity | Mean per day |
 |---|---:|
@@ -913,7 +915,8 @@ five each of fixed Place 4/10, mixed, Pass-heavy and 3:4 Don't-Pass-heavy — ov
 | Total emission, counting stored pool value | 125,066 FLIP (19.99%) |
 | Net | **34,374 FLIP burn (5.49%)** |
 
-The pool reached a day-730 mean of **19.28M FLIP** (median 19.12M, 10th-90th 13.82M-24.97M), paying
+In that historical run, the pool reached a day-730 mean of **19.28M FLIP** (median 19.12M,
+10th-90th 13.82M-24.97M), paying
 about **9.6 common and 0.15 rare awards a year**. A 100-world ten-year extension ended at a mean of
 **21.40M**, so the pool approaches a roughly 21-million level under this cohort rather than growing
 without bound.
@@ -931,7 +934,7 @@ bankroll action per complete daily ticket and the 50,000 base:
 | Weighted post-shooter edge | Approximate zero-EV daily tickets |
 |---:|---:|
 | 16.00% efficient-field policy assumption | 80 |
-| 17.85% all blank/random | 55 |
+| 17.85% all zero-chip random | 55 |
 | 18.37% fixed Place 4/10 | 50 |
 | 25.5% modeled heterogeneous field | 24 |
 
@@ -1005,8 +1008,9 @@ hand these two their passes have not paid one yet. The credits are banked, not r
 never expire and are spent one day at a time by whichever days actually open.
 
 - An already reserved future seat is left alone.
-- The Vault board is read before funding. It may be blank, a legal seven-chip/max-four board, or
-  the OFF sentinel. OFF prevents a new automatic seat but cannot erase a seat already reserved.
+- The Vault board is read before funding. It may place zero through seven chips under the
+  three-per-leg and one-side rules, or use the OFF sentinel. OFF prevents a new automatic seat but
+  cannot erase a seat already reserved.
 - The funding order is **banked passes first** — a high pass, then a normal one — and an ordinary
   FLIP burn only when the bank is empty.
 - A high pass makes the protocol body a high roller at the day's exact draw. The FLIP fallback is
@@ -1090,8 +1094,8 @@ Quantitative results for the high-water system — calibration, population sensi
 and economic risks — are in
 [`CRAPS-HIGH-WATER-SYSTEM-SIMULATION.md`](CRAPS-HIGH-WATER-SYSTEM-SIMULATION.md), whose model is
 `scripts/craps-high-water-system-sim.cpp`. `scripts/check-craps-progressive-parity.sh` holds the
-contract and that model together on source text: the base subsidy, both rung divisors, all four
-high-point cutoffs, and the escalator's period, ceiling, shooter cap and roll budget.
+contract and that model together on source text: the base subsidy, all four payout rungs, both
+fixed-5x high-point cutoffs, and the escalator's period, ceiling, shooter cap and roll budget.
 [`CRAPS-SYSTEM-SIMULATION.md`](CRAPS-SYSTEM-SIMULATION.md) describes the SUPERSEDED
 stop-at-goal system and its nine depth/target formats.
 

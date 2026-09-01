@@ -35,19 +35,20 @@ contract CrapsSystemEconTest is CrapsPins {
     uint256 internal constant PERIODS = 7;
 
     // ── The board catalogue ─────────────────────────────────────────────────
-    // The same seven-chip picks the C++ study named, restated as real tickets. Every one obeys
-    // the four-chips-a-leg cap and totals exactly seven, so every one is a legal entry.
+    // Seven-chip strategy families, restated as real tickets. Every one obeys the
+    // three-chips-a-leg cap and totals exactly seven, so every one is a legal entry.
     uint8 internal constant B_BLANK = 0;
-    uint8 internal constant B_FAIR = 1; // 4 place 4 + 3 place 10 — the true-odds core
+    uint8 internal constant B_FAIR = 1; // true-odds Place 4/5/10 core
     uint8 internal constant B_SPREAD = 2; // fair spread over 4/5/9/10
-    uint8 internal constant B_PASS = 3; // 4 pass line + 3 place 4
-    uint8 internal constant B_DONT = 4; // 4 don't pass + 3 place 4
-    uint8 internal constant B_HARD = 5; // 4 hard 4 + 3 hard 8
+    uint8 internal constant B_PASS = 3; // pass-heavy plus true-odds places
+    uint8 internal constant B_DONT = 4; // don't-heavy plus true-odds places
+    uint8 internal constant B_HARD = 5; // hardways plus one true-odds place
     uint8 internal constant B_MIXED = 6; // the mixed light board
 
     function _board(uint8 k) internal pure returns (Craps.Bets memory b) {
         if (k == B_FAIR) {
-            b.place4 = 4;
+            b.place4 = 3;
+            b.place5 = 1;
             b.place10 = 3;
         } else if (k == B_SPREAD) {
             b.place4 = 2;
@@ -55,13 +56,16 @@ contract CrapsSystemEconTest is CrapsPins {
             b.place9 = 2;
             b.place10 = 1;
         } else if (k == B_PASS) {
-            b.passLine = 4;
+            b.passLine = 3;
             b.place4 = 3;
+            b.place10 = 1;
         } else if (k == B_DONT) {
-            b.dontPass = 4;
+            b.dontPass = 3;
             b.place4 = 3;
+            b.place10 = 1;
         } else if (k == B_HARD) {
-            b.hard4 = 4;
+            b.place4 = 1;
+            b.hard4 = 3;
             b.hard8 = 3;
         } else if (k == B_MIXED) {
             b.passLine = 2;
@@ -753,11 +757,11 @@ contract CrapsSystemEconTest is CrapsPins {
     /// @dev Diagnostic: what the selector actually selected, and what the schedule offered.
     function test_H0_whatTheSelectorSees() public {
         vm.warp(_dayStart() + 1 days);
-        uint256[3] memory depths;
-        uint256[4] memory goals;
-        uint256 hits;
+        uint256 goalFive;
+        uint256 otherGoals;
+        uint256 depthFive;
+        uint256 otherDepths;
         uint256 windows;
-        uint256 eventHits;
         for (uint256 d = 0; d < 200; ++d) {
             uint24 day = craps.currentDayIndex();
             _setDailyWord(day, uint256(keccak256(abi.encode("day", uint256(0x81), d))));
@@ -767,30 +771,20 @@ contract CrapsSystemEconTest is CrapsPins {
                 (uint128 bankroll, uint128 goal, uint256 boardStake,,,) = craps.bonusTermsFor(day, p);
                 ++windows;
                 uint256 gm = goal / bankroll;
-                uint256 dep = bankroll / boardStake;
-                if (gm == 5) ++goals[0];
-                else if (gm == 10) ++goals[1];
-                else if (gm == 20) ++goals[2];
-                else ++goals[3];
-                if (dep == 2) ++depths[0];
-                else if (dep == 5) ++depths[1];
-                else ++depths[2];
-                if (gm == 5 && dep == 2) {
-                    ++hits;
-                    if (p + 1 == PERIODS) ++eventHits;
-                }
+                uint256 dep = bankroll / ((boardStake * 10) / 7);
+                if (gm == 5) ++goalFive;
+                else ++otherGoals;
+                if (dep == 5) ++depthFive;
+                else ++otherDepths;
             }
             vm.warp(_dayStart() + 1 days);
         }
-        emit log_named_uint("windows seen        ", windows);
-        emit log_named_uint("goal 5x             ", goals[0]);
-        emit log_named_uint("goal 10x            ", goals[1]);
-        emit log_named_uint("goal 20x            ", goals[2]);
-        emit log_named_uint("goal 50x            ", goals[3]);
-        emit log_named_uint("depth 2             ", depths[0]);
-        emit log_named_uint("depth 5             ", depths[1]);
-        emit log_named_uint("depth 10 (or other) ", depths[2]);
-        emit log_named_uint("depth2 AND goal5    ", hits);
-        emit log_named_uint("  of which the EVENT", eventHits);
+        emit log_named_uint("windows seen", windows);
+        emit log_named_uint("goal 5x    ", goalFive);
+        emit log_named_uint("other goals", otherGoals);
+        emit log_named_uint("depth 5    ", depthFive);
+        emit log_named_uint("other depth", otherDepths);
+        assertEq(goalFive, windows, "the main schedule offered a non-5x goal");
+        assertEq(depthFive, windows, "the main schedule offered a non-5x depth");
     }
 }

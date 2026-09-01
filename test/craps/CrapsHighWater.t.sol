@@ -56,13 +56,14 @@ contract WaterHarness is CrapsViews {
         Window memory w = _slotWindow(slot);
         uint256 chipFlip = (w.played / 1 ether) / BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
-        uint256 thrown = BONUS_CHIPS;
-        if (packed != 0) {
-            board = _boardFrom(packed, chipFlip);
-            thrown = _RSEL_PICK7;
-        }
+        uint256 placed;
+        (, placed) = _packChips(uint32(packed));
+        board = _boardFrom(packed, chipFlip);
         _scatterInto(
-            board, uint256(keccak256(abi.encode(_wordAt(_indexOf(slot)), address(uint160(header))))), chipFlip, thrown
+            board,
+            uint256(keccak256(abi.encode(_wordAt(_indexOf(slot)), address(uint160(header))))),
+            chipFlip,
+            BONUS_CHIPS - placed
         );
     }
 
@@ -87,14 +88,14 @@ contract WaterHarness is CrapsViews {
 
     /// @dev THE SHIPPED FOLD, and — on the seat that completes the field — the shipped payout,
     ///      with its progressive rung and its record arm. The window is a real scheduled shape.
-    function scoreAt(bytes32 key, uint256 score, uint64 seat, uint64 slot, uint256 bankrollFlip, uint256 goalMult)
+    function scoreAt(bytes32 key, uint256 score, uint64 seat, uint64 slot, uint256 bankrollFlip)
         external
     {
         Window memory w;
         w.key = key;
         w.bound = uint48(slot);
         w.bankroll = uint128(bankrollFlip * 1 ether);
-        w.goal = uint128(bankrollFlip * goalMult * 1 ether);
+        w.goal = uint128(bankrollFlip * SCHED_GOAL * 1 ether);
         w.played = (bankrollFlip / _SCHED_BANK_MULT) * 1 ether;
         _scoreBattle(w, score, seat, 0);
     }
@@ -411,13 +412,13 @@ contract CrapsHighWaterTest is CrapsPins {
         for (uint256 i = 0; i < 64; ++i) {
             bytes32 seed = keccak256(abi.encode("differential", i));
             uint256 bank = stake * (3 + (i % 5));
-            uint256 goal = bank * (i % 2 == 0 ? 5 : 20);
+            uint256 goal = bank * craps.SCHED_GOAL();
 
             Craps.SlipResult memory bare =
                 craps.slipUnder(b, seed, bank, goal, craps.MAX_SLIP_HANDS(), craps.SLIP_ROLL_BUDGET(), alice, 0);
             _agree(bare, craps.oracle().resolveSlipFor(b, seed, bank, goal, craps.MAX_SLIP_HANDS(), alice), "bare");
 
-            uint256 boost = craps.shooterBoostTerms(false, i % 2 == 0 ? 5 : 20);
+            uint256 boost = craps.shooterBoostTerms(7);
             Craps.SlipResult memory sched = craps.slipUnder(
                 b, seed, bank, goal, craps.MAX_SLIP_HANDS(), craps.SLIP_ROLL_BUDGET(), alice, boost
             );
@@ -519,9 +520,9 @@ contract CrapsHighWaterTest is CrapsPins {
 
 /// @title The hard scheduled/custom boundary, end to end
 /// @notice Two products share one engine and share nothing else. A custom battle may copy every
-///         number the schedule draws — depth five, a 5x or 20x target, the same round — and still
-///         gets the legacy engine, no shooter boost, no high-water continuation, no jackpot, no
-///         record, and no line in any day's action book.
+///         number the schedule draws — depth five, a 5x target, the same round — or retain another
+///         target such as 20x, and still gets the legacy engine, no shooter boost, no high-water
+///         continuation, no jackpot, no record, and no line in any day's action book.
 contract CrapsCustomBoundaryTest is CrapsPins {
     WaterHarness internal craps;
 
@@ -534,7 +535,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
     uint32 internal constant PLAYED = 600;
 
     bytes32 internal constant _PAID_SIG = keccak256(
-        "CrapsProgressivePaid(uint256,bytes32,address,bool,uint16,uint256,uint256,uint256,uint256,uint256,uint256)"
+        "CrapsProgressivePaid(uint256,bytes32,address,bool,uint16,uint256,uint256,uint256,uint256,uint256)"
     );
 
     function setUp() public {
@@ -565,10 +566,10 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         _closeOn(craps, slot, index, salt);
     }
 
-    /// @dev A CUSTOM BATTLE COPYING THE SCHEDULE'S NUMBERS IS STILL A CUSTOM BATTLE. At depth five
-    ///      chasing 5x or 20x — the exact scheduled format — it settles on the LEGACY engine: the
-    ///      bare bare-engine result off the same seed, with no schedule and no continuation.
-    function test_aCustomCopyOfTheScheduledFormatTakesTheBareEngine() public {
+    /// @dev CUSTOM BATTLES KEEP THEIR TARGET CHOICE. At depth five chasing either the scheduled
+    ///      5x target or a custom 20x target, each settles on the LEGACY engine: the bare-engine
+    ///      result off the same seed, with no schedule and no continuation.
+    function test_customFiveAndTwentyXTargetsTakeTheBareEngine() public {
         uint16[2] memory goals = [uint16(5), 20];
         for (uint256 g = 0; g < 2; ++g) {
             uint64 slot = _copycat(goals[g], uint48(90 + g), uint256(keccak256(abi.encode("copycat", g))));
@@ -601,7 +602,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
                 craps.MAX_SLIP_HANDS(),
                 craps.SLIP_ROLL_BUDGET(),
                 craps.betOf(betId).player,
-                craps.shooterBoostTerms(false, goals[g])
+                craps.shooterBoostTerms(7)
             );
             if (scheduled.bankrollOut != bare.bankrollOut) {
                 assertTrue(s.won != scheduled.bankrollOut, "a custom copy settled under the scheduled engine");
@@ -671,7 +672,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
     ///      call is made or is not.
     ///
     ///      The floor is the WHOLE eligibility test. A 100x high point has necessarily crossed
-    ///      either scheduled target, so there is no second goal check to get wrong.
+    ///      the scheduled target, so there is no second goal check to get wrong.
     function test_theRecordIsArmedOncePerFieldAndOnlyAboveTheFloor() public {
         assertEq(craps.DICE_RUN_RECORD_FLOOR(), 1_000_000, "the record floor moved off 100x");
         uint256 bank = 3000;
@@ -711,7 +712,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         bytes32 key = keccak256(abi.encode(tag));
         craps.writeBattleWord(key, 1);
         craps.writeBet((uint256(slot) << 64) | 1, alice, craps.SYBIL_SCORE_FLOOR());
-        craps.scoreAt(key, score, 1, slot, bankrollFlip, craps.SCHED_GOAL_HIGH());
+        craps.scoreAt(key, score, 1, slot, bankrollFlip);
     }
 
     /// @dev RESOLUTION ORDER DOES NOT MOVE THE VERDICT. The same field under every permutation of

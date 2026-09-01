@@ -737,13 +737,14 @@ contract DegenerusVault {
         gamePlayer.setOperatorApproval(operator, approved);
     }
 
-    /// @notice Join a custom craps battle for the vault, picking its seven chips by COUNT. The
-    ///         slot dictates bankroll, target and bounty, so there is nothing else to name, and
-    ///         both burn from the vault's own FLIP — its virtual mint allowance and settled
-    ///         coinflip claimable — so this spends vault value exactly as a purchase does. The
-    ///         vault is seated at every bonus window automatically and needs no door for those.
+    /// @notice Join a custom craps battle for the vault, placing zero through seven chips by
+    ///         COUNT. The slot dictates bankroll, target and bounty, so there is nothing else to
+    ///         name, and both burn from the vault's own FLIP — its virtual mint allowance and
+    ///         settled coinflip claimable — so this spends vault value exactly as a purchase
+    ///         does. The vault is seated at every bonus window automatically and needs no door
+    ///         for those.
     /// @param slot  The custom battle to join.
-    /// @param chips The seven the vault picks; the remaining three are thrown at settlement.
+    /// @param chips Up to seven the vault places; the complement to ten is scattered at settlement.
     /// @param multiple How many copies of the run to buy, 1 to `MAX_ENTRY_MULTIPLE`: the same
     ///                  bounty and the same standing in the battle, at that multiple of the
     ///                  bankroll and that multiple of whatever the table returns.
@@ -752,12 +753,12 @@ contract DegenerusVault {
         return ICrapsPlayerActions(ContractAddresses.CRAPS).enterBattle(slot, chips, multiple);
     }
 
-    /// @notice Re-spread the chips on one of the vault's craps slips — the bonus seats it takes
-    ///         automatically included. Only the composition moves: the count, the terms and the
-    ///         seat all belong to the slot, so no value moves and the field does not change.
-    ///         Allowed until the slot closes.
+    /// @notice Re-spread zero through seven chips on one of the vault's craps slips — the bonus
+    ///         seats it takes automatically included. Only the board moves: the terms and seat
+    ///         belong to the slot, so no value moves and the field does not change. Allowed until
+    ///         the slot closes.
     /// @param betId The vault's slip: `(slot << 64) | seat`.
-    /// @param chips Where the same seven chips go instead.
+    /// @param chips Where up to seven chips go instead.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function crapsAmendSlip(uint256 betId, uint32 chips) external onlyVaultOwner {
         ICrapsPlayerActions(ContractAddresses.CRAPS).amendSlip(betId, chips);

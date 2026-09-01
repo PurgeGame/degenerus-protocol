@@ -102,23 +102,30 @@ contract CrapsFlowHandler {
     }
 
     function _board(uint256 seed) internal pure returns (Craps.Bets memory b) {
-        uint256 k = seed % 5;
-        if (k == 1) {
-            b.place4 = 4;
-            b.place10 = 3;
-        } else if (k == 2) {
-            b.passLine = 4;
-            b.place4 = 3;
-        } else if (k == 3) {
-            b.dontPass = 4;
-            b.place4 = 3;
-        } else if (k == 4) {
-            b.place4 = 2;
-            b.place5 = 2;
-            b.place9 = 2;
-            b.place10 = 1;
+        uint24 count = uint24(seed % 8);
+        uint24 first = count > 3 ? 3 : count;
+        uint24 rest = count - first;
+        uint24 second = rest > 3 ? 3 : rest;
+        uint24 third = rest - second;
+        uint256 shape = (seed >> 3) % 4;
+        if (shape == 0) {
+            b.place4 = first;
+            b.place10 = second;
+            b.place5 = third;
+        } else if (shape == 1) {
+            b.passLine = first;
+            b.place4 = second;
+            b.place10 = third;
+        } else if (shape == 2) {
+            b.dontPass = first;
+            b.place4 = second;
+            b.place10 = third;
+        } else {
+            b.place6 = first;
+            b.hard8 = second;
+            b.place8 = third;
         }
-        // k == 0 is the blank ticket: all ten chips to the dice.
+        // The low three seed bits now exercise every legal placed count, including zero.
     }
 
     function _setWord(uint48 index, uint256 word) internal {
@@ -240,7 +247,7 @@ contract CrapsFlowHandler {
         } catch {}
     }
 
-    /// @dev Re-spread (or blank) a tracked slip through the real amendment door.
+    /// @dev Re-spread a tracked slip to another count from zero through seven.
     function amend(uint256 pickSeed, uint256 boardSeed) external {
         if (ghost_betIds.length == 0) return;
         uint256 betId = ghost_betIds[pickSeed % ghost_betIds.length];

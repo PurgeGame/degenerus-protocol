@@ -62,7 +62,7 @@ check-pool-writes:
 	@scripts/check-pool-writes.sh
 
 # ── Craps progressive parity gate ───────────────────────────────────────
-# The progressive's base subsidy, its two pool divisors and its nine roll
+# The progressive's base subsidy, four payout rungs and fixed 5x high-point
 # cutoffs live in the contract that pays them AND in the C++ model the
 # economics are calibrated on. Neither can read the other, so this holds the
 # two together on source text: a cutoff moved in one and not the other leaves a

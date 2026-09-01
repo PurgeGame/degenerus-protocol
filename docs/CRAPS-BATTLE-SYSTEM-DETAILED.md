@@ -1,7 +1,7 @@
 <!-- generated-by: gsd-doc-writer -->
 # Craps Battle System: Detailed Reference
 
-> This document describes the contracts in the current working tree as of 2026-08-29. It is a
+> This document describes the contracts in the current working tree as of 2026-08-31. It is a
 > system reference, not a promise about separately deployed bytecode. If deployed bytecode differs,
 > the bytecode wins.
 
@@ -13,7 +13,7 @@ return, while the best run wins the field's competitive pots.
 There are two products behind the same entry and settlement machinery:
 
 - **Scheduled Dice Runs** are the protocol's seven daily windows. They use a fixed five-round
-  bankroll, a 5x or 20x target, a high-water continuation after reaching the target, shooter-profit
+  bankroll, a fixed 5x target, a high-water continuation after reaching the target, shooter-profit
   boosts, protocol-funded ladder awards, a global progressive, and THE BIGGEST DICE RUN record.
 - **Custom battles** are creator-defined legacy races. They stop when the target is reached, rank
   successful runs by speed, and receive no scheduled subsidy, progressive award, record claim, or
@@ -181,19 +181,17 @@ multi-shooter engine to subtract the complete mandatory round before running the
 
 ## 5. Board selection, encoding, and scatter
 
-A seat has two board modes:
+A seat may place any total from zero through seven chips. Settlement randomly places the exact
+complement, `10 - placed`, so every accepted board plays the same ten-chip round.
 
-1. **Picked:** submit exactly seven chips; settlement randomly places the remaining three.
-2. **Blank:** submit zero; settlement randomly places all ten.
+For a submitted board:
 
-For a picked board:
-
-- the submitted counts must sum to exactly seven;
-- no selected leg may contain more than four chips;
+- the submitted counts must sum to at most seven;
+- no selected leg may contain more than three chips;
 - Pass Line and Don't Pass cannot both be selected; and
 - the values are chip counts, not FLIP amounts.
 
-Random scatter may put the resolved board above four chips on a leg or add a chip to the opposite
+Random scatter may put the resolved board above three chips on a leg or add a chip to the opposite
 line. The restriction governs player selection, not the random board.
 
 ### Packed `uint32` layout
@@ -227,16 +225,16 @@ casino table; they are choosing different responses to the same sequence of shoo
 
 ### Amendments
 
-The owner may replace a slip's chip allocation with a legal seven-chip board while entry is still
-open:
+The owner may replace a slip's chip allocation with any legal zero-through-seven-chip board while
+entry is still open:
 
 - a window or custom slip locks when its entry clock closes, even if nobody has armed it yet;
 - a whole-day or future-day ticket locks when that day's opener closes;
 - terms, owner, seat, boon, and high status cannot change; and
 - the slip's standing is refreshed to the owner's current activity score when amended.
 
-A blank slip can be amended into a picked board. `amendSlip` itself requires seven chips, so it
-does not turn a picked ticket back into a blank one.
+A zero-chip slip can be amended into any other accepted count, and any picked slip can be amended
+back to zero. No money or match terms move with the count.
 
 ## 6. One shooter
 
@@ -323,13 +321,19 @@ do not share this second chance.
 
 Only scheduled windows attach a per-shooter profit boost:
 
-| Ticket class | Eligible shooters | 5x Goal | 20x Goal |
-|---|---:|---:|---:|
-| Blank/random | 15% | +33% | +45% |
-| Picked | 5% | +20% | +50% |
+| Chips placed | Chips scattered | Eligible shooters | Profit uplift |
+|---:|---:|---:|---:|
+| 0 | 10 | 15% | +33% |
+| 1 | 9 | 14% | +30% |
+| 2 | 8 | 12% | +30% |
+| 3 | 7 | 11% | +30% |
+| 4 | 6 | 9% | +30% |
+| 5 | 5 | 8% | +25% |
+| 6 | 4 | 6% | +25% |
+| 7 | 3 | 5% | +20% |
 
-Eligibility is drawn independently for each player and shooter. The class comes from the stored
-pre-scatter ticket: a blank ticket remains a blank-class ticket after the dice place its chips.
+Eligibility is drawn independently for each player and shooter. The row comes from the stored
+pre-scatter count; random additions do not reclassify the ticket.
 
 The percentage applies only to eligible **profit**:
 
@@ -346,7 +350,8 @@ bankroll before the next stop and affordability checks, so it can legitimately:
 - change the field winner; or
 - turn a would-be Bust into a Goal.
 
-Custom battles receive a zero schedule and use the bare engine.
+Custom battles accept the same zero-through-seven range but receive a zero schedule and use the
+bare engine.
 
 ### Scheduled high-water lifecycle
 
@@ -520,7 +525,7 @@ The round remains one-fifth of bankroll.
 ### Terms shared by all scheduled windows
 
 - Bankroll depth: exactly five rounds.
-- Goal: 5x or 20x starting bankroll, evenly drawn.
+- Goal: 5x starting bankroll, fixed.
 - High multiple: 10x on 90% of days, 100x on 10%.
 - Minimum standing: zero; scheduled fields do not gate entry on activity.
 - Multi-entry: off; one seat per address per window.
@@ -591,8 +596,8 @@ jackpot docs carry the full rule). Two more doors move banked credits, both insi
   cannot hold the result revert with nothing moved.
 
 The seat exists immediately when reserved. There is no later redemption transaction or failure to
-return that causes expiry. Its initial board may be blank or picked and can be amended until that
-day's opener closes.
+return that causes expiry. Its initial board may place zero through seven chips and can be amended
+to any other accepted count until that day's opener closes.
 
 ### Upgrading selected windows
 
@@ -807,13 +812,12 @@ Only the finalized **main winner** of a scheduled field can qualify:
 
 1. the winner must be a Goal;
 2. the winner's unscaled high point is divided by starting bankroll into score basis points;
-3. the cutoff for that field's 5x or 20x Goal is applied; and
+3. the fixed scheduled cutoff pair is applied; and
 4. rare is tested before common and replaces it rather than stacking.
 
 | Scheduled Goal | Common cutoff | Rare cutoff |
 |---:|---:|---:|
 | 5x | 25x high point | 120x high point |
-| 20x | 50x high point | 225x high point |
 
 ### Award
 
@@ -944,8 +948,8 @@ Custom battles play by the same rules and differ only in what money reaches them
 - neither fund nor claim the progressive; and
 - cannot set THE BIGGEST DICE RUN.
 
-A creator may copy a scheduled bankroll, five-round depth and 5x/20x target exactly and get a
-run that plays identically — it simply pays only what its own field burned.
+A creator may copy a scheduled bankroll, five-round depth, and 5x target exactly—or choose another
+custom target such as 20x—and still get the bare custom run. It pays only what its own field burned.
 
 ## 18. Randomness, closing, and liveness
 
@@ -953,8 +957,8 @@ run that plays identically — it simply pays only what its own field burned.
 
 Scheduled play deliberately separates:
 
-1. **Daily terms word:** known before entry and used to draw bankrolls, bounties, Goals, and the
-   day's high multiple.
+1. **Daily terms word:** known before entry and used to draw bankrolls, bounties, and the day's
+   high multiple. Goal is always five times the drawn bankroll.
 2. **Settlement word:** selected only after the window closes and used for the actual tournament.
 
 When entry closes, `armBonusWindow` binds the slot to `currentTableIndex + 1`. That word cannot
@@ -1031,7 +1035,7 @@ appear in seven `CrapsBetSettled` events.
 | `enterBonusBattle(period, chips, multiple)` | Join one current-day scheduled window. |
 | `enterBonusDay(chips, multiple)` | Buy all seven windows while the opener is still live. |
 | `enterBattle(slot, chips, multiple)` | Join a custom battle. |
-| `amendSlip(betId, chips)` | Re-spread an unlocked slip to seven legal chips. |
+| `amendSlip(betId, chips)` | Re-spread an unlocked slip to any legal count from zero through seven. |
 | `applyCrapsPasses(startDay, count, high, chips)` | Spend pass credits on consecutive future days. |
 | `buyFutureCrapsDays(startDay, count, high, chips)` | Buy consecutive future days at fixed prices. |
 | `upgradeDayWindows(day, periodMask)` | Upgrade selected live windows of a normal day ticket. |
@@ -1053,7 +1057,7 @@ appear in seven `CrapsBetSettled` events.
 | Event | Meaning |
 |---|---|
 | `CrapsSlipPlaced` | Seat, packed board, multiple, frozen standing, and boon. |
-| `CrapsSlipAmended` | New packed seven-chip board. |
+| `CrapsSlipAmended` | New packed zero-through-seven-chip board. |
 | `CrapsBonusOpened` | Scheduled terms and maximum ladder quote. |
 | `CrapsBattleCreated` | Packed custom terms. |
 | `CrapsBonusArmed` | Battle key, slot, and future table index. |
@@ -1085,8 +1089,9 @@ Assume:
 - bounty: 100 FLIP; and
 - ordinary seat.
 
-The player burns 400 FLIP. Their picked seven-chip board receives three random chips, producing a
-60-FLIP board. The run doubles its mandatory round every three shooters.
+The player burns 400 FLIP. In this example they place seven chips and receive three random chips,
+producing a 60-FLIP board. A player could instead place any smaller count and receive the larger
+complement. The run doubles its mandatory round every three shooters.
 
 Suppose the run:
 
@@ -1131,7 +1136,7 @@ Assume a creator chooses:
 - no high lane.
 
 Each ordinary seat burns a 500-FLIP bankroll plus 100-FLIP bounty. The run uses the legacy
-five-shooter escalator and stops immediately when it reaches 10,000 FLIP. Successful seats rank by
+three-shooter escalator and stops immediately when it reaches 10,000 FLIP. Successful seats rank by
 fewest shooters, then ending bankroll and standing. No daily ladder, progressive, record, shooter
 boost, or scheduled action is involved.
 

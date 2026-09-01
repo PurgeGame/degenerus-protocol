@@ -33,8 +33,6 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant BASE_MAIN_BUDGET = _BASE_MAIN_BUDGET;
     uint256 public constant HIGH_MAIN_NUM = _HIGH_MAIN_NUM;
     uint256 public constant HIGH_MAIN_DEN = _HIGH_MAIN_DEN;
-    uint256 public constant BOOST_BLANK_CHANCE = _BOOST_BLANK_CHANCE;
-    uint256 public constant BOOST_PICKED_CHANCE = _BOOST_PICKED_CHANCE;
     uint256 public constant BOOST_MAX_MULT = _BOOST_MAX_MULT;
     uint256 public constant MAX_MIN_SCORE = _MAX_MIN_SCORE;
     uint256 public constant MAX_SLIP_HANDS = _MAX_SLIP_HANDS;
@@ -46,8 +44,7 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant ESC_HANDS = _ESC_HANDS;
     uint256 public constant ESC_CAP = _ESC_CAP;
     uint256 public constant SCHED_BANK_MULT = _SCHED_BANK_MULT;
-    uint256 public constant SCHED_GOAL_LOW = _SCHED_GOAL_LOW;
-    uint256 public constant SCHED_GOAL_HIGH = _SCHED_GOAL_HIGH;
+    uint256 public constant SCHED_GOAL = _SCHED_GOAL;
     uint256 public constant DICE_RUN_RECORD_FLOOR = _DICE_RUN_RECORD_FLOOR;
     bytes32 public constant CRAPS_SEED_DOMAIN = _CRAPS_SEED_DOMAIN;
     uint256 public constant HIGH_MULT = _HIGH_MULT;
@@ -431,11 +428,10 @@ contract CrapsViews is CrapsBattle {
         (, contribution) = _splitMainBudget(m);
     }
 
-    /// @dev The two formats' HIGH-POINT cutoffs, as inclusive multiples of the run's own starting
-    ///      bankroll — exactly the pair `_payProgressive` applies.
-    function progressiveThresholds(uint256 goalMult) external pure returns (uint256 common, uint256 rare) {
-        bool high = goalMult == _SCHED_GOAL_HIGH;
-        return (high ? _PROG_COMMON_20X : _PROG_COMMON_5X, high ? _PROG_RARE_20X : _PROG_RARE_5X);
+    /// @dev The scheduled format's HIGH-POINT cutoffs, as inclusive multiples of the run's own
+    ///      starting bankroll — exactly the pair `_payProgressive` applies.
+    function progressiveThresholds() external pure returns (uint256 common, uint256 rare) {
+        return (_PROG_COMMON, _PROG_RARE);
     }
 
     /// @dev The comparator, restated: everything but the entrant's standing.
@@ -614,8 +610,8 @@ contract CrapsViews is CrapsBattle {
 
     /// @dev The engine's own shooter-boost primitives, restated so the suite can grade the
     ///      schedule and the eligibility draw without a second implementation of either.
-    function shooterBoostTerms(bool blank, uint256 goalMult) external pure returns (uint256) {
-        return _shooterBoostTerms(blank, goalMult);
+    function shooterBoostTerms(uint256 placed) external pure returns (uint256) {
+        return _shooterBoostTerms(placed);
     }
 
     function boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance)

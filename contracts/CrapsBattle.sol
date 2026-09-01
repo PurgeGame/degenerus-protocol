@@ -53,8 +53,8 @@ interface ICoinflipStake {
 
 /// @title CrapsBattle
 /// @notice Slot-based FLIP craps battles. A slot fixes one bankroll, goal, ten-chip round,
-///         battle stake and standing bar for every entrant. A player either places seven chip
-///         counts and leaves three to the draw, or submits a blank board and leaves all ten.
+///         battle stake and standing bar for every entrant. A player places zero through seven
+///         chips and leaves the rest of the ten to the draw.
 ///
 /// @dev Entry burns the bankroll plus any battle stake. Closing a slot binds it to
 ///      `_currentIndex() + 1`, whose word cannot have existed while entry was open. `resolveSlot`
@@ -119,7 +119,7 @@ contract CrapsBattle is LootboxCraps {
     ///         standing bar exceeds `_MAX_MIN_SCORE`.
     error BadRandomCount();
 
-    /// @notice A board stacks more than `_MAX_CHIPS_PER_LEG` chips on a single leg.
+    /// @notice A board stacks more than three player-selected chips on a single leg.
     error TooManyChipsOnALeg();
     /// @notice A ticket named chips on the pass line AND on don't pass. Pick a side: a board that
     ///         backs the shooter and fades them at once is two wagers cancelling into two house
@@ -203,24 +203,17 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _BONUS_MED_BANKROLL = 1200;
     uint256 internal constant _BONUS_LARGE_BANKROLL = 3000;
 
-    /// @notice Chips in every round. An entrant selects seven or leaves all ten to the draw.
+    /// @notice Chips in every round. An entrant places zero through seven; the draw scatters the rest.
     uint256 internal constant _BONUS_CHIPS = 10;
 
-    /// @notice HOW OFTEN A SCHEDULED SHOOTER CARRIES THE PROFIT BOOST, per hundred, by ticket.
-    ///         A blank ticket takes it three times as often as a picked one: the dice choose its
-    ///         board, so the boost is the whole of what it is paid for giving up the choice.
-    uint256 internal constant _BOOST_BLANK_CHANCE = 15;
-    uint256 internal constant _BOOST_PICKED_CHANCE = 5;
-
     /// @notice THE SCHEDULED FORMAT, and the whole of it. Every protocol-scheduled Dice Run runs
-    ///         a bankroll FIVE rounds deep and chases one of two targets, drawn evenly. Depth and
-    ///         target used to be three-way draws each; a high-water run ranks on how far it got
-    ///         rather than how fast it arrived, and nine formats of that are eight more than the
-    ///         thing needs. A CUSTOM battle still names its own depth and target — these are the
-    ///         schedule's, never a test of eligibility.
+    ///         a bankroll FIVE rounds deep and chases FIVE times that bankroll. A high-water run
+    ///         ranks on how far it got rather than how fast it arrived, so drawing another target
+    ///         only creates another set of downstream rules without changing the product. A
+    ///         CUSTOM battle still names its own depth and target — these are the schedule's,
+    ///         never a test of eligibility.
     uint256 internal constant _SCHED_BANK_MULT = 5;
-    uint256 internal constant _SCHED_GOAL_LOW = 5;
-    uint256 internal constant _SCHED_GOAL_HIGH = 20;
+    uint256 internal constant _SCHED_GOAL = 5;
 
     /// @notice THE DICE RUN RECORD FLOOR, in score basis points: a 100x high point against the
     ///         run's own starting bankroll. Below it a scheduled winner never reads the shared
@@ -352,12 +345,11 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _PROG_RARE_DOUBLINGS = 1;
     uint256 internal constant _PROG_EVENT_DOUBLINGS = 2;
 
-    /// @dev THE HIGH-POINT CUTOFFS, one pair per scheduled target, in SCORE BASIS POINTS — the
+    /// @dev THE HIGH-POINT CUTOFFS, in SCORE BASIS POINTS — the
     ///      winner's high point over its own starting bankroll, 10,000 being 1x. INCLUSIVE:
     ///
-    ///        target   common          rare
-    ///           5x    250,000 (25x)   1,200,000 (120x)
-    ///          20x    500,000 (50x)   2,250,000 (225x)
+    ///        common          rare
+    ///        250,000 (25x)   1,200,000 (120x)
     ///
     ///      A MULTIPLE, not a roll count. The old cutoffs read the winner's cumulative roll
     ///      prefix, which measured how LONG a run took rather than how far it got; a high-water
@@ -369,10 +361,8 @@ contract CrapsBattle is LootboxCraps {
     ///      `floor(peak * 10_000 / start)`, and for integers `floor(a/b) >= c` is exactly
     ///      `a >= c * b`. So comparing the floored score to a bps cutoff is comparing the whole
     ///      high point to a multiple of the bankroll, without the multiplication.
-    uint256 internal constant _PROG_COMMON_5X = 250_000;
-    uint256 internal constant _PROG_RARE_5X = 1_200_000;
-    uint256 internal constant _PROG_COMMON_20X = 500_000;
-    uint256 internal constant _PROG_RARE_20X = 2_250_000;
+    uint256 internal constant _PROG_COMMON = 250_000;
+    uint256 internal constant _PROG_RARE = 1_200_000;
 
     /// @dev Where a `CrapsProgressiveRolled` came from: the main ladder, a contested high lane,
     ///      or the boost capital a sole high rider's standing would not admit. Carried to
@@ -413,8 +403,8 @@ contract CrapsBattle is LootboxCraps {
     //   bits  43.. 60  stakeUnits the bounty, in _BATTLE_STAKE_UNIT granules
     //   bits  61.. 72  minScore   the standing bar
     //   bits  73..112  closeTime  when entry shuts and the table may be taken
-    // The chips left to the dice are not a term: a blank ticket throws ten and a seven-chip
-    // ticket throws three, but both play the slot's same ten-chip round.
+    // The chips left to the dice are not a term: every ticket places zero through seven and
+    // scatters the complement, but all play the slot's same ten-chip round.
     uint256 private constant _CB_PLAYED_MASK = 0xFFFFFFF;
     uint256 private constant _CB_BANK_SHIFT = 28;
     uint256 private constant _CB_BANK_MASK = 0x1F;
@@ -484,11 +474,10 @@ contract CrapsBattle is LootboxCraps {
     // cursor carries the one lifecycle mark a slip needs.
     /// @dev The ten legs, three bits each, as chip counts, in the CANONICAL order — the identical
     ///      thirty-bit word `CrapsSlipPlaced` carries in its low bits, so storage and the log
-    ///      agree without a translation anywhere. All ten zero is a blank ticket and the draw
-    ///      places all ten chips, so the mode needs no field of its own. A count over seven cannot
-    ///      be smuggled in: ten legs summing to seven is the only shape the door accepts, and the
-    ///      SUM is what it checks — which is also why three bits is the right width, since all
-    ///      seven may legally pile onto one leg.
+    ///      agree without a translation anywhere. All ten zero leaves the whole round to the draw;
+    ///      the submitted counts may sum to at most seven, and settlement scatters the complement.
+    ///      Three bits is the right width because the per-leg cap fits and no submitted total may
+    ///      exceed seven.
     uint256 internal constant _BET_CHIPS_SHIFT = 160;
     uint256 internal constant _BET_CHIPS_MASK = 0x3FFFFFFF;
     /// @dev The entrant's standing, frozen at entry. Chip composition may be amended before the
@@ -536,13 +525,8 @@ contract CrapsBattle is LootboxCraps {
     ///         can never collide with a shape anyone could name.
     uint32 internal constant _VAULT_BOARD_OFF = type(uint32).max;
 
-    /// @notice The most chips a ticket may name on ONE leg. A board is seven chips across ten
-    ///         legs, so without a cap a whole ticket could ride a single number — which is a
-    ///         different game from the spread the round is priced as.
-    uint256 internal constant _MAX_CHIPS_PER_LEG = 4;
-
-    /// @dev Bit 0 of every one of the ten three-bit legs, so a per-leg test runs on the whole
-    ///      board at once instead of a comparison a leg.
+    /// @dev Bit 0 of every one of the ten three-bit legs. Shifting each leg's `4` bit onto this
+    ///      mask makes the three-chip ceiling one board-wide test.
     uint256 internal constant _CHIP_LO_MASK = 0x9249249;
 
     uint256 internal constant _CHIP_DONT_SHIFT = 27;
@@ -605,12 +589,12 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev The two non-money terms, packed for the key: bounty granules in 0..23, standing bar
     ///      in 32..43. They live on the SLOT, never in a header. The chips a ticket leaves to the
-    ///      dice are NOT a term — that is a per-ENTRANT choice, and both modes put the same round
-    ///      down, so a picked board and a thrown one race in ONE field rather than two thin ones.
+    ///      dice are NOT a term — that is a per-ENTRANT choice, and every split between placed and
+    ///      scattered chips puts the same round down, so all eight shapes race in ONE field.
     uint256 internal constant _TERM_SCORE_SHIFT = 32;
 
-    /// @dev Place seven of the ten chips; the dice place the other three.
-    uint256 internal constant _RSEL_PICK7 = 3;
+    /// @dev A ticket may place at most seven of the round's ten chips. The dice scatter the rest.
+    uint256 internal constant _MAX_PICKED_CHIPS = 7;
 
     // Battle scoreboard packing — one battle's entire shared state in one word.
     //   bits   0.. 31  entrants        bits  32.. 63  resolved
@@ -1142,12 +1126,9 @@ contract CrapsBattle is LootboxCraps {
     ///        doubled on a repeat victory. Read with `rare` this is the whole decision — a 4,000
     ///        that is not `rare` is a doubled common event rung, and one that is `rare` is an
     ///        undoubled rare one.
-    /// @param goalMult The scheduled target this field ran, 5 or 20 — which of the two cutoff
-    ///        pairs was applied.
     /// @param peak The winner's high point in whole FLIP, the figure that was tested.
     /// @param scoreBps That high point over the run's own starting bankroll, in basis points:
-    ///        10,000 is 1x, and the cutoffs are 250,000 / 1,200,000 at 5x and 500,000 / 2,250,000
-    ///        at 20x.
+    ///        10,000 is 1x, and the cutoffs are 250,000 / 1,200,000.
     /// @param candidate The rung's whole figure, before the winner's standing is applied.
     /// @param paid What actually LEFT the pool — `candidate` at full standing, less below it —
     ///        so `poolBefore - poolAfter` reconstructs from this figure alone. A slice of it can
@@ -1162,7 +1143,6 @@ contract CrapsBattle is LootboxCraps {
         address indexed player,
         bool rare,
         uint16 poolBps,
-        uint16 goalMult,
         uint256 peak,
         uint256 scoreBps,
         uint256 candidate,
@@ -1330,16 +1310,15 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev A ticket's ten leg counts, packed into the thirty-bit chip word, with their sum.
     ///      Each leg is a COUNT of chips, not an amount — the slot fixes what a chip is worth, so
-    ///      an entrant chooses only where the seven go. The sum is nearly the whole validation:
-    ///      ten legs summing to seven cannot hold a leg above seven, so no count can overflow its
-    ///      three bits.
+    ///      an entrant chooses only where up to seven go. The sum is the board-wide ceiling; the
+    ///      separate per-leg check keeps each count within the priced spread.
     ///
     ///      The one composition rule on top of that: PICK A SIDE. A ticket may not name both the
     ///      pass line and don't pass. Checked here rather than at each door, so every way in — a
     ///      window, a day ticket, a custom battle, an amendment — is held to it identically.
     ///      The DICE are not: a scatter chip may still land on the side a ticket did not pick,
     ///      which is the draw's doing and not a wager the player chose.
-    function _packChips(uint32 c) private pure returns (uint256 packed, uint256 count) {
+    function _packChips(uint32 c) internal pure returns (uint256 packed, uint256 count) {
         packed = c;
         // Bits 30-31 are outside the ten three-bit legs. Letting either through would overlap the
         // frozen standing field when `chips` is shifted into the stored bet word.
@@ -1347,21 +1326,13 @@ contract CrapsBattle is LootboxCraps {
         if (packed & 7 != 0 && (packed >> _CHIP_DONT_SHIFT) & _CHIP_DONT_MASK != 0) {
             revert BoardPlaysBothSides();
         }
-        if (_legOverCap(packed)) revert TooManyChipsOnALeg();
+        // Three is the ceiling, so bit 2 being set in any three-bit leg is the whole cap test.
+        if ((packed >> 2) & _CHIP_LO_MASK != 0) revert TooManyChipsOnALeg();
         unchecked {
             for (uint256 i = 0; i <= _CHIP_DONT_SHIFT; i += 3) {
                 count += (packed >> i) & 7;
             }
         }
-    }
-
-    /// @dev Whether any leg of a packed board holds more than `_MAX_CHIPS_PER_LEG`. Each leg is
-    ///      three bits, so "five or more" is exactly the top bit set alongside either low one —
-    ///      which tests all ten legs in one pass rather than ten comparisons.
-    function _legOverCap(uint256 packed) private pure returns (bool) {
-        uint256 hi = (packed >> 2) & _CHIP_LO_MASK;
-        uint256 lo = (packed | (packed >> 1)) & _CHIP_LO_MASK;
-        return hi & lo != 0;
     }
 
     /// @dev Packed counts back into the board they stand for, at this slot's chip.
@@ -1380,7 +1351,7 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @notice Name or re-spread an open slip's seven chips. Only the COMPOSITION moves: the
+    /// @notice Name or re-spread zero through seven chips on an open slip. Only the COMPOSITION moves: the
     ///         bankroll, target, bounty and seat are all the SLOT's, so no value moves and no
     ///         field changes. A blank ticket may name a pick this way, which is how the vault
     ///         steers the seats it takes automatically. Allowed until the slot closes, which is
@@ -1388,10 +1359,10 @@ contract CrapsBattle is LootboxCraps {
     ///         only until the first window of that entry closes, and for a DAY ticket, its own
     ///         day's period zero: a reservation on a future day re-spreads freely until then.
     /// @param betId The slip: `(slot << 64) | seat`.
-    /// @param chips Where its seven chips go; the draw places the remaining three.
+    /// @param chips Where up to seven chips go; the draw places the remainder of ten.
     /// @custom:reverts NotYourBet If the caller does not own the slip.
     /// @custom:reverts BetLocked If the slot has closed, or a day-wide entry's first window has.
-    /// @custom:reverts BadRandomCount If the new board is neither seven chips nor blank.
+    /// @custom:reverts BadRandomCount If the new board names more than seven chips.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     function amendSlip(uint256 betId, uint32 chips) public {
         uint256 header = _bets[betId];
@@ -1416,12 +1387,10 @@ contract CrapsBattle is LootboxCraps {
             // field that was already public and frozen. Nobody who entered on time had that move.
             _joinableSlot(slot);
         }
-        // SEVEN CHIPS OR NONE, the same shape every entry door takes — so an amendment can move a
-        // slip BETWEEN the two ticket classes, not merely re-spread one. A picked board handed
-        // back to the dice becomes a blank ticket in every respect the settlement reads: the draw
-        // places all ten chips, and the slip takes the blank shooter schedule. The class is read
-        // off this stored word, so there is nothing else to clear.
-        uint256 packed = _sevenOrNone(chips);
+        // ZERO THROUGH SEVEN CHIPS, the same range every entry door takes. The stored count fixes
+        // both how many of the ten the dice scatter and, on scheduled windows alone, which
+        // shooter-profit row the slip receives. There is no separate mode bit to update.
+        uint256 packed = _upToSeven(chips);
 
         // THE STANDING MOVES WITH THE BOARD. A seat may now be written days before its day opens,
         // so the standing frozen at that moment is the holder's oldest rather than their current
@@ -1433,9 +1402,6 @@ contract CrapsBattle is LootboxCraps {
 
         emit CrapsSlipAmended(betId, packed);
     }
-
-    /// @dev The chips a bonus window leaves its entrants to pick.
-    uint256 internal constant _RSEL_PICK7_KEPT = _BONUS_CHIPS - _RSEL_PICK7;
 
     /// @dev One ticket, every window of the day. Nothing per-window is written here: the field
     ///      each window plays is folded in when that window shuts, which is safe precisely because
@@ -1456,7 +1422,7 @@ contract CrapsBattle is LootboxCraps {
         // twice. A prepaid day needs no door of its own: the seat was written when the pass was
         // spent, so there is nothing left to redeem.
         if (_daySeated[daySlot][msg.sender] != 0) revert AlreadyInBonus();
-        uint256 packed = _sevenOrNone(chips);
+        uint256 packed = _upToSeven(chips);
 
         uint256 cost;
         uint256 bar;
@@ -1905,8 +1871,8 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @notice Join a custom battle. A blank ticket leaves all ten chips to the dice; seven chips
-    ///         posted leaves three — the same two modes a bonus window offers, racing in one field.
+    /// @notice Join a custom battle, placing zero through seven chips and leaving the rest of the
+    ///         ten-chip round to the dice. Custom tickets receive no shooter-profit boost.
     /// @custom:reverts BoardPlaysBothSides If the ticket names both the pass line and don't pass.
     function enterBattle(uint64 slot, uint32 chips, uint16 multiple) public returns (uint256 betId) {
         return _enterWindow(_joinableSlot(slot), chips, multiple);
@@ -1939,8 +1905,8 @@ contract CrapsBattle is LootboxCraps {
             w.played = (c & _CB_PLAYED_MASK) * 1 ether;
             w.bankroll = uint128(w.played * ((c >> _CB_BANK_SHIFT) & _CB_BANK_MASK));
             w.goal = uint128(uint256(w.bankroll) * ((c >> _CB_GOAL_SHIFT) & _CB_GOAL_MASK));
-            // What a PICKING entrant hands in: seven of the ten, the dice placing the rest.
-            w.postedStake = (w.played / _BONUS_CHIPS) * _RSEL_PICK7_KEPT;
+            // The maximum a player may place directly: seven of the ten chips.
+            w.postedStake = (w.played / _BONUS_CHIPS) * _MAX_PICKED_CHIPS;
             w.stakeUnits = (c >> _CB_STAKE_SHIFT) & _BSTAKE_MAX;
             // Fixed at creation, and no day's draw can move it: a custom battle's high lane is a
             // term its creator named, not a thing the protocol rolls.
@@ -1981,8 +1947,8 @@ contract CrapsBattle is LootboxCraps {
     ///      the dice place all ten of its chips. This is the vault's only say in what it plays,
     ///      short of amending each seat by hand after the fact.
     ///
-    ///      SEVEN CHIPS OR NONE, the same rule both paid doors enforce, so the vault can never
-    ///      hold a shape a player could not. A blank board restores the full draw.
+    ///      ZERO THROUGH SEVEN CHIPS, the same rule every paid door enforces, so the vault can
+    ///      never hold a shape a player could not. A zero board restores the full draw.
     ///
     ///      Read at seat time, never copied forward: changing it moves every day the vault has not
     ///      yet been seated at, and no day it already has. A seat already taken is moved with
@@ -1996,18 +1962,16 @@ contract CrapsBattle is LootboxCraps {
     ///      of the automatic day lane, so it buys no seat, burns no FLIP and spends no banked pass
     ///      until its owner names a board again. It does NOT reach a seat a pass already bought —
     ///      that day was paid for when the pass was spent, and there is nothing left to decline.
-    /// @param packed Seven chips in the packed layout, zero to go back to the draw, or
+    /// @param packed Up to seven chips in the packed layout, zero to go back to the draw, or
     ///        `VAULT_BOARD_OFF` to stop taking day seats at all.
     /// @custom:reverts NotVaultOwner If the caller does not hold the vault's DGVE majority.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
-    /// @custom:reverts BadRandomCount If it names some count other than seven or none.
+    /// @custom:reverts BadRandomCount If it names more than seven chips.
     function setVaultBoard(uint32 packed) external {
         if (!IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
         if (packed != 0 && packed != _VAULT_BOARD_OFF) {
             (, uint256 count) = _packChips(packed);
-            // Seven is also what bounds every leg: ten legs summing to seven cannot hold an eighth
-            // chip anywhere, so no count can overflow the three bits it is read back out of.
-            if (count != _RSEL_PICK7_KEPT) revert BadRandomCount();
+            if (count > _MAX_PICKED_CHIPS) revert BadRandomCount();
         }
         // No echo of its own: the board is read back at each seat, and every seat it steers
         // still announces the chips it actually plays through `CrapsSlipPlaced`.
@@ -2111,29 +2075,19 @@ contract CrapsBattle is LootboxCraps {
         emit CrapsBetSettled(betId, player, s.won * scale, paid);
     }
 
-    /// @dev THE SCHEDULED SHOOTER-PROFIT SCHEDULE a ticket plays under, packed the way
-    ///      `_settleSlip` reads it: the eligible-shooter percentage in the low byte, the percent
-    ///      added to an eligible shooter's PROFIT in the byte above.
+    /// @dev THE SCHEDULED SHOOTER-PROFIT TERMS, indexed by how many of the ten chips the ticket
+    ///      placed itself. The low byte is the eligible-shooter percentage and the byte above is
+    ///      the percent added to an eligible shooter's PROFIT:
     ///
-    ///        ticket           eligible shooters    5x       20x
-    ///        blank/random           15%           +33%     +45%
-    ///        picked                  5%           +20%     +50%
+    ///        placed       0       1       2       3       4       5       6       7
+    ///        chance      15%     14%     12%     11%      9%      8%      6%      5%
+    ///        uplift     +33%    +30%    +30%    +30%    +30%    +25%    +25%    +20%
     ///
-    ///      THE CROSSOVER IS THE POINT. A blank ticket is boosted three times as often and paid
-    ///      more for it at the short target; a picked one is paid least where the run is short
-    ///      enough for a chosen board to matter, and most at 20x, where the length of the run is
-    ///      what decides it and the chips may as well be the dice's.
-    ///
-    ///      Only the two SCHEDULED targets are named, because only a scheduled window is ever
-    ///      handed a schedule: a custom battle is passed zero and plays the bare engine, whatever
-    ///      numbers its creator copied off the schedule.
-    function _shooterBoostTerms(bool blank, uint256 goalMult) internal pure returns (uint256) {
-        unchecked {
-            // Two packed uint16 schedules, 5x low and 20x high. Each low byte is the draw chance
-            // and each high byte its profit uplift, exactly as `_settleSlip` reads it.
-            uint256 table = blank ? 0x2D0F210F : 0x32051405;
-            return (table >> (goalMult == _SCHED_GOAL_LOW ? 0 : 16)) & 0xFFFF;
-        }
+    ///      Packed into one constant so the continuum costs one indexed shift instead of eight
+    ///      branches. Only a SCHEDULED window is handed the result: custom battles always pass
+    ///      zero and play the bare engine, while still accepting every placed-chip count.
+    function _shooterBoostTerms(uint256 placed) internal pure returns (uint256) {
+        return (0x1405190619081E091E0B1E0C1E0E210F >> (placed << 4)) & 0xFFFF;
     }
 
     /// @dev The entire settlement of `betId`, decided the moment its table's word landed. Shared
@@ -2148,19 +2102,16 @@ contract CrapsBattle is LootboxCraps {
         unchecked {
             chipFlip = (w.played / 1 ether) / _BONUS_CHIPS;
         }
-        // The board a slip actually PLAYS: the chips it named, grown by the ones the dice place.
+        // The board a slip actually PLAYS: the chips it named, grown to ten by the dice.
         // The throw comes off the table's own word keyed to the OWNER, so two players at one
         // table get different boards; both inputs were fixed before this could be read — the word
-        // did not exist when the slip was placed, and the owner is who placed it. A blank ticket
-        // named none, so the dice place all ten and there is no placeholder shape to clear.
+        // did not exist when the slip was placed, and the owner is who placed it. The stored sum
+        // says exactly how many of the ten remain for the dice.
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
-        Craps.Bets memory board;
-        uint256 thrown = _BONUS_CHIPS;
-        if (packed != 0) {
-            board = _boardFrom(packed, chipFlip);
-            thrown = _RSEL_PICK7;
-        }
-        _scatterInto(board, _hash2(word, uint160(header)), chipFlip, thrown);
+        uint256 placed;
+        (, placed) = _packChips(uint32(packed));
+        Craps.Bets memory board = _boardFrom(packed, chipFlip);
+        _scatterInto(board, _hash2(word, uint160(header)), chipFlip, _BONUS_CHIPS - placed);
 
         // Lean mode: settlement pays from the scalars alone, so the per-leg books stay off. The
         // owner rides in for the survival coin alone — the dice stay the TABLE's, so the field
@@ -2176,8 +2127,8 @@ contract CrapsBattle is LootboxCraps {
         // The SHOOTER PROFIT BOOST rides the same call, and only for a window the protocol
         // scheduled itself: a custom battle is handed zero, so its every byte of settlement is
         // what it always was. The ticket is classified from the word it was STORED with — before
-        // the scatter, which is what the dice did to it — so a blank ticket cannot be mistaken
-        // for a picked one by the ten chips it ends up playing.
+        // the scatter, which is what the dice did to it — so the boost row cannot be changed by
+        // where the scattered chips happen to land.
         //
         // ONE ENGINE, ONE SET OF RULES. Both products latch the goal, hold it as a protected
         // reserve, escalate every three shooters to `uint32.max`, and run to the same bounds — a
@@ -2195,7 +2146,7 @@ contract CrapsBattle is LootboxCraps {
             _MAX_SLIP_HANDS,
             _SLIP_ROLL_BUDGET,
             address(uint160(header)),
-            scheduled ? _shooterBoostTerms(packed == 0, w.goal / w.bankroll) : 0
+            scheduled ? _shooterBoostTerms(placed) : 0
         );
         // `Settlement` is the same seven-word memory shape as `SlipResult`. The first word —
         // bankrollIn — is dead after the engine returns and becomes `paid` below; every other
@@ -2237,10 +2188,9 @@ contract CrapsBattle is LootboxCraps {
         bytes32 key;
         uint128 bankroll;
         uint128 goal;
-        /// @dev The ten-chip round this window plays — what the match key is built on, and what a
-        ///      blank ticket posts whole.
+        /// @dev The ten-chip round this window plays — what the match key is built on.
         uint256 played;
-        /// @dev The seven chips a picking entrant hands in. The dice place the other three.
+        /// @dev The maximum seven chips an entrant may place; the dice scatter the complement.
         uint256 postedStake;
         uint256 stakeUnits;
         uint256 terms;
@@ -2294,10 +2244,9 @@ contract CrapsBattle is LootboxCraps {
     function _windowTermsOn(uint24 day, uint256 period, uint256 word) private pure returns (Window memory w) {
         (w.bankroll, w.goal, w.played, w.stakeUnits, w.tier) = _bonusPreset(_bonusRoll(word, period), period);
         unchecked {
-            // What a PICKING entrant hands in: seven of the window's ten chips, with the dice
-            // placing the rest. One that picks nothing posts the whole round instead — the key is
-            // built on `played`, so the two are the same race.
-            w.postedStake = (w.played / _BONUS_CHIPS) * _RSEL_PICK7_KEPT;
+            // The maximum a player may place directly: seven of the window's ten chips. The key
+            // is built on the full round, so every placed/scattered split is the same race.
+            w.postedStake = (w.played / _BONUS_CHIPS) * _MAX_PICKED_CHIPS;
             w.bound = uint48(_slotOf(day, period));
             // Every window of a day runs the SAME high lane, because the draw is the day's and
             // the slot names the day. A window armed or settled days later still reads its own.
@@ -2471,14 +2420,14 @@ contract CrapsBattle is LootboxCraps {
     /// @param startDay The first day to reserve. Must be strictly after today.
     /// @param count    How many consecutive days, 1..255.
     /// @param high     Which credit lane to spend.
-    /// @param chips    The packed board every reserved day starts on — zero for a blank ticket
-    ///                 and the full draw, otherwise exactly seven chips in the same packed shape
-    ///                 every live door takes. Each day may still be re-spread on its own through
+    /// @param chips    The packed board every reserved day starts on — zero through seven named
+    ///                 chips in the same packed shape every live door takes. Each day may still
+    ///                 be re-spread on its own through
     ///                 `amendSlip` once that day opens.
     /// @custom:reverts BadPassCount If `count` is zero.
     /// @custom:reverts DayNotReservable If any day in the range is taken, worded or not future.
-    /// @custom:reverts BadRandomCount If `chips` names some count other than seven or none.
-    /// @custom:reverts TooManyChipsOnALeg If any leg stacks more than four chips.
+    /// @custom:reverts BadRandomCount If `chips` names more than seven chips.
+    /// @custom:reverts TooManyChipsOnALeg If any leg stacks more than three chips.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     function applyCrapsPasses(uint24 startDay, uint8 count, bool high, uint32 chips) public {
         _takeCredits(msg.sender, high, count);
@@ -2496,8 +2445,8 @@ contract CrapsBattle is LootboxCraps {
     /// @param startDay The first day to reserve. Must be strictly after today.
     /// @param count    How many consecutive days, 1..255.
     /// @param high     Whether these are high-roller days.
-    /// @param chips    The packed board every reserved day starts on — zero for a blank ticket,
-    ///                 otherwise exactly seven chips, exactly as `applyCrapsPasses` takes it.
+    /// @param chips    The packed board every reserved day starts on — zero through seven named
+    ///                 chips, exactly as `applyCrapsPasses` takes it.
     /// @custom:reverts BadPassCount If `count` is zero.
     /// @custom:reverts DayNotReservable If any day in the range is taken, worded or not future.
     function buyFutureCrapsDays(uint24 startDay, uint8 count, bool high, uint32 chips) public {
@@ -2567,10 +2516,10 @@ contract CrapsBattle is LootboxCraps {
     ///      `uint24` day space fails on the day itself rather than wrapping into the past.
     function _reserveRun(uint24 startDay, uint8 count, bool high, uint32 chips, uint256 boonMask) private {
         // The board is vetted ONCE for the whole run, by the same test every live door uses:
-        // blank, or exactly seven chips within the per-leg cap and off the both-sides trap. One
+        // zero through seven chips within the per-leg cap and off the both-sides trap. One
         // slip serves every day of the run; `amendSlip` still re-spreads any single day once that
         // day opens.
-        uint256 packed = _sevenOrNone(chips);
+        uint256 packed = _upToSeven(chips);
         // Read ONCE for the whole run: a standing is a property of the caller, not of the day, and
         // a 255-day run must not make 255 trips into the game to ask the same question.
         uint256 standing = _standingOf(msg.sender);
@@ -2823,25 +2772,24 @@ contract CrapsBattle is LootboxCraps {
     ///      `_place` is private and the optimizer inlines a full copy at each call site, so a
     ///      door of its own per entry mode costs more than the mode is worth.
     function _enterWindow(Window memory w, uint32 chips, uint256 multiple) private returns (uint256) {
-        return _place(w, _sevenOrNone(chips), multiple, _standingOf(msg.sender));
+        return _place(w, _upToSeven(chips), multiple, _standingOf(msg.sender));
     }
 
-    /// @dev A door's board: blank, or exactly seven chips — the one shape either lane sells.
-    ///      Seven or nothing matters beyond taste: any other count used to derive a round of its
-    ///      own and so key a PRIVATE battle at a slot — a field of one, a stranded bounty.
-    function _sevenOrNone(uint32 chips) private pure returns (uint256 packed) {
+    /// @dev A door's board: zero through seven named chips. Every count grows to the same ten-chip
+    ///      round at settlement, so none of them changes the field key or creates a private race.
+    function _upToSeven(uint32 chips) private pure returns (uint256 packed) {
         uint256 count;
         (packed, count) = _packChips(chips);
-        if (count != 0 && count != _RSEL_PICK7_KEPT) revert BadRandomCount();
+        if (count > _MAX_PICKED_CHIPS) revert BadRandomCount();
     }
 
-    /// @notice Join one of today's bonus windows, picking your seven chips. `chips` names them by
-    ///         COUNT — how many of the stack go on each leg, seven in all — rather than by FLIP,
+    /// @notice Join one of today's bonus windows, placing up to seven chips. `chips` names them by
+    ///         COUNT — how many of the stack go on each leg — rather than by FLIP,
     ///         so ONE allocation enters any window whatever its chip is worth. The window dictates
     ///         bankroll, target and bounty, so there is nothing else to supply.
     ///
-    ///         Name nothing and the dice place all ten instead: an all-zero `chips` is the whole
-    ///         entry, in one call and with no board to build.
+    ///         The dice scatter the rest of the ten: an all-zero `chips` leaves the whole board
+    ///         to the draw.
     function enterBonusBattle(uint256 period, uint32 chips, uint16 multiple) public returns (uint256 betId) {
         Window memory w = _joinableWindow(period);
         return _enterWindow(w, chips, multiple);
@@ -3238,19 +3186,15 @@ contract CrapsBattle is LootboxCraps {
             boardStake = boardFlip * 1 ether;
             stakeUnits = (bountyFlip * 1 ether) / _BATTLE_STAKE_UNIT;
 
-            // The target: a simple multiple of the bankroll, nothing more. TWO rungs, drawn
-            // EVENLY — the shooter schedule is what separates them, paying a picked board most of
-            // its edge back at 20x and a blank one most of its edge back at 5x, so weighting the
-            // draw as well would subsidise one target twice.
-            goal = uint128(
-                bankrollFlip * ((roll >> 32) % 2 == 0 ? _SCHED_GOAL_LOW : _SCHED_GOAL_HIGH) * 1 ether
-            );
+            // The target: five times the bankroll, in every scheduled window. Custom battles
+            // continue to carry the creator's chosen target through their separate terms path.
+            goal = uint128(bankrollFlip * _SCHED_GOAL * 1 ether);
         }
     }
 
     /// @dev The match key: one slot and the exact numeric terms every entrant shares. The round
-    ///      played is included; chip composition is not, because different seven-chip choices
-    ///      and blank tickets deliberately race in the same field.
+    ///      played is included; chip composition is not, because every zero-through-seven choice
+    ///      deliberately races in the same field.
     function _battleKey(uint48 bound, uint256 staked, uint256 goal, uint256 played, uint256 terms)
         private
         pure
@@ -3863,7 +3807,7 @@ contract CrapsBattle is LootboxCraps {
             //
             // THE BIGGEST DICE RUN is the FIFTH category of the record `Coinflip` already owns,
             // not a pool of its own: nothing here funds a record pool, adds craps action, or
-            // touches the four existing kinds. A 100x high point has necessarily crossed either
+            // touches the four existing kinds. A 100x high point has necessarily crossed the
             // scheduled target, so the floor does the whole eligibility test. Below it NOTHING is
             // called — a field that never got near a record does not pay for a cross-contract
             // read to be told so — and `Coinflip` logs the claim it makes.
@@ -3957,19 +3901,11 @@ contract CrapsBattle is LootboxCraps {
         address winner
     ) internal {
         unchecked {
-            // The format, straight off the window's own terms. The ratio is exact for every
-            // scheduled preset — every bankroll the schedule draws is a whole-FLIP multiple of 300
-            // — so it cannot land between the two targets. The pair of cutoffs rides one word so
-            // the target is read once rather than at each rung.
-            uint256 goalMult = uint256(w.goal) / uint256(w.bankroll);
-            uint256 cuts = goalMult == _SCHED_GOAL_HIGH
-                ? (_PROG_RARE_20X << 32) | _PROG_COMMON_20X
-                : (_PROG_RARE_5X << 32) | _PROG_COMMON_5X;
-            // RARE FIRST, and it OVERRIDES. The rare cutoff is above the common one at both
-            // targets, so a run that clears it has cleared both — and takes the rare rung alone,
+            // RARE FIRST, and it OVERRIDES. The rare cutoff is above the common cutoff, so a run
+            // that clears it has cleared both — and takes the rare rung alone,
             // never both. Both cutoffs are INCLUSIVE.
             uint256 pool = _progressive;
-            bool rare = score >= (cuts >> 32);
+            bool rare = score >= _PROG_RARE;
             // THE RUNG, COUNTED IN DOUBLINGS of the routine common share, because that is what
             // the schedule actually is: RARE is worth one doubling, the day's EVENT two more, and
             // a repeat victory at the event one further. So `500 << shift` is the whole table —
@@ -3977,7 +3913,7 @@ contract CrapsBattle is LootboxCraps {
             // named rungs below it are the same four figures written out.
             uint256 shift;
             if (rare) shift = _PROG_RARE_DOUBLINGS;
-            else if (score < (cuts & _MASK32)) return;
+            else if (score < _PROG_COMMON) return;
             if (_isEventSlot(w.bound)) {
                 shift += _PROG_EVENT_DOUBLINGS;
                 // THE REPEAT DOUBLE, on the EVENT alone. Its state is read at RESOLUTION time: a
@@ -3999,7 +3935,7 @@ contract CrapsBattle is LootboxCraps {
             pool -= paid;
             _progressive = pool;
             emit CrapsProgressivePaid(
-                winnerId, w.key, winner, rare, uint16(bps), uint16(goalMult), peakFlip, score, candidate, paid, pool
+                winnerId, w.key, winner, rare, uint16(bps), peakFlip, score, candidate, paid, pool
             );
             // State first, credit second. A scoreless winner takes nothing, and a call for nothing
             // is a call not worth making.

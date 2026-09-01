@@ -97,16 +97,14 @@ contract CrapsSlipHarness is CrapsViews {
         Window memory w = _slotWindow(betId >> 64);
         uint256 chipFlip = (w.played / 1 ether) / BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
-        uint256 thrown = BONUS_CHIPS;
-        if (packed != 0) {
-            board = _boardFrom(packed, chipFlip);
-            thrown = _RSEL_PICK7;
-        }
+        uint256 placed;
+        (, placed) = _packChips(uint32(packed));
+        board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
             uint256(keccak256(abi.encode(_wordAt(_indexOf(betId >> 64)), address(uint160(header))))),
             chipFlip,
-            thrown
+            BONUS_CHIPS - placed
         );
     }
 
@@ -499,7 +497,8 @@ contract CrapsSlipTest is CrapsPins {
     function test_sideOnlySettlementMatchesFullResolver() public {
         // No pass line: the engine's place/hardway specialization resolves this one.
         Craps.Bets memory b;
-        b.place6 = 4;
+        b.place6 = 3;
+        b.place8 = 1;
         b.hard8 = 3;
         uint256 bankroll = uint256(PLAYED) * 5 * 1 ether;
 
@@ -531,14 +530,14 @@ contract CrapsSlipTest is CrapsPins {
         uint256 word = uint256(keccak256(abi.encode(rawWord)));
         // Seven chips split between the dark side and a light leg that is not the pass line —
         // naming both sides is refused at the door, and rightly so.
-        // Bounded by the FOUR-A-LEG cap, and the light remainder spread over two legs for the
+        // Bounded by the THREE-A-LEG cap, and the light remainder spread over two legs for the
         // same reason: a seven-chip board can no longer sit on one number.
-        uint256 dark = bound(uint256(rawSplit), 1, 4);
+        uint256 dark = bound(uint256(rawSplit), 1, 3);
         Craps.Bets memory b;
         b.dontPass = uint24(dark);
         uint256 rest = 7 - dark;
-        b.place6 = uint24(rest > 4 ? 4 : rest);
-        if (rest > 4) b.place8 = uint24(rest - 4);
+        b.place6 = uint24(rest > 3 ? 3 : rest);
+        if (rest > 3) b.place8 = uint24(rest - 3);
 
         uint256 bankroll = uint256(PLAYED) * 4 * 1 ether;
         (uint256 betId, uint64 slot) = _run(alice, b, 4, uint16(GOAL_FAR_MULT), 900, word);
@@ -557,13 +556,14 @@ contract CrapsSlipTest is CrapsPins {
     ///      what reaches the engine's no-line specialization with a dark wager on it. Both machines
     ///      carry their own copy of the rule, so this is the only fixture that grades the second.
     ///
-    ///      Not dark-ONLY any more: four chips a leg is the table's cap, so seven cannot sit on
+    ///      Not dark-ONLY any more: three chips a leg is the table's cap, so seven cannot sit on
     ///      `dontPass` alone. The specialization keys on the absence of a PASS LINE, which a
-    ///      place-6 remainder leaves untouched.
+        ///      place-6 remainder leaves untouched.
     function test_aDarkOnlyBoardMatchesTheIndependentOracle() public {
         Craps.Bets memory b;
-        b.dontPass = 4;
+        b.dontPass = 3;
         b.place6 = 3;
+        b.place8 = 1;
         uint256 bankroll = uint256(PLAYED) * 5 * 1 ether;
 
         for (uint256 i = 0; i < 12; ++i) {

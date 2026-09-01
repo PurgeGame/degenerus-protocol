@@ -19,24 +19,22 @@ contract EconHarness is CrapsViews {
         oracle = new CrapsOracle();
     }
 
-    /// @dev The board a slip actually PLAYS: its seven chips grown by the three the dice place.
-    ///      Both the oracle cross-check and the theo have to be taken against this, never against
-    ///      the counts the ticket named.
+    /// @dev The board a slip actually PLAYS: its named chips grown to ten by the dice. Both the
+    ///      oracle cross-check and the theo have to be taken against this, never against only the
+    ///      counts the ticket named.
     function drawnBoardOf(uint256 betId) external view returns (Craps.Bets memory board) {
         uint256 header = _bets[betId];
         Window memory w = _slotWindow(betId >> 64);
         uint256 chipFlip = (w.played / 1 ether) / BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
-        uint256 thrown = BONUS_CHIPS;
-        if (packed != 0) {
-            board = _boardFrom(packed, chipFlip);
-            thrown = _RSEL_PICK7;
-        }
+        uint256 placed;
+        (, placed) = _packChips(uint32(packed));
+        board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
             uint256(keccak256(abi.encode(_wordAt(_indexOf(betId >> 64)), address(uint160(header))))),
             chipFlip,
-            thrown
+            BONUS_CHIPS - placed
         );
     }
 
@@ -134,7 +132,7 @@ contract CrapsEconomicsTest is CrapsPins {
 
     /// @dev Boards spanning the whole shape of the game: the grind, the bleeders, the
     ///      indulgences, a pure ZERO-EDGE true-odds board, and as much as one entry can light at
-    ///      once. All of them are seven whole chips, since that is the only shape a door takes.
+    ///      once. These fixtures all choose the seven-chip endpoint of the door's 0–7 range.
     /// @dev The round every fixture here plays, in whole FLIP: ten chips of a hundred.
     uint32 internal constant PLAYED = 1000;
 
@@ -142,18 +140,21 @@ contract CrapsEconomicsTest is CrapsPins {
     ///      keep the leg proportions the theo argument was written against.
     function _board(uint256 which) internal pure returns (Craps.Bets memory b) {
         if (which == 0) {
-            b.passLine = 4;
+            b.passLine = 3;
             b.place6 = 3;
+            b.place8 = 1;
         } else if (which == 1) {
             b.passLine = 2;
             b.place6 = 2;
             b.place8 = 3;
         } else if (which == 2) {
             // THE FAIR BOARD: true odds end to end, expected loss exactly zero on every leg.
-            b.place4 = 4;
+            b.place4 = 3;
+            b.place5 = 1;
             b.place10 = 3;
         } else if (which == 3) {
-            b.hard4 = 4;
+            b.place4 = 1;
+            b.hard4 = 3;
             b.hard8 = 3;
         } else {
             // As many legs as seven chips can light, with the pass line carrying two.

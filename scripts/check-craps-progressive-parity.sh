@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ── Craps progressive parity gate ───────────────────────────────────────
-# The progressive's funding rule and its four HIGH-POINT cutoffs live in TWO places
+# The progressive's funding rule and its two HIGH-POINT cutoffs live in TWO places
 # by necessity: the contract that pays them and the C++ model the economics are
 # calibrated on. Neither can read the other, so this holds them together on
 # source text — a cutoff moved in one and not the other is a model that no longer
@@ -8,13 +8,12 @@
 #
 # The model is the HIGH-WATER system simulation. The cutoffs are inclusive score
 # basis points — the winner's high point over its own starting bankroll, 10,000
-# being 1x — and there are four of them because the scheduled format is two
-# targets, not nine depth/target pairs.
+# being 1x. The contract has one scheduled target, so only the model's 5x pair
+# describes live chain behavior.
 #
 # Checked:
 #   1. `_BASE_MAIN_BUDGET` (ether)  == `kDefaultMainBase` (whole FLIP)
-#   2. `_PROG_COMMON_5X`  == `kGoal5CommonPeakBps`   `_PROG_RARE_5X`  == `kGoal5RarePeakBps`
-#      `_PROG_COMMON_20X` == `kGoal20CommonPeakBps`  `_PROG_RARE_20X` == `kGoal20RarePeakBps`
+#   2. `_PROG_COMMON` == `kGoal5CommonPeakBps`; `_PROG_RARE` == `kGoal5RarePeakBps`
 #   3. the four RUNG shares (routine/event x common/rare, in bps of the live pool)
 #      == `kProgRoutineCommonBps` / `kProgRoutineRareBps` / `kProgEventCommonBps` /
 #         `kProgEventRareBps`. The event's repeat double is a `x2` on the event rungs in both
@@ -59,10 +58,8 @@ def num(text, pattern, what):
     return None if v is None else int(v.replace('_', '').replace("'", ''))
 
 for label, sol_name, cpp_name in (
-    ("5x common", "_PROG_COMMON_5X", "kGoal5CommonPeakBps"),
-    ("5x rare", "_PROG_RARE_5X", "kGoal5RarePeakBps"),
-    ("20x common", "_PROG_COMMON_20X", "kGoal20CommonPeakBps"),
-    ("20x rare", "_PROG_RARE_20X", "kGoal20RarePeakBps"),
+    ("scheduled common", "_PROG_COMMON", "kGoal5CommonPeakBps"),
+    ("scheduled rare", "_PROG_RARE", "kGoal5RarePeakBps"),
 ):
     a = num(sol, rf'{sol_name}\s*=\s*([0-9_]+)\s*;', sol_name)
     b = num(cpp, rf'{cpp_name}\s*=\s*([0-9\']+)\s*;', cpp_name)
@@ -146,6 +143,6 @@ if [ $rc -ne 0 ]; then
 fi
 
 if [ $fail -eq 0 ]; then
-  echo "${GREEN}PASS${OFF} craps progressive: base subsidy, all four rungs and the repeat double, all four high-point cutoffs and the escalator agree with the model"
+  echo "${GREEN}PASS${OFF} craps progressive: base subsidy, all four rungs and the repeat double, the fixed 5x high-point cutoffs and the escalator agree with the model"
 fi
 exit $fail

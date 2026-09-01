@@ -77,12 +77,15 @@ contract BoostHarness is CrapsViews {
         uint256 word = _wordAt(_indexOf(slot));
         uint256 chipFlip = (w.played / 1 ether) / _BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
-        uint256 thrown = _BONUS_CHIPS;
-        if (packed != 0) {
-            board = _boardFrom(packed, chipFlip);
-            thrown = _RSEL_PICK7;
-        }
-        _scatterInto(board, uint256(keccak256(abi.encode(word, address(uint160(header))))), chipFlip, thrown);
+        uint256 placed;
+        (, placed) = _packChips(uint32(packed));
+        board = _boardFrom(packed, chipFlip);
+        _scatterInto(
+            board,
+            uint256(keccak256(abi.encode(word, address(uint160(header))))),
+            chipFlip,
+            _BONUS_CHIPS - placed
+        );
     }
 }
 
@@ -152,62 +155,13 @@ contract CrapsShooterBoostTest is CrapsPins {
     // The schedule itself
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev A BLANK ticket is boosted three times as often as a picked one. The rate is a property
-    ///      of the ticket alone and does not move with the target.
-    function test_aBlankTicketIsBoostedThreeTimesAsOften() public view {
-        uint16[3] memory goals = [uint16(5), 10, 50];
-        for (uint256 i = 0; i < 3; ++i) {
-            assertEq(craps.shooterBoostTerms(true, goals[i]) & 0xFF, 15, "a blank ticket is not 15 in a hundred");
-            assertEq(craps.shooterBoostTerms(false, goals[i]) & 0xFF, 5, "a picked ticket is not 5 in a hundred");
-        }
-        assertEq(craps.BOOST_BLANK_CHANCE(), 15, "the blank rate moved");
-        assertEq(craps.BOOST_PICKED_CHANCE(), 5, "the picked rate moved");
-    }
-
-    /// @dev THE CROSSOVER, as a table. A picked board is paid least chasing 5x and MOST chasing
-    ///      20x — which is the whole point: picking is worth doing where a board can shorten a
-    ///      run, and the long target is where the ten chips are better left to the dice.
-    function test_theTargetSelectsTheExactFixedAmount() public view {
-        assertEq(craps.shooterBoostTerms(true, 5) >> 8, 33, "blank at 5x is not +33%");
-        assertEq(craps.shooterBoostTerms(true, 20) >> 8, 45, "blank at 20x is not +45%");
-        assertEq(craps.shooterBoostTerms(false, 5) >> 8, 20, "picked at 5x is not +20%");
-        assertEq(craps.shooterBoostTerms(false, 20) >> 8, 50, "picked at 20x is not +50%");
-
-        // THE RATES, which are the other half of the schedule: a blank ticket is boosted three
-        // times as often at both targets.
-        assertEq(craps.shooterBoostTerms(true, 5) & 0xFF, craps.BOOST_BLANK_CHANCE(), "blank rate at 5x");
-        assertEq(craps.shooterBoostTerms(true, 20) & 0xFF, craps.BOOST_BLANK_CHANCE(), "blank rate at 20x");
-        assertEq(craps.shooterBoostTerms(false, 5) & 0xFF, craps.BOOST_PICKED_CHANCE(), "picked rate at 5x");
-        assertEq(craps.shooterBoostTerms(false, 20) & 0xFF, craps.BOOST_PICKED_CHANCE(), "picked rate at 20x");
-
-        // THE UPLIFT PER HUNDRED SHOOTERS, which is what a player actually feels: rate times
-        // amount. A blank ticket leads at both targets, and the lead NARROWS as the target
-        // lengthens — 4.95x at 5x, 2.7x at 20x. That closing gap is the crossover: a picked board
-        // only has to make up the difference with the board itself, and it can do that over five
-        // times the bankroll far more readily than over twenty.
-        uint16[2] memory goals = [uint16(5), 20];
-        uint256[2] memory blankUplift;
-        uint256[2] memory pickedUplift;
-        for (uint256 i = 0; i < 2; ++i) {
-            uint256 g = goals[i];
-            blankUplift[i] = (craps.shooterBoostTerms(true, g) & 0xFF) * (craps.shooterBoostTerms(true, g) >> 8);
-            pickedUplift[i] = (craps.shooterBoostTerms(false, g) & 0xFF) * (craps.shooterBoostTerms(false, g) >> 8);
-            assertGt(blankUplift[i], pickedUplift[i], "a picked ticket out-earns a blank one on the schedule");
-        }
-        assertGt(
-            (blankUplift[0] * 100) / pickedUplift[0], (blankUplift[1] * 100) / pickedUplift[1], "gap did not narrow"
-        );
-    }
-
-    /// @dev There is NO amount jitter: one target, one number, forever. Reading the schedule twice
-    ///      on the same terms gives the same word, and no input but the ticket and the target
-    ///      moves it.
-    function test_theScheduleCarriesNoJitter() public view {
-        for (uint256 i = 0; i < 8; ++i) {
-            assertEq(craps.shooterBoostTerms(true, 5), _terms(15, 33), "the blank 5x schedule moved");
-            assertEq(craps.shooterBoostTerms(true, 20), _terms(15, 45), "the blank 20x schedule moved");
-            assertEq(craps.shooterBoostTerms(false, 5), _terms(5, 20), "the picked 5x schedule moved");
-            assertEq(craps.shooterBoostTerms(false, 20), _terms(5, 50), "the picked 20x schedule moved");
+    /// @dev The exact eight-row continuum: more player choice means fewer scattered chips and a
+    ///      smaller scheduled shooter-profit subsidy.
+    function test_theScheduleCarriesTheExactPlacedChipTerms() public view {
+        uint8[8] memory chance = [uint8(15), 14, 12, 11, 9, 8, 6, 5];
+        uint8[8] memory uplift = [uint8(33), 30, 30, 30, 30, 25, 25, 20];
+        for (uint256 placed = 0; placed < 8; ++placed) {
+            assertEq(craps.shooterBoostTerms(placed), _terms(chance[placed], uplift[placed]), "a boost row moved");
         }
     }
 
@@ -240,7 +194,7 @@ contract CrapsShooterBoostTest is CrapsPins {
     }
 
     /// @dev THE RATE IS THE RATE. Over a long stream the draw lands inside a few points of the
-    ///      percentage it was given, at both of the schedule's two rates.
+    ///      percentage it was given, at the schedule's two endpoint rates.
     function test_theDrawHitsItsStatedRate() public view {
         bytes32 seed = keccak256("rate");
         uint256 blankHits;
@@ -506,53 +460,77 @@ contract CrapsShooterBoostTest is CrapsPins {
     // Where the schedule applies, and where it does not
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev A CUSTOM BATTLE IS HANDED NO SCHEDULE, even on a target the day's own windows draw.
-    ///      Settled byte for byte against the bare engine.
+    /// @dev A CUSTOM BATTLE IS HANDED NO SCHEDULE at every accepted placed-chip count, even on a
+    ///      target the day's own windows draw. Each settles byte for byte against the bare engine.
     function test_aCustomBattleIsNeverBoosted() public {
         uint16[3] memory goals = [uint16(5), 10, 50];
-        for (uint256 i = 0; i < 3; ++i) {
-            uint64 slot = _openBattle(craps, 600, 5, goals[i], 0);
+        for (uint256 placed = 0; placed <= 7; ++placed) {
+            uint256 goalMult = goals[placed % goals.length];
+            uint64 slot = _openBattle(craps, 600, 5, uint16(goalMult), 0);
             vm.prank(alice);
-            uint256 betId = craps.enterBattle(slot, _sevenChips(), 1);
-            _closeOn(craps, slot, uint48(20 + i), uint256(keccak256(abi.encode("custom", i))));
+            uint256 betId = craps.enterBattle(slot, _placed(placed), 1);
+            _closeOn(
+                craps, slot, uint48(20 + placed), uint256(keccak256(abi.encode("custom", placed)))
+            );
 
             CrapsBattle.Settlement memory s = craps.settlementAt(betId);
             // The terms this fixture opened the battle on: a 600-FLIP round, five rounds deep.
             uint256 bank = 600e18 * 5;
-            uint256 goal = bank * goals[i];
+            uint256 goal = bank * goalMult;
             Craps.SlipResult memory bare = craps.slip(
                 _scattered(betId, slot), craps.seedForBet(slot), bank, goal, craps.MAX_SLIP_HANDS(), alice, 0
             );
             assertEq(s.won, bare.bankrollOut, "a custom battle settled to something the bare engine did not");
+            assertEq(s.peak, bare.peakBankroll, "a custom boost changed the run's high point");
+            assertEq(s.handsPlayed, bare.handsPlayed, "a custom boost changed the shooter count");
+            assertEq(s.totalRolls, bare.totalRolls, "a custom boost changed the dice walk");
+            assertEq(uint8(s.stop), uint8(bare.stop), "a custom boost changed the stop class");
         }
     }
 
-    /// @dev A SCHEDULED WINDOW IS. The same run, taken through a protocol window, settles to the
-    ///      engine driven with that window's schedule and to nothing else — and a picked ticket
-    ///      and a blank one at the same window take different schedules.
-    function test_aScheduledWindowAppliesTheTicketsOwnSchedule() public {
-        (uint24 day, uint64 slot, uint48 index) = _openAndSeatBoth();
+    /// @dev A SCHEDULED WINDOW applies each of the eight rows to the ticket whose stored count
+    ///      names it. Every run is compared against the shipped engine driven with that exact row.
+    function test_aScheduledWindowAppliesEveryTicketsOwnSchedule() public {
+        vm.warp(vm.getBlockTimestamp() + 10 days);
+        _warpToDayStart();
+        uint24 day = craps.currentDayIndex();
+        craps.bookDay(day - 1, 3_000_000 ether);
+        _setDailyWord(day, PLAIN_WORD);
+        vm.prank(ContractAddresses.GAME);
+        craps.openBonusDay();
 
-        uint256 pickedId = (uint256(slot) << 64) | 1;
-        uint256 blankId = (uint256(slot) << 64) | 2;
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
+        uint256[8] memory ids;
+        address[8] memory players;
+        for (uint256 placed = 0; placed <= 7; ++placed) {
+            address player = makeAddr(string(abi.encodePacked("boost-row", placed)));
+            players[placed] = player;
+            game.setScore(player, craps.SYBIL_SCORE_FLOOR());
+            vm.prank(player);
+            ids[placed] = craps.enterBonusBattle(PER, _placed(placed), 1);
+        }
+
+        uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
+        vm.warp(vm.getBlockTimestamp() + 5 hours);
+        uint48 index = craps.armBonusWindow(slot);
+        _setWord(index, uint256(keccak256("all-boost-rows")));
+
         (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, PER);
-        uint256 mult = uint256(goal) / uint256(bank);
         bytes32 seed = craps.seedForBet(slot);
-
-        assertEq(
-            craps.settlementAt(pickedId).won,
-            craps.slipScheduled(
-                _scattered(pickedId, slot), seed, bank, goal, alice, craps.shooterBoostTerms(false, mult)
-            ).bankrollOut,
-            "the picked seat did not settle under the picked schedule"
-        );
-        assertEq(
-            craps.settlementAt(blankId).won,
-            craps.slipScheduled(
-                _scattered(blankId, slot), seed, bank, goal, bob, craps.shooterBoostTerms(true, mult)
-            ).bankrollOut,
-            "the blank seat did not settle under the blank schedule"
-        );
+        for (uint256 placed = 0; placed <= 7; ++placed) {
+            assertEq(
+                craps.settlementAt(ids[placed]).won,
+                craps.slipScheduled(
+                    _scattered(ids[placed], slot),
+                    seed,
+                    bank,
+                    goal,
+                    players[placed],
+                    craps.shooterBoostTerms(placed)
+                ).bankrollOut,
+                "a seat did not settle under its placed-chip row"
+            );
+        }
         assertGt(index, 0, "the window never shut onto a table");
     }
 
@@ -563,7 +541,6 @@ contract CrapsShooterBoostTest is CrapsPins {
     function test_theScatteredBoardNeverReclassifiesABlankTicket() public {
         (uint24 day, uint64 slot,) = _openAndSeatBoth();
         (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, PER);
-        uint256 mult = uint256(goal) / uint256(bank);
         uint256 blankId = (uint256(slot) << 64) | 2;
 
         // The board it PLAYS holds all ten chips, exactly like a picked ticket's does — which is
@@ -573,21 +550,21 @@ contract CrapsShooterBoostTest is CrapsPins {
         (,, uint256 posted,,,) = craps.bonusTermsFor(day, PER);
         assertEq(craps.stakeFor(played), (posted * 10) / 7, "the scattered blank board is not the whole round");
 
-        // And it settles under the BLANK schedule, which the picked one would not reproduce.
-        // Searched for a table word that actually SEPARATES the two schedules: a run in which no
-        // shooter draws either boost settles identically under both, and would grade nothing.
+        // And it settles under row zero, which row seven would not reproduce. Search for a table
+        // word that actually SEPARATES those endpoint rows: a run in which no shooter draws
+        // either boost settles identically under both, and would grade nothing.
         bool separated;
         for (uint256 i = 0; i < 64 && !separated; ++i) {
             _setWord(craps.indexOfSlot(slot), uint256(keccak256(abi.encode("classify", i))));
             played = _scattered(blankId, slot);
             bytes32 s2 = craps.seedForBet(slot);
-            uint256 b2 = craps.slipScheduled(played, s2, bank, goal, bob, craps.shooterBoostTerms(true, mult))
+            uint256 b2 = craps.slipScheduled(played, s2, bank, goal, bob, craps.shooterBoostTerms(0))
                 .bankrollOut;
-            uint256 p2 = craps.slipScheduled(played, s2, bank, goal, bob, craps.shooterBoostTerms(false, mult))
+            uint256 p2 = craps.slipScheduled(played, s2, bank, goal, bob, craps.shooterBoostTerms(7))
                 .bankrollOut;
             if (b2 == p2) continue;
             separated = true;
-            assertEq(craps.settlementAt(blankId).won, b2, "a blank ticket did not take the blank schedule");
+            assertEq(craps.settlementAt(blankId).won, b2, "a zero-chip ticket did not take row zero");
         }
         assertTrue(separated, "no word separated the two schedules, so the classification is untested");
     }
@@ -720,11 +697,10 @@ contract CrapsShooterBoostTest is CrapsPins {
 
         uint256 betId = (uint256(slot) << 64) | 1;
         (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, PER);
-        uint256 mult = uint256(goal) / uint256(bank);
 
         // ONE base run, drawn under the ONE schedule its ticket names.
         uint256 base = craps.slipScheduled(
-            _scattered(betId, slot), craps.seedForBet(slot), bank, goal, alice, craps.shooterBoostTerms(false, mult)
+            _scattered(betId, slot), craps.seedForBet(slot), bank, goal, alice, craps.shooterBoostTerms(7)
         ).bankrollOut;
         assertEq(craps.settlementAt(betId).won, base, "the high seat's base run took a different schedule");
 
@@ -733,11 +709,9 @@ contract CrapsShooterBoostTest is CrapsPins {
         assertEq(won, base * hm, "the high multiple did not scale one boosted base run");
     }
 
-    /// @dev NEUTRAL GOAL WEIGHTING, 1:1. A window's slice of its day is a function of its PERIOD
-    ///      and its SIZE and of nothing else — two routine windows of the same tier on the same day
-    ///      take the same share whether they drew 5x or 20x. The two targets are drawn evenly too,
-    ///      so no target is subsidised twice.
-    function test_theGoalNeverWeightsTheAllocation() public {
+    /// @dev A window's slice of its day is a function of its PERIOD and SIZE. Fixing the goal at
+    ///      5x leaves no goal-weighting branch in the allocation.
+    function test_theFixedGoalNeverAddsAllocationWeighting() public {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         _warpToDayStart();
         uint24 day = craps.currentDayIndex();
@@ -745,47 +719,37 @@ contract CrapsShooterBoostTest is CrapsPins {
             craps.bookDay(day - uint24(i), 6_000_000 ether);
         }
 
-        uint256[2] memory goalCounts;
-        uint256 differingPairs;
+        uint256 matchingPairs;
         for (uint256 w = 0; w < 80; ++w) {
             _setDailyWord(day, uint256(keccak256(abi.encode("goalweight", w))));
-            // Per tier, within THIS day: the share it took and the target the first one drew.
+            // Per tier, within THIS day: every routine window takes the same share.
             uint256[4] memory shareOf;
-            uint256[4] memory goalOf;
             for (uint256 p = 0; p + 1 < craps.BONUS_PERIODS_PER_DAY(); ++p) {
                 (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, p);
                 if (bank == 0) continue;
                 uint256 mult = uint256(goal) / uint256(bank);
-                goalCounts[mult == 5 ? 0 : 1] += 1;
+                assertEq(mult, craps.SCHED_GOAL(), "a routine window is not goal 5x");
                 uint256 tier = craps.tierPickAt(craps.dailyWordAt(day), p) + 1;
                 uint256 share = craps.boostBaseOf(uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1));
                 assertGt(share, 0, "a routine window took nothing, so the sweep measures nothing");
                 if (shareOf[tier] == 0) {
                     shareOf[tier] = share;
-                    goalOf[tier] = mult;
                 } else {
                     assertEq(shareOf[tier], share, "two windows of one tier took different shares");
-                    if (goalOf[tier] != mult) ++differingPairs;
+                    ++matchingPairs;
                 }
             }
         }
-        assertGt(differingPairs, 40, "the sweep never put two targets on one tier, so it proves nothing");
+        assertGt(matchingPairs, 40, "the sweep never repeated a tier, so it proves nothing");
 
-        // BOTH TARGETS APPEAR, and near enough evenly that neither is favoured by the draw.
-        uint256 total = goalCounts[0] + goalCounts[1];
-        for (uint256 i = 0; i < 2; ++i) {
-            assertApproxEqRel(goalCounts[i] * 2, total, 0.25e18, "a scheduled target is not drawn evenly");
-        }
-
-        // And nothing else is on the schedule — the event window included, and the DEPTH is five
-        // rounds everywhere, so the two targets are the whole of the format.
+        // Nothing else is on the schedule — the event window included — and depth is five rounds.
         for (uint256 w = 0; w < 80; ++w) {
             _setDailyWord(day, uint256(keccak256(abi.encode("goalweight", w))));
             for (uint256 p = 0; p < craps.BONUS_PERIODS_PER_DAY(); ++p) {
                 (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, p);
                 if (bank == 0) continue;
                 uint256 mult = uint256(goal) / uint256(bank);
-                assertTrue(mult == 5 || mult == 20, "a scheduled window drew an unlisted target");
+                assertEq(mult, craps.SCHED_GOAL(), "a scheduled window is not goal 5x");
                 uint256 round = craps.roundOf(uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1));
                 assertEq(uint256(bank) / round, craps.SCHED_BANK_MULT(), "a scheduled window is not five deep");
             }
@@ -863,6 +827,13 @@ contract CrapsShooterBoostTest is CrapsPins {
         b.passLine = 3;
         b.place6 = 2;
         b.hard8 = 2;
+    }
+
+    /// @dev Any accepted placed-chip count, spread under the three-per-leg ceiling.
+    function _placed(uint256 placed) internal pure returns (Craps.Bets memory b) {
+        b.passLine = uint24(placed > 3 ? 3 : placed);
+        if (placed > 3) b.place6 = uint24(placed - 3 > 3 ? 3 : placed - 3);
+        if (placed > 6) b.place8 = uint24(placed - 6);
     }
 
     /// @dev The board a bet actually PLAYS: its stored chips grown by the scatter, rebuilt here

@@ -1,9 +1,12 @@
-# Dice Run high-water system simulation
+# Dice Run high-water system simulation — historical calibration
 
-> Proposed-system analysis, 2026-08-28. This is not a description of the currently deployed
-> contract. Raw outputs and reproducible code are linked below.
+> Historical proposed-system analysis, 2026-08-28. The numeric results below predate the fixed-5x
+> schedule, 0–7 placed-chip boost continuum, and three-selected-chips-per-spot cap adopted on
+> 2026-08-31. They are retained as provenance and are not current economic forecasts. The linked
+> simulator now implements the current rules, so rerunning it produces a new calibration rather
+> than reproducing these archived tables.
 
-## Executive Summary
+## Archived Executive Summary
 
 The proposed scheduled system is economically viable at the **portfolio** level with the accepted
 boost schedule, but it is not a 16–18% take in every individual cell. Across 100 million runs per
@@ -89,7 +92,8 @@ Evidence generated for this report:
 Fixed-cell results are five independent 20-million-run blocks per cell. The aggregate is the
 equal-weight mean. This block design exposes the payout tail instead of hiding it behind one seed.
 
-Reproduction:
+Run the current model (these commands now use the current rules and do not reproduce the archived
+numbers above):
 
 ```bash
 g++ -O3 -std=c++20 -pthread scripts/craps-high-water-system-sim.cpp \
@@ -102,7 +106,7 @@ g++ -O3 -std=c++20 -pthread scripts/craps-high-water-system-sim.cpp \
   --system-matrix-days 5000 --calibration 1 --schedule 1 --seed 20260829
 
 /tmp/craps-high-water-system-sim \
-  --winner-calibration 500000 --jackpot-depth 5 --jackpot-goal 5 \
+  --winner-calibration 500000 --jackpot-depth 5 \
   --calibration 1 --schedule 1 --seed 202610005
 ```
 

@@ -35,7 +35,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
 
     uint256 internal constant PLAIN_WORD = 40 << 8;
     uint256 internal constant PER = 1;
-    uint32 internal constant SEVEN = 4 | (uint32(3) << 9);
+    uint32 internal constant SEVEN = 3 | (uint32(3) << 9) | (uint32(1) << 12);
 
     /// @dev Enough seats that a budget stops the walk before the field does.
     uint256 internal constant FIELD = 40;

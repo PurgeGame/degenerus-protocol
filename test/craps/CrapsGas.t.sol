@@ -21,8 +21,8 @@ contract GasHarness is CrapsViews {
         return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0), 0);
     }
 
-    /// @dev The same worst case UNDER A SCHEDULE, at the dearest one a window can hand it: the
-    ///      blank ticket's 15-in-a-hundred draw at the 20x target's +45%. A boosted shooter costs
+    /// @dev The same worst case UNDER THE SCHEDULE: the blank ticket's 15-in-a-hundred draw at
+    ///      +33%. A boosted shooter costs
     ///      one extra keccak and one multiply-divide, so the guarantee has to be measured with the
     ///      schedule on — an unboosted ceiling proves nothing about the common case.
     function engineRunBoosted(Craps.Bets calldata b, uint48 index, uint256 bankroll)
@@ -38,7 +38,7 @@ contract GasHarness is CrapsViews {
             MAX_SLIP_HANDS,
             SLIP_ROLL_BUDGET,
             address(0),
-            _shooterBoostTerms(true, SCHED_GOAL_HIGH)
+            _shooterBoostTerms(0)
         );
     }
 
@@ -57,7 +57,7 @@ contract GasHarness is CrapsViews {
             MAX_SLIP_HANDS,
             SLIP_ROLL_BUDGET,
             player,
-            _shooterBoostTerms(true, SCHED_GOAL_HIGH)
+            _shooterBoostTerms(0)
         );
     }
 }

@@ -96,14 +96,19 @@ contract BattleHarness is CrapsViews {
         Window memory w = _slotWindow(slot);
         uint256 chipFlip = (w.played / 1 ether) / BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
-        uint256 thrown = BONUS_CHIPS;
-        if (packed != 0) {
-            board = _boardFrom(packed, chipFlip);
-            thrown = _RSEL_PICK7;
-        }
+        uint256 placed;
+        (, placed) = _packChips(uint32(packed));
+        board = _boardFrom(packed, chipFlip);
         _scatterInto(
-            board, uint256(keccak256(abi.encode(_wordAt(_indexOf(slot)), address(uint160(header))))), chipFlip, thrown
+            board,
+            uint256(keccak256(abi.encode(_wordAt(_indexOf(slot)), address(uint160(header))))),
+            chipFlip,
+            BONUS_CHIPS - placed
         );
+    }
+
+    function placedCountOf(uint256 betId) external view returns (uint256 count) {
+        (, count) = _packChips(uint32((_bets[betId] >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK));
     }
 
     /// @dev Where the custom lane starts. Internal on the contract, so the suite reads it here
@@ -182,9 +187,9 @@ contract CrapsBattleTest is CrapsPins {
     BattleHarness internal craps;
 
     uint24 internal constant L = 600;
-    /// @dev Every round is TEN chips and an entry places SEVEN of them. `C` is this suite's chip
-    ///      and `P` the seven a board posts; the dice place the other three, so the round actually
-    ///      played is `L` and every bankroll and stop-round below is unmoved.
+    /// @dev Every round is TEN chips. `C` is this suite's chip and `P` its default seven-chip
+    ///      allocation; the dice place the complement, so the round actually played is `L` and
+    ///      every bankroll and stop-round below is unmoved.
     uint24 internal constant C = 60;
     uint24 internal constant P = C * 7;
     uint128 internal constant LW = 600e18;
@@ -217,36 +222,40 @@ contract CrapsBattleTest is CrapsPins {
     // The slot fixes what a chip is worth, so one allocation enters any battle.
     /// @dev The packed forms of the two stock allocations, for fixtures that read a slip back.
     ///      Three bits a leg, in board order.
-    uint256 internal constant BOARD_A_PACKED = 4 | (uint256(3) << 9); // line 4, place 6 three
-    uint256 internal constant SEVEN_PACKED = 4 | (uint256(3) << 12); // line 4, place 8 three
+    uint256 internal constant BOARD_A_PACKED = 3 | (uint256(3) << 9) | (uint256(1) << 12);
+    uint256 internal constant SEVEN_PACKED = 3 | (uint256(3) << 12) | (uint256(1) << 15);
 
     function _boardA() internal pure returns (Craps.Bets memory b) {
-        b.passLine = 4;
+        b.passLine = 3;
         b.place6 = 3;
+        b.place8 = 1;
     }
 
     function _boardB() internal pure returns (Craps.Bets memory b) {
-        b.place6 = 4;
+        b.place6 = 3;
         b.place8 = 3;
+        b.place9 = 1;
     }
 
     function _boardC() internal pure returns (Craps.Bets memory b) {
-        b.place4 = 4;
+        b.place4 = 3;
+        b.place10 = 1;
         b.hard8 = 3;
     }
 
     /// @dev A blank ticket: names nothing, so the dice place all ten.
     function _blank() internal pure returns (Craps.Bets memory b) {}
 
-    /// @dev `n` chips spread within the four-a-leg cap, for fixtures that care about the COUNT and
-    ///      nothing about the shape. Four legs carry fourteen, which is every count they ask for.
+    /// @dev `n` chips spread within the three-a-leg cap, for fixtures that care about the COUNT and
+    ///      nothing about the shape. Five legs carry fifteen, which is every count they ask for.
     function _spread(uint24 n) internal pure returns (Craps.Bets memory b) {
-        uint24[4] memory legs;
-        for (uint256 i = 0; i < 4 && n > 0; ++i) {
-            legs[i] = n > 4 ? 4 : n;
+        uint24[5] memory legs;
+        for (uint256 i = 0; i < 5 && n > 0; ++i) {
+            legs[i] = n > 3 ? 3 : n;
             n -= legs[i];
         }
-        (b.passLine, b.place6, b.place8, b.place9) = (legs[0], legs[1], legs[2], legs[3]);
+        (b.passLine, b.place6, b.place8, b.place9, b.place10) =
+            (legs[0], legs[1], legs[2], legs[3], legs[4]);
     }
 
     function _ids(uint256 a) internal pure returns (uint256[] memory out) {
@@ -385,31 +394,28 @@ contract CrapsBattleTest is CrapsPins {
         assertFalse(info.finalized, "finalized early");
     }
 
-    /// @dev There are two ways to put a round down and they are the SAME race: place seven chips
-    ///      and the dice place three, or place none and the dice place all ten. The match key is
-    ///      built on the round PLAYED, not on the slice of it the entrant chose to name, so the
-    ///      chips left to the dice are composition rather than a term.
-    function test_placingSevenOrNoneIsTheSameBattle() public {
+    /// @dev CUSTOMS ACCEPT THE WHOLE CONTINUUM TOO. Every placed count from zero through seven
+    ///      grows into the same ten-chip round, shares one field, and receives no private terms.
+    function test_everyPlacedCountSharesOneCustomBattleAndScattersToTen() public {
         uint64 slot = _slotFor(LW * 2, LW * 10, SU);
-        uint256 a = _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU);
-        // A BLANK ticket names nothing, so the dice place all ten. Same slot, same terms, so it
-        // is the same race — the count a ticket defers is a per-entrant choice, not a term.
-        uint256 b = _placeBattle(bob, _blank(), LW * 2, LW * 10, SU);
+        uint256[8] memory ids;
+        bytes32 key;
+        for (uint24 placed = 0; placed <= 7; ++placed) {
+            address who = makeAddr(string(abi.encodePacked("custom-shape", placed)));
+            ids[placed] = _placeBattle(who, _spread(placed), LW * 2, LW * 10, SU);
+            if (placed == 0) key = craps.battleKeyOf(ids[placed]);
+            else assertEq(craps.battleKeyOf(ids[placed]), key, "a placed count split the custom field");
+        }
+        assertEq(craps.battleOf(key).entrants, 8, "the custom field did not gather every shape");
 
-        bytes32 key = craps.battleKeyOf(a);
-        assertEq(craps.battleKeyOf(b), key, "a blank ticket split the battle");
-        assertEq(craps.battleOf(key).entrants, 2, "the field did not gather");
-        assertEq(craps.betOf(a).chips, BOARD_A_PACKED, "the seven were not named");
-        assertEq(craps.betOf(b).chips, 0, "a blank ticket named something");
-
-        // Both put the SAME round down, whatever they posted.
         _closeOn(craps, slot, 4, uint256(keccak256("chips")));
         uint256 round = uint256(C) * 10 * 1 ether;
-        assertEq(craps.stakeFor(craps.drawnBoardOf(a)), round, "the seven-and-three round moved");
-        assertEq(craps.stakeFor(craps.drawnBoardOf(b)), round, "the all-thrown round moved");
+        for (uint256 placed = 0; placed <= 7; ++placed) {
+            assertEq(craps.stakeFor(craps.drawnBoardOf(ids[placed])), round, "a custom board missed ten chips");
+        }
 
         craps.resolveSlot(slot, WHOLE_FIELD);
-        assertTrue(craps.battleOf(key).finalized, "the mixed field did not finalize");
+        assertTrue(craps.battleOf(key).finalized, "the eight-shape custom field did not finalize");
     }
 
     /// @dev Perturb every term of the match key — bankroll, goal, round, battle stake, and slot —
@@ -838,17 +844,18 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.stakeFor(drawn), uint256(L) * 1 ether, "the drawn board is not the whole round");
     }
 
-    /// @dev SEVEN chips on the dark side — the maximum a count can hold, in the TOP three bits of
-    ///      the chip region, sitting directly under the standing. A chip word written one bit out,
-    ///      or a mask still sized for nine legs, corrupts the standing, the multiple or the
-    ///      day-entry field; this pins all three against a full tenth count at once.
-    function test_aFullDontPassCountDoesNotCorruptItsNeighbours() public {
+    /// @dev The maximum three chips on the dark side sit in the TOP three bits of the chip region,
+    ///      directly under the standing. A chip word written one bit out, or a mask still sized
+    ///      for nine legs, corrupts the standing, the multiple or the day-entry field; this pins
+    ///      all three against a full legal tenth count at once.
+    function test_aMaxDontPassCountDoesNotCorruptItsNeighbours() public {
         // A HIGH lane at nine, so the multiple byte and the high-roller flag above the day field
         // are both non-zero and every neighbour of the chip region is under load at once.
         uint64 slot = _openHigh(craps, uint32(LW / 1 ether), 2, 10, SU, 9);
         Craps.Bets memory c;
-        c.dontPass = 4;
+        c.dontPass = 3;
         c.place6 = 3;
+        c.place8 = 1;
 
         uint16 standing = 4321;
         game.setScore(alice, standing);
@@ -856,7 +863,11 @@ contract CrapsBattleTest is CrapsPins {
         uint256 betId = craps.enterBattle(slot, c, 9); // a multiple, so its byte is non-zero too
 
         CrapsBattle.Bet memory bet = craps.betOf(betId);
-        assertEq(bet.chips, (uint256(4) << 27) | (uint256(3) << 9), "the dark count did not land in its own field");
+        assertEq(
+            bet.chips,
+            (uint256(3) << 27) | (uint256(3) << 9) | (uint256(1) << 12),
+            "the dark count did not land in its own field"
+        );
         assertEq(bet.standing, standing, "a full dark count corrupted the standing");
         assertEq(bet.player, alice, "a full dark count corrupted the owner");
         // The multiple is what the money is scaled by, so a corrupt byte shows up as a mispriced
@@ -870,10 +881,15 @@ contract CrapsBattleTest is CrapsPins {
         // into it would lock this slip to a day it never joined.
         vm.prank(alice);
         Craps.Bets memory re;
-        re.place6 = 4;
+        re.place6 = 3;
         re.place8 = 3;
+        re.place9 = 1;
         craps.amendSlip(betId, re);
-        assertEq(craps.betOf(betId).chips, (uint256(4) << 9) | (uint256(3) << 12), "the amendment did not clear the dark count");
+        assertEq(
+            craps.betOf(betId).chips,
+            (uint256(3) << 9) | (uint256(3) << 12) | (uint256(1) << 15),
+            "the amendment did not clear the dark count"
+        );
         assertEq(craps.betOf(betId).standing, standing, "the amendment corrupted the standing");
     }
 
@@ -883,25 +899,28 @@ contract CrapsBattleTest is CrapsPins {
     function test_anAmendmentRewritesAllTenCounts() public {
         uint64 slot = _slotFor(LW * 2, LW * 10, SU);
         Craps.Bets memory dark;
-        dark.dontPass = 4;
+        dark.dontPass = 3;
         dark.place6 = 3;
+        dark.place8 = 1;
         game.setScore(alice, craps.SYBIL_SCORE_FLOOR());
         vm.prank(alice);
         uint256 betId = craps.enterBattle(slot, dark, 1);
-        assertEq(craps.betOf(betId).chips, (uint256(4) << 27) | (uint256(3) << 9), "the dark ticket did not store");
+        uint256 darkPacked = (uint256(3) << 27) | (uint256(3) << 9) | (uint256(1) << 12);
+        assertEq(craps.betOf(betId).chips, darkPacked, "the dark ticket did not store");
 
         // Dark -> light: the tenth count must be CLEARED, not merely joined.
         Craps.Bets memory light;
-        light.passLine = 4;
+        light.passLine = 3;
         light.place8 = 3;
+        light.place9 = 1;
         vm.prank(alice);
         craps.amendSlip(betId, light);
-        assertEq(craps.betOf(betId).chips, 4 | (uint256(3) << 12), "the amendment left the old dark count behind");
+        assertEq(craps.betOf(betId).chips, SEVEN_PACKED, "the amendment left the old dark count behind");
 
         // Light -> dark again, to prove the clear works the other way too.
         vm.prank(alice);
         craps.amendSlip(betId, dark);
-        assertEq(craps.betOf(betId).chips, (uint256(4) << 27) | (uint256(3) << 9), "the amendment left the old light count behind");
+        assertEq(craps.betOf(betId).chips, darkPacked, "the amendment left the old light count behind");
         assertEq(craps.betOf(betId).standing, craps.SYBIL_SCORE_FLOOR(), "an amendment moved the standing");
         assertEq(craps.betOf(betId).slot, slot, "an amendment moved the seat");
         slot; // silence
@@ -932,8 +951,9 @@ contract CrapsBattleTest is CrapsPins {
     function test_aTicketMayNotPlayBothSidesOfTheLine() public {
         uint64 slot = _slotFor(LW * 2, LW * 10, SU);
         Craps.Bets memory both;
-        both.passLine = 4;
+        both.passLine = 3;
         both.dontPass = 3;
+        both.place6 = 1;
         game.setScore(alice, craps.SYBIL_SCORE_FLOOR());
 
         vm.prank(alice);
@@ -953,11 +973,16 @@ contract CrapsBattleTest is CrapsPins {
 
         // Either side ALONE is fine — the rule is about naming both, not about the dark leg.
         Craps.Bets memory darkOnly;
-        darkOnly.dontPass = 4;
+        darkOnly.dontPass = 3;
         darkOnly.place6 = 3;
+        darkOnly.place8 = 1;
         vm.prank(bob);
         craps.amendSlip(betId, darkOnly);
-        assertEq(craps.betOf(betId).chips, (uint256(4) << 27) | (uint256(3) << 9), "a dark-only board was refused");
+        assertEq(
+            craps.betOf(betId).chips,
+            (uint256(3) << 27) | (uint256(3) << 9) | (uint256(1) << 12),
+            "a dark-only board was refused"
+        );
     }
 
     /// @dev The DICE reach all ten legs, and never place more or fewer than ten chips. Swept over
@@ -1000,8 +1025,8 @@ contract CrapsBattleTest is CrapsPins {
     // Amendment
     // ---------------------------------------------------------------------------------------
 
-    /// @dev Until the slot closes, only the board's COMPOSITION is an open order: the same seven
-    ///      chips re-spread across the legs, no money moving, and every other term of the slip —
+    /// @dev Until the slot closes, only the board's COMPOSITION is an open order: zero through
+    ///      seven chips may be placed across the legs, no money moving, and every other term —
     ///      all of them the slot's — untouched.
     function test_amendReshapesTheChipsOnly() public {
         uint64 slot = _slotFor(LW * 2, LW * 10, SU);
@@ -1012,26 +1037,33 @@ contract CrapsBattleTest is CrapsPins {
         craps.amendSlip(betId, _boardB());
 
         CrapsBattle.Bet memory bet = craps.betOf(betId);
-        assertEq(bet.chips, (uint256(4) << 9) | (uint256(3) << 12), "chips not re-spread onto place6");
+        assertEq(
+            bet.chips,
+            (uint256(3) << 9) | (uint256(3) << 12) | (uint256(1) << 15),
+            "chips not re-spread onto place6"
+        );
         assertEq(bet.slot, slot, "the slip changed battle");
         assertEq(flip.burned(alice), burnedBefore, "an amendment burned FLIP");
         assertEq(flip.minted(alice), 0, "an amendment minted FLIP");
 
-        // SEVEN CHIPS OR NONE: a stack of any other size is refused, so the round played, the
-        // money and the seat are all exactly what they were.
+        // Every count in the continuum may replace the last one without moving money or terms.
+        for (uint24 placed = 0; placed <= 7; ++placed) {
+            vm.prank(alice);
+            craps.amendSlip(betId, _spread(placed));
+            assertEq(craps.placedCountOf(betId), placed, "an amendment stored the wrong count");
+        }
+
+        // Eight is the first count outside the continuum.
         Craps.Bets memory wider = _boardB();
         wider.passLine = 1;
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.BadRandomCount.selector);
         craps.amendSlip(betId, wider);
 
-        // BUT A PICKED BOARD MAY BE HANDED BACK TO THE DICE. Zero chips is the blank ticket, and
-        // an amendment is the same choice the entry door offered — so a seat that picked can
-        // change its mind about picking, not merely about where.
+        // The endpoints remain ordinary amendments too.
         vm.prank(alice);
         craps.amendSlip(betId, uint32(0));
         assertEq(craps.betOf(betId).chips, 0, "the slip did not become a blank ticket");
-        // And back again, which was always allowed.
         vm.prank(alice);
         craps.amendSlip(betId, _boardA());
         assertGt(craps.betOf(betId).chips, 0, "a blank ticket could not pick a board again");
@@ -1241,9 +1273,9 @@ contract CrapsBattleTest is CrapsPins {
         assertTrue(lone & (uint256(1) << 113) == 0, "single-entry published as multi");
     }
 
-    /// @dev A blank ticket is an open order too: it named nothing, so it may still name its seven
-    ///      while the slot is open. This is the door the vault steers its automatic seats through.
-    function test_aBlankTicketCanStillNameItsSeven() public {
+    /// @dev A zero-chip ticket is an open order too: it may move to any later count while the slot
+    ///      is open. This is the same door the vault uses to steer its automatic seats.
+    function test_aZeroChipTicketCanStillNameItsBoard() public {
         uint64 slot = _slotFor(LW * 2, LW * 10, SU);
         uint256 betId = _placeBattle(alice, _blank(), LW * 2, LW * 10, SU);
         assertEq(craps.betOf(betId).chips, 0, "a blank ticket named something");
@@ -1251,10 +1283,14 @@ contract CrapsBattleTest is CrapsPins {
         uint256 burnedBefore = flip.burned(alice);
         vm.prank(alice);
         craps.amendSlip(betId, _boardC());
-        assertEq(craps.betOf(betId).chips, (uint256(4) << 3) | (uint256(3) << 24), "the blank did not take a shape");
+        assertEq(
+            craps.betOf(betId).chips,
+            (uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24),
+            "the blank did not take a shape"
+        );
         assertEq(flip.burned(alice), burnedBefore, "naming a shape moved money");
 
-        // Still the same ten-chip round either way: the draw simply places three instead of ten.
+        // Still the same ten-chip round either way: the draw places the complement.
         uint256 plain = _placeBattle(bob, _boardA(), LW * 2, LW * 10, SU);
         _closeOn(craps, slot, 4, uint256(keccak256("blank-named")));
         assertEq(
@@ -1284,46 +1320,54 @@ contract CrapsBattleTest is CrapsPins {
         assertTrue(craps.battleOf(_slotKeyOf(slot)).finalized, "the amended seat broke finalization");
     }
 
-    /// @dev A round is TEN chips and an entry places SEVEN of them, however it spreads those
-    ///      seven. The COUNT is the rule, not the composition, and an amendment cannot smuggle a
-    ///      ragged board into a seated battle either.
-    function test_theShapeRuleIsSevenChipsOrNone() public {
+    /// @dev A round is TEN chips and an entry may place any count from zero through seven. The
+    ///      COUNT is bounded, not binary, and an amendment is held to the same boundary.
+    function test_theShapeRuleAllowsUpToSevenChips() public {
         uint64 slot = _slotFor(LW * 2, LW * 10, SU);
 
         // Freeform across the legs: composition is not the rule, the COUNT is.
         Craps.Bets memory freeform;
-        freeform.place6 = 4;
+        freeform.place6 = 3;
+        freeform.place8 = 1;
         freeform.hard8 = 3;
         vm.prank(alice);
         craps.enterBattle(slot, freeform, 1);
 
-        // Six chips is not a stack, and neither is eight. This is the hole the slot model closed:
-        // a wrong count used to derive a round of its own and key a PRIVATE battle at this slot —
-        // a field of one, with the bounty stranded in it.
+        // Six is an ordinary choice and remains in the same field: the dice supply four.
         Craps.Bets memory six;
-        six.place6 = 4;
-        six.place8 = 2;
+        six.place6 = 3;
+        six.place8 = 3;
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
-        craps.enterBattle(slot, six, 1);
+        uint256 sixId = craps.enterBattle(slot, six, 1);
+        assertEq(craps.placedCountOf(sixId), 6, "the six-chip ticket stored another count");
 
+        // Eight is the first count that can change the fixed ten-chip round, so it is refused.
         Craps.Bets memory eight;
-        eight.place4 = 4;
-        eight.hard8 = 4;
+        eight.place4 = 3;
+        eight.place8 = 2;
+        eight.hard8 = 3;
         vm.prank(bob);
         vm.expectRevert(CrapsBattle.BadRandomCount.selector);
         craps.enterBattle(slot, eight, 1);
 
-        // An amendment cannot smuggle a wrong count into a seated battle either.
+        // Amendments accept the same continuum and reject the same first out-of-range count.
         uint256 betId = _placeBattle(carol, _boardA(), LW * 2, LW * 10, SU);
         vm.prank(carol);
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
         craps.amendSlip(betId, six);
+        assertEq(craps.placedCountOf(betId), 6, "the six-chip amendment was not stored");
 
-        // A seven-chip re-spread of the same stack is fine, and lands on the legs it named.
+        vm.prank(carol);
+        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        craps.amendSlip(betId, eight);
+
+        // Seven remains the inclusive upper boundary and lands on the legs it named.
         vm.prank(carol);
         craps.amendSlip(betId, _boardC());
-        assertEq(craps.betOf(betId).chips, (uint256(4) << 3) | (uint256(3) << 24), "legal reshape refused");
+        assertEq(
+            craps.betOf(betId).chips,
+            (uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24),
+            "legal reshape refused"
+        );
     }
 
     /// @dev A window puts up a FLAT seventh of its day's budget — the same figure whether three
@@ -1982,12 +2026,13 @@ contract CrapsBattleTest is CrapsPins {
         return (craps._daySlotOfPub(day) << 64) | 1;
     }
 
-    /// @dev A chip ALLOCATION: seven chips, spread within the four-a-leg cap. A window's door
+    /// @dev A chip ALLOCATION: seven chips, spread within the three-a-leg cap. A window's door
     ///      takes chips by COUNT and scales them to its own chip, which is what makes one
     ///      allocation a legal entry at every window of the day however differently they are sized.
     function _seven() internal pure returns (Craps.Bets memory c) {
-        c.passLine = 4;
+        c.passLine = 3;
         c.place8 = 3;
+        c.place9 = 1;
     }
 
     /// @dev Take a seat in `period`, standing clear of the sybil floor. A bonus window bars
@@ -2900,34 +2945,37 @@ contract CrapsBattleTest is CrapsPins {
         }
     }
 
-    /// @dev FOUR CHIPS A LEG, at every door that names a board. A round is seven chips over ten
-    ///      legs, so without the cap a whole ticket could ride ONE number — a different game from
-    ///      the spread the round is priced as. The consequence is deliberate: a single-leg board is
-    ///      now impossible, because seven will not fit anywhere.
+    /// @dev THREE CHIPS A LEG, at every door that names a board. Even though a ticket may place as
+    ///      few as zero chips, the cap prevents its selectable share from concentrating more than
+    ///      three on one number.
     ///
-    ///      The DICE are not capped, and are not meant to be: the three they place on a picked
-    ///      ticket, or all ten on a blank one, may land wherever they land. The rule is about what
-    ///      a ticket CHOOSES, and the dice choose nothing.
-    function test_fourChipsIsTheCapOnEveryNamedLeg() public {
+    ///      The DICE are not capped, and are not meant to be: whatever complement they place may
+    ///      land wherever it lands. The rule is about what a ticket CHOOSES.
+    function test_threeChipsIsTheCapOnEveryNamedLeg() public {
         _openDay();
         game.setScore(alice, BON_SCORE);
 
         Craps.Bets memory over;
-        over.place6 = 5;
-        over.place8 = 2;
+        over.place6 = 4;
+        over.place8 = 3;
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
         craps.enterBonusBattle(PER, over, 1);
 
-        // Four is the boundary, and it seats.
+        // Three is the boundary, and a seven-chip board seats across three legs.
         Craps.Bets memory atCap;
-        atCap.place6 = 4;
+        atCap.passLine = 1;
+        atCap.place6 = 3;
         atCap.place8 = 3;
         vm.prank(alice);
         uint256 betId = craps.enterBonusBattle(PER, atCap, 1);
-        assertEq(craps.betOf(betId).chips, (uint256(4) << 9) | (uint256(3) << 12), "the capped board did not seat");
+        assertEq(
+            craps.betOf(betId).chips,
+            1 | (uint256(3) << 9) | (uint256(3) << 12),
+            "the capped board did not seat"
+        );
 
-        // And an amendment cannot smuggle a fifth chip onto a leg afterwards.
+        // And an amendment cannot smuggle a fourth chip onto a leg afterwards.
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
         craps.amendSlip(betId, over);
@@ -2938,8 +2986,8 @@ contract CrapsBattleTest is CrapsPins {
     ///      dice place all ten of its chips. The HOUSE keeps the blank either way — it has nobody
     ///      to choose for it, and naming nothing is the one shape that cannot be read in advance.
     function test_theVaultPlaysTheBoardItsOwnerNamed() public {
-        // Four chips on place 4, three on hard 8 — seven, in the packed layout the events carry.
-        uint32 board = uint32((uint256(4) << 3) | (uint256(3) << 24));
+        // Three each on place 4 and hard 8, plus one on place 10 — seven in packed layout.
+        uint32 board = uint32((uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24));
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.NotVaultOwner.selector);
@@ -2960,7 +3008,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      the vault has not been seated at yet and no day it already has. A seat already taken
     ///      moves with `amendSlip` or not at all.
     function test_theVaultsBoardIsChangeableAndRestorable() public {
-        uint32 board = uint32((uint256(4) << 3) | (uint256(3) << 24));
+        uint32 board = uint32((uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24));
         vm.prank(vaultOwner);
         craps.setVaultBoard(board);
         _openDay();
@@ -3035,20 +3083,28 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(banked, 1, "standing down spent the banked pass");
     }
 
-    /// @dev SEVEN CHIPS OR NONE, and never both sides — the same rule both paid doors enforce, so
-    ///      the vault can never hold a shape a player could not.
-    function test_theVaultsBoardIsSevenChipsOrNone() public {
+    /// @dev ZERO THROUGH SEVEN CHIPS, and never both sides — the same rule both paid doors enforce,
+    ///      so the vault can never hold a shape a player could not.
+    function test_theVaultsBoardAllowsUpToSevenChips() public {
         vm.startPrank(vaultOwner);
-        // Six chips, spread so the COUNT is what is refused rather than the per-leg cap.
+        for (uint24 placed = 0; placed <= 7; ++placed) {
+            uint256 first = placed > 3 ? 3 : placed;
+            uint256 rest = placed - first;
+            uint256 second = rest > 3 ? 3 : rest;
+            uint32 packed = uint32(first | (second << 9) | ((rest - second) << 12));
+            craps.setVaultBoard(packed);
+        }
+
+        // Eight is the first board-wide count outside the continuum.
         vm.expectRevert(CrapsBattle.BadRandomCount.selector);
-        craps.setVaultBoard(uint32(4 | (uint256(2) << 9)));
+        craps.setVaultBoard(uint32(3 | (uint256(3) << 9) | (uint256(2) << 12)));
 
         // And the cap itself, on a board that would otherwise be a legal seven.
         vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
-        craps.setVaultBoard(uint32((uint256(5) << 9) | (uint256(2) << 12)));
+        craps.setVaultBoard(uint32((uint256(4) << 9) | (uint256(3) << 12)));
 
         vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
-        craps.setVaultBoard(uint32(uint256(4) | (uint256(3) << 27)));
+        craps.setVaultBoard(uint32(uint256(3) | (uint256(1) << 9) | (uint256(3) << 27)));
 
         craps.setVaultBoard(uint32(SEVEN_PACKED));
         craps.setVaultBoard(0);
@@ -3156,57 +3212,37 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.betOf(betId).standing, 0, "the slip recorded a standing it does not hold");
     }
 
-    /// @dev A tournament hands you seven chips and lets you put them where you like. The door
-    ///      takes them by COUNT and the window scales them to its own chip, so splitting a chip
-    ///      is not something an entry can even express — and the only thing left to police is the
-    ///      count itself.
-    function test_aWindowTakesSevenChipsHoweverYouSpreadThem() public {
+    /// @dev A scheduled window accepts every placed count from zero through seven, rejects eight,
+    ///      and scatters each accepted board to the same ten-chip round.
+    function test_aWindowTakesEveryPlacedCountFromZeroThroughSeven() public {
         _openDay();
         bytes32 key = _keyOf(PER);
         uint256 chip = (BON_STACK / 1 ether) / 7;
         assertGt(chip, 0, "the stack did not divide into whole chips");
 
-        // Three on the line, two on a place, one on a hardway, one more elsewhere.
-        Craps.Bets memory spread;
-        spread.passLine = 3;
-        spread.place6 = 2;
-        spread.hard8 = 1;
-        spread.place9 = 1;
-        game.setScore(alice, BON_SCORE);
-        vm.prank(alice);
-        uint256 a = craps.enterBonusBattle(PER, spread, 1);
-        assertEq(craps.battleKeyOf(a), key, "a legal spread did not seat");
-        // The ticket stores COUNTS; the window scales them to its own chip at settlement.
-        assertEq(craps.betOf(a).chips & 7, 3, "the ticket did not name three on the line");
-        assertEq((craps.betOf(a).chips >> 24) & 7, 1, "the ticket did not name one on the hard eight");
+        uint256[8] memory ids;
+        for (uint24 placed = 0; placed <= 7; ++placed) {
+            address who = makeAddr(string(abi.encodePacked("scheduled-shape", placed)));
+            vm.prank(who);
+            ids[placed] = craps.enterBonusBattle(PER, _spread(placed), 1);
+            assertEq(craps.battleKeyOf(ids[placed]), key, "an accepted count split the field");
+            assertEq(craps.placedCountOf(ids[placed]), placed, "the ticket stored the wrong count");
+        }
 
-        // All seven on ONE leg is refused: four a leg is the table's cap, so a stack must spread.
-        Craps.Bets memory piled;
-        piled.place4 = 7;
-        game.setScore(bob, BON_SCORE);
-        vm.prank(bob);
-        vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
-        craps.enterBonusBattle(PER, piled, 1);
-
-        // Spread to the cap it seats, and keys the same race — composition is still not a term.
-        Craps.Bets memory capped;
-        capped.place4 = 4;
-        capped.place10 = 3;
-        vm.prank(bob);
-        assertEq(craps.battleKeyOf(craps.enterBonusBattle(PER, capped, 1)), key, "a capped spread landed elsewhere");
-
-        // Any other count is not this window's stack. Whether the chip rule refuses it outright
-        // or it simply keys as a different race depends on the window's chip; either way it is
-        // not the race the house is backing.
-        game.setScore(carol, BON_SCORE);
-        for (uint24 n = 1; n <= 14; ++n) {
-            if (n == 7) continue;
-            Craps.Bets memory off = _spread(n);
-            vm.prank(carol);
-            // Seven or none. Every other count is REFUSED outright — it used to derive a round
-            // of its own and key a private battle at this slot, with the bounty stranded in it.
+        // Eight through fourteen remain well-spread, so the board-wide count is what rejects them.
+        for (uint24 placed = 8; placed <= 14; ++placed) {
+            address who = makeAddr(string(abi.encodePacked("scheduled-over", placed)));
+            vm.prank(who);
             vm.expectRevert(CrapsBattle.BadRandomCount.selector);
-            craps.enterBonusBattle(PER, off, 1);
+            craps.enterBonusBattle(PER, _spread(placed), 1);
+        }
+
+        _warpPastClose(PER);
+        uint48 index = _armAt(PER);
+        _setWord(index, uint256(keccak256("placed-counts")));
+        uint256 played = BON_STACK / 7 * 10;
+        for (uint256 placed = 0; placed <= 7; ++placed) {
+            assertEq(craps.stakeFor(craps.drawnBoardOf(ids[placed])), played, "a board did not grow to ten chips");
         }
     }
 
@@ -3226,7 +3262,7 @@ contract CrapsBattleTest is CrapsPins {
         // Chips-all-zero IS the blank ticket: the mode needs no field of its own.
         assertEq(craps.betOf(a).chips, 0, "a blank ticket named something");
 
-        // A picked ticket posts only its seven, and races the blank one in the SAME battle.
+        // A seven-chip ticket posts only its selection and races the zero-chip one in the SAME battle.
         uint256 b = _enter(bob, PER);
         assertEq(craps.betOf(b).chips, SEVEN_PACKED, "a picked ticket named the wrong count");
         assertEq(craps.battleKeyOf(a), key, "a blank ticket landed in another battle");
@@ -3252,13 +3288,10 @@ contract CrapsBattleTest is CrapsPins {
 
     /// @dev The tournament's shape, held to its definition so it cannot drift: a single table
     ///      bet; ten chips of it are the BASE a round puts down and seven of them are what an
-    ///      entrant posts; the bankroll runs FIVE of those bases deep; and the target is 5x or
-    ///      20x that bankroll. Swept over every window of many days, so this pins the format
+    ///      entrant posts; the bankroll runs FIVE of those bases deep; and the target is 5x that
+    ///      bankroll. Swept over every window of many days, so this pins the format
     ///      itself rather than one draw of it.
-    function test_tournamentFormatIsChipsBaseFiveDeepOnTwoTargets() public {
-        bool sawNearTarget;
-        bool sawFarTarget;
-
+    function test_tournamentFormatIsChipsBaseFiveDeepAtFiveX() public {
         for (uint24 d = 1; d <= 120; ++d) {
             _setDailyWord(d, uint256(keccak256(abi.encode("format", d))));
             for (uint256 p = 0; p < craps.BONUS_PERIODS_PER_DAY(); ++p) {
@@ -3275,18 +3308,12 @@ contract CrapsBattleTest is CrapsPins {
                 assertEq(bankFlip % baseFlip, 0, "the bankroll is not a whole number of bases");
                 assertEq(bankFlip / baseFlip, craps.SCHED_BANK_MULT(), "a scheduled bankroll is not five deep");
 
-                // The target is a whole multiple of the bankroll, and one of the two offered.
+                // The target is the one scheduled multiple of the bankroll.
                 assertEq(uint256(goal) % uint256(bank), 0, "the target is not a multiple of the bankroll");
                 uint256 mult = uint256(goal) / uint256(bank);
-                assertTrue(mult == craps.SCHED_GOAL_LOW() || mult == craps.SCHED_GOAL_HIGH(), "an unoffered target");
-                if (mult == craps.SCHED_GOAL_LOW()) sawNearTarget = true;
-                if (mult == craps.SCHED_GOAL_HIGH()) sawFarTarget = true;
+                assertEq(mult, craps.SCHED_GOAL(), "a scheduled target is not 5x");
             }
         }
-
-        // Both ends of the one remaining draw actually turn up, so it is not a constant in
-        // disguise — the depth deliberately is one.
-        assertTrue(sawNearTarget && sawFarTarget, "the target never varied across its range");
     }
 
     /// @dev The three chips nobody picks are drawn at settlement off the table's own word, keyed

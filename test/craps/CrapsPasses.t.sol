@@ -49,8 +49,9 @@ contract CrapsPassesTest is CrapsPins {
     }
 
     function _seven() internal pure returns (Craps.Bets memory c) {
-        c.passLine = 4;
+        c.passLine = 3;
         c.place8 = 3;
+        c.place9 = 1;
     }
 
     // ── Delivery ────────────────────────────────────────────────────────────
@@ -182,9 +183,9 @@ contract CrapsPassesTest is CrapsPins {
     /// @dev Restated for `expectEmit`; matched by topics and data, not by declaring contract.
     event CrapsSlipPlaced(address indexed player, uint256 bet);
 
-    /// @dev A seven-chip allocation in the packed shape the doors take: 4 on the pass line, 3 on
-    ///      place 8 — `_seven()` as the doors see it.
-    uint32 internal constant PACKED_SEVEN = 4 | (3 << 12);
+    /// @dev A seven-chip allocation in the packed shape the doors take: 3 on the pass line, 3 on
+    ///      place 8 and 1 on place 9 — `_seven()` as the doors see it.
+    uint32 internal constant PACKED_SEVEN = 3 | (3 << 12) | (1 << 15);
 
     /// @dev A reservation may name its board up front, and ONE slip then serves every day of the
     ///      run: each reserved day's ticket stores the same chips, and each day's own
@@ -221,35 +222,52 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(craps.betOf(betId).chips, PACKED_SEVEN, "the bought day did not store the named board");
     }
 
-    /// @dev A named board is held to the very rules the live doors enforce: seven chips or none,
-    ///      four to a leg, one side of the line — vetted before anything burns or debits.
-    function test_aReservedBoardMustBeSevenLegalChips() public {
+    /// @dev A named board is held to the very rules the live doors enforce: zero through seven
+    ///      chips, three to a leg, one side of the line — vetted before anything burns or debits.
+    function test_aReservedBoardAllowsUpToSevenLegalChips() public {
         vm.prank(ContractAddresses.GAME);
         craps.creditPasses(alice, 4, 0);
         uint24 start = _today() + 2;
 
-        // Three chips are neither blank nor a full pick.
+        // An intermediate count is an ordinary reservation, through both the credit and paid doors.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
         craps.applyCrapsPasses(start, 1, false, 3);
+        uint256 passId = ((uint256(start) * craps.BONUS_SLOTS_PER_DAY()) << 64)
+            | craps.daySeatNumberOf(start, alice);
+        assertEq(craps.betOf(passId).chips, 3, "the credited reservation lost its three-chip board");
 
-        // Five on one leg breaks the per-leg cap even inside seven total.
+        // Four on one leg breaks the per-leg cap even inside the seven-chip total ceiling.
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
-        craps.applyCrapsPasses(start, 1, false, uint32(5 << 3) | 2);
+        craps.applyCrapsPasses(start + 1, 1, false, uint32(4 << 3) | 3);
 
         // Backing the shooter and fading them at once is refused at this door like every other.
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
-        craps.applyCrapsPasses(start, 1, false, uint32(4 | (3 << 27)));
+        craps.applyCrapsPasses(start + 1, 1, false, uint32(3 | (1 << 9) | (3 << 27)));
+
+        // Eight is the first board-wide count the shared validator rejects.
+        uint32 eight = uint32(3 | (3 << 9) | (2 << 12));
+        vm.prank(alice);
+        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        craps.applyCrapsPasses(start + 1, 1, false, eight);
 
         (uint256 n,) = craps.passCreditsOf(alice);
-        assertEq(n, 4, "a refused board still spent a credit");
+        assertEq(n, 3, "a refused board still spent another credit");
+
+        uint256 burnedBefore = flip.burned(alice);
+        vm.prank(alice);
+        craps.buyFutureCrapsDays(start + 1, 1, false, 3);
+        uint256 paidId = ((uint256(start + 1) * craps.BONUS_SLOTS_PER_DAY()) << 64)
+            | craps.daySeatNumberOf(start + 1, alice);
+        assertEq(craps.betOf(paidId).chips, 3, "the bought reservation lost its three-chip board");
+        uint256 burnedAfter = flip.burned(alice);
+        assertGt(burnedAfter, burnedBefore, "the legal bought reservation paid nothing");
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattle.BadRandomCount.selector);
-        craps.buyFutureCrapsDays(start, 1, false, 3);
-        assertEq(flip.burned(alice), 0, "a refused board still burned the fixed price");
+        craps.buyFutureCrapsDays(start + 2, 1, false, eight);
+        assertEq(flip.burned(alice), burnedAfter, "a refused board still burned the fixed price");
     }
 
     /// @dev The one slip serves the run, but each DAY is still its own ticket: re-spreading one

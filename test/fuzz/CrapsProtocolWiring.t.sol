@@ -114,9 +114,10 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     ///      is written directly only to stand in for the already-covered VRF lifecycle.
     function test_realProtocolPlaceRevealAndSettleFlow() public {
         Craps.Bets memory board;
-        // Seven selected chips, spread within the four-a-leg cap; the dice place the other three.
-        board.passLine = 4;
+        // Seven selected chips, spread within the three-a-leg cap; the dice place the other three.
+        board.passLine = 3;
         board.place8 = 3;
+        board.place9 = 1;
         // Ten rounds deep. A bankroll of exactly one round is a walk absorbed at zero, which
         // never pays; ten gives the escalator room to leave a remainder the table has to settle.
         uint128 bankroll = 6000 ether;
@@ -174,7 +175,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
             600, 1, uint16(crapsBattle.MIN_BATTLE_GOAL_MULT()), 0, 0, uint40(block.timestamp + 1), false, 0
         );
 
-        uint32 board = uint32(4 | (3 << 12));
+        uint32 board = uint32(3 | (3 << 12) | (1 << 15));
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame(address(vault), 600 ether);
         vm.prank(ContractAddresses.CREATOR);
@@ -184,7 +185,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertEq(bet.player, address(vault), "the proxy seated its owner instead of the vault");
         assertEq(bet.chips, board, "the packed board changed across the vault call");
 
-        uint32 amended = uint32((4 << 9) | (3 << 24));
+        uint32 amended = uint32((3 << 9) | (1 << 18) | (3 << 24));
         vm.prank(ContractAddresses.CREATOR);
         vault.crapsAmendSlip(betId, amended);
 
@@ -225,8 +226,9 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame(PLAYER, uint256(bankroll) * 4);
         Craps.Bets memory board;
-        board.passLine = 4;
+        board.passLine = 3;
         board.place8 = 3;
+        board.place9 = 1;
         vm.prank(PLAYER);
         crapsBattle.enterBonusBattle(1, board, 1);
 
@@ -303,8 +305,9 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // A field deeper than one batch, so the BUDGET is what stops the walk and not the field.
         (uint128 bankroll,,,,,) = crapsBattle.bonusTermsFor(today, 1);
         Craps.Bets memory board;
-        board.passLine = 4;
+        board.passLine = 3;
         board.place8 = 3;
+        board.place9 = 1;
         uint256 seated = 100;
         for (uint256 i = 0; i < seated; ++i) {
             address who = address(uint160(uint256(keccak256(abi.encode("bigfield", i)))));

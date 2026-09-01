@@ -80,8 +80,9 @@ contract CrapsHighRollerTest is CrapsPins {
     }
 
     function _boardA() internal pure returns (Craps.Bets memory b) {
-        b.passLine = 4;
+        b.passLine = 3;
         b.place6 = 3;
+        b.place8 = 1;
     }
 
     /// @dev To the top of a protocol day, where period zero is live.
@@ -261,7 +262,10 @@ contract CrapsHighRollerTest is CrapsPins {
         _warpToDayStart();
         uint24 today = craps.currentDayIndex();
         uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
-        for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(today - uint24(i), 7_100_000 ether);
+        // Fixed-5x windows put less of this tier's daily allocation into period one than the old
+        // mixed-goal schedule did. Keep the fixture comfortably above `_roundBoost`'s threshold
+        // so it continues to test rounding rather than merely granule widening.
+        for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(today - uint24(i), 30_000_000 ether);
         _setDailyWord(today, _wordFor(10));
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
@@ -683,8 +687,9 @@ contract CrapsHighRollerGasTest is CrapsPins {
     }
 
     function _board() internal pure returns (Craps.Bets memory b) {
-        b.passLine = 4;
+        b.passLine = 3;
         b.place6 = 3;
+        b.place8 = 1;
     }
 
     /// @dev One entry, measured. `h` is the field's lane multiple, `m` what this seat names.

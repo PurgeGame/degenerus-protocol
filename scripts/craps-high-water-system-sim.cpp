@@ -76,28 +76,18 @@ constexpr int kProgEventDoublings = 2;
 inline i64 poolShare(i64 pool, i64 bps) {
     return (pool / kBpsDenominator) * bps + ((pool % kBpsDenominator) * bps) / kBpsDenominator;
 }
-// THE ROLL CUTOFFS, indexed `depthIndex * 3 + goalIndex` with depth in (2, 5, 10) and target in
-// (5x, 10x, 50x). Cumulative dice rolls, inclusive, and the WINNING ticket's own.
+// Historical roll cutoffs, retained only for comparing the old roll-count classifier against the
+// high-water classifier. Live scheduled play uses depth 5 and the first (5x) column only.
 constexpr int kProgCommon[9] = {150, 205, 340, 215, 275, 405, 265, 325, 455};
 constexpr int kProgRare[9] = {185, 245, 395, 260, 320, 455, 315, 375, 500};
-// Final peak/start thresholds. 10,000 bps = 1x starting bankroll. Scheduled formats only.
-constexpr i64 kGoal5CommonPeakBps = 250'000;   // 25x
-constexpr i64 kGoal5RarePeakBps = 1'200'000;   // 120x
-constexpr i64 kGoal20CommonPeakBps = 500'000;  // 50x
-constexpr i64 kGoal20RarePeakBps = 2'250'000;  // 225x
+// The one scheduled target and its final peak/start thresholds. 10,000 bps = 1x bankroll.
+constexpr int kScheduledGoalMult = 5;
+constexpr i64 kGoal5CommonPeakBps = 250'000;  // 25x
+constexpr i64 kGoal5RarePeakBps = 1'200'000;  // 120x
 
-inline i64 peakCommonBps(int goalMult) {
-    return goalMult == 5 ? kGoal5CommonPeakBps : kGoal20CommonPeakBps;
-}
-
-inline i64 peakRareBps(int goalMult) {
-    return goalMult == 5 ? kGoal5RarePeakBps : kGoal20RarePeakBps;
-}
-
-inline int progFormatIndex(int depth, int goalMult) {
+inline int progFormatIndex(int depth) {
     int d = depth == 2 ? 0 : (depth == 5 ? 1 : 2);
-    int g = goalMult == 5 ? 0 : ((goalMult == 10 || goalMult == 20) ? 1 : 2);
-    return d * 3 + g;
+    return d * 3;
 }
 // The two parts the HIGH lane's component splits into: two fifths to the main lane, three to
 // the lane that earned it.
@@ -109,7 +99,6 @@ int gEscHands = 3;
 // Scheduled settlement widens the packed multiplier from 16 to 32 bits. This keeps the
 // every-three-shooters escalator live through shooter 95; 0xFFFFFFFF is first used at hand 96.
 i64 gEscCap = 0xFFFFFFFFLL;
-int gDrawGoalFilter = 0;
 constexpr int kRollBudget = 8192;
 constexpr int kMaxRolls = 512;
 // 1,200ths keep every current payout denominator exact and also keep an integer percentage
@@ -123,79 +112,10 @@ i64 gMainBase = kDefaultMainBase;
 // only surplus above Goal may fund another full shooter. Goal fields rank by their completed-
 // shooter bankroll high-water mark, then by ending bankroll; Bust fields retain the shipped rank.
 bool gHighWaterGoal = true;
-// THE PROPOSED SHOOTER PROFIT SCHEDULE, as the defaults. A blank/random ticket carries the boost
-// on 15 shooters in a hundred and a picked one on 5; the amount is FIXED per target — there is no
-// jitter and no fractional rung, so the bps figures below are always whole hundreds.
-//
-//     ticket   eligible   goal 5x   goal 20x
-//     blank        15%       +33%        +45%
-//     picked        5%       +20%        +50%
-//
-// Every knob here stays overridable so a sweep can still explore off-schedule settings; nothing
-// but an explicit flag moves them off production.
-int gBoostedShootersPct = 0;
-int gWinningsBoostPct = 0;
-enum class WinningsBoostMode { All, RandomTickets };
-WinningsBoostMode gWinningsBoostMode = WinningsBoostMode::All;
-int gRandomBoostedShootersPct = 15;
-int gPickedBoostedShootersPct = 5;
-int gRandomGoal5ShooterPct = -1;
-int gRandomGoal10ShooterPct = -1;
-int gRandomGoal50ShooterPct = -1;
-int gPickedGoal5ShooterPct = -1;
-int gPickedGoal10ShooterPct = -1;
-int gPickedGoal50ShooterPct = -1;
-int gRandomWinningsBoostPct = -1;
-int gPickedWinningsBoostPct = -1;
-int gRandomWinningsBoostJitterPct = 0;
-int gPickedWinningsBoostJitterPct = 0;
-int gRandomGoal5WinningsBoostBps = 3'300;
-int gRandomGoal10WinningsBoostBps = 4'500;
-int gRandomGoal50WinningsBoostBps = 4'500;
-int gPickedGoal5WinningsBoostBps = 2'000;
-int gPickedGoal10WinningsBoostBps = 5'000;
-int gPickedGoal50WinningsBoostBps = 5'000;
-
-int winningsBoostFrequency(bool randomTicket) {
-    int overridePct = randomTicket ? gRandomBoostedShootersPct : gPickedBoostedShootersPct;
-    if (overridePct >= 0) return overridePct;
-    if (!randomTicket && gWinningsBoostMode == WinningsBoostMode::RandomTickets) return 0;
-    return gBoostedShootersPct;
-}
-
-int winningsBoostFrequency(bool randomTicket, int goalMult) {
-    int goalPct = -1;
-    if (goalMult == 5) {
-        goalPct = randomTicket ? gRandomGoal5ShooterPct : gPickedGoal5ShooterPct;
-    } else if (goalMult == 10 || goalMult == 20) {
-        goalPct = randomTicket ? gRandomGoal10ShooterPct : gPickedGoal10ShooterPct;
-    } else if (goalMult == 50) {
-        goalPct = randomTicket ? gRandomGoal50ShooterPct : gPickedGoal50ShooterPct;
-    }
-    return goalPct >= 0 ? goalPct : winningsBoostFrequency(randomTicket);
-}
-
-int winningsBoostAmount(bool randomTicket) {
-    int overridePct = randomTicket ? gRandomWinningsBoostPct : gPickedWinningsBoostPct;
-    return overridePct >= 0 ? overridePct : gWinningsBoostPct;
-}
-
-int winningsBoostJitter(bool randomTicket) {
-    return randomTicket ? gRandomWinningsBoostJitterPct : gPickedWinningsBoostJitterPct;
-}
-
-int winningsBoostTargetBps(bool randomTicket, int goalMult) {
-    int goalBps = -1;
-    if (goalMult == 5) {
-        goalBps = randomTicket ? gRandomGoal5WinningsBoostBps : gPickedGoal5WinningsBoostBps;
-    } else if (goalMult == 10 || goalMult == 20) {
-        goalBps = randomTicket ? gRandomGoal10WinningsBoostBps : gPickedGoal10WinningsBoostBps;
-    } else if (goalMult == 50) {
-        goalBps = randomTicket ? gRandomGoal50WinningsBoostBps : gPickedGoal50WinningsBoostBps;
-    }
-    if (goalBps >= 0) return goalBps;
-    return winningsBoostAmount(randomTicket) * 100;
-}
+// THE SCHEDULED SHOOTER-PROFIT CONTINUUM, indexed by player-placed chips. The contract stores the
+// same eight rows in one packed constant. Custom battles are outside this scheduled-only model.
+constexpr std::array<int, 8> kBoostChancePct{15, 14, 12, 11, 9, 8, 6, 5};
+constexpr std::array<int, 8> kBoostUpliftBps{3'300, 3'000, 3'000, 3'000, 3'000, 2'500, 2'500, 2'000};
 
 u64 mix64(u64 x) {
     x += 0x9e3779b97f4a7c15ULL;
@@ -223,28 +143,28 @@ enum class Strategy { Sharp4, FairSpread, Mixed, Pass, Blank, Hardways, Dark, Bo
 
 std::string_view strategyName(Strategy s) {
     switch (s) {
-        case Strategy::Sharp4: return "sharp_place4_4_place10_3";
+        case Strategy::Sharp4: return "sharp_place4_3_place5_1_place10_3";
         case Strategy::FairSpread: return "fair_spread";
         case Strategy::Mixed: return "mixed";
-        case Strategy::Pass: return "pass4_place4_3";
+        case Strategy::Pass: return "pass3_place4_3_place10_1";
         case Strategy::Blank: return "blank";
         case Strategy::Hardways: return "hardways";
-        case Strategy::Dark: return "dontpass4_place4_3";
-        case Strategy::Bounty: return "bounty_dontpass4_place5_3";
+        case Strategy::Dark: return "dontpass3_place4_3_place5_1";
+        case Strategy::Bounty: return "bounty_dontpass3_place5_3_place9_1";
         case Strategy::FairControl: return "control_10_fair_no_scatter";
     }
     return "unknown";
 }
 
 Strategy strategyFromName(std::string_view name) {
-    if (name == "sharp" || name == "sharp_place4_4_place10_3") return Strategy::Sharp4;
+    if (name == "sharp" || name == "sharp_place4_3_place5_1_place10_3") return Strategy::Sharp4;
     if (name == "fair" || name == "fair_spread") return Strategy::FairSpread;
     if (name == "mixed") return Strategy::Mixed;
-    if (name == "pass" || name == "pass4_place4_3") return Strategy::Pass;
+    if (name == "pass" || name == "pass3_place4_3_place10_1") return Strategy::Pass;
     if (name == "blank") return Strategy::Blank;
     if (name == "hardways") return Strategy::Hardways;
-    if (name == "dark" || name == "dontpass4_place4_3") return Strategy::Dark;
-    if (name == "bounty" || name == "bounty_dontpass4_place5_3") return Strategy::Bounty;
+    if (name == "dark" || name == "dontpass3_place4_3_place5_1") return Strategy::Dark;
+    if (name == "bounty" || name == "bounty_dontpass3_place5_3_place9_1") return Strategy::Bounty;
     throw std::invalid_argument("unknown strategy name");
 }
 
@@ -254,7 +174,8 @@ ChipCounts pickedCounts(Strategy s) {
     ChipCounts c{};
     switch (s) {
         case Strategy::Sharp4:
-            c[1] = 4;
+            c[1] = 3;
+            c[2] = 1;
             c[6] = 3;
             break;
         case Strategy::FairSpread:
@@ -268,22 +189,26 @@ ChipCounts pickedCounts(Strategy s) {
             c[1] = c[2] = c[3] = c[4] = c[5] = 1;
             break;
         case Strategy::Pass:
-            c[0] = 4;
+            c[0] = 3;
             c[1] = 3;
+            c[6] = 1;
             break;
         case Strategy::Blank:
             break;
         case Strategy::Hardways:
-            c[7] = 4;
+            c[1] = 1;
+            c[7] = 3;
             c[8] = 3;
             break;
         case Strategy::Dark:
             c[1] = 3;
-            c[9] = 4;
+            c[2] = 1;
+            c[9] = 3;
             break;
         case Strategy::Bounty:
             c[2] = 3;
-            c[9] = 4;
+            c[5] = 1;
+            c[9] = 3;
             break;
         case Strategy::FairControl:
             // Mathematical control, not a player-submitted board: ten chips entirely on true-odds
@@ -302,16 +227,12 @@ struct Terms {
     i64 round{};
     i64 bounty{};
     int depth{};
-    int goalMult{};
     int tier{}; // routine: 1/2/3; event: 0
 };
 
 Terms drawTerms(Rng& rng, int period) {
     Terms t;
     t.depth = 5;
-    // Scheduled play now has only two targets. A goal filter is useful for format-specific
-    // board searches; otherwise draw the two formats evenly.
-    t.goalMult = gDrawGoalFilter != 0 ? gDrawGoalFilter : (rng.below(2) == 0 ? 5 : 20);
 
     if (period == kWindows - 1) {
         int tail = static_cast<int>(rng.below(100));
@@ -344,7 +265,7 @@ Terms drawTerms(Rng& rng, int period) {
     }
     t.round = (t.bankroll / t.depth / 10) * 10;
     if (t.round < 10) t.round = 10;
-    t.goal = t.bankroll * t.goalMult;
+    t.goal = t.bankroll * kScheduledGoalMult;
     return t;
 }
 
@@ -396,7 +317,8 @@ using BoardMoney = std::array<i64, 10>;
 
 BoardMoney makeBoard(const Terms& t, Strategy strategy, u64 scatterSeed, u64 playerKey) {
     auto counts = pickedCounts(strategy);
-    int thrown = strategy == Strategy::Blank ? 10 : (strategy == Strategy::FairControl ? 0 : 3);
+    int placed = static_cast<int>(std::accumulate(counts.begin(), counts.end(), i64{0}));
+    int thrown = strategy == Strategy::FairControl ? 0 : 10 - placed;
     for (int i = 0; i < thrown; ++i) {
         int leg = static_cast<int>(keyed(scatterSeed, playerKey, static_cast<u64>(i), 0x5ca77eULL) % 10);
         ++counts[leg];
@@ -411,9 +333,12 @@ BoardMoney makeBoardChoice(
     const Terms& t, const ChipCounts& selected, u64 scatterSeed, u64 playerKey
 ) {
     ChipCounts counts = selected;
-    // Zero is the contract's other legal board mode: scatter all ten chips. Every nonzero board
-    // enumerated by the search is a legal seven-chip selection and therefore scatters three.
-    int thrown = std::accumulate(selected.begin(), selected.end(), i64{0}) == 0 ? 10 : 3;
+    int placed = static_cast<int>(std::accumulate(selected.begin(), selected.end(), i64{0}));
+    if (placed < 0 || placed > 7) throw std::invalid_argument("selected board must place 0..7 chips");
+    for (i64 count : selected) {
+        if (count < 0 || count > 3) throw std::invalid_argument("selected board exceeds three chips per spot");
+    }
+    int thrown = 10 - placed;
     for (int i = 0; i < thrown; ++i) {
         int leg = static_cast<int>(keyed(scatterSeed, playerKey, static_cast<u64>(i), 0x5ca77eULL) % 10);
         ++counts[leg];
@@ -554,8 +479,7 @@ Run settlePreparedBoard(
     u64 seed,
     u64 playerKey,
     int boostedShootersPct,
-    int winningsBoostTargetBps,
-    int winningsBoostJitterPct
+    int winningsBoostTargetBps
 ) {
     i64 stakeMoney = std::accumulate(board.begin(), board.end(), i64{0});
     i64 bankrollMoney = t.bankroll * kMoneyUnits;
@@ -621,13 +545,6 @@ Run settlePreparedBoard(
                 < fractionalPct) {
             ++shooterBoostPct;
         }
-        if (boosted && winningsBoostJitterPct != 0) {
-            int width = winningsBoostJitterPct * 2 + 1;
-            int offset = static_cast<int>(
-                keyed(seed, playerKey, static_cast<u64>(r.hands), 0xb0059ULL) % width
-            ) - winningsBoostJitterPct;
-            shooterBoostPct = std::max(0, shooterBoostPct + offset);
-        }
         if (boosted) ++r.boostedHands;
         bankrollMoney += runHandMoney(board, shooter, boosted, shooterBoostPct) * q;
         i64 handGainMoney = bankrollMoney - beforeHandMoney;
@@ -655,11 +572,10 @@ Run settlePreparedBoard(
 
 Run settleRun(const Terms& t, Strategy strategy, ShooterCache& dice, u64 seed, u64 playerKey) {
     BoardMoney board = makeBoard(t, strategy, seed, playerKey);
-    bool randomTicket = strategy == Strategy::Blank;
+    ChipCounts selected = pickedCounts(strategy);
+    int placed = std::min(7, static_cast<int>(std::accumulate(selected.begin(), selected.end(), i64{0})));
     return settlePreparedBoard(
-        t, board, dice, seed, playerKey,
-        winningsBoostFrequency(randomTicket, t.goalMult), winningsBoostTargetBps(randomTicket, t.goalMult),
-        winningsBoostJitter(randomTicket)
+        t, board, dice, seed, playerKey, kBoostChancePct[placed], kBoostUpliftBps[placed]
     );
 }
 
@@ -671,11 +587,9 @@ Run settleBoardChoice(
     u64 playerKey
 ) {
     BoardMoney board = makeBoardChoice(t, selected, seed, playerKey);
-    bool randomTicket = std::accumulate(selected.begin(), selected.end(), i64{0}) == 0;
+    int placed = static_cast<int>(std::accumulate(selected.begin(), selected.end(), i64{0}));
     return settlePreparedBoard(
-        t, board, dice, seed, playerKey,
-        winningsBoostFrequency(randomTicket, t.goalMult), winningsBoostTargetBps(randomTicket, t.goalMult),
-        winningsBoostJitter(randomTicket)
+        t, board, dice, seed, playerKey, kBoostChancePct[placed], kBoostUpliftBps[placed]
     );
 }
 
@@ -710,20 +624,18 @@ bool better(const ScoredRun& a, const ScoredRun& b) {
 i64 integerPercentile(std::vector<i64> xs, long double q);
 
 void printBountyMatchup(int fields, u64 seed) {
-    constexpr std::array<int, 2> goals{5, 20};
     std::cout << "BOUNTY_MATCHUP_HEADER\tgoal_multiple\tfields\tfield_random_win_pct"
                  "\tfield_picked_win_pct\tpair_random_win_pct\tpair_picked_win_pct"
                  "\tqualified_winner_pct\tall_bust_pct"
                  "\tall_winner_peak_p90_bps\tall_winner_peak_p99_bps"
                  "\tqualified_peak_p90_bps\tqualified_peak_p99_bps\n";
-    for (int goalMult : goals) {
+    {
         ChipCounts bountyBoard{};
-        // Best common tournament board in the 8,917-board search against random incumbents:
-        // one Place 5, two Place 9, four Don't Pass.
+        // A legal seven-chip tournament board against random incumbents.
         bountyBoard[2] = 1;
-        bountyBoard[5] = 2;
-        bountyBoard[9] = 4;
-        Rng rng(keyed(seed, static_cast<u64>(goalMult), 0xb0177ULL));
+        bountyBoard[5] = 3;
+        bountyBoard[9] = 3;
+        Rng rng(keyed(seed, static_cast<u64>(kScheduledGoalMult), 0xb0177ULL));
         std::size_t fieldRandomWins = 0;
         std::size_t pairRandomWins = 0;
         std::size_t qualifiedWinners = 0;
@@ -735,14 +647,13 @@ void printBountyMatchup(int fields, u64 seed) {
             Terms t;
             t.bankroll = 3'000;
             t.depth = 5;
-            t.goalMult = goalMult;
             t.round = t.bankroll / t.depth;
-            t.goal = t.bankroll * t.goalMult;
+            t.goal = t.bankroll * kScheduledGoalMult;
             u64 runSeed = rng.next();
             ShooterCache dice(runSeed);
             std::array<ScoredRun, 40> runs;
             for (std::size_t n = 0; n < runs.size(); ++n) {
-                u64 playerKey = keyed(seed, static_cast<u64>(goalMult), static_cast<u64>(f), n + 1);
+                u64 playerKey = keyed(seed, static_cast<u64>(kScheduledGoalMult), static_cast<u64>(f), n + 1);
                 Run run = n < 20
                     ? settleRun(t, Strategy::Blank, dice, runSeed, playerKey)
                     : settleBoardChoice(t, bountyBoard, dice, runSeed, playerKey);
@@ -768,7 +679,7 @@ void printBountyMatchup(int fields, u64 seed) {
         auto pct = [&](std::size_t n) {
             return 100.0L * static_cast<long double>(n) / fields;
         };
-        std::cout << "BOUNTY_MATCHUP\t" << goalMult << '\t' << fields
+        std::cout << "BOUNTY_MATCHUP\t" << kScheduledGoalMult << '\t' << fields
                   << '\t' << static_cast<double>(pct(fieldRandomWins))
                   << '\t' << static_cast<double>(100.0L - pct(fieldRandomWins))
                   << '\t' << static_cast<double>(pct(pairRandomWins))
@@ -1123,15 +1034,15 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                 routineGoalWinner[mainWinner] = 1;
             }
             if (runs[mainWinner].run.stop == Stop::Goal) {
-                int fi = progFormatIndex(t.depth, t.goalMult);
+                int fi = progFormatIndex(t.depth);
                 int rolls = runs[mainWinner].run.rolls;
                 i64 candidate = 0;
                 bool rare;
                 bool common;
                 if (gHighWaterGoal) {
                     i64 scoreBps = highWaterBps(runs[mainWinner].run, t);
-                    i64 commonBps = peakCommonBps(t.goalMult);
-                    i64 rareBps = peakRareBps(t.goalMult);
+                    i64 commonBps = kGoal5CommonPeakBps;
+                    i64 rareBps = kGoal5RarePeakBps;
                     rare = scoreBps >= rareBps;
                     common = scoreBps >= commonBps;
                 } else {
@@ -1249,9 +1160,8 @@ Calibration calibrate(Strategy strategy, int samples, u64 seed) {
         Terms t;
         t.bankroll = 3'000;
         t.depth = 5;
-        t.goalMult = rng.below(2) == 0 ? 5 : 20;
         t.round = t.bankroll / t.depth;
-        t.goal = t.bankroll * t.goalMult;
+        t.goal = t.bankroll * kScheduledGoalMult;
         u64 runSeed = rng.next();
         ShooterCache dice(runSeed);
         Run r = settleRun(t, strategy, dice, runSeed, keyed(seed, static_cast<u64>(i), 0xca1ULL));
@@ -1269,16 +1179,15 @@ Calibration calibrate(Strategy strategy, int samples, u64 seed) {
     return c;
 }
 
-Calibration calibrateFixed(Strategy strategy, int samples, u64 seed, int depth, int goalMult) {
+Calibration calibrateFixed(Strategy strategy, int samples, u64 seed, int depth) {
     Rng rng(seed);
     Calibration c;
     for (int i = 0; i < samples; ++i) {
         Terms t;
         t.bankroll = 3'000;
         t.depth = depth;
-        t.goalMult = goalMult;
         t.round = t.bankroll / t.depth;
-        t.goal = t.bankroll * t.goalMult;
+        t.goal = t.bankroll * kScheduledGoalMult;
         u64 runSeed = rng.next();
         ShooterCache dice(runSeed);
         Run r = settleRun(t, strategy, dice, runSeed, keyed(seed, static_cast<u64>(i), 0xf1cedULL));
@@ -1431,7 +1340,6 @@ Scenario matrixScenario(MatrixComposition c, int heads) {
 
 void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
     constexpr std::array<int, 8> heads{1, 2, 5, 10, 20, 40, 80, 160};
-    constexpr std::array<int, 2> goals{5, 20};
     constexpr std::array<MatrixComposition, 5> compositions{
         MatrixComposition::AllRandom,
         MatrixComposition::AllSharp,
@@ -1456,13 +1364,12 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
         MatrixComposition composition = compositions[ci];
         for (int n : heads) {
             int fields = std::clamp(targetSeatsPerCell / n, 3'000, 200'000);
-            for (int goalMult : goals) {
+            {
                 Terms t;
                 t.bankroll = 3'000;
                 t.depth = 5;
-                t.goalMult = goalMult;
                 t.round = t.bankroll / t.depth;
-                t.goal = t.bankroll * t.goalMult;
+                t.goal = t.bankroll * kScheduledGoalMult;
                 long double risk = 0;
                 long double paid = 0;
                 long double handsSum = 0;
@@ -1500,7 +1407,7 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                 handCounts.reserve(static_cast<std::size_t>(fields) * n);
                 rollCounts.reserve(static_cast<std::size_t>(fields) * n);
                 workUnits.reserve(static_cast<std::size_t>(fields) * n);
-                Rng rng(keyed(seed, ci, static_cast<u64>(n), static_cast<u64>(goalMult)));
+                Rng rng(keyed(seed, ci, static_cast<u64>(n), static_cast<u64>(kScheduledGoalMult)));
 
                 for (int f = 0; f < fields; ++f) {
                     int day = f / fieldsPerDay;
@@ -1515,7 +1422,7 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                     for (int p = 0; p < n; ++p) {
                         Strategy strategy = matrixStrategy(composition, p, n);
                         u64 playerKey = keyed(seed, static_cast<u64>(f), static_cast<u64>(p + 1),
-                                              keyed(ci, n, goalMult));
+                                              keyed(ci, n, kScheduledGoalMult));
                         Run run = settleRun(t, strategy, dice, runSeed, playerKey);
                         runs.push_back({run, kScoreFloor, keyed(runSeed, static_cast<u64>(p), 0x71eULL)});
                         risk += t.bankroll;
@@ -1551,8 +1458,8 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                         continue;
                     }
                     qualifiedPeaks.push_back(peak);
-                    if (peak >= peakRareBps(goalMult)) ++rare;
-                    else if (peak >= peakCommonBps(goalMult)) ++common;
+                    if (peak >= kGoal5RarePeakBps) ++rare;
+                    else if (peak >= kGoal5CommonPeakBps) ++common;
                     if (peak >= recordFloorBps && peak > record) {
                         record = peak;
                         ++recordHits;
@@ -1570,7 +1477,7 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                 auto pctFields = [&](std::size_t x) { return 100.0L * x / fields; };
                 auto pctSeats = [&](std::size_t x) { return 100.0L * x / seats; };
                 std::cout << "POPULATION\t" << matrixCompositionName(composition) << '\t' << n << '\t'
-                          << goalMult << '\t' << fields << '\t' << static_cast<std::uint64_t>(seats) << '\t'
+                          << kScheduledGoalMult << '\t' << fields << '\t' << static_cast<std::uint64_t>(seats) << '\t'
                           << static_cast<double>(100 * (risk - paid) / risk) << '\t'
                           << static_cast<double>(pctSeats(goalSeats)) << '\t'
                           << static_cast<double>(pctFields(allBust)) << '\t'
@@ -1687,9 +1594,8 @@ void printSystemMatrix(int days, u64 seed) {
     }
 }
 
-void printPeakJackpotCalibration(int samples, u64 seed, int depthFilter, int goalFilter) {
+void printPeakJackpotCalibration(int samples, u64 seed, int depthFilter) {
     constexpr std::array<int, 1> depths{5};
-    constexpr std::array<int, 2> goals{5, 20};
     bool savedMode = gHighWaterGoal;
     std::cout << "PEAK_JACKPOT_HEADER\tdepth\tgoal_multiple\tsamples\tgoals"
                  "\told_common_roll_cutoff\told_common_tail_pct\told_rare_roll_cutoff\told_rare_tail_pct"
@@ -1702,11 +1608,9 @@ void printPeakJackpotCalibration(int samples, u64 seed, int depthFilter, int goa
                  "\tmean_peak_x_start\tmean_final_x_start\tmean_post_goal_hands"
                  "\tmean_post_goal_rolls\tmax_post_goal_hands\tmax_total_rolls\tcap_stops\n";
     for (int depth : depths) {
-        for (int goalMult : goals) {
-            if ((depthFilter != 0 && depth != depthFilter) || (goalFilter != 0 && goalMult != goalFilter)) {
-                continue;
-            }
-            int fi = progFormatIndex(depth, goalMult);
+        {
+            if (depthFilter != 0 && depth != depthFilter) continue;
+            int fi = progFormatIndex(depth);
             std::vector<i64> peaks;
             peaks.reserve(static_cast<std::size_t>(samples));
             std::size_t oldCommon = 0;
@@ -1724,9 +1628,8 @@ void printPeakJackpotCalibration(int samples, u64 seed, int depthFilter, int goa
                 Terms t;
                 t.bankroll = 3'000;
                 t.depth = depth;
-                t.goalMult = goalMult;
                 t.round = t.bankroll / t.depth;
-                t.goal = t.bankroll * t.goalMult;
+                t.goal = t.bankroll * kScheduledGoalMult;
                 u64 runSeed = rng.next();
                 u64 playerKey = keyed(seed, static_cast<u64>(fi), static_cast<u64>(i), 0x5045414bULL);
                 ShooterCache dice(runSeed);
@@ -1764,7 +1667,7 @@ void printPeakJackpotCalibration(int samples, u64 seed, int depthFilter, int goa
             auto pct = [&](std::size_t n) {
                 return goalsSeen == 0 ? 0.0L : 100.0L * static_cast<long double>(n) / goalsSeen;
             };
-            std::cout << "PEAK_JACKPOT\t" << depth << '\t' << goalMult << '\t' << samples << '\t'
+            std::cout << "PEAK_JACKPOT\t" << depth << '\t' << kScheduledGoalMult << '\t' << samples << '\t'
                       << goalsSeen << '\t' << kProgCommon[fi] << '\t' << static_cast<double>(pct(oldCommon))
                       << '\t' << kProgRare[fi] << '\t' << static_cast<double>(pct(oldRare))
                       << '\t' << rawCommon << '\t' << rawRare
@@ -1784,9 +1687,8 @@ void printPeakJackpotCalibration(int samples, u64 seed, int depthFilter, int goa
     gHighWaterGoal = savedMode;
 }
 
-void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalFilter) {
+void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter) {
     constexpr std::array<int, 1> depths{5};
-    constexpr std::array<int, 2> goals{5, 20};
     std::array<Strategy, 40> field{};
     int cursor = 0;
     for (int i = 0; i < 20; ++i) field[cursor++] = Strategy::Blank;
@@ -1798,7 +1700,7 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
     bool savedMode = gHighWaterGoal;
     gHighWaterGoal = true;
     std::vector<i64> aggregateWinnerPeaks;
-    std::array<std::vector<i64>, 2> aggregatePeaksByGoal;
+    std::array<std::vector<i64>, 1> aggregatePeaksByGoal;
     std::size_t aggregateOldCommon = 0;
     std::size_t aggregateOldRare = 0;
     std::size_t aggregateFields = 0;
@@ -1840,11 +1742,9 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                  "\tmax_hand_gain_start_x\tpositive_hands\tnegative_hands\tflat_hands"
                  "\tboosted_hands\ttotal_handle_start_x\n";
     for (int depth : depths) {
-        for (int goalMult : goals) {
-            if ((depthFilter != 0 && depth != depthFilter) || (goalFilter != 0 && goalMult != goalFilter)) {
-                continue;
-            }
-            int fi = progFormatIndex(depth, goalMult);
+        {
+            if (depthFilter != 0 && depth != depthFilter) continue;
+            int fi = progFormatIndex(depth);
             std::vector<i64> winnerPeaks;
             winnerPeaks.reserve(static_cast<std::size_t>(fields));
             std::vector<i64> allWinnerPeaks;
@@ -1866,9 +1766,8 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                 Terms t;
                 t.bankroll = 3'000;
                 t.depth = depth;
-                t.goalMult = goalMult;
                 t.round = t.bankroll / t.depth;
-                t.goal = t.bankroll * t.goalMult;
+                t.goal = t.bankroll * kScheduledGoalMult;
                 u64 runSeed = rng.next();
                 ShooterCache dice(runSeed);
                 std::array<ScoredRun, 40> runs;
@@ -1891,14 +1790,14 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                     }
                     if (run.stop == Stop::Goal && run.peakMoney > observedMaxPeakMoney) {
                         observedMaxPeakMoney = run.peakMoney;
-                        observedMaxPeakGoal = goalMult;
+                        observedMaxPeakGoal = kScheduledGoalMult;
                         observedMaxPeakStrategy = static_cast<int>(field[n]);
                         observedMaxPeakHands = run.peakHands;
                         observedMaxPeakRolls = run.peakRolls;
                     }
                     if (run.stop == Stop::Goal && run.paid > observedMaxPaid) {
                         observedMaxPaid = run.paid;
-                        observedMaxPaidGoal = goalMult;
+                        observedMaxPaidGoal = kScheduledGoalMult;
                         observedMaxPaidStrategy = static_cast<int>(field[n]);
                         observedMaxPaidHands = run.hands;
                         observedMaxPaidRolls = run.rolls;
@@ -1924,7 +1823,7 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                         ? 0
                         : static_cast<long double>(std::max(i64{0}, run.rawMoney - t.goal * kMoneyUnits))
                             / nextNeed;
-                    std::cout << "CAP_STOP\t" << depth << '\t' << goalMult << '\t' << f << '\t' << n
+                    std::cout << "CAP_STOP\t" << depth << '\t' << kScheduledGoalMult << '\t' << f << '\t' << n
                               << '\t' << strategyName(field[n]) << '\t' << (n == newWinner ? 1 : 0)
                               << '\t' << (run.hands == kMaxHands ? "hands" : "rolls")
                               << '\t' << run.hands << '\t' << run.rolls
@@ -1949,8 +1848,8 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                 if (newWinner < 20) ++randomWinners;
                 i64 winnerPeakBps = highWaterBps(runs[newWinner].run, t);
                 allWinnerPeaks.push_back(winnerPeakBps);
-                int matchedCommonBps = goalMult == 5 ? 250'000 : 500'000;
-                int matchedRareBps = goalMult == 5 ? 1'200'000 : 2'250'000;
+                int matchedCommonBps = kGoal5CommonPeakBps;
+                int matchedRareBps = kGoal5RarePeakBps;
                 if (runs[newWinner].run.stop == Stop::Goal && winnerPeakBps >= matchedCommonBps) {
                     ++commonHits;
                     if (newWinner < 20) ++commonRandomHits;
@@ -1971,14 +1870,13 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
             i64 rawRare = rawTailThreshold(winnerPeaks, oldRare);
             i64 roundedCommon = bestSteppedThreshold(winnerPeaks, oldCommon, 1'000);
             i64 roundedRare = bestSteppedThreshold(winnerPeaks, oldRare, 1'000);
-            i64 simpleCommon = peakCommonBps(goalMult);
-            i64 simpleRare = peakRareBps(goalMult);
+            i64 simpleCommon = kGoal5CommonPeakBps;
+            i64 simpleRare = kGoal5RarePeakBps;
             aggregateWinnerPeaks.insert(
                 aggregateWinnerPeaks.end(), winnerPeaks.begin(), winnerPeaks.end()
             );
-            int aggregateGoalIndex = goalMult == 5 ? 0 : 1;
-            aggregatePeaksByGoal[aggregateGoalIndex].insert(
-                aggregatePeaksByGoal[aggregateGoalIndex].end(), winnerPeaks.begin(), winnerPeaks.end()
+            aggregatePeaksByGoal[0].insert(
+                aggregatePeaksByGoal[0].end(), winnerPeaks.begin(), winnerPeaks.end()
             );
             aggregateOldCommon += oldCommon;
             aggregateOldRare += oldRare;
@@ -1986,7 +1884,7 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
             auto fieldPct = [&](std::size_t n) {
                 return fields == 0 ? 0.0L : 100.0L * static_cast<long double>(n) / fields;
             };
-            std::cout << "WINNER_PEAK\t" << depth << '\t' << goalMult << '\t' << fields << '\t'
+            std::cout << "WINNER_PEAK\t" << depth << '\t' << kScheduledGoalMult << '\t' << fields << '\t'
                       << goalFields << '\t' << oldCommon << '\t' << static_cast<double>(fieldPct(oldCommon))
                       << '\t' << oldRare << '\t' << static_cast<double>(fieldPct(oldRare))
                       << '\t' << rawCommon << '\t' << rawRare
@@ -2013,7 +1911,7 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                       << '\t' << static_cast<double>(fieldPct(inclusiveTailCount(winnerPeaks, 500'000'000)))
                       << '\t' << static_cast<double>(fieldPct(inclusiveTailCount(winnerPeaks, 1'000'000'000)))
                       << "\n";
-            std::cout << "BOUNTY_COHORT\t" << depth << '\t' << goalMult << '\t' << fields
+            std::cout << "BOUNTY_COHORT\t" << depth << '\t' << kScheduledGoalMult << '\t' << fields
                       << '\t' << static_cast<double>(100.0L * randomWinners / fields)
                       << '\t' << static_cast<double>(100.0L * (fields - randomWinners) / fields)
                       << '\t' << static_cast<double>(100.0L * goalFields / fields)
@@ -2023,9 +1921,9 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                       << '\t' << integerPercentile(allWinnerPeaks, 0.995L)
                       << '\t' << integerPercentile(winnerPeaks, 0.90L)
                       << '\t' << integerPercentile(winnerPeaks, 0.99L) << "\n";
-            std::cout << "JACKPOT_MATCH\t" << depth << '\t' << goalMult << '\t' << fields
-                      << '\t' << (goalMult == 5 ? 250'000 : 500'000)
-                      << '\t' << (goalMult == 5 ? 1'200'000 : 2'250'000)
+            std::cout << "JACKPOT_MATCH\t" << depth << '\t' << kScheduledGoalMult << '\t' << fields
+                      << '\t' << kGoal5CommonPeakBps
+                      << '\t' << kGoal5RarePeakBps
                       << '\t' << static_cast<double>(100.0L * commonHits / fields)
                       << '\t' << static_cast<double>(100.0L * rareHits / fields)
                       << '\t' << static_cast<double>(100.0L * commonRandomHits / (fields * 20.0L))
@@ -2033,7 +1931,7 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                       << '\t' << static_cast<double>(100.0L * rareRandomHits / (fields * 20.0L))
                       << '\t' << static_cast<double>(100.0L * (rareHits - rareRandomHits) / (fields * 20.0L))
                       << "\n";
-            std::cout << "RUN_LENGTH\t" << depth << '\t' << goalMult
+            std::cout << "RUN_LENGTH\t" << depth << '\t' << kScheduledGoalMult
                       << '\t' << static_cast<u64>(fields) * field.size()
                       << "\thands_p95\t" << histogramPercentile(handHistogram, 0.95L)
                       << "\thands_p99\t" << histogramPercentile(handHistogram, 0.99L)
@@ -2067,9 +1965,8 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter, int goalF
                          aggregatePct(inclusiveTailCount(aggregateWinnerPeaks, rare))
                      )
                   << "\n";
-        for (int i = 0; i < 2; ++i) {
-            int goal = i == 0 ? 5 : 20;
-            std::cout << "WINNER_PEAK_UNIVERSAL_RATE\t" << goal
+        for (int i = 0; i < 1; ++i) {
+            std::cout << "WINNER_PEAK_UNIVERSAL_RATE\t" << kScheduledGoalMult
                       << '\t' << static_cast<double>(
                              100.0L * inclusiveTailCount(aggregatePeaksByGoal[i], common) / fields
                          )
@@ -2190,22 +2087,22 @@ struct BoardSearchStats {
 };
 
 std::vector<ChipCounts> legalBoardChoices() {
-    // Blank is a first-class legal choice in addition to every seven-chip selection.
-    std::vector<ChipCounts> boards{ChipCounts{}};
+    // Every total from zero through seven is legal, with at most three selected chips per spot.
+    std::vector<ChipCounts> boards;
     ChipCounts board{};
     auto walk = [&](auto&& self, int leg, int left) -> void {
         if (leg == 10) {
             if (left == 0 && !(board[0] != 0 && board[9] != 0)) boards.push_back(board);
             return;
         }
-        int cap = std::min(4, left);
+        int cap = std::min(3, left);
         for (int n = 0; n <= cap; ++n) {
             board[leg] = n;
             self(self, leg + 1, left - n);
         }
         board[leg] = 0;
     };
-    walk(walk, 0, 7);
+    for (int total = 0; total <= 7; ++total) walk(walk, 0, total);
     return boards;
 }
 
@@ -2221,11 +2118,13 @@ std::vector<ChipCounts> strategicField(std::string_view name) {
             throw std::invalid_argument("duel field dark-seat count must be in 0..31");
         }
         ChipCounts light{};
-        light[0] = 4;
+        light[0] = 3;
         light[2] = 3;
+        light[6] = 1;
         ChipCounts dark{};
+        dark[1] = 1;
         dark[2] = 3;
-        dark[9] = 4;
+        dark[9] = 3;
         for (int i = 0; i < darkSeats; ++i) field.push_back(dark);
         for (int i = darkSeats; i < 31; ++i) field.push_back(light);
     } else if (name == "strategic_mix" || name == "adaptive_mix") {
@@ -2394,17 +2293,20 @@ void printBoardSearch(
     std::vector<std::pair<std::string_view, ChipCounts>> probes;
     probes.push_back({"blank", ChipCounts{}});
     ChipCounts light5{};
-    light5[0] = 4;
+    light5[0] = 3;
     light5[2] = 3;
-    probes.push_back({"pass4_place5_3", light5});
+    light5[6] = 1;
+    probes.push_back({"pass3_place5_3_place10_1", light5});
     ChipCounts dark5{};
+    dark5[1] = 1;
     dark5[2] = 3;
-    dark5[9] = 4;
-    probes.push_back({"dont4_place5_3", dark5});
+    dark5[9] = 3;
+    probes.push_back({"dont3_place4_1_place5_3", dark5});
     ChipCounts fair59{};
-    fair59[2] = 4;
+    fair59[1] = 1;
+    fair59[2] = 3;
     fair59[5] = 3;
-    probes.push_back({"place5_4_place9_3", fair59});
+    probes.push_back({"place4_1_place5_3_place9_3", fair59});
     for (const auto& [label, probe] : probes) {
         (void)label;
         auto it = std::find(boards.begin(), boards.end(), probe);
@@ -2522,24 +2424,15 @@ void printShockTable() {
 void usage(const char* argv0) {
     std::cerr << "Usage: " << argv0
               << " [--days N] [--worlds N] [--calibration N] [--schedule N] [--settings N]"
-                 " [--setting-depths a,b,c] [--setting-goals x,y]"
+                 " [--setting-depths a,b,c]"
                  " [--high-water-goal 0|1] [--jackpot-calibration N]"
                  " [--winner-calibration N]"
                  " [--bounty-matchup N]"
                  " [--population-matrix-seats N] [--system-matrix-days N]"
-                 " [--jackpot-depth 5] [--jackpot-goal 5|20]"
+                 " [--jackpot-depth 5]"
                  " [--settings-strategy STRATEGY] [--dont-profit-num N] [--dont-profit-den N]"
                  " [--main-base FLIP]"
                  " [--esc-hands N] [--esc-cap N]"
-                 " [--boosted-shooters-pct N] [--winnings-boost-pct N]"
-                 " [--winnings-boost-mode all|random]"
-                 " [--random-boosted-shooters-pct N] [--picked-boosted-shooters-pct N]"
-                 " [--random-goal5-shooters-pct N] [--random-goal20-shooters-pct N]"
-                 " [--picked-goal5-shooters-pct N] [--picked-goal20-shooters-pct N]"
-                 " [--random-winnings-boost-pct N] [--picked-winnings-boost-pct N]"
-                 " [--random-winnings-boost-jitter-pct N] [--picked-winnings-boost-jitter-pct N]"
-                 " [--random-goal5-boost-bps N] [--random-goal20-boost-bps N]"
-                 " [--picked-goal5-boost-bps N] [--picked-goal20-boost-bps N]"
                  " [--board-search N] [--search-refine N]"
                  " [--search-field STRATEGY|strategic_mix|duelN]"
                  " [--search-top N]"
@@ -2556,7 +2449,6 @@ int main(int argc, char** argv) {
     int scheduleSamples = 500'000;
     int settingSamples = 0;
     std::string settingDepthsArg;
-    std::string settingGoalsArg;
     int boardSearchSamples = 0;
     int searchRefineSamples = 0;
     int searchTop = 20;
@@ -2566,7 +2458,6 @@ int main(int argc, char** argv) {
     int populationMatrixSeats = 0;
     int systemMatrixDays = 0;
     int jackpotDepthFilter = 0;
-    int jackpotGoalFilter = 0;
     u64 seed = 20'260'826ULL;
     std::string scenarioFilter;
     std::string settingStrategyFilter;
@@ -2589,7 +2480,6 @@ int main(int argc, char** argv) {
         else if (arg == "--schedule") scheduleSamples = std::stoi(argv[++i]);
         else if (arg == "--settings") settingSamples = std::stoi(argv[++i]);
         else if (arg == "--setting-depths") settingDepthsArg = argv[++i];
-        else if (arg == "--setting-goals") settingGoalsArg = argv[++i];
         else if (arg == "--high-water-goal") gHighWaterGoal = std::stoi(argv[++i]) != 0;
         else if (arg == "--jackpot-calibration") jackpotCalibrationSamples = std::stoi(argv[++i]);
         else if (arg == "--winner-calibration") winnerCalibrationFields = std::stoi(argv[++i]);
@@ -2597,10 +2487,6 @@ int main(int argc, char** argv) {
         else if (arg == "--population-matrix-seats") populationMatrixSeats = std::stoi(argv[++i]);
         else if (arg == "--system-matrix-days") systemMatrixDays = std::stoi(argv[++i]);
         else if (arg == "--jackpot-depth") jackpotDepthFilter = std::stoi(argv[++i]);
-        else if (arg == "--jackpot-goal") {
-            jackpotGoalFilter = std::stoi(argv[++i]);
-            gDrawGoalFilter = jackpotGoalFilter;
-        }
         else if (arg == "--settings-strategy") settingStrategyFilter = argv[++i];
         else if (arg == "--board-search") boardSearchSamples = std::stoi(argv[++i]);
         else if (arg == "--search-refine") searchRefineSamples = std::stoi(argv[++i]);
@@ -2611,71 +2497,6 @@ int main(int argc, char** argv) {
         else if (arg == "--main-base") gMainBase = std::stoll(argv[++i]);
         else if (arg == "--esc-hands") gEscHands = std::stoi(argv[++i]);
         else if (arg == "--esc-cap") gEscCap = std::stoll(argv[++i]);
-        else if (arg == "--boosted-shooters-pct") gBoostedShootersPct = std::stoi(argv[++i]);
-        else if (arg == "--winnings-boost-pct") gWinningsBoostPct = std::stoi(argv[++i]);
-        else if (arg == "--random-boosted-shooters-pct") {
-            gRandomBoostedShootersPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-boosted-shooters-pct") {
-            gPickedBoostedShootersPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--random-goal5-shooters-pct") {
-            gRandomGoal5ShooterPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--random-goal20-shooters-pct" || arg == "--random-goal10-shooters-pct") {
-            gRandomGoal10ShooterPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--random-goal50-shooters-pct") {
-            gRandomGoal50ShooterPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-goal5-shooters-pct") {
-            gPickedGoal5ShooterPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-goal20-shooters-pct" || arg == "--picked-goal10-shooters-pct") {
-            gPickedGoal10ShooterPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-goal50-shooters-pct") {
-            gPickedGoal50ShooterPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--random-winnings-boost-pct") {
-            gRandomWinningsBoostPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-winnings-boost-pct") {
-            gPickedWinningsBoostPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--random-winnings-boost-jitter-pct") {
-            gRandomWinningsBoostJitterPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-winnings-boost-jitter-pct") {
-            gPickedWinningsBoostJitterPct = std::stoi(argv[++i]);
-        }
-        else if (arg == "--random-goal5-boost-bps") {
-            gRandomGoal5WinningsBoostBps = std::stoi(argv[++i]);
-        }
-        else if (arg == "--random-goal20-boost-bps" || arg == "--random-goal10-boost-bps") {
-            gRandomGoal10WinningsBoostBps = std::stoi(argv[++i]);
-        }
-        else if (arg == "--random-goal50-boost-bps") {
-            gRandomGoal50WinningsBoostBps = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-goal5-boost-bps") {
-            gPickedGoal5WinningsBoostBps = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-goal20-boost-bps" || arg == "--picked-goal10-boost-bps") {
-            gPickedGoal10WinningsBoostBps = std::stoi(argv[++i]);
-        }
-        else if (arg == "--picked-goal50-boost-bps") {
-            gPickedGoal50WinningsBoostBps = std::stoi(argv[++i]);
-        }
-        else if (arg == "--winnings-boost-mode") {
-            std::string mode = argv[++i];
-            if (mode == "all") gWinningsBoostMode = WinningsBoostMode::All;
-            else if (mode == "random" || mode == "blank") {
-                gWinningsBoostMode = WinningsBoostMode::RandomTickets;
-            } else {
-                throw std::invalid_argument("winnings boost mode must be all or random");
-            }
-        }
         else if (arg == "--dont-profit-sixths") {
             // Backward-compatible shorthand retained for reproducing earlier sweeps.
             gDontProfitNum = std::stoi(argv[++i]);
@@ -2712,31 +2533,6 @@ int main(int argc, char** argv) {
         && jackpotDepthFilter != 10) {
         throw std::invalid_argument("jackpot depth must be 2, 5, or 10");
     }
-    if (jackpotGoalFilter != 0 && jackpotGoalFilter != 5 && jackpotGoalFilter != 20) {
-        throw std::invalid_argument("jackpot goal must be 5 or 20");
-    }
-    if (gBoostedShootersPct < 0 || gBoostedShootersPct > 100
-        || gWinningsBoostPct < 0 || gWinningsBoostPct > 100
-        || gRandomBoostedShootersPct < -1 || gRandomBoostedShootersPct > 100
-        || gPickedBoostedShootersPct < -1 || gPickedBoostedShootersPct > 100
-        || gRandomWinningsBoostPct < -1 || gRandomWinningsBoostPct > 100
-        || gPickedWinningsBoostPct < -1 || gPickedWinningsBoostPct > 100
-        || gRandomWinningsBoostJitterPct < 0 || gRandomWinningsBoostJitterPct > 100
-        || gPickedWinningsBoostJitterPct < 0 || gPickedWinningsBoostJitterPct > 100
-        || gRandomGoal5ShooterPct < -1 || gRandomGoal5ShooterPct > 100
-        || gRandomGoal10ShooterPct < -1 || gRandomGoal10ShooterPct > 100
-        || gRandomGoal50ShooterPct < -1 || gRandomGoal50ShooterPct > 100
-        || gPickedGoal5ShooterPct < -1 || gPickedGoal5ShooterPct > 100
-        || gPickedGoal10ShooterPct < -1 || gPickedGoal10ShooterPct > 100
-        || gPickedGoal50ShooterPct < -1 || gPickedGoal50ShooterPct > 100
-        || gRandomGoal5WinningsBoostBps < -1 || gRandomGoal5WinningsBoostBps > 10'000
-        || gRandomGoal10WinningsBoostBps < -1 || gRandomGoal10WinningsBoostBps > 10'000
-        || gRandomGoal50WinningsBoostBps < -1 || gRandomGoal50WinningsBoostBps > 10'000
-        || gPickedGoal5WinningsBoostBps < -1 || gPickedGoal5WinningsBoostBps > 10'000
-        || gPickedGoal10WinningsBoostBps < -1 || gPickedGoal10WinningsBoostBps > 10'000
-        || gPickedGoal50WinningsBoostBps < -1 || gPickedGoal50WinningsBoostBps > 10'000) {
-        throw std::invalid_argument("shooter frequency and winnings boost must each be between 0 and 100 percent");
-    }
     bool matchupOnly = !matchupIncumbentFilter.empty() || !matchupCandidateFilter.empty();
     if (matchupOnly && !scenarioFilter.empty()) {
         throw std::invalid_argument("scenario and matchup filters cannot be combined");
@@ -2747,46 +2543,27 @@ int main(int argc, char** argv) {
               << "\tschedule\t" << scheduleSamples << "\tseed\t" << seed << "\taction_bps\t"
               << kActionBps << "\tmain_base\t" << gMainBase
               << "\tesc_hands\t" << gEscHands << "\tesc_cap\t" << gEscCap << "\tdont_profit_ratio\t"
-              << gDontProfitNum << '/' << gDontProfitDen << "\tboosted_shooters_pct\t"
-              << gBoostedShootersPct << "\twinnings_boost_pct\t" << gWinningsBoostPct
-              << "\twinnings_boost_mode\t"
-              << (gWinningsBoostMode == WinningsBoostMode::All ? "all" : "random")
-              << "\trandom_shooters_pct\t" << winningsBoostFrequency(true)
-              << "\tpicked_shooters_pct\t" << winningsBoostFrequency(false)
-              << "\trandom_goal_shooters_pct_5_20\t"
-              << winningsBoostFrequency(true, 5) << ',' << winningsBoostFrequency(true, 20)
-              << "\tpicked_goal_shooters_pct_5_20\t"
-              << winningsBoostFrequency(false, 5) << ',' << winningsBoostFrequency(false, 20)
-              << "\trandom_winnings_pct\t" << winningsBoostAmount(true)
-              << "\tpicked_winnings_pct\t" << winningsBoostAmount(false)
-              << "\trandom_winnings_jitter_pct\t" << winningsBoostJitter(true)
-              << "\tpicked_winnings_jitter_pct\t" << winningsBoostJitter(false)
-              << "\trandom_goal_bps_5_20\t" << winningsBoostTargetBps(true, 5) << ','
-              << winningsBoostTargetBps(true, 20)
-              << "\tpicked_goal_bps_5_20\t" << winningsBoostTargetBps(false, 5) << ','
-              << winningsBoostTargetBps(false, 20) << "\n";
+              << gDontProfitNum << '/' << gDontProfitDen << "\tscheduled_goal\t" << kScheduledGoalMult
+              << "\tboost_chance_by_placed\t15,14,12,11,9,8,6,5"
+                 "\tboost_uplift_bps_by_placed\t3300,3000,3000,3000,3000,2500,2500,2000\n";
     std::cout << "PROPOSED_RULES\thigh_water_goal\t" << (gHighWaterGoal ? 1 : 0)
-              << "\tpeak_jackpot_table\t25x_120x__50x_225x"
+              << "\tpeak_jackpot_table\t25x_120x"
               << "\tcustoms\texcluded_legacy_product\n";
     long double darkWinProbability = 949.0L / 1925.0L;
     auto scheduledProfitRatio = [&](int frequencyPct, int boostBps) {
         return static_cast<long double>(gDontProfitNum) / gDontProfitDen
             * (1 + static_cast<long double>(frequencyPct) * boostBps / 1'000'000);
     };
-    auto darkPerShooterEdge = [&](bool randomTicket, int goalMult) {
+    auto darkPerShooterEdge = [&](int placed) {
         return 100 * (1 - darkWinProbability * (
-            1 + scheduledProfitRatio(
-                winningsBoostFrequency(randomTicket, goalMult), winningsBoostTargetBps(randomTicket, goalMult)
-            )
+            1 + scheduledProfitRatio(kBoostChancePct[placed], kBoostUpliftBps[placed])
         ));
     };
-    std::cout << "DONT_PASS\tprofit_ratio\t" << gDontProfitNum << '/' << gDontProfitDen
-              << "\trandom_ticket_edge_pct_5_20\t"
-              << static_cast<double>(darkPerShooterEdge(true, 5)) << ','
-              << static_cast<double>(darkPerShooterEdge(true, 20))
-              << "\tpicked_ticket_edge_pct_5_20\t"
-              << static_cast<double>(darkPerShooterEdge(false, 5)) << ','
-              << static_cast<double>(darkPerShooterEdge(false, 20)) << "\n";
+    std::cout << "DONT_PASS_HEADER\tplaced_chips\tprofit_ratio\tedge_pct\n";
+    for (int placed = 0; placed <= 7; ++placed) {
+        std::cout << "DONT_PASS\t" << placed << '\t' << gDontProfitNum << '/' << gDontProfitDen
+                  << '\t' << static_cast<double>(darkPerShooterEdge(placed)) << "\n";
+    }
 
     // An exhaustive board sweep is a self-contained mode. Avoid spending time on, and printing,
     // unrelated schedule/calibration/scenario tables before returning its result.
@@ -2797,15 +2574,11 @@ int main(int argc, char** argv) {
     }
 
     if (jackpotCalibrationSamples != 0) {
-        printPeakJackpotCalibration(
-            jackpotCalibrationSamples, seed, jackpotDepthFilter, jackpotGoalFilter
-        );
+        printPeakJackpotCalibration(jackpotCalibrationSamples, seed, jackpotDepthFilter);
         return 0;
     }
     if (winnerCalibrationFields != 0) {
-        printWinnerPeakCalibration(
-            winnerCalibrationFields, seed, jackpotDepthFilter, jackpotGoalFilter
-        );
+        printWinnerPeakCalibration(winnerCalibrationFields, seed, jackpotDepthFilter);
         return 0;
     }
 
@@ -2857,31 +2630,25 @@ int main(int argc, char** argv) {
             return out;
         };
         std::vector<int> depths{5};
-        std::vector<int> goals{5, 20};
         if (!settingDepthsArg.empty()) depths = parseIntList(settingDepthsArg);
-        if (!settingGoalsArg.empty()) goals = parseIntList(settingGoalsArg);
         for (std::size_t si = 0; si < strategies.size(); ++si) {
             if (!settingStrategyFilter.empty() && strategies[si] != strategyFromName(settingStrategyFilter)) continue;
             for (int depth : depths) {
-                for (int goalMult : goals) {
-                    if ((jackpotDepthFilter != 0 && depth != jackpotDepthFilter)
-                        || (jackpotGoalFilter != 0 && goalMult != jackpotGoalFilter)) {
-                        continue;
-                    }
+                    if (jackpotDepthFilter != 0 && depth != jackpotDepthFilter) continue;
                     Calibration c = calibrateFixed(
                         strategies[si], settingSamples,
-                        keyed(seed, si, static_cast<u64>(depth), static_cast<u64>(goalMult)), depth, goalMult
+                        keyed(seed, si, static_cast<u64>(depth), static_cast<u64>(kScheduledGoalMult)), depth
                     );
                     long double effective = 100 * (c.bankroll - c.paid) / c.bankroll;
                     long double rawEdge = 100 * (c.bankroll - c.raw) / c.bankroll;
                     long double deletion = 100 * c.deleted / c.bankroll;
-                    std::cout << "SETTING\t" << strategyName(strategies[si]) << '\t' << depth << '\t' << goalMult
+                    std::cout << "SETTING\t" << strategyName(strategies[si]) << '\t' << depth << '\t'
+                              << kScheduledGoalMult
                               << '\t' << static_cast<double>(effective) << '\t' << static_cast<double>(rawEdge)
                               << '\t' << static_cast<double>(deletion) << '\t'
                               << static_cast<double>(100 * c.busts / settingSamples) << '\t'
                               << static_cast<double>(100 * c.goals / settingSamples) << '\t'
                               << static_cast<double>(c.hands / settingSamples) << "\n";
-                }
             }
         }
     }
