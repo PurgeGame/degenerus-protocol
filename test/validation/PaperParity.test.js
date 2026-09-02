@@ -1027,10 +1027,11 @@ describe("Paper Parity (Phase 46)", function () {
 
     it("deity pass prices are strictly increasing", async function () {
       const base = 24n;
+      // Triangular through k=26 (375 ETH), then doubling from that anchor.
+      const curve = (k) => (k <= 26n ? base + (k * (k + 1n)) / 2n : 375n << (k - 26n));
       let prevPrice = 0n;
       for (let k = 0n; k < 32n; k++) {
-        const tn = (k * (k + 1n)) / 2n;
-        const price = (base + tn) * ethers.parseEther("1");
+        const price = curve(k) * ethers.parseEther("1");
         expect(price).to.be.gt(
           prevPrice,
           `Deity pass price not increasing at k=${k}`
@@ -1039,12 +1040,12 @@ describe("Paper Parity (Phase 46)", function () {
       }
     });
 
-    it("32nd deity pass (k=31) costs 520 ETH", async function () {
-      // k=31: 24 + 31*32/2 = 24 + 496 = 520
-      const k = 31n;
-      const tn = (k * (k + 1n)) / 2n;
-      const price = 24n + tn;
-      expect(price).to.equal(520n, "32nd deity pass = 520 ETH");
+    it("27th deity pass (k=26) costs 375 ETH, then each pass doubles to 12,000 ETH at the 32nd", async function () {
+      // k=26: 24 + 26*27/2 = 24 + 351 = 375; k=27..31: 375 << 1..5
+      const curve = (k) => (k <= 26n ? 24n + (k * (k + 1n)) / 2n : 375n << (k - 26n));
+      expect(curve(26n)).to.equal(375n, "27th deity pass = 375 ETH");
+      expect(curve(27n)).to.equal(750n, "28th deity pass doubles the anchor");
+      expect(curve(31n)).to.equal(12000n, "32nd deity pass = 12,000 ETH");
     });
 
     it("coinflip minimum deposit: 100 FLIP", async function () {

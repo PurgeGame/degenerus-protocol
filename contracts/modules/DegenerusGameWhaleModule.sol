@@ -167,6 +167,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      tier (levels 0-9); level 10 opens the standard 100-level cycle pricing.
     uint24 private constant WHALE_BONUS_END_LEVEL = 9;
 
+    /// @dev Bulk buy: every 5 passes in one purchase award one more pass's entries (same
+    ///      shape as a paid pass). Price, lootbox, DGNRS, affiliate and Craps credit follow
+    ///      the paid quantity only.
+    uint256 private constant WHALE_BULK_BONUS_DIVISOR = 5;
+
     /// @dev Whale pass lootbox share (10%).
     uint16 private constant WHALE_LOOTBOX_BPS = 1000;
 
@@ -177,8 +182,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      high-roller Craps pass the early purchase banks.
     uint16 private constant DEITY_EARLY_LOOTBOX_BPS = 500;
 
-    /// @dev Deity pass base price (24 ETH, unscaled). Actual price = 24 + T(n) where T(n) = n*(n+1)/2, n = passes sold so far.
+    /// @dev Deity pass base price (24 ETH, unscaled). Price = 24 + T(n) where T(n) = n*(n+1)/2,
+    ///      n = passes sold so far, through the 27th pass (n = 26, 375 ETH); every later pass
+    ///      doubles the one before it, so the 32nd costs 12,000 ETH.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
+    uint256 private constant DEITY_DOUBLING_ANCHOR_SOLD = 26;
+    uint256 private constant DEITY_DOUBLING_ANCHOR_PRICE = 375 ether;
 
     /// @dev Deity pass boon expiry (4 game days, expires at jackpot reset).
     uint32 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
@@ -194,7 +203,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Queues 20 × quantity bonus entries/lvl for levels passLevel-9; the rest of the span
      *        is awarded as whole tickets (4 entries each): quantity/2 tickets on every level, plus
      *        one ticket every 2nd level when quantity is odd (1 pass = 1 whole ticket per 2 levels).
-     *      - Lootbox: 10% of price.
+     *      - Bulk buy: every 5 passes in one purchase award one more pass's entries; the
+     *        price, lootbox, DGNRS, affiliate and Craps credit follow the paid quantity.
+     *      - Lootbox: 10% of price, as one custom box per pass bought; fewer, larger boxes as
+     *        the entry's 100-box cap closes, held customs averaged in (a full entry with no
+     *        custom to fold into reverts; the next RNG index clears it).
      *      - Below level 10: one Craps day-pass credit per pass purchased, banked at the
      *        table (credit-only, spendable via applyCrapsPasses). Keys on passes bought,
      *        not price paid, so a boon-discounted purchase earns the same.
@@ -352,9 +365,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         mintPacked_[buyer] = data;
         emit PassActivated(buyer, true, ticketStartLevel, newFrozenLevel, data);
 
-        // Queue entries: 20*quantity/lvl for bonus levels (passLevel to 9); the standard
-        // leg awards 2*quantity half-passes as whole-ticket chunks (strided when odd).
-        uint32 bonusEntries = uint32(WHALE_BONUS_ENTRIES_PER_LEVEL * quantity);
+        // Queue entries for the paid passes plus one bonus pass per 5 bought: 20/lvl per pass
+        // for bonus levels (passLevel to 9); the standard leg awards 2 half-passes per pass
+        // as whole-ticket chunks (strided when odd).
+        uint256 awardQty = quantity + quantity / WHALE_BULK_BONUS_DIVISOR;
+        uint32 bonusEntries = uint32(WHALE_BONUS_ENTRIES_PER_LEVEL * awardQty);
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
             ? (WHALE_BONUS_END_LEVEL - passLevel + 1)
             : 0;
@@ -371,7 +386,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             buyer,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
-            WHALE_HALF_PASSES_PER_PASS * quantity,
+            WHALE_HALF_PASSES_PER_PASS * awardQty,
             false
         );
 
@@ -440,9 +455,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             );
         }
 
-        // Lootbox: 10% of price
+        // Lootbox: 10% of price, one box per pass bought
         uint256 lootboxAmount = (totalPrice * WHALE_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(buyer, lootboxAmount);
+        _recordLootboxEntry(buyer, lootboxAmount, uint8(quantity));
         // Below level 10 (passLevel == level + 1, invariant across this call) every pass
         // bought banks one Craps day-pass credit on the table's credit-only door.
         if (passLevel <= 10) {
@@ -642,7 +657,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Award lootbox as 10% of the price paid
         uint256 lootboxAmount = (totalPrice * LAZY_PASS_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(buyer, lootboxAmount);
+        _recordLootboxEntry(buyer, lootboxAmount, 1);
         _grantSeatCoin(buyer);
     }
 
@@ -652,8 +667,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      Buyer chooses from available symbols (0-31). Virtual trait-targeted jackpot
      *      entries are computed at resolution time — no explicit ticket queuing needed.
      *
-     *      Price: 24 + T(n) ETH where n = passes sold so far, T(n) = n*(n+1)/2.
-     *      First pass costs 24 ETH, last (32nd) costs 520 ETH.
+     *      Price: 24 + T(n) ETH where n = passes sold so far, T(n) = n*(n+1)/2, through the
+     *      27th pass (375 ETH); each pass after that doubles the previous price, so the
+     *      28th costs 750 ETH and the last (32nd) 12,000 ETH.
      *
      *      Craps award (every deity purchase): below level 10 the lootbox is 5% of price
      *      and the buyer banks one HIGH-ROLLER Craps pass credit; from level 10 the
@@ -702,8 +718,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 mp = mintPacked_[buyer];
         if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert AlreadyOwnsDeityPass();
 
-        uint256 k = deityPassOwners.length;
-        uint256 basePrice = DEITY_PASS_BASE + (k * (k + 1) * 1 ether) / 2;
+        uint256 basePrice = _deityPassBasePrice(deityPassOwners.length);
 
         // Apply discount boon if active (tier 1=10%, 2=20%, 3=35%)
         uint256 totalPrice = basePrice;
@@ -832,7 +847,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         bool earlyDeity = passLevel <= 10;
         uint256 lootboxAmount = (totalPrice
             * (earlyDeity ? DEITY_EARLY_LOOTBOX_BPS : DEITY_LOOTBOX_BPS)) / 10_000;
-        _recordLootboxEntry(buyer, lootboxAmount);
+        _recordLootboxEntry(buyer, lootboxAmount, 1);
         ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses(
             buyer,
             earlyDeity ? 0 : 1,
@@ -953,15 +968,26 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
     }
 
+    /// @dev Undiscounted deity pass price with `sold` passes already taken: triangular through
+    ///      the anchor (sold 26 = 375 ETH), then doubling from the anchor.
+    function _deityPassBasePrice(uint256 sold) private pure returns (uint256) {
+        if (sold <= DEITY_DOUBLING_ANCHOR_SOLD) {
+            return DEITY_PASS_BASE + (sold * (sold + 1) * 1 ether) / 2;
+        }
+        return DEITY_DOUBLING_ANCHOR_PRICE << (sold - DEITY_DOUBLING_ANCHOR_SOLD);
+    }
+
+    /// @dev Record a pass purchase's lootbox spend as `boxes` custom boxes of equal value.
     function _recordLootboxEntry(
         address buyer,
-        uint256 lootboxAmount
+        uint256 lootboxAmount,
+        uint8 boxes
     ) private {
         // Pass-bundled lootbox spend joins the minted-units tally (400 units = one
         // ticket-price), combining with ticket spend for the participation floor.
         _recordLootboxUnits(buyer, lootboxAmount);
 
-        // The cover box itself is recorded by the Lootbox module — one place owns the order
+        // The boxes themselves are recorded by the Lootbox module — one place owns the order
         // slot's encoding, and boons stay ON for the pass bundle.
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSelector(
@@ -970,7 +996,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 lootboxAmount,
                 _clampScore(_playerActivityScore(buyer, _effectiveQuestStreak(buyer))),
                 level + 1,
-                true
+                true,
+                boxes
             )
         );
         if (!ok) {

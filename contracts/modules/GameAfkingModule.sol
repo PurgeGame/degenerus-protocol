@@ -1141,7 +1141,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 amount,
                 score,
                 currentLevel + 1,
-                false
+                false,
+                0
             )
         );
         if (!ok) {

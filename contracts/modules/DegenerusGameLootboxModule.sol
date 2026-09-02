@@ -471,8 +471,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 cHeld = _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK);
 
         // Summed as uint256 before the cap check: 8-bit lanes would wrap a large request back
-        // under the ceiling and let it through.
-        if (sHeld + mHeld + lHeld + cHeld + added > MAX_BOXES_PER_ORDER) revert E();
+        // under the ceiling and let it through. The cover box counts: an entry never resolves
+        // more than MAX_BOXES_PER_ORDER boxes.
+        if (
+            sHeld + mHeld + lHeld + cHeld + (_lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) == 0 ? 0 : 1) + added
+                > MAX_BOXES_PER_ORDER
+        ) revert E();
 
         uint256 price = PriceLookupLib.priceForLevel(uint24(_lbGet(word, LB_LEVEL_SHIFT, LB_LEVEL_MASK)));
         uint256 customWei = _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) * LB_CUSTOM_SCALE;
@@ -659,23 +663,33 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         emit LootBoxBuy(buyer, idx, costWei);
     }
 
-    /// @notice Record a system-granted cover box — the whale-pass bundle and the afking
-    ///         auto-buy. Accumulates into the order's cover lane and resolves as ONE extra box.
+    /// @notice Record a system-granted box spend — the pass purchases and the afking auto-buy.
+    ///         A pass purchase lands as up to `count` ordinary custom boxes (fewer, larger ones
+    ///         as the entry's cap closes), folding any held customs in at the value-weighted
+    ///         average size; at a full entry the value folds into the held customs with no new
+    ///         box. The afking cover (count 0) accumulates into the order's cover lane and
+    ///         resolves as ONE box, folding into held customs instead when the entry is full.
     /// @dev Delegatecall entrypoint shared by the Whale and Afking modules; runs in the Game's
-    ///      storage context. Deliberately outside `MAX_BOXES_PER_ORDER`: a cover is granted, not
-    ///      chosen, so it must never be able to lock a player out of buying — and it never
-    ///      touches `customSize`, so it cannot strand a player behind a size they did not pick.
-    ///      The player's own EV score/level freeze on the first box either way, so a cover
+    ///      storage context. An entry never holds more than `MAX_BOXES_PER_ORDER` boxes on any
+    ///      path (the buy side counts the cover box too); a held custom size only ever scales
+    ///      up. The player's own EV score/level freeze on the first box either way, so a cover
     ///      arriving first is what seeds them.
-    /// @param player Player receiving the cover.
-    /// @param amountWei Cover spend in wei.
+    /// @custom:reverts E When the entry is full and holds no custom box to fold the value into.
+    /// @param player Player receiving the boxes.
+    /// @param amountWei Box spend in wei.
     /// @param score Caller's activity-score snapshot, used only if this is the first box.
     /// @param capKey Level key for the shared per-(player, level) EV-cap accumulator.
-    /// @param boost Whether to consume a live lootbox-boost boon (whale bundle yes, afking no).
-    function recordCoverBox(address player, uint256 amountWei, uint16 score, uint24 capKey, bool boost)
-        external
-        payable
-    {
+    /// @param boost Whether to consume a live lootbox-boost boon (pass purchases yes, afking no).
+    /// @param count Custom boxes wanted (one per pass bought); zero folds the value into the
+    ///        cover lane.
+    function recordCoverBox(
+        address player,
+        uint256 amountWei,
+        uint16 score,
+        uint24 capKey,
+        bool boost,
+        uint8 count
+    ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         // Below storage granularity the cover lane would round to a ZERO count while the
         // level/score write left the word non-zero — a queue slot the sweep skips forever.
@@ -740,15 +754,36 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             _blendBps(uint16(_lbGet(word, LB_ADJ_SHIFT, LB_BPS_MASK)), priorNominal, evExtra, amountWei)
         );
 
-        // Covers accumulate into one box rather than one each: they arrive on a schedule the
-        // player does not control, so counting them would let the sweep's per-entry cost drift
-        // with subscription cadence rather than with what anyone chose to buy.
-        word = _lbSet(
-            word,
-            LB_COVER_SHIFT,
-            LB_COVER_MASK,
-            _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) + amountWei / LB_CUSTOM_SCALE
-        );
+        uint256 cHeld = _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK);
+        uint256 held = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK) + _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK)
+            + _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK) + cHeld
+            + (_lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) == 0 ? 0 : 1);
+        if (count != 0 || (held >= MAX_BOXES_PER_ORDER && cHeld != 0)) {
+            // A pass purchase lands in the custom lane: one box per pass while the entry has the
+            // room, fewer and larger ones as the cap closes. Customs already held fold in at the
+            // value-weighted average size, so a held size only ever scales up and a full entry
+            // still takes the value without a new box. An afking cover that finds the entry full
+            // folds in the same way rather than opening the cover lane as a box past the cap.
+            // Only a full entry with nothing to fold into refuses. The split's sub-unit dust is
+            // reward-side only.
+            uint256 n = held >= MAX_BOXES_PER_ORDER ? 0 : MAX_BOXES_PER_ORDER - held;
+            if (n > count) n = count;
+            if (n == 0 && cHeld == 0) revert E();
+            uint256 heldScaled = cHeld == 0 ? 0 : cHeld * _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK);
+            word = _lbSet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK, (heldScaled + amountWei / LB_CUSTOM_SCALE) / (cHeld + n));
+            word = _lbSet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK, cHeld + n);
+        } else {
+            // Afking covers accumulate into one box rather than one each: they arrive on a
+            // schedule the player does not control, so counting them would let the sweep's
+            // per-entry cost drift with subscription cadence rather than with what anyone chose
+            // to buy.
+            word = _lbSet(
+                word,
+                LB_COVER_SHIFT,
+                LB_COVER_MASK,
+                _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) + amountWei / LB_CUSTOM_SCALE
+            );
+        }
         lootboxOrder[idx][player] = word;
 
         uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK) + _packEthToMilliEth(amountWei);

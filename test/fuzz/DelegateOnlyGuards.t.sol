@@ -30,4 +30,33 @@ contract DelegateOnlyGuards is DeployProtocol {
         vm.expectRevert();
         whaleModule.purchaseDeityPass{value: 1 ether}(address(this), 0, bytes32(0));
     }
+
+    // The lootbox module's five delegatecall-only entrypoints. Each guards on the executing
+    // address being the Game; called on the module itself, each must refuse before touching
+    // the module's own (empty) storage.
+
+    function test_quoteBoxOrder_directCallReverts() public {
+        vm.expectRevert();
+        lootboxModule.quoteBoxOrder(address(this), 1);
+    }
+
+    function test_beginBoxOrder_directCallReverts() public {
+        vm.expectRevert();
+        lootboxModule.beginBoxOrder(address(this), 1);
+    }
+
+    function test_recordCoverBox_directCallReverts() public {
+        vm.expectRevert();
+        lootboxModule.recordCoverBox(address(this), 1 ether, 1, 0, false, 1);
+    }
+
+    function test_applyBoxOrderScore_directCallReverts() public {
+        vm.expectRevert();
+        lootboxModule.applyBoxOrderScore(address(this), 1, 0, 1 ether, 0);
+    }
+
+    function test_resolveLootboxDirect_directCallReverts() public {
+        vm.expectRevert();
+        lootboxModule.resolveLootboxDirect(address(this), 1 ether, 1, 1);
+    }
 }

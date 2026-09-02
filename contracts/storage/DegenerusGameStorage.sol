@@ -1456,10 +1456,10 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LB_COUNT_MASK = 0xFF;                               // 8 bits per tier
     uint256 internal constant LB_CUSTOM_SIZE_SHIFT = 113;
     uint256 internal constant LB_CUSTOM_SIZE_MASK = 0xFFFFFFFFFFFF;               // 48 bits
-    /// @dev Whale-pass and afking covers grant box value the player did not choose and cannot
-    ///      size, so it cannot be a count against a preset. It accumulates in its own lane and
-    ///      resolves as ONE extra box — outside MAX_BOXES_PER_ORDER, since a cover must never
-    ///      be able to lock a player out of buying, and never touching customSize.
+    /// @dev The afking cover grants box value the player did not choose and cannot size, so it
+    ///      cannot be a count against a preset. It accumulates in its own lane and resolves as
+    ///      ONE extra box that counts toward MAX_BOXES_PER_ORDER like any other, never touching
+    ///      customSize. Pass purchases land as ordinary custom boxes instead.
     uint256 internal constant LB_COVER_SHIFT = 161;
     uint256 internal constant LB_COVER_MASK = 0xFFFFFFFFFFFF;                     // 48 bits
 

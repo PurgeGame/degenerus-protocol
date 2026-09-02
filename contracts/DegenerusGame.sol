@@ -1024,7 +1024,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Per pass x quantity: 20 entries/level for [passLevel..9]; the rest of the 100-level
     ///      span from passLevel = level+1 pays 2 x quantity half-passes as whole tickets
     ///      (4 entries = 1 whole ticket), strided so one pass earns a ticket every 2nd level.
-    ///      Includes lootbox (10% of price).
+    ///      Every 5 passes in one purchase award one more pass's entries; price, lootbox and
+    ///      credits follow the paid quantity.
+    ///      Includes lootbox (10% of price, one box per pass bought).
     ///      Frozen stats don't increment until game reaches the frozen level.
     ///
     ///      Fund distribution - Level 0: 30% next / 70% future.

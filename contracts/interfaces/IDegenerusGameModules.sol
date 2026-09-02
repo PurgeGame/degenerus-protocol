@@ -374,18 +374,20 @@ interface IDegenerusGameLootboxModule {
             uint256 priorNominal
         );
 
-    /// @notice Record a system-granted cover box (whale-pass bundle, afking auto-buy)
-    /// @param player Player receiving the cover
-    /// @param amountWei Cover spend in wei
+    /// @notice Record a system-granted box spend (pass purchases, afking auto-buy)
+    /// @param player Player receiving the boxes
+    /// @param amountWei Box spend in wei
     /// @param score Activity-score snapshot, used only if this is the player's first box here
     /// @param capKey Level key for the shared per-(player, level) EV-cap accumulator
     /// @param boost Whether to consume a live lootbox-boost boon
+    /// @param count Custom boxes wanted, one per pass (fewer, larger ones as the cap closes; held customs fold in at the average size); zero folds the value into the cover lane
     function recordCoverBox(
         address player,
         uint256 amountWei,
         uint16 score,
         uint24 capKey,
-        bool boost
+        bool boost,
+        uint8 count
     ) external payable;
 
     /// @notice Freeze the order's activity score and fold this purchase's EV-cap draw
