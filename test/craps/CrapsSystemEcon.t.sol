@@ -96,11 +96,6 @@ contract CrapsSystemEconTest is CrapsPins {
         bool vaultOff; // stand the vault down
         bool vaultDark; // give the vault the don't-pass board
         bool starveBodies; // refuse the bodies' burn, so they fall through to the comp path
-        // CHERRY-PICKING. Zero takes the whole day through the day lane. Nonzero takes windows
-        // ONE AT A TIME and only where the schedule drew this goal multiple — the terms are
-        // public before entry, so this is a door the contract actually leaves open.
-        uint16 onlyGoalMult;
-        uint8 onlyDepth; // and only at this bankroll depth; zero means any
     }
 
     struct Ledger {
@@ -219,15 +214,11 @@ contract CrapsSystemEconTest is CrapsPins {
             (uint256 va,) = craps.passCreditsOf(ContractAddresses.VAULT);
             L.passFunded += (hb - ha + vb - va) * dayBill;
 
-            if (f.onlyGoalMult == 0) {
-                uint256 hm = craps.highMultForDay(day);
-                for (uint256 i = 0; i < ps.length; ++i) {
-                    uint16 mult = i < f.highSeats ? uint16(hm) : 1;
-                    vm.prank(ps[i]);
-                    craps.enterBonusDay(board, mult);
-                }
-            } else {
-                _seatSelectively(f, ps, board, day);
+            uint256 hm = craps.highMultForDay(day);
+            for (uint256 i = 0; i < ps.length; ++i) {
+                uint16 mult = i < f.highSeats ? uint16(hm) : 1;
+                vm.prank(ps[i]);
+                craps.enterBonusDay(board, mult);
             }
 
             for (uint256 p = 0; p < PERIODS; ++p) {
@@ -263,30 +254,6 @@ contract CrapsSystemEconTest is CrapsPins {
         L.vaultCredit = now_[6] - snap[6];
         // Whatever the pots and the contested lane did not pay came home with the runs.
         L.runCredit = L.credited - L.potCredit - L.laneCredit;
-    }
-
-    /// @dev Seat the field ONLY at windows whose published terms match what the field is
-    ///      hunting. `bonusTermsFor` is readable the moment the day opens and every window of
-    ///      the day is still joinable then, so a field can read all seven and sit down at the
-    ///      ones it likes. Nothing here is a cheat code: it is the ordinary per-window door.
-    function _seatSelectively(Field memory f, address[] memory ps, Craps.Bets memory board, uint24 day)
-        internal
-    {
-        // THE EVENT IS LEFT OUT. Its bankroll runs to sixty thousand against a routine window's
-        // three hundred, so a handful of them would carry most of the field's action and the
-        // measurement would be about those few runs rather than about the cell.
-        for (uint256 p = 0; p + 1 < PERIODS; ++p) {
-            (uint128 bankroll, uint128 goal, uint256 boardStake,,,) = craps.bonusTermsFor(day, p);
-            if (bankroll == 0 || boardStake == 0) continue;
-            if (goal / bankroll != f.onlyGoalMult) continue;
-            // `boardStake` is the SEVEN chips a picking ticket posts, not the whole round, so the
-            // round is `boardStake * 10 / 7` and the depth is the bankroll over that.
-            if (f.onlyDepth != 0 && (uint256(bankroll) * 7) / (boardStake * 10) != f.onlyDepth) continue;
-            for (uint256 i = 0; i < ps.length; ++i) {
-                vm.prank(ps[i]);
-                craps.enterBonusBattle(p, board, 1);
-            }
-        }
     }
 
     /// @dev The whole FLIP balance sheet in one read: totals first, then the two protocol
@@ -721,40 +688,11 @@ contract CrapsSystemEconTest is CrapsPins {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // H. CHERRY-PICKING — the field reads the schedule before it sits down.
+    // H. THE SCHEDULE HAS ONE FORMAT.
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice `bonusTermsFor` is public and every window of a day is joinable the moment the day
-    ///         opens, so nothing stops a field from reading all seven and entering only the ones
-    ///         whose terms it likes. Depth and goal are drawn independently — three depths, four
-    ///         goals — so one routine window in twelve is the shallowest, lowest-target cell,
-    ///         which is also the cell in which a run is least likely to bust and therefore the
-    ///         one that gives the LEAST back to the deletion the subsidy is funded by.
-    ///
-    ///         This drives that field on the real contract and reports what it does to the
-    ///         ledger, against the same field taking the whole day blind.
-    function test_H1_aFieldThatOnlyTakesTheCheapestCell() public {
-        Field memory f = _fair(20);
-        f.vaultOff = true;
-        f.onlyGoalMult = 5;
-        f.onlyDepth = 2;
-        Ledger memory L = _play(f, 1600, 0x81);
-        _report("H1  20 fair-core seats, ONLY depth-2 / goal-5x windows", L);
-        emit log_named_uint("  linear give-back bps  ", craps.BOOST_ACTION_BPS());
-        assertEq(L.minted, 0, "craps minted liquid FLIP");
-    }
-
-    /// @notice The control: the SAME seats, the same board, taking every window the day offers.
-    function test_H2_theSameFieldTakingTheWholeDay() public {
-        Field memory f = _fair(20);
-        f.vaultOff = true;
-        Ledger memory L = _play(f, 300, 0x82);
-        _report("H2  20 fair-core seats, the WHOLE day (control for H1)", L);
-        assertEq(L.minted, 0, "craps minted liquid FLIP");
-    }
-
-    /// @dev Diagnostic: what the selector actually selected, and what the schedule offered.
-    function test_H0_whatTheSelectorSees() public {
+    /// @dev Every advertised scheduled window is five rounds deep and chases exactly 5x.
+    function test_H0_everyWindowUsesTheFixedFormat() public {
         vm.warp(_dayStart() + 1 days);
         uint256 goalFive;
         uint256 otherGoals;

@@ -33,6 +33,11 @@ over a 168h lifetime and requires approve-weight > reject-weight. A proposal is 
 moment VRF recovers or a word is fulfilled after creation (see SECURITY.md role 1, "kill-on-recovery"). Feed swap
 requires the feed unhealthy 2d (admin) / 7d (community); a down feed only suspends LINK→FLIP donation
 credit (LINK donations still process). This is the intended trust model (see SECURITY.md).
+The daily VRF request itself is a HARD HALT by policy: `_requestVrfWord` (advance module) reverts
+the crank when the coordinator refuses the request (subscription unfunded, coordinator
+misconfigured), so the game stops at the day boundary until VRF funding/config is fixed or the
+rotation above lands — it never proceeds on a missing word. The mid-day lootbox request is the
+fail-soft twin (`_tryRequestRng`, try/catch).
 
 **Growth-parimutuel scoring is claim-time-derived, and betting ignores the RNG lock.**
 `DegenerusParimutuel` stores no settlement result: every claim re-derives its round's outcome

@@ -30,6 +30,22 @@ contract BoxQueueViewer is DegenerusGame {
     /// @notice The raw persisted lootboxOrder word. word != 0 => a persisted, not-yet-opened box;
     ///         word == 0 => already resolved (drained on open, the whole word cleared in one
     ///         SSTORE) and correctly absent from the queue.
+    /// @notice The most times any one buyer appears in boxPlayers[index]. Each store enqueues a
+    ///         buyer once per index however many boxes they buy: the box order (mint and cover
+    ///         lootboxes share `lootboxOrder`) and the presale box (`presaleBoxEth`) each push
+    ///         on their own first deposit, so a buyer holding both sits in the queue twice, and
+    ///         the sweep's first visit opens both legs and its second is a zero/zero skip.
+    function boxPlayersMaxMultiplicity(uint48 index) external view returns (uint256 most) {
+        address[] storage q = boxPlayers[index];
+        for (uint256 i; i < q.length; i++) {
+            uint256 n;
+            for (uint256 j; j < q.length; j++) {
+                if (q[i] == q[j]) n++;
+            }
+            if (n > most) most = n;
+        }
+    }
+
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
         return lootboxOrder[index][who];
     }
@@ -134,6 +150,28 @@ contract BoxEnqueue is DeployProtocol {
                     enqueued,
                     "WHALE-01: every persisted box (base != 0) must be enqueued in boxPlayers[index] for the permissionless auto-open"
                 );
+            }
+        }
+
+        vm.etch(address(game), realCode);
+    }
+
+    // =========================================================================
+    // INVARIANT: the queue is bounded by buyers x stores, never by boxes
+    // =========================================================================
+
+    function invariant_queueIsBoundedByBuyersNotBoxes() public {
+        BoxCreationHandler.BoxRef[] memory refs = handler.trackedBoxes();
+
+        bytes memory realCode = address(game).code;
+        vm.etch(address(game), type(BoxQueueViewer).runtimeCode);
+        BoxQueueViewer viewer = BoxQueueViewer(payable(address(game)));
+
+        for (uint256 i; i < refs.length; i++) {
+            uint256 most = viewer.boxPlayersMaxMultiplicity(refs[i].index);
+            if (most > 2) {
+                vm.etch(address(game), realCode);
+                assertLe(most, 2, "a buyer is enqueued at most once per store (box order, presale box), however many boxes they buy");
             }
         }
 

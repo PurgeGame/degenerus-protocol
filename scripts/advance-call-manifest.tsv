@@ -1,0 +1,255 @@
+# Advance-chain external-call manifest — the reviewed registry behind scripts/check-advance-calls.sh.
+#
+# One row per external call site in the crank's file set (scripts/lib/external_call_extract.py:
+# the game facade, its storage base, the advance module and every module the advance reaches).
+# CLASS is the reviewed reachability judgement; the gate keeps the registry in exact
+# correspondence with source and requires every CRANK-PINNED row to name a test that drives
+# the callee (the file must literally mention the callee function).
+#
+# Roots: DegenerusGame.advanceGame -> AdvanceModule.advanceGame (every internal it reaches:
+# rngGate, _finalizeRngRequest, _unlockRng, _handleGameOverPath, _consolidatePoolsAndRewardJackpots,
+# _endPhase, _rewardTopAffiliate, _distributeYieldSurplus, _runSubscriberStage, the ticket batches,
+# _autoStakeExcessEth, _tryRequestRng, _requestVrfWord, _afKingSubDraw, _backfillGapDays,
+# _gameOverEntropy, _resolvePendingRedemption); the VRF fulfilment (rawFulfillRandomWords, which
+# makes no external call); the keeper router mineFlip (advance self-call, _autoOpen/_openAfkingBox,
+# openHumanBoxes, _crapsKeep under try). Module roots: Mint.processTicketBatch/processFutureTicketBatch,
+# Afking.processSubscriberStage, Jackpot.payDailyJackpot/payDailyJackpotCoinAndTickets/payDailyFlipJackpot/
+# distributeYieldSurplus, GameOver.handleGameOverDrain/handleFinalSweep, the facade self-calls
+# runBafJackpot/runDecimatorJackpot/runTerminalJackpot/runTerminalDecimatorJackpot/emitDailyWinningTraits.
+#
+# Classes: CRANK-PINNED (bare, on the crank, pin required) · CRANK-TRY (wrapped at the site) ·
+# CRANK-CAUGHT (bare at the site, but every crank path to it crosses an upstream try/catch —
+# the rationale names the catching site) · CRANK-SELF (delegatecall/self-call into own module code)
+# · CRANK-POLICY (documented intentional halt) · OFF-CRANK (not reachable from any root) ·
+# CRANK-UNPINNED (bare crank call with no pin yet — the gate refuses it).
+#
+# Columns: CLASS  callee  function  file  mode  pin  rationale
+CLASS	callee	function	file	mode	pin	rationale
+OFF-CRANK	lowlevel:call	constructor	DegenerusGame.sol	BARE		deploy-time ENS reverse-name registration; result ignored; unreachable after construction
+CRANK-SELF	lowlevel:delegatecall	advanceGame	DegenerusGame.sol	BARE		advanceGame dispatcher -> GAME_ADVANCE_MODULE.advanceGame (msg.data forwarded); own-storage revert bubbles by design
+OFF-CRANK	lowlevel:delegatecall	wireVrf	DegenerusGame.sol	BARE		ADMIN-only VRF wiring (DegenerusAdmin.wireVrf is the caller)
+OFF-CRANK	lowlevel:delegatecall	claimBingo	DegenerusGame.sol	BARE		player entry claimBingo
+OFF-CRANK	lowlevel:delegatecall	subscribe	DegenerusGame.sol	BARE		player / sDGNRS / VAULT subscribe entry (afking module); never reached from a crank root
+CRANK-SELF	lowlevel:delegatecall	mineFlip	DegenerusGame.sol	BARE		keeper router entry -> GAME_AFKING_MODULE.mineFlip (advance, box-open, craps legs run in-context); own-storage revert bubbles
+OFF-CRANK	lowlevel:delegatecall	claimAfkingFlip	DegenerusGame.sol	BARE		player entry claimAfkingFlip
+OFF-CRANK	lowlevel:delegatecall	drainAffiliateBase	DegenerusGame.sol	BARE		reached only from DegenerusAffiliate.claim (player affiliate claim)
+OFF-CRANK	lowlevel:delegatecall	decurse	DegenerusGame.sol	BARE		player entry decurse
+OFF-CRANK	lowlevel:delegatecall	clearSeatEncumbrance	DegenerusGame.sol	BARE		reached only from AFKingSubscriptionToken.reclaimSeat (player seat reclaim)
+OFF-CRANK	lowlevel:delegatecall	smite	DegenerusGame.sol	BARE		player entry smite (deity holder)
+OFF-CRANK	lowlevel:delegatecall	recordAfkingSecondary	DegenerusGame.sol	BARE		QUESTS callback on player quest completion / streak bonus; crank quest calls (rollDailyQuest, rollLevelQuest, finalizeAfking) never reach it
+OFF-CRANK	lowlevel:delegatecall	floorAfkingStreakBase	DegenerusGame.sol	BARE		QUESTS.handleFoilPurchase callback on a player foil-pack purchase
+CRANK-CAUGHT	IsDGNRS.poolBalance	payRecordSdgnrs	DegenerusGame.sol	BARE		reached from the keeper craps leg (keepScheduled→resolveSlot→_payout→armDiceRunRecord→payRecordSdgnrs) only inside GameAfkingModule._crapsKeep's try; a revert is swallowed there
+CRANK-CAUGHT	IsDGNRS.transferFromPool	payRecordSdgnrs	DegenerusGame.sol	BARE		same path as poolBalance: the craps leg's try in GameAfkingModule._crapsKeep catches any revert; not on the bare crank
+OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	setLootboxRngThreshold	DegenerusGame.sol	BARE		vault-owner admin setter (lootbox RNG threshold)
+OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	setMiddayMaxBasefee	DegenerusGame.sol	BARE		vault-owner admin setter (midday basefee cap)
+OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	setThanosLevel	DegenerusGame.sol	BARE		vault-owner admin setter (thanos level)
+OFF-CRANK	delegatecall:IDegenerusGameMintModule.purchase	_purchaseFor	DegenerusGame.sol	BARE		player ticket purchase entry (purchase / purchaseFor)
+OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.quoteBoxOrder	_quoteBoxOrderCost	DegenerusGame.sol	BARE		player box-order cost quote inside the purchase path
+OFF-CRANK	delegatecall:IDegenerusGameMintModule.purchaseWith	_purchaseWithFoil	DegenerusGame.sol	BARE		player purchaseWithFoil entry
+OFF-CRANK	delegatecall:IDegenerusGameFoilPackModule.buyFoilPack	_purchaseWithFoil	DegenerusGame.sol	BARE		player purchaseWithFoil entry (foil pack leg)
+OFF-CRANK	delegatecall:IDegenerusGameMintModule.redeemFlip	redeemFlip	DegenerusGame.sol	BARE		player / VAULT redeemFlip entry
+OFF-CRANK	delegatecall:IDegenerusGameMintModule.buyPresaleBox	buyPresaleBox	DegenerusGame.sol	BARE		player presale box purchase
+OFF-CRANK	lowlevel:delegatecall	claimFoilMatch	DegenerusGame.sol	BARE		player foil-match claim
+OFF-CRANK	lowlevel:delegatecall	claimFoilMatchMany	DegenerusGame.sol	BARE		player foil-match batch claim
+OFF-CRANK	lowlevel:delegatecall	claimGoldenTicket	DegenerusGame.sol	BARE		player golden-ticket claim
+OFF-CRANK	delegatecall:IDegenerusGameMintModule.buyLootboxAndPresaleBox	buyLootboxAndPresaleBox	DegenerusGame.sol	BARE		player lootbox+presale purchase entry
+OFF-CRANK	lowlevel:delegatecall	openBox	DegenerusGame.sol	BARE		player box open entry
+OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseWhalePass	_purchaseWhalePassFor	DegenerusGame.sol	BARE		player whale pass purchase
+OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseLazyPass	_purchaseLazyPassFor	DegenerusGame.sol	BARE		player lazy pass purchase
+OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseDeityPass	_purchaseDeityPassFor	DegenerusGame.sol	BARE		player deity pass purchase
+OFF-CRANK	lowlevel:delegatecall	placeDegeneretteBet	DegenerusGame.sol	BARE		player degenerette bet placement
+OFF-CRANK	lowlevel:delegatecall	resolveDegeneretteBets	DegenerusGame.sol	BARE		player / VAULT degenerette bet resolution (VAULT resolves as a player)
+OFF-CRANK	lowlevel:delegatecall	consumeCoinflipBoon	DegenerusGame.sol	BARE		FLIP / COINFLIP deposit-path callback (recordAmount != 0 branch only); processCoinflipPayouts re-stakes with 0
+OFF-CRANK	delegatecall:IDegenerusGameBoonModule.consumeDecimatorBoost	consumeDecimatorBoon	DegenerusGame.sol	BARE		FLIP decimator-burn callback (player burn)
+OFF-CRANK	delegatecall:IDegenerusGameBoonModule.issueDeityBoon	issueDeityBoon	DegenerusGame.sol	BARE		player deity boon issuance
+OFF-CRANK	lowlevel:delegatecall	recordDecBurn	DegenerusGame.sol	BARE		FLIP decimator-burn callback (player burn)
+CRANK-SELF	lowlevel:delegatecall	runDecimatorJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from _consolidatePoolsAndRewardJackpots -> GAME_DECIMATOR_MODULE.runDecimatorJackpot; bubble intentional
+CRANK-SELF	lowlevel:delegatecall	runBafJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from _consolidatePoolsAndRewardJackpots -> GAME_JACKPOT_MODULE.runBafJackpot; bubble intentional
+OFF-CRANK	lowlevel:delegatecall	recordTerminalDecBurn	DegenerusGame.sol	BARE		FLIP terminal-decimator burn callback (player burn)
+OFF-CRANK	lowlevel:delegatecall	boostTerminalDecimator	DegenerusGame.sol	BARE		player entry boostTerminalDecimator
+CRANK-SELF	lowlevel:delegatecall	runTerminalDecimatorJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from GameOverModule.handleGameOverDrain (advance game-over path) -> GAME_DECIMATOR_MODULE; bubble intentional
+CRANK-SELF	lowlevel:delegatecall	runTerminalJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from GameOverModule.handleGameOverDrain (advance game-over path) -> GAME_JACKPOT_MODULE; bubble intentional
+CRANK-SELF	lowlevel:delegatecall	emitDailyWinningTraits	DegenerusGame.sol	BARE		OnlySelf facade self-called from advanceGame (purchaseLevel==1 daily) -> GAME_JACKPOT_MODULE.emitDailyWinningTraits; bubble intentional
+OFF-CRANK	lowlevel:delegatecall	claimDecimatorJackpot	DegenerusGame.sol	BARE		permissionless decimator claim (player-side, separate tx)
+OFF-CRANK	lowlevel:delegatecall	claimDecimatorJackpotMany	DegenerusGame.sol	BARE		permissionless decimator batch claim (player-side, separate tx)
+OFF-CRANK	lowlevel:delegatecall	claimTerminalDecimatorJackpot	DegenerusGame.sol	BARE		player terminal decimator claim
+OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	_claimWinningsWithCurse	DegenerusGame.sol	BARE		claimWinnings / claimWinnings(amount) player claim path; GNRUS, sDGNRS and VAULT redemptions call it as players
+OFF-CRANK	lowlevel:call	withdrawAfkingFunding	DegenerusGame.sol	BARE		player / VAULT afking funding withdrawal entry
+OFF-CRANK	lowlevel:delegatecall	claimAffiliateDgnrs	DegenerusGame.sol	BARE		player affiliate DGNRS claim
+OFF-CRANK	ICoinflip.creditFlip	degeneretteResolve	DegenerusGame.sol	BARE		permissionless degenerette resolver bounty (its own tx; not a mineFlip router leg)
+OFF-CRANK	delegatecall:IGameAfkingModule.drainAfkingBoxes	openBoxes	DegenerusGame.sol	BARE		player liveness valve openBoxes; the router walks afking boxes inside GameAfkingModule instead
+OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.openHumanBoxes	openBoxes	DegenerusGame.sol	BARE		player liveness valve openBoxes; the router runs openHumanBoxes from GameAfkingModule.mineFlip instead
+OFF-CRANK	lowlevel:delegatecall	claimWhalePass	DegenerusGame.sol	BARE		player whale pass claim
+OFF-CRANK	lowlevel:delegatecall	resolveRedemptionLootbox	DegenerusGame.sol	BARE		sDGNRS._claimRedemptionFor (player claimRedemption); resolveRedemptionPeriod itself makes no game callback
+OFF-CRANK	lowlevel:delegatecall	creditRedemptionDirect	DegenerusGame.sol	BARE		sDGNRS._claimRedemptionFor (player claimRedemption); resolveRedemptionPeriod itself makes no game callback
+OFF-CRANK	lowlevel:delegatecall	pullRedemptionReserve	DegenerusGame.sol	BARE		sDGNRS._submitGamblingClaimFrom (player gambling-burn claim)
+OFF-CRANK	delegatecall:IDegenerusGameMintModule.sellFarFutureEntries	sellFarFutureEntries	DegenerusGame.sol	BARE		player / VAULT far-future entry sale
+OFF-CRANK	lowlevel:delegatecall	previewSellFarFutureEntries	DegenerusGame.sol	BARE		view preview of a far-future sale
+OFF-CRANK	IStETH.balanceOf	adminSwapEthForStEth	DegenerusGame.sol	BARE		ADMIN-only ETH->stETH swap
+OFF-CRANK	IStETH.transfer	adminSwapEthForStEth	DegenerusGame.sol	BARE		ADMIN-only ETH->stETH swap
+OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	adminStakeEthForStEth	DegenerusGame.sol	BARE		vault-owner admin stake entry
+OFF-CRANK	IStETH.submit	adminStakeEthForStEth	DegenerusGame.sol	TRY		vault-owner admin stake entry; the catch re-throws TransferFailed
+OFF-CRANK	lowlevel:delegatecall	updateVrfCoordinatorAndSub	DegenerusGame.sol	BARE		ADMIN governance coordinator rotation (DegenerusAdmin is the caller)
+OFF-CRANK	lowlevel:delegatecall	requestLootboxRng	DegenerusGame.sol	BARE		keeper / CRAPS mid-day RNG request, its own tx; CrapsBattle._armSlot calls it under try and _crapsKeep catches the craps leg
+OFF-CRANK	IDegenerusCoin.burnCoin	reverseFlip	DegenerusGame.sol	BARE		player reverseFlip entry
+OFF-CRANK	IStETH.approve	_transferSteth	DegenerusGame.sol	BARE		claim payout helper (claimWinnings* / claimWinningsStethFirst); player, VAULT, GNRUS, sDGNRS claim entries
+OFF-CRANK	IsDGNRS.depositSteth	_transferSteth	DegenerusGame.sol	BARE		claim payout helper (claimWinnings* / claimWinningsStethFirst); sDGNRS-recipient leg
+OFF-CRANK	IStETH.transfer	_transferSteth	DegenerusGame.sol	BARE		claim payout helper (claimWinnings* / claimWinningsStethFirst); player, VAULT, GNRUS claim entries
+OFF-CRANK	IStETH.balanceOf	_payoutWithStethFallback	DegenerusGame.sol	BARE		ETH-first claim payout, claimWinnings player path
+OFF-CRANK	lowlevel:call	_payoutWithStethFallback	DegenerusGame.sol	BARE		ETH-first claim payout, claimWinnings player path (untrusted recipient call runs last)
+OFF-CRANK	IStETH.balanceOf	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-only claimWinningsStethFirst payout
+OFF-CRANK	lowlevel:call	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-only claimWinningsStethFirst payout
+OFF-CRANK	IStETH.balanceOf	yieldPoolView	DegenerusGame.sol	BARE		external view; no contract calls it (distributeYieldSurplus sums its own obligations)
+CRANK-PINNED	IVaultOwnerCheck.isVaultOwner	advanceGame	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/VaultSweep.t.sol;test/fuzz/MiddayRngCredit.t.sol	pre-gate stalled daily request: 1h vault-owner head start on the single 12h retry; view on the pinned VAULT (balance read)
+CRANK-PINNED	ICoinflip.armCenturySeed	advanceGame	modules/DegenerusGameAdvanceModule.sol	BARE	test/gas/Lvl100PhaseEndAdvanceGas.t.sol	x00 transition close arms the century seed; COINFLIP gate is msg.sender==GAME; silent when nothing is due
+CRANK-SELF	IDegenerusGame.emitDailyWinningTraits	advanceGame	modules/DegenerusGameAdvanceModule.sol	BARE		self-call to the OnlySelf facade -> GAME_JACKPOT_MODULE.emitDailyWinningTraits (purchaseLevel==1 daily); bubble intentional
+CRANK-PINNED	ICoinflip.armBafDraw	advanceGame	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/BafWeightedDraw.t.sol;test/gas/BafDrawGas.t.sol	x0 last-purchase latch arms tomorrow's weighted flip draw; COINFLIP gate is msg.sender==GAME
+CRANK-PINNED	IDegenerusParimutuel.recordGrowth	advanceGame	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/ParimutuelGrowthBet.t.sol	level-transition growth settlement (purchaseLevel>=2); PARIMUTUEL gate is the game; write-once ratchet entry
+CRANK-PINNED	IDegenerusQuests.rollLevelQuest	advanceGame	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/CoverageGap222.t.sol;test/unit/DegenerusQuests.test.js	level quest rolled at jackpot entry; QUESTS onlyGame gate is msg.sender==GAME
+CRANK-SELF	delegatecall:IDegenerusGameGameOverModule.handleFinalSweep	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	BARE		post-gameover final sweep delegatecall -> GAME_GAMEOVER_MODULE.handleFinalSweep; bubble intentional
+CRANK-SELF	delegatecall:IDegenerusGameMintModule.processTicketBatch	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	BARE		terminal cohort drain -> GAME_MINT_MODULE.processTicketBatch; dOk=false is swallowed so terminal fund release still runs
+CRANK-SELF	delegatecall:IDegenerusGameGameOverModule.handleGameOverDrain	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	BARE		terminal drain delegatecall -> GAME_GAMEOVER_MODULE.handleGameOverDrain; bubble intentional
+CRANK-PINNED	ICoinflip.fundRecordPool	_endPhase	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/BigRecordPool.t.sol	_endPhase funds the record pool with 0.2% notional FLIP; COINFLIP gate is the game; saturating add
+CRANK-PINNED	IDegenerusAffiliate.affiliateTop	_rewardTopAffiliate	modules/DegenerusGameAdvanceModule.sol	BARE	test/unit/DegenerusAffiliate.test.js	_rewardTopAffiliate view read at the last-purchase request; AFFILIATE view has no revert path
+CRANK-PINNED	IsDGNRS.poolBalance	_rewardTopAffiliate	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/AffiliateDgnrsClaim.t.sol	_rewardTopAffiliate reads the sDGNRS affiliate pool balance (view)
+CRANK-PINNED	IsDGNRS.transferFromPool	_rewardTopAffiliate	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/PresaleBoxDrain.t.sol;test/fuzz/CoverageGap222.t.sol	1% top-affiliate DGNRS reward; sDGNRS authorizes the game; clamps to the pool and returns the decrement
+CRANK-SELF	delegatecall:IDegenerusGameJackpotModule.distributeYieldSurplus	_distributeYieldSurplus	modules/DegenerusGameAdvanceModule.sol	BARE		yield surplus split delegatecall -> GAME_JACKPOT_MODULE.distributeYieldSurplus; bubble intentional
+CRANK-SELF	delegatecall:IGameAfkingModule.processSubscriberStage	_runSubscriberStage	modules/DegenerusGameAdvanceModule.sol	BARE		afking process STAGE chunk -> GAME_AFKING_MODULE.processSubscriberStage; fail-loud by design (no valve)
+CRANK-SELF	IDegenerusGame.runBafJackpot	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	BARE		self-call to the OnlySelf facade -> GAME_JACKPOT_MODULE.runBafJackpot; bubble intentional
+CRANK-PINNED	IDegenerusJackpots.markBafSkipped	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/BafConsolationClaim.t.sol	losing-flip x0 bracket marked skipped; JACKPOTS gate is msg.sender==GAME
+CRANK-PINNED	IWwxrpIncinerator.resolveIncinerator	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/WwxrpIncinerator.t.sol	century BAF-skip incinerator draw; WWXRP gate is the game; empty bracket returns address(0)
+CRANK-SELF	IDegenerusGame.runDecimatorJackpot	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	BARE		self-call to the OnlySelf facade -> GAME_DECIMATOR_MODULE.runDecimatorJackpot; bubble intentional
+CRANK-PINNED	ICoinflip.creditFlip	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/KeeperNonBrick.t.sol;test/fuzz/CrapsProtocolWiring.t.sol	transition FLIP credit to SDGNRS; COINFLIP flip-creditor gate includes the game
+CRANK-SELF	delegatecall:IDegenerusGameJackpotModule.payDailyJackpot	payDailyJackpot	modules/DegenerusGameAdvanceModule.sol	BARE		daily jackpot delegatecall -> GAME_JACKPOT_MODULE.payDailyJackpot; bubble intentional
+CRANK-SELF	delegatecall:IDegenerusGameJackpotModule.payDailyJackpotCoinAndTickets	payDailyJackpotCoinAndTickets	modules/DegenerusGameAdvanceModule.sol	BARE		split daily coin+tickets delegatecall -> GAME_JACKPOT_MODULE.payDailyJackpotCoinAndTickets; bubble intentional
+CRANK-SELF	delegatecall:IDegenerusGameJackpotModule.payDailyFlipJackpot	_payDailyCoinJackpot	modules/DegenerusGameAdvanceModule.sol	BARE		daily FLIP jackpot delegatecall -> GAME_JACKPOT_MODULE.payDailyFlipJackpot; bubble intentional
+CRANK-CAUGHT	IVRFCoordinator.getSubscription	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol	BARE		requestLootboxRng is keeper/player-entered; from the crank it is reached only via CrapsBattle._armSlot's own try (inside _crapsKeep's try)
+CRANK-PINNED	ICoinflip.processCoinflipPayouts	rngGate	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/VRFStallEdgeCases.t.sol;test/fuzz/StallResilience.t.sol;test/fuzz/CoinflipBonusDay.t.sol	daily flip settlement on the applied word; COINFLIP gate is msg.sender==GAME
+CRANK-PINNED	ICrapsBonusDay.openBonusDay	rngGate	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/CrapsOpenerFailOpen.t.sol;test/fuzz/CrapsProtocolWiring.t.sol	craps bonus day opens on the wall-day crank; deliberately unwrapped; callee is internally revert-free
+CRANK-PINNED	IDegenerusQuests.rollDailyQuest	rngGate	modules/DegenerusGameAdvanceModule.sol	BARE	test/repro/QuestStreakStallForgiveness.t.sol;test/repro/GenesisDailyQuestSeed.t.sol	daily quest roll on the wall day; idempotent per day; QUESTS onlyGame gate is msg.sender==GAME
+CRANK-PINNED	IVaultOwnerCheck.isVaultOwner	rngGate	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/VaultSweep.t.sol;test/fuzz/MiddayRngCredit.t.sol	rngGate 12h retry: 1h vault-owner head start; view on the pinned VAULT (balance read)
+OFF-CRANK	IAdminLinkValue.linkAmountToEth	_tryChargeMiddayCredit	modules/DegenerusGameAdvanceModule.sol	BARE		_tryChargeMiddayCredit, keeper mid-day credit charge; the CRAPS caller short-circuits before it
+CRANK-PINNED	IsDGNRS.pendingResolveDay	_resolvePendingRedemption	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/RedemptionEdgeCases.t.sol;test/fuzz/StakedStonkRedemption.t.sol	sentinel read of the unresolved gambling-burn day (view on sDGNRS)
+CRANK-PINNED	IsDGNRS.resolveRedemptionPeriod	_resolvePendingRedemption	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/RedemptionEdgeCases.t.sol;test/fuzz/StakedStonkRedemption.t.sol	resolves the sentinel day with a 25..175 roll; sDGNRS gate is the game; records only, no game callback
+CRANK-PINNED	ICoinflip.processCoinflipPayouts	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/VRFStallEdgeCases.t.sol;test/fuzz/StallResilience.t.sol	game-over settlement of the final day's flips on the delivered word (bonus 0)
+CRANK-PINNED	ICoinflip.processCoinflipPayouts	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/VRFStallEdgeCases.t.sol;test/fuzz/StallResilience.t.sol	game-over settlement on the historical fallback word (bonus 0)
+CRANK-SELF	delegatecall:IDegenerusGameMintModule.processFutureTicketBatch	_processFutureTicketBatch	modules/DegenerusGameAdvanceModule.sol	BARE		far-future promotion drain -> GAME_MINT_MODULE.processFutureTicketBatch; bubble intentional
+CRANK-SELF	delegatecall:IDegenerusGameMintModule.processTicketBatch	_runProcessTicketBatch	modules/DegenerusGameAdvanceModule.sol	BARE		windowed ticket sweep -> GAME_MINT_MODULE.processTicketBatch; bubble intentional
+CRANK-TRY	IStETH.submit	_autoStakeExcessEth	modules/DegenerusGameAdvanceModule.sol	TRY		auto-stake at the phase transition; catch emits StEthStakeFailed (Lido paused or reverting is non-fatal)
+CRANK-TRY	IVRFCoordinator.requestRandomWords	_tryRequestRng	modules/DegenerusGameAdvanceModule.sol	TRY		game-over entropy request; catch returns false and starts the 14-day fallback timer
+CRANK-POLICY	IVRFCoordinator.requestRandomWords	_requestVrfWord	modules/DegenerusGameAdvanceModule.sol	BARE		documented halt until VRF funding/config is fixed; recovery = governance coordinator swap (KNOWN-ISSUES.md §1 VRF-coordinator swap governance)
+CRANK-PINNED	IGNRUSResolve.pickCharity	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/RngRetryLootboxStall.t.sol;test/fuzz/WwxrpIncinerator.t.sol	level!=currentLevel is the one non-access revert; safe because level=lvl and the call share the atomic block
+CRANK-PINNED	IDegenerusQuests.rollDailyQuest	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	BARE	test/repro/QuestStreakStallForgiveness.t.sol;test/repro/GenesisDailyQuestSeed.t.sol	foil daily forced at the final-jackpot request (wall day only, never a retry); idempotent per day
+CRANK-PINNED	IStETH.balanceOf	_unlockRng	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/V56FreezeSolvency.t.sol	day-seal solvency snapshot event reads the stETH balance (view on the pinned STETH)
+CRANK-PINNED	ICoinflip.creditFlip	_afKingSubDraw	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/SeatTenureDraw.t.sol;test/fuzz/AfKingSubscription.t.sol	seat-tenure draw prize at the day seal; COINFLIP flip-creditor gate includes the game
+CRANK-PINNED	ICoinflip.processCoinflipPayouts	_backfillGapDays	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/VRFStallEdgeCases.t.sol;test/fuzz/StallResilience.t.sol	gap-day backfill settlement (<=120 days) on derived words (bonus 0)
+OFF-CRANK	IDegenerusQuests.effectiveBaseStreakAndAfking	_effectiveQuestStreak	storage/DegenerusGameStorage.sol	BARE		playerActivityScore view / player paths (decimator boost, degenerette, pass buys); router reach only inside lootbox try on CRAPS.deliverPasses{gas}
+CRANK-PINNED	IDegenerusQuests.awardQuestStreakShield	_applyBoon	modules/DegenerusGameBoonModule.sol	BARE	test/repro/QuestShieldCrossDayDoubleConsume.t.sol;test/repro/QuestStreakStallForgiveness.t.sol	Box boon delivery on the keeper open legs (rollBoxBoons -> _deliverBoon -> _applyBoon); callee onlyGame then zero-skip
+CRANK-PINNED	IDegenerusQuests.awardQuestStreakBonus	_creditActivity	modules/DegenerusGameBoonModule.sol	BARE	test/repro/QuestStreakStallForgiveness.t.sol;test/fuzz/QuestBoonAfkingStreakLoss.t.sol	Activity boon on the keeper open legs (_applyBoon -> _creditActivity); callee gated OnlyGame only, streak math clamped
+OFF-CRANK	ICoinflip.creditFlip	claimDecimatorJackpotMany	modules/DegenerusGameDecimatorModule.sol	BARE		Player batch-claim entry (facade claimDecimatorJackpotMany stub); pays the caller's claim bounty
+OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.resolveLootboxDirect	_awardDecimatorLootbox	modules/DegenerusGameDecimatorModule.sol	BARE		Reached only via _claimDecimatorJackpotFor <- claimDecimatorJackpot/Many (player claims); runDecimatorJackpot never calls it
+OFF-CRANK	IDegenerusGame.playerActivityScore	recordTerminalDecBurn	modules/DegenerusGameDecimatorModule.sol	BARE		Entry is FLIP.sol's player burn hook (OnlyCoin gate); not on the advance, VRF, or keeper paths
+OFF-CRANK	IDegenerusGame.playerActivityScore	boostTerminalDecimator	modules/DegenerusGameDecimatorModule.sol	BARE		Permissionless player boost entry (facade boostTerminalDecimator stub); credits msg.sender
+OFF-CRANK	IDegenerusAffiliate.payAffiliate	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); affiliate kickback leg
+OFF-CRANK	IDegenerusAffiliate.payAffiliate	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); affiliate kickback leg
+OFF-CRANK	ICoinflip.creditFlip	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); kickback credit to the buyer
+OFF-CRANK	ICoinflip.creditFlip	claimFoilMatchMany	modules/DegenerusGameFoilPackModule.sol	BARE		Player batch-claim entry (facade claimFoilMatchMany stub); caller bounty credit
+OFF-CRANK	lowlevel:delegatecall	_foilSpin	modules/DegenerusGameFoilPackModule.sol	BARE		Reached only via _payFoilTier <- _tryClaimFoilMatch <- claimFoilMatch/claimFoilMatchMany (player claims); the drain path never spins
+OFF-CRANK	ICoinflip.creditFlip	_foilSpin	modules/DegenerusGameFoilPackModule.sol	BARE		Reached only via _payFoilTier <- _tryClaimFoilMatch (player claims)
+OFF-CRANK	IFoilWwxrp.mintPrize	_foilSpin	modules/DegenerusGameFoilPackModule.sol	BARE		Reached only via _payFoilTier <- _tryClaimFoilMatch (player claims)
+OFF-CRANK	ICoinflip.creditFlip	_settleGoldenTicket	modules/DegenerusGameFoilPackModule.sol	BARE		Reached only from claimGoldenTicket (player claim entry)
+CRANK-SELF	delegatecall:IDegenerusGameJackpotModule.payGoldenTicketGrand	_pushFoilGrand	modules/DegenerusGameFoilPackModule.sol	BARE		Own JACKPOT module payGoldenTicketGrand on the ticket-batch drain (processTicketBatch -> _drainFoil -> _resolveFoilBuyer); bubbles EmptyRevert
+CRANK-PINNED	IStETH.balanceOf	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE	test/integration/GnrusRecovery.test.js;test/integration/CharityGameHooks.test.js	Game-over drain stage of the advance (dispatch at advance:929); Lido balanceOf is a pure view, no revert surface
+CRANK-PINNED	IGNRUSGameOver.burnAtGameOver	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE	test/integration/CharityGameHooks.test.js;test/integration/GnrusRecovery.test.js	Game-over drain; callee onlyGame, AlreadyFinalized only on a second call and the gameOver latch makes this the single call
+CRANK-PINNED	IsDGNRS.burnAtGameOver	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE	test/unit/DGNRSLiquid.test.js;test/integration/CharityGameHooks.test.js	Game-over drain; callee onlyGame, returns on zero pool balance, unchecked burn, no external call
+CRANK-PINNED	IFlipTombstone.tombstoneAtGameOver	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE	test/fuzz/FlipTombstone.t.sol	Game-over drain; callee OnlyGame then one-shot early return, only an allowance write
+CRANK-SELF	IDegenerusGame.runTerminalDecimatorJackpot	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE		External self-call; facade OnlySelf stub delegatecalls own DECIMATOR module runTerminalDecimatorJackpot, bubbled on purpose
+CRANK-SELF	IDegenerusGame.runTerminalJackpot	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE		External self-call; facade OnlySelf stub delegatecalls own JACKPOT module runTerminalJackpot, bubbled on purpose
+CRANK-PINNED	IGNRUSGameOver.onFinalSweep	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	BARE	test/integration/GnrusRecovery.test.js	Post-gameover final sweep stage (dispatch at advance:788); callee onlyGame, stamps sweptAt only
+CRANK-TRY	IDegenerusAdminShutdown.shutdownVrf	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	TRY		Catch swallows any admin/coordinator failure on VRF subscription shutdown so the sweep still pays out
+CRANK-PINNED	IStETH.balanceOf	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	BARE	test/integration/GnrusRecovery.test.js	Final sweep stage; Lido balanceOf is a pure view, no revert surface
+CRANK-PINNED	IStETH.transfer	_sendStethFirst	modules/DegenerusGameGameOverModule.sol	BARE	test/fuzz/FinalSweepPayoutLegs.t.sol	final-sweep payout leg to a pinned protocol receiver (VAULT/SDGNRS/GNRUS); hard-revert by policy; pinned by driving the real sweep through every leg (stETH-only, ETH-only, mixed, empty)
+CRANK-PINNED	IStETH.transfer	_sendStethFirst	modules/DegenerusGameGameOverModule.sol	BARE	test/fuzz/FinalSweepPayoutLegs.t.sol	final-sweep payout leg to a pinned protocol receiver (VAULT/SDGNRS/GNRUS); hard-revert by policy; pinned by driving the real sweep through every leg (stETH-only, ETH-only, mixed, empty)
+CRANK-PINNED	lowlevel:call	_sendStethFirst	modules/DegenerusGameGameOverModule.sol	BARE	test/fuzz/FinalSweepPayoutLegs.t.sol	final-sweep payout leg to a pinned protocol receiver (VAULT/SDGNRS/GNRUS); hard-revert by policy; pinned by driving the real sweep through every leg (stETH-only, ETH-only, mixed, empty)
+OFF-CRANK	IVRFCoordinator.requestRandomWords	_requestVrfWord	modules/DegenerusGameGameOverModule.sol	BARE		Reached only from updateVrfCoordinatorAndSub (OnlyAdmin governance rotation); the daily VRF request lives in the advance module
+CRANK-PINNED	IStETH.balanceOf	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	BARE	test/fuzz/V56FreezeSolvency.t.sol;test/fuzz/YieldSurplusSolvency.t.sol	Yield-surplus stage of the advance (dispatch at advance:1009); Lido balanceOf is a pure view
+CRANK-PINNED	ICoinflip.creditFlip	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	BARE	test/fuzz/CrapsProtocolWiring.t.sol;test/fuzz/GoldenTicketArmResolve.t.sol	Golden-ticket FLIP leg on payDailyJackpot (_resolveGoldenTicket) and the foil-drain grand; callee onlyFlipCreditors then zero-skip
+CRANK-PINNED	IWwxrpMintPrize.mintPrize	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	BARE	test/gas/KeeperResolveBetWorstCaseGas.t.sol;test/fuzz/GoldenTicketArmResolve.t.sol	Golden-ticket WWXRP leg on the same paths; callee gated OnlyMinter (GAME is a minter), plain mint
+CRANK-PINNED	ICoinflip.creditFlipBatch	_awardDailyCoinToTraitWinners	modules/DegenerusGameJackpotModule.sol	BARE	test/fuzz/CrapsProtocolWiring.t.sol;test/fuzz/JackpotCrapsComps.t.sol	Daily FLIP jackpot stage (payDailyFlipJackpot / CoinAndTickets -> _runFlipJackpot); batch skips zero/address(0) past onlyFlipCreditors
+CRANK-PINNED	ICrapsCompPassCredit.creditPasses	_payCrapsComps	modules/DegenerusGameJackpotModule.sol	BARE	test/fuzz/JackpotCrapsComps.t.sol;test/craps/CrapsPasses.t.sol	Comp quadrant of the daily FLIP jackpot; callee OnlyGame (met under delegatecall), unchecked saturating credit, no external call
+CRANK-PINNED	ICoinflip.creditFlipBatch	_awardFarFutureCoinJackpot	modules/DegenerusGameJackpotModule.sol	BARE	test/fuzz/CrapsProtocolWiring.t.sol;test/fuzz/JackpotCrapsComps.t.sol	Far-future coin leg of _runFlipJackpot; same batch callee, zero entries skipped
+OFF-CRANK	ICoinflip.armRecord	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	BARE		Reached only through the mint module's _lootboxLeg on player purchases; the keeper never purchases
+CRANK-SELF	delegatecall:IDegenerusGameBoonModule.rollBoxBoons	_rollSingleBoxBoons	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own BOON module rollBoxBoons on resolveAfkingBox/resolveLootboxDirect (keeper open legs)
+CRANK-PINNED	ICoinflip.creditFlip	_flushBoxAcc	modules/DegenerusGameLootboxModule.sol	BARE	test/gas/KeeperOpenBoxWorstCaseGas.t.sol;test/fuzz/CrapsProtocolWiring.t.sol	Box settlement flush on the keeper open legs (openHumanBoxes/resolveAfkingBox); zero-skipped here and in the callee past its gate
+CRANK-PINNED	IWWXRP.mintPrize	_flushBoxAcc	modules/DegenerusGameLootboxModule.sol	BARE	test/gas/KeeperResolveBetWorstCaseGas.t.sol;test/fuzz/WWXRPDailyDraw.t.sol	Box settlement flush WWXRP leg; callee OnlyMinter gate, GAME is a minter, plain mint
+CRANK-TRY	ICrapsPassDelivery.deliverPasses	_deliverPasses	modules/DegenerusGameLootboxModule.sol	TRY		Catch swallows any craps seat/day reservation failure (PASS_DELIVERY_GAS stipend) and falls back to a plain credit
+CRANK-PINNED	ICrapsPassDelivery.creditPasses	_deliverPasses	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/CrapsPassAwards.t.sol;test/craps/CrapsPasses.t.sol	Fallback credit inside the catch, same PASS_DELIVERY_GAS stipend; callee OnlyGame then a saturating storage write
+CRANK-SELF	delegatecall:IDegenerusGameBoonModule.rollBoxBoons	_rollTierImmediate	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own BOON module rollBoxBoons on the openHumanBoxes leg (_openLootBoxLegWith)
+CRANK-SELF	delegatecall:IDegenerusGameBoonModule.rollBoxBoonTiers	_rollBatchedTiers	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own BOON module rollBoxBoonTiers on the openHumanBoxes leg (_openLootBoxLegWith)
+CRANK-PINNED	ICrapsPassDelivery.creditPasses	_resolvePresaleBox	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/CrapsPassAwards.t.sol;test/craps/CrapsPasses.t.sol	Presale box resolution on the openHumanBoxes keeper leg; callee OnlyGame then saturating credit
+CRANK-PINNED	IWWXRP.mintPrize	_resolvePresaleBox	modules/DegenerusGameLootboxModule.sol	BARE	test/gas/KeeperResolveBetWorstCaseGas.t.sol;test/fuzz/WWXRPDailyDraw.t.sol	Presale box WWXRP leg; callee OnlyMinter gate, plain mint
+CRANK-PINNED	ICoinflip.creditFlip	_resolvePresaleBox	modules/DegenerusGameLootboxModule.sol	BARE	test/gas/KeeperOpenBoxWorstCaseGas.t.sol;test/fuzz/CrapsProtocolWiring.t.sol	Presale box FLIP leg; callee zero-skips past its creditor gate
+CRANK-PINNED	IWWXRP.mintPrize	_resolvePresaleBox	modules/DegenerusGameLootboxModule.sol	BARE	test/gas/KeeperResolveBetWorstCaseGas.t.sol;test/fuzz/WWXRPDailyDraw.t.sol	Presale box WWXRP leg (second outcome band); callee OnlyMinter gate, plain mint
+CRANK-PINNED	IsDGNRS.poolBalance	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/PresaleBoxDrain.t.sol	Presale-close sweep on the keeper open leg; sDGNRS poolBalance is a view
+CRANK-PINNED	IsDGNRS.transferFromPool	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/PresaleBoxDrain.t.sol	Presale-close sweep; callee onlyGame, clamps to the available pool, returns 0 when empty; owner never address(0)
+CRANK-PINNED	IsDGNRS.poolBalance	_presaleBoxDgnrsReward	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/PresaleBoxDrain.t.sol	Presale DGNRS reward on the keeper open leg; poolBalance view
+CRANK-PINNED	IsDGNRS.transferFromPool	_presaleBoxDgnrsReward	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/PresaleBoxDrain.t.sol	Presale DGNRS reward; callee onlyGame, clamps to available, returns 0 when empty
+OFF-CRANK	IStETH.transferFrom	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	BARE		Entry is sDGNRS._claimRedemptionFor (claimRedemption/Many, player); the advance's resolveRedemptionPeriod never re-enters the game
+OFF-CRANK	IStETH.transferFrom	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	BARE		Entry is sDGNRS._claimRedemptionFor (claimRedemption/claimRedemptionMany, player)
+OFF-CRANK	lowlevel:call	pullRedemptionReserve	modules/DegenerusGameLootboxModule.sol	BARE		Entry is sDGNRS._submitGamblingClaimFrom (player gambling claim); not on any crank root
+OFF-CRANK	IStETH.balanceOf	pullRedemptionReserve	modules/DegenerusGameLootboxModule.sol	BARE		Entry is sDGNRS._submitGamblingClaimFrom (player gambling claim)
+OFF-CRANK	IsDGNRS.pendingRedemptionEthValue	pullRedemptionReserve	modules/DegenerusGameLootboxModule.sol	BARE		Entry is sDGNRS._submitGamblingClaimFrom (player gambling claim)
+CRANK-PINNED	IsDGNRS.poolBalance	_resolveLootboxRoll	modules/DegenerusGameLootboxModule.sol	BARE	test/repro/LootboxNestedDgnrsOrdering.t.sol;test/fuzz/PresaleBoxDrain.t.sol	One poolBalance staticcall per box batch on the keeper open legs; view
+CRANK-SELF	delegatecall:IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox	_callWwxrpSpin	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own DEGENERETTE module resolveWwxrpSpinFromBox on box resolution (keeper open legs)
+CRANK-SELF	delegatecall:IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox	_callFlipSpins	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own DEGENERETTE module resolveFlipSpinsFromBox on box resolution (keeper open legs)
+CRANK-SELF	delegatecall:IDegenerusGameDegeneretteModule.resolveEthSpinFromBox	_callEthSpin	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own DEGENERETTE module resolveEthSpinFromBox on box resolution (keeper open legs)
+CRANK-PINNED	IsDGNRS.transferFromPool	_creditDgnrsReward	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/PresaleBoxDrain.t.sol;test/repro/RedemptionLootboxPayableForward.t.sol	DGNRS reward on box resolution (keeper open legs); callee onlyGame, clamps to the pool, returns 0 when empty
+CRANK-SELF	delegatecall:IDegenerusGameFoilPackModule.processFoilDrain	_drainFoil	modules/DegenerusGameMintModule.sol	BARE		Delegatecall into own FOILPACK module processFoilDrain on processTicketBatch (advance ticket stage)
+OFF-CRANK	ICoinflip.creditFlip	_redeemFlipFor	modules/DegenerusGameMintModule.sol	BARE		Player redeemFlip entry (facade stub); quest reward credit
+OFF-CRANK	IDegenerusCoin.burnCoinForSalvage	sellFarFutureEntries	modules/DegenerusGameMintModule.sol	BARE		Player sellFarFutureEntries entry (facade stub); salvage burn
+OFF-CRANK	ICoinflip.creditFlip	sellFarFutureEntries	modules/DegenerusGameMintModule.sol	BARE		Player sellFarFutureEntries entry (facade stub); salvage credit
+OFF-CRANK	lowlevel:delegatecall	_lootboxLeg	modules/DegenerusGameMintModule.sol	BARE		Reached from _quoteBoxOrder/_purchaseForWithCached on player purchase entries; the keeper's autoBuy never enters the mint module
+OFF-CRANK	ICoinflip.armRecord	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	BARE		Player purchase path (_purchaseFor/_purchaseForWith/buyLootboxAndPresaleBox)
+OFF-CRANK	IDegenerusQuests.handlePurchase	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	BARE		Player purchase path; quest purchase hook
+OFF-CRANK	IDegenerusAffiliate.payAffiliateCombined	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	BARE		Player purchase path; affiliate settlement
+OFF-CRANK	ICoinflip.creditFlipPair	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	BARE		Player purchase path; affiliate/buyer credit pair
+OFF-CRANK	delegatecall:IDegenerusGameBoonModule.consumePurchaseBoost	_callTicketPurchase	modules/DegenerusGameMintModule.sol	BARE		Reached from _redeemFlipFor/_purchaseForWithCached (player redeemFlip/purchase); own BOON module consumePurchaseBoost
+OFF-CRANK	IDegenerusCoin.burnCoin	_coinReceive	modules/DegenerusGameMintModule.sol	BARE		Reached from _callTicketPurchase on coin-paid player purchases
+OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseWhalePass entry (facade stub); affiliate leg
+OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseWhalePass entry (facade stub); affiliate leg
+OFF-CRANK	ICoinflip.creditFlip	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseWhalePass entry; kickback credit
+OFF-CRANK	ICrapsPassCredit.creditPasses	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseWhalePass entry; pass grant
+OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseLazyPass entry (facade stub); affiliate leg
+OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseLazyPass entry (facade stub); affiliate leg
+OFF-CRANK	ICoinflip.creditFlip	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseLazyPass entry; kickback credit
+OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry (facade stub); affiliate leg
+OFF-CRANK	IDegenerusDeityPassMint.mint	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry; pass NFT mint
+OFF-CRANK	IDegenerusAffiliate.getReferrer	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry; referrer lookup (view)
+OFF-CRANK	IDegenerusAffiliate.getReferrer	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry; upline lookup (view)
+OFF-CRANK	IDegenerusAffiliate.getReferrer	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry; second upline lookup (view)
+OFF-CRANK	ICrapsPassCredit.creditPasses	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry; pass grant
+OFF-CRANK	IsDGNRS.poolBalance	_rewardWhalePassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseWhalePass (player)
+OFF-CRANK	IsDGNRS.transferFromPool	_rewardWhalePassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseWhalePass (player)
+OFF-CRANK	IsDGNRS.poolBalance	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
+OFF-CRANK	IsDGNRS.transferFromPool	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
+OFF-CRANK	IsDGNRS.poolBalance	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
+OFF-CRANK	IsDGNRS.transferFromPool	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
+OFF-CRANK	IsDGNRS.transferFromPool	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
+OFF-CRANK	IsDGNRS.transferFromPool	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
+OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.recordCoverBox	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from the three pass purchases (player); own LOOTBOX module recordCoverBox
+OFF-CRANK	IAFKingSeatMint.mintSeatFor	_grantSeatCoin	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from the three pass purchases (player); claimWhalePass never calls it
+OFF-CRANK	IDegenerusAffiliate.claim	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry (self-consent or operator approval); affiliate drain leg
+OFF-CRANK	ISeatToken.balanceOf	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry; seat balance view
+OFF-CRANK	IDegenerusQuests.beginAfking	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry; quest afking start
+OFF-CRANK	IQuestCompletionView.questCompletionToday	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry; quest completion view
+CRANK-SELF	delegatecall:IDegenerusGameLootboxModule.recordCoverBox	_recordAfkingCoverBox	modules/GameAfkingModule.sol	BARE		Delegatecall into own LOOTBOX module recordCoverBox on processSubscriberStage (_deliverAfkingBuy)
+CRANK-PINNED	IDegenerusQuests.finalizeAfking	_finalizeAfking	modules/GameAfkingModule.sol	BARE	test/gas/V56AfkingGasMarginal.t.sol;test/fuzz/StreakSnapshotAndPendingFlipClamp.t.sol;test/fuzz/QuestBoonAfkingStreakLoss.t.sol	Evict leg of processSubscriberStage; callee onlyGame with idempotent early returns, no external call
+OFF-CRANK	ICoinflip.creditFlip	_settlePendingFlip	modules/GameAfkingModule.sol	BARE		Called only from subscribe (cancel/re-subscribe) and claimAfkingFlip (player entries); never from the stage/evict path
+CRANK-SELF	delegatecall:IDegenerusGameLootboxModule.resolveAfkingBox	_openAfkingBox	modules/GameAfkingModule.sol	BARE		Delegatecall into own LOOTBOX module resolveAfkingBox on the keeper afking open leg (mineFlip -> _autoOpen)
+CRANK-SELF	IGameRouter.advanceGame	mineFlip	modules/GameAfkingModule.sol	BARE		External self-call; facade advanceGame delegatecalls own ADVANCE module; the keeper's advance leg is the crank itself
+CRANK-SELF	delegatecall:IDegenerusGameLootboxModule.openHumanBoxes	mineFlip	modules/GameAfkingModule.sol	BARE		Delegatecall into own LOOTBOX module openHumanBoxes on the keeper human open leg
+CRANK-PINNED	ICoinflip.creditFlip	mineFlip	modules/GameAfkingModule.sol	BARE	test/fuzz/KeeperNonBrick.t.sol;test/gas/RouterWorstCaseGas.t.sol	The single keeper bounty credit, skipped at 0; callee zero-skips past its creditor gate
+CRANK-TRY	ICrapsKeeper.keepScheduled	_crapsKeep	modules/GameAfkingModule.sol	TRY		Catch swallows any craps table fault so the keeper crank still commits its advance/open work
+OFF-CRANK	IDegenerusCoin.burnCoin	decurse	modules/GameAfkingModule.sol	BARE		Player decurse entry (facade stub); coin burn
+OFF-CRANK	IDegenerusDeityPassOwner.ownerOf	smite	modules/GameAfkingModule.sol	BARE		Player smite entry (facade stub); deity ownership view
+OFF-CRANK	IDegenerusCoin.burnCoin	smite	modules/GameAfkingModule.sol	BARE		Player smite entry (facade stub); coin burn

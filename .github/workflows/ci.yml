@@ -159,6 +159,6 @@ jobs:
       - name: Install Halmos
         run: pip install --upgrade halmos
       - name: Halmos symbolic proofs
-        run: halmos --match-path 'test/halmos/*.t.sol'
+        run: FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --solver-timeout-assertion 120000
       - name: Deep invariant sweep (runs=1000 / depth=256)
         run: FOUNDRY_PROFILE=deep forge test --match-path 'test/fuzz/invariant/*.inv.t.sol'

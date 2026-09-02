@@ -241,10 +241,13 @@ contract V56QuestNonPerturb is DeployProtocol {
     function testO1LootboxSingleCreditAcrossTwoWorlds() public {
         address target = makeAddr("o1_target");
         address other = makeAddr("o1_other");
-        uint32 day = _rollDay(4); // slot-1 rolls LOOTBOX (the O1 region)
+        // The quest-type table has grown since this fixture pinned day 4 (craps quests joined the
+        // roll), so the day whose slot-1 draw is LOOTBOX is searched for rather than hard-coded:
+        // the property under test is about the O1 credit path, not about which day rolls it.
+        uint32 day = _rollDayWithSlot1(QT_LOOTBOX);
         {
             QuestInfo[2] memory active = quests.getActiveQuests();
-            assertEq(active[1].questType, QT_LOOTBOX, "fixture: day-4 slot-1 is LOOTBOX (the O1 region)");
+            assertEq(active[1].questType, QT_LOOTBOX, "fixture: slot-1 is LOOTBOX (the O1 region)");
         }
 
         uint256 snap = vm.snapshotState();
@@ -274,6 +277,17 @@ contract V56QuestNonPerturb is DeployProtocol {
 
     /// @dev Roll the daily quest set for `day` (slot 0 = MINT_ETH; slot 1 = entropy-derived), pranked
     ///      as GAME. Returns the day so callers thread the same currentDay into the handlers.
+    /// @dev Roll successive days until slot-1 draws `wanted`; returns that day. Bounded so a
+    ///      table with no such draw fails the fixture loudly rather than looping.
+    function _rollDayWithSlot1(uint8 wanted) internal returns (uint32 day) {
+        for (day = 1; day <= 96; day++) {
+            _rollDay(day);
+            QuestInfo[2] memory active = quests.getActiveQuests();
+            if (active[1].questType == wanted) return day;
+        }
+        revert("fixture: no day within 96 rolled the wanted slot-1 quest");
+    }
+
     function _rollDay(uint32 day) internal returns (uint32) {
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(uint24(day), uint256(keccak256(abi.encode(day, "v56qnp"))), false, false, false);

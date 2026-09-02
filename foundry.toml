@@ -87,3 +87,9 @@ show_metrics = true
 dictionary_weight = 80
 include_storage = true
 include_push_bytes = true
+
+# Halmos symbolic proofs need the via-IR build (the game facades hit stack-too-deep without it)
+# but must not pull the whole test tree into one solc unit: only the halmos suites are compiled.
+[profile.halmos]
+out = "forge-out-halmos"
+skip = ["test/access/**", "test/craps/**", "test/deploy/**", "test/differential/**", "test/economics/**", "test/edge/**", "test/fuzz/**", "test/gas/**", "test/governance/**", "test/integration/**", "test/invariant/**", "test/mutation/**", "test/repro/**", "test/stat/**", "test/unit/**", "test/validation/**"]

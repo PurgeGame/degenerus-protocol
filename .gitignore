@@ -49,3 +49,6 @@
 
 # Local junk that can appear inside tracked dirs
 *.sol.bak
+
+# Python bytecode from the scripts/lib extractors
+__pycache__/

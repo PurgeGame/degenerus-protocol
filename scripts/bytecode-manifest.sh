@@ -21,10 +21,12 @@ CONTRACTS=(
   DegenerusGameBoonModule DegenerusGameDecimatorModule DegenerusGameDegeneretteModule
   DegenerusGameFoilPackModule DegenerusGameGameOverModule DegenerusGameJackpotModule
   DegenerusGameLootboxModule DegenerusGameMintModule DegenerusGameWhaleModule
-  GameAfkingModule
+  GameAfkingModule CrapsBattle DegenerusParimutuel
 )
 
-forge build > /dev/null 2>&1
+# Production sources only: the test tree is not needed for runtime bytecode and keeping it out
+# of the unit is what keeps this a seconds-long build (see forge-hardhat-cache-collision-oom).
+FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip 'test/**' > /dev/null 2>&1
 
 # Hash the executable code only: solc appends a CBOR metadata trailer (length in
 # the final 2 bytes) whose ipfs hash covers source text and compiler settings —

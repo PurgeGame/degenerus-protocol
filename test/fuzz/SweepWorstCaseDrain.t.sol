@@ -397,11 +397,18 @@ contract SweepWorstCaseDrain is DeployProtocol {
         // Call 1: the 1920-unit walk budget spends one unit on the index header and 1919 on stale
         // entries, opening nothing — but the frontier advanced to cur=1919. Post-fix mineFlip does
         // NOT revert; it COMMITS that skip-only progress (no bounty).
+        // The router now carries a craps leg behind the box sweep, and that leg pays a FLAT
+        // bounty for any lapsed craps day its keeper sweeps (the warp above lapsed several). The
+        // claim under test is about the BOX sweep: skip-only sweep progress earns no box-open
+        // bounty. So the bounty events are recorded and attributed by kind rather than the
+        // keeper's whole FLIP delta being asserted zero.
         uint256 keeperFlipBefore = coinflip.coinflipAmount(actor);
+        vm.recordLogs();
         uint256 gasBefore = gasleft();
         vm.prank(actor);
         game.mineFlip();
         uint256 skipOnlyGas = gasBefore - gasleft();
+        uint256 crapsBounty = _crapsKeepBountyOnly(vm.getRecordedLogs());
 
         (uint48 afterIdx, uint48 afterCur) = _frontier();
         assertEq(afterIdx, beforeIdx, "regression: still sweeping the same index");
@@ -409,8 +416,8 @@ contract SweepWorstCaseDrain is DeployProtocol {
         assertGt(_lootAmt(index, liveOwner), 0, "regression: budget hit the wall - tail box not yet reached");
         assertEq(
             coinflip.coinflipAmount(actor),
-            keeperFlipBefore,
-            "regression: skip-only housekeeping earns no bounty"
+            keeperFlipBefore + crapsBounty,
+            "regression: skip-only housekeeping earns no box-open bounty"
         );
         assertLt(skipOnlyGas, EFFECTIVE_GAS_CEILING, "regression: skip-only keeper call fits the tx ceiling");
 
@@ -431,8 +438,32 @@ contract SweepWorstCaseDrain is DeployProtocol {
         require(!game.boxesPending(), "fixture: no human-box work remains");
         require(!game.advanceDue(), "fixture: no advance work remains");
         // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
-        // asserting an idleness it never set up.
+        // asserting an idleness it never set up. Quieting arms the closed windows, and an arm asks
+        // the game for a lootbox word — which makes the crank due again (a request in flight). So
+        // land that word and let the crank consume it, re-quieting the table each lap, until
+        // neither side has work left.
+        // Landed words also make pending boxes openable, so the router is drained too: each lap
+        // lands the pending word, lets the crank consume it, quiets the table, then cranks the
+        // router once; the lap in which the router itself reports NoWork is the idle state.
         _quietCrapsTable();
+        bool idle;
+        for (uint256 i; i < 12 && !idle; i++) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != 0) {
+                (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("quiet", i))) | 1);
+            }
+            for (uint256 j; j < 4 && game.advanceDue(); j++) {
+                try game.advanceGame() {} catch {}
+            }
+            _quietCrapsTable();
+            vm.prank(actor);
+            try game.mineFlip() {}
+            catch (bytes memory err) {
+                idle = bytes4(err) == bytes4(keccak256("NoWork()"));
+            }
+        }
+        require(idle, "fixture: the router never went idle after quieting");
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
         game.mineFlip();
@@ -510,4 +541,16 @@ contract SweepWorstCaseDrain is DeployProtocol {
         return 0;
     }
 
+
+    /// @dev Sum the `MinerBounty` payouts in `logs`, requiring every one to be the craps keeper's
+    ///      flat bounty (kind 4): any other kind on a skip-only sweep is the regression.
+    function _crapsKeepBountyOnly(Vm.Log[] memory logs) internal pure returns (uint256 total) {
+        bytes32 topic = keccak256("MinerBounty(uint8,address,uint256)");
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].topics.length == 0 || logs[i].topics[0] != topic) continue;
+            (uint8 kind, uint256 amount) = abi.decode(logs[i].data, (uint8, uint256));
+            require(kind == 4, "regression: a non-craps bounty was paid for skip-only sweep progress");
+            total += amount;
+        }
+    }
 }

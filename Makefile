@@ -68,6 +68,18 @@ check-pool-writes:
 # two together on source text: a cutoff moved in one and not the other leaves a
 # model that no longer describes the chain. Operates on source text — no forge
 # build prerequisite.
+check-advance-calls:
+	@bash scripts/check-advance-calls.sh
+
+check-rng-taint:
+	@bash scripts/check-rng-taint.sh
+
+check-unchecked:
+	@bash scripts/check-unchecked.sh
+
+check-write-owners:
+	@bash scripts/check-write-owners.sh
+
 check-craps-progressive:
 	@scripts/check-craps-progressive-parity.sh
 
@@ -91,7 +103,7 @@ coverage-check:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive
+test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -101,7 +113,7 @@ test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive
+test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners
 	@npx hardhat test $(ARGS)
 
 # Run both suites

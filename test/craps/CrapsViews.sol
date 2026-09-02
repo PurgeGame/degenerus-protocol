@@ -583,6 +583,49 @@ contract CrapsViews is CrapsBattle {
         return _indexOf(slot);
     }
 
+    /// @dev The FLIP a seat's run pays when `slot`'s field settles, from the settlement engine
+    ///      itself: the scaled run, its boon, and — for a lane's SOLE high rider — the ride on its
+    ///      extra bounties and admitted lane boost. Unlike `previewSettlement` this prices a DAY
+    ///      ticket too: a day ticket's own slot never shuts onto a table, so it is quoted on the
+    ///      window that settles it. The harness bound is built on this figure.
+    function settlementOn(uint256 betId, uint64 slot) external view returns (uint256 paid) {
+        uint256 header = _bets[betId];
+        if (address(uint160(header)) == address(0)) return 0;
+        uint256 word = _wordAt(_indexOf(slot));
+        if (word == 0) revert RngNotReady();
+        Window memory w = _slotWindow(slot);
+        Settlement memory s = _settlementOf(betId, header, w, word);
+        // A day ticket stores seven high flags and the window's period picks its own.
+        uint256 bit = _BET_HIGH_BIT;
+        unchecked {
+            if ((betId >> 64) != slot) bit <<= (slot % _BONUS_SLOTS_PER_DAY) - 1;
+        }
+        bool hi = header & bit != 0;
+        unchecked {
+            uint256 scale = hi ? w.highMult : 1;
+            paid = s.paid * scale;
+            paid += _boonBonus((header >> _BET_BOON_SHIFT) & _BET_BOON_MASK, paid);
+            if (hi && uint32(_highField[w.key]) == 1) {
+                // The admitted lane boost, as `_laneBoostSplit` rations it by the seat's standing.
+                uint256 lane = _roundBoost(
+                    _boostShare(_highBoostUnits(w, word), (header >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK)
+                ) * _BATTLE_STAKE_UNIT;
+                paid += _ride(s.paid, (scale - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT + lane, w.bankroll);
+            }
+        }
+    }
+
+    /// @dev Where a slot's day tickets live — the day slot's bet-id base — and how many there
+    ///      are. The resolve walk settles a window's own seats `1..ownN` at the slot and then the
+    ///      day tickets `1..n` under this base. A custom battle carries no day field.
+    function dayFieldOf(uint64 slot) external view returns (uint256 base, uint64 n) {
+        if (slot >= _CUSTOM_SLOT_BASE) return (0, 0);
+        unchecked {
+            uint256 d = (uint256(slot) / _BONUS_SLOTS_PER_DAY) * _BONUS_SLOTS_PER_DAY;
+            return (d << 64, uint32(_dayTickets[d]));
+        }
+    }
+
     function keyOfSlot(uint64 slot) external view returns (bytes32) {
         return _slotWindow(slot).key;
     }

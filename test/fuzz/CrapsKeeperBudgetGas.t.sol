@@ -69,7 +69,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     ///      `allowance + one seat`, and the one seat is what the words move.
     function _sweep(uint256 dayWord, uint32 board, string memory label) internal returns (uint256 p95) {
         (uint64 slot, uint48 index) = _deepField(dayWord, board);
-        (uint256 depth, uint256 mult) = _formatOf(slot);
+        uint256 depth = _depthOf(slot);
 
         uint256[] memory used = new uint256[](WORDS);
         uint256[] memory seats = new uint256[](WORDS);
@@ -91,7 +91,6 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
 
         emit log_string(label);
         emit log_named_uint("  depth                     ", depth);
-        emit log_named_uint("  goal multiple             ", mult);
         emit log_named_uint("  words replayed            ", WORDS);
         emit log_named_uint("  seats p50                 ", _p(seats, 50));
         emit log_named_uint("  seats min                 ", _p(seats, 1));
@@ -111,7 +110,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
 
     /// @dev The one scheduled format, on the picked board the plan names.
     function test_theBudgetHoldsAcrossTheScheduledFormat() public {
-        uint256 dayWord = _findFormat(3000);
+        uint256 dayWord = _findBankroll(3000);
         uint24 today = crapsBattle.currentDayIndex();
         _landDayWord(today, dayWord);
         (uint128 bank, uint128 goal, uint256 posted,,,) = crapsBattle.bonusTermsFor(today, 1);
@@ -127,7 +126,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     /// @dev The outcome-weighted allowance still walks a useful, bounded part of the fixed 5x
     ///      field across several shared settlement words.
     function test_theFixedFiveXFormatHasMeasuredSeatThroughput() public {
-        uint256 seats = _medianSeats(_findFormat(3000));
+        uint256 seats = _medianSeats(_findBankroll(3000));
         emit log_named_uint("median seats, 3000 FLIP goal 5x", seats);
         assertGt(seats, 0, "one allowance walked no seats");
         assertLt(seats, FIELD, "the field ceiling, not the allowance, stopped settlement");
@@ -156,7 +155,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     ///      subtracts a reserve before handing the allowance down. This is that reserve measured:
     ///      the same field settled through `game.mineFlip()` and through `resolveSlot` directly.
     function test_probe_theRouterTailOverTheResolver() public {
-        uint256 dayWord = _findFormat(3000);
+        uint256 dayWord = _findBankroll(3000);
         uint256 word = uint256(keccak256("router-tail"));
 
         uint256 snap = vm.snapshotState();
@@ -187,17 +186,15 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertLt(crank, 16_700_000, "the crank passed the protocol's hard per-transaction ceiling");
     }
 
-    /// @dev A day word whose period-1 window draws the requested bankroll at the fixed scheduled
-    ///      depth and target.
-    function _findFormat(uint256 wantBankrollFlip) internal returns (uint256) {
+    /// @dev A day word whose period-1 window draws the requested bankroll. Depth and target are
+    ///      fixed by the schedule and asserted by the format test above.
+    function _findBankroll(uint256 wantBankrollFlip) internal returns (uint256) {
         uint24 today = crapsBattle.currentDayIndex();
         for (uint256 i = 0; i < 4000; ++i) {
             uint256 dayWord = uint256(keccak256(abi.encode("find", wantBankrollFlip, i)));
             _landDayWord(today, dayWord);
-            (uint128 bank, uint128 goal,,,,) = crapsBattle.bonusTermsFor(today, 1);
-            if (uint256(bank) / 1 ether == wantBankrollFlip && uint256(goal) / uint256(bank) == 5) {
-                return dayWord;
-            }
+            (uint128 bank,,,,,) = crapsBattle.bonusTermsFor(today, 1);
+            if (uint256(bank) / 1 ether == wantBankrollFlip) return dayWord;
         }
         revert("no day word drew that format");
     }
@@ -211,11 +208,11 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     ///      allowance and then run the most expensive seat the table can produce. The bound is
     ///      therefore `allowance + max seat + router tail`, with no statistical step in it.
     ///
-    ///      The dearest seat is the one that is simultaneously LONG (the deepest format at the
-    ///      longest odds), PAID, FIELD-FINALIZING (so it carries the pot, the progressive and the
-    ///      lane), and a HIGH seat. This searches for it rather than asserting it exists.
+    ///      The dearest seat is simultaneously a long dice path, PAID, FIELD-FINALIZING (so it
+    ///      carries the pot, progressive and lane), and a HIGH seat. This searches for it rather
+    ///      than asserting it exists.
     function test_theHardBoundHoldsWithAWholeSeatOfOvershoot() public {
-        uint256 dayWord = _findFormat(3000);
+        uint256 dayWord = _findBankroll(3000);
         uint256 worstSeat;
         uint256 worstFinal;
 
@@ -356,13 +353,12 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         index = crapsBattle.armBonusWindow(slot);
     }
 
-    /// @dev The format a window drew, as (depth, goal multiple).
-    function _formatOf(uint64 slot) internal view returns (uint256 depth, uint256 mult) {
+    /// @dev The fixed scheduled depth, reconstructed from a live window.
+    function _depthOf(uint64 slot) internal view returns (uint256 depth) {
         uint24 day = uint24(uint256(slot) / crapsBattle.BONUS_SLOTS_PER_DAY());
-        (uint128 bank, uint128 goal,,,,) = crapsBattle.bonusTermsFor(day, 1);
+        (uint128 bank,,,,,) = crapsBattle.bonusTermsFor(day, 1);
         uint256 round = crapsBattle.roundOf(slot);
         depth = uint256(bank) / round;
-        mult = uint256(goal) / uint256(bank);
     }
 
     function _p(uint256[] memory xs, uint256 pct) internal pure returns (uint256) {
