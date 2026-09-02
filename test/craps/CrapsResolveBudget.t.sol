@@ -314,7 +314,6 @@ contract CrapsResolveBudgetTest is CrapsPins {
         slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(block.timestamp + 5 hours);
         uint48 index = craps.armBonusWindow(slot);
-        _setIndex(index);
         _setWord(index, wordSalt);
     }
 

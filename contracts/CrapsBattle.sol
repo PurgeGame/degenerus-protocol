@@ -57,7 +57,7 @@ interface ICoinflipStake {
 ///         chips and leaves the rest of the ten to the draw.
 ///
 /// @dev Entry burns the bankroll plus any battle stake. Closing a slot binds it to
-///      `_currentIndex() + 1`, whose word cannot have existed while entry was open. `resolveSlot`
+///      `_currentIndex()`, the table whose word cannot exist yet, and asks for that word. `resolveSlot`
 ///      walks the slot's dense, 1-based seats and credits each run's rounded return as coinflip
 ///      stake. A non-zero battle stake also records a single running leader, and the seat that
 ///      completes the field hands that leader the pot in the same call — there is no claim.
@@ -2690,8 +2690,10 @@ contract CrapsBattle is LootboxCraps {
     /// @notice Shut a bonus window and take the table it settles on. Permissionless, open from the
     ///         moment that window stops taking bets, and good for ANY window on any day in any
     ///         order — which is what makes a window impossible to strand, whoever forgot it and
-    ///         however long ago. The index is `_currentIndex() + 1`, a table whose word cannot
-    ///         exist yet, so the dice were unknowable to every entrant however late it is shut.
+    ///         however long ago. The index is `_currentIndex()`, the table whose word cannot exist
+    ///         yet — every path that fills an index advances the cursor past it in the same
+    ///         transaction — so the dice were unknowable to every entrant however late it is shut.
+    ///         The request fired below is the one that fills it.
     /// @param slot The window: `day * _BONUS_SLOTS_PER_DAY + period + 1`.
     function armBonusWindow(uint64 slot) external returns (uint48 index) {
         (,, uint256 open) = _currentBonusSlot();
@@ -2711,7 +2713,7 @@ contract CrapsBattle is LootboxCraps {
     ///      the scheduled cursor, which has already proven the same preconditions on its own walk.
     function _armSlot(uint64 slot, Window memory w) private returns (uint48 index) {
         unchecked {
-            index = _currentIndex() + 1;
+            index = _currentIndex();
             _slotIndex[slot] = index + 1;
             // The day field joins the window HERE rather than at the ticket sale, so selling a day
             // ticket never touches seven scoreboards. Both counts are already frozen — tickets
@@ -2728,11 +2730,13 @@ contract CrapsBattle is LootboxCraps {
                 if (dayHigh != 0) _highField[w.key] += dayHigh;
             }
         }
-        // Shutting a window also asks the protocol for the word that will settle it. The lootbox
-        // queue's pending-value gates do not apply to this caller — the word settles a table, not
-        // a queue — but the temporary ones do. Fail-open: if the lootbox lane cannot request right
-        // now — LINK, gas ceiling, the daily lock, a request already in flight — the index still
-        // fills on that lane's own schedule, and closing on the clock must not be hostage to it.
+        // Shutting a window also asks the protocol for the word that settles it: the request
+        // fulfils into the cursor it was sent at, which is the index bound above, and advances the
+        // cursor past it. The lootbox queue's pending-value gates do not apply to this caller — the
+        // word settles a table, not a queue — but the temporary ones do. Fail-open: if the lootbox
+        // lane cannot request right now — LINK, gas ceiling, the daily lock, a request already in
+        // flight — the cursor stays put and the next request on that lane, whoever sends it, fills
+        // this same index. Closing on the clock must not be hostage to it.
         try IGameLootboxRng(_GAME).requestLootboxRng() {} catch {}
         emit CrapsBonusArmed(w.key, uint48(slot), index);
     }

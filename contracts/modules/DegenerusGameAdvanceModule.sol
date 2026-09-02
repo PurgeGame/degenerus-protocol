@@ -1341,7 +1341,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // so credit is never charged for a request the subscription cannot pay for.
         if (noPending || (threshold != 0 && totalEthEquivalent < threshold)) {
             // The craps table is exempt from both. It shuts a bonus window by binding it to the
-            // NEXT index, so its request is not buying a word for the lootbox queue — it is buying
+            // index this request fills, so it is not buying a word for the lootbox queue — it is buying
             // the word that settles a table already holding staked FLIP, and a queue it has no
             // stake in cannot price it. Checked before the credit charge so craps never pays for
             // the ADMIN price call it would fail anyway, holding no credit. Every other gate above

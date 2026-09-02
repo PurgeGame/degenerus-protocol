@@ -315,11 +315,13 @@ contract CrapsSlipTest is CrapsPins {
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
         craps.previewSettlement(betId);
 
-        // Shutting picks the index, and the word for it cannot exist until after that.
+        // Shutting picks the live index — the one its own request fills — and the word for it
+        // cannot exist until after that.
         _setIndex(9);
         vm.warp(block.timestamp + 2 hours);
         uint48 index = craps.closeBattle(slot);
-        assertEq(index, 10, "the close took the next table");
+        assertEq(index, 9, "the close took a table other than the live one");
+        assertEq(craps.currentIndex(), 10, "the close's request did not move the cursor past its table");
         assertEq(craps.wordAt(index), 0, "the table it took already carried a word");
     }
 

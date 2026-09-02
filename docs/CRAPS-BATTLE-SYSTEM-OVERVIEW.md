@@ -325,8 +325,8 @@ the boost's liquid remainder, with the banked pass value announced beside it.
 
 Scheduled terms come from the already committed daily word. That word does **not** settle the
 battle. When a window stops accepting entries, anyone may call `armBonusWindow`; it binds the slot
-to `_currentIndex() + 1`, a lootbox table whose word does not yet exist. Custom battles use the
-same pattern through `closeBattle` after their deadline.
+to `_currentIndex()`, the lootbox table whose word does not yet exist, and fires the VRF request
+that fills it. Custom battles use the same pattern through `closeBattle` after their deadline.
 
 The future settlement word drives domain-separated values for:
 

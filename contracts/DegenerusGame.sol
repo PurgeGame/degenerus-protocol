@@ -2163,7 +2163,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Callable by anyone. Reverts if daily RNG has not been consumed, if request
     ///      windows are locked, or if pending lootbox value is below threshold. The craps
     ///      table clears the pending-value gates and answers to a lower LINK floor — it buys
-    ///      the word that settles a window already bound to the next index, where a lootbox
+    ///      the word that settles a window already bound to the index it fills, where a lootbox
     ///      queue can wait for the daily word instead.
     ///      The signature matches the module function exactly (identical selector), so the calldata
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.

@@ -1734,7 +1734,6 @@ contract CrapsProgressiveTest is CrapsPins {
     function _armAt(uint256 period) internal returns (uint48 index) {
         (, uint48 already,,) = craps.bonusWindowOf(period);
         index = already == 0 ? craps.armBonusWindow(_slotAt(period)) : already;
-        _setIndex(index);
     }
 
     /// @dev Move to a day nobody has opened, land inside the window under test, and open it.

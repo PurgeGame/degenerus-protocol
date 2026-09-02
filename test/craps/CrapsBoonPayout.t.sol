@@ -348,7 +348,6 @@ contract CrapsBoonPayoutTest is CrapsPins {
         _warpPastPeriod(period);
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + period + 1);
         uint48 index = craps.armBonusWindow(slot);
-        _setIndex(index);
         _setWord(index, uint256(keccak256(abi.encode("settle", period, salt))));
         vm.recordLogs();
         craps.resolveSlot(slot, WHOLE_FIELD);

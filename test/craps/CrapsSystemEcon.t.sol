@@ -234,7 +234,6 @@ contract CrapsSystemEconTest is CrapsPins {
                 vm.warp(_dayStart() + _closeOf(p));
                 uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1);
                 uint48 idx = craps.armBonusWindow(slot);
-                _setIndex(idx);
                 _setWord(idx, uint256(keccak256(abi.encode("table", salt, d, p))));
                 _settleAndSplit(L, slot, day, p);
                 ++L.fields;

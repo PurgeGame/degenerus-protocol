@@ -1128,7 +1128,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // And the two buckets are exactly the field the window shuts on.
         _warpPastClose(PER);
-        _setIndex(craps.armBonusWindow(slot));
+        craps.armBonusWindow(slot);
         assertEq(day + own, craps.battleOf(_keyOf(PER)).entrants, "the stream and the field disagree");
     }
 
@@ -1985,7 +1985,6 @@ contract CrapsBattleTest is CrapsPins {
     function _armAt(uint256 period) internal returns (uint48 index) {
         (, uint48 already,,) = craps.bonusWindowOf(period);
         index = already == 0 ? craps.armBonusWindow(_slotAt(period)) : already;
-        _setIndex(index);
     }
 
     /// @dev A window's slot on a NAMED day, for reaching back past the current one.
@@ -2133,7 +2132,7 @@ contract CrapsBattleTest is CrapsPins {
         uint48 live = craps.currentIndex();
         _warpPastClose(PER + 1);
         vm.prank(keeper);
-        assertEq(craps.armBonusWindow(_slotAt(PER + 1)), live + 1, "shut onto a table that already exists");
+        assertEq(craps.armBonusWindow(_slotAt(PER + 1)), live, "shut onto a table other than the live one");
         craps.armBonusWindow(here);
         vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
         craps.armBonusWindow(here);
@@ -2317,17 +2316,20 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.betOf(_houseSeat(PER)).chips, 0, "the house named a shape");
     }
 
-    /// @dev A window shuts onto the NEXT index, never the live one — the day's word is public
-    ///      from the moment the day opens, so binding forward is what stops anyone
-    ///      pre-positioning into a table they already know the dice of.
-    function test_aWindowShutsOntoTheNextIndexOnly() public {
+    /// @dev A window shuts onto the LIVE index — the table whose word cannot exist yet, since the
+    ///      protocol moves the cursor past an index in the same call that requests its word — and
+    ///      the shut's own request moves the cursor on, so the next window shuts onto the next
+    ///      table. The day's word is public from the moment the day opens and settles nothing.
+    function test_aWindowShutsOntoTheLiveIndexAndMovesTheCursor() public {
         _openDay();
         uint48 live = craps.currentIndex();
         _warpPastClose(PER);
 
-        craps.armBonusWindow(_slotAt(PER - 1));
+        uint48 first = craps.armBonusWindow(_slotAt(PER - 1));
+        assertEq(first, live, "shut onto a table other than the live one");
         uint48 index = craps.armBonusWindow(_slotAt(PER));
-        assertEq(index, live + 1, "shut onto the live index");
+        assertEq(index, live + 1, "the second shut did not take the next table");
+        assertEq(craps.currentIndex(), live + 2, "the shuts did not move the cursor past their tables");
         assertEq(craps.wordAt(index), 0, "shut onto a table that had already rolled");
 
         (, uint48 published,, bool joinable) = craps.bonusWindowOf(PER);
@@ -2703,7 +2705,6 @@ contract CrapsBattleTest is CrapsPins {
         uint64 slot = _slotOn(day, 0);
         _warpPastClose(0);
         uint48 index = craps.armBonusWindow(slot);
-        _setIndex(index);
         _setWord(index, uint256(keccak256("one-shooter")));
 
         // The SAME ticket, read from a window-slot id. Only where it is stored differs.
@@ -2938,7 +2939,7 @@ contract CrapsBattleTest is CrapsPins {
         for (uint256 p = 0; p < periods; ++p) {
             _warpPastClose(p);
             uint64 slot = _slotOn(theDay, p);
-            _setIndex(craps.armBonusWindow(slot));
+            craps.armBonusWindow(slot);
             assertEq(craps.battleOf(_slotKeyOf(slot)).entrants, 2, "a window shut without the day field");
             assertEq(_idAt(slot, 1), house, "the house is not this window's first seat");
             assertEq(_idAt(slot, 2), house + 1, "the vault is not this window's second seat");
@@ -3138,7 +3139,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // The comped seat is a real one: it joins the field and races like any other.
         _warpPastClose(PER);
-        _setIndex(craps.armBonusWindow(_slotAt(PER)));
+        craps.armBonusWindow(_slotAt(PER));
         assertEq(craps.battleOf(_keyOf(PER)).entrants, 1, "the comped seat did not take its place");
     }
 

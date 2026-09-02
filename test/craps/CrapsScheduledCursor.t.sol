@@ -97,7 +97,6 @@ contract CrapsScheduledCursorTest is CrapsPins {
         for (uint256 i = 0; i < 8 && craps.slotIndexOf(winSlot) == 0; ++i) {
             uint48 pending = craps.slotIndexOf(craps.keeperSlot());
             if (pending != 0 && craps.wordAt(pending - 1) == 0) {
-                _setIndex(pending - 1);
                 _setWord(pending - 1, uint256(keccak256(abi.encode("life", i))));
             }
             craps.keepScheduled(type(uint64).max);
@@ -113,7 +112,6 @@ contract CrapsScheduledCursorTest is CrapsPins {
 
         // The word lands; the field settles and the cursor crosses.
         uint48 index = craps.slotIndexOf(winSlot) - 1;
-        _setIndex(index);
         _setWord(index, uint256(keccak256("life-word")));
         (progressed,) = craps.keepScheduled(type(uint64).max);
         assertTrue(progressed, "settling the field was not progress");
@@ -133,7 +131,6 @@ contract CrapsScheduledCursorTest is CrapsPins {
         _driveCursorTo(winSlot);
 
         uint48 index = craps.slotIndexOf(winSlot) - 1;
-        _setIndex(index);
         _setWord(index, uint256(keccak256("midnight")));
 
         // A small budget settles part of the field.
@@ -164,7 +161,6 @@ contract CrapsScheduledCursorTest is CrapsPins {
 
         // Somebody else finishes the whole field directly.
         uint48 index = craps.slotIndexOf(winSlot) - 1;
-        _setIndex(index);
         _setWord(index, uint256(keccak256("external")));
         vm.recordLogs();
         craps.resolveSlot(winSlot, WHOLE_FIELD);
@@ -349,7 +345,6 @@ contract CrapsScheduledCursorTest is CrapsPins {
             if (at == target && craps.slotIndexOf(target) != 0) return;
             uint48 pending = craps.slotIndexOf(at);
             if (pending != 0 && craps.wordAt(pending - 1) == 0 && at != target) {
-                _setIndex(pending - 1);
                 _setWord(pending - 1, uint256(keccak256(abi.encode("drive", i))));
             }
             craps.keepScheduled(type(uint64).max);
@@ -366,7 +361,6 @@ contract CrapsScheduledCursorTest is CrapsPins {
             uint64 at = craps.keeperSlot();
             uint48 pending = craps.slotIndexOf(at);
             if (pending != 0 && craps.wordAt(pending - 1) == 0) {
-                _setIndex(pending - 1);
                 _setWord(pending - 1, uint256(keccak256(abi.encode("whole", day, i))));
             }
             craps.keepScheduled(type(uint64).max);

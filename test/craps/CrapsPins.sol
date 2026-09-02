@@ -31,13 +31,17 @@ contract MockGame {
         return score[player];
     }
 
-    /// @dev The lootbox draw the table asks for when a window shuts. Counted rather than acted on:
-    ///      what a suite needs to know is that the ask HAPPENED, since that one request carries
-    ///      both the table's dice and the day's pending boxes.
+    /// @dev The lootbox draw the table asks for when a window shuts. Counted, and the packed index
+    ///      advances the way the protocol's does — the request fulfils into the index it was sent
+    ///      at and new commitments queue above it — so a fixture that arms twice binds two tables.
+    ///      The word itself is still landed by hand.
     uint256 public lootboxRngCalls;
 
     function requestLootboxRng() external {
         ++lootboxRngCalls;
+        bytes32 packed = slots[bytes32(uint256(33))];
+        uint256 index = uint256(packed) & 0xFFFFFFFFFFFF;
+        slots[bytes32(uint256(33))] = bytes32((uint256(packed) & ~uint256(0xFFFFFFFFFFFF)) | ((index + 1) & 0xFFFFFFFFFFFF));
     }
 }
 
@@ -306,9 +310,9 @@ abstract contract CrapsPins is Test {
     /// @dev Shut a battle onto `index` and land `word` on it. The index is chosen BY the close,
     ///      so it is pinned here first and handed back for the caller to assert against.
     function _closeOn(CrapsViews c, uint64 slot, uint48 index, uint256 word) internal returns (uint48) {
-        // A close takes `currentIndex() + 1`, so the live index is set one BELOW the table the
-        // caller wants it to land on.
-        _setIndex(index - 1);
+        // A close takes `currentIndex()`, so the live index is set TO the table the caller wants
+        // it to land on; the close's own request then moves the cursor past it.
+        _setIndex(index);
         // Warp to the slot's OWN close time rather than by a relative amount: a sweeping fixture
         // opens each battle at whatever `block.timestamp` its last iteration left behind, so a
         // fixed step drifts and eventually opens a battle that is already past its close.
