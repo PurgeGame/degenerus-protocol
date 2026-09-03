@@ -914,8 +914,8 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev What one banked pass is WORTH when a protocol award pays in passes — the lootbox's own
     ///      expected-cost figures, restated so an award and a box price the same credit
-    ///      identically. The denomination switch mirrors the lootbox rule exactly: a pass budget
-    ///      strictly above twenty normal units pays high, and a high award banks at most thirty.
+    ///      identically. The denomination switch mirrors the lootbox rule: a pass budget
+    ///      strictly above twenty normal units pays high. The thirty-high cap is the award's own.
     uint256 internal constant _NORMAL_PASS_VALUE = 22_800 ether;
     uint256 internal constant _HIGH_PASS_VALUE = 19 * _NORMAL_PASS_VALUE;
     uint256 internal constant _PASS_HIGH_SWITCH = 20 * _NORMAL_PASS_VALUE;

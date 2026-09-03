@@ -196,8 +196,9 @@ abstract contract DegenerusGameStorage {
     uint80 internal constant SNAP_DONE_BIT = uint80(1) << 40;
 
     /// @dev Owner-registry position of a queued entry, stored plus one in the owed word's
-    ///      bits 48..79 (zero = not yet registered: an advance-chain award, registered by the
-    ///      drain). A foil pack carries its position in the foilBuyers word the same way.
+    ///      bits 48..79; every sink stamps it on the first push, so an owed word with a
+    ///      balance always carries one. A foil pack carries its position in the foilBuyers
+    ///      word the same way.
     uint256 internal constant OWNER_IDX_SHIFT = 48;
     uint80 internal constant OWNER_IDX_MASK = uint80(type(uint32).max) << 48;
 
@@ -213,7 +214,8 @@ abstract contract DegenerusGameStorage {
     // the opcode cost in units of UNIT_GAS_BOUND: a fresh write (22,100 + its read) is 3 units,
     // a dirty write (5,000 + its read) is 1, a seat exit 1, per-entry compute 1 per 16
     // occurrences, a round's event and loops 3. Every charged unit covers its cost and no step
-    // starts without room for its worst, so a call never exceeds WRITES_BUDGET_SAFE units. Hence a call's gas
+    // starts without room for its worst; a call's last step may charge above what it reserved
+    // (charges over-price), but its gas never exceeds the reserve. Hence a call's gas
     // is at most WRITES_BUDGET_SAFE x UNIT_GAS_BOUND plus the fixed entry/exit overhead, which
     // test/gas/TicketDrainWorstCaseBound.t.sol pins under the EIP-7825 cap. Worst cases assume
     // every storage write opens a fresh slot (20,000 + 2,100 cold access) and every read is
@@ -1757,7 +1759,9 @@ abstract contract DegenerusGameStorage {
     /// @dev The afking cover grants box value the player did not choose and cannot size, so it
     ///      cannot be a count against a preset. It accumulates in its own lane and resolves as
     ///      ONE extra box that counts toward MAX_BOXES_PER_ORDER like any other, never touching
-    ///      customSize. Pass purchases land as ordinary custom boxes instead.
+    ///      customSize; an entry already holding a hundred presets and no custom takes it as
+    ///      its hundred-and-first, the one box the ceiling admits past the cap. Pass purchases
+    ///      land as ordinary custom boxes instead.
     uint256 internal constant LB_COVER_SHIFT = 161;
     uint256 internal constant LB_COVER_MASK = 0xFFFFFFFFFFFF;                     // 48 bits
 

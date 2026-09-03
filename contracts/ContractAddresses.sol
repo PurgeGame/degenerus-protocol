@@ -114,4 +114,10 @@ library ContractAddresses {
     // deploy pipeline overwrites it with the real prediction.
     address internal constant CRAPS =
         address(0x883816205341a6ba3C32AE8dAdCEbDD9d59BC2C4);
+    // Chainlink LINK/ETH aggregator that values LINK donations. Optional:
+    // address(0) leaves DegenerusAdmin's feed slot empty, so the reward lane
+    // stays dark until the feed-swap governance path installs one. Patched per
+    // network — the mainnet aggregator proxy, or MockLinkEthFeed locally.
+    address internal constant LINK_ETH_FEED =
+        address(0);
 }

@@ -537,6 +537,18 @@ contract DegenerusAdmin {
             ContractAddresses.VRF_KEY_HASH
         );
 
+        // Install the LINK/ETH feed the deploy pinned, so donation rewards are
+        // priced from the first block. The constant is address(0) unless the
+        // deploy patched one in, and that zero leaves the slot for the feed-swap
+        // governance path to fill — the same slot proposeFeedSwap writes, with
+        // the same decimals expectation, so a wrong feed pinned here is swapped
+        // out the way a wrong feed installed by a vote is.
+        address feed = ContractAddresses.LINK_ETH_FEED;
+        if (feed != address(0)) {
+            linkEthPriceFeed = feed;
+            emit LinkEthFeedUpdated(address(0), feed);
+        }
+
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
         // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
@@ -1180,9 +1192,9 @@ contract DegenerusAdmin {
         address coord = coordinator;
         address feed = linkEthPriceFeed;
 
-        // Reward valuation is disabled until governance installs a price feed —
-        // skip the subscription read + reward math entirely in that state
-        // (mult stays 0 and the post-funding return below covers it).
+        // Reward valuation is disabled while no price feed is installed — skip
+        // the subscription read + reward math entirely in that state (mult stays
+        // 0 and the post-funding return below covers it).
         uint256 mult;
         if (feed != address(0)) {
             (uint96 bal, , , , ) = IVRFCoordinatorV2_5Owner(coord).getSubscription(

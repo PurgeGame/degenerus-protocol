@@ -1256,9 +1256,9 @@ contract DegenerusGameFoilPackModule is
                 // a fixed cost of 16 single-lane appends (~5 units each, a length write and a
                 // tail word that may be fresh) + baseOv(2) + 1 = 83 budget units.
                 // Defer the whole buyer when the leftover budget can't cover a full
-                // pack; it resumes next tx (no partial-within-buyer, no brick). The
-                // guard MUST equal the charge below: a smaller guard lets `room` just
-                // above it underflow the unchecked charge and drain everything in one tx.
+                // pack's worst-case gas; it resumes next tx (no partial-within-buyer,
+                // no brick). The charge below is the actual write count and saturates
+                // at the room left.
                 if (room < (FOIL_PACK_ENTRIES * 5) + 3) {
                     foilDrainDay = dd;
                     foilCursor = uint32(cursor);

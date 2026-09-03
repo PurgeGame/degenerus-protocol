@@ -142,10 +142,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      STAGE_JACKPOT_COIN_TICKETS / STAGE_JACKPOT_PHASE_ENDED priced it, so the two
     ///      100-winner ticket legs never share a tx. Seals the day on a non-final daily.
     uint8 private constant STAGE_JACKPOT_CARRYOVER_TICKETS = 13;
-    // 12 is the last stage of the do-loop chain: the subscriber STAGE is entry-gated on
-    // !rngLockedFlag, so it can
-    // never complete in a tx that also has a buffered word / pending backfill — there is no
-    // deferred-composition case left to stage.
+    // No deferred-composition stage is left: the subscriber STAGE is entry-gated on
+    // !rngLockedFlag, so it can never complete in a tx that also has a buffered word /
+    // pending backfill.
     event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
     event StEthStakeFailed(uint256 amount);
 

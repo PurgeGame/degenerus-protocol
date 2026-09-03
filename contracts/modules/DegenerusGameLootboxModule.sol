@@ -680,8 +680,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param score Caller's activity-score snapshot, used only if this is the first box.
     /// @param capKey Level key for the shared per-(player, level) EV-cap accumulator.
     /// @param boost Whether to consume a live lootbox-boost boon (pass purchases yes, afking no).
-    /// @param count Custom boxes wanted (one per pass bought); zero folds the value into the
-    ///        cover lane.
+    /// @param count Custom boxes wanted (one per pass bought); zero folds the value into a held
+    ///        custom on a full entry, else into the cover lane.
     function recordCoverBox(
         address player,
         uint256 amountWei,
@@ -761,10 +761,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (count != 0 || (held >= MAX_BOXES_PER_ORDER && cHeld != 0)) {
             // A pass purchase lands in the custom lane: one box per pass while the entry has the
             // room, fewer and larger ones as the cap closes. Customs already held fold in at the
-            // value-weighted average size, so a held size only ever scales up and a full entry
+            // value-weighted average size (which can land below a held size) and a full entry
             // still takes the value without a new box. An afking cover that finds the entry full
-            // folds in the same way rather than opening the cover lane as a box past the cap.
-            // Only a full entry with nothing to fold into refuses. The split's sub-unit dust is
+            // folds into a held custom the same way; with no custom to fold into it takes the
+            // cover lane below, the one box the ceiling admits past the hundred, since a
+            // delivery the player did not choose must never fail the subscriber stage. Only a
+            // full pass purchase with nothing to fold into refuses. The split's sub-unit dust is
             // reward-side only.
             uint256 n = held >= MAX_BOXES_PER_ORDER ? 0 : MAX_BOXES_PER_ORDER - held;
             if (n > count) n = count;

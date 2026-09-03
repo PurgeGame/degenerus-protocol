@@ -359,6 +359,7 @@ contract DegenerusGameMintModule is
         if (!inFarFuture && ticketLevel != lvl) {
             ticketLevel = lvl;
             ticketCursor = 0;
+            if (ticketSeats != 0) ticketSeats = 0;
         }
 
         uint256 idx = ticketCursor;
@@ -609,6 +610,9 @@ contract DegenerusGameMintModule is
             if (ticketLevel != t) {
                 ticketLevel = t;
                 ticketCursor = 0;
+                // The seat word names indices of the queue the cursor was walking; a re-point
+                // to another queue (the terminal single-key drain) must not carry them over.
+                if (ticketSeats != 0) ticketSeats = 0;
             }
             uint256 idx = ticketCursor;
             if (idx == 0) {
