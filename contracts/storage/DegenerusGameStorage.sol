@@ -234,11 +234,11 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant UNIT_GAS_BOUND = 10_000;
 
     /// @dev Write budget per drain call, in units bounded by UNIT_GAS_BOUND (10k gas each at
-    ///      the opcode-level worst case, see the table above). 900 units bound a call at 9M
-    ///      plus fixed overhead: a proven 10M ceiling, well under the 16.7M cap; measured
-    ///      chunks land near half that. The cold-level derate keeps a fresh level's first
+    ///      the opcode-level worst case, see the table above). 1,000 units bound a call at 10M
+    ///      plus fixed overhead: a proven 11M ceiling, well under the 16.7M cap; measured
+    ///      chunks land well below it. The cold-level derate keeps a fresh level's first
     ///      chunk lower still.
-    uint32 internal constant WRITES_BUDGET_SAFE = 900;
+    uint32 internal constant WRITES_BUDGET_SAFE = 1000;
 
     /// @dev Seats in a drain round: one packed lane word per quadrant carries every seat.
     uint256 internal constant ROUND_SEATS = 8;
