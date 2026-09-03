@@ -947,7 +947,6 @@ abstract contract DegenerusGameStorage {
         // reverted here, so the gate stays off the shared sink.
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
-        emit EntriesQueued(buyer, targetLevel, entries);
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
@@ -955,9 +954,14 @@ abstract contract DegenerusGameStorage {
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
-            ticketQueue[wk].push(buyer);
             packed = _registerEntryOwner(buyer, targetLevel);
+            if (packed == 0) {
+                if (rngBypass) return;
+                revert E();
+            }
+            ticketQueue[wk].push(buyer);
         }
+        emit EntriesQueued(buyer, targetLevel, entries);
         unchecked {
             owed += entries;
         }
@@ -1003,7 +1007,6 @@ abstract contract DegenerusGameStorage {
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
         bool isFarFuture = targetLevel > level + 5;
         if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
-        emit EntriesQueuedScaled(buyer, targetLevel, entriesScaled);
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
@@ -1011,9 +1014,14 @@ abstract contract DegenerusGameStorage {
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
-            ticketQueue[wk].push(buyer);
             packed = _registerEntryOwner(buyer, targetLevel);
+            if (packed == 0) {
+                if (rngBypass) return;
+                revert E();
+            }
+            ticketQueue[wk].push(buyer);
         }
+        emit EntriesQueuedScaled(buyer, targetLevel, entriesScaled);
 
         uint32 whole = uint32(uint256(entriesScaled) / QTY_SCALE);
         uint8 frac = uint8(uint256(entriesScaled) % QTY_SCALE);
@@ -1095,15 +1103,21 @@ abstract contract DegenerusGameStorage {
             uint80 packed = entriesOwedPacked[wk][buyer];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
+            bool room = true;
             if (packed == 0) {
-                ticketQueue[wk].push(buyer);
                 packed = _registerEntryOwner(buyer, lvl);
+                // A full registry drops an advance-chain award's level and fails a purchase.
+                room = packed != 0;
+                if (!room && !rngBypass) revert E();
+                if (room) ticketQueue[wk].push(buyer);
             }
-            unchecked {
-                owed += entriesPerLevel;
+            if (room) {
+                unchecked {
+                    owed += entriesPerLevel;
+                }
+                entriesOwedPacked[wk][buyer] =
+                    (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
             }
-            entriesOwedPacked[wk][buyer] =
-            (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
 
             unchecked {
                 lvl += stride;
@@ -1251,10 +1265,14 @@ abstract contract DegenerusGameStorage {
     /// @dev Register a freshly queued entry's owner at its target level. Every sink calls
     ///      this on the first push, so the drain never writes a registry slot and each owed
     ///      word carries its position from the day it is queued. Returns the owner bits for
-    ///      the caller's owed word.
+    ///      the caller's owed word, or zero when the level's registry is full: positions are
+    ///      stored plus one in 32-bit lanes, so a level holds at most 2^32 - 1 owners. The
+    ///      sinks decide what a full registry means — a paid purchase reverts, an advance-chain
+    ///      award is dropped — so the drain never meets an owed word without a position.
     function _registerEntryOwner(address buyer, uint24 targetLevel) internal returns (uint80) {
         address[] storage owners = lvlEntryOwner[targetLevel];
         uint256 idx = owners.length;
+        if (idx >= type(uint32).max - 1) return 0;
         owners.push(buyer);
         return uint80((idx + 1) << OWNER_IDX_SHIFT);
     }
