@@ -35,7 +35,7 @@ OWNER	dailyFoilDraw	modules/DegenerusGameJackpotModule.sol	payDailyJackpot/emitD
 INIT	dailyIdx	DegenerusGame.sol	constructor seeds dailyIdx to the deploy day so gap detection starts there
 OWNER	dailyIdx	modules/DegenerusGameAdvanceModule.sol	_unlockRng seals the completed day (skipped at gameOver so the deadman's staleness survives); the crank is the sole runtime writer
 OWNER	dailyJackpotCoinTicketsPending	modules/DegenerusGameJackpotModule.sol	payDailyJackpot sets the phase-2 latch, payDailyJackpotCoinAndTickets clears it; both in the jackpot module
-OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets for phase 2; payDailyJackpotCoinAndTickets consumes and zeroes
+OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets; payDailyJackpotCoinAndTickets consumes them and zeroes the word unless a carryover was priced, which payCarryoverTickets then consumes and zeroes
 OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimatorJackpot writes [lvl]; runTerminalDecimatorJackpot writes [lvl+1] deliberately to avoid aliasing a live regular round
 OWNER	decDayOneActive	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest clears on a fresh daily request and arms at the x4/x99 window open; sole writer
 OWNER	decWindowOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest opens at x4/x99 and closes at x5/x00 on the level-promoting request; sole writer
@@ -145,3 +145,7 @@ OWNER	wwxrpJackpotWhalePassBracketAwarded	modules/DegenerusGameDegeneretteModule
 OWNER	yieldAccumulator	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots stores the settled accumulator at transition
 OWNER	yieldAccumulator	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain zeroes at terminal drain
 OWNER	yieldAccumulator	modules/DegenerusGameJackpotModule.sol	payDailyJackpot adds the insurance cut; distributeYieldSurplus adds the quarter share
+OWNER	ticketRound	modules/DegenerusGameFoilPackModule.sol	drainRounds advances the seated-round derivation counter once per round it runs (delegatecall target of the mint module drains); sole writer
+OWNER	ticketSeats	modules/DegenerusGameFoilPackModule.sol	drainRounds records the seats still holding entries when a chunk ends (queue indices plus one, queue order) so the next chunk re-seats them without rescanning holes
+OWNER	ticketSeats	modules/DegenerusGameMintModule.sol	_drainSeatedSurvivors pops seats it drains by index below the seat floor; processFutureTicketBatch clears it on an empty queue
+OWNER	ticketSeats	storage/DegenerusGameStorage.sol	_releaseTicketQueue clears the seats with the drained queue

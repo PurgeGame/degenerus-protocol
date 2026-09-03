@@ -11,7 +11,7 @@
 #
 # Columns: CLASS  file  function  ordinal  head  rationale
 CLASS	file	function	ordinal	head	rationale
-NO-OVERFLOW-OP	DegenerusGame.sol	initPerpetualTickets	1	++i	Loop counter `i` is uint24 bounded by the `i <= 100` condition at :259; ++i can reach at most 101, far below 2^24.
+NO-OVERFLOW-OP	modules/DegenerusGameMintModule.sol	initPerpetualTickets	1	++i	Loop counter `i` is uint24 bounded by the `i <= 100` condition at :259; ++i can reach at most 101, far below 2^24.
 BOUNDED	DegenerusGame.sol	_claimWinningsInternal	1	if (amount > 1) { claimDebit = amount - 1	`amount` is uint128(packed) and the `if (amount > 1)` guard at :1605 runs immediately before, so `amount - 1 >= 1` cannot borrow.
 BOUNDED	DegenerusGame.sol	_claimWinningsInternal	2	payout = claimDebit + afking	claimDebit <= amount-1 < 2^128 and afking = packed>>128 < 2^128 (:1601), so the uint256 sum is < 2^129.
 NO-OVERFLOW-OP	DegenerusGame.sol	claimAffiliateDgnrs	1	++i	Loop counter bounded by `i < len` where len = affiliates.length (:1696); an array length cannot approach 2^256.
@@ -65,15 +65,14 @@ NO-OVERFLOW-OP	modules/DegenerusGameDegeneretteModule.sol	_flipSpinChain	1	++i	L
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	claimFoilMatchMany	1	++settled	Counter incremented at most once per loop iteration, and the loop runs n = players.length times (:565); a calldata array length cannot approach 2^256.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	claimFoilMatchMany	2	++i	Loop counter under `i < n` where n = players.length checked equal to the three parallel arrays at :557-561; calldata-bounded, so no overflow.
 BOUNDED	modules/DegenerusGameFoilPackModule.sol	_processFoilDrain	1	--room	Guarded by `if (room == 0) { ... return; }` immediately above at :941-945, so room >= 1 at the decrement; room is the uint32 budget passed in by the keeper path.
-BOUNDED	modules/DegenerusGameFoilPackModule.sol	_processFoilDrain	2	room -= (FOIL_PACK_ENTRIES * 2) + 3	Guard at :961 returns unless room >= (FOIL_PACK_ENTRIES*2)+3, the identical constant charged here, so the uint32 subtraction cannot underflow; ++cursor bounded by cursor < total (:955).
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_processFoilDrain	2	++cursor	Bucket cursor under cursor < total (foilBuyers[dd].length); the pack charge is a saturating subtraction outside the block.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_processFoilDrain	3	++dd	uint24 day cursor advanced once per fully drained bucket under `dd <= last` (:921) where last = foilLastResolveDay; days advance one per calendar day, so 2^24 is unreachable.
-NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_resolveFoilBuyer	1	++u	uint16 loop counter under `u < touchedLen` (:1065); touchedLen counts distinct traits over FOIL_PACK_ENTRIES=16 entries x 4 quadrants, so it is at most 64 and bounded by the 256-slot scratch array.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_packGold	1	++inLine	uint8 counter incremented at most once per quadrant in a fixed `q < 4` loop (:1121), so inLine <= 4.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_packGold	2	golds += inLine	Fixed `i < 4` loop (:1119) adding inLine <= 4 each pass, so the uint8 golds <= 16; ++allGoldTickets fires at most once per line, so it is <= 4.
 BOUNDED	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain	1	totalRefunded += refund	refund is clamped to budget at :160-162 before `budget -= refund`; totalRefunded sums those refunds so stays <= preRefundAvailable (:135), derived from the ETH+stETH balance.
 NO-OVERFLOW-OP	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain	2	++i	Loop counter bounded by `i < ownerCount`, the deityPassOwners array length.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	payDailyJackpot	1	++i	Loop counter of `for (uint8 i; i < 4; )` at :696 building the rotated bucketCounts; i is bounded by the literal 4.
-BOUNDED	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets	1	jackpotCounter = counterCached + counterStep	uint8+uint8: counterCached=jackpotCounter :798 is < JACKPOT_LEVEL_CAP=5 (storage :327, cap :1504) and counterStep is 1, 2 or 5 (:473/:482/:488), so the sum is <= 10.
+BOUNDED	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets	1	jackpotCounter = jackpotCounter + counterStep	uint8+uint8: jackpotCounter is < JACKPOT_LEVEL_CAP=5 (the advance runs _endPhase, which zeroes it, the moment the sum reaches the cap) and counterStep is 1, 2 or 5, so the sum is <= 10.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_distributeTicketsToBuckets	1	++traitIdx	Loop counter of `for (uint8 traitIdx; traitIdx < 4; )` at :1054; bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_distributeTicketsToBucket	1	++i	Loop counter of `for (uint256 i; i < len; )` at :1102 where len = winners.length from _randTraitTicket (<= numWinners, a uint8); array-length bounded.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_computeBucketCounts	1	++activeCount	uint8 incremented at most once per iteration of the 4-iteration loop at :1149, so activeCount <= 4.
@@ -130,7 +129,7 @@ BOUNDED	modules/DegenerusGameMintModule.sol	processFutureTicketBatch	1	used += w
 BOUNDED	modules/DegenerusGameMintModule.sol	_raritySymbolBatch	1	endIndex = startIndex + count	startIndex = processed, count = take, processed + take <= owed (take = min(owed,maxT) :859, remainingOwed = owed - take :884); owed is uint32 from packed>>8 so the sum fits.
 WRAP-INTENDED	modules/DegenerusGameMintModule.sol	_raritySymbolBatch	2	s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset)	LCG seed mix on uint64 s; modular truncation is the intended PRNG step and every reader only takes low-bit slices of s for trait selection, so wrap carries no value meaning.
 WRAP-INTENDED	modules/DegenerusGameMintModule.sol	_raritySymbolBatch	3	s = s * TICKET_LCG_MULT + 1	LCG s = s*MULT+1 wraps by design (uint64 PRNG); co-resident ops width-bounded: traitFromWord <= 63 plus (i&3)<<6 <= 192 fits uint8; counts[]++ <= count; touchedLen <= 256.
-NO-OVERFLOW-OP	modules/DegenerusGameMintModule.sol	_raritySymbolBatch	4	++u	Loop counter u under u < touchedLen with touchedLen <= 256 (one bump per first-seen traitId, traitId is uint8).
+NO-OVERFLOW-OP	modules/DegenerusGameMintModule.sol	_raritySymbolBatch	4	fresh += f	Per-run write counts: at most 2 + occurrences/8 writes per touched trait, summed over <= 256 traits; u < touchedLen <= 256.
 NO-OVERFLOW-OP	modules/DegenerusGameMintModule.sol	processTicketBatch	1	++t	uint24 window counter t bounded by windowEnd = anchor+4 with levels far below 2^23 (comment at :634); ++t only inside t <= windowEnd.
 BOUNDED	modules/DegenerusGameMintModule.sol	processTicketBatch	2	used += writesUsed	Same envelope as processFutureTicketBatch: _processOneTicketEntry caps take by remaining - used (:857-860), so writesUsed <= room+1 and used <= WRITES_BUDGET_SAFE+1 in uint32.
 NO-OVERFLOW-OP	modules/DegenerusGameMintModule.sol	processTicketBatch	3	++t	uint24 window counter t bounded by windowEnd = anchor+4 with levels far below 2^23; ++t runs only after the loop test t <= windowEnd.
@@ -166,3 +165,14 @@ SCALE-BOUNDED	storage/DegenerusGameStorage.sol	_queueEntriesScaled	3	owed += 1	e
 SCALE-BOUNDED	storage/DegenerusGameStorage.sol	_queueEntryRangeStridedCore	1	owed += entriesPerLevel	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): entriesPerLevel is an uncapped uint32 parameter accumulated per level into the uint32 owed lane; no guard bounds cumulative owed below 2^32.
 BOUNDED	storage/DegenerusGameStorage.sol	_queueEntryRangeStridedCore	2	lvl += stride	`lvl` is uint24 starting near `level`, advanced numLevels times by stride; callers pass numLevels <= 100, stride <= 4 (Storage:1060-1070, :1889; Whale:362,:790), so lvl stays far below 2^24.
 NO-OVERFLOW-OP	storage/DegenerusGameStorage.sol	_boxOrderCount	1	return ((word >> LB_SMALL_SHIFT) & LB_COUNT_MASK) + ((word >> LB_MED_SHIFT) & LB_COUNT_MAS	Four 8-bit masked fields (LB_COUNT_MASK = 0xFF, Storage:1455) plus 0-or-1, summed in uint256; maximum 1021.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	drainRounds	1	++round	uint32 round counter: one bump per round of at least ROUND_UNITS write units, so it cannot reach 2^32 within any gas-bounded history.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	drainRounds	2	++j	Seat write-back loop counter under j < seated <= 8.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_fillSeats	1	++st.cur	Queue frontier under st.cur < total (queue length).
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_resolveFoilBuyer	1	units += uint32(f * 3 + d)	Sixteen single-lane appends at most 2 writes each: units <= 3 + 16 * 6 = 99 in uint32; u < touchedLen <= 16.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runQuadrant	1	++n	Participant count under n <= seated <= 8.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runQuadrant	2	++j	Seat loop counter under j < seated <= 8.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	1	++q	Quadrant loop counter under q < 4.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	2	++j	Seat loop counter under j < seated <= 8 (players array fill).
+BOUNDED	modules/DegenerusGameFoilPackModule.sol	_runRound	3	owed -= owed > 4 ? 4 : owed	Subtrahend is min(owed, 4) so the difference is never negative.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	4	++used	Write-unit counter: at most 8 seat exits plus the round's charged writes, reserved by the caller before the round.
+NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	5	++k	Compaction index k <= j < seated <= 8.

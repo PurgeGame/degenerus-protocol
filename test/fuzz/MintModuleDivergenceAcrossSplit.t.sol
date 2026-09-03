@@ -93,6 +93,10 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ///      with lrIndex default-initialized to 1, so the consumed slot is index 0.
     uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;
 
+    /// @dev lvlEntryOwner (mapping(uint24 => address[])) — slot 67, the owner registry the
+    ///      packed lvlTraitEntry lanes index into.
+    uint256 private constant SLOT_LVL_ENTRY_OWNER = 67;
+
     /// @dev TICKET_SLOT_BIT mirror from DegenerusGameStorage.sol:182. With
     ///      ticketWriteSlot=false (default), _tqReadKey(lvl) returns lvl | TICKET_SLOT_BIT.
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
@@ -177,9 +181,20 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         return bytes32(uint256(base) + uint256(traitId));
     }
 
-    /// @dev Compute the data root slot for the address[] elements at `lvlTraitEntry[lvl][traitId]`.
+    /// @dev Compute the data root slot for the packed lane words at `lvlTraitEntry[lvl][traitId]`.
     function _slotTraitBurnData(uint24 lvl, uint8 traitId) private pure returns (bytes32) {
         return keccak256(abi.encode(_slotTraitBurnLen(lvl, traitId)));
+    }
+
+    /// @dev Owner of occurrence `i` of `lvlTraitEntry[lvl][traitId]` on `host`: decode the
+    ///      uint32 lane, then resolve it through `lvlEntryOwner[lvl]`.
+    function _laneOwner(address host, uint24 lvl, uint8 traitId, uint256 i) private view returns (address) {
+        bytes32 dataRoot = _slotTraitBurnData(lvl, traitId);
+        uint256 word = uint256(vm.load(host, bytes32(uint256(dataRoot) + (i >> 3))));
+        uint256 lane = (word >> (32 * (i & 7))) & 0xffffffff;
+        bytes32 ownersLen = keccak256(abi.encode(uint256(lvl), SLOT_LVL_ENTRY_OWNER));
+        bytes32 ownersData = keccak256(abi.encode(ownersLen));
+        return address(uint160(uint256(vm.load(host, bytes32(uint256(ownersData) + lane)))));
     }
 
     /// @dev Test-side seeding of a single-player queue with `owed` tickets at level `lvl` on the
@@ -199,8 +214,11 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         vm.store(host, _slotTicketQueueLen(rk), bytes32(uint256(1)));
         vm.store(host, _slotTicketQueueData(rk), bytes32(uint256(uint160(player))));
 
-        // entriesOwedPacked[rk][player] = (owed << 8) | 0
-        vm.store(host, _slotOwed(rk, player), bytes32(uint256(owed) << 8));
+        // lvlEntryOwner[lvl] = [player]; entriesOwedPacked[rk][player] = (1 << 48) | (owed << 8)
+        bytes32 ownersLen = keccak256(abi.encode(uint256(lvl), SLOT_LVL_ENTRY_OWNER));
+        vm.store(host, ownersLen, bytes32(uint256(1)));
+        vm.store(host, bytes32(uint256(keccak256(abi.encode(ownersLen)))), bytes32(uint256(uint160(player))));
+        vm.store(host, _slotOwed(rk, player), bytes32((uint256(1) << 48) | (uint256(owed) << 8)));
 
         // ticketLevel = lvl (offset 4 within slot 14); ticketCursor = 0 (offset 0). Default 0.
         vm.store(
@@ -217,6 +235,8 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         for (uint16 traitId = 0; traitId < 256; ++traitId) {
             vm.store(host, _slotTraitBurnLen(lvl, uint8(traitId)), bytes32(0));
         }
+        // The owner registry behind the lanes resets with them.
+        vm.store(host, keccak256(abi.encode(uint256(lvl), SLOT_LVL_ENTRY_OWNER)), bytes32(0));
     }
 
     /// @dev Pre-seed `lootboxRngWordByIndex[0]` with `entropy` and pin `lootboxRngPacked` so its
@@ -269,12 +289,9 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
             bytes32 lenSlot = _slotTraitBurnLen(lvl, uint8(traitId));
             uint256 len = uint256(vm.load(host, lenSlot));
             if (len == 0) continue;
-            bytes32 dataRoot = _slotTraitBurnData(lvl, uint8(traitId));
             uint32 c;
             for (uint256 i = 0; i < len; ++i) {
-                bytes32 dSlot = bytes32(uint256(dataRoot) + i);
-                address stored = address(uint160(uint256(vm.load(host, dSlot))));
-                if (stored == player) {
+                if (_laneOwner(host, lvl, uint8(traitId), i) == player) {
                     unchecked { ++c; }
                 }
             }
@@ -295,11 +312,8 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
             bytes32 lenSlot = _slotTraitBurnLen(lvl, uint8(traitId));
             uint256 len = uint256(vm.load(host, lenSlot));
             if (len == 0) continue;
-            bytes32 dataRoot = _slotTraitBurnData(lvl, uint8(traitId));
             for (uint256 i = 0; i < len; ++i) {
-                bytes32 dSlot = bytes32(uint256(dataRoot) + i);
-                address stored = address(uint160(uint256(vm.load(host, dSlot))));
-                if (stored == player) {
+                if (_laneOwner(host, lvl, uint8(traitId), i) == player) {
                     unchecked { ++total; }
                 }
             }

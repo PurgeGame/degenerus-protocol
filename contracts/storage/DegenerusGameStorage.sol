@@ -36,6 +36,7 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 /**
@@ -192,7 +193,66 @@ abstract contract DegenerusGameStorage {
     /// @dev Marker bit on entriesOwedPacked values: set by the drain once a player's
     ///      owed balance has been divided by 2^snapShift, so a budget-split resume
     ///      never divides the same balance twice.
-    uint48 internal constant SNAP_DONE_BIT = uint48(1) << 40;
+    uint80 internal constant SNAP_DONE_BIT = uint80(1) << 40;
+
+    /// @dev Owner-registry position of a queued entry, stored plus one in the owed word's
+    ///      bits 48..79 (zero = not yet registered: an advance-chain award, registered by the
+    ///      drain). A foil pack carries its position in the foilBuyers word the same way.
+    uint256 internal constant OWNER_IDX_SHIFT = 48;
+    uint80 internal constant OWNER_IDX_MASK = uint80(type(uint32).max) << 48;
+
+    /// @dev Seat floor of the round drain: a queue segment with fewer entries than this drains
+    ///      entry by entry (thin rounds cost more than per-trait runs).
+    uint256 internal constant ROUND_MIN_SEATS = 4;
+
+    // ---- Ticket-drain unit bound ------------------------------------------------------------
+    // A drain call does exactly the work its write budget affords — never a function of the
+    // gas the caller supplied — so the safety proof is on the budget. Reserve the worst,
+    // charge the actual: a step starts only if its worst case (table below) fits the
+    // remaining budget, and once done it charges what it did, priced per write at or above
+    // the opcode cost in units of UNIT_GAS_BOUND: a fresh write (22,100 + its read) is 3 units,
+    // a dirty write (5,000 + its read) is 1, a seat exit 1, per-entry compute 1 per 16
+    // occurrences, a round's event and loops 3. Every charged unit covers its cost and no step
+    // starts without room for its worst, so a call never exceeds WRITES_BUDGET_SAFE units. Hence a call's gas
+    // is at most WRITES_BUDGET_SAFE x UNIT_GAS_BOUND plus the fixed entry/exit overhead, which
+    // test/gas/TicketDrainWorstCaseBound.t.sol pins under the EIP-7825 cap. Worst cases assume
+    // every storage write opens a fresh slot (20,000 + 2,100 cold access) and every read is
+    // cold (2,100): a single-lane append is 2 reads + 2 fresh writes = 48,400.
+    //
+    //   step                         charge   worst gas
+    //   seated round (no split)      37       4 x (len 22,100 + tail 22,100 + next 22,100 + 2 reads)
+    //                                         = 282,000; + 8 exits x 7,100 + event/loops 25,000 = 364,000
+    //   split quadrant (extra)       32       8 x 48,400 - 70,500 = 316,700
+    //   seat join                    2        2 reads + remainder zeroing + write-back = 14,200
+    //   dust skip                    1        2 reads + zeroing write = 9,200
+    //   seats word write             3        22,100
+    //   per-entry occurrence, 1..256 6        fresh length + fresh word + 2 reads + lane share = 51,600
+    //   per-entry occurrence, >256   1        fresh word per eight lanes + LCG = 3,200
+    //   foil pack                    83       16 x 48,400 + record/cursor/golden 40,000 = 814,400
+    uint256 internal constant UNIT_GAS_BOUND = 10_000;
+
+    /// @dev Write budget per drain call, in units bounded by UNIT_GAS_BOUND (10k gas each at
+    ///      the opcode-level worst case, see the table above). 900 units bound a call at 9M
+    ///      plus fixed overhead: a proven 10M ceiling, well under the 16.7M cap; measured
+    ///      chunks land near half that. The cold-level derate keeps a fresh level's first
+    ///      chunk lower still.
+    uint32 internal constant WRITES_BUDGET_SAFE = 900;
+
+    /// @dev Seats in a drain round: one packed lane word per quadrant carries every seat.
+    uint256 internal constant ROUND_SEATS = 8;
+    /// @dev Color tiers at or above this spread a round's seats across the quadrant's eight
+    ///      symbols, one lane per bucket, so the smallest buckets never take a whole round.
+    uint8 internal constant ROUND_SPLIT_COLOR = 6;
+    /// @dev Write units per round at UNIT_GAS_BOUND: four quadrant appends at their worst
+    ///      (a fresh length, a fresh tail and a fresh next word each: 282k), eight seat exits
+    ///      (57k), the event and the seat loops (25k): 364k -> 37 units.
+    uint32 internal constant ROUND_UNITS = 37;
+    /// @dev Extra units for a split quadrant: eight single-lane appends at their worst
+    ///      (8 x 48,400) less the whole-word append they replace (70,500): 317k -> 32 units.
+    uint32 internal constant ROUND_SPLIT_UNITS = 32;
+    /// @dev Units per seat join: cold queue and owed reads, a remainder zeroing write and
+    ///      the eventual write-back (14.2k) -> 2 units.
+    uint32 internal constant SEAT_JOIN_UNITS = 2;
 
 
 
@@ -493,11 +553,11 @@ abstract contract DegenerusGameStorage {
     ///      with totalFlipReversals.
     uint48 internal lastVrfProcessedTimestamp;
 
-    /// @dev Packed daily jackpot ticket data for two-phase execution.
+    /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
     ///      Layout: [counterStep (8 bits @ 0)] [dailyEntries (64 bits @ 8)]
     ///              [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
-    ///      Set during ETH phase, consumed during coin+ticket phase.
-    ///      Gas optimization: allows splitting daily jackpot across multiple advanceGame calls.
+    ///      Set by the ETH stage; the coin+tickets stage consumes the first three and, when
+    ///      a carryover was priced, leaves the word for the carryover stage, which zeroes it.
     uint256 internal dailyTicketBudgetsPacked;
 
     // =========================================================================
@@ -517,19 +577,25 @@ abstract contract DegenerusGameStorage {
     ///      function / withdrawAfkingFunding), separating credit from transfer.
     mapping(address => uint256) internal balancesPacked;
 
-    /// @dev Nested mapping: level -> trait ID (0-255) -> array of ticket holders.
-    ///      Used for jackpot winner selection: random index into trait's array.
+    /// @dev Nested mapping: level -> trait ID (0-255) -> packed occurrence lanes.
+    ///      Used for jackpot winner selection: random occurrence index into the trait's
+    ///      bucket, resolved to its owner through lvlEntryOwner[level].
     ///
-    ///      STRUCTURE: lvlTraitEntry[level][traitId] = address[]
-    ///      Each burn adds the burner's address, allowing duplicate entries
-    ///      (more burns = more tickets = higher win probability).
+    ///      STRUCTURE: lvlTraitEntry[level][traitId] = uint256[]
+    ///        - the length word holds the OCCURRENCE count, not the word count
+    ///        - data word w (at keccak256(lengthSlot) + w) holds occurrences 8w .. 8w+7
+    ///        - lane j of a word = bits [32j, 32j+32) = uint32 index into lvlEntryOwner[level]
+    ///      A holder with more tickets occupies more lanes (higher win probability).
+    ///      Never index the array with Solidity `[]`; read through _bucketOwnerAt and
+    ///      write through _bucketAppendRun. Every read is length-gated, so an unwritten
+    ///      lane is never resolved.
     ///
     ///      STORAGE: Slot for mapping root, then:
     ///        - keccak256(level . slot) gives the 256-element array of arrays
     ///        - Each inner array has length at its slot, data at keccak256(slot)
     ///
     ///      SECURITY: Array growth bounded by total ticket supply per level.
-    mapping(uint24 => address[][256]) internal lvlTraitEntry;
+    mapping(uint24 => uint256[][256]) internal lvlTraitEntry;
 
     /// @dev Bit-packed mint history per player.
     ///      Layout defined by constants in BitPackingLib and MintStreakUtils.
@@ -588,7 +654,7 @@ abstract contract DegenerusGameStorage {
     ///      NOT whole tickets — 4 entries make one whole ticket (priceForLevel(level)).
     ///      The snap-done bit (SNAP_DONE_BIT) is set only by the drains; queue writers
     ///      run strictly before their key's drain window, so they never observe it.
-    mapping(uint24 => mapping(address => uint48)) internal entriesOwedPacked;
+    mapping(uint24 => mapping(address => uint80)) internal entriesOwedPacked;
 
     /// @dev Cursor for ticket queue processing (dual-purpose).
     ///      - SETUP phase: tracks near-future level progress (1-4), reset to 0 when done.
@@ -618,6 +684,11 @@ abstract contract DegenerusGameStorage {
     ///      level commit that reaches snapLevel.
     uint8 internal snapPendingShift;
 
+    /// @dev Round counter for the seated ticket drain: every round of group trait rolls
+    ///      keys its derivation off this value, so a budget-split resume continues the
+    ///      same sequence. Never reset.
+    uint32 internal ticketRound;
+
     // =========================================================================
     // Ticket Queue Helpers
     // =========================================================================
@@ -628,6 +699,20 @@ abstract contract DegenerusGameStorage {
         address indexed player,
         uint256 baseKey,
         uint32 take
+    );
+
+    /// @notice Emitted for every seated round of the ticket drain: the traits each seat
+    ///         received this round and the seat owners in queue order. Lane j of
+    ///         `seatTraits` (bits 32j..32j+31) holds seat j's four trait bytes, quadrant q
+    ///         at byte q; bit 4j+q of `seatMask` is set when seat j received an entry in
+    ///         quadrant q (a seat with fewer than four entries left takes the leading
+    ///         quadrants only).
+    event RoundTraitsGenerated(
+        uint24 indexed lvl,
+        uint32 round,
+        uint256 seatTraits,
+        uint32 seatMask,
+        address[] players
     );
 
     /// @notice Emitted when a future level is declared a thanos level.
@@ -814,6 +899,13 @@ abstract contract DegenerusGameStorage {
         return false;
     }
 
+    /// @dev True while the carryover ticket leg of a jackpot-phase daily waits for its own
+    ///      advance stage: the coin+tickets stage cleared its latch and left Phase 1's budgets
+    ///      in dailyTicketBudgetsPacked. The day stays locked until that stage seals it.
+    function _carryoverLegPending() internal view returns (bool) {
+        return !dailyJackpotCoinTicketsPending && dailyTicketBudgetsPacked != 0;
+    }
+
     /// @dev True when gameover liveness guard would fire within ~1 day (day-granularity).
     ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
     ///      and 25% ticket bonus on the distress-bought portion.
@@ -857,16 +949,18 @@ abstract contract DegenerusGameStorage {
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
-        uint48 packed = entriesOwedPacked[wk][buyer];
+        uint80 packed = entriesOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
             ticketQueue[wk].push(buyer);
+            packed = _registerEntryOwner(buyer, targetLevel);
         }
         unchecked {
             owed += entries;
         }
-        entriesOwedPacked[wk][buyer] = (uint48(owed) << 8) | uint48(rem);
+        entriesOwedPacked[wk][buyer] =
+            (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
     }
 
     /// @dev Converts a post-Bernoulli whole-ticket count into the entries unit the
@@ -911,11 +1005,12 @@ abstract contract DegenerusGameStorage {
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
-        uint48 packed = entriesOwedPacked[wk][buyer];
+        uint80 packed = entriesOwedPacked[wk][buyer];
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
             ticketQueue[wk].push(buyer);
+            packed = _registerEntryOwner(buyer, targetLevel);
         }
 
         uint32 whole = uint32(uint256(entriesScaled) / QTY_SCALE);
@@ -937,7 +1032,7 @@ abstract contract DegenerusGameStorage {
             }
             rem = uint8(newRem);
         }
-        uint48 newPacked = (uint48(owed) << 8) | uint48(rem);
+        uint80 newPacked = (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
         if (newPacked != packed) {
             entriesOwedPacked[wk][buyer] = newPacked;
         }
@@ -995,16 +1090,18 @@ abstract contract DegenerusGameStorage {
             bool isFarFuture = lvl > currentLevel + 5;
             if (isFarFuture && rngLockedCached && !rngBypass) revert RngLocked();
             uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : (lvl | writeSlotBit);
-            uint48 packed = entriesOwedPacked[wk][buyer];
+            uint80 packed = entriesOwedPacked[wk][buyer];
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
             if (packed == 0) {
                 ticketQueue[wk].push(buyer);
+                packed = _registerEntryOwner(buyer, lvl);
             }
             unchecked {
                 owed += entriesPerLevel;
             }
-            entriesOwedPacked[wk][buyer] = (uint48(owed) << 8) | uint48(rem);
+            entriesOwedPacked[wk][buyer] =
+            (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
 
             unchecked {
                 lvl += stride;
@@ -1149,6 +1246,206 @@ abstract contract DegenerusGameStorage {
         }
     }
 
+    /// @dev Register a freshly queued entry's owner at its target level. Every sink calls
+    ///      this on the first push, so the drain never writes a registry slot and each owed
+    ///      word carries its position from the day it is queued. Returns the owner bits for
+    ///      the caller's owed word.
+    function _registerEntryOwner(address buyer, uint24 targetLevel) internal returns (uint80) {
+        address[] storage owners = lvlEntryOwner[targetLevel];
+        uint256 idx = owners.length;
+        owners.push(buyer);
+        return uint80((idx + 1) << OWNER_IDX_SHIFT);
+    }
+
+    // =========================================================================
+    // Owed Balance Helpers (shared by the mint and foil drains)
+    // =========================================================================
+
+    /// @dev Divide a not-yet-snapped owed balance by 2^s, folding the shifted-out
+    ///      fraction into the QTY_SCALE remainder (sub-remainder residue evaporates,
+    ///      matching the sub-unit handling of scaled purchases). Marks the value
+    ///      snap-done so a resumed drain never divides it again.
+    function _snapOwedPacked(uint80 packed, uint8 s) internal pure returns (uint80) {
+        uint256 scaled = (uint256(uint32(packed >> 8)) * QTY_SCALE +
+            uint8(packed)) >> s;
+        return
+            (packed & OWNER_IDX_MASK) |
+            SNAP_DONE_BIT |
+            (uint80(scaled / QTY_SCALE) << 8) |
+            uint80(scaled % QTY_SCALE);
+    }
+
+    /// @dev Roll remainder chance for a fractional ticket (0-99).
+    function _rollRemainder(
+        uint256 entropy,
+        uint256 rollSalt,
+        uint8 rem
+    ) internal pure returns (bool win) {
+        // Hash via scratch-slot keccak so player address (stored in rollSalt
+        // bits 191-32) reaches the low 7 bits of rollEntropy consumed by
+        // `% QTY_SCALE`. A plain XOR mix only diffuses bits a fixed span
+        // outward, leaving upper player-address bits invisible to the roll
+        // outcome; keccak gives full low-bit diffusion of the high-bit input.
+        uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
+        return (rollEntropy % QTY_SCALE) < rem;
+    }
+
+    /// @dev Resolves the zero-owed remainder case for ticket processing. `packed` is
+    ///      the caller's post-snap value; `snapDone` rides the rolled write-back so a
+    ///      budget-split resume sees the balance as already snapped.
+    function _resolveZeroOwedRemainder(
+        uint80 packed,
+        mapping(address => uint80) storage owedMap,
+        address player,
+        uint256 entropy,
+        uint256 baseKey,
+        uint80 snapDone
+    ) internal returns (uint80 newPacked, bool skip) {
+        uint8 rem = uint8(packed);
+        if (rem == 0) {
+            if (packed != 0) {
+                owedMap[player] = 0;
+            }
+            return (0, true);
+        }
+
+        bool win = _rollRemainder(entropy, baseKey, rem);
+        if (!win) {
+            owedMap[player] = 0;
+            return (0, true);
+        }
+
+        newPacked = (packed & OWNER_IDX_MASK) | snapDone | (uint80(1) << 8);
+        if (newPacked != packed) {
+            owedMap[player] = newPacked;
+        }
+        return (newPacked, false);
+    }
+
+    // =========================================================================
+    // Packed Trait Buckets
+    // =========================================================================
+
+    /// @dev Owner of occurrence `k` in lvlTraitEntry[lvl][trait]. Two reads: the lane word,
+    ///      then the registry element it names. No bound check: callers gate on the length.
+    function _bucketOwnerAt(uint24 lvl, uint8 trait, uint256 k) internal view returns (address owner) {
+        uint256[] storage lanes = lvlTraitEntry[lvl][trait];
+        address[] storage owners = lvlEntryOwner[lvl];
+        assembly ("memory-safe") {
+            mstore(0x00, lanes.slot)
+            let word := sload(add(keccak256(0x00, 0x20), shr(3, k)))
+            let idx := and(shr(shl(5, and(k, 7)), word), 0xffffffff)
+            mstore(0x00, owners.slot)
+            owner := sload(add(keccak256(0x00, 0x20), idx))
+        }
+    }
+
+    /// @dev Append `occurrences` lanes naming registry position `ownerIdx` to the bucket at
+    ///      `levelSlot + traitId` (levelSlot = keccak256(level . lvlTraitEntry.slot)). The
+    ///      partially filled tail word is read once and completed; every further full word
+    ///      is written whole with the lane replicated across it, so a long run of one trait
+    ///      costs one store per eight occurrences.
+    function _bucketAppendRun(
+        uint256 levelSlot,
+        uint8 traitId,
+        uint256 ownerIdx,
+        uint256 occurrences
+    ) internal returns (uint256 fresh, uint256 dirty) {
+        assembly ("memory-safe") {
+            let elem := add(levelSlot, traitId)
+            let len := sload(elem)
+            sstore(elem, add(len, occurrences))
+            switch len
+            case 0 {
+                fresh := 1
+            }
+            default {
+                dirty := 1
+            }
+            mstore(0x00, elem)
+            let w := add(keccak256(0x00, 0x20), shr(3, len))
+            let lane := and(len, 7)
+            let word := 0
+            if lane {
+                word := sload(w)
+                dirty := add(dirty, 1)
+            }
+            // Complete the tail word lane by lane.
+            for {} and(gt(lane, 0), gt(occurrences, 0)) {} {
+                word := or(word, shl(shl(5, lane), ownerIdx))
+                lane := add(lane, 1)
+                occurrences := sub(occurrences, 1)
+                if eq(lane, 8) {
+                    sstore(w, word)
+                    w := add(w, 1)
+                    lane := 0
+                    word := 0
+                }
+            }
+            // The run ended inside the tail word: store it and finish (the tail word's
+            // dirty write was counted when it was read).
+            if lane {
+                sstore(w, word)
+            }
+            // Whole words: the lane replicated eight times.
+            let full := mul(ownerIdx, 0x0000000100000001000000010000000100000001000000010000000100000001)
+            for {} gt(occurrences, 7) {} {
+                sstore(w, full)
+                fresh := add(fresh, 1)
+                w := add(w, 1)
+                occurrences := sub(occurrences, 8)
+            }
+            // Leading lanes of a fresh final word.
+            if occurrences {
+                sstore(w, and(full, sub(shl(shl(5, occurrences), 1), 1)))
+                fresh := add(fresh, 1)
+            }
+        }
+    }
+
+    /// @dev Append `count` distinct lanes, already packed into `lanesWord` at positions
+    ///      0..count-1 (every higher lane zero), to the bucket at `levelSlot + traitId`.
+    ///      A partially filled tail word takes the leading lanes; the rest open a fresh
+    ///      word. At most two stores for any count up to eight.
+    function _bucketAppendLanes(
+        uint256 levelSlot,
+        uint8 traitId,
+        uint256 lanesWord,
+        uint256 count
+    ) internal returns (uint256 fresh, uint256 dirty) {
+        assembly ("memory-safe") {
+            let elem := add(levelSlot, traitId)
+            let len := sload(elem)
+            sstore(elem, add(len, count))
+            switch len
+            case 0 {
+                fresh := 1
+            }
+            default {
+                dirty := 1
+            }
+            mstore(0x00, elem)
+            let w := add(keccak256(0x00, 0x20), shr(3, len))
+            let fill := and(len, 7)
+            switch fill
+            case 0 {
+                sstore(w, lanesWord)
+                fresh := add(fresh, 1)
+            }
+            default {
+                // Lanes past the tail's free room shift out of the word and land in
+                // the next one.
+                sstore(w, or(sload(w), shl(shl(5, fill), lanesWord)))
+                dirty := add(dirty, 1)
+                let room := sub(8, fill)
+                if gt(count, room) {
+                    sstore(add(w, 1), shr(shl(5, room), lanesWord))
+                    fresh := add(fresh, 1)
+                }
+            }
+        }
+    }
+
     // =========================================================================
     // Ticket Queue Key Encoding
     // =========================================================================
@@ -1186,6 +1483,7 @@ abstract contract DegenerusGameStorage {
         assembly ("memory-safe") {
             sstore(q.slot, 0)
         }
+        if (ticketSeats != 0) ticketSeats = 0;
     }
 
     // =========================================================================
@@ -3324,6 +3622,22 @@ abstract contract DegenerusGameStorage {
     ///      an entry is written once and never revisited, a settled round's answer can
     ///      never change.
     uint128[] internal centuryPrizePools;
+
+    /// @dev Per-level owner registry behind the packed trait buckets. Append-only and never
+    ///      released: a lane in lvlTraitEntry[level] is a position in this array, written
+    ///      when the entry is queued (or the foil pack bought), so every in-length lane
+    ///      resolves to a nonzero owner. One owner may hold several positions at a level
+    ///      (a queue entry per double-buffer generation, a foil pack); sampling is over
+    ///      lanes, so each still resolves to the right address.
+    mapping(uint24 => address[]) internal lvlEntryOwner;
+
+    /// @dev The seats a ticket drain left occupied when its write budget ran out: up to
+    ///      eight queue indices plus one (lane j = bits 32j..32j+31, zero = empty), in queue
+    ///      order, for the queue named by ticketLevel. The next chunk re-seats them and
+    ///      resumes filling from ticketCursor, which is the scan FRONTIER (every index below
+    ///      it is exhausted or seated), so exhausted holes are never rescanned and a
+    ///      long-lived seat can never pin the cursor. Cleared at queue release.
+    uint256 internal ticketSeats;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

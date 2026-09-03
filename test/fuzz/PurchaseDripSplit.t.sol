@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title PurchaseDripHarness -- drives the live purchase-phase daily drip
 /// @notice Extends the production DegenerusGameJackpotModule so `payDailyJackpot`
@@ -12,15 +13,12 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 ///         The harness only adds state seeders and read-only views; it overrides
 ///         NO production logic.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
-contract PurchaseDripHarness is DegenerusGameJackpotModule {
+contract PurchaseDripHarness is DegenerusGameJackpotModule, BucketSeed {
     /// @dev Push `count` distinct, non-zero holder addresses into lvlTraitEntry[lvl][traitId]
     ///      so bucket winner selection (which allows duplicates via `% effectiveLen`) never
     ///      resolves to address(0).
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
-        address[] storage holders = lvlTraitEntry[lvl][traitId];
-        for (uint256 i; i < count; ++i) {
-            holders.push(address(base + uint160(i + 1)));
-        }
+        _seedBucketDistinct(lvl, traitId, count, base);
     }
 
     function exposed_setPrizePools(uint128 next, uint128 future) external {

@@ -8,6 +8,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title JackpotSingleCallHarness -- drives the live single-call daily-ETH jackpot surface
 /// @notice Extends the production DegenerusGameJackpotModule so the inherited (external)
@@ -18,16 +19,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         DAILY_ETH_MAX_WINNERS=305 ceiling at the DAILY_JACKPOT_SCALE_MAX_BPS=63_600 max
 ///         scale (bucket counts 159/95/50/1), in ONE call -- exactly the JGAS-03 surface.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
-contract JackpotSingleCallHarness is DegenerusGameJackpotModule {
+contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
     /// @dev Push `count` distinct, non-zero holder addresses into lvlTraitEntry[lvl][traitId].
     ///      Distinct addresses make per-winner claimable accounting unambiguous; the seeded
     ///      pool is larger than any bucket's winner count so winner selection (which allows
     ///      duplicates via `% effectiveLen`) never resolves to address(0).
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
-        address[] storage holders = lvlTraitEntry[lvl][traitId];
-        for (uint256 i; i < count; ++i) {
-            holders.push(address(base + uint160(i + 1)));
-        }
+        _seedBucketDistinct(lvl, traitId, count, base);
     }
 
     // -- read-only accounting views (the credit sinks _processDailyEth writes) --

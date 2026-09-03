@@ -7,6 +7,7 @@ import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJ
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title GoldenTicketHarness -- drives the live payDailyJackpot arm/resolve surface
 /// @notice Extends the production DegenerusGameJackpotModule so the inherited external
@@ -14,12 +15,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         contract's storage. Adds only storage seeders and read-only views; overrides
 ///         NO production logic.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
-contract GoldenTicketHarness is DegenerusGameJackpotModule {
+contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
-        address[] storage holders = lvlTraitEntry[lvl][traitId];
-        for (uint256 i; i < count; ++i) {
-            holders.push(address(base + uint160(i + 1)));
-        }
+        _seedBucketDistinct(lvl, traitId, count, base);
     }
 
     function setLevel(uint24 v) external {

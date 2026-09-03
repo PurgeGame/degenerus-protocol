@@ -84,9 +84,14 @@ interface IDegenerusGameJackpotModule {
         uint256 randWord
     ) external;
 
-    /// @notice Pays daily jackpot rewards in coin and tickets
+    /// @notice Pays the daily coin jackpot and the day's own ticket leg
     /// @param randWord Random word for distribution
-    function payDailyJackpotCoinAndTickets(uint256 randWord) external;
+    /// @return carryoverPending True when a carryover ticket leg waits for the next advance
+    function payDailyJackpotCoinAndTickets(uint256 randWord) external returns (bool carryoverPending);
+
+    /// @notice Pays the carryover ticket leg the coin+tickets stage left pending
+    /// @param randWord Random word for distribution (the same day's word)
+    function payCarryoverTickets(uint256 randWord) external;
 
     /// @notice Pay the golden-ticket grand to a foil pack holding two all-gold tickets.
     /// @dev Delegatecall-only; the foil gold claim is the only caller.
@@ -233,6 +238,10 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
+    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 for `who`.
+    /// @dev Delegatecall target of the Game facade's initPerpetualTickets (caller-gated there).
+    function initPerpetualTickets(address who) external;
+
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer
     /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
@@ -725,6 +734,29 @@ interface IGameAfkingModule {
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
+    /// @notice Seated round drain for a ticket queue: eight entries share each trait roll
+    ///         and every quadrant is one packed lane word. Delegatecall target of the mint
+    ///         module's queue drains; hosted here for EIP-170 room.
+    /// @param rk Ticket queue key (read half or far-future key).
+    /// @param lvl Level whose buckets receive the lanes.
+    /// @param room Write budget for this call.
+    /// @param idx Queue index to start seating from.
+    /// @param total Queue length.
+    /// @param entropy The level's trait entropy word.
+    /// @param shift Snap exponent for the level.
+    /// @return nextIdx The scan frontier (the resume cursor); seats still holding entries
+    ///         below it are recorded in ticketSeats.
+    /// @return used Write units charged.
+    function drainRounds(
+        uint24 rk,
+        uint24 lvl,
+        uint32 room,
+        uint256 idx,
+        uint256 total,
+        uint256 entropy,
+        uint8 shift
+    ) external returns (uint256 nextIdx, uint32 used);
+
     /// @notice Deliver one foil pack (four tickets) for the active cycle. Delegatecall
     ///         target invoked by the mint module's purchase path (the foil leg of an
     ///         additive ticket/lootbox/foil buy). Handles the foil leg's own payment

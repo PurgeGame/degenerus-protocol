@@ -698,16 +698,16 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       const jackpotSrc = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
       const mintSrc = fs.readFileSync(MINT_MODULE_SOURCE_PATH, "utf8");
 
-      // (1) `_queueEntries` body packs `(uint48(owed) << 8) | uint48(rem)` with
-      //     `rem` carried UNCHANGED from the pre-existing slot value — it never
-      //     computes a fraction.
+      // (1) `_queueEntries` body packs `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)`
+      //     with `rem` carried UNCHANGED from the pre-existing slot value — it never
+      //     computes a fraction. The owner-registry bits ride along untouched.
       const queueBody = extractBody(storage, "function _queueEntries(");
       expect(queueBody, "_queueEntries body not found").to.not.equal(null);
       expect(
-        /entriesOwedPacked\[wk\]\[buyer\]\s*=\s*\(uint48\(owed\)\s*<<\s*8\)\s*\|\s*uint48\(rem\)/.test(
+        /entriesOwedPacked\[wk\]\[buyer\]\s*=\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(
           queueBody
         ),
-        "_queueEntries must pack `(uint48(owed) << 8) | uint48(rem)` with rem carried from the existing slot"
+        "_queueEntries must pack `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` with rem carried from the existing slot"
       ).to.equal(true);
       expect(
         queueBody.includes("% QTY_SCALE"),

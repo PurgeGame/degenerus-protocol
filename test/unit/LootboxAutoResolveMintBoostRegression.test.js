@@ -110,28 +110,30 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
     });
   });
 
-  describe("`_rollRemainder` defined + consumed in MintModule (mint-boost activation still resolves rem byte)", function () {
-    it("[02a] `_rollRemainder` is defined in MintModule (function _rollRemainder(... ) signature present)", function () {
-      const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
+  describe("`_rollRemainder` defined in the shared storage base + consumed by MintModule (mint-boost activation still resolves rem byte)", function () {
+    it("[02a] `_rollRemainder` is defined in DegenerusGameStorage.sol (the shared owed-balance engine both drains use)", function () {
+      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
       expect(
-        mint.includes("function _rollRemainder("),
-        "_rollRemainder must be defined in MintModule"
+        storage.includes("function _rollRemainder("),
+        "_rollRemainder must be defined in the storage base"
       ).to.equal(true);
     });
 
     it("[02b] every MintModule drain path still reaches `_rollRemainder` (via the shared per-entry engine)", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      // Both remainder-roll sites live in the single per-entry engine now: the zero-owed
-      // roll inside _resolveZeroOwedRemainder, and the end-of-take roll inside
-      // _processOneTicketEntry. Assert the roll sites AND that both drain entrypoints route
-      // through that engine — a stronger guard than a raw occurrence count, which used to
-      // encode the duplicated inline loop processFutureTicketBatch carried before it was
-      // collapsed onto _processOneTicketEntry.
-      const callsites = (mint.match(/_rollRemainder\(/g) || []).length;
+      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
+      // The zero-owed roll lives in the storage base's _resolveZeroOwedRemainder; the
+      // end-of-take roll lives in MintModule's _processOneTicketEntry. Assert both roll sites
+      // AND that both drain entrypoints route through that engine.
       expect(
-        callsites,
-        "expected ≥3 occurrences of `_rollRemainder(` (1 def + the zero-owed and end-of-take roll sites)"
-      ).to.be.gte(3);
+        (mint.match(/_rollRemainder\(/g) || []).length,
+        "expected the end-of-take `_rollRemainder(` site in MintModule"
+      ).to.be.gte(1);
+      const zeroOwed = storage.slice(storage.indexOf("function _resolveZeroOwedRemainder("));
+      expect(
+        zeroOwed.slice(0, zeroOwed.indexOf("\n    function ")).includes("_rollRemainder("),
+        "_resolveZeroOwedRemainder must roll the remainder"
+      ).to.equal(true);
       for (const entrypoint of ["processTicketBatch", "processFutureTicketBatch"]) {
         const body = mint.slice(mint.indexOf(`function ${entrypoint}(`));
         expect(
@@ -141,11 +143,12 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
       }
     });
 
-    it("[02c] cross-module negation: `_rollRemainder` is NOT defined in DegenerusGameStorage.sol or DegenerusGameLootboxModule.sol — it's MintModule-local", function () {
-      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
+    it("[02c] cross-module negation: `_rollRemainder` is NOT defined in MintModule or DegenerusGameLootboxModule.sol — it's the storage base's", function () {
+      const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       const lootbox = fs.readFileSync(LOOTBOX_MODULE_PATH, "utf8");
-      expect(storage.includes("function _rollRemainder(")).to.equal(false);
+      expect(mint.includes("function _rollRemainder(")).to.equal(false);
       expect(lootbox.includes("function _rollRemainder(")).to.equal(false);
+
       // LootboxModule must not even reference _rollRemainder (no auto-resolve
       // dependency on the helper post-Phase-275).
       expect(lootbox.includes("_rollRemainder(")).to.equal(false);

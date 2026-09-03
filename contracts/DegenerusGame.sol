@@ -256,12 +256,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function initPerpetualTickets() external {
         address who = msg.sender;
         if (who != ContractAddresses.SDGNRS && who != ContractAddresses.VAULT) revert Unauthorized();
-        for (uint24 i = 1; i <= 100; ) {
-            _queueEntries(who, i, 16, false); // 16 entries (= 4 whole tickets) per level
-            unchecked {
-                ++i;
-            }
-        }
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameMintModule.initPerpetualTickets.selector, who)
+        );
+        if (!ok) _revertDelegate(data);
     }
 
     /*+======================================================================+
@@ -2859,8 +2857,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 entropy
     ) external view returns (uint8 traitSel, address[] memory entries) {
         traitSel = uint8(entropy >> 24);
-        address[] storage arr = lvlTraitEntry[targetLvl][traitSel];
-        uint256 len = arr.length;
+        uint256 len = lvlTraitEntry[targetLvl][traitSel].length;
         if (len == 0) {
             return (traitSel, new address[](0));
         }
@@ -2869,7 +2866,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         entries = new address[](take);
         uint256 start = (entropy >> 40) % len;
         for (uint256 i; i < take; ) {
-            entries[i] = arr[(start + i) % len];
+            entries[i] = _bucketOwnerAt(targetLvl, traitSel, (start + i) % len);
             unchecked {
                 ++i;
             }
@@ -2942,15 +2939,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint32 limit,
         address player
     ) external view returns (uint24 count, uint32 nextOffset, uint32 total) {
-        address[] storage a = lvlTraitEntry[lvl][trait];
-        total = uint32(a.length);
+        total = uint32(lvlTraitEntry[lvl][trait].length);
         if (offset >= total) return (0, total, total);
 
         uint256 end = offset + limit;
         if (end > total) end = total;
 
         for (uint256 i = offset; i < end; ) {
-            if (a[i] == player) count++;
+            if (_bucketOwnerAt(lvl, trait, i) == player) count++;
             unchecked {
                 ++i;
             }

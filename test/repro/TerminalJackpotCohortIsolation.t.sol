@@ -3,10 +3,11 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @dev Etch-only storage overlay used to construct and inspect exact terminal states while every
 ///      measured advance still executes the production DegenerusGame runtime.
-contract TerminalCohortSeeder is DegenerusGame {
+contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
     function seedPhase(bool inJackpot, bool isLastPurchase, bool locked) external {
         jackpotPhaseFlag = inJackpot;
         lastPurchaseDay = isLastPurchase;
@@ -107,7 +108,7 @@ contract TerminalCohortSeeder is DegenerusGame {
 
     function seedEveryTrait(uint24 lvl, address player) external {
         for (uint16 trait; trait < 256; ++trait) {
-            lvlTraitEntry[lvl][uint8(trait)].push(player);
+            _seedBucket(lvl, uint8(trait), player, 1);
         }
     }
 
@@ -117,9 +118,9 @@ contract TerminalCohortSeeder is DegenerusGame {
 
     function holderEntryCount(uint24 lvl, address player) external view returns (uint256 count) {
         for (uint16 trait; trait < 256; ++trait) {
-            address[] storage bucket = lvlTraitEntry[lvl][uint8(trait)];
-            for (uint256 i; i < bucket.length; ++i) {
-                if (bucket[i] == player) ++count;
+            uint256 len = lvlTraitEntry[lvl][uint8(trait)].length;
+            for (uint256 i; i < len; ++i) {
+                if (_bucketOwnerAt(lvl, uint8(trait), i) == player) ++count;
             }
         }
     }
@@ -135,7 +136,8 @@ contract TerminalCohortSeeder is DegenerusGame {
 
     function _seedQueue(uint24 key, address player, uint32 entries) private {
         ticketQueue[key].push(player);
-        entriesOwedPacked[key][player] = uint40(entries) << 8;
+        entriesOwedPacked[key][player] =
+            _registerEntryOwner(player, uint24(key & ((uint24(1) << 22) - 1))) | (uint80(entries) << 8);
     }
 }
 

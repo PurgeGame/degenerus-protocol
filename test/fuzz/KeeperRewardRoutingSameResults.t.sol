@@ -558,13 +558,24 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         return keccak256(abi.encode(uint256(key), TICKET_QUEUE_SLOT));
     }
 
+    /// @dev Register `who` in lvlEntryOwner[lvl] (slot 67, append-only) the way every sink does at
+    ///      queue time, returning the owner bits the owed word must carry (position + 1 << 48).
+    function _seedOwnerBits(uint24 lvl, address who) internal returns (uint256) {
+        bytes32 lenSlot = keccak256(abi.encode(uint256(lvl), uint256(67)));
+        uint256 len = uint256(vm.load(address(game), lenSlot));
+        bytes32 elemSlot = bytes32(uint256(keccak256(abi.encode(lenSlot))) + len);
+        vm.store(address(game), elemSlot, bytes32(uint256(uint160(who))));
+        vm.store(address(game), lenSlot, bytes32(len + 1));
+        return (len + 1) << 48;
+    }
+
     /// @dev Seed `whole` far-future tickets for `who` at level L (packed: owed=whole*4 entries << 8 | rem).
     ///      Appends `who` to ticketQueue[ffk(L)].
     function _seedFarTickets(address who, uint24 L, uint32 whole) internal {
         uint24 key = ffk.ffKey(L);
         uint32 entries = whole * 4;
-        uint40 packed = uint40(uint256(entries) << 8); // rem = 0
-        vm.store(address(game), _ownedPackedSlot(key, who), bytes32(uint256(packed)));
+        uint256 packed = (uint256(entries) << 8) | _seedOwnerBits(L, who); // rem = 0
+        vm.store(address(game), _ownedPackedSlot(key, who), bytes32(packed));
 
         bytes32 lenSlot = _queueBaseSlot(key);
         uint256 len = uint256(vm.load(address(game), lenSlot));
@@ -602,8 +613,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     ///      << 8 | rem) and append `who` to ticketQueue[readKey]. Mirrors the far-future seed shape.
     function _seedReadSlotTickets(uint24 readKey, address who, uint32 whole) internal {
         uint32 entries = whole * 4;
-        uint40 packed = uint40(uint256(entries) << 8);
-        vm.store(address(game), _ownedPackedSlot(readKey, who), bytes32(uint256(packed)));
+        uint256 packed = (uint256(entries) << 8) | _seedOwnerBits(readKey & ~TICKET_SLOT_BIT, who);
+        vm.store(address(game), _ownedPackedSlot(readKey, who), bytes32(packed));
 
         bytes32 lenSlot = _queueBaseSlot(readKey);
         uint256 len = uint256(vm.load(address(game), lenSlot));

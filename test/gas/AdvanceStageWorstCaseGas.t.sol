@@ -4,9 +4,11 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
+import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title AdvanceStageWorstCaseGas — Phase 367 (GASCEIL) measured per-stage advanceGame ceiling
 /// @notice Phase 367 REDO. The prior pass reported the standalone 305-winner daily jackpot stage
@@ -40,12 +42,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///        - stage 11 payDailyJackpot(true)  jackpot-phase    (JackpotModule.sol:450 _processDailyEth)
 ///        - stage 12 runTerminalJackpot     game-over        (JackpotModule.sol:280 _processDailyEth)
 ///      All three feed `_processDailyEth` the same DAILY_ETH_MAX_WINNERS=305 ceiling at max scale.
-contract JackpotStageHarness is DegenerusGameJackpotModule {
+contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
-        address[] storage holders = lvlTraitEntry[lvl][traitId];
-        for (uint256 i; i < count; ++i) {
-            holders.push(address(base + uint160(i + 1)));
-        }
+        _seedBucketDistinct(lvl, traitId, count, base);
     }
 }
 
@@ -68,12 +67,13 @@ contract TicketBatchStageHarness is DegenerusGameMintModule {
 
         uint24 rk = _tqReadKey(lvl);
         address[] storage queue = ticketQueue[rk];
-        mapping(address => uint48) storage owedMap = entriesOwedPacked[rk];
+        mapping(address => uint80) storage owedMap = entriesOwedPacked[rk];
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(address(1));
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             queue.push(p);
             // packed layout: owed in bits [8:], remainder in bits [0:8]. Set owed=owedEach, rem=0.
-            owedMap[p] = uint48(uint48(owedEach) << 8);
+            owedMap[p] = _registerEntryOwner(p, lvl) | (uint80(owedEach) << 8);
         }
     }
 
@@ -86,7 +86,7 @@ contract TicketBatchStageHarness is DegenerusGameMintModule {
     }
 
     /// @dev Seed the queue AND pin (ticketLevel == lvl, ticketCursor == startCursor) so the batch runs at
-    ///      the FULL warm WRITES_BUDGET_SAFE=550 budget (NOT the 35%-cold-scaled 357 of the first batch).
+    ///      the FULL warm WRITES_BUDGET_SAFE=900 budget (NOT the 35%-cold-scaled 585 of the first batch).
     ///      This is the heavier resume-batch worst case (a level whose first batch already ran).
     function seedTicketQueueWarmResume(uint24 lvl, uint256 n, uint32 owedEach, uint160 base, uint32 startCursor)
         external
@@ -117,11 +117,11 @@ contract AdvanceStageWorstCaseGas is Test {
 
     // Production caps, re-attested against the frozen audit subject c4d48008
     // (JackpotModule: DAILY_ETH_MAX_WINNERS 305, DAILY_COIN_MAX_WINNERS 50,
-    //  DAILY_JACKPOT_SCALE_MAX_BPS 63_600; MintModule: WRITES_BUDGET_SAFE 550).
+    //  DAILY_JACKPOT_SCALE_MAX_BPS 63_600; MintModule: WRITES_BUDGET_SAFE 900).
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
     uint32 internal constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
     uint16 internal constant DAILY_COIN_MAX_WINNERS = 50;
-    uint32 internal constant WRITES_BUDGET_SAFE = 550;
+    uint32 internal constant WRITES_BUDGET_SAFE = 900;
 
     /// @dev The hard EIP-7825 per-transaction gas cap. A breach = advanceGame DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
@@ -137,6 +137,10 @@ contract AdvanceStageWorstCaseGas is Test {
     function setUp() public {
         jp = new JackpotStageHarness();
         tb = new TicketBatchStageHarness();
+        vm.etch(
+            ContractAddresses.GAME_FOILPACK_MODULE,
+            address(new DegenerusGameFoilPackModule()).code
+        );
     }
 
     function _word() internal pure returns (uint256) {
@@ -279,7 +283,7 @@ contract AdvanceStageWorstCaseGas is Test {
 
     /// @notice MEASURED worst-case for ONE full processTicketBatch write-budget chunk — the loop shared by
     ///         every chunked ticket stage (0 mid-day drain, 1 daily drain gate, 5 FF drain, 6 prepare
-    ///         future tickets, 7 current-level batch). Each chunk mints up to WRITES_BUDGET_SAFE=550 write
+    ///         future tickets, 7 current-level batch). Each chunk mints up to WRITES_BUDGET_SAFE=900 write
     ///         units of cold lvlTraitEntry SSTOREs (the first batch is cold-scaled to ~357). We seed a
     ///         deep queue (1 player owing a large trait count) so one batch saturates the budget, and
     ///         measure the live external processTicketBatch.
@@ -309,12 +313,12 @@ contract AdvanceStageWorstCaseGas is Test {
     }
 
     /// @notice MEASURED worst-case for a WARM resume ticket batch — the heavier case where the level's
-    ///         first (cold-scaled) batch already ran, so this batch uses the FULL WRITES_BUDGET_SAFE=550
+    ///         first (cold-scaled) batch already ran, so this batch uses the FULL WRITES_BUDGET_SAFE=900
     ///         budget (not the 35%-scaled 357). Seed one deep-owed player at a non-zero cursor so idx != 0.
     ///         This is the true single-tx ticket-stage worst case; the cold first batch (~6.5M) is lighter.
     function test_Stage7_TicketBatch_WarmResume_FullBudget_Measured() public {
         // Player[0] cheap (owed small, advances fast); player[1] deep-owed; cursor pinned at index 1 so
-        // the batch enters the deep player with idx==1 -> the full 550 budget (no cold scale).
+        // the batch enters the deep player with idx==1 -> the full 900 budget (no cold scale).
         // We seed 2 entries: index 0 a 1-owed cheap entry, index 1 a 700-owed deep entry; cursor=1.
         // seedTicketQueueWarmResume seeds n uniform-owed players; to get the mixed shape we seed 2 deep
         // players and start at cursor 1 (so only the second is processed this batch at full budget).
@@ -330,17 +334,17 @@ contract AdvanceStageWorstCaseGas is Test {
         emit log_named_uint("ticket_batch_warm_finished", finished ? 1 : 0);
         emit log_named_uint("headroom_to_16p7M_gas", EIP7825_TX_GAS_CAP - gasUsed);
 
-        // The warm full-budget (550) batch is the true ticket-stage worst case; still strictly < the cap.
+        // The warm full-budget (900) batch is the true ticket-stage worst case; still strictly < the cap.
         assertLt(
             gasUsed,
             EIP7825_TX_GAS_CAP,
-            "STAGE 7 (warm resume): the full 550-write-budget ticket batch is strictly < 16,777,216"
+            "STAGE 7 (warm resume): the full 900-write-budget ticket batch is strictly < 16,777,216"
         );
     }
 
     /// @notice Per-trait marginal for the ticket batch, measured loop-N-divide across two deep-owed
     ///         counts that both fit in ONE (non-cold-scaled) batch, isolating the per-trait cold SSTORE.
-    ///         The deep-owed single player's later batches use the full 550 budget (no cold-scale), so we
+    ///         The deep-owed single player's later batches use the full 900 budget (no cold-scale), so we
     ///         drive a first cheap batch to advance off cursor 0, then measure the second batch's marginal.
     function test_PerTraitMarginal_TicketBatch_Measured() public {
         // Two runs from one baseline: a player owing M traits vs M-K, both within one warm batch.
@@ -366,13 +370,13 @@ contract AdvanceStageWorstCaseGas is Test {
         if (gasHi > gasLo) {
             uint256 perTrait = (gasHi - gasLo) / (mHi - mLo);
             emit log_named_uint("per_trait_marginal_gas", perTrait);
-            // Per-trait cold array push is a bounded O(1); a 550-write budget × this stays < the cap.
+            // Per-trait cold array push is a bounded O(1); a 900-write budget × this stays < the cap.
             assertLt(perTrait, 200_000, "per-trait cold push is a bounded O(1) write");
-            // Analytic-from-measured cross-check: a worst-case 550-write-unit chunk (~275 traits, each
+            // Analytic-from-measured cross-check: a worst-case 900-write-unit chunk (~150 traits, each
             // ~2 write units) at this per-trait cost stays well under the EIP cap.
-            uint256 analytic550 = 500_000 + perTrait * 275; // fixed overhead + ~275 traits
-            emit log_named_uint("analytic_550_write_chunk_from_measured_marginal", analytic550);
-            assertLt(analytic550, EIP7825_TX_GAS_CAP, "analytic 550-write chunk from the measured per-trait marginal < the EIP cap");
+            uint256 analytic900 = 500_000 + perTrait * 150; // fixed overhead + ~150 traits
+            emit log_named_uint("analytic_900_write_chunk_from_measured_marginal", analytic900);
+            assertLt(analytic900, EIP7825_TX_GAS_CAP, "analytic 900-write chunk from the measured per-trait marginal < the EIP cap");
         } else {
             // Guard the probe's precondition so a degenerate measurement FAILS rather than silently
             // skipping the per-trait marginal + analytic bound: the 200-owed batch MUST cost more
@@ -398,7 +402,7 @@ contract AdvanceStageWorstCaseGas is Test {
         jp.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
         uint256 jackpotGas = gJ0 - gasleft();
 
-        // Use the WARM full-550-budget resume batch (the true ticket-stage worst case, not the lighter
+        // Use the WARM full-900-budget resume batch (the true ticket-stage worst case, not the lighter
         // cold-scaled first batch).
         tb.seedTicketQueueWarmResume(TARGET_LVL, 2, 700, uint160(0x40000), 1);
         uint256 gT0 = gasleft();

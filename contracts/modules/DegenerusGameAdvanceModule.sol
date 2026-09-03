@@ -138,7 +138,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      re-entry (gapDays == 0 next call), dailyIdx is not yet advanced, so advanceDue()
     ///      stays true and the next advance pays the jackpot with the same frozen word.
     uint8 private constant STAGE_GAP_BACKFILLED = 12;
-    // 12 is the last stage: the subscriber STAGE is entry-gated on !rngLockedFlag, so it can
+    /// @dev The carryover ticket leg of a jackpot-phase daily, paid on the advance after
+    ///      STAGE_JACKPOT_COIN_TICKETS / STAGE_JACKPOT_PHASE_ENDED priced it, so the two
+    ///      100-winner ticket legs never share a tx. Seals the day on a non-final daily.
+    uint8 private constant STAGE_JACKPOT_CARRYOVER_TICKETS = 13;
+    // 12 is the last stage of the do-loop chain: the subscriber STAGE is entry-gated on
+    // !rngLockedFlag, so it can
     // never complete in a tx that also has a buffered word / pending backfill — there is no
     // deferred-composition case left to stage.
     event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
@@ -594,6 +599,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 break;
             }
 
+            // Carryover ticket leg of the jackpot-phase daily: the stage after the one that
+            // priced it, on the same recorded word, ahead of the transition it may precede.
+            // The read slot drained before that daily ran and the lock has held since, so no
+            // drain or request can sit between the two halves.
+            if (_carryoverLegPending()) {
+                _payCarryoverTickets(rngWord);
+                if (!phaseTransitionActive) _unlockRng(day);
+                stage = STAGE_JACKPOT_CARRYOVER_TICKETS;
+                break;
+            }
+
             // Phase transition housekeeping + FF promotion
             if (phaseTransitionActive) {
                 // Drain the one FF level that entered near-future at this level transition.
@@ -741,13 +757,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // Complete coin+ticket distribution
             if (dailyJackpotCoinTicketsPending) {
-                payDailyJackpotCoinAndTickets(rngWord);
+                bool carryover = payDailyJackpotCoinAndTickets(rngWord);
                 if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
                     _endPhase(lvl);
                     stage = STAGE_JACKPOT_PHASE_ENDED;
                     break;
                 }
-                _unlockRng(day);
+                // A priced carryover leg seals the day from its own stage instead.
+                if (!carryover) _unlockRng(day);
                 stage = STAGE_JACKPOT_COIN_TICKETS;
                 break;
             }
@@ -1254,15 +1271,25 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Pay coin+ticket portion of daily jackpot via jackpot module delegatecall.
-    ///      Called when dailyJackpotCoinTicketsPending is true to complete the split
-    ///      daily jackpot (gas optimization to stay under 15M block limit).
+    /// @dev Pay the coin jackpot and the day's own ticket leg via jackpot module delegatecall.
+    ///      Called when dailyJackpotCoinTicketsPending is true; the carryover ticket leg it
+    ///      prices runs from the next advance so the two ticket legs never share a tx.
     /// @param randWord VRF random word for winner selection.
-    function payDailyJackpotCoinAndTickets(uint256 randWord) internal {
+    /// @return carryoverPending True when a carryover leg waits for the next advance.
+    function payDailyJackpotCoinAndTickets(uint256 randWord) internal returns (bool carryoverPending) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyJackpotCoinAndTickets.selector, randWord)
             );
+        if (!ok) _revertDelegate(data);
+        return abi.decode(data, (bool));
+    }
+
+    /// @dev Pay the pending carryover ticket leg via jackpot module delegatecall.
+    /// @param randWord The day's recorded VRF word.
+    function _payCarryoverTickets(uint256 randWord) private {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
+            .delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payCarryoverTickets.selector, randWord));
         if (!ok) _revertDelegate(data);
     }
 
@@ -2187,7 +2214,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngRequestTime = 0;
         _unfreezePool();
         // The day-seal is the one chokepoint every completed game-day passes through (purchase
-        // daily, jackpot coin+tickets, phase transition). Emit the daily pool snapshot here, after
+        // daily, jackpot coin+tickets or its carryover leg, phase transition). Emit the daily pool
+        // snapshot here, after
         // _unfreezePool folds the pending accumulators back into the live pools, so the indexer
         // mirrors the settled end-of-day pools and a solvency total (ETH + stETH) from logs alone.
         // Game-over also seals here but emits its own terminal snapshot in the drain, so skip it.

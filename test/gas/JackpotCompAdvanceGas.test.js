@@ -11,6 +11,7 @@
 
 import { expect } from "chai";
 import hre from "hardhat";
+import * as bucketSeed from "../helpers/bucketSeed.js";
 import { execSync } from "node:child_process";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
@@ -56,12 +57,7 @@ async function setSlot(addr, slot, value) {
 }
 
 async function seedBucket(gameAddr, lvl, trait, holders, root) {
-  const arraySlot = mapSlot(trait, mapSlot(lvl, root));
-  await setSlot(gameAddr, arraySlot, holders.length);
-  const dataBase = BigInt(ethers.keccak256(pad32(arraySlot)));
-  for (let i = 0; i < holders.length; ++i) {
-    await setSlot(gameAddr, dataBase + BigInt(i), BigInt(holders[i]));
-  }
+  await bucketSeed.seedTraitBucket(gameAddr, lvl, trait, holders, { traitSlot: root });
 }
 
 // --- JS mirrors of the draw's pure derivations (zero hero wagers → base traits) ---

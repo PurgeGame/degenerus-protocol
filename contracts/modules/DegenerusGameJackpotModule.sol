@@ -748,10 +748,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @notice Phase 2 of daily jackpot: distributes coin jackpot AND tickets to trait winners.
-    /// @dev Called by advanceGame when dailyJackpotCoinTicketsPending is true.
-    ///      Gas optimization: Separating coin+ticket distribution from ETH distribution
-    ///      keeps each advanceGame call under the 15M gas block limit.
+    /// @notice Phase 2 of the daily jackpot: the coin jackpot and the day's own ticket leg.
+    /// @dev Called by advanceGame when dailyJackpotCoinTicketsPending is true. The daily is a
+    ///      chain of advance txs so each stays under the per-tx gas cap: Phase 1 pays the ETH,
+    ///      this stage pays FLIP and the main-board tickets, and the carryover ticket leg (up to
+    ///      another 100 winners) runs from its own stage on the next advance
+    ///      (payCarryoverTickets). Phase 1's packed budgets stay in place for that stage when a
+    ///      carryover was priced; otherwise they are cleared here.
     ///
     ///      Traits are derived inline from randWord (main via isBonus=false, bonus via isBonus=true).
     ///      Uses stored values from Phase 1:
@@ -759,15 +762,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - dailyTicketBudgetsPacked: Packed ticket units, counter step, and carryover source offset
     ///
     /// @param randWord VRF entropy (must match rngWordCurrent from Phase 1).
-    function payDailyJackpotCoinAndTickets(uint256 randWord) external {
-        if (!dailyJackpotCoinTicketsPending) return;
+    /// @return carryoverPending True when a carryover leg was priced and waits for the next advance.
+    function payDailyJackpotCoinAndTickets(uint256 randWord) external returns (bool carryoverPending) {
+        if (!dailyJackpotCoinTicketsPending) return false;
 
         // Unpack stored values
         (
             uint8 counterStep,
             uint256 dailyEntries,
             uint256 carryoverEntries,
-            uint8 carryoverSourceOffset
+
         ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
 
         // Derive traits inline from randWord; main and bonus each roll a distinct hero.
@@ -795,32 +799,43 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             );
         }
 
-        uint8 counterCached = jackpotCounter;
-
-        // Distribute carryover tickets: winners from source level, tickets at current level
-        // (or lvl+1 on final day since current level is about to end). Uses bonus traits.
-        if (carryoverEntries != 0) {
-            uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
-            bool isFinalDay = counterCached + counterStep >= JACKPOT_LEVEL_CAP;
-            _distributeTicketJackpot(
-                sourceLevel,
-                isFinalDay ? lvl + 1 : lvl,
-                bonusTraitsPacked,
-                carryoverEntries,
-                EntropyLib.hash2(randWord, sourceLevel),
-                TICKET_JACKPOT_MAX_WINNERS,
-                240,
-                false // bonus board: no ETH distribution, no solo quadrant
-            );
-        }
-
         // Complete the daily jackpot cycle
         unchecked {
-            jackpotCounter = counterCached + counterStep;
+            jackpotCounter = jackpotCounter + counterStep;
         }
 
-        // Clear pending state
+        // Clear pending state. A priced carryover keeps Phase 1's budgets for its own stage.
         dailyJackpotCoinTicketsPending = false;
+        carryoverPending = carryoverEntries != 0;
+        if (!carryoverPending) dailyTicketBudgetsPacked = 0;
+    }
+
+    /// @notice The carryover ticket leg of the daily jackpot, from its own advance stage.
+    /// @dev Called by advanceGame on the advance after payDailyJackpotCoinAndTickets left it
+    ///      pending, with the same day's word from rngGate. Winners come from the source level's
+    ///      buckets on the day's bonus traits (re-rolled from the word: the hero pool and the
+    ///      golden-ticket ban read the same on every roll of a board, as Phase 2's re-roll of
+    ///      Phase 1's board already relies on); tickets queue at the current level, or lvl+1
+    ///      once _endPhase has closed the level. The lock held since the request keeps every
+    ///      input frozen until the day seals after this leg.
+    /// @param randWord VRF entropy (the day's recorded word).
+    function payCarryoverTickets(uint256 randWord) external {
+        (, , uint256 carryoverEntries, uint8 carryoverSourceOffset) = _unpackDailyTicketBudgets(
+            dailyTicketBudgetsPacked
+        );
+        uint24 lvl = level;
+        uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
+        (, uint32 bonusTraitsPacked) = _rollWinningTraitsPair(randWord);
+        _distributeTicketJackpot(
+            sourceLevel,
+            phaseTransitionActive ? lvl + 1 : lvl,
+            bonusTraitsPacked,
+            carryoverEntries,
+            EntropyLib.hash2(randWord, sourceLevel),
+            TICKET_JACKPOT_MAX_WINNERS,
+            240,
+            false // bonus board: no ETH distribution, no solo quadrant
+        );
         dailyTicketBudgetsPacked = 0;
     }
 
@@ -1092,7 +1107,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             address[] memory winners,
             uint256[] memory ticketIndexes
         ) = _randTraitTicket(
-                lvlTraitEntry[sourceLvl],
+                sourceLvl,
                 entropy,
                 traitId,
                 uint8(count),
@@ -1486,7 +1501,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             address[] memory winners,
             uint256[] memory ticketIndexes
         ) = _randTraitTicket(
-                lvlTraitEntry[lvl],
+                lvl,
                 newEntropy,
                 traitId,
                 uint8(totalCount),
@@ -1896,7 +1911,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      Reads the bucket length and deity itself; distribution paths that
     ///      already hold them use the precomputed overload directly.
     function _randTraitTicket(
-        address[][256] storage lvlTraitEntry_,
+        uint24 lvl,
         uint256 randomWord,
         uint8 trait,
         uint8 numWinners,
@@ -1906,7 +1921,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         view
         returns (address[] memory winners, uint256[] memory ticketIndexes)
     {
-        uint256 len = lvlTraitEntry_[trait].length;
+        uint256 len = lvlTraitEntry[lvl][trait].length;
 
         // traitId layout: (quadrant << 6) | (color << 3) | symIdx
         // fullSymId = quadrant * 8 + symIdx
@@ -1918,7 +1933,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         return
             _randTraitTicket(
-                lvlTraitEntry_,
+                lvl,
                 randomWord,
                 trait,
                 numWinners,
@@ -1931,7 +1946,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Winner-selection core with caller-supplied bucket length and deity.
     ///      Winners beyond the real bucket land on the deity's virtual entries.
     function _randTraitTicket(
-        address[][256] storage lvlTraitEntry_,
+        uint24 lvl,
         uint256 randomWord,
         uint8 trait,
         uint8 numWinners,
@@ -1943,7 +1958,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         view
         returns (address[] memory winners, uint256[] memory ticketIndexes)
     {
-        address[] storage holders = lvlTraitEntry_[trait];
         uint256 virtualCount = _deityVirtualCount(trait, len, deity);
 
         uint256 effectiveLen = len + virtualCount;
@@ -1958,7 +1972,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 keccak256(abi.encode(randomWord, trait, salt, i))
             ) % effectiveLen;
             if (idx < len) {
-                winners[i] = holders[idx];
+                winners[i] = _bucketOwnerAt(lvl, trait, idx);
                 ticketIndexes[i] = idx;
             } else {
                 winners[i] = deity;
@@ -2132,8 +2146,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 abi.encode(randomWord, FLIP_LEVEL_TAG, i)
             )) % range);
 
-            address[] storage holders = lvlTraitEntry[lvlPrime][trait_i];
-            uint256 len = holders.length;
+            uint256 len = lvlTraitEntry[lvlPrime][trait_i].length;
             address deity = deityCache[traitIdx];
             uint256 effectiveLen = len + _deityVirtualCount(trait_i, len, deity);
             if (effectiveLen == 0) {
@@ -2145,7 +2158,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             address winner;
             uint256 ticketIdx;
             if (idx < len) {
-                winner = holders[idx];
+                winner = _bucketOwnerAt(lvlPrime, trait_i, idx);
                 ticketIdx = idx;
             } else {
                 winner = deity;
@@ -2203,15 +2216,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 abi.encode(randomWord, FLIP_LEVEL_TAG, i)
             )) % range);
 
-            address[] storage holders = lvlTraitEntry[lvlPrime][trait];
-            uint256 len = holders.length;
+            uint256 len = lvlTraitEntry[lvlPrime][trait].length;
             uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
             if (effectiveLen != 0) {
                 uint256 idx = EntropyLib.hash4(randomWord, trait, lvlPrime, i) % effectiveLen;
                 address winner;
                 uint256 ticketIdx;
                 if (idx < len) {
-                    winner = holders[idx];
+                    winner = _bucketOwnerAt(lvlPrime, trait, idx);
                     ticketIdx = idx;
                 } else {
                     winner = deity;

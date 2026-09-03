@@ -80,6 +80,10 @@ check-unchecked:
 check-write-owners:
 	@bash scripts/check-write-owners.sh
 
+# Determinism: no gasleft() in game contracts (crank work is a pure function of state)
+check-gasleft:
+	@bash scripts/check-gasleft.sh
+
 check-craps-progressive:
 	@scripts/check-craps-progressive-parity.sh
 
@@ -103,7 +107,7 @@ coverage-check:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners
+test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -113,7 +117,7 @@ test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners
+test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 	@npx hardhat test $(ARGS)
 
 # Run both suites

@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import hre from "hardhat";
+import * as bucketSeed from "../helpers/bucketSeed.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
   deployFullProtocol,
@@ -696,22 +697,7 @@ describe("DegenerusJackpots", function () {
 
     /** Write an address array into lvlTraitEntry[level][trait] */
     async function setTraitBurnTicket(gameAddr, level, trait, addresses) {
-      const lenSlot = lvlTraitEntrySlot(level, trait);
-      // Set length
-      await hre.ethers.provider.send("hardhat_setStorageAt", [
-        gameAddr,
-        lenSlot,
-        hre.ethers.toBeHex(addresses.length, 32),
-      ]);
-      // Set each element
-      for (let i = 0; i < addresses.length; i++) {
-        const dataSlot = lvlTraitEntryDataSlot(lenSlot, i);
-        await hre.ethers.provider.send("hardhat_setStorageAt", [
-          gameAddr,
-          dataSlot,
-          hre.ethers.toBeHex(addresses[i], 32),
-        ]);
-      }
+      await bucketSeed.seedTraitBucket(gameAddr, level, trait, addresses);
     }
 
     /** Write an address array into ticketQueue[key] (for FF tickets) */

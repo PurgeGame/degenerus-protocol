@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import hre from "hardhat";
+import * as bucketSeed from "../helpers/bucketSeed.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { execSync } from "node:child_process";
 import {
@@ -64,12 +65,9 @@ async function setStorage(gameAddress, slot, value) {
 }
 
 async function seedTraitBucket(gameAddress, level, trait, holders) {
-  const lengthSlot = traitBucketSlot(level, trait, lvlTraitEntrySlot);
-  await setStorage(gameAddress, lengthSlot, holders.length);
-
-  for (let i = 0; i < holders.length; i++) {
-    await setStorage(gameAddress, arrayElementSlot(lengthSlot, i), holders[i]);
-  }
+  await bucketSeed.seedTraitBucket(gameAddress, level, trait, holders, {
+    traitSlot: lvlTraitEntrySlot,
+  });
 }
 
 async function seedBingo(gameAddress, level, symbol, holders) {

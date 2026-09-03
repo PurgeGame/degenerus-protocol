@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title AdvanceGasCeiling — the REUSABLE EIP-7825 gas-ceiling property component
 /// @notice advanceGame() is the mandatory permissionless heartbeat. A single advanceGame tx that
@@ -38,7 +39,7 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 /// @dev Seeder overlay: writes a worst-case advanceGame pre-state directly into the live game storage.
 ///      Both entrypoints share one body so the named v60 game-over regression keeps the EXACT pre-state
 ///      while Phase 384 / the fuzz can drive arbitrary reachable geometries through the same writes.
-contract GameSeeder is DegenerusGame {
+contract GameSeeder is DegenerusGame, BucketSeed {
     /// @notice Parameterized worst-case advanceGame seeder (the general seam Phase 384 calls).
     /// @param lvl          current game level (>=10 so the bounded deity-refund loop is skipped; a
     ///                     deeper level also means deeper trait buckets)
@@ -97,10 +98,9 @@ contract GameSeeder is DegenerusGame {
         // Terminal jackpot buckets: seed the winning-trait buckets so runTerminalJackpot resolves the
         // full geometry (every selected winner is a real, non-zero holder).
         for (uint8 q; q < 4; ++q) {
-            address[] storage holders = lvlTraitEntry[pl][winTraits[q]];
             uint256 n = uint256(bucketCounts[q]) + 8; // a few extra so selection never hits address(0)
             uint160 b = base + uint160(0x100000) + uint160(q) * 0x40000;
-            for (uint256 i; i < n; ++i) holders.push(address(b + uint160(i + 1)));
+            _seedBucketDistinct(pl, winTraits[q], n, b);
         }
     }
 
@@ -122,7 +122,8 @@ contract GameSeeder is DegenerusGame {
         address p = address(base + 1);
         ticketQueue[key].push(p);
         // packed layout: owed in bits [8:], remainder in bits [0:8].
-        entriesOwedPacked[key][p] = uint40(uint40(owed) << 8);
+        entriesOwedPacked[key][p] =
+            _registerEntryOwner(p, uint24(key & ((uint24(1) << 22) - 1))) | (uint80(owed) << 8);
     }
 }
 

@@ -57,8 +57,8 @@ contract AdvancePrepareCursorStall is DeployProtocol {
     /// @dev topic0 of `event Advance(uint8 stage, uint24 lvl)` (both params non-indexed → in data).
     bytes32 private constant TOPIC_ADVANCE = keccak256("Advance(uint8,uint24)");
 
-    /// @dev Distinct jackpot-phase buyers. Well above the ~358 cold-budget plateau so a broken
-    ///      resume would strand a tail; a correct resume drains all of them in a handful of calls.
+    /// @dev Distinct jackpot-phase buyers. More than one drain chunk holds, so a broken resume
+    ///      would strand a tail; a correct resume drains all of them in a handful of calls.
     uint256 private constant N_BUYERS = 420;
     /// @dev One whole ticket per buyer = 4 entries = 4 * QTY_SCALE(100) = 400 scaled entries → owed=4.
     uint256 private constant QTY_ONE_TICKET = 400;
@@ -146,9 +146,11 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         // ---- Regression assertions: the cohort drains to completion, the day is not wedged ----
         // The read queue is deleted only when every entry has been materialized (idx >= total,
         // MintModule finish paths), so an emptied queue proves the full cohort minted. The mint
-        // cursor advances monotonically past the pre-fix ~353 plateau instead of rescanning from 0.
+        // cursor persisted a partial chunk's frontier (non-zero between calls) and the next call
+        // resumed from it instead of rescanning from 0.
         assertTrue(drained, "current-level cohort fully materialized (read queue emptied)");
-        assertGt(uint256(maxCursor), 353, "cursor advanced past the pre-fix stall plateau (healthy resume)");
+        assertGt(iters, 1, "the cohort spans more than one drain chunk, so a resume was exercised");
+        assertGt(uint256(maxCursor), 0, "a partial chunk persisted its frontier for the resume");
         assertFalse(game.gameOver(), "still live");
     }
 

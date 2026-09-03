@@ -724,7 +724,18 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         bytes32 owedSlot = keccak256(
             abi.encode(who, keccak256(abi.encode(uint256(rk), uint256(13))))
         );
-        vm.store(address(game), owedSlot, bytes32(uint256(entries) << 8));
+        vm.store(address(game), owedSlot, bytes32((uint256(entries) << 8) | _seedOwnerBits(lvl, who)));
+    }
+
+    /// @dev Register `who` in lvlEntryOwner[lvl] (slot 67, append-only) the way every sink does at
+    ///      queue time, returning the owner bits the owed word must carry (position + 1 << 48).
+    function _seedOwnerBits(uint24 lvl, address who) internal returns (uint256) {
+        bytes32 lenSlot = keccak256(abi.encode(uint256(lvl), uint256(67)));
+        uint256 len = uint256(vm.load(address(game), lenSlot));
+        bytes32 elemSlot = bytes32(uint256(keccak256(abi.encode(lenSlot))) + len);
+        vm.store(address(game), elemSlot, bytes32(uint256(uint160(who))));
+        vm.store(address(game), lenSlot, bytes32(len + 1));
+        return (len + 1) << 48;
     }
 
     // ---------------------------------------------------------------------

@@ -51,7 +51,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     error ScoreTooLow(); // Thrown when the player (the claim beneficiary — claims are permissionless, so not necessarily the caller) is not a deity holder and their affiliate score is below AFFILIATE_DGNRS_MIN_SCORE.
 
     /// @notice Thrown when caller does not own the slot at the cited trait/index,
-    ///         or the slot index is out of bounds for that trait's holder array.
+    ///         or the slot index is out of bounds for that trait's bucket.
     error NotSlotOwner();
 
     /// @notice Thrown when the symbol is out of range (>= 32).
@@ -140,16 +140,19 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint8 symInQ = symbol & 7; // bits 2-0 of the trait byte
 
         // ---- Ownership read (READ-ONLY; NO write to lvlTraitEntry) ----
-        // For each color c the owner must occupy slots[c] in the holder array of
+        // For each color c the owner must occupy occurrence slots[c] in the bucket of
         // traitId = (quadrant << 6) | (c << 3) | symInQ. Guard the index against the
         // array length BEFORE the read so a bad index fails closed with one clean
         // custom error (no bare Panic(0x32)).
-        address[][256] storage levelBuckets = lvlTraitEntry[level];
+        uint256[][256] storage levelBuckets = lvlTraitEntry[level];
         uint256 traitBase = (uint256(quadrant) << 6) | uint256(symInQ);
         for (uint256 c = 0; c < 8; ) {
-            address[] storage holders = levelBuckets[uint8(traitBase | (c << 3))];
+            uint8 traitId = uint8(traitBase | (c << 3));
             uint256 slot = slots[c];
-            if (slot >= holders.length || holders[slot] != player) {
+            if (
+                slot >= levelBuckets[traitId].length ||
+                _bucketOwnerAt(level, traitId, slot) != player
+            ) {
                 revert NotSlotOwner();
             }
             unchecked {

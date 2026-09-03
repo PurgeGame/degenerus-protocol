@@ -113,6 +113,7 @@
 
 import { expect } from "chai";
 import hre from "hardhat";
+import * as bucketSeed from "../helpers/bucketSeed.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { execSync } from "node:child_process";
 import {
@@ -286,28 +287,9 @@ async function seedDeityBySymbol(gameAddr, fullSymId, deity, baseSlot) {
 // holder addresses contiguously at the keccak-derived element-base. Mirrors
 // the HRROLL fixture's `seedDailyHeroWagersDirect` pattern at L407-L419.
 async function seedTraitBucket(gameAddr, lvl, trait, holders, baseSlot) {
-  const lengthSlot = computeTraitBucketLengthSlot(lvl, trait, baseSlot);
-  const lengthSlotHex = "0x" + lengthSlot.toString(16).padStart(64, "0");
-  // 1. Write the length word.
-  const lengthHex =
-    "0x" + BigInt(holders.length).toString(16).padStart(64, "0");
-  await hre.network.provider.send("hardhat_setStorageAt", [
-    gameAddr,
-    lengthSlotHex,
-    lengthHex,
-  ]);
-  // 2. Write each holder at element[i].
-  for (let i = 0; i < holders.length; ++i) {
-    const slot = computeDynamicArrayElementSlot(lengthSlot, i);
-    const slotHex = "0x" + slot.toString(16).padStart(64, "0");
-    const addrBn = BigInt(holders[i]) & ((1n << 160n) - 1n);
-    const valueHex = "0x" + addrBn.toString(16).padStart(64, "0");
-    await hre.network.provider.send("hardhat_setStorageAt", [
-      gameAddr,
-      slotHex,
-      valueHex,
-    ]);
-  }
+  await bucketSeed.seedTraitBucket(gameAddr, lvl, trait, holders, {
+    traitSlot: baseSlot,
+  });
 }
 
 // Read the bucket length and the holders array back from storage. Used to
@@ -317,27 +299,14 @@ async function seedTraitBucket(gameAddr, lvl, trait, holders, baseSlot) {
 // bucket the contract would see if it executed `_randTraitTicket` against
 // this seeded state.
 async function readTraitBucket(gameAddr, lvl, trait, expectedLen, baseSlot) {
-  const lengthSlot = computeTraitBucketLengthSlot(lvl, trait, baseSlot);
-  const lengthSlotHex = "0x" + lengthSlot.toString(16).padStart(64, "0");
-  const lengthWord = await hre.ethers.provider.getStorage(
-    gameAddr,
-    lengthSlotHex
-  );
-  const len = BigInt(lengthWord);
-  if (Number(len) !== expectedLen) {
+  const out = await bucketSeed.readTraitBucket(gameAddr, lvl, trait, {
+    traitSlot: baseSlot,
+  });
+  if (out.length !== expectedLen) {
     throw new Error(
       `readTraitBucket(lvl=${lvl}, trait=${trait}): length mismatch — ` +
-        `read=${len}, expected=${expectedLen}`
+        `read=${out.length}, expected=${expectedLen}`
     );
-  }
-  const out = [];
-  for (let i = 0; i < expectedLen; ++i) {
-    const slot = computeDynamicArrayElementSlot(lengthSlot, i);
-    const slotHex = "0x" + slot.toString(16).padStart(64, "0");
-    const word = await hre.ethers.provider.getStorage(gameAddr, slotHex);
-    const addr =
-      "0x" + (BigInt(word) & ((1n << 160n) - 1n)).toString(16).padStart(40, "0");
-    out.push(hre.ethers.getAddress(addr));
   }
   return out;
 }

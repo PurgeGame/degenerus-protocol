@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title GameOverCompositionAdvanceGas — v60 GASCEIL: the historical game-over composition
 /// @notice END-TO-END regression driving the REAL `advanceGame()` from the historical two-slot
@@ -27,7 +28,7 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 ///      the measured tx runs the exact production `advanceGame()` bytecode.
 
 /// @dev Seeder overlay: writes the worst-case game-over pre-state directly into the live game storage.
-contract GameSeeder is DegenerusGame {
+contract GameSeeder is DegenerusGame, BucketSeed {
     /// @param lvl          current game level (>=10 so the bounded deity-refund loop is skipped)
     /// @param rngWord      the (pre-seeded) day word; non-zero so `_gameOverEntropy` is bypassed
     /// @param readOwed     traits owed by the committed read-slot player (one cold finishing batch)
@@ -71,10 +72,9 @@ contract GameSeeder is DegenerusGame {
         // Terminal jackpot buckets: seed the 4 winning-trait buckets so runTerminalJackpot resolves
         // the full 305-winner geometry (every selected winner is a real, non-zero holder).
         for (uint8 q; q < 4; ++q) {
-            address[] storage holders = lvlTraitEntry[pl][winTraits[q]];
             uint256 n = uint256(bucketCounts[q]) + 8; // a few extra so selection never hits address(0)
             uint160 b = base + uint160(0x100000) + uint160(q) * 0x40000;
-            for (uint256 i; i < n; ++i) holders.push(address(b + uint160(i + 1)));
+            _seedBucketDistinct(pl, winTraits[q], n, b);
         }
     }
 
@@ -82,7 +82,8 @@ contract GameSeeder is DegenerusGame {
         address p = address(base + 1);
         ticketQueue[key].push(p);
         // packed layout: owed in bits [8:], remainder in bits [0:8].
-        entriesOwedPacked[key][p] = uint40(uint40(owed) << 8);
+        entriesOwedPacked[key][p] =
+            _registerEntryOwner(p, uint24(key & ((uint24(1) << 22) - 1))) | (uint80(owed) << 8);
     }
 }
 

@@ -38,7 +38,14 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
     }
 
     function pushFoilBuyer(uint24 day, uint24 lvl, address buyer) external {
-        foilBuyers[day].push((uint256(lvl) << 160) | uint256(uint160(buyer)));
+        // Register the buyer at the cycle level the way the live buy does, carrying the
+        // position above the level in the bucketed word.
+        address[] storage owners = lvlEntryOwner[lvl];
+        uint256 ownerIdx = owners.length;
+        owners.push(buyer);
+        foilBuyers[day].push(
+            ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
+        );
     }
 
     function setRngWord(uint24 day, uint256 word) external {
@@ -149,7 +156,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         uint8 traitId,
         uint256 i
     ) external view returns (address) {
-        return lvlTraitEntry[lvl][traitId][i];
+        return _bucketOwnerAt(lvl, traitId, i);
     }
 
     function claimableOf(address who) external view returns (uint256) {
@@ -286,6 +293,29 @@ contract GoldenTicketFoilPack is Test {
         h.setRngWord(RESOLVE_DAY, word);
         h.setDrainWindow(RESOLVE_DAY, RESOLVE_DAY);
         h.processFoilDrain(1000);
+    }
+
+    // -- gas: a full write budget of foil packs on the leftover -----------------
+
+    /// @dev The foil drain runs on the ticket batch's leftover budget, so with an empty
+    ///      queue it can take the whole WRITES_BUDGET_SAFE (900). Each unregistered pack
+    ///      is sixteen single-lane appends plus a registry slot; the per-pack charge must
+    ///      keep a full budget of packs under the 10M soft target.
+    function test_gas_FoilChunk_FullBudget() public {
+        for (uint256 i; i < 60; ++i) {
+            address b = address(uint160(0xF01100 + i));
+            h.setFoilRecord(LVL, b, MAX_MULT, RESOLVE_DAY, 0);
+            h.pushFoilBuyer(RESOLVE_DAY, LVL, b);
+        }
+        h.setRngWord(RESOLVE_DAY, uint256(keccak256("foil-chunk-word")) | 1);
+        h.setDrainWindow(RESOLVE_DAY, RESOLVE_DAY);
+        uint256 g0 = gasleft();
+        (bool done, bool drained) = h.processFoilDrain(900);
+        uint256 g = g0 - gasleft();
+        emit log_named_uint("foil_chunk_full_budget_gas", g);
+        assertTrue(drained, "drained at least one pack");
+        assertFalse(done, "sixty packs exceed one budget");
+        assertLt(g, 10_000_000, "foil chunk over the 10M soft target");
     }
 
     // -- the searched pair really is an all-gold ticket -----------------------

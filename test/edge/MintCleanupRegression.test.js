@@ -540,7 +540,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       return { fixture, gameAddr, ticketWriteSlot };
     }
 
-    it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8)) 48-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
+    it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8) | owner<<48) 80-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
       try {
         const forgeOut = execSync(
           "forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout 2>/dev/null"
@@ -609,13 +609,13 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
           );
         }
         expect(packed).to.be.lessThan(
-          1n << 40n,
-          `lvl=${lvl} path=${path}: packed value must fit in 40 bits (storage:465 layout)`
+          1n << 80n,
+          `lvl=${lvl} path=${path}: packed value must fit in 80 bits (rem | owed<<8 | snap bit 40 | owner-registry position << 48)`
         );
-        expect((packed >> 40n) === 0n).to.equal(
-          true,
-          `lvl=${lvl} path=${path}: bits above bit-39 must be zero`
-        );
+        // Bits 41..47 are unused; the owner-registry position (plus one) sits in
+        // bits 48..79 for a player-paid entry.
+        expect((packed >> 41n) & 0x7fn, `lvl=${lvl} path=${path}: bits 41..47 must be zero`).to.equal(0n);
+        expect(packed >> 80n, `lvl=${lvl} path=${path}: bits above bit-79 must be zero`).to.equal(0n);
 
         if (path === "B" && lvl === 1) {
           const viewOwed = Number(await game.entriesOwedView(1, alice.address));

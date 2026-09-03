@@ -245,7 +245,7 @@
     "label": "lvlTraitEntry",
     "offset": 0,
     "slot": 8,
-    "typeLabel": "mapping(uint24 => address[][256])"
+    "typeLabel": "mapping(uint24 => uint256[][256])"
   },
   {
     "bytes": "32",
@@ -285,7 +285,7 @@
     "label": "entriesOwedPacked",
     "offset": 0,
     "slot": 13,
-    "typeLabel": "mapping(uint24 => mapping(address => uint48))"
+    "typeLabel": "mapping(uint24 => mapping(address => uint80))"
   },
   {
     "bytes": "4",
@@ -326,6 +326,14 @@
     "offset": 11,
     "slot": 14,
     "typeLabel": "uint8"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "ticketRound",
+    "offset": 12,
+    "slot": 14,
+    "typeLabel": "uint32"
   },
   {
     "bytes": "32",
@@ -830,5 +838,21 @@
     "offset": 0,
     "slot": 66,
     "typeLabel": "uint128[]"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "lvlEntryOwner",
+    "offset": 0,
+    "slot": 67,
+    "typeLabel": "mapping(uint24 => address[])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "ticketSeats",
+    "offset": 0,
+    "slot": 68,
+    "typeLabel": "uint256"
   }
 ]

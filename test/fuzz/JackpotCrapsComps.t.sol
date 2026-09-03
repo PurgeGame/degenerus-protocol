@@ -8,12 +8,13 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {CrapsViews} from "../craps/CrapsViews.sol";
+import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @dev Extends the production module so `payDailyFlipJackpot` runs the live
 ///      `_runFlipJackpot -> _awardDailyCoinToTraitWinners / _awardDailyCoinWithCrapsComp`
 ///      path in this contract's own storage. Seeders and mirror views only — NO production
 ///      logic is overridden.
-contract JackpotCompHarness is DegenerusGameJackpotModule {
+contract JackpotCompHarness is DegenerusGameJackpotModule, BucketSeed {
     function seedBudgetFor(uint24 lvl, uint256 coinBudget) external {
         // Mirror of `_calcDailyCoinBudget` solved for the pool. priceForLevel(level)=0.01 ether
         // at level 1 makes the map exact for budgets divisible by 250 wei.
@@ -25,29 +26,25 @@ contract JackpotCompHarness is DegenerusGameJackpotModule {
     }
 
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
-        address[] storage holders = lvlTraitEntry[lvl][traitId];
-        for (uint256 i; i < count; ++i) {
-            holders.push(address(base + uint160(i + 1)));
-        }
+        _seedBucketDistinct(lvl, traitId, count, base);
     }
 
     /// @dev Every one of the 256 possible trait bytes gets `count` distinct holders, so any
     ///      trait the day rolls finds a nonempty bucket and every pull resolves a winner.
     function seedAllTraits(uint24 lvl, uint256 count) external {
         for (uint256 t; t < 256; ++t) {
-            address[] storage holders = lvlTraitEntry[lvl][uint8(t)];
             for (uint256 i; i < count; ++i) {
-                holders.push(address(uint160((t << 32) | (i + 1))));
+                _seedBucket(lvl, uint8(t), address(uint160((t << 32) | (i + 1))), 1);
             }
         }
     }
 
     function clearBucket(uint24 lvl, uint8 traitId) external {
-        delete lvlTraitEntry[lvl][traitId];
+        _seedBucketClear(lvl, traitId);
     }
 
     function bucketAt(uint24 lvl, uint8 traitId, uint256 idx) external view returns (address) {
-        return lvlTraitEntry[lvl][traitId][idx];
+        return _bucketOwnerAt(lvl, traitId, idx);
     }
 
     function bucketLen(uint24 lvl, uint8 traitId) external view returns (uint256) {

@@ -115,8 +115,6 @@ contract DegenerusGameMintModule is
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @dev Safe write budget for gas control (keeps cold batch under 15M gas).
-    uint32 private constant WRITES_BUDGET_SAFE = 550;
 
     /// @dev LCG multiplier for trait generation.
     uint64 private constant TICKET_LCG_MULT = 6364136223846793005;
@@ -348,12 +346,13 @@ contract DegenerusGameMintModule is
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
         bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
-        mapping(address => uint48) storage owedMap = entriesOwedPacked[rk];
+        mapping(address => uint80) storage owedMap = entriesOwedPacked[rk];
         address[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
         if (total == 0) {
             ticketCursor = 0;
             ticketLevel = 0;
+            if (ticketSeats != 0) ticketSeats = 0;
             return (false, true, 0);
         }
 
@@ -363,7 +362,7 @@ contract DegenerusGameMintModule is
         }
 
         uint256 idx = ticketCursor;
-        if (idx >= total) {
+        if (idx >= total && ticketSeats == 0) {
             _releaseTicketQueue(rk);
             ticketCursor = 0;
             ticketLevel = 0;
@@ -390,6 +389,13 @@ contract DegenerusGameMintModule is
         // _processOneTicketEntry — the single per-entry engine shared with
         // processTicketBatch.
         uint8 shift = _snapShiftFor(lvl);
+
+        // Seated rounds first: eight entries share each trait roll and every quadrant is one
+        // whole lane word. Survivors below the seat floor drain entry by entry.
+        if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
+            (idx, used) = _drainRounds(rk, lvl, writesBudget, idx, total, entropy, shift);
+            used = _drainSeatedSurvivors(queue, lvl, owedMap, writesBudget, used, entropy, shift, counts, touchedTraits);
+        }
 
         while (idx < total && used < writesBudget) {
             (
@@ -422,7 +428,7 @@ contract DegenerusGameMintModule is
 
         worked = (used > 0);
         writesUsed = used;
-        finished = (idx >= total);
+        finished = (idx >= total && ticketSeats == 0);
         if (finished) {
             _releaseTicketQueue(rk);
             if (!inFarFuture) {
@@ -449,27 +455,27 @@ contract DegenerusGameMintModule is
 
     /// @dev Generates trait tickets in batch for a player's ticket awards using LCG-based PRNG.
     ///      Uses inline assembly for gas-efficient bulk storage writes.
-    /// @param player Address receiving the trait tickets.
     /// @param baseKey Encoded key carrying (lvl, queueIdx, player, owed) packed across 256 bits.
     ///                The owed value in the low 32 bits mutates per emission, so multi-call
     ///                drains hash distinct seeds across calls on the same player.
     /// @param startIndex Starting position within this player's owed tickets for this batch.
     /// @param count Number of ticket entries to process this batch.
     /// @param entropyWord VRF entropy for trait generation.
+    /// @param ownerIdx The player's position in lvlEntryOwner[lvl]; every lane names it.
     /// @param counts Caller-allocated all-zero scratch tracking how many times each trait
     ///               was generated; the touched entries are re-zeroed before return, so one
     ///               allocation serves every entry of a batch loop.
     /// @param touchedTraits Caller-allocated scratch listing the traits generated this call
     ///                      (only the first `touchedLen` entries are read).
     function _raritySymbolBatch(
-        address player,
         uint256 baseKey,
         uint32 startIndex,
         uint32 count,
         uint256 entropyWord,
+        uint256 ownerIdx,
         uint32[256] memory counts,
         uint8[256] memory touchedTraits
-    ) private {
+    ) private returns (uint256 fresh, uint256 dirty) {
         uint16 touchedLen;
 
         uint32 endIndex;
@@ -516,8 +522,7 @@ contract DegenerusGameMintModule is
         // Extract level from baseKey for storage slot calculation.
         uint24 lvl = uint24(baseKey >> 224);
 
-        // Calculate the storage slot for this level's trait arrays.
-        // Layout assumption: lvlTraitEntry is mapping(uint24 => address[256]).
+        // Calculate the storage slot for this level's trait buckets.
         // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
         // with dynamic array elements at keccak256(keccak256(key . slot) + index).
         // This relies on the standard Solidity storage layout (stable since 0.4.x).
@@ -529,65 +534,19 @@ contract DegenerusGameMintModule is
             levelSlot := keccak256(0x00, 0x40)
         }
 
-        // Batch-write trait tickets to storage using assembly for gas efficiency.
+        // Batch-write the packed lanes, one run per distinct trait.
         for (uint16 u; u < touchedLen; ) {
             uint8 traitId = touchedTraits[u];
             uint32 occurrences = counts[traitId];
             // Restore the all-zero invariant on the shared scratch buffer.
             counts[traitId] = 0;
-
-            assembly ("memory-safe") {
-                // Get array length slot and current length.
-                let elem := add(levelSlot, traitId)
-                let len := sload(elem)
-                let newLen := add(len, occurrences)
-                sstore(elem, newLen)
-
-                // Calculate data slot and write player address `occurrences` times.
-                mstore(0x00, elem)
-                let data := keccak256(0x00, 0x20)
-                let dst := add(data, len)
-                for {
-                    let k := 0
-                } lt(k, occurrences) {
-                    k := add(k, 1)
-                } {
-                    sstore(dst, player)
-                    dst := add(dst, 1)
-                }
-            }
+            (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences);
             unchecked {
+                fresh += f;
+                dirty += d;
                 ++u;
             }
         }
-    }
-
-    /// @dev Divide a not-yet-snapped owed balance by 2^s, folding the shifted-out
-    ///      fraction into the QTY_SCALE remainder (sub-remainder residue evaporates,
-    ///      matching the sub-unit handling of scaled purchases). Marks the value
-    ///      snap-done so a resumed drain never divides it again.
-    function _snapOwedPacked(uint48 packed, uint8 s) internal pure returns (uint48) {
-        uint256 scaled = (uint256(uint32(packed >> 8)) * QTY_SCALE +
-            uint8(packed)) >> s;
-        return
-            SNAP_DONE_BIT |
-            (uint48(scaled / QTY_SCALE) << 8) |
-            uint48(scaled % QTY_SCALE);
-    }
-
-    /// @dev Roll remainder chance for a fractional ticket (0-99).
-    function _rollRemainder(
-        uint256 entropy,
-        uint256 rollSalt,
-        uint8 rem
-    ) private pure returns (bool win) {
-        // Hash via scratch-slot keccak so player address (stored in rollSalt
-        // bits 191-32) reaches the low 7 bits of rollEntropy consumed by
-        // `% QTY_SCALE`. A plain XOR mix only diffuses bits a fixed span
-        // outward, leaving upper player-address bits invisible to the roll
-        // outcome; keccak gives full low-bit diffusion of the high-bit input.
-        uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
-        return (rollEntropy % QTY_SCALE) < rem;
     }
 
     // -------------------------------------------------------------------------
@@ -666,10 +625,15 @@ contract DegenerusGameMintModule is
                 ];
             }
 
-            mapping(address => uint48) storage owedMap = entriesOwedPacked[rk];
+            mapping(address => uint80) storage owedMap = entriesOwedPacked[rk];
             uint32 used;
             uint32 processed;
             uint8 shift = _snapShiftFor(t);
+
+            if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
+                (idx, used) = _drainRounds(rk, t, remaining, idx, total, entropy, shift);
+                used = _drainSeatedSurvivors(queue, t, owedMap, remaining, used, entropy, shift, counts, touchedTraits);
+            }
 
             while (idx < total && used < remaining) {
                 (
@@ -707,9 +671,10 @@ contract DegenerusGameMintModule is
             // leftover to 0 rather than underflowing the subtraction.
             remaining = used >= remaining ? 0 : remaining - used;
 
-            if (idx < total) {
-                // Mid-queue stop: persist the resume cursor. Level switches only
-                // happen at queue release, so the marker is never lost mid-queue.
+            if (idx < total || ticketSeats != 0) {
+                // Mid-queue stop: persist the frontier cursor (seats still holding
+                // entries below it are in ticketSeats). Level switches only happen at
+                // queue release, so the marker is never lost mid-queue.
                 ticketCursor = uint32(idx);
                 return (false, didWork);
             }
@@ -753,11 +718,11 @@ contract DegenerusGameMintModule is
     /// @return drained True if this call resolved at least one foil buyer.
     function _drainFoil(uint32 room) private returns (bool done, bool drained) {
         if (!_foilDrainPending()) return (true, false);
-        // A foil buyer costs a fixed FOIL_PACK_ENTRIES*2 + 3 budget units; if the
+        // A foil buyer costs a fixed FOIL_PACK_ENTRIES*5 + 3 budget units; if the
         // normal queue already consumed the budget there is no room for even one, so
         // defer to the next tx WITHOUT the delegatecall (pending foil is never "done"
         // here — the readiness gate keeps the draw blocked until it drains).
-        if (room < (FOIL_PACK_ENTRIES * 2) + 3) return (false, false);
+        if (room < (FOIL_PACK_ENTRIES * 5) + 3) return (false, false);
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_FOILPACK_MODULE
             .delegatecall(
@@ -775,36 +740,94 @@ contract DegenerusGameMintModule is
         return abi.decode(data, (bool, bool));
     }
 
-    /// @dev Resolves the zero-owed remainder case for ticket processing. `packed` is
-    ///      the caller's post-snap value; `snapDone` rides the rolled write-back so a
-    ///      budget-split resume sees the balance as already snapped.
-    function _resolveZeroOwedRemainder(
-        uint48 packed,
-        mapping(address => uint48) storage owedMap,
-        address player,
+    /// @dev Drain the seats the round phase left below the seat floor, by queue index
+    ///      straight from ticketSeats, so the frontier cursor never walks back over
+    ///      exhausted holes to reach them. Runs only when fewer than ROUND_MIN_SEATS seats
+    ///      remain (a fuller set keeps rolling as rounds next chunk).
+    function _drainSeatedSurvivors(
+        address[] storage queue,
+        uint24 lvl,
+        mapping(address => uint80) storage owedMap,
+        uint32 budget,
+        uint32 used,
         uint256 entropy,
-        uint256 baseKey,
-        uint48 snapDone
-    ) private returns (uint48 newPacked, bool skip) {
-        uint8 rem = uint8(packed);
-        if (rem == 0) {
-            if (packed != 0) {
-                owedMap[player] = 0;
+        uint8 shift,
+        uint32[256] memory counts,
+        uint8[256] memory touchedTraits
+    ) private returns (uint32) {
+        uint256 seats = ticketSeats;
+        if (seats == 0) return used;
+        uint256 count;
+        for (uint256 w = seats; w != 0; w >>= 32) ++count;
+        if (count >= ROUND_MIN_SEATS) return used;
+        uint32 processed;
+        while (seats != 0 && used < budget) {
+            uint256 qi = (seats & 0xffffffff) - 1;
+            (
+                uint32 writesThis,
+                uint32 take,
+                bool advance
+            ) = _processOneTicketEntry(
+                    queue[qi],
+                    lvl,
+                    owedMap,
+                    budget - used,
+                    processed,
+                    entropy,
+                    qi,
+                    shift,
+                    counts,
+                    touchedTraits
+                );
+            if (writesThis == 0 && !advance) break;
+            used += writesThis;
+            if (advance) {
+                seats >>= 32;
+                processed = 0;
+            } else {
+                processed += take;
             }
-            return (0, true);
         }
+        if (seats != ticketSeats) {
+            ticketSeats = seats;
+            used += 3;
+        }
+        return used;
+    }
 
-        bool win = _rollRemainder(entropy, baseKey, rem);
-        if (!win) {
-            owedMap[player] = 0;
-            return (0, true);
+    /// @dev Seated round drain, hosted in the foil-pack module (this module is at the
+    ///      EIP-170 limit); the delegatecall runs in the Game's storage context on the
+    ///      same queue, owed map and buckets this module drains.
+    function _drainRounds(
+        uint24 rk,
+        uint24 lvl,
+        uint32 room,
+        uint256 idx,
+        uint256 total,
+        uint256 entropy,
+        uint8 shift
+    ) private returns (uint256 nextIdx, uint32 used) {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_FOILPACK_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameFoilPackModule.drainRounds.selector,
+                    rk,
+                    lvl,
+                    room,
+                    idx,
+                    total,
+                    entropy,
+                    shift
+                )
+            );
+        if (!ok) {
+            if (data.length == 0) revert E();
+            assembly ("memory-safe") {
+                revert(add(32, data), mload(data))
+            }
         }
-
-        newPacked = snapDone | (uint48(1) << 8);
-        if (newPacked != packed) {
-            owedMap[player] = newPacked;
-        }
-        return (newPacked, false);
+        return abi.decode(data, (uint256, uint32));
     }
 
     /// @dev Processes a single ticket entry, returning writes used and whether to advance.
@@ -815,7 +838,7 @@ contract DegenerusGameMintModule is
     function _processOneTicketEntry(
         address player,
         uint24 lvl,
-        mapping(address => uint48) storage owedMap,
+        mapping(address => uint80) storage owedMap,
         uint32 room,
         uint32 processed,
         uint256 entropy,
@@ -824,8 +847,8 @@ contract DegenerusGameMintModule is
         uint32[256] memory counts,
         uint8[256] memory touchedTraits
     ) private returns (uint32 writesUsed, uint32 take, bool advance) {
-        uint48 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
-        uint48 packed = owedMap[player];
+        uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
+        uint80 packed = owedMap[player];
         if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
             packed = _snapOwedPacked(packed, shift);
         }
@@ -851,11 +874,18 @@ contract DegenerusGameMintModule is
 
         uint32 baseOv = (processed == 0 && owed <= 2) ? 4 : 2;
         if (room <= baseOv) return (0, 0, false);
+        // Registry position, stamped when the entry was queued and carried on every write-back.
+        uint80 ownerBits = packed & OWNER_IDX_MASK;
+        uint256 ownerIdx = uint256(ownerBits >> OWNER_IDX_SHIFT) - 1;
         {
             uint32 availRoom = room - baseOv;
-            uint32 maxT = (availRoom <= 256)
-                ? (availRoom >> 1)
-                : (availRoom - 256);
+            // Reserve the worst: six units per occurrence for the first 256 (each may open a
+            // fresh bucket length and a fresh word), one per occurrence beyond (runs coalesce
+            // to a fresh word per eight lanes). The actual charge below is usually far less
+            // and the leftover serves the next take in this call.
+            uint32 maxT = (availRoom <= 1536)
+                ? (availRoom / 6)
+                : (256 + (availRoom - 1536));
             take = owed > maxT ? maxT : owed;
         }
         // Budget-limited takes stay whole-ticket (%4) aligned so the quadrant cycle
@@ -863,19 +893,21 @@ contract DegenerusGameMintModule is
         if (take != owed) take &= ~uint32(3);
         if (take == 0) return (0, 0, false);
 
-        _raritySymbolBatch(
-            player,
+        (uint256 fresh, uint256 dirty) = _raritySymbolBatch(
             baseKey,
             processed,
             take,
             entropy,
+            ownerIdx,
             counts,
             touchedTraits
         );
         emit TraitsGenerated(player, baseKey, take);
 
+        // Charge the actual writes (reserved at their worst above): fresh 3, dirty 1, compute
+        // 1 per 16 occurrences, plus the entry's own bookkeeping.
         writesUsed =
-            ((take <= 256) ? (take << 1) : (take + 256)) +
+            uint32(fresh * 3 + dirty + (take >> 4) + 1) +
             baseOv +
             (take == owed ? 1 : 0);
 
@@ -890,8 +922,8 @@ contract DegenerusGameMintModule is
             }
             rem = 0;
         }
-        uint48 newPacked = (uint48(remainingOwed) << 8) | uint48(rem);
-        if (newPacked != 0) newPacked |= snapDone;
+        uint80 newPacked = (uint80(remainingOwed) << 8) | uint80(rem);
+        if (newPacked != 0) newPacked |= snapDone | ownerBits;
         if (newPacked != packed) {
             owedMap[player] = newPacked;
         }
@@ -901,6 +933,18 @@ contract DegenerusGameMintModule is
     // -------------------------------------------------------------------------
     // Purchases and Loot Boxes
     // -------------------------------------------------------------------------
+
+    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 (advance handles 101+).
+    /// @dev Delegatecalled by the Game facade, which restricts the caller to VAULT and SDGNRS and
+    ///      passes it as `who`; each calls exactly once from its own constructor.
+    function initPerpetualTickets(address who) external {
+        for (uint24 i = 1; i <= 100; ) {
+            _queueEntries(who, i, 16, false); // 16 entries (= 4 whole tickets) per level
+            unchecked {
+                ++i;
+            }
+        }
+    }
 
     /// @notice Purchase tickets and loot boxes for a buyer.
     /// @dev Delegatecalled by DegenerusGame. Handles payment routing, affiliates, and queues.
@@ -1268,7 +1312,7 @@ contract DegenerusGameMintModule is
         uint256 idx
     ) internal {
         uint24 ffk = _tqFarFutureKey(L);
-        uint48 packed = entriesOwedPacked[ffk][player];
+        uint80 packed = entriesOwedPacked[ffk][player];
         uint32 owed = uint32(packed >> 8);
         if (owed < entries) revert E(); // ownership / over-sell guard
         uint8 rem = uint8(packed);
@@ -1281,7 +1325,8 @@ contract DegenerusGameMintModule is
             q.pop();
             entriesOwedPacked[ffk][player] = 0;
         } else {
-            entriesOwedPacked[ffk][player] = (uint48(newOwed) << 8) | uint48(rem);
+            entriesOwedPacked[ffk][player] =
+                (packed & OWNER_IDX_MASK) | (uint80(newOwed) << 8) | uint80(rem);
         }
     }
 

@@ -545,10 +545,17 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         uint256 len = uint256(vm.load(address(game), elem));
         if (len == 0) return 0;
         uint256 base = uint256(keccak256(abi.encode(elem)));
+        // Lanes are uint32 registry positions, eight per word; resolve through
+        // lvlEntryOwner[lvl] (slot 67).
+        uint256 owners = uint256(
+            keccak256(abi.encode(keccak256(abi.encode(uint256(lvl), uint256(67)))))
+        );
         for (uint256 i = 0; i < len; i++) {
+            uint256 word = uint256(vm.load(address(game), bytes32(base + (i >> 3))));
+            uint256 lane = (word >> (32 * (i & 7))) & 0xffffffff;
             address a = address(
                 uint160(
-                    uint256(vm.load(address(game), bytes32(base + i)))
+                    uint256(vm.load(address(game), bytes32(owners + lane)))
                 )
             );
             if (a == who) {

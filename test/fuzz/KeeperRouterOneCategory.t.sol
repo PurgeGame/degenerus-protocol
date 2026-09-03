@@ -680,7 +680,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     ///      LR_INDEX-1 — the finalized index the relocated multi-index sweep reads.
     function _advanceLootboxRngIndexByOne() internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        uint48 idx = uint48(packed & 0xFFFFFFFFFFFF);
+        uint80 idx = uint80(packed & 0xFFFFFFFFFFFF);
         packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx + 1);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
     }
