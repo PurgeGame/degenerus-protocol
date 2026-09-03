@@ -22,7 +22,7 @@ Two liveness guards prevent permanent fund lockup. At level 0, a 365-day deploy 
 
 - **29 deployable contracts** (17 core + 12 delegatecall modules), sharing storage via `DegenerusGameStorage`
 - Solidity 0.8.34, `viaIR` enabled, optimizer runs = 1000, EVM target `osaka`
-- All deployed contracts under the 24,576-byte EIP-170 limit (largest: DegenerusGame at 24,424 bytes, 152 to spare; AdvanceModule at 23,615, 961 to spare; CrapsBattle at 23,938, 638 to spare)
+- All deployed contracts under the 24,576-byte EIP-170 limit (largest: MintModule at 24,406 bytes, 170 to spare; AdvanceModule at 24,161, 415 to spare; DegenerusGame at 24,134, 442 to spare; CrapsBattle at 24,081, 495 to spare)
 - External dependencies: Chainlink VRF V2.5, Lido stETH, LINK token, and (optionally) an ENS
   reverse registrar — `ENS_REVERSE_REGISTRAR` is `address(0)` in this tree, which disables the
   constructor self-naming call entirely
@@ -116,7 +116,7 @@ The Solidity build is pinned — `foundry.toml` fixes the compiler (solc 0.8.34)
 
 The full assurance pipeline lives in this repository and runs in CI (`.github/workflows/ci.yml`) on every push:
 
-- **`forge test`** — **the Foundry suite: 2,053 passing, 104 skipped at the last freeze; the two fixtures that were stale then (`SweepWorstCaseDrain`, `V56QuestNonPerturb`) have since been migrated to the craps-era router and quest table and are green.** Coverage spans unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding. Since the freeze the craps table gained its own real-lifecycle nets: `CrapsRngSeal.inv` (the arm-to-word seal under the real VRF request/fulfil machinery), `CrapsRealWiringConservation.inv` (settlement liability bound and the vault's comp budget, no mocks in the loop), `CrapsOpenerFailOpen` (the daily crank's bare call into the table survives every protocol burn reverting) and `FinalSweepPayoutLegs` (the game-over sweep's three bare payout calls).
+- **`forge test`** — **the Foundry suite: 2,240 passing, 104 skipped at the freeze (every suite, including the invariant nets, sliced across seven runs).** Coverage spans unit, integration, fuzz, invariant, gas, access-control, governance, economics, and named regression harnesses for every fixed finding. Since the freeze the craps table gained its own real-lifecycle nets: `CrapsRngSeal.inv` (the arm-to-word seal under the real VRF request/fulfil machinery), `CrapsRealWiringConservation.inv` (settlement liability bound and the vault's comp budget, no mocks in the loop), `CrapsOpenerFailOpen` (the daily crank's bare call into the table survives every protocol burn reverting) and `FinalSweepPayoutLegs` (the game-over sweep's three bare payout calls).
   The three stale fixtures — `TicketLifecycle::testLootboxFarRollTicketsRouteToFF`, `VRFLifecycle::test_vrfLifecycle_levelAdvancement` and `FoilSnapPayout::test_matchPayoutIgnoresSnapExponent` — encode the superseded model in which repeated lootbox spends of differing sizes accumulated for one buyer in one RNG index. `_mergeBoxOrder` now deliberately admits one custom box *size* per (index, buyer), so those fixtures build a smaller scenario than they assert over. The contracts behave as designed; the fixtures await migration and are tracked as test debt, not findings (`test/` is out of scope).
 - **EIP-170 size gate** — CI fails if any deployed contract breaches the 24,576-byte limit.
 - **Storage-layout oracle** (`scripts/layout/storage_layout_oracle.sh`) — 12 modules execute by `delegatecall` against one shared `DegenerusGameStorage`, so CI fails the build if any storage slot in the game, any state contract, or any module moves versus a committed golden. This makes the "a module writes a slot the game uses for something else" corruption class un-shippable.
@@ -127,16 +127,16 @@ The full assurance pipeline lives in this repository and runs in CI (`.github/wo
 Reproduce the core suite locally:
 
 ```
-forge test    # 2,053 passing, 104 skipped, 2 known-stale fixtures
+forge test    # 2,240 passing, 104 skipped
 make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-rng-taint check-advance-calls check-unchecked check-write-owners check-pool-writes check-array-delete check-craps-progressive
 bash scripts/layout/storage_layout_oracle.sh
 ```
 
-A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional coverage — 1,637 passing.
+A secondary Hardhat behavioral suite (`npx hardhat test`) provides additional coverage — 1,638 passing.
 
 ## Scope & Known Issues
 
-- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `d5e87795` (tag `degenerus-c4a`).
+- **`scope.txt` / `out_of_scope.txt`** — the exact audited surface, pinned to `contracts/` tree `8b3101b3` (tag `degenerus-c4a`).
 - **`KNOWN-ISSUES.md`** — every pre-triaged finding, by-design ruling, and static-analysis disposition, each with its precise mechanism. Not vague disclaimers.
 - **`SECURITY.md`** — threat model, trusted-role matrix (functional authority, not just Solidity modifiers), and disclosure process.
 - **`ECONOMIC_DISCLOSURES.md`** — creator allocations, vesting, governance control, the WWXRP reserve, and terminal value — every figure cited to a contract line.

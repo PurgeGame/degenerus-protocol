@@ -367,7 +367,8 @@ contract RedemptionInvariants is DeployProtocol {
     ///         wrapper supply is untouched — exactly the regime the scoped invariants exempt.
     function test_yearSweepIsSoleEqualityBreak() public {
         // Drive a REAL game-over via the liveness timeout (the redemption handler's machinery).
-        for (uint256 i; i < 8 && !game.gameOver(); i++) {
+        // Twelve actions: the genesis cohort's drain and the request cycle it shifts take ten.
+        for (uint256 i; i < 12 && !game.gameOver(); i++) {
             handler.action_triggerGameOver();
         }
         assertTrue(game.gameOver(), "precondition: liveness game-over latched");
