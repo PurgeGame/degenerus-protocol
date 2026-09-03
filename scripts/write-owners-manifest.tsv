@@ -53,7 +53,7 @@ OWNER	gameOver	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain latch
 HELPER	gameOverStatePacked	storage/DegenerusGameStorage.sol	_goWrite field mutator for the packed game-over state (time, jackpotPaid, swept)
 OWNER	goldenTicket	modules/DegenerusGameJackpotModule.sol	_armGoldenTicket packs winner/quadrant/symbol/day; _resolveGoldenTicket rewrites to the resolved form; both jackpot-module
 OWNER	jackpotCounter	modules/DegenerusGameAdvanceModule.sol	_endPhase zeroes the counter at level end; the jackpot module advances it (counterStep) per paid daily jackpot
-OWNER	jackpotCounter	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets advances by counterStep; the advance module's _endPhase is the only reset
+OWNER	jackpotCounter	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets advances by counterStep when it seals the day or ends the level, payCarryoverTickets when it seals a non-final daily; the advance module's _endPhase is the only reset
 OWNER	jackpotPhaseFlag	modules/DegenerusGameAdvanceModule.sol	advanceGame sets at the purchase->jackpot transition and clears at transition close; sole writer
 OWNER	lastPurchaseDay	modules/DegenerusGameAdvanceModule.sol	advanceGame arms (turbo/target-met) and clears at jackpot entry; sole writer
 OWNER	lastVrfProcessedTimestamp	modules/DegenerusGameAdvanceModule.sol	_applyDailyRng stamps the time the daily word was applied; runtime sole writer

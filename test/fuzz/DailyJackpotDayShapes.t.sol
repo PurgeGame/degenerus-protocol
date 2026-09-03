@@ -17,6 +17,11 @@ contract DayShapeHarness is GoldenTicketHarness {
         carryoverEntries = uint64(p >> 72);
         offset = uint8(p >> 136);
     }
+    function setLocked(bool v) external { rngLockedFlag = v; }
+    function setJackpotPhase(bool v) external { jackpotPhaseFlag = v; }
+    function counter() external view returns (uint8) { return jackpotCounter; }
+    function routedLevel() external view returns (uint24) { return _activeTicketLevel(); }
+    function carryoverPending() external view returns (bool) { return _carryoverLegPending(); }
 }
 
 /// @title DailyJackpotDayShapes -- the early-bird day and the final physical day move the pools as documented
@@ -115,6 +120,30 @@ contract DailyJackpotDayShapes is Test {
         assertGt(offset, 0, "a carryover source is drawn");
         // The carryover is priced at lvl + 1 because this level ends tonight.
         assertEq(carryoverEntries, (reserveSlice << 2) / PriceLookupLib.priceForLevel(LVL + 1), "carryover entries are priced at the next level");
+    }
+
+    /// @dev Between the coin+tickets stage and the carryover stage the day is still locked; the
+    ///      counter must not have advanced yet, or the routing predicate would read the next
+    ///      daily as final and send buys to the next level for one advance.
+    function test_carryoverDayAdvancesTheCounterOnlyAtItsSeal() public {
+        h.setJackpotCounter(3);
+        h.setJackpotPhase(true);
+        h.setLocked(true);
+        uint256 word = _board(0x0DD1);
+        h.payDailyJackpot(true, LVL, word);
+        assertEq(h.routedLevel(), LVL, "the day's ETH stage leaves buys at this level");
+        bool pending = h.payDailyJackpotCoinAndTickets(word);
+        assertTrue(pending, "an ordinary day priced a carryover");
+        assertTrue(h.carryoverPending());
+        assertEq(h.counter(), 3, "the counter waits for the seal");
+        assertEq(h.routedLevel(), LVL, "buys still route to this level under the held lock");
+        h.payCarryoverTickets(word);
+        assertFalse(h.carryoverPending());
+        assertEq(h.counter(), 4, "the carryover stage advanced it with the seal");
+        h.setLocked(false);
+        assertEq(h.routedLevel(), LVL);
+        h.setLocked(true);
+        assertEq(h.routedLevel(), LVL + 1, "the next request is the final daily's");
     }
 
     function test_ordinaryDayIsNeitherShape() public {

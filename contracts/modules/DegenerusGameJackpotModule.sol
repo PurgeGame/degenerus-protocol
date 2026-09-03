@@ -799,14 +799,22 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             );
         }
 
-        // Complete the daily jackpot cycle
-        unchecked {
-            jackpotCounter = jackpotCounter + counterStep;
+        // Complete the daily jackpot cycle. The counter advances with the day seal: here when
+        // this stage seals the day (no carryover) or ends the level, otherwise in
+        // payCarryoverTickets, which seals the day. The ticket-routing predicate keys off the
+        // counter under the lock to spot the final daily's request, and the lock now spans the
+        // carryover stage, so a counter advanced ahead of its seal would route buys to the
+        // next level for one advance.
+        uint8 counterCached = jackpotCounter;
+        carryoverPending = carryoverEntries != 0;
+        if (!carryoverPending || counterCached + counterStep >= JACKPOT_LEVEL_CAP) {
+            unchecked {
+                jackpotCounter = counterCached + counterStep;
+            }
         }
 
         // Clear pending state. A priced carryover keeps Phase 1's budgets for its own stage.
         dailyJackpotCoinTicketsPending = false;
-        carryoverPending = carryoverEntries != 0;
         if (!carryoverPending) dailyTicketBudgetsPacked = 0;
     }
 
@@ -820,7 +828,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      input frozen until the day seals after this leg.
     /// @param randWord VRF entropy (the day's recorded word).
     function payCarryoverTickets(uint256 randWord) external {
-        (, , uint256 carryoverEntries, uint8 carryoverSourceOffset) = _unpackDailyTicketBudgets(
+        (uint8 counterStep, , uint256 carryoverEntries, uint8 carryoverSourceOffset) = _unpackDailyTicketBudgets(
             dailyTicketBudgetsPacked
         );
         uint24 lvl = level;
@@ -837,6 +845,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             false // bonus board: no ETH distribution, no solo quadrant
         );
         dailyTicketBudgetsPacked = 0;
+        // A non-final daily advances the counter here, with its seal; the final daily advanced
+        // it in the coin+tickets stage so _endPhase could fire there (which then zeroed it).
+        if (!phaseTransitionActive) {
+            unchecked {
+                jackpotCounter = jackpotCounter + counterStep;
+            }
+        }
     }
 
     /// @dev Execute the early-bird ticket jackpot from the unified future pool.
