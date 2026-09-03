@@ -11,7 +11,6 @@
 #
 # Columns: CLASS  file  function  ordinal  head  rationale
 CLASS	file	function	ordinal	head	rationale
-NO-OVERFLOW-OP	modules/DegenerusGameMintModule.sol	initPerpetualTickets	1	++i	Loop counter `i` is uint24 bounded by the `i <= 100` condition at :259; ++i can reach at most 101, far below 2^24.
 BOUNDED	DegenerusGame.sol	_claimWinningsInternal	1	if (amount > 1) { claimDebit = amount - 1	`amount` is uint128(packed) and the `if (amount > 1)` guard at :1605 runs immediately before, so `amount - 1 >= 1` cannot borrow.
 BOUNDED	DegenerusGame.sol	_claimWinningsInternal	2	payout = claimDebit + afking	claimDebit <= amount-1 < 2^128 and afking = packed>>128 < 2^128 (:1601), so the uint256 sum is < 2^129.
 NO-OVERFLOW-OP	DegenerusGame.sol	claimAffiliateDgnrs	1	++i	Loop counter bounded by `i < len` where len = affiliates.length (:1696); an array length cannot approach 2^256.

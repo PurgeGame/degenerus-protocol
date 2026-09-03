@@ -938,12 +938,7 @@ contract DegenerusGameMintModule is
     /// @dev Delegatecalled by the Game facade, which restricts the caller to VAULT and SDGNRS and
     ///      passes it as `who`; each calls exactly once from its own constructor.
     function initPerpetualTickets(address who) external {
-        for (uint24 i = 1; i <= 100; ) {
-            _queueEntries(who, i, 16, false); // 16 entries (= 4 whole tickets) per level
-            unchecked {
-                ++i;
-            }
-        }
+        _queueEntryRange(who, 1, 100, 16, false); // 16 entries (= 4 whole tickets) per level
     }
 
     /// @notice Purchase tickets and loot boxes for a buyer.
