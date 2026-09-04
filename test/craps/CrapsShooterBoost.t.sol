@@ -50,6 +50,11 @@ contract BoostHarness is CrapsViews {
         return _settlementOf(betId, _bets[betId], _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
+    /// @dev The field's frozen entrant count — own seats and the day's appended seats.
+    function fieldCountOf(uint64 slot) external view returns (uint256) {
+        return _slotWindow(slot).entrants;
+    }
+
     /// @dev The seed a BET's run is keyed on: the table's word and the WINDOW's slot.
     function seedForBet(uint64 slot) external view returns (bytes32) {
         return _crapsSeed(_wordAt(_indexOf(slot)), uint48(slot));
@@ -159,7 +164,7 @@ contract CrapsShooterBoostTest is CrapsPins {
     ///      smaller scheduled shooter-profit subsidy.
     function test_theScheduleCarriesTheExactPlacedChipTerms() public view {
         uint8[8] memory chance = [uint8(15), 14, 12, 11, 9, 8, 6, 5];
-        uint8[8] memory uplift = [uint8(33), 30, 30, 30, 30, 25, 25, 20];
+        uint8[8] memory uplift = [uint8(32), 29, 29, 29, 29, 24, 23, 18];
         for (uint256 placed = 0; placed < 8; ++placed) {
             assertEq(craps.shooterBoostTerms(placed), _terms(chance[placed], uplift[placed]), "a boost row moved");
         }
@@ -526,7 +531,7 @@ contract CrapsShooterBoostTest is CrapsPins {
                     bank,
                     goal,
                     players[placed],
-                    craps.shooterBoostTerms(placed)
+                    craps.shooterBoostTerms(placed) | _turn(seed, placed + 1, craps.fieldCountOf(slot))
                 ).bankrollOut,
                 "a seat did not settle under its placed-chip row"
             );
@@ -558,9 +563,9 @@ contract CrapsShooterBoostTest is CrapsPins {
             _setWord(craps.indexOfSlot(slot), uint256(keccak256(abi.encode("classify", i))));
             played = _scattered(blankId, slot);
             bytes32 s2 = craps.seedForBet(slot);
-            uint256 b2 = craps.slipScheduled(played, s2, bank, goal, bob, craps.shooterBoostTerms(0))
+            uint256 b2 = craps.slipScheduled(played, s2, bank, goal, bob, craps.shooterBoostTerms(0) | _turn(s2, 2, craps.fieldCountOf(slot)))
                 .bankrollOut;
-            uint256 p2 = craps.slipScheduled(played, s2, bank, goal, bob, craps.shooterBoostTerms(7))
+            uint256 p2 = craps.slipScheduled(played, s2, bank, goal, bob, craps.shooterBoostTerms(7) | _turn(s2, 2, craps.fieldCountOf(slot)))
                 .bankrollOut;
             if (b2 == p2) continue;
             separated = true;
@@ -700,7 +705,12 @@ contract CrapsShooterBoostTest is CrapsPins {
 
         // ONE base run, drawn under the ONE schedule its ticket names.
         uint256 base = craps.slipScheduled(
-            _scattered(betId, slot), craps.seedForBet(slot), bank, goal, alice, craps.shooterBoostTerms(7)
+            _scattered(betId, slot),
+            craps.seedForBet(slot),
+            bank,
+            goal,
+            alice,
+            craps.shooterBoostTerms(7) | _turn(craps.seedForBet(slot), 1, craps.fieldCountOf(slot))
         ).bankrollOut;
         assertEq(craps.settlementAt(betId).won, base, "the high seat's base run took a different schedule");
 
@@ -830,6 +840,147 @@ contract CrapsShooterBoostTest is CrapsPins {
     }
 
     /// @dev Any accepted placed-chip count, spread under the three-per-leg ceiling.
+
+    // ════════════════════════════════════════════════════════════════════════
+    // The rotating shooter
+    // ════════════════════════════════════════════════════════════════════════
+
+    uint256 internal constant _ROTATION_TAG = 0x526f746174696e6753686f6f746572; // "RotatingShooter"
+
+    /// @dev The published derivation, restated: one start per field off the slot-keyed seed, then
+    ///      the seat's distance from it. Returns the packed one-based turn, or zero past the bound.
+    function _turn(bytes32 seed, uint256 seat, uint256 n) internal pure returns (uint256) {
+        uint256 start = 1 + uint256(keccak256(abi.encode(_ROTATION_TAG, seed))) % n;
+        uint256 offset = (seat + n - start) % n;
+        return offset < 512 ? (offset + 1) << 16 : 0;
+    }
+
+    /// @dev Every seat in one field takes the SAME start and settles at its OWN turn — checked
+    ///      against the bare engine driven with an independently restated rotation term.
+    function test_everySeatSettlesAtItsOwnTurnOffOneSharedStart() public {
+        vm.warp(vm.getBlockTimestamp() + 10 days);
+        _warpToDayStart();
+        uint24 day = craps.currentDayIndex();
+        craps.bookDay(day - 1, 3_000_000 ether);
+        _setDailyWord(day, PLAIN_WORD);
+        vm.prank(ContractAddresses.GAME);
+        craps.openBonusDay();
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
+
+        uint256 n = 13;
+        uint256[] memory ids = new uint256[](n);
+        address[] memory players = new address[](n);
+        for (uint256 i = 0; i < n; ++i) {
+            address player = makeAddr(string(abi.encodePacked("rot", i)));
+            players[i] = player;
+            game.setScore(player, craps.SYBIL_SCORE_FLOOR());
+            vm.prank(player);
+            ids[i] = craps.enterBonusBattle(PER, _placed(i % 8), 1);
+        }
+        uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
+        vm.warp(vm.getBlockTimestamp() + 5 hours);
+        uint48 index = craps.armBonusWindow(slot);
+        _setWord(index, uint256(keccak256("rotation-field")));
+        (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, PER);
+        bytes32 seed = craps.seedForBet(slot);
+
+        uint256 moved;
+        uint256 field = craps.fieldCountOf(slot);
+        assertGe(field, n, "the frozen field is smaller than the seats entered");
+        for (uint256 i = 0; i < n; ++i) {
+            uint256 seat = uint64(ids[i]);
+            assertEq(seat, i + 1, "seats are not dense");
+            uint256 terms = craps.shooterBoostTerms(i % 8);
+            uint256 want = craps.slipScheduled(_scattered(ids[i], slot), seed, bank, goal, players[i], terms | _turn(seed, seat, field)).bankrollOut;
+            assertEq(craps.settlementAt(ids[i]).won, want, "a seat did not settle at its rotation turn");
+            if (want != craps.slipScheduled(_scattered(ids[i], slot), seed, bank, goal, players[i], terms).bankrollOut) ++moved;
+        }
+        assertGt(moved, 0, "no seat's money moved: the rotation is not reaching the engine");
+    }
+
+    /// @dev A one-seat field: the start is seat one, hand zero is the turn, and that is all.
+    function test_aLoneSeatShootsFirstAndOnlyOnce() public pure {
+        bytes32 seed = keccak256("lone");
+        assertEq(_turn(seed, 1, 1), 1 << 16, "a lone seat's turn is hand zero");
+    }
+
+    /// @dev Hands 0..N-1 name every seat exactly once, from any start, and wrap.
+    function testFuzz_theFirstLapNamesEverySeatOnce(uint16 nRaw, bytes32 seed) public pure {
+        uint256 n = 1 + (uint256(nRaw) % 600);
+        uint256 start = 1 + uint256(keccak256(abi.encode(_ROTATION_TAG, seed))) % n;
+        bool[] memory seen = new bool[](n);
+        for (uint256 seat = 1; seat <= n; ++seat) {
+            uint256 offset = (seat + n - start) % n;
+            assertLt(offset, n, "offset out of range");
+            assertFalse(seen[offset], "two seats share a hand");
+            seen[offset] = true;
+            assertEq(1 + ((start - 1 + offset) % n), seat, "shooterAt(offset) is not this seat");
+            uint256 packed = _turn(seed, seat, n);
+            if (offset >= 512) assertEq(packed, 0, "an unreachable turn must encode as none");
+            else assertEq(packed >> 16, offset + 1, "the packed turn is off by one");
+        }
+    }
+
+    /// @dev The engine and the oracle agree on rotation turns across the grid — including a turn
+    ///      that overlaps a natural shooter (additive, floored once), a turn on the second lap
+    ///      (never paid) and a turn past the run's stop (forfeited).
+    function test_theRotationMatchesTheOracleOnEveryTurnAndOverlap() public view {
+        Craps.Bets[3] memory boards;
+        boards[0] = _mixed();
+        boards[1] = _dark();
+        boards[2].passLine = 240;
+        boards[2].hard4 = 180;
+        uint256[4] memory schedules = [uint256(0), _terms(100, 32), _terms(15, 32), _terms(5, 18)];
+        uint256[6] memory turns = [uint256(0), 1, 2, 4, 9, 40];
+        uint256 graded;
+        uint256 lifted;
+        for (uint256 i = 0; i < boards.length; ++i) {
+            for (uint256 j = 0; j < schedules.length; ++j) {
+                for (uint256 t = 0; t < turns.length; ++t) {
+                    for (uint256 k = 0; k < 4; ++k) {
+                        lifted += _gradeCell(boards[i], keccak256(abi.encode("rot-diff", i, j, t, k)), k, schedules[j], turns[t]);
+                        ++graded;
+                    }
+                }
+            }
+        }
+        assertEq(graded, 288, "grid");
+        assertGt(lifted, 0, "no turn ever paid");
+    }
+
+    /// @dev One cell of the rotation differential: engine equals oracle; returns one when the
+    ///      turn moved the money against the same schedule without it.
+    function _gradeCell(Craps.Bets memory board, bytes32 seed, uint256 k, uint256 schedule, uint256 turn)
+        internal
+        view
+        returns (uint256)
+    {
+        address who = k % 2 == 0 ? alice : bob;
+        uint256 bank = 3000e18 * (1 + (k % 3));
+        uint256 boost = schedule | (turn << 16);
+        Craps.SlipResult memory got = craps.slip(board, seed, bank, bank * 10, 48, who, boost);
+        CrapsOracle.SlipResult memory want = craps.oracle().resolveSlipBoosted(board, seed, bank, bank * 10, 48, who, boost);
+        assertEq(got.bankrollOut, want.bankrollOut, "money");
+        assertEq(got.handsPlayed, want.handsPlayed, "shooters");
+        assertEq(got.totalRolls, want.totalRolls, "dice");
+        assertEq(uint8(got.stop), uint8(want.stop), "stop");
+        if (turn == 0) return 0;
+        return got.bankrollOut != craps.slip(board, seed, bank, bank * 10, 48, who, schedule).bankrollOut ? 1 : 0;
+    }
+
+    /// @dev Natural plus rotation is one percentage floored once: a 100%-eligible 32% schedule
+    ///      with the turn on hand zero pays exactly what a 37% schedule pays on hand zero.
+    function test_anOverlapAddsFivePointsAndFloorsOnce() public view {
+        for (uint256 k = 0; k < 12; ++k) {
+            bytes32 seed = keccak256(abi.encode("overlap", k));
+            uint256 bank = 3000e18;
+            // Cap at ONE hand so the whole difference is hand zero's boost.
+            Craps.SlipResult memory stacked = craps.slip(_mixed(), seed, bank, bank * 10, 1, alice, _terms(100, 32) | (1 << 16));
+            Craps.SlipResult memory flat = craps.slip(_mixed(), seed, bank, bank * 10, 1, alice, _terms(100, 37));
+            assertEq(stacked.bankrollOut, flat.bankrollOut, "overlap is not additive-floored-once");
+        }
+    }
+
     function _placed(uint256 placed) internal pure returns (Craps.Bets memory b) {
         b.passLine = uint24(placed > 3 ? 3 : placed);
         if (placed > 3) b.place6 = uint24(placed - 3 > 3 ? 3 : placed - 3);

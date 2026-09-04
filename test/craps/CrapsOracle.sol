@@ -561,8 +561,13 @@ contract CrapsOracle {
                 // THE SHOOTER PROFIT BOOST, folded into the base hand before the round's multiple
                 // scales it and before the ledger records it, so a boosted hand's line still says
                 // what that hand was worth. Floored once, on winnings alone.
-                if (boost != 0 && _boostedShooter(seed, hands, player, boost & 0xFF)) {
-                    uint256 add = (o.profit * (boost >> 8)) / 100;
+                if (boost != 0) {
+                    uint256 pct = _boostedShooter(seed, hands, player, boost & 0xFF) ? (boost >> 8) & 0xFF : 0;
+                    // The rotation turn, held here as a one-based ordinal above the schedule and
+                    // compared against this oracle's own zero-based hand count.
+                    uint256 turn = boost >> 16;
+                    if (turn != 0 && turn - 1 == hands) pct += 5;
+                    uint256 add = (o.profit * pct) / 100;
                     o.returned += add;
                     o.net += int256(add);
                 }

@@ -1304,6 +1304,7 @@ contract CrapsBattle is LootboxCraps {
                 uint256 p = slot % _BONUS_SLOTS_PER_DAY;
                 if (p == 0) revert NoSuchBattle();
                 w = _windowTerms(uint24(slot / _BONUS_SLOTS_PER_DAY), p - 1);
+                w.entrants = uint32(_battles[w.key]);
             }
         }
     }
@@ -2004,6 +2005,9 @@ contract CrapsBattle is LootboxCraps {
         private
         returns (address player, uint256 paid, uint256 staked, uint256 high, uint256 cost)
     {
+        // The combined ordinal is the rotation's seat: a day ticket's own id names its day-local
+        // seat, not where it sits in this window's field.
+        w.seat = seat;
         Settlement memory s = _settlementOf(betId, header, w, word);
         // High for THIS window: a day ticket may be high in some of its seven and ordinary in the
         // rest, and the window being settled names which flag applies.
@@ -2081,13 +2085,16 @@ contract CrapsBattle is LootboxCraps {
     ///
     ///        placed       0       1       2       3       4       5       6       7
     ///        chance      15%     14%     12%     11%      9%      8%      6%      5%
-    ///        uplift     +33%    +30%    +30%    +30%    +30%    +25%    +25%    +20%
+    ///        uplift     +32%    +29%    +29%    +29%    +29%    +24%    +23%    +18%
+    ///
+    ///      The uplifts sit one to two points under what a field with no rotation would carry:
+    ///      the difference funds the rotating shooter's +5% at forty seats.
     ///
     ///      Packed into one constant so the continuum costs one indexed shift instead of eight
     ///      branches. Only a SCHEDULED window is handed the result: custom battles always pass
     ///      zero and play the bare engine, while still accepting every placed-chip count.
     function _shooterBoostTerms(uint256 placed) internal pure returns (uint256) {
-        return (0x1405190619081E091E0B1E0C1E0E210F >> (placed << 4)) & 0xFFFF;
+        return (0x1205170618081D091D0B1D0C1D0E200F >> (placed << 4)) & 0xFFFF;
     }
 
     /// @dev The entire settlement of `betId`, decided the moment its table's word landed. Shared
@@ -2137,16 +2144,29 @@ contract CrapsBattle is LootboxCraps {
         // and therefore the protocol's own windows' alone. Nothing reads the goal, the depth or
         // the schedule to decide which is which: a custom battle may legally copy every number a
         // scheduled one draws, and a future scheduled format could legally carry a zero boost.
-        bool scheduled = w.bound < _CUSTOM_SLOT_BASE;
+        bytes32 seed = _crapsSeed(word, w.bound);
+        uint256 boost;
+        if (w.bound < _CUSTOM_SLOT_BASE) {
+            boost = _shooterBoostTerms(placed);
+            // THE ROTATING SHOOTER. One start for the whole field, drawn off the slot-keyed seed
+            // under its own tag once the word exists, then passed seat by seat in dense order
+            // and wrapping at the field's frozen count. This seat's turn is the hand whose
+            // ordinal is its distance from the start; a run that stops first forfeits it, and a
+            // turn past the hand bound is unreachable and encodes as none. A window's own seats
+            // are the field's first segment, so a slip settled without a combined ordinal —
+            // a preview — is at its own bet ordinal.
+            uint256 n = w.entrants;
+            if (n != 0) {
+                uint256 seat = w.seat != 0 ? w.seat : uint64(betId);
+                uint256 offset;
+                unchecked {
+                    offset = (seat + n - 1 - (_hash2(ROTATING_SHOOTER_TAG, uint256(seed)) % n)) % n;
+                }
+                if (offset < _MAX_SLIP_HANDS) boost |= (offset + 1) << _BOOST_TURN_SHIFT;
+            }
+        }
         SlipResult memory sr = _settleSlip(
-            board,
-            _crapsSeed(word, w.bound),
-            w.bankroll,
-            w.goal,
-            _MAX_SLIP_HANDS,
-            _SLIP_ROLL_BUDGET,
-            address(uint160(header)),
-            scheduled ? _shooterBoostTerms(placed) : 0
+            board, seed, w.bankroll, w.goal, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, address(uint160(header)), boost
         );
         // `Settlement` is the same seven-word memory shape as `SlipResult`. The first word —
         // bankrollIn — is dead after the engine returns and becomes `paid` below; every other
@@ -2201,6 +2221,11 @@ contract CrapsBattle is LootboxCraps {
         uint256 highMult;
         bool multiEntry;
         uint48 bound;
+        /// @dev The field's frozen entrant count — the low word of its scoreboard — and the dense
+        ///      combined ordinal of the seat being settled. Memory only: the rotation is a pure
+        ///      function of these, the slot and the word, and nothing stores it.
+        uint32 entrants;
+        uint64 seat;
     }
 
     /// @dev The slot a day's shared field lives at — remainder ZERO, the one `_slotWindow`

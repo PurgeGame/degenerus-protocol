@@ -594,6 +594,13 @@ contract CrapsViews is CrapsBattle {
         uint256 word = _wordAt(_indexOf(slot));
         if (word == 0) revert RngNotReady();
         Window memory w = _slotWindow(slot);
+        // A day ticket sits after the window's own seats: own count plus its day-local seat.
+        if ((betId >> 64) != slot) {
+            unchecked {
+                uint256 dayN = uint32(_dayTickets[(slot / _BONUS_SLOTS_PER_DAY) * _BONUS_SLOTS_PER_DAY]);
+                w.seat = uint64(w.entrants - dayN) + uint64(betId);
+            }
+        }
         Settlement memory s = _settlementOf(betId, header, w, word);
         // A day ticket stores seven high flags and the window's period picks its own.
         uint256 bit = _BET_HIGH_BIT;

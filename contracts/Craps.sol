@@ -136,6 +136,17 @@ contract Craps {
     ///         from the survival coin and from every draw the wrapper takes off the same word.
     uint256 internal constant SHOOTER_BOOST_TAG = 0x53686f6f746572426f6f7374; // "ShooterBoost"
 
+    /// @notice Domain tag for the field's rotating-shooter start, separated from every other
+    ///         draw the same seed answers. One draw per FIELD: the seat offset does the rest.
+    uint256 internal constant ROTATING_SHOOTER_TAG = 0x526f746174696e6753686f6f746572; // "RotatingShooter"
+
+    /// @dev The percent the house adds to a seat's eligible profit on the one shooter its turn in
+    ///      the field's rotation names. Stacks ADDITIVELY with the natural schedule.
+    uint256 internal constant _ROTATION_UPLIFT = 5;
+    /// @dev Where `boost` carries the rotation turn: `offset + 1` above the two schedule bytes,
+    ///      zero for no turn within the run's bound.
+    uint256 internal constant _BOOST_TURN_SHIFT = 16;
+
     /// @dev The six totals that can be a point.
     uint256 internal constant _POINT_TOTALS_MASK = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 10);
 
@@ -296,8 +307,10 @@ contract Craps {
     ///      Loop state note: `cur` packs the hand counter, the round's mandatory multiplier, the
     ///      roll cursor and the goal latch into one stack slot (see `_CUR_HANDS_MASK`) — via-IR
     ///      runs out of stack here with them separate.
-    /// @param boost Packed schedule: the eligible-shooter percentage in bits 0..7 and the percent
-    ///              added to an eligible shooter's profit in bits 8..15. Zero is no schedule.
+    /// @param boost Packed schedule: the eligible-shooter percentage in bits 0..7, the percent
+    ///              added to an eligible shooter's profit in bits 8..15, and above them the
+    ///              ONE-BASED hand ordinal of this seat's rotation turn, or zero for none. Zero
+    ///              is no schedule.
     function _settleSlip(
         Bets memory b,
         bytes32 seed,
@@ -390,9 +403,15 @@ contract Craps {
                 );
                 // THE SHOOTER PROFIT BOOST. House money on the base hand's ELIGIBLE PROFIT and on
                 // nothing else, floored ONCE here so the round's escalating multiple below scales
-                // one boosted base figure rather than drawing a schedule per copy.
-                if (boost != 0 && _boostedShooter(seed, cur & _CUR_HANDS_MASK, player, boost & 0xFF)) {
-                    handOut += ((handOut >> _HR_PROFIT_SHIFT) * (boost >> 8)) / 100;
+                // one boosted base figure rather than drawing a schedule per copy. Two sources add
+                // into ONE percentage before the floor: the natural schedule's draw and the seat's
+                // single rotation turn, the hand whose one-based ordinal rides above the schedule.
+                if (boost != 0) {
+                    uint256 pct = _boostedShooter(seed, cur & _CUR_HANDS_MASK, player, boost & 0xFF)
+                        ? (boost >> 8) & 0xFF
+                        : 0;
+                    if ((boost >> _BOOST_TURN_SHIFT) == (cur & _CUR_HANDS_MASK) + 1) pct += _ROTATION_UPLIFT;
+                    handOut += ((handOut >> _HR_PROFIT_SHIFT) * pct) / 100;
                 }
                 bankroll += ((cur >> _CUR_MULT_SHIFT) & _CUR_MULT_MASK) * (handOut & _HR_AMOUNT_MASK);
                 // ACCUMULATED IN MEMORY, not on the stack. The loop's live set is what decides
