@@ -2960,7 +2960,8 @@ contract CrapsBattle is LootboxCraps {
     ///
     ///      THIS IS THE ONLY PLACE EITHER BODY CAN SPEND A PASS. Both open lootboxes — the vault
     ///      buys them outright, sDGNRS resolves its own self-subscription boxes — so both are
-    ///      handed passes by `deliverPasses` like any other winner. Neither can reach the doors
+    ///      handed passes by `deliverPasses` like any other winner, and the house banks its level
+    ///      cut as high passes at every level close besides. Neither can reach the doors
     ///      that spend them: `applyCrapsPasses` and `buyFutureCrapsDays` key off `msg.sender`,
     ///      the vault would need a door of its own, and sDGNRS has no controller at all. So the
     ///      daily seat spends them, and a body that arrives already paid for is not charged twice.

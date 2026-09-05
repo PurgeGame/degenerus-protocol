@@ -220,8 +220,11 @@ contract CrapsRngSealHandler is Test {
             _fulfilPending(seed + 100 + i);
             try game.advanceGame() {} catch {}
         }
-        (uint256 hb,) = craps.passCreditsOf(ContractAddresses.SDGNRS);
-        (uint256 vb,) = craps.passCreditsOf(ContractAddresses.VAULT);
+        // Both lanes: the house banks its level cut as HIGH passes and the seat spends those first.
+        (uint256 hbn, uint256 hbh) = craps.passCreditsOf(ContractAddresses.SDGNRS);
+        (uint256 vbn, uint256 vbh) = craps.passCreditsOf(ContractAddresses.VAULT);
+        uint256 hb = hbn + hbh;
+        uint256 vb = vbn + vbh;
         uint256 bodiesFlip = coin.balanceOf(ContractAddresses.SDGNRS) + coin.balanceOf(ContractAddresses.VAULT);
         // Early in the new day: period 0 (the twenty-minute opener) is still taking bets.
         vm.warp(_dayStart() + 1 days + 5 minutes);
@@ -245,9 +248,9 @@ contract CrapsRngSealHandler is Test {
                 ghost_subsidies += craps.boostBudgetOf(today) + craps.progressiveContributionFor(today)
                     + craps.highBudgetOf(today);
                 // Protocol seats: a spent pass is value the bodies did not burn.
-                (uint256 ha,) = craps.passCreditsOf(ContractAddresses.SDGNRS);
-                (uint256 va,) = craps.passCreditsOf(ContractAddresses.VAULT);
-                uint256 passSeats = (hb - ha) + (vb - va);
+                (uint256 han, uint256 hah) = craps.passCreditsOf(ContractAddresses.SDGNRS);
+                (uint256 van, uint256 vah) = craps.passCreditsOf(ContractAddresses.VAULT);
+                uint256 passSeats = (hb - (han + hah)) + (vb - (van + vah));
                 if (passSeats != 0) ghost_passSeatValue += passSeats * _dayBill(today);
             }
         }

@@ -48,6 +48,13 @@ interface ICrapsBonusDay {
     function openBonusDay() external;
 }
 
+/// @dev The table's pass-credit door, for the house's level cut. Called BARE from the level
+///      close — no stipend, no try/catch — because `creditPasses` is revert-free for the game by
+///      contract: a full lane saturates and reports rather than throws.
+interface ICrapsPassCredit {
+    function creditPasses(address player, uint32 normal, uint32 high) external;
+}
+
 interface IGNRUSResolve {
     function pickCharity(uint24 level) external;
 }
@@ -1229,14 +1236,24 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         memCurrent += memNext;
         memNext = 0;
 
-        // --- Coinflip credit ---
+        // --- The house's level cut: high-roller craps passes ---
+        // A twentieth of the consolidated pool, priced in FLIP at this level, banks to sDGNRS as
+        // high-roller day passes rather than as a coinflip stake — one pass per
+        // HIGH_ROLLER_DAY_PASS_VALUE, rounded down, the fraction under a whole pass dropped.
+        // sDGNRS has no door of its own, so the table spends them: its daily seat reaches for a
+        // banked high pass before FLIP and sits the house at the day's high multiple.
         // purchaseLevel == storage level here: consolidation runs only on the
         // lastPurchase leg with rngLockedFlag held, after the request-time
         // level pre-increment.
-        coinflip.creditFlip(
-            ContractAddresses.SDGNRS,
-            (memCurrent * PRICE_COIN_UNIT) / (PriceLookupLib.priceForLevel(purchaseLevel) * 20)
-        );
+        uint256 highPasses = (memCurrent * PRICE_COIN_UNIT)
+            / (PriceLookupLib.priceForLevel(purchaseLevel) * 20 * HIGH_ROLLER_DAY_PASS_VALUE);
+        if (highPasses != 0) {
+            // Unreachable at any real pool — the cap merely makes the cast provable.
+            if (highPasses > type(uint32).max) highPasses = type(uint32).max;
+            ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses(
+                ContractAddresses.SDGNRS, 0, uint32(highPasses)
+            );
+        }
 
         // --- Future→next drawdown (15% on non-x00 levels) ---
         if ((lvl % 100) != 0) {
