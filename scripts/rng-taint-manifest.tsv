@@ -35,7 +35,8 @@ PURE-DERIVE	PARAM	word	_settlementOf	CrapsBattle.sol	internal pure: scatter keye
 PURE-DERIVE	ARG	FlipRoundLib.roundFlipToHundreds	_settlementOf	CrapsBattle.sol	EV-preserving rounding on hash2(word, betId ^ FLIP_ROUND_TAG); per-bet key so batching cannot choose the split; pure
 PURE-DERIVE	PARAM	word	_windowTermsOn	CrapsBattle.sol	private pure: window preset from _bonusRoll(word, period) and highMult from _highMultOf(word); published terms, no actor input
 EXEMPT-ADVANCE	PARAM	word	_openWindow	CrapsBattle.sol	reached only via openBonusDay (onlyGame, called by rngGate right after _applyDailyRng sealed rngWordByDay[today]); banks the window's published stake terms once per day
-PURE-DERIVE	PARAM	word	_scatterInto	CrapsBattle.sol	internal pure: throws the unplaced chips at legs keccak(word, i) % 10; word is hash2(settling word, owner) from _settlementOf
+PURE-DERIVE	PARAM	word	_scatterInto	Craps.sol	internal pure: throws the unplaced chips at legs keccak(word, i) % 10; word is hash2(settling word, owner), handed across by CrapsEngine.settleSlip
+PURE-DERIVE	PARAM	seed	settleSlip	CrapsEngine.sol	external pure engine door reached by STATICCALL from _settlementOf; seed = _crapsSeed(word, slot) and the scatter hash both computed by the table from the committed word; no storage, no actor input
 PURE-DERIVE	PARAM	word	_bonusRoll	CrapsBattle.sol	private pure hash2(word, period+1): the window's draw off the day word
 PURE-DERIVE	PARAM	word	_tierPick	CrapsBattle.sol	internal pure size tier from _bonusRoll(word, period); bit-identical to _bonusPreset's draw
 PURE-DERIVE	PARAM	word	_routineWeight	CrapsBattle.sol	internal pure sum of 1<<_tierPick over the six routine windows; the day's budget denominator, stored once at open

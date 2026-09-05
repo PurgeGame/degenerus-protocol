@@ -4,7 +4,7 @@ Pre-disclosure for audit wardens. **If a finding's mechanism + impact is describ
 already known and is not eligible.** This is a precise perimeter — each entry names the exact
 mechanism and why it is by-design, defended, or out-of-scope. There are no vague blanket disclaimers.
 
-Frozen subject: `contracts/` tree `8b3101b3` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
+Frozen subject: `contracts/` tree `58367471` @ tag `degenerus-c4a`. Pre-scanned with Slither v0.11.5
 + Aderyn 0.6.8; those findings are triaged in the automated-tools section below.
 
 ---
@@ -146,21 +146,56 @@ transaction (a coin credit, not ETH-backed value). Immaterial; documented, not e
 
 ## 5. Automated tool findings (pre-disclosed)
 
-The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (4,103
-results / 101 detectors over 179 contracts at tree `8b3101b3`; 186 High / 526 Medium / 528 Low /
-2,809 Informational / 54 Optimization, and the "High" tier is dominated by 142 `uninitialized-state`
+The full machine-readable Slither/Aderyn baseline is maintained internally — Slither 0.11.5 (4,119
+results / 101 detectors over 182 contracts at tree `58367471`; 188 High / 526 Medium / 537 Low /
+2,814 Informational / 54 Optimization, and the "High" tier is dominated by 142 `uninitialized-state`
 false positives from the shared-storage delegatecall architecture — the deployed-module compilation
-units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (10 High / 22 Low; the one new
-High is the same Yul shift-order reading Slither's new class records, below).
+units plus the `DegenerusGameLens` unit, see below) + Aderyn 0.6.8 (10 High / 22 Low, unchanged).
 Slither totals are sensitive to the scan environment (solc/toolchain resolution), so the absolute
 count is not comparable across machines — re-runs should compare category triage, not the total.
-These counts were measured directly at tree `8b3101b3`, not carried forward from an earlier scan.
-The immediately preceding freeze tree `d5e87795` (the prior `degenerus-c4a`) re-scanned in the same
-environment reproduced 3,968 / 177 High / 516 Medium / 515 Low / 2,708 Informational / 52
+These counts were measured directly at tree `58367471`, not carried forward from an earlier scan.
+The immediately preceding freeze tree `8b3101b3` (the prior `degenerus-c4a`) re-scanned in the same
+environment reproduced 4,103 / 186 High / 526 Medium / 528 Low / 2,809 Informational / 54
 Optimization exactly, tier for tier — the figure recorded for it at that freeze — so the delta
 across this span is a measurement rather than an assumption.
 
-That delta is **+135 results and +9 High** across the fourteen-commit span: the trait-bucket lane
+That delta is **+16 results and +2 High** across the five-commit span: the rotating shooter (one
+random start per scheduled field), the drain's partial tail word filled in one masked write, the
+house's level cut banked as high-roller passes, a round naming its seats by registry position,
+and the vault craps comps — the pure dice engine moved into `CrapsEngine` behind a STATICCALL,
+the FLIP comp lane the table feeds at two percent of every finished field's bankroll, the
+vault-only comp door with its packed codes, scheduled windows keyed by slot so a seat can be
+reserved before its day is drawn, and the Vault's delegated comp allowances. The contract count
+moves 179 -> 182 (`CrapsEngine` and the `ICrapsEngine` / `ICrapsComps` interfaces).
+
+Neither new High is in the comp work. `weak-prng` moves 20 -> 21: `_settlementOf`'s
+rotating-shooter start, a modulo over a tag-hashed copy of the settling word — the same benign
+class as the other twenty (nothing is drawn from it that a player could steer; the word did not
+exist while entry was open). `incorrect-shift` moves 1 -> 2: `_bucketAppendRun`'s second Yul shift,
+the prefix mask for a partial tail word, read by the detector in Solidity operand order exactly as
+the first was; `test/fuzz/BucketLanePacking.t.sol` pins the word lane for lane. `uninitialized-state`
+is unchanged at 142 and every other High detector class is composition-identical
+(arbitrary-send-eth 6, delegatecall-loop 4, encode-packed-collision 2, incorrect-exp 2,
+reentrancy-balance 6, reentrancy-eth 3 — the three `advanceGame` entries re-keyed on body text,
+three out and three in).
+
+The Medium tier nets to zero: the comp doors' new signatures re-key the standing
+`reentrancy-no-eth` entries on `_enterDayLane`, `_upgradeDayWindows`, `_payout` (now calling the
+comp-lane credit) and the vault's `crapsComp` batch; `incorrect-equality` −1 (the engine's two
+strict-equality entries leave the table's unit with `_settleSlip`, `_vetMultiple`'s `multiple == 1`
+arrives); `uninitialized-local` +1 (`crapsComp`'s running `total`); `unused-return` −1 (the removed
+200-pass door). Low +9: `calls-loop` on the vault's comp batch and the window-ahead run, and
+`reentrancy-benign` on the comp burns. Informational +5 net: `cyclomatic-complexity` +4
+(`vaultComp`, `_payout`), `missing-inheritance` +2 (`CrapsEngine` against the table's
+`ICrapsEngine`, the Vault's `ICrapsComps`), `unused-state` +2 (the comp-code field shifts),
+`assembly` +1 and `pragma` +1 for the engine file, against re-keyed entries the span replaced.
+Optimization unchanged. Every new finding names the engine, the comp lane, the comp door or the
+drain code the span actually touched; nothing else moved.
+
+The paragraphs below record the accumulated attribution of the standing false-positive classes
+across the earlier freeze chain, and remain accurate as history.
+
+At the preceding freeze, the delta `d5e87795` -> `8b3101b3` was **+135 results and +9 High** across the fourteen-commit span: the trait-bucket lane
 packing (eight 32-bit owner positions per slot over a per-level owner registry), the seated
 round drain with its persisted frontier, the unit-priced write budget, the split of the
 jackpot-phase daily's carryover ticket leg into its own advance stage, the craps protocol awards
@@ -200,9 +235,6 @@ round-engine delegatecall and the vault comp credit); `constable-states` +2; `un
 +1 (the lane replication constant); `calls-loop` −1 and `incorrect-equality` −2 on code the span
 replaced. Every new finding names the ticket engine, the craps pass lanes, the whale or presale
 code the span actually touched; nothing else moved.
-
-The paragraphs below record the accumulated attribution of the standing false-positive classes
-across the earlier freeze chain, and remain accurate as history.
 
 At the preceding freeze, the delta `09413eb0` -> `d5e87795` was **+59 results and +1 High** across
 the eleven-commit craps span (the Dice Run high-water redesign, the progressive's window-class

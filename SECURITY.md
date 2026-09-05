@@ -1,6 +1,6 @@
 # Security Policy
 
-Frozen subject: `contracts/` tree `8b3101b3` @ tag `degenerus-c4a` (post-v76.0 audit freeze).
+Frozen subject: `contracts/` tree `58367471` @ tag `degenerus-c4a` (post-v76.0 audit freeze).
 
 ## Reporting a vulnerability
 
