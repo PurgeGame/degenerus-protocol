@@ -22,6 +22,7 @@ import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToke
 import {DegenerusParimutuel} from "../../../contracts/DegenerusParimutuel.sol";
 import {DegenerusRecordBounty} from "../../../contracts/DegenerusRecordBounty.sol";
 import {CrapsViews} from "../../craps/CrapsViews.sol";
+import {CrapsEngine} from "../../../contracts/CrapsEngine.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -74,6 +75,7 @@ abstract contract DeployProtocol is Test {
     DegenerusParimutuel public parimutuel;
     DegenerusRecordBounty public recordBounty;
     CrapsViews public crapsBattle;
+    CrapsEngine public crapsEngine;
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
@@ -112,7 +114,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 30 protocol contracts (nonces 5-34) ---
+        // Then 31 protocol contracts (nonces 5-35) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -210,6 +212,10 @@ abstract contract DeployProtocol is Test {
         // gates authorize ContractAddresses.CRAPS, i.e. exactly this address), and the REAL
         // Coinflip credit lane. Deployed last so ContractAddresses.CRAPS resolves to code.
         crapsBattle = new CrapsViews();                                     // N+29 = nonce 34
+
+        // Craps dice engine — appended, so it shifts no earlier nonce. Pure, no ctor args; the
+        // table STATICCALLs ContractAddresses.CRAPS_ENGINE, so it must resolve to code here.
+        crapsEngine = new CrapsEngine();                                    // N+30 = nonce 35
     }
 
     /// @dev Give `player` an AFKing seat (the sole afking credential — subscribe reverts

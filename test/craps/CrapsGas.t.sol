@@ -341,6 +341,6 @@ contract CrapsGasTest is CrapsPins {
     function test_productionRuntimeFitsEip170() public {
         CrapsBattle production = new CrapsBattle();
         emit log_named_uint("CrapsBattle runtime bytes", address(production).code.length);
-        assertLe(address(production).code.length, 24_400, "CrapsBattle runtime left too little deployment headroom");
+        assertLe(address(production).code.length, 24_300, "CrapsBattle runtime left too little deployment headroom");
     }
 }

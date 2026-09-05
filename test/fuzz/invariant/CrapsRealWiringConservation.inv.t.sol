@@ -58,16 +58,18 @@ contract CrapsRealWiringConservation is DeployProtocol {
         }
     }
 
-    /// @notice The vault's comp budget is a lifetime two hundred, debited exactly once per pass.
-    function invariant_vaultCompBudgetExact() public view {
-        assertEq(
-            uint256(vault.crapsCompsRemaining()),
-            200 - handler.ghost_compsGranted(),
-            "VAULT-COMPS: remaining budget diverged from the grants"
+    /// @notice The comp lane opens on the converted two hundred passes, is charged exactly the
+    ///         passes each grant banked, and is lowered by nothing but a grant — settlement can
+    ///         only feed it.
+    function invariant_vaultCompLaneExact() public view {
+        assertGe(
+            coin.crapsCompAllowance() + handler.ghost_compLaneSpent(),
+            4_560_000 ether,
+            "VAULT-COMPS: something other than a grant lowered the comp lane"
         );
         assertTrue(
             handler.ghost_compGrantsRefused() != type(uint256).max,
-            "VAULT-COMPS: an over-ask was served or a within-budget grant was refused"
+            "VAULT-COMPS: a grant charged other than what it banked, or a within-lane grant was refused"
         );
     }
 

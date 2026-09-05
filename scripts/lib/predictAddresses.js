@@ -79,6 +79,10 @@ export const DEPLOY_ORDER = [
   // address must be predicted rather than discovered, because FLIP and Coinflip
   // bake CRAPS in as a constant to authorize the burn/mint/credit sinks.
   "CRAPS",                  // N+29: CrapsBattle
+  // Craps dice engine. Appended LAST so adding it shifts no existing predicted
+  // address. A pure contract with no ctor args and no deploy-time dependents:
+  // CrapsBattle STATICCALLs it at runtime through a compile-time constant.
+  "CRAPS_ENGINE",           // N+30: CrapsEngine
 ];
 
 /**
@@ -115,6 +119,7 @@ export const KEY_TO_CONTRACT = {
   PARIMUTUEL: "DegenerusParimutuel",
   RECORD_BOUNTY: "DegenerusRecordBounty",
   CRAPS: "CrapsBattle",
+  CRAPS_ENGINE: "CrapsEngine",
 };
 
 /**

@@ -16,6 +16,14 @@
     "typeLabel": "bool"
   },
   {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "_crapsCompAllowance",
+    "offset": 1,
+    "slot": 1,
+    "typeLabel": "uint128"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "balanceOf",

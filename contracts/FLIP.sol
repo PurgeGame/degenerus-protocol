@@ -103,6 +103,16 @@ contract FLIP {
     /// @param amount The amount consumed from allowance (18 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
+    /// @notice The craps comp lane paid for a seat, a reservation, an upgrade or banked passes.
+    /// @param player Who was comped.
+    /// @param amount The FLIP wei the lane was charged — the entry's own price.
+    event CrapsCompSpent(address indexed player, uint256 amount);
+
+    /// @notice A completed craps battle fed the comp lane.
+    /// @param amount Two percent of the field's eligible bankroll.
+    /// @param balance The lane afterwards.
+    event CrapsCompsAccrued(uint256 amount, uint256 balance);
+
     /*+======================================================================+
       |                              ERRORS                                  |
       +======================================================================+
@@ -189,6 +199,14 @@ contract FLIP {
 
     /// @notice One-shot latch for the gameover FLIP tombstone flood (set on first flood).
     bool private _tombstoneFlooded;
+
+    /// @notice The craps comp lane: FLIP-wei the vault may spend seating players at the craps
+    ///         table, and nothing else. An ACCOUNTING allowance — never minted, never a balance,
+    ///         out of `vaultMintTo`'s reach — that the table feeds at two percent of every
+    ///         completed battle's eligible bankroll and a comp burn spends. Opens on the converted
+    ///         lifetime pass allowance: two hundred normal day passes at their pass value. Packed
+    ///         beside the tombstone latch, so it moves no slot.
+    uint128 private _crapsCompAllowance = 4_560_000 ether;
 
     /// @notice Token balance for each address.
     /// @dev Standard ERC20 balance mapping.
@@ -638,6 +656,10 @@ contract FLIP {
     ///      property at the tag site rather than trusting it here.
     uint256 private constant CRAPS_FLAG_MASK = 0xFF;
 
+    /// @dev The comp bit in that byte: the craps comp lane pays, not the player. Only the table's
+    ///      vault-only door sets it; no player-facing door can.
+    uint256 private constant CRAPS_FLAG_COMP = 0x10;
+
     /// @notice Burn a paid craps purchase, spend any craps boon on it, and report the action.
     /// @dev Access: CRAPS only. The craps twin of `burnCoin`, kept separate so the ordinary burn
     ///      — Game, Parimutuel, donations, upgrades, protocol seats — gains neither a caller
@@ -665,6 +687,19 @@ contract FLIP {
         uint256 gross = grossAndFlags & ~CRAPS_FLAG_MASK;
         uint8 flags = uint8(grossAndFlags & CRAPS_FLAG_MASK);
 
+        // A COMP. The vault seated somebody: the comp lane pays, the player's own FLIP is not
+        // touched, no boon is consumed and no quest is credited — the seat is a gift, not a spend.
+        if (flags & CRAPS_FLAG_COMP != 0) {
+            uint128 charge = _toUint128(gross);
+            uint128 lane = _crapsCompAllowance;
+            if (charge > lane) revert Insufficient();
+            unchecked {
+                _crapsCompAllowance = lane - charge;
+            }
+            emit CrapsCompSpent(player, gross);
+            return 0;
+        }
+
         // CEI: the burn lands before any downstream trusted call, exactly as `decimatorBurn` does.
         uint256 consumed = _consumeCoinflipShortfall(player, gross);
         _burn(player, gross - consumed);
@@ -681,6 +716,22 @@ contract FLIP {
         // Quest progress and the day-streak credit only. No value is computed or forwarded here —
         // the boon's whole effect is the mask returned above.
         if (flags != 0) questModule.recordCrapsAction(player, flags);
+    }
+
+    /// @notice The craps comp lane's live balance, in FLIP wei.
+    function crapsCompAllowance() external view returns (uint256) {
+        return _crapsCompAllowance;
+    }
+
+    /// @notice Feed the craps comp lane. CRAPS-only: the table calls it once per completed
+    ///         battle with two percent of the field's eligible bankroll.
+    /// @param amount FLIP wei to add to the lane.
+    /// @custom:reverts OnlyGame If the caller is not the craps table.
+    function creditCrapsComps(uint256 amount) external {
+        if (msg.sender != ContractAddresses.CRAPS) revert OnlyGame();
+        uint128 lane = _toUint128(uint256(_crapsCompAllowance) + amount);
+        _crapsCompAllowance = lane;
+        emit CrapsCompsAccrued(amount, lane);
     }
 
     /// @notice Burn `amount` of `target`'s FLIP for a far-future salvage swap, draining all sources.

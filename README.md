@@ -81,11 +81,11 @@ DegenerusGame.sol (main entry point, delegatecall dispatcher)
 
 ## Repository Layout
 
-59 production Solidity files: 24 in `contracts/` (18 deployable — including the new `CrapsBattle` craps table — plus its `Craps`/`LootboxCraps` bases, `ContractAddresses`, `DegenerusTraitUtils`, `DeityBoonViewer`, `DegenerusGameLens`), 14 in `modules/` (12 deployable + 2 abstract utils), 1 shared storage contract, 8 libraries, and 12 interfaces. `contracts/mocks/` and `contracts/test/` are test scaffolding and are never deployed.
+60 production Solidity files: 25 in `contracts/` (19 deployable — including the `CrapsBattle` craps table and its `CrapsEngine` dice — plus the `Craps`/`LootboxCraps` bases, `ContractAddresses`, `DegenerusTraitUtils`, `DeityBoonViewer`, `DegenerusGameLens`), 14 in `modules/` (12 deployable + 2 abstract utils), 1 shared storage contract, 8 libraries, and 12 interfaces. `contracts/mocks/` and `contracts/test/` are test scaffolding and are never deployed.
 
 ## Deployment
 
-All contract addresses are compile-time constants in `ContractAddresses.sol`. Deployment is nonce-deterministic: addresses are predicted from the deployer nonce, patched into `ContractAddresses.sol`, then everything is recompiled and deployed in fixed order — Icons32Data and the modules first, then the tokens and game contracts, then contracts that depend on earlier ones (DGNRS, ADMIN, GNRUS). Later periphery deployments are append-only; FoilPack, AFKingSubscriptionToken, Parimutuel, RecordBounty, and CrapsBattle therefore shift no earlier address.
+All contract addresses are compile-time constants in `ContractAddresses.sol`. Deployment is nonce-deterministic: addresses are predicted from the deployer nonce, patched into `ContractAddresses.sol`, then everything is recompiled and deployed in fixed order — Icons32Data and the modules first, then the tokens and game contracts, then contracts that depend on earlier ones (DGNRS, ADMIN, GNRUS). Later periphery deployments are append-only; FoilPack, AFKingSubscriptionToken, Parimutuel, RecordBounty, CrapsBattle, and CrapsEngine therefore shift no earlier address.
 
 The `ContractAddresses.sol` values committed here are the **Foundry deterministic-test set** (with template `VRF_KEY_HASH = 0xabab…` and `DEPLOY_DAY_BOUNDARY = 0`), not a production manifest — a clean checkout builds and tests against them with no patching. `scripts/lib/predictAddresses.js` and `scripts/deploy.js` regenerate the real set for an actual deployment.
 

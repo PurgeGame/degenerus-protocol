@@ -7,6 +7,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 
 /// @dev The two things craps reads out of the live game: the raw lootbox-RNG slots and the
 ///      player's activity score. One double serves both because production reads both from the
@@ -84,10 +85,38 @@ contract MockFlip {
         nextBoonMask = mask;
     }
 
+    /// @dev The comp lane, mirrored: a comp-flagged burn charges the lane and touches no wallet;
+    ///      the table's finalization feeds it. Lane and accrual count share one slot, and the pins
+    ///      open the lane on a wei, so an accrual costs what it costs in real FLIP — a warm write
+    ///      to a slot that is already nonzero — rather than two fresh slots.
+    uint128 public compLane;
+    uint128 public compAccruals;
+    uint256 public compSpent;
+    mapping(address => uint256) public compFor;
+
+    error MockCompLaneShort();
+
+    function creditCrapsComps(uint256 amount) external {
+        compLane += uint128(amount);
+        ++compAccruals;
+    }
+
+    function setCompLane(uint256 amount) external {
+        compLane = uint128(amount);
+    }
+
     function burnCoinForCraps(address target, uint256 grossAndFlags) external returns (uint8 mask) {
         if (burnRefused[target]) revert MockBurnRefused();
         uint256 gross = grossAndFlags & ~uint256(0xFF);
         lastCrapsFlags = uint8(grossAndFlags);
+        if (grossAndFlags & 0x10 != 0) {
+            if (gross > compLane) revert MockCompLaneShort();
+            compLane -= uint128(gross);
+            compSpent += gross;
+            compFor[target] += gross;
+            ++crapsBurns;
+            return 0;
+        }
         burned[target] += gross;
         totalBurned += gross;
         ++crapsBurns;
@@ -231,9 +260,12 @@ abstract contract CrapsPins is Test {
     function _installPins() internal {
         vm.etch(ContractAddresses.GAME, address(new MockGame()).code);
         vm.etch(ContractAddresses.COIN, address(new MockFlip()).code);
+        MockFlip(ContractAddresses.COIN).setCompLane(1);
         vm.etch(ContractAddresses.COINFLIP, address(new MockCoinflip()).code);
         vm.etch(ContractAddresses.VAULT, address(new MockVault()).code);
         vm.etch(ContractAddresses.QUESTS, address(new MockQuests()).code);
+        // The real engine, at its pin: the table settles nothing without it.
+        vm.etch(ContractAddresses.CRAPS_ENGINE, address(new CrapsEngine()).code);
         quests = MockQuests(ContractAddresses.QUESTS);
         game = MockGame(ContractAddresses.GAME);
         flip = MockFlip(ContractAddresses.COIN);

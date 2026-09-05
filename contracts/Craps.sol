@@ -753,4 +753,51 @@ contract Craps {
             draw := keccak256(ptr, 0x80)
         }
     }
+
+    /// @dev Where the dark side sits in a packed board: ten three-bit legs, the don't-pass leg
+    ///      last, so a whole legal board occupies thirty bits.
+    uint256 internal constant _CHIP_DONT_SHIFT = 27;
+    uint256 internal constant _CHIP_DONT_MASK = 7;
+
+    /// @dev Packed counts back into the board they stand for, at this slot's chip.
+    function _boardFrom(uint256 packed, uint256 chipFlip) internal pure returns (Bets memory b) {
+        unchecked {
+            b.passLine = uint24((packed & 7) * chipFlip);
+            b.place4 = uint24(((packed >> 3) & 7) * chipFlip);
+            b.place5 = uint24(((packed >> 6) & 7) * chipFlip);
+            b.place6 = uint24(((packed >> 9) & 7) * chipFlip);
+            b.place8 = uint24(((packed >> 12) & 7) * chipFlip);
+            b.place9 = uint24(((packed >> 15) & 7) * chipFlip);
+            b.place10 = uint24(((packed >> 18) & 7) * chipFlip);
+            b.hard4 = uint24(((packed >> 21) & 7) * chipFlip);
+            b.hard8 = uint24(((packed >> 24) & 7) * chipFlip);
+            b.dontPass = uint24(((packed >> _CHIP_DONT_SHIFT) & _CHIP_DONT_MASK) * chipFlip);
+        }
+    }
+
+    /// @dev Throwing `n` chips onto `b`: one at a time, at a leg drawn off `word`. Every leg
+    ///      stays a whole number of chips by construction — the tournament's own rule, met
+    ///      without a check.
+    ///
+    ///      Written through the memory struct because the engine immediately plays that same
+    ///      board; rebinding a memory parameter would not update the caller's reference.
+    ///
+    ///      Random rather than optimised on purpose: the dice are the field's pace-setter, not
+    ///      its sharpest opponent, and finding a better board than a random one is the game.
+    function _scatterInto(Bets memory b, uint256 word, uint256 chipFlip, uint256 n) internal pure {
+        unchecked {
+            for (uint256 i = 0; i < n; ++i) {
+                // Memory structs are one word per field, so leg `n` is at offset 32n — and the
+                // ten bettable legs are exactly fields 0..9, the dark side last. The draw hashes
+                // the same two words `abi.encode(word, i)` would, out of scratch space so the loop
+                // allocates none.
+                assembly ("memory-safe") {
+                    mstore(0x00, word)
+                    mstore(0x20, i)
+                    let p := add(b, mul(mod(keccak256(0x00, 0x40), 10), 0x20))
+                    mstore(p, add(mload(p), chipFlip))
+                }
+            }
+        }
+    }
 }

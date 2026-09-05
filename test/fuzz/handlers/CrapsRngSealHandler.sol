@@ -167,6 +167,8 @@ contract CrapsRngSealHandler is Test {
     /// @notice Vault comps granted through the real vault (its lifetime cap is two hundred).
     uint256 public ghost_compsGranted;
     uint256 public ghost_compGrantsRefused;
+    /// @dev FLIP wei the comp lane was charged by grants this handler made.
+    uint256 public ghost_compLaneSpent;
 
     modifier useActor(uint256 seed) {
         currentActor = actors[seed % actors.length];
@@ -757,35 +759,59 @@ contract CrapsRngSealHandler is Test {
         _checkSealedHeaders();
     }
 
-    /// @notice The vault comps craps day passes out of a lifetime two hundred, through the REAL
-    ///         vault (its owner is the deployer, who holds the DGVE majority). Over-asks must be
-    ///         refused, and every granted pass must land in the recipient's real pass ledger.
+    /// @notice The vault comps banked craps passes through the REAL vault and the REAL FLIP
+    ///         comp lane (its owner is the deployer, who holds the DGVE majority). A grant must
+    ///         charge the lane exactly the passes it banked times their value, an over-ask must be
+    ///         refused whole, and nothing but a grant may ever lower the lane.
     function grantComps(uint256 seed, uint8 countEach) external {
         if (countEach == 0) countEach = 1;
         uint256 n = 1 + (seed % 3);
-        address[] memory to = new address[](n);
-        uint256 before;
+        uint256[] memory reqs = new uint256[](n);
+        uint256[] memory before = new uint256[](n);
         for (uint256 i; i < n; i++) {
-            to[i] = actors[(seed + i) % actors.length];
-            (uint256 nn, uint256 hh) = craps.passCreditsOf(to[i]);
-            before += nn + hh;
+            address to = actors[(seed + i) % actors.length];
+            reqs[i] = uint256(uint160(to)) | (4 << 160) | (uint256(countEach) << 200);
+            (before[i],) = craps.passCreditsOf(to);
         }
-        uint256 remaining = vault.crapsCompsRemaining();
+        uint256 laneBefore = coin.crapsCompAllowance();
+        uint256 value = craps.NORMAL_PASS_VALUE();
         vm.prank(ContractAddresses.CREATOR);
-        try vault.crapsGrantComps(to, countEach) {
-            ghost_compsGranted += n * countEach;
-            // Beyond the cap the grant must have been refused, never partially served.
-            if (n * countEach > remaining) ghost_compGrantsRefused = type(uint256).max; // impossible marker
+        try vault.crapsComp(reqs) {
+            uint256 banked;
+            for (uint256 i; i < n; i++) {
+                (uint256 now_,) = craps.passCreditsOf(address(uint160(reqs[i])));
+                if (_distinct(reqs)) banked += now_ - before[i];
+            }
+            uint256 spent = laneBefore - coin.crapsCompAllowance();
+            ghost_compsGranted += banked;
+            ghost_compLaneSpent += spent;
+            // Distinct recipients bank exactly what the lane was charged for; a repeated
+            // recipient's before/after spans both grants, so only the charge is checked.
+            if (_distinct(reqs) && spent != banked * value) ghost_compGrantsRefused = type(uint256).max;
+            if (spent > laneBefore) ghost_compGrantsRefused = type(uint256).max;
         } catch {
             ghost_compGrantsRefused++;
-            if (n * countEach <= remaining && _distinct(to)) ghost_compGrantsRefused = type(uint256).max;
+            if (coin.crapsCompAllowance() != laneBefore) ghost_compGrantsRefused = type(uint256).max;
+            // Within the lane, distinct recipients with room must be served.
+            if (
+                _distinct(reqs) && uint256(countEach) * n * value <= laneBefore
+                    && _allHaveRoom(reqs, countEach)
+            ) ghost_compGrantsRefused = type(uint256).max;
         }
     }
 
-    function _distinct(address[] memory a) internal pure returns (bool) {
-        for (uint256 i; i < a.length; i++) {
-            for (uint256 j = i + 1; j < a.length; j++) {
-                if (a[i] == a[j]) return false;
+    function _allHaveRoom(uint256[] memory r, uint8 countEach) internal view returns (bool) {
+        for (uint256 i; i < r.length; i++) {
+            (uint256 have,) = craps.passCreditsOf(address(uint160(r[i])));
+            if (have + countEach > type(uint32).max) return false;
+        }
+        return true;
+    }
+
+    function _distinct(uint256[] memory r) internal pure returns (bool) {
+        for (uint256 i; i < r.length; i++) {
+            for (uint256 j = i + 1; j < r.length; j++) {
+                if (address(uint160(r[i])) == address(uint160(r[j]))) return false;
             }
         }
         return true;

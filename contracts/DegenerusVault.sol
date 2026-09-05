@@ -113,18 +113,17 @@ interface ICoinPlayerActions {
 /// @dev The craps table's player surface. The vault is seated automatically at every bonus
 ///      window it can pay for, so the only doors it PLAYS through are joining a custom battle and
 ///      re-spreading the chips on slips it already owns. Comping somebody else a seat is not one
-///      of them — that goes through the delivery door below.
+///      of them — that goes through the comp door below.
 interface ICrapsPlayerActions {
     function enterBattle(uint64 slot, uint32 chips, uint16 multiple) external returns (uint256);
     function amendSlip(uint256 betId, uint32 chips) external;
 }
 
-/// @dev The craps table's pass-delivery door, the same one a lootbox award takes: ONE pass seated
-///      on tomorrow where tomorrow is free, the rest banked as credit the holder applies whenever
-///      it suits them. It never reverts on an unavailable day, so a comp cannot fail for reasons
-///      the vault would have to model.
-interface ICrapsPassDelivery {
-    function deliverPasses(address player, uint32 normal, uint32 high) external returns (uint24 day);
+/// @dev The craps table's comp door: one of today's windows, today's whole day, a run of future
+///      days, a day-ticket upgrade or banked passes for a named player, charged to the FLIP comp
+///      lane the table itself feeds. Vault-only on the table's side; the table prices it.
+interface ICrapsComps {
+    function vaultComp(uint256 code) external returns (uint256 charged);
 }
 
 /// @dev Minimal ERC20 surface for sweeping foreign tokens the vault has no other handling for.
@@ -465,11 +464,15 @@ contract DegenerusVault {
     /// @param flipOut FLIP minted to user
     event Claim(address indexed from, uint256 sharesBurned, uint256 ethOut, uint256 stEthOut, uint256 flipOut);
 
-    /// @notice Emitted when the vault comps craps day passes out of its lifetime allowance
-    /// @param operator Vault owner who granted them
-    /// @param granted Passes handed out by this call
-    /// @param remaining What is left of the allowance afterwards
-    event CrapsCompsGranted(address indexed operator, uint256 granted, uint16 remaining);
+    /// @notice Emitted once per craps comp the vault owner grants
+    /// @param operator Vault owner who granted it
+    /// @param to Who was comped
+    /// @param kind What was comped, as the table's `vaultComp` kind
+    /// @param charged FLIP wei the comp lane paid for it
+    event CrapsCompGranted(address indexed operator, address indexed to, uint8 kind, uint256 charged);
+
+    /// @notice The vault owner set what `who` may still comp, in FLIP wei
+    event CrapsCompAllowanceSet(address indexed operator, address indexed who, uint256 amount);
 
     // ---------------------------------------------------------------------
     // CONSTANTS
@@ -522,12 +525,10 @@ contract DegenerusVault {
     ///      totalBudget + this floor.
     uint96 private _salvageVaultFloorWei;
 
-    /// @notice Craps day passes the vault may still comp, of a lifetime two hundred.
-    /// @dev ONLY EVER SPENT. There is no setter, refill, reset or daily renewal, so the figure a
-    ///      fresh deployment reports is the whole allowance the vault will ever hold. It rides in
-    ///      the salvage fields' slot rather than taking one of its own — one byte for the flag and
-    ///      twelve for the floor leave this at offset 13.
-    uint16 public crapsCompsRemaining = 200;
+    /// @notice FLIP wei of craps comps an address other than the vault owner may still assign
+    ///         through `crapsComp`. Set by the owner, spent by the holder at the table's own
+    ///         prices, drawn from the same FLIP comp lane. The owner's own grants never touch it.
+    mapping(address => uint256) public crapsCompAllowanceOf;
 
     // ---------------------------------------------------------------------
     // MODIFIERS
@@ -764,40 +765,54 @@ contract DegenerusVault {
         ICrapsPlayerActions(ContractAddresses.CRAPS).amendSlip(betId, chips);
     }
 
-    /// @notice Comp craps day passes to whoever the vault likes, out of a lifetime allowance of
-    ///         two hundred. A comped ticket is an ordinary normal day pass — it plays all seven of
-    ///         its day's windows, converts and refunds like any other, and nothing downstream can
-    ///         tell it from one a lootbox rolled.
-    /// @dev The allowance is spent BEFORE the table is called, so a recipient that reverts takes
-    ///      the whole batch and its debit down with it and no pass can be handed out twice. It is
-    ///      denominated in PASSES, not FLIP: no vault asset moves, and the count is the only cap.
-    /// @param recipients Who to comp. Each is handed `countEach` passes.
-    /// @param countEach Passes per recipient. The first lands on tomorrow where tomorrow is still
-    ///                  free; the rest bank as credit that never expires.
-    /// @return remaining What is left of the allowance.
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    /// @custom:reverts Insufficient If the batch is empty or asks more than the allowance holds
-    /// @custom:reverts ZeroAddress If any recipient is the zero address
-    function crapsGrantComps(address[] calldata recipients, uint16 countEach)
-        external
-        onlyVaultOwner
-        returns (uint16 remaining)
-    {
-        uint256 n = recipients.length;
-        if (n == 0 || countEach == 0) revert Insufficient();
-        uint256 total = n * countEach;
-        remaining = crapsCompsRemaining;
-        if (total > remaining) revert Insufficient();
-        unchecked {
-            remaining = uint16(remaining - total);
-        }
-        crapsCompsRemaining = remaining;
+    /// @notice Comp craps to whoever the vault likes — a seat, a day, future days, an upgrade or
+    ///         banked passes — out of the FLIP comp lane the table feeds from every finished
+    ///         battle. Priced by the table at exactly what the paid door burns; no vault asset
+    ///         moves, and nothing here can set a price.
+    /// @dev ALL OR NOTHING: any item the table refuses — a shut window, an occupied day, a bad
+    ///      lane, a lane that cannot cover it — takes the whole batch down with it.
+    /// @param codes One comp each, packed as the table's `vaultComp` reads it:
+    ///              bits 0..159 the player; bits 160..167 the kind (0 window · 1 day · 2 future
+    ///              days · 3 upgrade · 4 passes · 5 a window on days ahead); bit 168 high; bits
+    ///              176..199 the period, first day or ticket day; bits 200..207 the count, or the
+    ///              upgrade's period mask; bits 208..215 the period for kind 5.
+    /// @custom:reverts NotVaultOwner If caller neither holds >50.1% of DGVE nor an allowance
+    /// @custom:reverts Insufficient If the batch is empty, or exceeds the caller's allowance
+    /// @custom:reverts ZeroAddress If any code names the zero address
+    function crapsComp(uint256[] calldata codes) external {
+        bool owner = _isVaultOwner(msg.sender);
+        uint256 allowance = owner ? 0 : crapsCompAllowanceOf[msg.sender];
+        if (!owner && allowance == 0) revert NotVaultOwner();
+        uint256 n = codes.length;
+        if (n == 0) revert Insufficient();
+        uint256 total;
         for (uint256 i; i < n; ++i) {
-            address to = recipients[i];
+            uint256 code = codes[i];
+            address to = address(uint160(code));
             if (to == address(0)) revert ZeroAddress();
-            ICrapsPassDelivery(ContractAddresses.CRAPS).deliverPasses(to, countEach, 0);
+            uint256 charged = ICrapsComps(ContractAddresses.CRAPS).vaultComp(code);
+            total += charged;
+            emit CrapsCompGranted(msg.sender, to, uint8(code >> 160), charged);
         }
-        emit CrapsCompsGranted(msg.sender, total, remaining);
+        // A delegate spends its allowance at the table's own prices; the owner spends nothing here.
+        if (!owner) {
+            if (total > allowance) revert Insufficient();
+            unchecked {
+                crapsCompAllowanceOf[msg.sender] = allowance - total;
+            }
+        }
+    }
+
+    /// @notice Let `who` assign craps comps through `crapsComp` up to `amount` FLIP wei, charged
+    ///         to the comp lane at the table's prices. Replaces any earlier figure; zero revokes.
+    /// @param who The delegate.
+    /// @param amount What they may still comp, in FLIP wei.
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @custom:reverts ZeroAddress If `who` is the zero address
+    function setCrapsCompAllowance(address who, uint256 amount) external onlyVaultOwner {
+        if (who == address(0)) revert ZeroAddress();
+        crapsCompAllowanceOf[who] = amount;
+        emit CrapsCompAllowanceSet(msg.sender, who, amount);
     }
 
     /// @notice Deposit coins into coinflip for the vault

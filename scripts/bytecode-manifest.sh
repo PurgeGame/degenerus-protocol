@@ -21,7 +21,7 @@ CONTRACTS=(
   DegenerusGameBoonModule DegenerusGameDecimatorModule DegenerusGameDegeneretteModule
   DegenerusGameFoilPackModule DegenerusGameGameOverModule DegenerusGameJackpotModule
   DegenerusGameLootboxModule DegenerusGameMintModule DegenerusGameWhaleModule
-  GameAfkingModule CrapsBattle DegenerusParimutuel
+  GameAfkingModule CrapsBattle CrapsEngine DegenerusParimutuel
 )
 
 # Production sources only: the test tree is not needed for runtime bytecode and keeping it out

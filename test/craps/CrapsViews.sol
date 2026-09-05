@@ -158,6 +158,14 @@ contract CrapsViews is CrapsBattle {
         return (_bets[betId] >> BET_BOON_SHIFT()) & BET_BOON_MASK();
     }
 
+    function BET_CHIPS_SHIFT() external pure returns (uint256) {
+        return _BET_CHIPS_SHIFT;
+    }
+
+    function BET_CHIPS_MASK() external pure returns (uint256) {
+        return _BET_CHIPS_MASK;
+    }
+
     function BET_BOON_SHIFT() public pure returns (uint256) {
         return _BET_BOON_SHIFT;
     }
@@ -323,7 +331,16 @@ contract CrapsViews is CrapsBattle {
 
     /// @dev The holder's day-ticket seat number, or zero — the raw stored value.
     function daySeatNumberOf(uint24 day, address player) external view returns (uint256) {
-        return _daySeated[uint256(day) * BONUS_SLOTS_PER_DAY][player];
+        return _daySeated[uint256(day) * BONUS_SLOTS_PER_DAY][player] & _MASK32;
+    }
+
+    function seatedIn(uint64 slot, address player) external view returns (bool) {
+        return _bonusSeated[bytes32(uint256(slot))][player];
+    }
+
+    function windowReservedOf(uint64 slot) external view returns (uint256 count, uint256 high) {
+        bytes32 key = bytes32(uint256(slot));
+        return (_battles[key] & _MASK32, uint32(_highField[key]));
     }
 
     function VAULT_BOARD_OFF() external pure returns (uint32) {
