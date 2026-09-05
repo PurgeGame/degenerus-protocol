@@ -422,6 +422,7 @@ contract DegenerusGameFoilPackModule is
         address[] storage owners = lvlEntryOwner[lvl];
         uint256 ownerIdx = owners.length;
         owners.push(buyer);
+        emit EntryOwnerRegistered(lvl, uint32(ownerIdx), buyer);
         foilBuyers[resolveDay].push(
             ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
         );
@@ -1119,14 +1120,16 @@ contract DegenerusGameFoilPackModule is
             }
         }
 
-        address[] memory players = new address[](seated);
+        // Seats by registry position plus one, eight lanes, so the log carries one word
+        // rather than an address array and a zero lane reads as an empty seat.
+        uint256 seatOwners;
         for (uint256 j; j < seated; ) {
-            players[j] = st.player[j];
             unchecked {
+                seatOwners |= (st.ownerIdx[j] + 1) << (j << 5);
                 ++j;
             }
         }
-        emit RoundTraitsGenerated(lvl, round, seatTraits, seatMask, players);
+        emit RoundTraitsGenerated(lvl, round, seatTraits, seatMask, seatOwners);
 
         // Consume one ticket per seat; exhausted seats roll their remainder, then leave.
         uint256 k;

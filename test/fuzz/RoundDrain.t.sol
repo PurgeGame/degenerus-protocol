@@ -77,7 +77,7 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
 contract RoundDrain is Test {
     RoundDrainHarness internal h;
     uint24 internal constant LVL = 9;
-    bytes32 internal constant ROUND_SIG = keccak256("RoundTraitsGenerated(uint24,uint32,uint256,uint32,address[])");
+    bytes32 internal constant ROUND_SIG = keccak256("RoundTraitsGenerated(uint24,uint32,uint256,uint32,uint256)");
     bytes32 internal constant ENTRY_SIG = keccak256("TraitsGenerated(address,uint256,uint32)");
 
     function setUp() public {
@@ -361,14 +361,16 @@ contract RoundDrain is Test {
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length && !seen; ++i) {
                 if (logs[i].topics[0] != ROUND_SIG) continue;
-                (, uint256 seatTraits, , address[] memory players) =
-                    abi.decode(logs[i].data, (uint32, uint256, uint32, address[]));
+                (, uint256 seatTraits, , uint256 seatOwners) =
+                    abi.decode(logs[i].data, (uint32, uint256, uint32, uint256));
+                uint256 seated;
+                while (seated < 8 && (seatOwners >> (32 * seated)) & 0xffffffff != 0) ++seated;
                 for (uint256 q; q < 4 && !seen; ++q) {
                     uint8 t0 = uint8(seatTraits >> (8 * q));
                     if (((t0 >> 3) & 7) < 6) continue;
                     seen = true;
                     uint256 symbolMask;
-                    for (uint256 j; j < players.length; ++j) {
+                    for (uint256 j; j < seated; ++j) {
                         uint8 tj = uint8(seatTraits >> (32 * j + 8 * q));
                         assertEq(tj & 0xF8, t0 & 0xF8, "same quadrant and color");
                         uint256 bit = 1 << (tj & 7);

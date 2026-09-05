@@ -703,18 +703,25 @@ abstract contract DegenerusGameStorage {
         uint32 take
     );
 
+    /// @notice Emitted once per owner per level, the moment the owner takes a position in
+    ///         that level's entry registry. Every later `RoundTraitsGenerated` names its
+    ///         seats by these positions, so the log stream alone resolves them.
+    event EntryOwnerRegistered(uint24 indexed lvl, uint32 idx, address owner);
+
     /// @notice Emitted for every seated round of the ticket drain: the traits each seat
     ///         received this round and the seat owners in queue order. Lane j of
     ///         `seatTraits` (bits 32j..32j+31) holds seat j's four trait bytes, quadrant q
     ///         at byte q; bit 4j+q of `seatMask` is set when seat j received an entry in
     ///         quadrant q (a seat with fewer than four entries left takes the leading
-    ///         quadrants only).
+    ///         quadrants only). Lane j of `seatOwners` holds seat j's registry position
+    ///         PLUS ONE (`EntryOwnerRegistered` at this level), so a zero lane is an empty
+    ///         seat.
     event RoundTraitsGenerated(
         uint24 indexed lvl,
         uint32 round,
         uint256 seatTraits,
         uint32 seatMask,
-        address[] players
+        uint256 seatOwners
     );
 
     /// @notice Emitted when a future level is declared a thanos level.
@@ -1274,6 +1281,7 @@ abstract contract DegenerusGameStorage {
         uint256 idx = owners.length;
         if (idx >= type(uint32).max - 1) return 0;
         owners.push(buyer);
+        emit EntryOwnerRegistered(targetLevel, uint32(idx), buyer);
         return uint80((idx + 1) << OWNER_IDX_SHIFT);
     }
 

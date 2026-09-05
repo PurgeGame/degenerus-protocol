@@ -172,7 +172,7 @@ NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_resolveFoilBuyer	1	units
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runQuadrant	1	++n	Participant count under n <= seated <= 8.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runQuadrant	2	++j	Seat loop counter under j < seated <= 8.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	1	++q	Quadrant loop counter under q < 4.
-NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	2	++j	Seat loop counter under j < seated <= 8 (players array fill).
+BOUNDED	modules/DegenerusGameFoilPackModule.sol	_runRound	2	seatOwners |= (st.ownerIdx[j] + 1) << (j << 5)	Registry position < 2^32 - 1 so the +1 fits its 32-bit lane; j < seated <= 8 keeps the shift under 256 and the loop counter in range.
 BOUNDED	modules/DegenerusGameFoilPackModule.sol	_runRound	3	owed -= owed > 4 ? 4 : owed	Subtrahend is min(owed, 4) so the difference is never negative.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	4	++used	Write-unit counter: at most 8 seat exits plus the round's charged writes, reserved by the caller before the round.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	5	++k	Compaction index k <= j < seated <= 8.
