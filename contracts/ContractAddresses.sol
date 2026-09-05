@@ -105,7 +105,7 @@ library ContractAddresses {
     // it (local/test/testnet builds skip the constructor setName call). Patched per
     // network — L1 ReverseRegistrar on mainnet, L2ReverseRegistrar on Base.
     address internal constant ENS_REVERSE_REGISTRAR =
-        address(0x0000000000000000000000000000000000000000);
+        address(0);
     // Craps table — appended, so it shifts no prior address. FLIP authorizes this
     // address for mintForGame (payouts) and burnCoin (stakes), the same pair of
     // sinks every other FLIP game uses. Like every constant above it, the value
@@ -125,5 +125,5 @@ library ContractAddresses {
     // stays dark until the feed-swap governance path installs one. Patched per
     // network — the mainnet aggregator proxy, or MockLinkEthFeed locally.
     address internal constant LINK_ETH_FEED =
-        address(0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9);
+        address(0);
 }
