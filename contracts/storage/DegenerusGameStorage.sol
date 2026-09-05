@@ -1385,30 +1385,18 @@ abstract contract DegenerusGameStorage {
             mstore(0x00, elem)
             let w := add(keccak256(0x00, 0x20), shr(3, len))
             let lane := and(len, 7)
-            let word := 0
+            // Replicate the owner index once; fill a partial tail in one masked write.
+            let full := mul(ownerIdx, 0x0000000100000001000000010000000100000001000000010000000100000001)
             if lane {
-                word := sload(w)
+                let take := sub(8, lane)
+                if lt(occurrences, take) { take := occurrences }
+                let prefix := and(full, sub(shl(shl(5, take), 1), 1))
+                sstore(w, or(sload(w), shl(shl(5, lane), prefix)))
                 dirty := add(dirty, 1)
-            }
-            // Complete the tail word lane by lane.
-            for {} and(gt(lane, 0), gt(occurrences, 0)) {} {
-                word := or(word, shl(shl(5, lane), ownerIdx))
-                lane := add(lane, 1)
-                occurrences := sub(occurrences, 1)
-                if eq(lane, 8) {
-                    sstore(w, word)
-                    w := add(w, 1)
-                    lane := 0
-                    word := 0
-                }
-            }
-            // The run ended inside the tail word: store it and finish (the tail word's
-            // dirty write was counted when it was read).
-            if lane {
-                sstore(w, word)
+                occurrences := sub(occurrences, take)
+                w := add(w, 1)
             }
             // Whole words: the lane replicated eight times.
-            let full := mul(ownerIdx, 0x0000000100000001000000010000000100000001000000010000000100000001)
             for {} gt(occurrences, 7) {} {
                 sstore(w, full)
                 fresh := add(fresh, 1)
