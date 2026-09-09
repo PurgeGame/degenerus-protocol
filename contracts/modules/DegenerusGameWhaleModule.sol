@@ -212,7 +212,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        table (credit-only, spendable via applyCrapsPasses). Keys on passes bought,
      *        not price paid, so a boon-discounted purchase earns the same.
      *      - Distributes DGNRS minter rewards to the buyer.
-     *      - Affiliate: fresh 25% (levels 0-3) or 20% (levels 4+), 5% recycled, of the price
+     *      - Affiliate: fresh 25% (affiliate levels 1-3) or 20% (4+), halved to
+     *        12.5% / 10% for bulk buys (5+ paid passes). Recycled funds earn 5% of the price
      *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
      *
      *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+, 10/25/50% off standard with boon.
@@ -390,7 +391,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             false
         );
 
-        // Affiliate, fresh 25% at levels 0-3 / 20% at 4+ and 5% recycle exactly like a
+        // Affiliate, fresh 25% at affiliate levels 1-3 / 20% at 4+, halved for
+        // bulk buys, and 5% recycle exactly like a
         // normal ticket mint: the fresh portion (freshPaid) at the fresh rate, the
         // claimable/afking-funded remainder at the recycle rate, both frozen at level + 1
         // like the ticket affiliate (score 0, same as tickets). The FLIP basis converts at
@@ -400,8 +402,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             uint256 passPriceWei = PriceLookupLib.priceForLevel(passLevel);
             uint256 kickback;
             if (freshPaid != 0) {
+                uint256 freshFlip = (freshPaid * PRICE_COIN_UNIT) / passPriceWei;
+                if (quantity >= WHALE_BULK_BONUS_DIVISOR) {
+                    // Halve the normal fresh reward, including the buyer's kickback.
+                    freshFlip >>= 1;
+                }
                 kickback = affiliate.payAffiliate(
-                    (freshPaid * PRICE_COIN_UNIT) / passPriceWei,
+                    freshFlip,
                     affiliateCode,
                     buyer,
                     passLevel,
