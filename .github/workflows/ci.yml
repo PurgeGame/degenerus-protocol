@@ -53,6 +53,12 @@ jobs:
       - name: Install npm deps (OpenZeppelin, etc.)
         run: npm ci || npm install
 
+      - name: Deployment configuration regression tests
+        run: npx mocha test/deploy/OptionalConfig.test.js
+
+      - name: Configure deterministic Foundry deployment addresses
+        run: node scripts/lib/patchForFoundry.js
+
       - name: forge build
         run: forge build --sizes || true   # informational size table; the ceiling is enforced by the gate below
 
@@ -92,11 +98,10 @@ jobs:
       - name: Storage-layout oracle (MECH-02)
         run: bash scripts/layout/storage_layout_oracle.sh
 
-      # Source-drift gates: interface coverage, delegatecall target alignment, raw-selector
-      # bans, RNG-window consumer classification, pool-write provenance, and the dynamic-array
-      # delete ban. These enforce the invariants the README advertises — a green build must pass all six.
+      # Run all source-drift gates, including the newer crank, randomness,
+      # shared-storage, arithmetic and simulation parity registries.
       - name: Source-drift gates
-        run: make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete
+        run: make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 
       - name: forge test
         run: forge test -vvv
@@ -158,6 +163,8 @@ jobs:
         run: npm ci || npm install
       - name: Install Halmos
         run: pip install --upgrade halmos
+      - name: Configure deterministic Foundry deployment addresses
+        run: node scripts/lib/patchForFoundry.js
       - name: Halmos symbolic proofs
         run: FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --solver-timeout-assertion 120000
       - name: Deep invariant sweep (runs=1000 / depth=256)

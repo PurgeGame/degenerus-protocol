@@ -10,6 +10,8 @@
 // 64-bit mixer in place of keccak256.
 // Shared shooter dice are preserved within each battle; board scatter, survival flips, payout
 // rounding, boost rungs, and final exact-score ties use separate deterministic streams.
+// `--boost-mode legacy|rebalanced|rotating` provides common-seed counterfactuals: the old natural
+// table, the production natural table alone, or that table plus the production rotation.
 //
 // This file models PROTOCOL-SCHEDULED Dice Run only. Custom battles are deliberately excluded:
 // they retain legacy immediate-Goal/speed semantics and contribute to none of the scheduled
@@ -115,7 +117,44 @@ bool gHighWaterGoal = true;
 // THE SCHEDULED SHOOTER-PROFIT CONTINUUM, indexed by player-placed chips. The contract stores the
 // same eight rows in one packed constant. Custom battles are outside this scheduled-only model.
 constexpr std::array<int, 8> kBoostChancePct{15, 14, 12, 11, 9, 8, 6, 5};
-constexpr std::array<int, 8> kBoostUpliftBps{3'300, 3'000, 3'000, 3'000, 3'000, 2'500, 2'500, 2'000};
+constexpr std::array<int, 8> kBoostUpliftBps{3'200, 2'900, 2'900, 2'900, 2'900, 2'400, 2'300, 1'800};
+constexpr std::array<int, 8> kLegacyBoostUpliftBps{
+    3'300, 3'000, 3'000, 3'000, 3'000, 2'500, 2'500, 2'000
+};
+constexpr int kRotationUpliftPct = 5;
+constexpr std::string_view kRotatingShooterTag = "RotatingShooter";
+// The economic replica uses its counter-based mixer in place of keccak. This is the independent
+// domain fed to that mixer for the one shared start draw per field, split into the exact ASCII
+// bytes of the contract's 15-byte tag because the replica's mixer accepts 64-bit words.
+constexpr u64 kRotatingShooterDomainHi = 0x526f746174696e67ULL; // "Rotating"
+constexpr u64 kRotatingShooterDomainLo = 0x53686f6f746572ULL;   // "Shooter"
+
+enum class ShooterBoostMode { Legacy, Rebalanced, Rotating };
+
+ShooterBoostMode gShooterBoostMode = ShooterBoostMode::Rotating;
+int gCalibrationFieldSize = 40;
+std::string gMatrixCompositionFilter;
+int gMatrixHeadsFilter = 0;
+
+std::string_view shooterBoostModeName() {
+    switch (gShooterBoostMode) {
+        case ShooterBoostMode::Legacy: return "legacy";
+        case ShooterBoostMode::Rebalanced: return "rebalanced";
+        case ShooterBoostMode::Rotating: return "rotating";
+    }
+    return "unknown";
+}
+
+ShooterBoostMode shooterBoostModeFromName(std::string_view name) {
+    if (name == "legacy") return ShooterBoostMode::Legacy;
+    if (name == "rebalanced") return ShooterBoostMode::Rebalanced;
+    if (name == "rotating") return ShooterBoostMode::Rotating;
+    throw std::invalid_argument("boost mode must be legacy, rebalanced, or rotating");
+}
+
+const std::array<int, 8>& activeBoostUpliftBps() {
+    return gShooterBoostMode == ShooterBoostMode::Legacy ? kLegacyBoostUpliftBps : kBoostUpliftBps;
+}
 
 u64 mix64(u64 x) {
     x += 0x9e3779b97f4a7c15ULL;
@@ -128,6 +167,19 @@ u64 keyed(u64 a, u64 b = 0, u64 c = 0, u64 d = 0) {
     return mix64(a ^ mix64(b + 0x243f6a8885a308d3ULL)
                  ^ mix64(c + 0x13198a2e03707344ULL)
                  ^ mix64(d + 0xa4093822299f31d0ULL));
+}
+
+// Zero-based hand on which a zero-based seat receives the field's rotating-shooter uplift.
+// A fixed seat is enough for standalone calibration: the uniformly drawn start makes every seat's
+// offset uniform over the field. Field simulations pass the actual dense seat so all players share
+// one start and receive distinct sequential offsets, matching the contract's field correlation.
+int rotationTurn(u64 seed, int seat, int fieldSize) {
+    if (gShooterBoostMode != ShooterBoostMode::Rotating || fieldSize <= 0) return -1;
+    int start = static_cast<int>(
+        keyed(seed, kRotatingShooterDomainHi, kRotatingShooterDomainLo) % static_cast<u64>(fieldSize)
+    );
+    int offset = (seat + fieldSize - start) % fieldSize;
+    return offset < kMaxHands ? offset : -1;
 }
 
 struct Rng {
@@ -458,6 +510,8 @@ struct Run {
     int negativeHands{};
     int flatHands{};
     int boostedHands{};
+    bool rotationReached{};
+    bool rotationOverlap{};
 };
 
 i64 highWaterBps(const Run& r, const Terms& t);
@@ -479,7 +533,8 @@ Run settlePreparedBoard(
     u64 seed,
     u64 playerKey,
     int boostedShootersPct,
-    int winningsBoostTargetBps
+    int winningsBoostTargetBps,
+    int rotatingShooterTurn
 ) {
     i64 stakeMoney = std::accumulate(board.begin(), board.end(), i64{0});
     i64 bankrollMoney = t.bankroll * kMoneyUnits;
@@ -535,18 +590,24 @@ Run settlePreparedBoard(
         i64 beforeHandMoney = bankrollMoney;
         bankrollMoney -= needMoney;
         const Shooter& shooter = dice.get(r.hands);
-        bool boosted = boostedShootersPct != 0 && winningsBoostTargetBps != 0
+        bool naturallyBoosted = boostedShootersPct != 0 && winningsBoostTargetBps != 0
             && static_cast<int>(keyed(seed, playerKey, static_cast<u64>(r.hands), 0xb0057ULL) % 100)
                 < boostedShootersPct;
-        int shooterBoostPct = winningsBoostTargetBps / 100;
+        int shooterBoostPct = naturallyBoosted ? winningsBoostTargetBps / 100 : 0;
         int fractionalPct = winningsBoostTargetBps % 100;
-        if (boosted && fractionalPct != 0
+        if (naturallyBoosted && fractionalPct != 0
             && static_cast<int>(keyed(seed, playerKey, static_cast<u64>(r.hands), 0xb0058ULL) % 100)
                 < fractionalPct) {
             ++shooterBoostPct;
         }
-        if (boosted) ++r.boostedHands;
-        bankrollMoney += runHandMoney(board, shooter, boosted, shooterBoostPct) * q;
+        bool rotating = r.hands == rotatingShooterTurn;
+        if (rotating) {
+            shooterBoostPct += kRotationUpliftPct;
+            r.rotationReached = true;
+            r.rotationOverlap = naturallyBoosted;
+        }
+        if (shooterBoostPct != 0) ++r.boostedHands;
+        bankrollMoney += runHandMoney(board, shooter, shooterBoostPct != 0, shooterBoostPct) * q;
         i64 handGainMoney = bankrollMoney - beforeHandMoney;
         if (handGainMoney > 0) ++r.positiveHands;
         else if (handGainMoney < 0) ++r.negativeHands;
@@ -570,12 +631,31 @@ Run settlePreparedBoard(
     return r;
 }
 
-Run settleRun(const Terms& t, Strategy strategy, ShooterCache& dice, u64 seed, u64 playerKey) {
+Run settleRun(
+    const Terms& t,
+    Strategy strategy,
+    ShooterCache& dice,
+    u64 seed,
+    u64 playerKey,
+    int fieldSeat = -1,
+    int fieldSize = 0
+) {
     BoardMoney board = makeBoard(t, strategy, seed, playerKey);
     ChipCounts selected = pickedCounts(strategy);
     int placed = std::min(7, static_cast<int>(std::accumulate(selected.begin(), selected.end(), i64{0})));
+    if (fieldSize == 0) {
+        fieldSeat = 0;
+        fieldSize = gCalibrationFieldSize;
+    }
     return settlePreparedBoard(
-        t, board, dice, seed, playerKey, kBoostChancePct[placed], kBoostUpliftBps[placed]
+        t,
+        board,
+        dice,
+        seed,
+        playerKey,
+        kBoostChancePct[placed],
+        activeBoostUpliftBps()[placed],
+        rotationTurn(seed, fieldSeat, fieldSize)
     );
 }
 
@@ -584,12 +664,25 @@ Run settleBoardChoice(
     const ChipCounts& selected,
     ShooterCache& dice,
     u64 seed,
-    u64 playerKey
+    u64 playerKey,
+    int fieldSeat = -1,
+    int fieldSize = 0
 ) {
     BoardMoney board = makeBoardChoice(t, selected, seed, playerKey);
     int placed = static_cast<int>(std::accumulate(selected.begin(), selected.end(), i64{0}));
+    if (fieldSize == 0) {
+        fieldSeat = 0;
+        fieldSize = gCalibrationFieldSize;
+    }
     return settlePreparedBoard(
-        t, board, dice, seed, playerKey, kBoostChancePct[placed], kBoostUpliftBps[placed]
+        t,
+        board,
+        dice,
+        seed,
+        playerKey,
+        kBoostChancePct[placed],
+        activeBoostUpliftBps()[placed],
+        rotationTurn(seed, fieldSeat, fieldSize)
     );
 }
 
@@ -655,8 +748,10 @@ void printBountyMatchup(int fields, u64 seed) {
             for (std::size_t n = 0; n < runs.size(); ++n) {
                 u64 playerKey = keyed(seed, static_cast<u64>(kScheduledGoalMult), static_cast<u64>(f), n + 1);
                 Run run = n < 20
-                    ? settleRun(t, Strategy::Blank, dice, runSeed, playerKey)
-                    : settleBoardChoice(t, bountyBoard, dice, runSeed, playerKey);
+                    ? settleRun(t, Strategy::Blank, dice, runSeed, playerKey,
+                                static_cast<int>(n), static_cast<int>(runs.size()))
+                    : settleBoardChoice(t, bountyBoard, dice, runSeed, playerKey,
+                                        static_cast<int>(n), static_cast<int>(runs.size()));
                 runs[n] = ScoredRun{
                     run,
                     kScoreFloor,
@@ -783,6 +878,17 @@ struct Totals {
     /// the redemption-side figure a banked pass-day later adds to action when it is used.
     long double ordinarySeatDayAction{};
     long double highSeatDayAction{};
+    /// Rotation diagnostics count seat-runs, not wager value. Assigned excludes seats whose
+    /// offset would exceed the engine's 512-hand bound; reached means that hand actually ran.
+    long double rotationAssigned{};
+    long double rotationReached{};
+    long double rotationOverlap{};
+    /// Optional per-seat payout samples, enabled only for named scenario reports so large matrix
+    /// runs keep their bounded memory footprint. Credits include the lane multiplier already.
+    std::vector<long double> ordinaryEngineCredits;
+    std::vector<long double> highEngineCredits;
+    std::vector<long double> ordinaryReturnMultiples;
+    std::vector<long double> highReturnMultiples;
     /// The pool's balance at the end of the counted run, and its trajectory.
     long double progressiveEnd{};
     std::vector<long double> progressiveDaily;
@@ -891,7 +997,7 @@ long double percentile(std::vector<long double> xs, long double q) {
     return xs[lo] * (1 - f) + xs[hi] * f;
 }
 
-Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed) {
+Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed, bool collectEngineTails = false) {
     Rng rng(seed);
     std::vector<Seat> seats = makeSeats(scenario, seed);
     int highHeads = static_cast<int>(std::count_if(seats.begin(), seats.end(), [](const Seat& s) { return s.high; }));
@@ -965,7 +1071,10 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
             for (std::size_t n = 0; n < seats.size(); ++n) {
                 const Seat& seat = seats[n];
                 u64 pk = keyed(seat.playerKey, static_cast<u64>(day), static_cast<u64>(p));
-                Run run = settleRun(t, seat.strategy, dice, windowSeed, pk);
+                Run run = settleRun(
+                    t, seat.strategy, dice, windowSeed, pk,
+                    static_cast<int>(n), static_cast<int>(seats.size())
+                );
                 runs.push_back(ScoredRun{run, seat.standing, keyed(windowSeed, static_cast<u64>(n), 0x71eULL)});
 
                 i64 scale = seat.high ? highMult : 1;
@@ -980,11 +1089,28 @@ Totals simulateScenario(const Scenario& scenario, int days, int warmup, u64 seed
                 }
 
                 if (count) {
+                    if (rotationTurn(windowSeed, static_cast<int>(n), static_cast<int>(seats.size())) >= 0) {
+                        out.rotationAssigned += 1;
+                    }
+                    if (run.rotationReached) out.rotationReached += 1;
+                    if (run.rotationOverlap) out.rotationOverlap += 1;
                     out.riskBankroll += bankrollRisk;
                     out.rawBankroll += static_cast<long double>(run.rawMoney) / kMoneyUnits * scale;
                     out.engineCredit += engine;
                     out.faceCost += face;
                     out.totalCredit += engine;
+                    if (collectEngineTails) {
+                        long double returnMultiple = bankrollRisk == 0
+                            ? 0
+                            : static_cast<long double>(engine) / bankrollRisk;
+                        if (seat.high) {
+                            out.highEngineCredits.push_back(engine);
+                            out.highReturnMultiples.push_back(returnMultiple);
+                        } else {
+                            out.ordinaryEngineCredits.push_back(engine);
+                            out.ordinaryReturnMultiples.push_back(returnMultiple);
+                        }
+                    }
                     out.bountyPosted += t.bounty * scale;
                     if (run.stop == Stop::Bust) {
                         out.deletedOnBust += static_cast<long double>(run.rawMoney) / kMoneyUnits * scale;
@@ -1357,12 +1483,16 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                  "\tending_p50_x\tending_p99_x\tmax_peak_x\tmax_ending_x"
                  "\tmean_hands\thands_p99\tmax_hands\tmean_rolls\trolls_p99\tmax_rolls"
                  "\tmean_work_units\twork_p99\tmax_work_units\tcap_seat_pct"
+                 "\trotation_reach_seat_pct\trotation_overlap_pct_of_reached"
                  "\trecord_floor_x\trecord_hits\tfirst_year_record_hits\tfinal_record_x"
                  "\tdice_only_record_paid\tdice_only_record_pool_end\n";
 
     for (std::size_t ci = 0; ci < compositions.size(); ++ci) {
         MatrixComposition composition = compositions[ci];
+        if (!gMatrixCompositionFilter.empty()
+            && matrixCompositionName(composition) != gMatrixCompositionFilter) continue;
         for (int n : heads) {
+            if (gMatrixHeadsFilter != 0 && n != gMatrixHeadsFilter) continue;
             int fields = std::clamp(targetSeatsPerCell / n, 3'000, 200'000);
             {
                 Terms t;
@@ -1377,6 +1507,8 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                 long double workSum = 0;
                 std::size_t goalSeats = 0;
                 std::size_t cappedSeats = 0;
+                std::size_t rotationReachedSeats = 0;
+                std::size_t rotationOverlapSeats = 0;
                 std::size_t allBust = 0;
                 std::size_t common = 0;
                 std::size_t rare = 0;
@@ -1423,7 +1555,7 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                         Strategy strategy = matrixStrategy(composition, p, n);
                         u64 playerKey = keyed(seed, static_cast<u64>(f), static_cast<u64>(p + 1),
                                               keyed(ci, n, kScheduledGoalMult));
-                        Run run = settleRun(t, strategy, dice, runSeed, playerKey);
+                        Run run = settleRun(t, strategy, dice, runSeed, playerKey, p, n);
                         runs.push_back({run, kScoreFloor, keyed(runSeed, static_cast<u64>(p), 0x71eULL)});
                         risk += t.bankroll;
                         paid += run.paid;
@@ -1442,6 +1574,8 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                         maxPeak = std::max(maxPeak, highWaterBps(run, t));
                         if (run.stop == Stop::Goal) ++goalSeats;
                         if (run.capped) ++cappedSeats;
+                        if (run.rotationReached) ++rotationReachedSeats;
+                        if (run.rotationOverlap) ++rotationOverlapSeats;
                     }
                     std::size_t winner = 0;
                     for (std::size_t p = 1; p < runs.size(); ++p) {
@@ -1502,12 +1636,88 @@ void printPopulationMatrix(int targetSeatsPerCell, u64 seed) {
                           << integerPercentile(rollCounts, 0.99L) << '\t' << maxRolls << '\t'
                           << static_cast<double>(workSum / seats) << '\t'
                           << integerPercentile(workUnits, 0.99L) << '\t' << maxWork << '\t'
-                          << static_cast<double>(pctSeats(cappedSeats)) << "\t100\t" << recordHits << '\t'
+                          << static_cast<double>(pctSeats(cappedSeats)) << '\t'
+                          << static_cast<double>(pctSeats(rotationReachedSeats)) << '\t'
+                          << static_cast<double>(rotationReachedSeats == 0 ? 0.0L
+                              : 100.0L * rotationOverlapSeats / rotationReachedSeats)
+                          << "\t100\t" << recordHits << '\t'
                           << firstYearRecordHits << '\t'
                           << static_cast<double>(record / 10'000.0L) << '\t'
                           << recordPaid << '\t' << recordPool << "\n";
             }
         }
+    }
+}
+
+// A nested family of legal boards isolates all eight packed Hot Shooter rows at one field size.
+// Row seven is the canonical Sharp4 board; lower rows remove Place 10 chips first, then Place 5,
+// then Place 4. This is an economic differential, not a claim that the rows have equal base edge.
+ChipCounts boostRowBoard(int placed) {
+    ChipCounts board{};
+    int left = placed;
+    board[1] = std::min(3, left); // Place 4
+    left -= static_cast<int>(board[1]);
+    if (left != 0) {
+        board[2] = 1; // Place 5
+        --left;
+    }
+    board[6] = left; // Place 10, at most three for placed <= 7
+    return board;
+}
+
+void printBoostRowMatrix(int targetSeatsPerRow, u64 seed) {
+    int n = gCalibrationFieldSize;
+    int fields = std::clamp(targetSeatsPerRow / n, 3'000, 200'000);
+    Terms t;
+    t.bankroll = 3'000;
+    t.depth = 5;
+    t.round = t.bankroll / t.depth;
+    t.goal = t.bankroll * kScheduledGoalMult;
+
+    std::cout << "BOOST_ROW_HEADER\tplaced\theads\tfields\tseats\tengine_edge_pct"
+                 "\tgoal_seat_pct\tmean_hands\treturn_p99_x\treturn_p999_x\treturn_max_x"
+                 "\trotation_reach_pct\trotation_overlap_pct_of_reached\n";
+    for (int placed = 0; placed <= 7; ++placed) {
+        ChipCounts board = boostRowBoard(placed);
+        Rng rng(keyed(seed, 0x726f7773ULL, static_cast<u64>(placed), static_cast<u64>(n)));
+        long double risk = 0;
+        long double paid = 0;
+        long double hands = 0;
+        std::size_t goals = 0;
+        std::size_t reached = 0;
+        std::size_t overlaps = 0;
+        i64 maxReturnBps = 0;
+        std::vector<i64> returns;
+        returns.reserve(static_cast<std::size_t>(fields) * n);
+        for (int f = 0; f < fields; ++f) {
+            u64 runSeed = rng.next();
+            ShooterCache dice(runSeed);
+            for (int seat = 0; seat < n; ++seat) {
+                u64 playerKey = keyed(seed, 0x726f7770ULL, static_cast<u64>(placed),
+                                      keyed(static_cast<u64>(f), static_cast<u64>(seat)));
+                Run run = settleBoardChoice(t, board, dice, runSeed, playerKey, seat, n);
+                risk += t.bankroll;
+                paid += run.paid;
+                hands += run.hands;
+                if (run.stop == Stop::Goal) ++goals;
+                if (run.rotationReached) ++reached;
+                if (run.rotationOverlap) ++overlaps;
+                i64 returnBps = run.paid * 10'000 / t.bankroll;
+                returns.push_back(returnBps);
+                maxReturnBps = std::max(maxReturnBps, returnBps);
+            }
+        }
+        long double seats = static_cast<long double>(fields) * n;
+        std::cout << "BOOST_ROW\t" << placed << '\t' << n << '\t' << fields << '\t'
+                  << static_cast<std::uint64_t>(seats) << '\t'
+                  << static_cast<double>(100 * (risk - paid) / risk) << '\t'
+                  << static_cast<double>(100 * goals / seats) << '\t'
+                  << static_cast<double>(hands / seats) << '\t'
+                  << static_cast<double>(integerPercentile(returns, 0.99L) / 10'000.0L) << '\t'
+                  << static_cast<double>(integerPercentile(returns, 0.999L) / 10'000.0L) << '\t'
+                  << static_cast<double>(maxReturnBps / 10'000.0L) << '\t'
+                  << static_cast<double>(100 * reached / seats) << '\t'
+                  << static_cast<double>(reached == 0 ? 0.0L : 100.0L * overlaps / reached) << "\n";
     }
 }
 
@@ -1524,7 +1734,8 @@ void printSystemMatrix(int days, u64 seed) {
                  "\tengine_credit_per_day\tengine_retention_per_day\tengine_edge_pct"
                  "\traw_main_allocation_per_day\tallocation_pct_action\tprogressive_funded_per_day"
                  "\tprogressive_paid_per_day\tladder_paid_per_day\tnet_accrual_after_allocation_per_day"
-                 "\tnet_cash_per_day\tprogressive_pool_end\tcommon_per_year\trare_per_year\n";
+                 "\tnet_cash_per_day\tprogressive_pool_end\tcommon_per_year\trare_per_year"
+                 "\trotation_reach_pct\trotation_overlap_pct_of_reached\n";
     // THE PASS SPLIT'S REPORT rides the same matrix walk. Sources use the contract's frozen
     // numbering: 1 main ladder, 2 contested high, 3 sole rider, 4 progressive. Outstanding
     // pass-days assume ZERO redemption over the horizon — the upper bound on the float — and the
@@ -1537,7 +1748,10 @@ void printSystemMatrix(int days, u64 seed) {
                  "\tthirty_high_caps_per_year\toutstanding_pass_days_end"
                  "\tredeemed_action_per_day\tbudget_feedback_per_day\n";
     for (std::size_t ci = 0; ci < compositions.size(); ++ci) {
+        if (!gMatrixCompositionFilter.empty()
+            && matrixCompositionName(compositions[ci]) != gMatrixCompositionFilter) continue;
         for (int n : heads) {
+            if (gMatrixHeadsFilter != 0 && n != gMatrixHeadsFilter) continue;
             Scenario s = matrixScenario(compositions[ci], n);
             Totals t = simulateScenario(s, days, 21, keyed(seed, 0x535953ULL, ci, n));
             long double d = t.days;
@@ -1561,7 +1775,11 @@ void printSystemMatrix(int days, u64 seed) {
                       << static_cast<double>((t.cashBurn - t.totalCredit) / d) << '\t'
                       << static_cast<double>(t.progressiveEnd) << '\t'
                       << static_cast<double>(365 * t.progressiveCommonAwards / d) << '\t'
-                      << static_cast<double>(365 * t.progressiveRareAwards / d) << "\n";
+                      << static_cast<double>(365 * t.progressiveRareAwards / d) << '\t'
+                      << static_cast<double>(t.rotationAssigned == 0 ? 0
+                          : 100 * t.rotationReached / t.rotationAssigned) << '\t'
+                      << static_cast<double>(t.rotationReached == 0 ? 0
+                          : 100 * t.rotationOverlap / t.rotationReached) << "\n";
             long double normals = 0;
             long double highs = 0;
             long double value = 0;
@@ -1776,7 +1994,10 @@ void printWinnerPeakCalibration(int fields, u64 seed, int depthFilter) {
                     u64 playerKey = keyed(
                         seed, static_cast<u64>(fi), static_cast<u64>(f), static_cast<u64>(n + 1)
                     );
-                    Run run = settleRun(t, field[n], dice, runSeed, playerKey);
+                    Run run = settleRun(
+                        t, field[n], dice, runSeed, playerKey,
+                        static_cast<int>(n), static_cast<int>(runs.size())
+                    );
                     observedMaxHands = std::max(observedMaxHands, run.hands);
                     observedMaxRolls = std::max(observedMaxRolls, run.rolls);
                     ++handHistogram[static_cast<std::size_t>(run.hands)];
@@ -2059,6 +2280,7 @@ std::vector<Scenario> scenarios() {
         {"one_body_high_pass", {{"body_normal", 1, 0, S::Blank, 12, F::Cash}, {"body_high", 0, 1, S::Blank, 12, F::FreePass}}, 0},
         {"vault_high_pass_dark", {{"house", 1, 0, S::Blank, 12, F::Cash}, {"vault", 0, 1, S::Dark, 12, F::FreePass}}, 0},
         {"two_body_high_passes", {{"body_high", 0, 2, S::Blank, 12, F::FreePass}}, 0},
+        {"tail_10x_contested", {{"protocol", 2, 0, S::Blank, 12, F::Cash}, {"sharp", 10, 0, S::Sharp4, 12, F::Cash}, {"whale", 0, 2, S::Sharp4, 12, F::Cash}}, 10},
         {"tail_100x_contested", {{"protocol", 2, 0, S::Blank, 12, F::Cash}, {"sharp", 10, 0, S::Sharp4, 12, F::Cash}, {"whale", 0, 2, S::Sharp4, 12, F::Cash}}, 100},
         // THE PROGRESSIVE'S CALIBRATION COHORT. Forty daily tickets, deliberately heterogeneous
         // and deliberately not efficient: twenty blank/random and five each of fixed place 4/10,
@@ -2222,7 +2444,9 @@ std::vector<BoardSearchStats> evaluateBoardChoices(
                 bool haveFieldBest = false;
                 for (std::size_t i = 0; i < field.size(); ++i) {
                     u64 pk = keyed(incumbentOwners[i], static_cast<u64>(day), static_cast<u64>(p));
-                    Run run = settleBoardChoice(t, field[i], dice, windowSeed, pk);
+                    Run run = settleBoardChoice(
+                        t, field[i], dice, windowSeed, pk, static_cast<int>(i), 32
+                    );
                     ScoredRun scored{run, kScoreFloor, keyed(windowSeed, i, 0x71eULL)};
                     if (!haveFieldBest || better(scored, fieldBest)) {
                         fieldBest = scored;
@@ -2234,7 +2458,7 @@ std::vector<BoardSearchStats> evaluateBoardChoices(
                 u64 candidateTie = keyed(windowSeed, 31, 0x71eULL);
                 for (std::size_t i = 0; i < candidateIds.size(); ++i) {
                     Run run = settleBoardChoice(
-                        t, allBoards[candidateIds[i]], dice, windowSeed, candidateKey
+                        t, allBoards[candidateIds[i]], dice, windowSeed, candidateKey, 31, 32
                     );
                     ScoredRun scored{run, kScoreFloor, candidateTie};
                     BoardSearchStats& s = stats[i];
@@ -2429,6 +2653,9 @@ void usage(const char* argv0) {
                  " [--winner-calibration N]"
                  " [--bounty-matchup N]"
                  " [--population-matrix-seats N] [--system-matrix-days N]"
+                 " [--boost-row-matrix-seats N]"
+                 " [--matrix-composition NAME] [--matrix-heads N]"
+                 " [--boost-mode legacy|rebalanced|rotating] [--calibration-field-size N]"
                  " [--jackpot-depth 5]"
                  " [--settings-strategy STRATEGY] [--dont-profit-num N] [--dont-profit-den N]"
                  " [--main-base FLIP]"
@@ -2457,6 +2684,7 @@ int main(int argc, char** argv) {
     int bountyMatchupFields = 0;
     int populationMatrixSeats = 0;
     int systemMatrixDays = 0;
+    int boostRowMatrixSeats = 0;
     int jackpotDepthFilter = 0;
     u64 seed = 20'260'826ULL;
     std::string scenarioFilter;
@@ -2486,6 +2714,11 @@ int main(int argc, char** argv) {
         else if (arg == "--bounty-matchup") bountyMatchupFields = std::stoi(argv[++i]);
         else if (arg == "--population-matrix-seats") populationMatrixSeats = std::stoi(argv[++i]);
         else if (arg == "--system-matrix-days") systemMatrixDays = std::stoi(argv[++i]);
+        else if (arg == "--boost-row-matrix-seats") boostRowMatrixSeats = std::stoi(argv[++i]);
+        else if (arg == "--matrix-composition") gMatrixCompositionFilter = argv[++i];
+        else if (arg == "--matrix-heads") gMatrixHeadsFilter = std::stoi(argv[++i]);
+        else if (arg == "--boost-mode") gShooterBoostMode = shooterBoostModeFromName(argv[++i]);
+        else if (arg == "--calibration-field-size") gCalibrationFieldSize = std::stoi(argv[++i]);
         else if (arg == "--jackpot-depth") jackpotDepthFilter = std::stoi(argv[++i]);
         else if (arg == "--settings-strategy") settingStrategyFilter = argv[++i];
         else if (arg == "--board-search") boardSearchSamples = std::stoi(argv[++i]);
@@ -2517,6 +2750,7 @@ int main(int argc, char** argv) {
         || bountyMatchupFields < 0
         || populationMatrixSeats < 0
         || systemMatrixDays < 0
+        || boostRowMatrixSeats < 0
         || boardSearchSamples < 0 || searchRefineSamples < 0 || searchTop <= 0) {
         throw std::invalid_argument("sample counts must be positive (settings may be zero)");
     }
@@ -2525,6 +2759,22 @@ int main(int argc, char** argv) {
         throw std::invalid_argument("Don't Pass ratio must satisfy 0 <= numerator <= denominator and divide 1200");
     }
     if (gMainBase < 0) throw std::invalid_argument("main base cannot be negative");
+    if (gCalibrationFieldSize <= 0) throw std::invalid_argument("calibration field size must be positive");
+    if (gMatrixHeadsFilter != 0) {
+        constexpr std::array<int, 8> heads{1, 2, 5, 10, 20, 40, 80, 160};
+        if (std::find(heads.begin(), heads.end(), gMatrixHeadsFilter) == heads.end()) {
+            throw std::invalid_argument("matrix heads must be 1, 2, 5, 10, 20, 40, 80, or 160");
+        }
+    }
+    if (!gMatrixCompositionFilter.empty()) {
+        constexpr std::array<std::string_view, 5> names{
+            "all_random", "all_bankroll_pick", "half_random_half_bankroll_pick",
+            "standard_mixed", "one_bounty_vs_random"
+        };
+        if (std::find(names.begin(), names.end(), gMatrixCompositionFilter) == names.end()) {
+            throw std::invalid_argument("unknown matrix composition");
+        }
+    }
     if (gEscHands <= 0 || gEscHands > 16) throw std::invalid_argument("esc-hands must be in 1..16");
     if (gEscCap <= 0 || gEscCap > 0xFFFFFFFFLL) {
         throw std::invalid_argument("esc-cap must be in 1..4294967295");
@@ -2544,8 +2794,17 @@ int main(int argc, char** argv) {
               << kActionBps << "\tmain_base\t" << gMainBase
               << "\tesc_hands\t" << gEscHands << "\tesc_cap\t" << gEscCap << "\tdont_profit_ratio\t"
               << gDontProfitNum << '/' << gDontProfitDen << "\tscheduled_goal\t" << kScheduledGoalMult
+              << "\tboost_mode\t" << shooterBoostModeName()
+              << "\tcalibration_field_size\t" << gCalibrationFieldSize
               << "\tboost_chance_by_placed\t15,14,12,11,9,8,6,5"
-                 "\tboost_uplift_bps_by_placed\t3300,3000,3000,3000,3000,2500,2500,2000\n";
+              << "\tboost_uplift_bps_by_placed\t";
+    for (std::size_t i = 0; i < activeBoostUpliftBps().size(); ++i) {
+        if (i != 0) std::cout << ',';
+        std::cout << activeBoostUpliftBps()[i];
+    }
+    std::cout << "\trotation_uplift_pct\t"
+              << (gShooterBoostMode == ShooterBoostMode::Rotating ? kRotationUpliftPct : 0)
+              << "\trotation_tag\t" << kRotatingShooterTag << "\n";
     std::cout << "PROPOSED_RULES\thigh_water_goal\t" << (gHighWaterGoal ? 1 : 0)
               << "\tpeak_jackpot_table\t25x_120x"
               << "\tcustoms\texcluded_legacy_product\n";
@@ -2556,10 +2815,10 @@ int main(int argc, char** argv) {
     };
     auto darkPerShooterEdge = [&](int placed) {
         return 100 * (1 - darkWinProbability * (
-            1 + scheduledProfitRatio(kBoostChancePct[placed], kBoostUpliftBps[placed])
+            1 + scheduledProfitRatio(kBoostChancePct[placed], activeBoostUpliftBps()[placed])
         ));
     };
-    std::cout << "DONT_PASS_HEADER\tplaced_chips\tprofit_ratio\tedge_pct\n";
+    std::cout << "DONT_PASS_HEADER\tplaced_chips\tprofit_ratio\tnatural_only_edge_pct\n";
     for (int placed = 0; placed <= 7; ++placed) {
         std::cout << "DONT_PASS\t" << placed << '\t' << gDontProfitNum << '/' << gDontProfitDen
                   << '\t' << static_cast<double>(darkPerShooterEdge(placed)) << "\n";
@@ -2587,9 +2846,10 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    if (populationMatrixSeats != 0 || systemMatrixDays != 0) {
+    if (populationMatrixSeats != 0 || systemMatrixDays != 0 || boostRowMatrixSeats != 0) {
         if (populationMatrixSeats != 0) printPopulationMatrix(populationMatrixSeats, seed);
         if (systemMatrixDays != 0) printSystemMatrix(systemMatrixDays, keyed(seed, 0x4d4154524958ULL));
+        if (boostRowMatrixSeats != 0) printBoostRowMatrix(boostRowMatrixSeats, keyed(seed, 0x524f5753ULL));
         return 0;
     }
 
@@ -2744,14 +3004,18 @@ int main(int argc, char** argv) {
                  "\tface_cost_per_day\tcash_burn_per_day\ttotal_credit_per_day\tnet_cash_burn_per_day"
                  "\tboost_paid_p50\tboost_paid_p90\tboost_paid_p99"
                  "\tprog_funded_per_day\tprog_rolled_per_day\tprog_paid_per_day\tprog_pool_end"
-                 "\tprog_common_per_year\tprog_rare_per_year\n";
+                 "\tprog_common_per_year\tprog_rare_per_year"
+                 "\trotation_reach_pct\trotation_overlap_pct_of_reached\n";
+    std::cout << "ENGINE_TAIL_HEADER\tname\tlane\tseat_runs\tcredit_p50\tcredit_p90"
+                 "\tcredit_p99\tcredit_p999\tcredit_max\treturn_p99_x\treturn_p999_x"
+                 "\treturn_max_x\n";
 
     auto all = scenarios();
     for (std::size_t si = 0; si < all.size(); ++si) {
         if (matchupOnly) break;
         const Scenario& scenario = all[si];
         if (!scenarioFilter.empty() && scenario.name != scenarioFilter) continue;
-        Totals t = simulateScenario(scenario, days, 21, keyed(seed, si, 0x5ceULL));
+        Totals t = simulateScenario(scenario, days, 21, keyed(seed, si, 0x5ceULL), true);
         long double d = t.days;
         long double edge = t.riskBankroll == 0 ? 0 : 100 * (t.riskBankroll - t.engineCredit) / t.riskBankroll;
         std::cout << "SCENARIO\t" << scenario.name << '\t' << static_cast<double>(t.ordinarySeats / t.windows) << '\t'
@@ -2770,7 +3034,28 @@ int main(int argc, char** argv) {
                   << static_cast<double>(t.progressivePaid / d) << '\t'
                   << static_cast<double>(t.progressiveEnd) << '\t'
                   << static_cast<double>(365 * t.progressiveCommonAwards / d) << '\t'
-                  << static_cast<double>(365 * t.progressiveRareAwards / d) << "\n";
+                  << static_cast<double>(365 * t.progressiveRareAwards / d) << '\t'
+                  << static_cast<double>(t.rotationAssigned == 0 ? 0
+                      : 100 * t.rotationReached / t.rotationAssigned) << '\t'
+                  << static_cast<double>(t.rotationReached == 0 ? 0
+                      : 100 * t.rotationOverlap / t.rotationReached) << "\n";
+
+        auto printEngineTail = [&](std::string_view lane,
+                                   const std::vector<long double>& credits,
+                                   const std::vector<long double>& multiples) {
+            if (credits.empty()) return;
+            std::cout << "ENGINE_TAIL\t" << scenario.name << '\t' << lane << '\t' << credits.size() << '\t'
+                      << static_cast<double>(percentile(credits, 0.50L)) << '\t'
+                      << static_cast<double>(percentile(credits, 0.90L)) << '\t'
+                      << static_cast<double>(percentile(credits, 0.99L)) << '\t'
+                      << static_cast<double>(percentile(credits, 0.999L)) << '\t'
+                      << static_cast<double>(*std::max_element(credits.begin(), credits.end())) << '\t'
+                      << static_cast<double>(percentile(multiples, 0.99L)) << '\t'
+                      << static_cast<double>(percentile(multiples, 0.999L)) << '\t'
+                      << static_cast<double>(*std::max_element(multiples.begin(), multiples.end())) << "\n";
+        };
+        printEngineTail("ordinary", t.ordinaryEngineCredits, t.ordinaryReturnMultiples);
+        printEngineTail("high", t.highEngineCredits, t.highReturnMultiples);
 
         for (std::size_t g = 0; g < scenario.cohorts.size(); ++g) {
             const Cohort& c = scenario.cohorts[g];

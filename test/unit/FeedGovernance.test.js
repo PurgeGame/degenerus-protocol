@@ -90,6 +90,23 @@ describe("Feed Governance", function () {
       const { admin } = await loadFixture(deployFullProtocol);
       expect(await admin.linkEthPriceFeed()).to.equal(ZERO_ADDRESS);
     });
+
+    it("the zero LINK_ETH_FEED constant leaves the slot empty and the swap path open at once", async function () {
+      const { admin, deployer } = await loadFixture(deployFullProtocol);
+      // This fixture pins ContractAddresses.LINK_ETH_FEED to zero, so the Admin
+      // constructor installs nothing, the empty slot reads as maximally stalled,
+      // and the vault owner can propose in the very first block — no waiting for
+      // a stall threshold that an installed feed would impose.
+      expect(await admin.linkEthPriceFeed()).to.equal(ZERO_ADDRESS);
+      expect(await admin.linkAmountToEth(eth("1"))).to.equal(0n);
+
+      const newFeed = await deployNewFeed();
+      const tx = await admin
+        .connect(deployer)
+        .proposeFeedSwap(await newFeed.getAddress());
+      const ev = await getEvent(tx, admin, "FeedProposalCreated");
+      expect(ev.args.path).to.equal(0n); // Admin path
+    });
   });
 
   // =========================================================================

@@ -49,6 +49,12 @@ export async function deployFullProtocol() {
     STETH_TOKEN: await mockStETH.getAddress(),
     LINK_TOKEN: await mockLINK.getAddress(),
     VRF_COORDINATOR: await mockVRF.getAddress(),
+    // Pinned to zero on purpose: this fixture is the one that exercises the
+    // feed-swap governance path, which needs the feed to start unhealthy. The
+    // Foundry fixture pins mockFeed instead, so the constructor-install path is
+    // covered there (test/fuzz/LinkFeedGenesis.t.sol). mockFeed below is still
+    // deployed — the governance tests install it by vote.
+    LINK_ETH_FEED: "0x0000000000000000000000000000000000000000",
     CREATOR: deployer.address,
   };
 

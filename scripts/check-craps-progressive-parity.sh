@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# ── Craps progressive parity gate ───────────────────────────────────────
-# The progressive's funding rule and its two HIGH-POINT cutoffs live in TWO places
+# ── Craps system-model parity gate ──────────────────────────────────────
+# The progressive rules and scheduled shooter terms live in TWO places
 # by necessity: the contract that pays them and the C++ model the economics are
 # calibrated on. Neither can read the other, so this holds them together on
 # source text — a cutoff moved in one and not the other is a model that no longer
@@ -19,6 +19,8 @@
 #         `kProgEventRareBps`. The event's repeat double is a `x2` on the event rungs in both
 #         files and carries no constant of its own.
 #   4. the escalator and bounds == `gEscHands` / `gEscCap` / `kMaxHands` / `kRollBudget`
+#   5. the packed Hot Shooter table == `kBoostChancePct` / `kBoostUpliftBps`
+#   6. `_ROTATION_UPLIFT` and `ROTATING_SHOOTER_TAG` == the model's production defaults
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -133,6 +135,66 @@ for label, sol_name, cpp_name in (
     if a is not None and b is not None and a != b:
         bad.append(f"{label} doublings: contract {a} vs model {b}")
 
+# Scheduled Hot Shooter and rotating-shooter economics. Decode the contract's packed rows rather
+# than comparing its prose table, then compare those rows with the production (not legacy
+# counterfactual) arrays in the model.
+packed_hex = one(
+    r'_shooterBoostTerms\s*\([^)]*\)[\s\S]*?return\s*\(\s*(0x[0-9A-Fa-f]+)\s*>>',
+    sol,
+    '_shooterBoostTerms packed table',
+)
+
+def cpp_array(name):
+    body = one(rf'{name}\s*\{{([^}}]+)\}}\s*;', cpp, name)
+    if body is None:
+        return None
+    return [int(x.replace("'", '')) for x in re.findall(r"[0-9][0-9']*", body)]
+
+chances = cpp_array('kBoostChancePct')
+uplifts_bps = cpp_array('kBoostUpliftBps')
+if packed_hex is not None and chances is not None and uplifts_bps is not None:
+    packed = int(packed_hex, 16)
+    contract_chances = [((packed >> (16 * i)) & 0xFFFF) & 0xFF for i in range(8)]
+    contract_uplifts_bps = [(((packed >> (16 * i)) & 0xFFFF) >> 8) * 100 for i in range(8)]
+    if len(chances) != 8 or chances != contract_chances:
+        bad.append(f"Hot Shooter chances: contract {contract_chances} vs model {chances}")
+    if len(uplifts_bps) != 8 or uplifts_bps != contract_uplifts_bps:
+        bad.append(f"Hot Shooter uplifts: contract {contract_uplifts_bps} bps vs model {uplifts_bps} bps")
+
+rotation_sol = num(sol, r'_ROTATION_UPLIFT\s*=\s*([0-9_]+)\s*;', '_ROTATION_UPLIFT')
+rotation_cpp = num(cpp, r'kRotationUpliftPct\s*=\s*([0-9\']+)\s*;', 'kRotationUpliftPct')
+if rotation_sol is not None and rotation_cpp is not None and rotation_sol != rotation_cpp:
+    bad.append(f"rotating-shooter uplift: contract {rotation_sol}% vs model {rotation_cpp}%")
+
+tag_hex = one(r'ROTATING_SHOOTER_TAG\s*=\s*(0x[0-9A-Fa-f]+)\s*;', sol, 'ROTATING_SHOOTER_TAG')
+tag_cpp = one(r'kRotatingShooterTag\s*=\s*"([^"]+)"\s*;', cpp, 'kRotatingShooterTag')
+if tag_hex is not None and tag_cpp is not None:
+    tag_int = int(tag_hex, 16)
+    tag_bytes = tag_int.to_bytes(max(1, (tag_int.bit_length() + 7) // 8), 'big')
+    try:
+        tag_sol = tag_bytes.decode('ascii')
+    except UnicodeDecodeError:
+        tag_sol = repr(tag_bytes)
+    if tag_sol != tag_cpp:
+        bad.append(f"rotating-shooter domain: contract {tag_sol!r} vs model {tag_cpp!r}")
+    hi = one(r'kRotatingShooterDomainHi\s*=\s*(0x[0-9A-Fa-f]+)ULL\s*;', cpp,
+             'kRotatingShooterDomainHi')
+    lo = one(r'kRotatingShooterDomainLo\s*=\s*(0x[0-9A-Fa-f]+)ULL\s*;', cpp,
+             'kRotatingShooterDomainLo')
+    if hi is not None and lo is not None:
+        model_bytes = int(hi, 16).to_bytes(8, 'big')
+        lo_int = int(lo, 16)
+        model_bytes += lo_int.to_bytes(max(1, (lo_int.bit_length() + 7) // 8), 'big')
+        try:
+            model_tag = model_bytes.decode('ascii')
+        except UnicodeDecodeError:
+            model_tag = repr(model_bytes)
+        if model_tag != tag_sol:
+            bad.append(f"rotating-shooter mixer domain: contract {tag_sol!r} vs model {model_tag!r}")
+
+if 'gShooterBoostMode = ShooterBoostMode::Rotating' not in cpp:
+    bad.append("the model's default shooter mode is no longer production rotating")
+
 for line in bad:
     print(f"MISMATCH {line}")
 sys.exit(1 if bad else 0)
@@ -143,6 +205,6 @@ if [ $rc -ne 0 ]; then
 fi
 
 if [ $fail -eq 0 ]; then
-  echo "${GREEN}PASS${OFF} craps progressive: base subsidy, all four rungs and the repeat double, the fixed 5x high-point cutoffs and the escalator agree with the model"
+  echo "${GREEN}PASS${OFF} craps system model: funding, progressive, engine bounds, Hot Shooter table, and rotating-shooter terms agree with the contracts"
 fi
 exit $fail

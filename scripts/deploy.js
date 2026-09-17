@@ -66,6 +66,14 @@ async function main() {
     external.ENS_REVERSE_REGISTRAR = process.env.ENS_REVERSE_REGISTRAR;
   }
 
+  // Optional: Chainlink LINK/ETH aggregator (mainnet proxy
+  // 0xDC530D9457755926550b59e8ECcdaE7624181557). DegenerusAdmin's constructor
+  // installs it, so donation rewards price from block one. If unset, the
+  // constant stays address(0) and the feed arrives later via proposeFeedSwap.
+  if (process.env.LINK_ETH_FEED) {
+    external.LINK_ETH_FEED = process.env.LINK_ETH_FEED;
+  }
+
   // 4. Patch ContractAddresses.sol
   console.log("Patching ContractAddresses.sol...");
   patchContractAddresses(predicted, external, deployDayBoundary, vrfKeyHash);

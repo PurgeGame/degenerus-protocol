@@ -74,6 +74,7 @@ async function main() {
     STETH_TOKEN: mocks.STETH_TOKEN,
     LINK_TOKEN: mocks.LINK_TOKEN,
     VRF_COORDINATOR: mocks.VRF_COORDINATOR,
+    LINK_ETH_FEED: mocks.LINK_ETH_FEED,
     CREATOR: deployer.address,
   };
 

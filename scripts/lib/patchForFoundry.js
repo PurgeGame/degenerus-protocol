@@ -59,6 +59,7 @@ export function patchForFoundry() {
     STETH_TOKEN: mockAddrs.MockStETH,
     LINK_TOKEN: mockAddrs.MockLinkToken,
     VRF_COORDINATOR: mockAddrs.MockVRFCoordinator,
+    LINK_ETH_FEED: mockAddrs.MockLinkEthFeed,
     CREATOR: FOUNDRY_TEST_CONTRACT,
   };
 

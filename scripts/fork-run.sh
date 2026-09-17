@@ -18,6 +18,8 @@
 #   LINK_TOKEN              0x514910771AF9Ca656af840dff83E8264EcF986CA
 # Optional:
 #   ENS_REVERSE_REGISTRAR   set it to exercise the one-shot constructor setName
+#   LINK_ETH_FEED           0xDC530D9457755926550b59e8ECcdaE7624181557 — set it to
+#                           exercise the constructor's LINK/ETH feed install
 #   FORK_BLOCK              pin a block for reproducibility
 #
 # Usage: ./scripts/fork-run.sh

@@ -13,7 +13,9 @@ const DEFAULT_CONTRACT_FILE = resolve(
  *
  * @param {Map<string, string>} addressMap - Predicted protocol addresses (key → address)
  * @param {object} external - External/config addresses:
- *   { STETH_TOKEN, LINK_TOKEN, VRF_COORDINATOR, CREATOR }
+ *   { STETH_TOKEN, LINK_TOKEN, VRF_COORDINATOR, CREATOR,
+ *     LINK_ETH_FEED?, ENS_REVERSE_REGISTRAR? }
+ *   Omitted optional addresses reset to zero on every build.
  * @param {number} deployDayBoundary - Computed DEPLOY_DAY_BOUNDARY value
  * @param {string} vrfKeyHash - 32-byte VRF key hash (hex string with 0x prefix)
  * @param {string} [contractFilePath] - Optional path to ContractAddresses.sol (for testnet builds)
@@ -38,8 +40,12 @@ export function patchContractAddresses(
     src = replaceAddressConstant(src, key, addr);
   }
 
-  // Patch external addresses
-  for (const [key, addr] of Object.entries(external)) {
+  // Optional integrations belong to this build, never to a previous patch.
+  const externalAddresses = { ...external };
+  for (const key of ["LINK_ETH_FEED", "ENS_REVERSE_REGISTRAR"]) {
+    externalAddresses[key] ||= "0x0000000000000000000000000000000000000000";
+  }
+  for (const [key, addr] of Object.entries(externalAddresses)) {
     if (key === "VRF_KEY_HASH") continue; // handled separately
     if (addr) {
       src = replaceAddressConstant(src, key, addr);

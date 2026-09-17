@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {StdStorage, stdStorage} from "forge-std/StdStorage.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
@@ -19,8 +18,6 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///      property the design targets (the subscription's real spend lands at 20% of the
 ///      donation, i.e. the charge is 5x the premium-inclusive cost of the request).
 contract MiddayRngCreditTest is DeployProtocol {
-    using stdStorage for StdStorage;
-
     /// @dev Mirrors of the contract-side constants under test. Deliberately restated rather
     ///      than imported: a silent edit to either constant must FAIL these tests, not be
     ///      tracked by them.
@@ -52,13 +49,9 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.deal(outsider, 1_000 ether);
         vm.deal(address(game), 5_000 ether);
 
-        // Governance installs the LINK/ETH feed post-deploy, so the fixture leaves it unset
-        // and linkAmountToEth returns 0 for everything. Install it directly: without this the
-        // charge cannot be priced and the refusal tests would pass vacuously.
-        stdstore
-            .target(address(admin))
-            .sig("linkEthPriceFeed()")
-            .checked_write(address(mockFeed));
+        // The charge is priced off the Admin's LINK/ETH feed, which the deploy pins through
+        // ContractAddresses.LINK_ETH_FEED. Assert it landed: an unset feed values everything
+        // at 0 and every refusal test below would pass vacuously.
         require(
             admin.linkAmountToEth(1 ether) != 0,
             "harness: LINK/ETH feed not installed, charge tests would be vacuous"
