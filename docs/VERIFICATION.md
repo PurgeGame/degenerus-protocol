@@ -62,15 +62,17 @@ solc 0.8.34); re-run against the exact delivery revision if it differs.
 | --- | --- |
 | Foundry, whole `test/` tree in seven compile units | 2,422 passed, 0 failed, 104 skipped, 294 suites |
 | Hardhat `make test-hardhat` | 1,656 passing, 22 pending, 0 failing |
+| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the accepted byte-identical baseline check and the empty-bucket skip-rate bound, both pre-disclosed reds |
 | Twelve `make check-*` gates and the storage layout oracle | all pass |
 | Slither 0.11.5, 182 contracts | 4,119 results, 188 High; composition identical to the prior scan |
 | Aderyn 0.6.8 | 10 High, 22 Low, unchanged |
 | EIP-170 runtime size, checked-in pins | largest 24,444 bytes (`DegenerusGameMintModule`, 132 spare); none over |
 
-`npm run test:stat` was not part of this pass; six of its statistical checks are accepted
-reds.
 
 Some `test/repro` tests deliberately assert an undesirable current behavior: a passing
 witness confirms the behavior, not a fix. Inspect test intent, skips and failures.
-Slither/Aderyn output requires source-specific triage. Symbolic proofs and deep invariants
-are separate runs, not implied by `npm test` or an ordinary Foundry pass.
+Slither/Aderyn output requires source-specific triage; the per-class triage of the High tier
+(dominated by `uninitialized-state` on the shared-storage delegatecall modules) is in the
+[archived known-issues register, section 5](archive/pre-audit-2026-09-05/KNOWN-ISSUES.md#5-automated-tool-findings-pre-disclosed),
+measured at the prior tree; the composition is unchanged at this one. Symbolic proofs and deep
+invariants are separate runs, not implied by `npm test` or an ordinary Foundry pass.

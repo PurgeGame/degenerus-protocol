@@ -7,7 +7,8 @@ import {Vm} from "forge-std/Vm.sol";
 import {BoonBatchParityHarness, BoonBatchQuestRecorder} from "../fuzz/BoonBatchParity.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @notice Audit witnesses, asserting the current vulnerable behavior rather than a fix.
+/// @notice Audit witnesses. Each test pins a disclosed resolution-order or level-keyed behavior as it
+///         stands (see KNOWN-ISSUES.md); a passing run confirms the behavior, not a fix.
 ///         Progressive fixtures inject finalized results through existing production-helper taps.
 contract PostRequestProgressiveControls is CrapsProgressiveTest {
     function testAuditOtherDayVictoryErasesEarnedEventDouble() public {
