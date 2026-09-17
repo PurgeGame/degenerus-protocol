@@ -55,8 +55,11 @@ advance calls. Test gas caps must not be raised simply to make a regression pass
 
 ## Evidence status
 
-Recorded on 2026-09-17 at the manifest's base revision (Node 24.18.0, Foundry 1.6.0-nightly,
-solc 0.8.34); re-run against the exact delivery revision if it differs.
+Recorded on 2026-09-17 (Node 24.18.0, Foundry 1.6.0-nightly, solc 0.8.34). The whole-tree
+rows were measured at `67b95c745`; the manifest's base revision differs from it only in
+`CrapsBattle.sol` (the reservation upgrade and the slip event's high bits), covered by the
+craps slice, the gates, the size row and the Slither rescan below. Re-run against the exact
+delivery revision if it differs.
 
 | Check | Result |
 | --- | --- |
@@ -64,9 +67,10 @@ solc 0.8.34); re-run against the exact delivery revision if it differs.
 | Hardhat `make test-hardhat` | 1,656 passing, 22 pending, 0 failing |
 | Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the accepted byte-identical baseline check and the empty-bucket skip-rate bound, both pre-disclosed reds |
 | Twelve `make check-*` gates and the storage layout oracle | all pass |
-| Slither 0.11.5, 182 contracts | 4,119 results, 188 High; composition identical to the prior scan |
+| Slither 0.11.5, 182 contracts, rescanned at the base revision | 4,120 results, 188 High; High and Medium identical to the prior scan, one new Low (`timestamp` on `upgradeReservedDay`, the day-index gate every reservation door shares) |
 | Aderyn 0.6.8 | 10 High, 22 Low, unchanged |
-| EIP-170 runtime size, checked-in pins | largest 24,444 bytes (`DegenerusGameMintModule`, 132 spare); none over |
+| Craps and gas slice at the base revision, after the reservation upgrade | 658 passed, 13 skipped, 1 failed: the seal suite's amend-vacuity seed guard, a harness artifact |
+| EIP-170 runtime size, checked-in pins | largest 24,444 bytes (`DegenerusGameMintModule`, 132 spare); `CrapsBattle` 24,286 (290 spare); none over |
 
 
 Some `test/repro` tests deliberately assert an undesirable current behavior: a passing
