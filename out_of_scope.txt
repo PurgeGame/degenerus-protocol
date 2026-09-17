@@ -10,14 +10,10 @@ contracts/test/
 test/
 node_modules/
 lib/
-agent/
 artifacts/
 cache/
 forge-out/
-forge-out-halmos/
 out/
-runs/
-mutation_campaign/
 # Separate frontend, indexer and website repositories.
 # Style-only reports and gas micro-optimizations are not audit priorities; reachable
 # gas-limit failures and unbounded work ARE in scope.

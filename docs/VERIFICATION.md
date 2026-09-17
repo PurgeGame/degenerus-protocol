@@ -39,7 +39,7 @@ configuration or uncommitted source pin is not lost.
 ```sh
 make check-interfaces check-delegatecall check-raw-selectors check-rng-window \
   check-rng-taint check-advance-calls check-unchecked check-write-owners \
-  check-pool-writes check-array-delete check-craps-progressive check-gasleft
+  check-pool-writes check-array-delete check-gasleft
 bash scripts/layout/storage_layout_oracle.sh
 ```
 
@@ -66,7 +66,7 @@ delivery revision if it differs.
 | Foundry, whole `test/` tree in seven compile units | 2,422 passed, 0 failed, 104 skipped, 294 suites |
 | Hardhat `make test-hardhat` | 1,656 passing, 22 pending, 0 failing |
 | Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the accepted byte-identical baseline check and the empty-bucket skip-rate bound, both pre-disclosed reds |
-| Twelve `make check-*` gates and the storage layout oracle | all pass |
+| Eleven `make check-*` gates and the storage layout oracle | all pass |
 | Slither 0.11.5, 182 contracts, rescanned at the base revision | 4,120 results, 188 High; High and Medium identical to the prior scan, one new Low (`timestamp` on `upgradeReservedDay`, the day-index gate every reservation door shares) |
 | Aderyn 0.6.8 | 10 High, 22 Low, unchanged |
 | Craps and gas slice at the base revision, after the reservation upgrade | 658 passed, 13 skipped, 1 failed: the seal suite's amend-vacuity seed guard, a harness artifact |
@@ -75,8 +75,23 @@ delivery revision if it differs.
 
 Some `test/repro` tests deliberately assert an undesirable current behavior: a passing
 witness confirms the behavior, not a fix. Inspect test intent, skips and failures.
-Slither/Aderyn output requires source-specific triage; the per-class triage of the High tier
-(dominated by `uninitialized-state` on the shared-storage delegatecall modules) is in the
-[archived known-issues register, section 5](archive/pre-audit-2026-09-05/KNOWN-ISSUES.md#5-automated-tool-findings-pre-disclosed),
-measured at the prior tree; the composition is unchanged at this one. Symbolic proofs and deep
-invariants are separate runs, not implied by `npm test` or an ordinary Foundry pass.
+Slither/Aderyn output requires source-specific triage. The 188 Slither Highs by class, as
+the project reads them; each remains open to the auditor's own judgment:
+
+- 142 `uninitialized-state`: variables of the shared `DegenerusGameStorage` layout read in one
+  module's compilation unit and written in another's. The modules delegatecall against one
+  storage, so no unit is a deployment on its own.
+- 21 `weak-prng`: day-index and time-of-day gates on `block.timestamp`, and a modulo over an
+  already-hashed VRF word; nothing a caller can steer is drawn from them.
+- 6 `arbitrary-send-eth`: two in mocks; the rest are the ETH/stETH payout doors of the Game,
+  the Vault and sDGNRS paying a recipient computed from the contract's own claim state.
+- 6 `reentrancy-balance` and 3 `reentrancy-eth`, all on the advance chain: external calls
+  into protocol contracts pinned at deployment.
+- 4 `delegatecall-loop`: the lootbox module's spin dispatch to pinned modules.
+- 2 `encode-packed-collision`: SVG string assembly in the subscription token renderer.
+- 2 `incorrect-exp`: `^` used as bitwise XOR, in OpenZeppelin `mulDiv` and a quest pairing hash.
+- 2 `incorrect-shift`: Yul shifts in the bucket-lane packing whose operand order the detector
+  misreads; the packing tests pin the layout.
+
+Symbolic proofs and deep invariants are separate runs, not implied by `npm test` or an
+ordinary Foundry pass.

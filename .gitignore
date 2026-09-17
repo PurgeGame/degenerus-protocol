@@ -52,3 +52,18 @@
 
 # Python bytecode from the scripts/lib extractors
 __pycache__/
+
+# Kept locally and in history, not in the audit tree
+docs/archive/
+deployments/
+test/REGRESSION-BASELINE-*.md
+scripts/craps-high-water-system-sim.cpp
+scripts/craps-system-sim.cpp
+scripts/check-craps-progressive-parity.sh
+scripts/ens-register.js
+scripts/ens-sepolia-proof.js
+scripts/ens-sepolia-register.js
+scripts/fork-probe.js
+scripts/fork-run.sh
+scripts/lib/ensForwardConfirmed.js
+scripts/bytecode-manifest.sh

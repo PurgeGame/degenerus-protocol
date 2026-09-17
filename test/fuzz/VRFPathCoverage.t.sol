@@ -236,7 +236,7 @@ contract VRFPathCoverage is DeployProtocol {
     ///      the intervening gap days on recovery. That is the SAME mid-day-stall-recovery surface as
     ///      DEF-380-04-FC1 (test_midDayRequest_doesNotBlockDaily) and the carried bucket-A
     ///      invariant_allGapDaysBackfilled — an RNG-window judgment for the council, NOT a stale
-    ///      slot/topic the test can re-derive. Recorded in REGRESSION-BASELINE-v62.md "Known
+    ///      slot/topic the test can re-derive. Recorded in the v62 regression baseline (repository history).md "Known
     ///      behavior-divergence — finding-candidates". The contract is NOT modified.
     function test_gapBackfillWithMidDayPending_fuzz(uint256 vrfWord) public {
         vm.skip(true); // DEF-380-04-FC6 — see @dev above; council adjudicates (382+/385)

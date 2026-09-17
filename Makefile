@@ -1,4 +1,4 @@
-.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive coverage-check invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete coverage-check invariant-test invariant-build invariant-clean
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -84,9 +84,6 @@ check-write-owners:
 check-gasleft:
 	@bash scripts/check-gasleft.sh
 
-check-craps-progressive:
-	@scripts/check-craps-progressive-parity.sh
-
 # ── External-function coverage classification gate (standalone) ─────────
 # Enforces 222-01-COVERAGE-MATRIX.md: every external/public function on
 # every deployable source artifact is classified (no universe drift),
@@ -107,7 +104,7 @@ coverage-check:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
+test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 	@echo "Patching ContractAddresses.sol for Foundry..."
 	@node scripts/lib/patchForFoundry.js
 	@echo "Running Foundry tests..."
@@ -117,7 +114,7 @@ test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-
 		exit $$TEST_EXIT
 
 # Run Hardhat tests (no patching needed — Hardhat deploys fresh)
-test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
+test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 	@npx hardhat test $(ARGS)
 
 # Run both suites

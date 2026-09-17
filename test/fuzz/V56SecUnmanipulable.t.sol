@@ -101,7 +101,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///      claim/credit events), a structural rewrite of the churn-accounting model against changed cancel
     ///      semantics, NOT a stale slot/event that can be mechanically re-pointed. Whether drain-on-cancel
     ///      preserves the no-farm invariant is exactly the asymmetry the council should adjudicate.
-    ///      Recorded in REGRESSION-BASELINE-v62.md "Known behavior-divergence". The contract is NOT modified.
+    ///      Recorded in the v62 regression baseline (repository history), "Known behavior-divergence". The contract is NOT modified.
     function testAffiliateReClaimChurnEqualsHonestContinuous() public {
         vm.skip(true); // DEF-380-04-FC4 — frozen cancel drains affiliateBase to upline (not persist); council adjudicates the no-farm property
         address honest = makeAddr("aff_honest");

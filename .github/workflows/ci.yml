@@ -101,7 +101,7 @@ jobs:
       # Run all source-drift gates, including the newer crank, randomness,
       # shared-storage, arithmetic and simulation parity registries.
       - name: Source-drift gates
-        run: make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-craps-progressive check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
+        run: make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 
       - name: forge test
         run: forge test -vvv
