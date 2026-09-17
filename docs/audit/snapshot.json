@@ -1,7 +1,7 @@
 {
   "date": "2026-09-17",
   "status": "working-tree snapshot at the base revision; not an audited deployment",
-  "base_commit": "64ae6381a",
+  "base_commit": "dde6275ef",
   "source_file_count": 58,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
