@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Ticket gas review — 2026-09-04
 
 Reviewed purchase-time owner registration, queued balances, current/future ticket drains,

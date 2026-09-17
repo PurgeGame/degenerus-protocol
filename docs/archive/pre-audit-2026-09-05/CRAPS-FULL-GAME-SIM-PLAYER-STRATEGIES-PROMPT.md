@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Craps Full-Game Simulation: Player Strategies and On-Chain Contract Validation
 
 Status: implementation handoff prompt

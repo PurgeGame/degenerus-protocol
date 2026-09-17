@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # High-Roller Boost Budget and Period Allocation — Addendum Specification
 
 **Status:** Ready for contract implementation

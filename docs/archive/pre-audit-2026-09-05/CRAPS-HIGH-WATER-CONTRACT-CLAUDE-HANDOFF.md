@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Dice Run high-water system: Contract Claude implementation handoff
 
 > Status: product rules locked on 2026-08-28, with one explicit modeling assumption: the initial
@@ -28,14 +30,14 @@ diff before editing and preserve every unrelated change.
 
 ## Canonical sources
 
-- [`contracts/Craps.sol`](../contracts/Craps.sol): pure shooter and slip resolver.
-- [`contracts/CrapsBattle.sol`](../contracts/CrapsBattle.sol): scheduled/custom terms, settlement,
+- [`contracts/Craps.sol`](../../../contracts/Craps.sol): pure shooter and slip resolver.
+- [`contracts/CrapsBattle.sol`](../../../contracts/CrapsBattle.sol): scheduled/custom terms, settlement,
   scoreboards, action accounting, ladder, progressive, and payouts.
-- [`contracts/Coinflip.sol`](../contracts/Coinflip.sol): the existing shared BIGGEST record pool.
-- [`contracts/DegenerusRecordBounty.sol`](../contracts/DegenerusRecordBounty.sol): soulbound BIGGEST
+- [`contracts/Coinflip.sol`](../../../contracts/Coinflip.sol): the existing shared BIGGEST record pool.
+- [`contracts/DegenerusRecordBounty.sol`](../../../contracts/DegenerusRecordBounty.sol): soulbound BIGGEST
   trophies.
-- [`test/craps/CrapsOracle.sol`](../test/craps/CrapsOracle.sol): independent settlement oracle.
-- [`scripts/craps-high-water-system-sim.cpp`](../scripts/craps-high-water-system-sim.cpp): proposed
+- [`test/craps/CrapsOracle.sol`](../../../test/craps/CrapsOracle.sol): independent settlement oracle.
+- [`scripts/craps-high-water-system-sim.cpp`](../../../scripts/craps-high-water-system-sim.cpp): proposed
   system Monte Carlo.
 - [`docs/CRAPS-HIGH-WATER-SYSTEM-SIMULATION.md`](CRAPS-HIGH-WATER-SYSTEM-SIMULATION.md): calibration,
   population sensitivities, gas tails, and economic risks.

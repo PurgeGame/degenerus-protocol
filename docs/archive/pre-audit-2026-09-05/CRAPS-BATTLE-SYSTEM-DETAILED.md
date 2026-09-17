@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 <!-- generated-by: gsd-doc-writer -->
 # Craps Battle System: Detailed Reference
 
@@ -1165,29 +1167,29 @@ boost, or scheduled action is involved.
 
 Primary implementation:
 
-- [`contracts/Craps.sol`](../contracts/Craps.sol) — one-shooter table and multi-shooter engine.
-- [`contracts/CrapsBattle.sol`](../contracts/CrapsBattle.sol) — entries, fields, settlement,
+- [`contracts/Craps.sol`](../../../contracts/Craps.sol) — one-shooter table and multi-shooter engine.
+- [`contracts/CrapsBattle.sol`](../../../contracts/CrapsBattle.sol) — entries, fields, settlement,
   scoreboards, payouts, progressive, and keeper.
-- [`contracts/LootboxCraps.sol`](../contracts/LootboxCraps.sol) — day/table words and Craps seed.
-- [`contracts/Coinflip.sol`](../contracts/Coinflip.sol) — Coinflip credit and shared BIGGEST pool.
-- [`contracts/DegenerusRecordBounty.sol`](../contracts/DegenerusRecordBounty.sol) — five trophies.
+- [`contracts/LootboxCraps.sol`](../../../contracts/LootboxCraps.sol) — day/table words and Craps seed.
+- [`contracts/Coinflip.sol`](../../../contracts/Coinflip.sol) — Coinflip credit and shared BIGGEST pool.
+- [`contracts/DegenerusRecordBounty.sol`](../../../contracts/DegenerusRecordBounty.sol) — five trophies.
 
 High-value executable specifications:
 
-- [`test/craps/Craps.t.sol`](../test/craps/Craps.t.sol) — craps wager rules.
-- [`test/craps/CrapsSlip.t.sol`](../test/craps/CrapsSlip.t.sol) — run and settlement behavior.
-- [`test/craps/CrapsHighWater.t.sol`](../test/craps/CrapsHighWater.t.sol) — scheduled high-water and
+- [`test/craps/Craps.t.sol`](../../../test/craps/Craps.t.sol) — craps wager rules.
+- [`test/craps/CrapsSlip.t.sol`](../../../test/craps/CrapsSlip.t.sol) — run and settlement behavior.
+- [`test/craps/CrapsHighWater.t.sol`](../../../test/craps/CrapsHighWater.t.sol) — scheduled high-water and
   custom isolation.
-- [`test/craps/CrapsBattle.t.sol`](../test/craps/CrapsBattle.t.sol) — fields, entries, timing,
+- [`test/craps/CrapsBattle.t.sol`](../../../test/craps/CrapsBattle.t.sol) — fields, entries, timing,
   ranking, and daily funding.
-- [`test/craps/CrapsProgressive.t.sol`](../test/craps/CrapsProgressive.t.sol) — progressive funding
+- [`test/craps/CrapsProgressive.t.sol`](../../../test/craps/CrapsProgressive.t.sol) — progressive funding
   and qualification.
-- [`test/craps/CrapsHighRoller.t.sol`](../test/craps/CrapsHighRoller.t.sol) — high-lane accounting.
-- [`test/craps/CrapsResolveBudget.t.sol`](../test/craps/CrapsResolveBudget.t.sol) — chunking and
+- [`test/craps/CrapsHighRoller.t.sol`](../../../test/craps/CrapsHighRoller.t.sol) — high-lane accounting.
+- [`test/craps/CrapsResolveBudget.t.sol`](../../../test/craps/CrapsResolveBudget.t.sol) — chunking and
   work-budget invariance.
-- [`test/craps/CrapsPasses.t.sol`](../test/craps/CrapsPasses.t.sol) — passes and reservations.
-- [`test/unit/Coinflip.test.js`](../test/unit/Coinflip.test.js) — Dice Run record claims.
-- [`test/unit/DegenerusRecordBounty.test.js`](../test/unit/DegenerusRecordBounty.test.js) — fifth
+- [`test/craps/CrapsPasses.t.sol`](../../../test/craps/CrapsPasses.t.sol) — passes and reservations.
+- [`test/unit/Coinflip.test.js`](../../../test/unit/Coinflip.test.js) — Dice Run record claims.
+- [`test/unit/DegenerusRecordBounty.test.js`](../../../test/unit/DegenerusRecordBounty.test.js) — fifth
   trophy behavior.
 
 Useful quantitative companion:

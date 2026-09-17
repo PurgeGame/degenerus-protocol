@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Scheduled Craps cursor and integration repairs: Contract Claude handoff
 
 > Status: implementation brief approved in discussion on 2026-08-27.
@@ -39,23 +41,23 @@ the conflict silently.
 
 ## Relevant implementation
 
-- [`contracts/CrapsBattle.sol`](../contracts/CrapsBattle.sol) owns scheduled-day opening,
+- [`contracts/CrapsBattle.sol`](../../../contracts/CrapsBattle.sol) owns scheduled-day opening,
   `_slotIndex`, `_bonusCursor`, `_dayTickets`, day action, progressive funding, arming, and
   settlement.
-- [`contracts/modules/GameAfkingModule.sol`](../contracts/modules/GameAfkingModule.sol) owns the
+- [`contracts/modules/GameAfkingModule.sol`](../../../contracts/modules/GameAfkingModule.sol) owns the
   rewarded `mineFlip()` router and currently implements `_crapsKeep` by calculating only
   `openSlot - 1`.
-- [`contracts/modules/DegenerusGameAdvanceModule.sol`](../contracts/modules/DegenerusGameAdvanceModule.sol)
+- [`contracts/modules/DegenerusGameAdvanceModule.sol`](../../../contracts/modules/DegenerusGameAdvanceModule.sol)
   backfills daily RNG words after a stall and calls `CrapsBattle.openBonusDay()` only for the
   current wall day.
-- [`contracts/modules/DegenerusGameLootboxModule.sol`](../contracts/modules/DegenerusGameLootboxModule.sol)
+- [`contracts/modules/DegenerusGameLootboxModule.sol`](../../../contracts/modules/DegenerusGameLootboxModule.sol)
   delivers rolled Craps passes using a bounded external call.
-- [`contracts/LootboxCraps.sol`](../contracts/LootboxCraps.sol) reads the pinned Game storage
+- [`contracts/LootboxCraps.sol`](../../../contracts/LootboxCraps.sol) reads the pinned Game storage
   layout for daily words and lootbox-index words.
-- [`contracts/Coinflip.sol`](../contracts/Coinflip.sol) receives Craps payouts through
+- [`contracts/Coinflip.sol`](../../../contracts/Coinflip.sol) receives Craps payouts through
   `creditFlip`/`creditFlipBatch`.
-- [`test/fuzz/CrapsProtocolWiring.t.sol`](../test/fuzz/CrapsProtocolWiring.t.sol) and
-  [`test/fuzz/CrapsKeeperBudgetGas.t.sol`](../test/fuzz/CrapsKeeperBudgetGas.t.sol) exercise the
+- [`test/fuzz/CrapsProtocolWiring.t.sol`](../../../test/fuzz/CrapsProtocolWiring.t.sol) and
+  [`test/fuzz/CrapsKeeperBudgetGas.t.sol`](../../../test/fuzz/CrapsKeeperBudgetGas.t.sol) exercise the
   production keeper route.
 - [`docs/CRAPS-BATTLE-SYSTEM-OVERVIEW.md`](CRAPS-BATTLE-SYSTEM-OVERVIEW.md) is the player/system
   overview that must describe the final lifecycle accurately.

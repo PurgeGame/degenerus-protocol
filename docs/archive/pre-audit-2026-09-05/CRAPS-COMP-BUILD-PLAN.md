@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Craps comps — build plan
 
 Status: BUILT in the working tree on 2026-09-05, uncommitted, awaiting review. Supersedes sections 2 and 3 of

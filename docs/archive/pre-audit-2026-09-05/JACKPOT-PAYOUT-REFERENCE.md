@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Jackpot Payout Reference (Post-Skip-Split)
 
 Reflects the unified `_processDailyEth` with conditional skip-split architecture.

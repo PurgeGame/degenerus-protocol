@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Dice Run high-water system simulation — historical calibration
 
 > Historical proposed-system analysis, 2026-08-28. The numeric results below predate the fixed-5x
@@ -112,10 +114,10 @@ g++ -O3 -std=c++20 -pthread scripts/craps-high-water-system-sim.cpp \
 
 Raw evidence:
 
-- [`CRAPS-HIGH-WATER-CALIBRATION.tsv`](CRAPS-HIGH-WATER-CALIBRATION.tsv)
-- [`CRAPS-HIGH-WATER-POPULATION-MATRIX.tsv`](CRAPS-HIGH-WATER-POPULATION-MATRIX.tsv)
-- [`CRAPS-HIGH-WATER-JACKPOT-MATRIX.tsv`](CRAPS-HIGH-WATER-JACKPOT-MATRIX.tsv)
-- [`CRAPS-HIGH-WATER-SYSTEM-MATRIX.tsv`](CRAPS-HIGH-WATER-SYSTEM-MATRIX.tsv)
+- [`CRAPS-HIGH-WATER-CALIBRATION.tsv`](../../CRAPS-HIGH-WATER-CALIBRATION.tsv)
+- [`CRAPS-HIGH-WATER-POPULATION-MATRIX.tsv`](../../CRAPS-HIGH-WATER-POPULATION-MATRIX.tsv)
+- [`CRAPS-HIGH-WATER-JACKPOT-MATRIX.tsv`](../../CRAPS-HIGH-WATER-JACKPOT-MATRIX.tsv)
+- [`CRAPS-HIGH-WATER-SYSTEM-MATRIX.tsv`](../../CRAPS-HIGH-WATER-SYSTEM-MATRIX.tsv)
 
 ## Mechanism Analysis
 

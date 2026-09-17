@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Consumer Handoff — The Ticket-Volume Parimutuel Is Removed
 
 - **Status:** the removal is complete in source. Deployment, frontend and indexer work is owed.

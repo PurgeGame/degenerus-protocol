@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Craps pass awards: whale buyers, deity buyers, and the presale box: Contract Claude handoff
 
 > Status: product brief approved in discussion on 2026-08-27.

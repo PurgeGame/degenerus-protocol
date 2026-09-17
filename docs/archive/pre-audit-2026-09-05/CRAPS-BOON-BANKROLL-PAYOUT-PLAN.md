@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # PLAN — Craps Boons as Bankroll-Payout Boosts
 
 **Status:** BUILT — shipped in `484024ab4` (craps boons as bankroll-payout boosts).

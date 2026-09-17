@@ -1,7 +1,9 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # PLAN — Craps Boons and Quests
 
 > **Boon payout amendment (2026-08-28):** The immediate Coinflip-credit design in this document is
-> superseded by [`CRAPS-BOON-BANKROLL-PAYOUT-PLAN.md`](./CRAPS-BOON-BANKROLL-PAYOUT-PLAN.md).
+> superseded by [`CRAPS-BOON-BANKROLL-PAYOUT-PLAN.md`](CRAPS-BOON-BANKROLL-PAYOUT-PLAN.md).
 > The quest design, boon IDs/weights/lifecycle, and completed packed-boon-lane work remain in force.
 > Where the two documents conflict, the bankroll-payout amendment controls.
 

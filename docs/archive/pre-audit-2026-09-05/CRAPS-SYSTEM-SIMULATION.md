@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Craps Battle System: Current Economic Simulation
 
 > Code snapshot reviewed 2026-08-27. Current rules in this report are **3:4 Don't Pass**, a
@@ -9,12 +11,12 @@
 > unlimited-stack results do not describe this working tree.
 
 This report measures the combined system implemented by
-[`Craps.sol`](../contracts/Craps.sol) and
-[`CrapsBattle.sol`](../contracts/CrapsBattle.sol): scheduled terms, scatter, shared shooters,
+[`Craps.sol`](../../../contracts/Craps.sol) and
+[`CrapsBattle.sol`](../../../contracts/CrapsBattle.sol): scheduled terms, scatter, shared shooters,
 survival flips, Goal/Bust stops, Bust deletion, composite ranking, bounties, boosts, high rollers,
 Vault boards, passes, and Coinflip-credit payouts.
 
-The reproducible model is [`scripts/craps-system-sim.cpp`](../scripts/craps-system-sim.cpp).
+The reproducible model is [`scripts/craps-system-sim.cpp`](../../../scripts/craps-system-sim.cpp).
 
 ```bash
 g++ -O3 -std=c++20 -pthread scripts/craps-system-sim.cpp -o /tmp/craps-system-sim

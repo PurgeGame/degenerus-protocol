@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Craps progressive jackpot and 50,000-FLIP base: Contract Claude handoff
 
 > Status: product/economic handoff approved in discussion on 2026-08-27.
@@ -28,12 +30,12 @@ Do not reset, restore, stage, commit, or broadly rewrite existing work unless se
 
 ## Canonical local sources
 
-- [`contracts/Craps.sol`](../contracts/Craps.sol): pure Craps run engine.
-- [`contracts/CrapsBattle.sol`](../contracts/CrapsBattle.sol): schedule, entry, shared fields,
+- [`contracts/Craps.sol`](../../../contracts/Craps.sol): pure Craps run engine.
+- [`contracts/CrapsBattle.sol`](../../../contracts/CrapsBattle.sol): schedule, entry, shared fields,
   ranking, budgets, battle finalization, and Coinflip-credit payouts.
-- [`test/craps/CrapsOracle.sol`](../test/craps/CrapsOracle.sol): independent settlement oracle.
-- [`test/craps/CrapsSystemEcon.t.sol`](../test/craps/CrapsSystemEcon.t.sol): system economic tests.
-- [`scripts/craps-system-sim.cpp`](../scripts/craps-system-sim.cpp): reference economic simulator.
+- [`test/craps/CrapsOracle.sol`](../../../test/craps/CrapsOracle.sol): independent settlement oracle.
+- [`test/craps/CrapsSystemEcon.t.sol`](../../../test/craps/CrapsSystemEcon.t.sol): system economic tests.
+- [`scripts/craps-system-sim.cpp`](../../../scripts/craps-system-sim.cpp): reference economic simulator.
 - [`docs/CRAPS-SYSTEM-SIMULATION.md`](CRAPS-SYSTEM-SIMULATION.md): prior calibration evidence.
 - [`docs/CRAPS-BATTLE-SYSTEM-OVERVIEW.md`](CRAPS-BATTLE-SYSTEM-OVERVIEW.md): current mechanics.
 

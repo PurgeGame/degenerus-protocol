@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Jackpot Event Catalog (Post-Split)
 
 This document catalogs every event emitted during jackpot operations in the Degenerus Protocol. Each entry includes the exact Solidity signature, field descriptions, emitting code paths, and cross-references to the [Jackpot Payout Reference](JACKPOT-PAYOUT-REFERENCE.md).

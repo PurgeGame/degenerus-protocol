@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Outcome-weighted Craps keeper gas budget: Contract Claude plan
 
 > Status: implementation plan approved in discussion on 2026-08-27.
@@ -25,16 +27,16 @@ silently changing economics.
 
 ## Relevant code
 
-- [`contracts/modules/GameAfkingModule.sol`](../contracts/modules/GameAfkingModule.sol) owns the
+- [`contracts/modules/GameAfkingModule.sol`](../../../contracts/modules/GameAfkingModule.sol) owns the
   rewarded `mineFlip()` router, the box walk-unit budget, `_crapsSeatBudget`, and `_crapsKeep`.
-- [`contracts/CrapsBattle.sol`](../contracts/CrapsBattle.sol) owns `resolveSlot`, `_settleBatch`,
+- [`contracts/CrapsBattle.sol`](../../../contracts/CrapsBattle.sol) owns `resolveSlot`, `_settleBatch`,
   `_resolve`, battle scoring/finalization, progressive payout, action booking, and the cursor.
-- [`contracts/Craps.sol`](../contracts/Craps.sol) is the bounded pure run engine.
-- [`contracts/Coinflip.sol`](../contracts/Coinflip.sol) receives the deferred bankroll returns
+- [`contracts/Craps.sol`](../../../contracts/Craps.sol) is the bounded pure run engine.
+- [`contracts/Coinflip.sol`](../../../contracts/Coinflip.sol) receives the deferred bankroll returns
   through `creditFlipBatch` and the keeper bounty through `creditFlip`.
-- [`test/fuzz/CrapsProtocolWiring.t.sol`](../test/fuzz/CrapsProtocolWiring.t.sol) exercises the whole
+- [`test/fuzz/CrapsProtocolWiring.t.sol`](../../../test/fuzz/CrapsProtocolWiring.t.sol) exercises the whole
   `game.mineFlip()` Craps arm/walk route.
-- [`test/craps/CrapsGas.t.sol`](../test/craps/CrapsGas.t.sol) pins standalone engine, legal-slip,
+- [`test/craps/CrapsGas.t.sol`](../../../test/craps/CrapsGas.t.sol) pins standalone engine, legal-slip,
   and marginal settlement gas.
 - [`docs/CRAPS-BATTLE-SYSTEM-OVERVIEW.md`](CRAPS-BATTLE-SYSTEM-OVERVIEW.md) explains the current
   system but contains fixed-seat gas claims that must be updated after this work.

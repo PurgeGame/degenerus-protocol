@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Craps protocol-award pass split + normal-to-high conversion: Contract Claude handoff
 
 > Status: product design approved by the user on 2026-08-29.

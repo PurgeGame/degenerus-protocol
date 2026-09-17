@@ -1,9 +1,11 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Craps Battle System: Current Implementation
 
 > Code snapshot reviewed 2026-08-31. This document describes the contracts as written in the
-> working tree, especially [`Craps.sol`](../contracts/Craps.sol),
-> [`CrapsBattle.sol`](../contracts/CrapsBattle.sol), and
-> [`LootboxCraps.sol`](../contracts/LootboxCraps.sol). The deployed bytecode, if different, wins.
+> working tree, especially [`Craps.sol`](../../../contracts/Craps.sol),
+> [`CrapsBattle.sol`](../../../contracts/CrapsBattle.sol), and
+> [`LootboxCraps.sol`](../../../contracts/LootboxCraps.sol). The deployed bytecode, if different, wins.
 >
 > **THE TABLE SETTLES TWO PRODUCTS.** A protocol-scheduled **Dice Run** runs a fixed five-round
 > bankroll at a fixed 5x target, latches its target instead of stopping on it, ranks on the HIGH POINT it

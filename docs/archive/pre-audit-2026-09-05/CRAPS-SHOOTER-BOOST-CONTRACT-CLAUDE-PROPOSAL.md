@@ -1,3 +1,5 @@
+> Historical document. Superseded by the [current audit handoff](../../AUDIT.md). Claims and test counts below apply only to their original revision.
+
 # Craps shooter boosts and bonus emission: Contract Claude proposal
 
 > Status: BUILT 2026-08-27, and **partly superseded** by
@@ -31,12 +33,12 @@ before changing semantics. Do not reset, restore, discard, or broadly rewrite ex
 
 ## Relevant source
 
-- [`contracts/Craps.sol`](../contracts/Craps.sol) is the pure run engine.
-- [`contracts/CrapsBattle.sol`](../contracts/CrapsBattle.sol) scatters boards, settles entries,
+- [`contracts/Craps.sol`](../../../contracts/Craps.sol) is the pure run engine.
+- [`contracts/CrapsBattle.sol`](../../../contracts/CrapsBattle.sol) scatters boards, settles entries,
   ranks runs, records action, draws scheduled budgets, and pays battle pots.
-- [`test/craps/CrapsOracle.sol`](../test/craps/CrapsOracle.sol) is the independent differential
+- [`test/craps/CrapsOracle.sol`](../../../test/craps/CrapsOracle.sol) is the independent differential
   oracle for run behavior.
-- [`scripts/craps-system-sim.cpp`](../scripts/craps-system-sim.cpp) is the reproducible economic
+- [`scripts/craps-system-sim.cpp`](../../../scripts/craps-system-sim.cpp) is the reproducible economic
   model.
 - [`docs/CRAPS-SYSTEM-SIMULATION.md`](CRAPS-SYSTEM-SIMULATION.md) records the simulations that led
   to these parameters.
