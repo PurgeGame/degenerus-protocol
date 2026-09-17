@@ -1008,6 +1008,9 @@ contract CrapsBattle is LootboxCraps {
     ///              afterwards moves it: it breaks a dead-level scoreboard and it rations the
     ///              boost a winner carries off, so a reader that cannot see it can order a field
     ///              only down to a tie and can quote a subsidy only after the fact.
+    ///            - bit 217 the high flag on a window seat; bits 217..223 a day ticket's per-period
+    ///              high mask, bit `217 + p` for period `p` — the same bits the bet stores, so a
+    ///              banked high pass seated at one copy of the run still reads as high.
     ///
     ///            The slot is the only term the slip carries: everything it PLAYS by — bankroll,
     ///            target, bounty, bar, the round — belongs to that slot, so an indexer reads those
@@ -1128,7 +1131,8 @@ contract CrapsBattle is LootboxCraps {
     /// @param upgradedMask Only the bits NEWLY set by this call, bit `p` for period `p` — a bit
     ///        already high was neither charged nor counted again and is not restated here.
     /// @param burned The exact delta charged for them: `(bankroll + bounty) * (H - 1)`, summed
-    ///        over the newly upgraded windows.
+    ///        over the newly upgraded windows. ZERO with the full mask is `upgradeReservedDay`:
+    ///        a future reservation swapped to the high lane for a banked high credit.
     event CrapsDayWindowsUpgraded(address indexed player, uint24 indexed day, uint8 upgradedMask, uint256 burned);
 
     /// @notice Uncommitted day-pass credits were banked for `player`.
@@ -1341,9 +1345,14 @@ contract CrapsBattle is LootboxCraps {
         uint256 boon = boonMask << _BET_BOON_SHIFT;
         _bets[betId] = uint256(uint160(player)) | (chips << _BET_CHIPS_SHIFT) | (standing << _BET_SCORE_SHIFT)
             | boon | highBits;
+        // The high flag rides in the echo too: `highBits` already sits at bit 217 (window seat) or
+        // 217..223 (day ticket, one per period), above every other field of the event word. A
+        // banked HIGH pass spent by `_seatBody` carries `evMult = 0`, so without this an indexer
+        // reads the house's high day seat as an ordinary 1x ticket and can only learn otherwise
+        // from storage.
         emit CrapsSlipPlaced(
             player,
-            chips | (betId << _EV_BET_SHIFT) | (evMult << _EV_MULT_SHIFT) | (standing << _BET_SCORE_SHIFT) | boon
+            chips | (betId << _EV_BET_SHIFT) | (evMult << _EV_MULT_SHIFT) | (standing << _BET_SCORE_SHIFT) | boon | highBits
         );
     }
 
@@ -2575,6 +2584,39 @@ contract CrapsBattle is LootboxCraps {
         _passCredits[msg.sender] =
             (word & ~(_PASS_MAX | (_PASS_MAX << _PASS_HIGH_SHIFT))) | (highs << _PASS_HIGH_SHIFT) | normals;
         emit CrapsNormalPassesConverted(msg.sender, cost, highCount);
+    }
+
+    /// @notice Turn your own NORMAL reservation on a future day into a HIGH one by spending one
+    ///         banked high-roller credit; the normal credit the day was taken with is banked back.
+    /// @dev A swap of like for like, so nothing is priced here: the seat already exists, blank
+    ///      or on its named board, at the standing it froze, and only its lane changes — the
+    ///      whole-day high mask on the bet word and one high ticket in every period's counter,
+    ///      exactly what `_writeDaySeat` writes for a high reservation. The day's multiple is
+    ///      still read off the window at settlement. Only a day that is STRICTLY FUTURE and not
+    ///      yet worded qualifies, the same test a fresh reservation passes: once the day opens,
+    ///      `upgradeDayWindows` is the door and it prices each window off the word. The high
+    ///      credit is debited before the normal one is banked, so a caller with no high credit
+    ///      fails on the debit and nothing moves. ONE-WAY, like `convertNormalToHigh`.
+    /// @param day The reserved day.
+    /// @custom:reverts DayNotReservable If `day` is today, past, or its word has landed.
+    /// @custom:reverts NoSuchBet If the caller holds no day ticket on `day`.
+    /// @custom:reverts NothingToUpgrade If that ticket is already high.
+    /// @custom:reverts Panic(0x11) If the caller holds no high-roller credit.
+    function upgradeReservedDay(uint24 day) external {
+        if (day <= _currentDayIndex() || _dailyWordAt(day) != 0) revert DayNotReservable();
+        uint256 daySlot = _daySlotOf(day);
+        uint256 seat = _daySeated[daySlot][msg.sender] & _MASK32;
+        if (seat == 0) revert NoSuchBet();
+        uint256 betId = (daySlot << 64) | seat;
+        uint256 header = _bets[betId];
+        if (header & _BET_DAYHIGH_MASK != 0) revert NothingToUpgrade();
+        _takeCredits(msg.sender, true, 1);
+        _credit(msg.sender, false, 1);
+        _bets[betId] = header | _BET_DAYHIGH_MASK;
+        unchecked {
+            _dayTickets[daySlot] += _DT_ALL_HIGH;
+        }
+        emit CrapsDayWindowsUpgraded(msg.sender, day, uint8(_BET_DAYHIGH_MASK >> _BET_HIGH_SHIFT), 0);
     }
 
     /// @dev Spend `count` credits from one lane. CHECKED: an insufficient balance underflows and

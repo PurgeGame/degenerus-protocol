@@ -157,6 +157,7 @@ CONSUMER-SEALED	_dailyWordAt	vaultComp	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	keepScheduled	CrapsBattle.sol	READ
 GATE	_dailyWordAt	_reserveDay	CrapsBattle.sol	READ
 GATE	_dailyWordAt	_reserveWindow	CrapsBattle.sol	READ
+GATE	_dailyWordAt	upgradeReservedDay	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusDayOf	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusBoostBand	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusTermsFor	CrapsBattle.sol	READ

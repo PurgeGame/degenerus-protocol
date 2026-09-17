@@ -794,6 +794,86 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(flip.burned(alice), burnedBefore, "a conversion burned FLIP");
         assertEq(coinflip.credits(), creditsBefore, "a conversion moved coinflip credit");
     }
+
+    event CrapsDayWindowsUpgraded(address indexed player, uint24 indexed day, uint8 upgradedMask, uint256 burned);
+
+    uint256 internal constant DAYHIGH_MASK = 0x7F << 217;
+
+    /// @dev A normal reservation on a future day swaps to the high lane for one banked high
+    ///      credit, and the normal credit it was taken with comes back: the bet word carries the
+    ///      whole-day high mask, every period's high count moves by one, the board and the total
+    ///      stay, and the log is the day upgrade with the full mask and nothing burned.
+    function test_aHighCreditUpgradesANormalReservation() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 1, 1);
+        uint24 day = _today() + 2;
+        vm.prank(alice);
+        craps.applyCrapsPasses(day, 1, false, PACKED_SEVEN);
+        uint256 betId = ((uint256(day) * craps.BONUS_SLOTS_PER_DAY()) << 64) | craps.daySeatNumberOf(day, alice);
+        assertEq(craps.betWordOf(betId) & DAYHIGH_MASK, 0, "a normal reservation started high");
+
+        vm.expectEmit(address(craps));
+        emit CrapsDayWindowsUpgraded(alice, day, 0x7F, 0);
+        vm.prank(alice);
+        craps.upgradeReservedDay(day);
+
+        (uint256 normal, uint256 high) = craps.passCreditsOf(alice);
+        assertEq(normal, 1, "the normal credit did not come back");
+        assertEq(high, 0, "the high credit was not spent");
+        assertEq(craps.betWordOf(betId) & DAYHIGH_MASK, DAYHIGH_MASK, "the seat did not turn high");
+        assertEq(craps.betOf(betId).chips, PACKED_SEVEN, "the upgrade moved the board");
+        assertEq(craps.dayTicketsWordOf(day) & 0xFFFFFFFF, 1, "the upgrade changed the day's total");
+        for (uint256 p = 0; p < 7; ++p) {
+            assertEq(craps.dayHighTicketsOf(day, p), 1, "a period did not count the high ticket");
+        }
+    }
+
+    /// @dev The debit is the balance test: no high credit, nothing moves.
+    function test_upgradeWithoutAHighCreditReverts() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 1, 0);
+        uint24 day = _today() + 2;
+        vm.prank(alice);
+        craps.applyCrapsPasses(day, 1, false, 0);
+        vm.expectRevert(stdError.arithmeticError);
+        vm.prank(alice);
+        craps.upgradeReservedDay(day);
+        (uint256 normal,) = craps.passCreditsOf(alice);
+        assertEq(normal, 0, "a failed upgrade moved a credit");
+    }
+
+    /// @dev A reservation already on the high lane has nothing to buy.
+    function test_upgradeOfAHighReservationReverts() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 0, 2);
+        uint24 day = _today() + 2;
+        vm.prank(alice);
+        craps.applyCrapsPasses(day, 1, true, 0);
+        vm.expectRevert(CrapsBattle.NothingToUpgrade.selector);
+        vm.prank(alice);
+        craps.upgradeReservedDay(day);
+    }
+
+    /// @dev No ticket on the day, no upgrade — the seat lookup is the caller's own.
+    function test_upgradeWithoutAReservationReverts() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 0, 1);
+        uint24 day = _today() + 2;
+        vm.expectRevert(CrapsBattle.NoSuchBet.selector);
+        vm.prank(alice);
+        craps.upgradeReservedDay(day);
+    }
+
+    /// @dev Today is not a future day: an open day's ticket upgrades through `upgradeDayWindows`
+    ///      at the word's price, never by a pass swap.
+    function test_upgradeOfTodayReverts() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, 0, 1);
+        uint24 today = _today();
+        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.prank(alice);
+        craps.upgradeReservedDay(today);
+    }
 }
 
 /// @title The protocol-award pass split — the deterministic half-to-passes formula
