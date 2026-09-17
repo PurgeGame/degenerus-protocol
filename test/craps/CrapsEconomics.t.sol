@@ -369,7 +369,7 @@ contract CrapsEconomicsTest is CrapsPins {
         // the whole margin.
         //
         // The ~17% matches the calibrated `effective_edge_pct` in
-        // `docs/CRAPS-HIGH-WATER-CALIBRATION.tsv` (17.07 at goal 5x), so the chain and the model
+        // the high-water calibration matrix (repository history) (17.07 at goal 5x), so the chain and the model
         // agree on it. Deterministic seeds, so this is a fact about a fixed sample rather than a
         // probabilistic claim.
         assertLt(minted + busted, burned, "the raw result cleared the burn before any deletion");

@@ -67,3 +67,4 @@ scripts/fork-probe.js
 scripts/fork-run.sh
 scripts/lib/ensForwardConfirmed.js
 scripts/bytecode-manifest.sh
+docs/CRAPS-HIGH-WATER-*.tsv
