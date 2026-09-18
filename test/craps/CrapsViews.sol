@@ -478,6 +478,16 @@ contract CrapsViews is CrapsBattle {
         return _settlementOf(betId, header, _slotWindow(slot), _wordAt(_indexOf(slot)));
     }
 
+    /// @dev The table index a slip settles on, whichever way it was bound. Test-side: the
+    ///      production contract has no reader for it since the preview moved here.
+    function _indexOf(uint256 slot) internal view returns (uint48 index) {
+        index = _slotIndex[slot];
+        if (index == 0) revert RngNotReady();
+        unchecked {
+            index -= 1;
+        }
+    }
+
     /// @notice What `betId` would settle to, if its table has rolled.
     /// @dev Test helper mirroring `_resolve`'s arithmetic: the production contract ships no such
     ///      view. It returns the GROSS figure: for a sole high roller that is the value before

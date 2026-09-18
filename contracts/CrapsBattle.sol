@@ -3975,15 +3975,6 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @dev The table index a slip settles on, whichever way it was bound.
-    function _indexOf(uint256 slot) internal view returns (uint48 index) {
-        index = _slotIndex[slot];
-        if (index == 0) revert RngNotReady();
-        unchecked {
-            index -= 1;
-        }
-    }
-
     /// @dev Pay a battle the instant it finishes: the pot to the main winner, and a contested
     ///      lane's principal and boost to the best high roller. Reached from exactly one place —
     ///      the branch in `_scoreBattle` where the last seat scores — so it runs once by
