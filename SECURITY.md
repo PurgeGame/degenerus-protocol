@@ -24,12 +24,15 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
 - Distribute WWXRP from its vault allowance and AFKing seats within the token's tranche/lock
   rules; manage eligible vault seats and recover foreign tokens/NFTs. The foreign-token
   sweep excludes stETH backing. Share redemption still burns the relevant shares.
+- The owner wallet is always bounty-eligible in the Game (`_bountyEligible`), regardless of
+  activity or time of day.
 - Set lootbox RNG threshold and midday basefee ceiling. Declare Thanos scaling at least
   six levels ahead, with shift <=8, the projected-entry floor and pending-declaration locks.
 - Stake surplus Game ETH into stETH subject to player-claim reserves; exchange supplied
   ETH for an equal amount of Game stETH through Admin.
 - Propose VRF recovery after 44 hours of stall, or feed recovery after two unhealthy days.
-  Community proposal paths require the specified sDGNRS stake and seven-day delay.
+  Community proposal paths open only after a seven-day stall and require the proposer
+  to hold at least 0.5% of sDGNRS voting supply; there is no post-proposal delay.
   Execution still needs the decaying vote threshold; recovery cancels applicable proposals.
   Retry retired-subscription cancellation with prescribed recovery destinations.
 - Manage permitted charity slots, claim level-vested DGNRS, unwrap owned DGNRS under its

@@ -22,7 +22,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
 const GENERATOR_PATH = resolve(
   REPO_ROOT,
-  ".planning/notes/degenerette-recalibration/derive_5_tables.py",
+  "scripts/data/derive_5_tables.py",
 );
 
 const WWXRP_BONUS_FACTOR_SCALE = 1_000_000;

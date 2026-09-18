@@ -41,7 +41,8 @@ Operational assumptions, including scheduled progression, are disclosed in Known
 ## Project High-severity criteria
 
 A High finding must demonstrate substantial impact that one actor can cause unilaterally
-without creator privileges, from a healthy live-game state: the game has not ended, VRF
+without vault-owner privileges (the >50.1% DGVE holder, initially CREATOR, and its comp
+delegates and battle creators), from a healthy live-game state: the game has not ended, VRF
 is functional, and `mineFlip()` is attempted on schedule.
 The finding must not require an unrelated service outage, prolonged keeper inactivity
 or a pre-existing unhealthy state.
@@ -52,9 +53,9 @@ Catastrophic loss, diversion or permanent lock of terminal distributions is also
 even after game-over or during VRF failure. Other findings outside these assumptions should
 state their prerequisites and be assessed below High under this project's criteria.
 
-## Creator attacks — Medium
+## Vault-owner attacks — Medium
 
-Attacks requiring creator privileges against a mature game with active independent
+Attacks requiring vault-owner (DGVE-majority) privileges against a mature game with active independent
 participants are classified as Medium, including terminal-distribution impacts.
 Genesis-only self-disruption is excluded.
 

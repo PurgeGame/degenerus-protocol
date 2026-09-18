@@ -57,17 +57,14 @@ check-array-delete:
 # ── SOLV pool-write drift gate ──────────────────────────────────────────
 # Every mutation of a counted ETH-obligation term (and every canonical
 # mutator call) must be classified in scripts/pool-write-manifest.tsv.
-# Keeps audit/ETH-SUBPOOL-PROVENANCE-PROOF.md true against source drift.
+# Holds the ETH sub-pool provenance classification against source drift.
 check-pool-writes:
 	@scripts/check-pool-writes.sh
 
-# ── Craps progressive parity gate ───────────────────────────────────────
-# The progressive's base subsidy, four payout rungs and fixed 5x high-point
-# cutoffs live in the contract that pays them AND in the C++ model the
-# economics are calibrated on. Neither can read the other, so this holds the
-# two together on source text: a cutoff moved in one and not the other leaves a
-# model that no longer describes the chain. Operates on source text — no forge
-# build prerequisite.
+# ── Advance-chain call manifest gate ────────────────────────────────────
+# Every external call reachable from the advance chain must be classified in
+# scripts/advance-call-manifest.tsv. Operates on source text — no forge build
+# prerequisite.
 check-advance-calls:
 	@bash scripts/check-advance-calls.sh
 
@@ -113,7 +110,9 @@ test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-
 		git checkout -- contracts/ContractAddresses.sol; \
 		exit $$TEST_EXIT
 
-# Run Hardhat tests (no patching needed — Hardhat deploys fresh)
+# Run Hardhat tests. The Hardhat fixture also rewrites contracts/ContractAddresses.sol
+# with its predicted addresses and does not restore it; treat the checkout as disposable
+# or run `git checkout -- contracts/ContractAddresses.sol` afterwards.
 test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 	@npx hardhat test $(ARGS)
 

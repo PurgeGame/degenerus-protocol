@@ -30,7 +30,7 @@
 // ============================================================================
 //
 // The canonical generator
-//   .planning/notes/degenerette-recalibration/derive_5_tables.py
+//   scripts/data/derive_5_tables.py
 // is the SINGLE source of truth for the 44 v73 payout / factor constants. This
 // gate SPAWNS it (spawnSync; status === 0 asserted BEFORE any parse), parses the
 // "FINAL PASTE-READY CONSTANTS" stdout (NEVER hand-typed), reads the contract
@@ -52,7 +52,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
 const GENERATOR_PATH = resolve(
   REPO_ROOT,
-  ".planning/notes/degenerette-recalibration/derive_5_tables.py",
+  "scripts/data/derive_5_tables.py",
 );
 const CONTRACT_PATH = resolve(
   REPO_ROOT,

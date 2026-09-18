@@ -15,7 +15,8 @@ price tables and reward curves.
 - Presale-box proceeds are capped at **50 ETH** and split **80% Vault / 20% sDGNRS**.
   Ordinary ticket/lootbox prize-pool funding is distinct from this presale allocation.
 - The vault receives prescribed surplus/yield, default-referrer rewards and protocol-owned
-  gameplay positions. It receives **four tickets per level** and a perpetual score grant.
+  gameplay positions. It receives **four tickets per level** (16 entries, queued 100 levels ahead)
+  and accrues BAF score from them like any player.
   The vault funds its daily lootbox subscription from its own balance. Vault positions
   may participate in rewards under their entry rules. The vault is excluded from BAF's
   top-4 leaderboard and its 10% top-bettor and 5% third/fourth-place slices, but retains
@@ -28,6 +29,7 @@ price tables and reward curves.
 - The craps comp allowance starts at **4.56M FLIP-equivalent** and grows by **2% of completed
   battle bankroll**. It cannot be cashed out, but grants produce ordinary player reward
   opportunities. Owner and delegate recipients are not restricted to unrelated wallets.
+  Owner grants charge no delegate allowance; the lane balance is their only cap.
 
 ## Accounting and value
 

@@ -4,26 +4,32 @@
 
 | Component | Responsibility |
 | --- | --- |
-| `DegenerusGame` + 12 game modules | Purchases, ticket materialization, advance/VRF, jackpots, lootboxes, side-games and terminal distribution |
-| `DegenerusGameStorage` | Shared game/module storage; delegatecalls execute against the Game |
-| `FLIP` + `Coinflip` | Token supply, burns, virtual vault allowance, coinflip stakes/credits and the separate craps comp allowance |
-| `CrapsBattle` + `CrapsEngine` | Seat/field state and payouts; stateless dice calculation through a pinned STATICCALL |
+| `DegenerusGame` + 12 game modules | Purchases, ticket materialization, advance/VRF, jackpots, lootboxes, side-games and terminal distribution. The twelve delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, FoilPack, GameOver, Jackpot, Lootbox, Mint and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
+| `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Decimator, Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
+| `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
+| `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip` as `external pure`, which is what makes the table's pinned call a STATICCALL |
 | `DegenerusVault` | DGVE/DGVF share classes, vault-owned positions and comp distribution authority |
 | `sDGNRS` / `DGNRS` / `GNRUS` | Reserve backing, transferable wrapper and charity rights |
 | Affiliate, Quests, Jackpots | Referral rewards, activity state and jackpot support |
 | Parimutuel | Growth bets; Game seals each outcome through `recordGrowth` |
 | DeityPass, AFKingSubscriptionToken, RecordBounty, WWXRP | Pass/seat/record rights and auxiliary token rewards |
 | Admin | VRF/feed recovery governance and bounded liquidity operations |
+| `libraries/*`, `DegenerusTraitUtils` | Internal libraries inlined at compile time (ActivityCurve, BitPacking, Entropy, FlipRound, GameTime, JackpotBucket, PriceLookup, SigFig, TraitUtils); in scope, not deployments |
 
-`ContractAddresses.sol` pins protocol dependencies. The deployment order has 31 entries;
+`ContractAddresses.sol` pins every protocol contract plus the external endpoints: the VRF
+coordinator and key hash, the LINK token, the LINK/ETH feed, stETH, the ENS reverse registrar
+and the CREATOR address. The ENS registrar receives a best-effort raw `setName(string)` call
+from the constructors of Coinflip, DeityPass, Parimutuel, AFKingSubscriptionToken and
+RecordBounty, skipped when the pin is zero. The deployment order has 31 entries;
 the Vault also creates its two share tokens. `DegenerusGameLens` and `DeityBoonViewer`
 are in scope but are not entries in that deployment sequence. Third-party renderers,
 Chainlink, LINK and stETH have distinct trust boundaries described in Security.
 
 ## Main value flow
 
-Ticket and ordinary lootbox ETH funds protocol prize pools. The presale-box proceeds
-have a separate vault/sDGNRS split. Jackpot and redemption paths create claimable
+Ticket and ordinary lootbox ETH funds protocol prize pools. Presale-box ETH is credited
+80% to the Vault and 20% to sDGNRS as claimable (`_creditBoxProceeds`); the closing buyer
+also receives the sDGNRS `PresaleBox` pool remainder once presale is drained. Jackpot and redemption paths create claimable
 obligations or game-specific credits; moving ETH/stETH to a player follows the relevant
 claim/recipient checks. Permissionless processing is not authority to redirect payment.
 Game-over processing distributes remaining obligations and later sweeps unclaimed balances.

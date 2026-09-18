@@ -1,20 +1,52 @@
 # Build and verification
 
-## Reproduce in separate clean checkouts
+## Reproduce in a clean checkout
 
-Use the lockfiles, pinned compiler configuration and submodules. Node 20 matches CI.
-Record `node --version`, `forge --version` and `git rev-parse HEAD` with results.
-Verify the snapshot hashes BEFORE patching addresses.
+Use the lockfiles, pinned compiler configuration and submodules. CI pins Node 20
+(`.github/workflows/ci.yml`); the recorded evidence ran on Node 24.18.0. Record
+`node --version`, `forge --version` and `git rev-parse HEAD` with results. Verify the
+snapshot hashes first, before anything patches addresses. The submodule step fetches
+`lib/forge-std` from GitHub at the revision pinned in `foundry.lock`.
 
 ```sh
+sha256sum -c docs/audit/source-sha256.txt
 npm ci
 git submodule update --init --recursive
-node scripts/lib/patchForFoundry.js
-forge build --skip test --sizes
-forge test
 ```
 
-For memory-constrained machines, use targeted paths without changing the optimizer:
+Both test fixtures rewrite `contracts/ContractAddresses.sol`: `scripts/lib/patchForFoundry.js`
+before Foundry, and the Hardhat deployment fixture during `hardhat test`. Only `make test-foundry`
+restores the file. Run in a disposable checkout, and restore with
+`git checkout -- contracts/ContractAddresses.sol` before switching between the two runners
+or reading a size table.
+
+### Foundry
+
+The whole `test/` tree is one compile unit for a bare `forge test`; that unit does not
+finish compiling on a 64 GB machine. Run the tree as seven compile units instead: give
+Foundry its own cache with `FOUNDRY_CACHE_PATH` (the Hardhat and Foundry caches otherwise
+collide in `cache/`), and for each unit pass `--skip <path>` for every `test/**/*.sol` file
+outside that unit, never skipping `test/fuzz/helpers/` or `test/fuzz/handlers/`. The seven
+keep-sets used for the evidence row:
+
+1. `test/craps`, `test/differential`, `test/economics`, `test/gas`, `test/helpers`, `test/mutation`, `test/invariant`
+2. `test/repro`, `test/halmos`
+3-6. `test/fuzz/*.t.sol` (top level only) split into four roughly equal file lists
+7. `test/fuzz/invariant`
+
+```sh
+export FOUNDRY_CACHE_PATH="$PWD/.fcache"
+node scripts/lib/patchForFoundry.js
+ALL=$(find test -name '*.sol' | grep -v '/fuzz/handlers/\|/fuzz/helpers/' | sort)
+# unit 1 (the craps, gas, economics and mutation slice in the evidence table)
+KEEP=$(find test/craps test/differential test/economics test/gas test/helpers test/mutation test/invariant -name '*.sol' | sort)
+SKIP=(); for f in $ALL; do grep -qxF "$f" <<< "$KEEP" || SKIP+=(--skip "$f"); done
+forge test "${SKIP[@]}"
+# repeat with the keep-set of each remaining unit
+git checkout -- contracts/ContractAddresses.sol
+```
+
+For a quick targeted pass without the unit split:
 
 ```sh
 forge test --match-path 'test/craps/*.t.sol'
@@ -22,17 +54,51 @@ forge test --match-path 'test/fuzz/*Comp*.t.sol'
 forge test --match-path 'test/fuzz/invariant/Craps*.t.sol'
 ```
 
-In a separate checkout for Hardhat:
+### Hardhat
 
 ```sh
-npm ci
-npm test
+make test-hardhat
 npm run test:stat
+git checkout -- contracts/ContractAddresses.sol
 ```
 
-Foundry/Hardhat fixtures can patch `ContractAddresses.sol`. The Makefile Foundry target
-also restores that file from Git; use clean disposable checkouts so a local deployment
-configuration or uncommitted source pin is not lost.
+`make test-hardhat` runs the eleven `check-*` gates and then `npx hardhat test` over the
+whole tree; that is the figure in the evidence table. `npm test` runs only the
+unit/integration/deploy/access/edge globs plus three gas files and reports fewer tests.
+`npm run test:stat` needs `python3` on PATH: two of its suites spawn
+`scripts/data/derive_5_tables.py` (stdlib-only) as the canonical generator of the
+Degenerette payout constants. Its two expected reds are the `v36.0 SURF-01..04` protected-range
+byte-identical baseline check and `STAT-03` (empty-bucket skip rate); both are accepted.
+
+### Static analysis
+
+Slither 0.11.5 and Aderyn 0.6.8 produced the evidence rows. Compile with Hardhat first so
+Slither reuses that build:
+
+```sh
+pip install slither-analyzer==0.11.5
+npx hardhat compile
+npm run slither      # slither . --filter-paths 'node_modules|mocks' --exclude naming-convention,solc-version,low-level-calls,assembly,too-many-digits,similar-names,dead-code
+cargo install aderyn   # or: npm install -g @cyfrin/aderyn
+aderyn . -o aderyn-report.md
+```
+
+CI runs Slither through `crytic/slither-action` with `--exclude-informational
+--exclude-optimization` and Aderyn with the same `aderyn . -o aderyn-report.md`; the evidence
+row counts come from `npm run slither` with the flags above.
+
+### Size table
+
+```sh
+forge build --sizes
+```
+
+The command exits non-zero on this tree: test helpers that are not `.t.sol` files
+(`CrapsViews`, `GameSeeder`) exceed 24,576 bytes and `--skip test` does not exclude them.
+Deployable code is the `DEPLOY_ORDER` name map in `scripts/lib/predictAddresses.js`
+(what `scripts/deploy.js` deploys) plus the Vault's two share tokens; read only those rows.
+CI parses `forge build --sizes --json` and skips names ending in `Harness`, `Tester` or
+`Seeder` or starting with `Mock`.
 
 ## Structural and gas checks
 
@@ -49,8 +115,8 @@ artifacts when included, so identify deployable code explicitly. Verify the engi
 has code and is appended without shifting earlier addresses. Check initcode/deployment
 gas independently of runtime size.
 
-Use `CrapsGas`, `CrapsKeeperBudgetGas`, `RoundDrainChunkGas` and the advance-stage gas
-suites for reachable worst cases. Include finalizing seats, cold state and combined
+Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
+`test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
 ## Evidence status
@@ -63,10 +129,10 @@ row and the Slither rescan, all of which were run at the base revision itself.
 
 | Check | Result |
 | --- | --- |
-| Foundry, whole `test/` tree in seven compile units | 2,435 passed, 0 failed, 104 skipped, 297 suites |
-| Foundry craps, gas, economics and mutation slice at the base revision | 613 passed, 0 failed, 13 skipped |
+| Foundry, whole `test/` tree in the seven compile units above | 2,435 passed, 0 failed, 104 skipped, 297 suites |
+| Foundry unit 1 (craps, gas, economics, mutation) at the base revision | 613 passed, 0 failed, 13 skipped |
 | Hardhat `make test-hardhat` | 1,656 passing, 22 pending, 0 failing |
-| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the accepted byte-identical baseline check and the empty-bucket skip-rate bound, both pre-disclosed reds |
+| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03` (empty-bucket skip rate), both accepted reds; needs `python3` and `scripts/data/derive_5_tables.py` |
 | Eleven `make check-*` gates and the storage layout oracle | all pass |
 | Slither 0.11.5, 182 contracts, rescanned at the base revision | 4,118 results, 187 High; zero new High or Medium versus the prior scan; one High gone (`uninitialized-state` on the decimator's removed price helper, the shared-storage class) and one Low gone (`timestamp` on the removed craps settlement preview) |
 | Aderyn 0.6.8 | 10 High, 22 Low, unchanged |
@@ -93,5 +159,5 @@ the project reads them; each remains open to the auditor's own judgment:
 - 2 `incorrect-shift`: Yul shifts in the bucket-lane packing whose operand order the detector
   misreads; the packing tests pin the layout.
 
-Symbolic proofs and deep invariants are separate runs, not implied by `npm test` or an
+Symbolic proofs and deep invariants are separate runs, not implied by `make test-hardhat` or an
 ordinary Foundry pass.
