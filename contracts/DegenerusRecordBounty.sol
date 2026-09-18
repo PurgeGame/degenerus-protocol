@@ -141,7 +141,8 @@ contract DegenerusRecordBounty {
     // -------------------------------------------------------------------------
 
     /// @notice Stamp record `kind`'s new mark and hand its trophy to `to`.
-    /// @dev COINFLIP only — called from `_armBigRecord` on every mark ratchet,
+    /// @dev COINFLIP only — called from `_armBigRecord` (kinds 0-3) and
+    ///      `armDiceRunRecord` (kind 4) on every mark ratchet,
     ///      so the trophy tracks the record holder, never the claim. A raw
     ///      ownership write with NO ERC721Receiver callback: the move rides
     ///      inside deposits and bets and must never depend on recipient code.

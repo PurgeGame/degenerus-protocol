@@ -136,8 +136,9 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  *    `unchecked` blocks in modules are intentional optimizations for safe ops.
  *
  * 6. MAPPING COLLISION: Mappings use keccak256(key . slot), making collisions
- *    computationally infeasible. The lvlTraitEntry nested mapping uses
- *    keccak256(traitId . keccak256(level . slot)) for data location.
+ *    computationally infeasible. lvlTraitEntry is a mapping to a fixed array of
+ *    dynamic arrays: bucket (level, traitId) has its length at
+ *    keccak256(level . slot) + traitId and its lane words at keccak256 of that slot.
  *
  * UPGRADE NOTES
  * -----------------------------------------------------------------------------
@@ -2403,7 +2404,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal vrfSubscriptionId;
 
     // =========================================================================
-    // Lootbox RNG Packed Slot (7 variables in 240/256 bits)
+    // Lootbox RNG Packed Slot (9 variables in 256/256 bits)
     // =========================================================================
     //
     // Layout (LSB -> MSB):
@@ -3175,7 +3176,7 @@ abstract contract DegenerusGameStorage {
         // --- config (16 bits) ---
         /// @dev 0 = paused / never-subscribed; minimum 1 when active.
         uint8 dailyQuantity;
-        /// @dev bit 0 free; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
+        /// @dev bit 0 = externalFunding; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
         uint8 flags;
         // --- per-sub stamp (40 bits) ---
         /// @dev Stamp: the frozen activity score (the EV multiplier input at open).
@@ -3407,7 +3408,7 @@ abstract contract DegenerusGameStorage {
     mapping(uint48 => address[]) internal boxPlayers;
 
     // =========================================================================
-    // Foil Pack (v71)
+    // Foil Pack
     // =========================================================================
 
     /// @dev One packed record per (cycle level, player) — the surviving foil buy

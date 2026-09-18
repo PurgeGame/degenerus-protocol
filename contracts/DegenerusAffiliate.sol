@@ -166,7 +166,7 @@ contract DegenerusAffiliate {
     error OnlyAuthorized();
 
 
-    /// @notice Thrown when attempting to create an affiliate code with zero or reserved value.
+    /// @notice Thrown when code creation is given a zero owner or a zero/reserved code, or referral bootstrapping a zero player.
     error Zero();
 
     /// @notice Generic insufficient condition error (code taken, invalid referral, array length mismatch).
@@ -384,12 +384,13 @@ contract DegenerusAffiliate {
      * @dev This is the explicit user-initiated way to set a referrer.
      *      Accepts both custom codes and default address-derived codes.
      *      Alternatively, referrers can be set implicitly during payAffiliate().
-     *      Once set (or locked), cannot be changed.
+     *      Once set, cannot be changed — except a VAULT-defaulted or locked code, which
+     *      may be replaced while the lootbox presale is active.
      *
      * VALIDATION:
      * - code_ must resolve to a valid owner (custom or default)
      * - code_ owner must not be the caller (no self-referral)
-     * - caller must not already have a referral code set
+     * - caller must not already have a referral code set (VAULT/locked codes may be replaced during presale)
      *
      * @param code_ The affiliate code to register under.
      */
@@ -815,7 +816,7 @@ contract DegenerusAffiliate {
     }
 
     // =====================================================================
-    //              AFKING AFFILIATE — FLAT-7% DETERMINISTIC-SPLIT PULL (v56)
+    //              AFKING AFFILIATE — FLAT-7% DETERMINISTIC-SPLIT PULL
     // =====================================================================
 
     /**

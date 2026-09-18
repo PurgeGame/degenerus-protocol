@@ -145,7 +145,8 @@ interface ICoinflip {
     ///      Reward percent ranges: 5% chance of 50% (unlucky), 5% chance of 150% (lucky),
     ///      90% chance of 78-115% (normal). The caller adds a precomputed bonus on top.
     /// @param bonus Reward-percent bonus precomputed by the caller from frozen state: 0 = normal day,
-    ///        2 = bonus day (level 0 or a level's first jackpot day), 6 = x0-level (post-BAF) bonus day.
+    ///        2 = bonus day (a level-0 day, the second day of a level's jackpot phase, or the first
+    ///        purchase day after a turbo collapse), 6 = the same on an x0 BAF level (10, 20, 30, …).
     /// @param rngWord The VRF random word for determining outcome.
     /// @param epoch The epoch (day) index being resolved.
     /// @custom:reverts OnlyDegenerusGame If caller is not the DegenerusGame contract.

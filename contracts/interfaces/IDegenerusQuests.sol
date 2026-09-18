@@ -216,7 +216,8 @@ interface IDegenerusQuests {
     ///      anchor and the current day; skipped stall days are never treated as playable misses.
     /// @param player The subscriber whose run is ending
     /// @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed
-    /// @param afkingCoveredDay The afking funded high-water day (Game-side)
+    /// @param afkingCoveredDay The Game-side handback anchor: the day before the sub ended,
+    ///        floored at the afking funded high-water day
     /// @param currentDay The current calendar day (the decay reference)
     function finalizeAfking(address player, uint24 earnedStreak, uint24 afkingCoveredDay, uint24 currentDay) external;
 

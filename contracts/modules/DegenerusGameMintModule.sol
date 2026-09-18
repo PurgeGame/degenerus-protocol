@@ -138,24 +138,11 @@ contract DegenerusGameMintModule is
     ///      case and leaves the hot path paying nothing for a slot no purchase otherwise touches.
     uint256 private constant SNAP_CHECK_MAX_UNITS = 16;
 
-    /// @dev Lootbox boost value cap and expiry for the next lootbox purchase.
+    /// @dev Cap on the purchase cost basis the purchase-boost boon sizes its bonus tickets from.
     uint256 private constant LOOTBOX_BOOST_MAX_VALUE = 10 ether;
-
-    /// @dev Entry floor for the biggest-lootbox-deposit record, on the raw purchased
-    ///      deposit (no boon boost). The record is armed into Coinflip, which owns the
-    ///      four all-time records and the shared FLIP pool they pay from; the floor
-    ///      gates the external arm call off ordinary purchases, and is sound because a
-    ///      mark is only ever written by a deposit that cleared it — a sub-floor
-    ///      deposit could not have beaten the mark anyway. (The biggest-BUY record
-    ///      arms via DegenerusGame's purchase router: this module has no EIP-170 room
-    ///      for a second arm site, and the router already holds the raw quantity.)
-
-    /// @dev Loot box pool split: 90% future, 10% next.
 
     /// @dev Share of ticket purchases routed to future prize pool (10%).
     uint16 private constant PURCHASE_TO_FUTURE_BPS = 1000;
-
-    /// @dev Number of daily jackpots per level (must match AdvanceModule).
 
     // -------------------------------------------------------------------------
     // Events

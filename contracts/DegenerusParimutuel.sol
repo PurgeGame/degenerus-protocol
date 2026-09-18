@@ -347,8 +347,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         // the ROUTED level the crank runs at so the FLIP tracks settle gas. A caller who
         // also won takes two slots — payout plus bounty, as two calls would pay.
         // growthState(0) rather than growthState(round): round 0 skips the three ratchet
-        // reads, and settlement no longer wants them — the outcome came from the bit. All
-        // this call carries now is the routing half the bounty is priced at.
+        // reads, which settlement does not need — the outcome is the stored bit. The call
+        // carries only the routing half the bounty is priced at.
         (, , , uint24 currentLevel, bool bettingOpen, ) = game.growthState(0);
         winners[len] = msg.sender;
         payouts[len] =
@@ -429,7 +429,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     /// @dev The participation-quest reward for a bet placed on jackpot-phase day
     ///      `phaseDay`: halved per day, floored to a whole FLIP so the ladder reads as
     ///      round numbers rather than trailing halves — 150 / 75 / 37 / 18 across the
-    ///      phase's four jackpot days.
+    ///      phase's five jackpot days, the counter reading 0-4.
     ///
     ///      Days 0 and 1 share the top tier deliberately. The counter reads 0 from the
     ///      transition until the first daily jackpot settles — usually later the same
@@ -474,9 +474,9 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             uint256 payout
         )
     {
-        // growthState(0): the ratchet terms are no longer a settlement input — the outcome
-        // is a bit this contract holds — so the view asks only for the routing half, and
-        // round 0 skips the three ratchet reads.
+        // growthState(0): the ratchet terms are not a settlement input — the outcome is a
+        // bit this contract holds — so the view asks only for the routing half, and round 0
+        // skips the three ratchet reads.
         (, , , uint24 lvl, bool open, uint8 phaseDay) = game.growthState(0);
         if (open && lvl != 0) openRound = lvl;
         questReward = _questReward(phaseDay);

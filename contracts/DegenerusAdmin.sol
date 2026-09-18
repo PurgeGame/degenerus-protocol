@@ -283,9 +283,9 @@ contract DegenerusAdmin {
     event SubscriptionCreated(uint256 indexed subId);
     event SubscriptionCancelled(uint256 indexed subId, address indexed to);
 
-    /// @dev Emitted when a retired subscription's LINK is routed back. `amount` is what
-    ///      actually moved: zero means the forward failed and the LINK is still held here,
-    ///      recoverable by calling again with subId zero.
+    /// @dev Emitted when a retired subscription's LINK is routed onward. `amount` is the LINK
+    ///      delivered to `to`: the live subscription while the game runs, the vault after game
+    ///      over. A failed forward reverts the call, so the event never reports zero.
     event SubscriptionRecovered(
         uint256 indexed subId,
         address indexed to,
@@ -1010,7 +1010,7 @@ contract DegenerusAdmin {
     // =========================================================================
 
     /// @dev Execute VRF coordinator swap and void all other active proposals.
-    // Intentional: lastVrfProcessedTimestamp is NOT reset here — the old stall
+    // Intentional: lastVrfProcessed is NOT reset here — the old stall
     // timestamp carries over so governance can rapidly re-swap if the new
     // coordinator also fails, without waiting for a fresh stall window.
     function _executeSwap(uint256 proposalId) internal {

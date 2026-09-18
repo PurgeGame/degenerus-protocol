@@ -114,8 +114,8 @@ interface IIcons32 {
 ///      (only `active` — the first return — is read: true while the holder
 ///      has a live afking subscription); mintPackedFor backs the seat lock /
 ///      forfeit checks (the SEAT_ENCUMBERED bit) — the game keeps its own
-///      SEAT_CLAIMED latch as the once-per-address mint gate, and this token
-///      no longer reads it; clearSeatEncumbrance is
+///      SEAT_CLAIMED latch as the once-per-address mint gate, which this token
+///      does not read; clearSeatEncumbrance is
 ///      the one mutator — AFKING_SUB_TOKEN-only game-side, called by
 ///      reclaimSeat after seizing a forfeited seat.
 interface ISeatGameViews {

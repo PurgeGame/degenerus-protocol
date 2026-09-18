@@ -216,7 +216,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        12.5% / 10% for bulk buys (5+ paid passes). Recycled funds earn 5% of the price
      *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
      *
-     *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+, 10/25/50% off standard with boon.
+     *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+, 10/20/35% off standard with boon.
      *
      *      Fund distribution:
      *      - Pre-game (level 0): 30% next pool, 70% future pool
@@ -239,7 +239,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         if (quantity == 0 || quantity > 100) revert InvalidQuantity();
 
-        // Check for valid whale boon (10/25/50% off standard price)
+        // Check for valid whale boon (10/20/35% off standard price)
         bool hasValidBoon = false;
         BoonPacked storage bp = boonPacked[buyer];
         uint256 s0 = bp.slot0;
@@ -297,7 +297,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 WHALE_PASS_STANDARD_PRICE *
                 (quantity - 1);
         } else {
-            // x99 levels: minimum 2 passes (8 ETH) to deter fresh-account century bonus farming
+            // x00 (century) levels: minimum 2 passes (8 ETH) to deter fresh-account century bonus farming
             if (passLevel % 100 == 0 && quantity < 2) revert MinQuantityRequired();
             uint256 unitPrice = passLevel <= 4
                 ? WHALE_PASS_EARLY_PRICE

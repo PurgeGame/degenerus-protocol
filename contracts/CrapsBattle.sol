@@ -374,11 +374,9 @@ contract CrapsBattle is LootboxCraps {
     ///        common          rare
     ///        250,000 (25x)   1,200,000 (120x)
     ///
-    ///      A MULTIPLE, not a roll count. The old cutoffs read the winner's cumulative roll
-    ///      prefix, which measured how LONG a run took rather than how far it got; a high-water
-    ///      run is not trying to be quick, so the roll prefix stopped saying anything about it.
-    ///      The high point adds no draw of its own either — it is a figure the settlement already
-    ///      computed — and it rewards exactly the thing the format is now about.
+    ///      A MULTIPLE, not a roll count. A high-water run is not trying to be quick, so how
+    ///      long it took says nothing about it; how far it got does. The high point adds no
+    ///      draw of its own — it is a figure the settlement already computed.
     ///
     ///      TESTED IN BASIS POINTS, not in FLIP, and the two are the same test: the score is
     ///      `floor(peak * 10_000 / start)`, and for integers `floor(a/b) >= c` is exactly
@@ -624,11 +622,10 @@ contract CrapsBattle is LootboxCraps {
     //   bits 219..249  seed granules
     //   bits 250..255  free
     //
-    // THE ROLL SLICE IS GONE. It held thirteen bits, which a scheduled run's 8,703-roll ceiling no
-    // longer fits, and nothing ranks or qualifies on rolls any more — the progressive reads the
-    // winner's HIGH POINT, which the composite already carries. Its bits went to the composite,
-    // which needs them: a high-water verdict is a goal flag, a high point, an ending bankroll and
-    // a standing, and no two of those may share a field.
+    // No roll slice: nothing ranks or qualifies on rolls — the progressive reads the winner's
+    // HIGH POINT, which the composite already carries — and the composite needs the width: a
+    // high-water verdict is a goal flag, a high point, an ending bankroll and a standing, and
+    // no two of those may share a field.
     uint256 internal constant _BG_RESOLVED_SHIFT = 32;
     uint256 internal constant _BG_BEST_SHIFT = 64;
     uint256 internal constant _BG_WINNER_SHIFT = 169;
@@ -713,9 +710,11 @@ contract CrapsBattle is LootboxCraps {
     ///      carries `winningScoreBps` for exactly that reason, and a caller holding the window's
     ///      terms divides `winningPeak` by them.
     /// @param battleStake  One entrant's stake (wei).
-    /// @param seed         House money banked on this battle (wei); zero for an unseeded custom one.
-    ///                     Every field that forms pays it out — there is no head count below which
-    ///                     it falls back out of the pot.
+    /// @param seed         FLIP donated onto this battle by third parties (wei), via `donate`;
+    ///                     zero if nobody has. Never the protocol's own boost — a window's boost
+    ///                     is drawn from the word that settles it and read through `boostOf`.
+    ///                     Every field that forms pays it out — there is no head count below
+    ///                     which it falls back out of the pot.
     /// @param pot          `battleStake x entrants`, plus banked seed (wei). A tier boost is drawn
     ///                     from the word that settles the field and is therefore not included here.
     struct Battle {
@@ -1500,7 +1499,7 @@ contract CrapsBattle is LootboxCraps {
         if (standing > _BET_SCORE_MASK) standing = _BET_SCORE_MASK;
 
         // ONE tagged burn buys the whole day: the join, the day pass and the day-kept streak all
-        // ride the same report, so the table no longer calls the quest ledger itself.
+        // ride the same report, so the quest ledger hears about the day once, from the burn.
         uint8 boonMask = _burnForCraps(
             player, _tag(cost, _CRAPS_FLAG_JOIN | _CRAPS_FLAG_PASS | (high ? _CRAPS_FLAG_HIGH : _CRAPS_FLAG_NORMAL) | flags)
         );
@@ -1705,9 +1704,9 @@ contract CrapsBattle is LootboxCraps {
     ///         and do the next piece of it, whatever that piece is — cross a spent slot, sweep a
     ///         lapsed day's reservations back to credits, shut a window whose close has passed,
     ///         or settle a batch of an armed field within `budgetUnits`.
-    /// @dev PERMISSIONLESS, and the ONE source of scheduled liveness. The old keeper looked only
-    ///      at the most recently closed window, so a field that outlasted one budget — or whose
-    ///      word came late, the daily event above all — fell behind the rewarded crank forever.
+    /// @dev PERMISSIONLESS, and the ONE source of scheduled liveness. Walking from the oldest
+    ///      slot still owing work means a field that outlasts one budget — or whose word came
+    ///      late, the daily event above all — is never left behind the rewarded crank.
     ///      This cursor cannot pass a slot that still owes anything, so nothing scheduled is ever
     ///      forgotten; external help (a direct arm, a direct settle) is detected as done work and
     ///      crossed, never wedged on.
@@ -1988,12 +1987,6 @@ contract CrapsBattle is LootboxCraps {
         return (w.key, index, c);
     }
 
-    /// @notice Grant or revoke the right to open a custom battle. The vault's majority holder is
-    ///         the only caller — and always holds the right itself — and this roll is the only
-    ///         thing it confers: a creator has no say over settlement, arming or anyone else's
-    ///         money, and every battle they open is joinable by anyone clearing its terms.
-    /// @dev Held as a mapping rather than resolved through the vault on each placement so a
-    ///      granted creator pays one warm SLOAD instead of a cross-contract call.
     /// @notice Name the board the vault's automatic day seats play from here on.
     /// @dev The vault is seated at every bonus day by `openBonusDay` — a call nobody makes on its
     ///      behalf and which takes no arguments — so without this its ticket is always blank and
@@ -2031,6 +2024,13 @@ contract CrapsBattle is LootboxCraps {
         _vaultBoard = packed;
     }
 
+    /// @notice Grant or revoke the right to open a custom battle. The vault's majority holder is
+    ///         the only caller — and always holds the right itself — and this roll is the only
+    ///         thing it confers: a creator has no say over settlement, arming or anyone else's
+    ///         money, and every battle they open is joinable by anyone clearing its terms.
+    /// @dev Held as a mapping rather than resolved through the vault on each placement so a
+    ///      granted creator pays one warm SLOAD instead of a cross-contract call.
+    /// @custom:reverts NotVaultOwner If the caller does not hold the vault's DGVE majority.
     function setBattleCreator(address account, bool allowed) external {
         if (!IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
         _battleCreator[account] = allowed;
@@ -2531,8 +2531,9 @@ contract CrapsBattle is LootboxCraps {
     ///      at a number that cannot move. Redemption never tops up and never refunds, whichever
     ///      way the day lands, and an unredeemed day is simply gone.
     ///
-    ///      The burn happens AFTER the whole range has been vetted, so a range that cannot be
-    ///      taken costs nothing.
+    ///      The burn goes FIRST and the run is vetted as it is written; a day the run cannot
+    ///      take reverts the whole call and the burn unwinds with it, so a rejected range still
+    ///      costs nothing.
     /// @param startDay The first day to reserve. Must be strictly after today.
     /// @param count    How many consecutive days, 1..255.
     /// @param high     Whether these are high-roller days.
@@ -2540,6 +2541,9 @@ contract CrapsBattle is LootboxCraps {
     ///                 chips, exactly as `applyCrapsPasses` takes it.
     /// @custom:reverts BadPassCount If `count` is zero.
     /// @custom:reverts DayNotReservable If any day in the range is taken, worded or not future.
+    /// @custom:reverts BadRandomCount If `chips` names more than seven chips.
+    /// @custom:reverts TooManyChipsOnALeg If any leg stacks more than three chips.
+    /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     function buyFutureCrapsDays(uint24 startDay, uint8 count, bool high, uint32 chips) public {
         if (count == 0) revert BadPassCount();
         uint8 boonMask;
@@ -3347,10 +3351,8 @@ contract CrapsBattle is LootboxCraps {
             uint256 boardFlip;
             uint256 bountyFlip;
             uint256 bankrollFlip;
-            // FIXED AT FIVE. The depth used to be a three-way draw, back when a run stopped the
-            // moment it reached its target and the depth was what decided how long that took. A
-            // scheduled run does not stop there any more — it latches the win and plays on — so
-            // the depth stopped separating the formats and the schedule stopped drawing it.
+            // FIXED AT FIVE. A scheduled run latches its win and plays on, so a drawn depth
+            // would not separate the formats; the schedule draws none.
             uint256 bankMult = _SCHED_BANK_MULT;
 
             if (period == _BONUS_PERIODS_PER_DAY - 1) {
@@ -3393,9 +3395,10 @@ contract CrapsBattle is LootboxCraps {
                     uint256 draw = roll % 10;
                     pick3 = draw < 7 ? 0 : (draw < 9 ? 1 : 2);
                 }
-                // The TIER is drawn here — it fixes the bankroll and the bounty band. It no longer
-                // carries a seed: house money is sized by the GAME (a share of the level's pool
-                // target) against what the field itself funded, not by which tier the word picked.
+                // The TIER is drawn here — it fixes the bankroll, the bounty band and the
+                // window's weight in the day's boost ladder (`_windowShare` scales a routine
+                // window by 1 << (tier - 1)). The ladder itself is sized by the table's own
+                // recent action plus the flat base (`_drawBudgets`), not by the tier.
                 if (pick3 == 0) {
                     tier = 1;
                     bankrollFlip = _BONUS_SMALL_BANKROLL;
@@ -3486,9 +3489,8 @@ contract CrapsBattle is LootboxCraps {
     ///
     ///      A GOAL BEATS EVERY BUST, and there is ONE comparator for both products:
     ///
-    ///        * GOALS race on the HIGH POINT, then on the ending bankroll. A run does not stop
-    ///          when it wins any more, so how fast it got there stopped being a merit; how far it
-    ///          got is.
+    ///        * GOALS race on the HIGH POINT, then on the ending bankroll. A run latches its win
+    ///          and plays on, so how fast it got there is no merit; how far it got is.
     ///        * BUSTS race on shooters completed, then on the remainder still held. A bust's high
     ///          point reaches neither field: the goal bit is clear, so the primary is its hand
     ///          count and nothing about a temporary peak can enter an all-Bust race.
@@ -3763,7 +3765,7 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @notice What a day's action contributes to a later budget: `dayStaked * _BOOST_ACTION_BPS`.
+    /// @notice What a day's action contributes to a later budget: `dayStaked * _BOOST_ACTION_BPS / _BPS_DENOMINATOR`.
     ///         Drawn from the HANDLE rather than from the realised result, so it does not move
     ///         with the dice and a lucky week cannot starve the next one. It measures no burn and
     ///         never has — it is a linear rate on what the seats put up.

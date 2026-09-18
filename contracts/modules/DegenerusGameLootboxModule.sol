@@ -59,7 +59,7 @@ interface ICrapsPassDelivery {
 /**
  * @title DegenerusGameLootboxModule
  * @author Burnie Degenerus
- * @notice Delegatecall module for lootbox opening, boon consumption, and deity boon system.
+ * @notice Delegatecall module for lootbox opening and boon consumption.
  *
  * @dev This module is called via `delegatecall` from DegenerusGame, meaning all storage
  *      reads/writes operate on the game contract's storage.
@@ -67,7 +67,7 @@ interface ICrapsPassDelivery {
  * ## Functions
  *
  * - Box opening (openBox, resolveLootboxDirect, resolveRedemptionLootbox)
- * - Deity boon system (issueDeityBoon)
+ * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
@@ -111,8 +111,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        when the beneficiary calls `claimWhalePass`, which may be greater
     ///        than this value (the player can delay the claim).
     /// @param entriesPerLevel Entries per level the materialized whale pass grants
-    /// @param statsBoost Reserved for future use (always 0)
-    /// @param frozenUntilLevel Reserved for future use (always 0)
+    /// @param statsBoost Always 0 (the pass carries no stat boost)
+    /// @param frozenUntilLevel Always 0 (the pass freezes no level)
     event LootBoxWhalePassJackpot(
         address indexed player,
         uint256 lootboxAmount,
@@ -164,7 +164,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Unified lootbox reward event for boon awards
     /// @param player The player receiving the reward
-    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon, 12=QuestShield, 13=DegeneretteBoon)
+    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon, 12=QuestShield, 13=DegeneretteBoon, 14=CrapsBoon)
     /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons; for type 13 the rolled boonType 32-40, which identifies the boon's currency and size)
     event LootBoxReward(address indexed player, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount);
 
@@ -203,9 +203,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Boon bonus values
 
     // Lootbox roll constants
-    /// @dev Base ticket roll budget in BPS (~155% EV after variance, 45% chance path).
-    ///      Sized so the 45%-frequency ticket path distributes the same aggregate ETH
-    ///      value as the prior 55%-frequency path (16_100 * 11 / 9).
+    /// @dev Base ticket budget in BPS of box value for ONE ticket outcome, before the
+    ///      variance tiers (~0.941x mean) and the near/far distance weighting: ~185% of box
+    ///      value per ticket outcome. Ticket outcomes are 40% of direct-box rolls and 45% of
+    ///      recirculated-box rolls (roll 19 pays tickets there instead of the ETH spin).
     uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 19_678;
     /// @dev Budget weighting by target-level distance, applied to the ticket roll budget.
     ///      Far-future ticket rolls (20% of ticket rolls) capture 30% of the aggregate
@@ -719,10 +720,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 extra = boost ? _consumeBoxBoost(player, amountWei) : 0;
         word = _lbSet(word, LB_BOOST_SHIFT, LB_BPS_MASK, _blendBps(oldBoost, priorNominal, extra, amountWei));
 
-        // Distress rides the same flag as the boost: the whale bundle carried both lanes
-        // before the relocation, the afking cover carried neither (it always preserved zero
-        // distress). Blended over BOOSTED value, mirroring beginBoxOrder — the resolver's
-        // distress basis is boostedSize * distressBps.
+        // Distress rides the same flag as the boost: the whale bundle carries both lanes,
+        // the afking cover neither (it always preserves zero distress). Blended over BOOSTED
+        // value, mirroring beginBoxOrder — the resolver's distress basis is boostedSize * distressBps.
         {
             uint256 boostedPrior = priorNominal + (priorNominal * oldBoost) / 10_000;
             uint256 boostedAdded = amountWei + extra;
@@ -1024,8 +1024,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 touched = acc.ticketTouched;
         while (touched != 0) {
             // Find the least-significant set bit in six bounded steps (all lanes are 0..50),
-            // then clear it. This walks only populated lanes, in the same ascending order as
-            // the former exhaustive 0..50 scan.
+            // then clear it. This walks only populated lanes, in ascending lane order.
             uint256 scan = touched;
             uint256 offset;
             if (uint32(scan) == 0) {
@@ -1072,7 +1071,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      box — and let it place at most one of them on tomorrow.
     ///
     ///      FAIL-OPEN, AND THE PASSES ARE NEVER LOST. A bounded stipend caps what a broken table
-    ///      could burn. A failure of the FULL lane no longer swallows the award: it falls back to
+    ///      could burn. A failure of the FULL lane does not swallow the award: it falls back to
     ///      the table's credit-only door, and only if both fail does the entry revert — retryable,
     ///      never silently consumed. The roll is announced from HERE, and the table's own
     ///      `CrapsPassesCredited`/`CrapsDayReserved` logs say which disposition it landed in, so
@@ -1099,7 +1098,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Add whole tickets to one target-level offset and remember that offset on first touch.
-    ///      The same saturation rule as the former inline update keeps the eventual entry shift
+    ///      Saturating the per-offset count keeps the eventual entry shift
     ///      (`wholeTicketsToEntries`) in range and prevents an extreme order from wedging a sweep.
     function _addBoxTickets(BoxAcc memory acc, uint256 offset, uint32 whole) private pure {
         if (whole == 0) return;
@@ -1317,7 +1316,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @return opened Total boxes opened this call.
     /// @return unitsSpent Walk units this call consumed — the crank's work-based bounty basis.
     ///         Crediting the knee per BOX would let one five-small order saturate it at a
-    ///         fraction of the work five distinct entries used to represent.
+    ///         fraction of the work five distinct entries represent.
     function openHumanBoxes(uint256 budget) external returns (uint256 opened, uint256 unitsSpent) {
         // Entry-gate: the open path's revert sources — rngLock and the terminal-jackpot
         // liveness control — are excluded pre-loop so the loop body is guaranteed-non-reverting.

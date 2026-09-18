@@ -34,9 +34,12 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 /**
  * @title DegenerusGameBoonModule
  * @author Burnie Degenerus
- * @notice Delegatecall module for boon consumption and expiry maintenance.
+ * @notice Delegatecall module for the boon lifecycle: box draws, deity issuance, consumption,
+ *         and expiry maintenance.
  *
- * @dev Consumes coinflip, purchase, and decimator boons; separately clears expired
+ * @dev Rolls and delivers box-drawn boons (`rollBoxBoons` / `rollBoxBoonTiers`), lets a
+ *      deity-pass holder issue a daily boon to another player (`issueDeityBoon`), consumes
+ *      coinflip, craps, purchase, and decimator boons, and separately clears expired
  *      coinflip, lootbox, purchase, decimator, whale, deity-pass, and lazy-pass boons.
  *      Called via `delegatecall` from DegenerusGame -- all storage reads/writes
  *      operate on the game contract's storage.
@@ -421,11 +424,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     );
 
     // =========================================================================
-    // Box-drawn boons (relocated from the Lootbox module)
+    // Box-drawn boons
     // =========================================================================
     //
-    // The draw table, its weights and every delivery branch live here rather than in the
-    // Lootbox module: this is the boon module, and that one had run out of EIP-170 headroom.
+    // The draw table, its weights and every delivery branch live here, not in the Lootbox
+    // module: this is the boon module, and the Lootbox module has no EIP-170 headroom for them.
     // The Lootbox module reaches this through ONE delegatecall per entry — see `rollBoxBoons`,
     // which loops the entry's boxes internally rather than making the caller pay a call frame
     // per box.
@@ -457,7 +460,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_BOON_BONUS_BPS = 500;
     /// @dev Maximum bonus amount for coinflip boon (5000 FLIP)
     uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000 ether;
-    /// @dev Deity pass base price (used for deity discount boon EV estimation).
+    /// @dev Deity pass base price; the nominal figure BOON_FIXED_WEIGHTED_MAX was derived from,
+    ///      not read at runtime.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
     /// @dev 10% bonus in basis points for coinflip boon
     uint16 private constant LOOTBOX_COINFLIP_10_BONUS_BPS = 1000;
@@ -483,7 +487,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint24 private constant LOOTBOX_ACTIVITY_BOON_50_BONUS = 50;
     /// @dev Quest-streak shields granted per quest-shield boon
     uint16 private constant LOOTBOX_QUEST_SHIELD_GRANT = 1;
-    /// @dev Whale pass price (200 entries = 50 tickets over 100 levels)
+    /// @dev Whale pass price (200 entries = 50 tickets over 100 levels); the nominal figure
+    ///      BOON_FIXED_WEIGHTED_MAX was derived from, not read at runtime.
     uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
         4.50 ether;
     /// @dev Probability scale for granular boon rolls (ppm = 1e6).
@@ -633,12 +638,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_CRAPS_5 = 200;
     uint16 private constant BOON_WEIGHT_CRAPS_10 = 40;
     uint16 private constant BOON_WEIGHT_CRAPS_15 = 8;
-    /// @dev Fixed nominal deity-pass price for the boon-chance normalization (mid-curve k=16:
-    ///      BASE + 16·17/2 ether). The live triangular price is collectively player-movable
-    ///      (pass purchases), so it must not reach `totalChance` — a constant keeps the hit
-    ///      boundary a pure function of committed inputs. The mis-pricing only moves boon
-    ///      FREQUENCY, never a payout amount, and is bounded by the deity tiers' 40/2856
-    ///      weight share.
+    /// @dev Fixed nominal deity-pass price (mid-curve k=16: BASE + 16·17/2 ether); the nominal
+    ///      figure BOON_FIXED_WEIGHTED_MAX was derived from, not read at runtime.
     uint256 private constant DEITY_PASS_NOMINAL_PRICE = DEITY_PASS_BASE + 136 ether;
     /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
     ///      The three craps families are appended at the TAIL of the walk (band 2608..2855), so
@@ -680,12 +681,19 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @dev Cursor position where the deity-pass band starts (pre-dec 982 + dec 50 +
     ///      whale-discount 40), in full-table coordinates after the dec skip re-adds 50.
     uint16 private constant BOON_WEIGHT_PRE_DEITY_PASS = 1072;
+    /// @dev Whale pass standard entries per level (4 entries = 1 ticket). Reported in the
+    ///      LootBoxWhalePassJackpot event for downstream indexers; the
+    ///      actual ticket materialization happens in claimWhalePass.
     uint32 private constant WHALE_PASS_ENTRIES_PER_LEVEL = 2;
 
-    /// @dev Coinflip boon cap for max deposit (100k FLIP) used in EV estimation.
+    /// @dev Coinflip boon cap for max deposit (100k FLIP). FLIP-denominated, so its ETH value
+    ///      scales with the ticket price: the nominal figure BOON_PRICE_WEIGHT was derived from,
+    ///      not read at runtime.
     uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000 ether;
 
-    /// @dev Decimator boon cap for base amount (50k FLIP) used in EV estimation.
+    /// @dev Decimator boon cap for base amount (50k FLIP). FLIP-denominated, so its ETH value
+    ///      scales with the ticket price: the nominal figure BOON_PRICE_WEIGHT was derived from,
+    ///      not read at runtime.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
 
     /// @dev 15% lootbox boost in basis points
@@ -694,13 +702,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @dev 25% lootbox boost in basis points
     uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
 
-    /// @dev Whale pass standard entries per level (4 entries = 1 ticket). Reported in the
-    ///      LootBoxWhalePassJackpot event for downstream indexers; the
-    ///      actual ticket materialization happens in claimWhalePass.
     /// @dev 5% lootbox boost in basis points
     uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
 
-    /// @dev Whale pass standard price (used for whale discount boon EV estimation).
+    /// @dev Whale pass standard price; the nominal figure BOON_FIXED_WEIGHTED_MAX was derived
+    ///      from, not read at runtime.
     uint256 private constant WHALE_PASS_STANDARD_PRICE =
         4 ether;
 
@@ -714,9 +720,9 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @notice Draw boons for every box in one opened entry.
     /// @dev Delegatecall entrypoint from the Lootbox module; runs in the Game's storage context.
     ///      ONE call covers the whole entry: the caller passes how many boxes it rolled and the
-    ///      per-box budget, and the loop lives here. Under the count model an entry can hold a
-    ///      hundred boxes, and a call frame per box — each of which used to make up to two
-    ///      delegatecalls of its own for expiry and activity — is the cost this collapses.
+    ///      per-box budget, and the loop lives here. An entry can hold a hundred boxes; one
+    ///      frame per box, each with its own expiry and activity delegatecalls, is the cost
+    ///      this collapses into a single call.
     ///
     ///      Each box still gets its OWN draw off a counter-tagged seed, so a box is a bet here
     ///      too; what is shared is the frame, not the outcome.
@@ -1304,7 +1310,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     function _lazyPassPriceForLevel(
         uint24 passLevel
     ) internal pure returns (uint256) {
-        // Preserve the old unchecked uint24-wrap behavior at the mathematical type boundary.
+        // Wrap uint24 at the type boundary exactly as the unchecked per-level sum does.
         // Real game levels never approach it; keeping the fallback makes the optimization exact
         // over the function's full input domain as well as every reachable state.
         if (passLevel > type(uint24).max - 9) {

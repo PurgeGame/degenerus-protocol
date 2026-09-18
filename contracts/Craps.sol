@@ -91,8 +91,8 @@ contract Craps {
     uint256 internal constant _SLIP_ROLL_BUDGET = 8192;
 
     /// @notice Shooter cap on a bet slip. A run does not stop when it wins — it latches the goal
-    ///         and plays on — so it needs room to: the escalator reaches its ceiling at shooter
-    ///         96, and twice that is where the cap belongs.
+    ///         and plays on — so it needs room past the escalator ceiling at shooter 96. Either
+    ///         this cap or `_SLIP_ROLL_BUDGET` ends a run, whichever the dice reach first.
     uint256 internal constant _MAX_SLIP_HANDS = 512;
 
     /// @notice THE ABSOLUTE TOTAL-ROLL CEILING, and the figure the gas and work-unit bounds are

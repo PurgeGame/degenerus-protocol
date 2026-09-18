@@ -104,14 +104,17 @@ interface IDegenerusGame {
     /// @return currPool The ratchet entry for round.
     /// @return nextPool The ratchet entry for round + 1 (0 until the successor banks).
     /// @return currentLevel The current game level — the round a bet placed now joins.
-    /// @return bettingOpen True while the jackpot phase is live. Deliberately just the
-    ///         flag: the market consumes no randomness and its terms are write-once, so
-    ///         the RNG lock is not its business, and game over only ever lands with the
-    ///         flag already down for good.
+    /// @return bettingOpen True while the jackpot phase is live, its draws have not ended
+    ///         (phaseTransitionActive clear) and the level is not turbo
+    ///         (compressedJackpotFlag < 2). The RNG lock is not consulted: the market
+    ///         consumes no randomness and its terms are write-once. Game over needs no leg —
+    ///         it is only ever declared with the flag already down for good.
     /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
-    ///         phase runs four jackpot days, 1-4, each tier advancing when its day's
-    ///         processing completes; 0 is only the sliver between the transition and the
-    ///         same day's first processing — day 1 before its settlement.
+    ///         phase runs five logical jackpot days; the counter reads k once logical day k's
+    ///         processing completes, and completing day 5 ends the phase in the same advance,
+    ///         so an open market reads 0-4. A compressed phase settles them over three
+    ///         physical days (counter 0, 1, 3, then end); turbo settles all five in one. 0 is
+    ///         only the sliver between the transition and the same day's first processing.
     function growthState(uint24 round)
         external
         view

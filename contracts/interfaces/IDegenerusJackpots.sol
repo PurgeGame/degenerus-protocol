@@ -44,10 +44,10 @@ interface IDegenerusJackpots {
         external
         returns (address[] memory winners, uint256[] memory amounts, uint256 returnAmountWei);
 
-    /// @notice Record a BAF (coinflip) deposit for jackpot eligibility tracking.
-    /// @param player The player making the deposit.
-    /// @param lvl The current game level.
-    /// @param amount The amount deposited (for leaderboard ranking).
+    /// @notice Record a coinflip win for BAF score tracking.
+    /// @param player Address of the player.
+    /// @param lvl BAF bracket (level rounded up to the next multiple of 10).
+    /// @param amount Winning coinflip payout credited to the player's BAF score.
     function recordBafFlip(address player, uint24 lvl, uint256 amount) external;
 
     /// @notice Mark a BAF bracket as skipped when the daily flip loses.

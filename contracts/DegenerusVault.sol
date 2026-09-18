@@ -659,13 +659,15 @@ contract DegenerusVault {
         gamePlayer.claimWinningsStethFirst();
     }
 
-    /// @notice Place a Degenerette bet using ETH (and/or claimable winnings)
-    /// @dev Uses msg.value + ethValue from vault balance. If underfunded, claimable winnings are used.
+    /// @notice Place a Degenerette bet for the vault in ETH, FLIP or WWXRP.
+    /// @dev ETH bets fund from msg.value + ethValue from the vault balance, falling back to
+    ///      claimable winnings when underfunded; other currencies send no value.
+    /// @param currency Bet currency (0 = ETH, 1 = FLIP, 3 = WWXRP)
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of tickets (must satisfy game rules)
     /// @param customTraits Custom packed traits
     /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
-    /// @param ethValue Additional ETH from vault balance to use (on top of msg.value)
+    /// @param ethValue Additional ETH from vault balance to use (on top of msg.value); ETH bets only
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If msg.value + ethValue exceeds vault balance
     function gameDegeneretteBet(

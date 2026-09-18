@@ -198,7 +198,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  [128-151] frozenUntilLevel - Whale pass freeze level (0 = none)     |
       |  [152-153] whalePassType  - Pass type (0=none,1=10,3=100)            |
       |  [154]    seatClaimed      - AFKing seat mint latch (1b)            |
-      |  [155-159] (reserved)       - 5 unused bits                          |
+      |  [155]    seatEncumbered   - AFKing seat encumbrance latch (1b)      |
+      |  [156-159] (reserved)      - 4 unused bits                           |
       |  [160-183] mintStreakLast  - Mint streak last completed level (24b)  |
       |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |
       |  [185-208] affBonusLevel   - Cached affiliate bonus level (24b)      |
@@ -1273,9 +1274,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                                                                                                                |
       |  Modules:                                                                                                      |
       |  • GAME_ADVANCE_MODULE      - Daily advance, VRF, daily processing                                             |
+      |  • GAME_AFKING_MODULE       - AFKing subscriptions, seats and prepaid balances                                 |
+      |  • GAME_BINGO_MODULE        - Bingo card purchase and claims                                                   |
       |  • GAME_BOON_MODULE         - Deity boon effects and activation                                                |
       |  • GAME_DECIMATOR_MODULE    - Decimator claim credits and lootbox payouts                                      |
       |  • GAME_DEGENERETTE_MODULE  - Degenerette bet placement and resolution                                         |
+      |  • GAME_FOILPACK_MODULE     - Foil pack purchase, match and round drains                                       |
+      |  • GAME_GAMEOVER_MODULE     - Game-over declaration and final sweeps                                           |
       |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                 |
       |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                 |
       |  • GAME_MINT_MODULE         - Mint data recording, airdrop multipliers                                         |
@@ -2631,10 +2636,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         phase, where the flag is already down and, with no transition ever coming,
     ///         stays down.
     /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
-    ///         phase runs four jackpot days, 1-4, each tier advancing when its day's
-    ///         processing completes; 0 is only the sliver between the transition and the
-    ///         same day's first processing — day 1 before its settlement. The counter is
-    ///         also zeroed at _endPhase, but bettingOpen is already false by then.
+    ///         phase runs five logical jackpot days; the counter reads k once logical day k's
+    ///         processing completes, and completing day 5 ends the phase in the same advance,
+    ///         so an open market reads 0-4. A compressed phase settles them over three
+    ///         physical days (counter 0, 1, 3, then end); turbo settles all five in one. 0 is
+    ///         only the sliver between the transition and the same day's first processing.
+    ///         The counter is also zeroed at _endPhase, but bettingOpen is already false by then.
     function growthState(
         uint24 round
     )

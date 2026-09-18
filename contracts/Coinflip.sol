@@ -144,10 +144,11 @@ contract Coinflip {
     /// @param kind Which record moved (RECORD_KIND_*).
     /// @param player The player the record — and any claim — accrues to.
     /// @param value The new mark, in that record's unit (flip: FLIP wei; spin and
-    ///        lootbox deposit: ETH wei; ticket buy: whole tickets).
+    ///        lootbox deposit: ETH wei; ticket buy: whole tickets; dice run: score
+    ///        basis points, 10,000 = 1x).
     /// @param paid FLIP credited for the claim — the category's accrued share of the
-    ///        record pool — 0 when the candidate ratcheted the mark without clearing
-    ///        it by a fifth.
+    ///        record pool — 0 on a bare ratchet (kinds 0-3: the candidate did not clear
+    ///        the mark by a fifth) or when the share of the pool computes to zero.
     /// @param sdgnrsPaid sDGNRS paid for the claim from the reward pool (the same
     ///        accrued share at 1/500 scale), 0 on a bare ratchet or an empty pool.
     event BigRecordUpdated(
@@ -1245,7 +1246,7 @@ contract Coinflip {
     /// @notice Configure auto-rebuy mode for coinflips.
     /// @param player The player to configure (address(0) for msg.sender).
     /// @param enabled True to enable auto-rebuy, false to disable and cash out carry.
-    /// @param takeProfit Amount reserved from wins before rolling remainder (0 = roll all).
+    /// @param takeProfit Take-profit threshold: every whole multiple of it in a win is banked, the remainder rolls (0 = roll all).
     function setCoinflipAutoRebuy(
         address player,
         bool enabled,
@@ -1452,10 +1453,9 @@ contract Coinflip {
         // return under 0-take-profit rebuy). FLIP leaves sDGNRS's position solely
         // through a redemption/salvage consume leg.
         //
-        // THE RESERVE IS STATIC ONCE ARMED. It used to bleed 2% a day onto the active flip so
-        // the protocol's own backing kept a position on the coin; craps now puts a far larger
-        // and genuinely player-funded burn through the table, so the reserve no longer has to
-        // manufacture one out of the redemption backing it exists to be.
+        // THE RESERVE IS STATIC ONCE ARMED: nothing drips from it onto the active flip.
+        // The table's player-funded craps burn is the coin's standing burn, so the reserve
+        // stays whole as the redemption backing it exists to be.
         PlayerCoinflipState storage sdgnrsState = playerState[
             ContractAddresses.SDGNRS
         ];

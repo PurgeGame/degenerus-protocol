@@ -1142,7 +1142,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (e.burnLevel != uint48(lvl) || e.weightedBurn == 0)
             revert TerminalDecNotWinner();
 
-        // Use totalBurn == 0 as claimed flag (set to 0 after claiming)
+        // weightedBurn == 0 is the claimed flag (zeroed after claiming)
         uint88 weight = e.weightedBurn;
 
         // Terminal offset lives at lvl + 1 (see runTerminalDecimatorJackpot) to avoid aliasing the

@@ -83,6 +83,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Errors
     // -------------------------------------------------------------------------
 
+    /// @notice Thrown when a function restricted to the game contract is called by another address.
     error OnlyGame();
 
     // -------------------------------------------------------------------------
@@ -717,7 +718,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Single packed-slot RMW folds every leg: credit the ticket leg's backing to nextPrizePool
         // and debit the future pool (drip consumed + ETH paid + insurance skim). ticketLegBudget and
         // insuranceCut are nonzero only when ethDaySlice is, so both ride this write;
-        // _distributePoolBackedTickets below no longer credits next itself. futureBal is still exact —
+        // _distributePoolBackedTickets below does not credit next itself. futureBal is still exact —
         // nothing above writes prizePoolsPacked (purchase-phase distribution never reaches the solo
         // whale-pass leg). The ticket leg, the skim and the ETH leg partition ethDaySlice exactly and
         // paidEth never exceeds the ETH leg, so the three debits sum to at most the 1% slice and the
@@ -802,7 +803,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Complete the daily jackpot cycle. The counter advances with the day seal: here when
         // this stage seals the day (no carryover) or ends the level, otherwise in
         // payCarryoverTickets, which seals the day. The ticket-routing predicate keys off the
-        // counter under the lock to spot the final daily's request, and the lock now spans the
+        // counter under the lock to spot the final daily's request, and the lock spans the
         // carryover stage, so a counter advanced ahead of its seal would route buys to the
         // next level for one advance.
         uint8 counterCached = jackpotCounter;
@@ -2665,9 +2666,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /**
      * @notice Unified jackpot ticket award function for all jackpots.
-     * @dev Awards tickets using two-tier system:
-     *      Small (0.5-5 ETH): Split in half, 2 probabilistic rolls
-     *      Large (> 5 ETH): Whale pass equivalent (100-ticket chunks)
+     * @dev Awards tickets by amount tier:
+     *      Very small (<= 0.5 ETH): one probabilistic roll
+     *      Medium (0.5-5 ETH): split in half, 2 probabilistic rolls
+     *      Large (> 5 ETH): whale-pass half-passes at 2.25 ETH each (100 entries = 25 tickets
+     *      per half-pass); the sub-half-pass remainder is credited as claimable ETH
      *      Uses actual game ticket pricing for target levels.
      *
      * @param winner Address to receive rewards.

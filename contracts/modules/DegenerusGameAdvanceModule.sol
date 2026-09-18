@@ -985,10 +985,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |  All modules MUST inherit DegenerusGameStorage for slot alignment.                                             |
       |                                                                                                                |
       |  Modules:                                                                                                      |
-      |  • ContractAddresses.GAME_DECIMATOR_MODULE - Decimator claim credits and lootbox payouts                       |
-      |  • ContractAddresses.GAME_MINT_MODULE     - Mint data recording, airdrop multipliers                           |
-      |  • ContractAddresses.GAME_WHALE_MODULE    - Whale pass purchases and whale pass claims                         |
+      |  • ContractAddresses.GAME_GAMEOVER_MODULE - Game-over path and final sweeps                                    |
+      |  • ContractAddresses.GAME_MINT_MODULE     - Ticket drains and mint-side daily work                             |
       |  • ContractAddresses.GAME_JACKPOT_MODULE  - Jackpot calculations and payouts                                   |
+      |  • ContractAddresses.GAME_AFKING_MODULE   - The afking process stage                                           |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |
       |  context, with access to all storage. Modules are constant.                                                    |
@@ -2201,7 +2201,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         //
         // questDay == wall day mirrors the fulfilment roll's own guard: a day the RNGREUSE
         // clamp held in the past must stay unrolled, since a retroactive quest lands already
-        // missed and bills every streak. That case keeps the old behaviour — no roll at all.
+        // missed and bills every streak. That case rolls nothing.
         //
         // !isDailyRetry pins the roll to the request that MOVED the boundary. The level
         // increment above carries the same gate, so a retry re-requests a word for a

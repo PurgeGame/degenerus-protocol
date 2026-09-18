@@ -366,7 +366,7 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     // All fields pack into a single 32-byte slot (27 bytes used). The per-slot day and
     // progress markers are flattened from fixed arrays — Solidity reserves a fresh slot
-    // per fixed array, so the arrays are what forced the old 5-slot layout. Daily progress
+    // per fixed array, so arrays here would cost four extra slots. Daily progress
     // is held in a compact per-family unit (see `_progressUnit`) so it fits uint16.
     struct PlayerQuestState {
         uint24 lastCompletedDay;   // Last day the primary (slot 0) completed — reset anchor alongside lastActiveDay
@@ -829,7 +829,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Handle flip-stake progress credited in FLIP base units (18 decimals).
-     * @dev Access: COIN or COINFLIP contract only.
+     * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      *      Progress tracks cumulative flip volume for the day.
      * @param player The player who staked FLIP.
      * @param flipCredit Amount of FLIP staked (in base units).
@@ -837,7 +837,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
-     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
+     * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handleFlip(
         address player,
@@ -887,7 +887,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Handle decimator burns counted in FLIP base units (18 decimals).
-     * @dev Access: COIN or COINFLIP contract only.
+     * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      *      Decimator quests share the same FLIP target as flip quests (2000 FLIP).
      * @param player The player who performed the decimator burn.
      * @param burnAmount Amount of FLIP burned (in base units).
@@ -895,7 +895,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
-     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
+     * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handleDecimator(
         address player,
@@ -1116,14 +1116,14 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Handle affiliate earnings credited in FLIP base units (18 decimals).
-     * @dev Access: COIN or COINFLIP contract only.
+     * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      * @param player The affiliate who earned commission.
      * @param amount FLIP earned from affiliate referrals (in base units).
      * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
-     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
+     * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handleAffiliate(
         address player,
@@ -1171,7 +1171,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Handle combined purchase-path activity (mint tickets + lootbox) in a single call.
-     * @dev Access: COIN or COINFLIP contract only.
+     * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      *      Combines the mint + lootbox quest legs for the purchase path.
      *      No reward is credited here; the ETH-mint, FLIP-mint, and lootbox rewards are summed
      *      and returned for the caller to credit exactly once. Returns streak for compute-once
@@ -1187,7 +1187,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
-     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
+     * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handlePurchase(
         address player,
@@ -1391,7 +1391,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Handle Degenerette bet progress for a player.
-     * @dev Access: COIN or COINFLIP contract only.
+     * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      * @param player The player who placed the Degenerette bet.
      * @param amount The bet amount (wei for ETH, base units for FLIP).
      * @param paidWithEth True if bet was paid with ETH, false for FLIP.
@@ -1400,7 +1400,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
-     * @custom:reverts OnlyCoin When caller is not COIN or COINFLIP contract.
+     * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handleDegenerette(
         address player,
@@ -2282,8 +2282,10 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - lastCompletedDay updates only on the primary (slot 0), keying the reset to it
      *
      *      Reward Calculation:
-     *      - Slot 0 (deposit ETH) pays a fixed 100 FLIP
+     *      - Slot 0 (deposit ETH) pays a fixed 100 FLIP off a run; while afking it pays 0 here
+     *        (the run's per-delivered-day pendingFlip accrual is that reward)
      *      - Slot 1 (random quest) pays a fixed 100 FLIP
+     * @param player The completing player (event subject; streak and century-shield bookkeeping).
      * @param state Storage reference to player's quest state.
      * @param slot The slot index being completed.
      * @param quest The quest being completed.
@@ -2321,7 +2323,7 @@ contract DegenerusQuests is IDegenerusQuests {
         // `lastActiveDay` tracks ONLY a normal funded mint (slot 0 is always MINT_ETH) — a
         // slot-1 completion never advances it. This keeps it the honest "last funded manual
         // mint day": the afking finalize's no-zero protection keys on max(afkCovered,
-        // lastActiveDay), so a cheap slot-1 quest can no longer hold a lapsed afking streak
+        // lastActiveDay), so a cheap slot-1 quest cannot hold a lapsed afking streak
         // alive. During an active afking run with no manual mint, lastActiveDay stays put and
         // the afking machinery (afkCoveredThroughDay) carries the streak.
         if (slot == 0 && questDay24 > state.lastActiveDay) {
@@ -2372,6 +2374,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      This function enables "combo completion" where completing one quest
      *      can automatically complete the other if its progress already meets target.
      *      This is a UX optimization to avoid requiring separate transactions.
+     * @param player The completing player, forwarded to `_questComplete` and the pair check.
      * @param state Storage reference to player's quest state.
      * @param quests Memory copy of active quests.
      * @param slot The slot being completed.

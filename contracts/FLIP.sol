@@ -44,7 +44,7 @@ pragma solidity 0.8.34;
  *      - totalSupply + vaultAllowance = supplyIncUncirculated
  *
  * @dev SECURITY:
- *      - Access control: onlyGame, onlyVault
+ *      - Access control: onlyGame, onlyGameOrParimutuel, onlyVault
  *      - CEI pattern: burns before external calls
  */
 
@@ -99,7 +99,7 @@ contract FLIP {
     /// @param amount The amount added to vault mint allowance (18 decimals).
     event VaultEscrowRecorded(address indexed sender, uint256 amount);
     /// @notice Emitted when the vault spends from its mint allowance (may or may not mint tokens).
-    /// @param spender The account tied to the allowance decrease: VAULT when spent via burnCoinForSalvage's _burn path, or the FLIP contract (address(this)) when minted out via vaultMintTo.
+    /// @param spender The account tied to the allowance decrease: VAULT when any burn routed at the vault (burnCoin, burnCoinForCraps, burnCoinForSalvage) spends the virtual allowance through _burn's VAULT branch, or the FLIP contract (address(this)) when minted out via vaultMintTo.
     /// @param amount The amount consumed from allowance (18 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
@@ -155,7 +155,7 @@ contract FLIP {
       |  | Slot | Variable                    | Type                       | |
       |  +------+-----------------------------+----------------------------+ |
       |  |  0   | _supply (total/vault)       | uint128 + uint128          | |
-      |  |  1   | _tombstoneFlooded          | bool                       | |
+      |  |  1   | _tombstoneFlooded + _crapsCompAllowance | bool + uint128 | |
       |  |  2   | balanceOf                  | mapping(address => uint256)| |
       |  |  3   | allowance                  | mapping(addr => mapping)   | |
       |  +-----------------------------------------------------------------+ |
@@ -508,7 +508,7 @@ contract FLIP {
     }
 
     /// @notice Mint FLIP to a player (coinflip claims, degenerette wins, craps wins).
-    /// @dev Only callable by COINFLIP, GAME, or CRAPS.
+    /// @dev Only callable by COINFLIP or GAME.
     /// @param to The player's address to mint to.
     /// @param amount The amount of FLIP to mint (18 decimals).
     function mintForGame(address to, uint256 amount) external {
@@ -550,18 +550,19 @@ contract FLIP {
       |  |  Modifier              | Allowed Callers                        | |
       |  +------------------------+----------------------------------------+ |
       |  |  onlyGame              | GAME only                              | |
+      |  |  onlyGameOrParimutuel  | GAME, PARIMUTUEL or CRAPS              | |
       |  |  onlyVault             | VAULT only                             | |
       |  +-----------------------------------------------------------------+ |
       +======================================================================+*/
 
-    /// @dev Restricts access to game contract.
-    ///      Used for: burnCoin, burnCoinForSalvage (gameplay/salvage burns).
+    /// @dev Restricts access to the game contract.
+    ///      Used for: burnCoinForSalvage (the salvage burn, which reaches the auto-rebuy carry).
     modifier onlyGame() {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         _;
     }
 
-    /// @dev Restricts access to GAME or the growth-bet parimutuel. Used for: burnCoin.
+    /// @dev Restricts access to GAME, PARIMUTUEL or CRAPS. Used for: burnCoin.
     ///      PARIMUTUEL burns exactly one fixed stake, and only from a player who is the
     ///      caller or has approved them, so the widening reaches no non-consenting balance.
     ///      burnCoinForSalvage keeps plain onlyGame — the salvage burn drains the auto-rebuy

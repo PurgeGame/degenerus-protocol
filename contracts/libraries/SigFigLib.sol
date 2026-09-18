@@ -44,7 +44,7 @@ library SigFigLib {
      * @dev Amounts under 1,000 already carry three or fewer figures and pass through
      *      untouched, so zero maps to zero. The loop runs once per decimal digit past the
      *      third — about 16-22 iterations at the 1e18-scaled magnitudes these awards
-     *      reach, and bounded at 74 by uint256 itself.
+     *      reach, and bounded at 75 by uint256 itself.
      * @param amount Raw award, wei-scaled.
      * @return The award with every digit past the third zeroed.
      */

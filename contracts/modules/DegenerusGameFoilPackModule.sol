@@ -90,11 +90,10 @@ contract DegenerusGameFoilPackModule is
     // Per-score face counts for the graded match (see _tryClaimFoilMatch).
     // One face stakes 1,000 FLIP or priceForLevel(L) ETH — one ticket of value either
     // way (WWXRP, the third currency, is worthless). Calibrated to
-    // E[faces/comparison] = 0.010972 (E[faces/pack/30d] = 2.633) — byte-identical EV to
-    // the prior liveCount {2->7, 3->65, 4->1000} table, so the value-bearing ETH and
-    // FLIP lanes (40% each) still each deliver ~1 ticket of value per pack over a
-    // 30-day, 60-draw window. Score T (0..8) pays from T=4; T=8 (all four full doubles,
-    // the old 4-of-4 moonshot) also grants a half whale pass.
+    // E[faces/comparison] = 0.010972 (E[faces/pack/30d] = 2.633), so the value-bearing ETH and
+    // FLIP lanes (40% each) each deliver ~1 ticket of value per pack over a 30-day, 60-draw
+    // window. Score T (0..8) pays from T=4; T=8 (all four full doubles) also grants a half
+    // whale pass.
     uint256 private constant FOIL_FACES_T4 = 2;
     uint256 private constant FOIL_FACES_T5 = 6;
     uint256 private constant FOIL_FACES_T6 = 35;
@@ -871,8 +870,8 @@ contract DegenerusGameFoilPackModule is
     }
 
     // =========================================================================
-    // Queue drain (relocated here from the mint module so the near-full mint
-    // module keeps only the normal-ticket path under the EIP-170 limit)
+    // Queue drain (lives here so the mint module keeps only the normal-ticket path
+    // under the EIP-170 limit)
     // =========================================================================
 
     // -------------------------------------------------------------------------

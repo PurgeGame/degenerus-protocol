@@ -46,20 +46,22 @@ interface IGameRouter {
     function advanceGame() external returns (uint8 mult);
 }
 
+/// @title ICrapsKeeper
+/// @notice The craps table's keeper surface: ONE call, permissionless on the table — the crank only
+///         makes sure somebody makes it.
+/// @dev The table owns its own scheduled cursor, so it knows which slot is the oldest still
+///      owing work; `keepScheduled` does the next piece of that work within the gas allowance
+///      and reports whether anything actually moved, which is the whole of what a
+///      bounty-paying caller needs to know.
+interface ICrapsKeeper {
+    function keepScheduled(uint64 budgetUnits) external returns (bool progressed, uint64 slot);
+}
+
 /// @title IQuestCompletionView
 /// @notice Minimal quest-view surface for the day-0 grounding check: the per-slot
 ///         completion flags alone, skipping the full `playerQuestStates` tuple
 ///         (streak / lastCompletedDay / progress) and its per-slot validity and
 ///         native-unit conversion work.
-/// @dev The craps table's keeper surface: ONE call, permissionless on the table — the crank only
-///      makes sure somebody makes it. The table owns its own scheduled cursor, so it knows which
-///      slot is the oldest still owing work; `keepScheduled` does the next piece of that work
-///      within the gas allowance and reports whether anything actually moved, which is the whole
-///      of what a bounty-paying caller needs to know.
-interface ICrapsKeeper {
-    function keepScheduled(uint64 budgetUnits) external returns (bool progressed, uint64 slot);
-}
-
 interface IQuestCompletionView {
     function questCompletionToday(address player) external view returns (bool slot0, bool slot1);
 }
@@ -355,7 +357,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Shared afking-walk + human-sweep budget per rewarded crank, in walk units:
     ///      80 opens (the OPEN_BATCH-equivalent) with zero skips, or pro-rata fewer opens
     ///      as ring-scan skips consume units. Bounds one call's open-leg gas at
-    ///      ≈ 1920 × ~4.7k ≈ 9.1M structurally — skips can no longer stack a full-ring
+    ///      ≈ 1920 × ~4.7k ≈ 9.1M structurally — skips cannot stack a full-ring
     ///      scan on top of a full-budget human sweep.
     uint256 internal constant OPEN_WEIGHT_BUDGET = OPEN_BATCH * OPEN_ITEM_WEIGHT;
 
@@ -1611,6 +1613,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      seed `day`). No stored baseLevel/index — the live roll needs no floor.
     /// @param player The subscriber whose box is materialized.
     /// @param sub The subscriber's stamped record (storage ref — the marker advances here).
+    /// @param word The frozen stamp day's `rngWordByDay[day]`, read once by the caller.
     function _openAfkingBox(address player, Sub storage sub, uint256 word) private {
         // lastAutoBoughtDay is the frozen stamp day used as the seed/word key.
         uint24 day = sub.lastAutoBoughtDay;
@@ -1878,7 +1881,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
             // Human-box leg — the multi-index sweep lives in the lootbox module (delegatecall
             // runs it in this Game's storage, the same nested pattern as _openAfkingBox's
-            // resolveAfkingBox). Its unit is BOXES now, not entries: one order can carry up to
+            // resolveAfkingBox). Its unit is BOXES, not entries: one order can carry up to
             // MAX_BOXES_PER_ORDER of them.
             //
             // The legs stop sharing a call only when the afking leg does REAL work: the sweep
@@ -1891,9 +1894,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // shared budget always did — gating on units consumed would let a scan-only walk
             // starve the rewarded human sweep on every crank, permanently under a wedged
             // counter. Scan + remainder is budget-bounded (<= OPEN_WEIGHT_BUDGET total), so
-            // the stacked case stays within the old shared-budget ceiling.
+            // the stacked case stays within the shared-budget ceiling.
             bool sweptFrontier;
-            // Passed in WALK UNITS, not steps: the sweep prices its own entries now, because
+            // Passed in WALK UNITS, not steps: the sweep prices its own entries, because
             // only it knows how many boxes each holds.
             uint256 humanSteps = opened == 0
                 ? (unitsUsed < OPEN_WEIGHT_BUDGET ? OPEN_WEIGHT_BUDGET - unitsUsed : 0)
@@ -1925,9 +1928,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 opened += humanOpened;
                 spentUnits += humanUnits;
                 // Knee credit in WORK, not boxes: one entry-weight of walk units is about one
-                // old-style open's worth of gas, and boxes after an entry's first cost a
+                // single-box open's worth of gas, and boxes after an entry's first cost a
                 // fraction of that. Crediting per box would let a single five-small order
-                // saturate the knee at ~a third of the work five entries used to represent.
+                // saturate the knee at ~a third of the work five separate entries cost.
                 if (humanOpened != 0) {
                     afkKneeCredit += humanUnits / OPEN_HUMAN_ENTRY_WEIGHT;
                 }
@@ -1989,7 +1992,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @return opened The number of afking boxes opened this call.
     /// @return stepsUsed Walk budget consumed in OPEN-STEP currency (units ÷ OPEN_ITEM_WEIGHT,
     ///         rounded up) — the Game's openBoxes subtracts it from the caller's maxCount so a
-    ///         drained-ring scan can no longer hand the human sweep an uncharged full budget.
+    ///         drained-ring scan cannot hand the human sweep an uncharged full budget.
     function drainAfkingBoxes(
         uint256 count
     ) external returns (uint256 opened, uint256 stepsUsed) {
@@ -2016,10 +2019,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev The WORK the craps leg may spend, in the same walk units the box legs already burned
     ///      `spentUnits` of — the remainder of one shared budget, so the three legs cannot stack.
     ///
-    ///      SATURATING, and that is a fix rather than a nicety. The old form divided the spend
-    ///      into seats first, so a box walk that consumed the WHOLE 1,920-unit budget still left
-    ///      `80 - 1920/27 = 9` seats of craps work stacked on top of a full-budget call. Taking
-    ///      the raw remainder and flooring it at zero is what makes a spent budget mean spent.
+    ///      SATURATING on the raw unit remainder, floored at zero. Dividing the spend into seats
+    ///      first would round a fully consumed 1,920-unit walk down to `1920/27 = 71` seats and
+    ///      leave 9 seats of craps work stacked on top of a full-budget call; the raw remainder
+    ///      is what makes a spent budget mean spent.
     function _crapsUnitBudget(uint256 spentUnits) private pure returns (uint64) {
         unchecked {
             if (spentUnits >= OPEN_WEIGHT_BUDGET) return 0;

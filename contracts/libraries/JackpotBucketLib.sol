@@ -60,8 +60,9 @@ library JackpotBucketLib {
     function traitBucketCounts(uint256 entropy) internal pure returns (uint16[4] memory counts) {
         // Base counts [25,15,8,1] (large/mid/small/solo) rotated by entropy for fairness across
         // traits: counts[i] = base[(i + offset) & 3]. Unrolled to a 4-way branch on the offset to
-        // skip allocating the base[4] scratch array. The solo bucket (1) receives the 60% share via
-        // its landing index. Rotations MUST stay [25,15,8,1]/[15,8,1,25]/[8,1,25,15]/[1,25,15,8].
+        // skip allocating the base[4] scratch array. The solo bucket (1) lands on soloBucketIndex,
+        // which bucketShares treats as the remainder bucket; its ETH share is set by the caller's
+        // shareBps table. Rotations MUST stay [25,15,8,1]/[15,8,1,25]/[8,1,25,15]/[1,25,15,8].
         uint8 offset = uint8(entropy & 3);
         if (offset == 0) {
             counts[0] = 25;
@@ -183,7 +184,7 @@ library JackpotBucketLib {
         shares[remainderIdx] = pool - distributed;
     }
 
-    /// @dev Returns the solo bucket index (receives 60% share) based on entropy rotation.
+    /// @dev Returns the solo bucket index (the remainder bucket in bucketShares) from the entropy rotation.
     function soloBucketIndex(uint256 entropy) internal pure returns (uint8) {
         return uint8((uint256(3) - (entropy & 3)) & 3);
     }

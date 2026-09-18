@@ -79,7 +79,7 @@ library EntropyLib {
      * @dev Equivalent to `uint256(keccak256(abi.encode(a)))` without the
      *      bytes-memory allocation — byte-identical preimage (one raw word).
      * @param a Input word.
-     * @return r 256-bit Keccak digest of the two inputs.
+     * @return r 256-bit Keccak digest of the input word.
      */
     function hash1(uint256 a) internal pure returns (uint256 r) {
         assembly ("memory-safe") {

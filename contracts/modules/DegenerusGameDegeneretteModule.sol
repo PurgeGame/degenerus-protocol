@@ -71,7 +71,9 @@ contract DegenerusGameDegeneretteModule is
 
     // error E() — inherited from DegenerusGameStorage
 
-    /// @notice Thrown when RNG word is not yet available for bet resolution.
+    /// @notice Thrown when the bet index's RNG word is in the wrong state for the call:
+    ///         already landed at placement (a bet binds to a still-unrevealed index), or
+    ///         still absent at a strict resolution.
     error RngNotReady();
 
     /// @notice Thrown when caller is not approved to act on behalf of player.
@@ -103,9 +105,10 @@ contract DegenerusGameDegeneretteModule is
     /// @param player The player address.
     /// @param betId The bet ID.
     /// @param spinCount Number of spins resolved.
-    /// @param totalPayout Total payout across all spins. Diverges from the per-spin
-    ///        DegeneretteResult sums in one case: a FLIP bet's survival flip (doubled or
-    ///        zeroed).
+    /// @param totalPayout Total payout across all spins. For a FLIP bet it diverges from the
+    ///        per-spin DegeneretteResult sums: the summed payout doubles or zeroes on the
+    ///        bet's survival flip, then collapses to a whole-FLIP floor or, above
+    ///        FLIP_ROUND_THRESHOLD, a 100-FLIP multiple (FlipRoundLib).
     /// @param resultTraits The spin-0 result traits (additional spin results are derived per spinIndex).
     event DegeneretteResolved(
         address indexed player,
@@ -1727,8 +1730,8 @@ contract DegenerusGameDegeneretteModule is
     // Claimable ETH Credit
     // -------------------------------------------------------------------------
 
-    /// @dev Adds ETH to a player's claimable winnings balance. The sole call site
-    ///      is gated on a nonzero amount.
+    /// @dev Adds ETH to a player's claimable winnings balance. Both call sites
+    ///      (resolveDegeneretteBets, resolveEthSpinFromBox) gate on a nonzero amount.
     /// @param beneficiary The address to credit.
     /// @param weiAmount The amount in wei to credit (nonzero).
     function _addClaimableEth(address beneficiary, uint256 weiAmount) private {
