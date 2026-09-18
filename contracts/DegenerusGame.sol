@@ -1908,7 +1908,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                    LOOTBOX CLAIMS                                    |
       +======================================================================+*/
 
-    /// @notice Claim deferred whale pass rewards from large lootbox wins (>5 ETH).
+    /// @notice Claim deferred whale pass rewards. `whalePassClaims` is fed in half-pass units by
+    ///         large lootbox wins (>5 ETH), the solo jackpot bucket, golden tickets, the lootbox
+    ///         whale-pass boon, foil tier 8 and the WWXRP bracket jackpot.
     /// @dev Thin, PERMISSIONLESS delegatecall dispatch stub into the whale module — forwards
     ///      `msg.data` verbatim (msg.sender preserved). No approval gate and no address(0)
     ///      self-resolution: the claim only awards the passed player their own deferred
