@@ -1,7 +1,7 @@
 {
   "date": "2026-09-18",
   "status": "working-tree snapshot at the base revision; not an audited deployment",
-  "base_commit": "5bc37b792",
+  "base_commit": "1df5f574c",
   "source_file_count": 58,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -80,5 +80,5 @@
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "evidence recorded at dde6275ef on 2026-09-17: see docs/VERIFICATION.md, Evidence status. Deltas since: comment-only commits 988d0374b, ba56ef471, 3a10dfb65, 4e7e61b79 (comment-stripped sources identical) and one logic commit 5bc37b792 (whale-boon expiry, full-pass boon award, decimator bounty price routing, craps preview view removed) verified on the craps slice plus the boon, whale and decimator suites (486/486, 17/17, new WhaleBoonExpiry 3/3), contracts-only build clean, ten source gates green."
+  "verification": "evidence recorded at 1df5f574c on 2026-09-18: see docs/VERIFICATION.md, Evidence status."
 }
