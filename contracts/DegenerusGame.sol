@@ -41,11 +41,7 @@ pragma solidity 0.8.34;
  *
  * @dev CRITICAL INVARIANTS:
  *      - address(this).balance + steth.balanceOf(this) >= claimablePool
- *        (claimablePool >= Σ claimableWinnings + Σ afkingFunding; both ride in the one reserve.
- *         >= not ==: a resolved decimator round parks its whole pool in claimablePool up front
- *         while winners pull their shares lazily, so the un-itemized remainder over-reserves
- *         until claimed — always in the solvency-safe direction. Equality holds at full settlement,
- *         modulo pro-rata rounding dust.)
+ *      - claimablePool >= total payable winnings + total afking funding
  *      - jackpotPhaseFlag is the daily payout mode: false(PURCHASE) / true(JACKPOT); gameOver is terminal
  *      - Presale is the coin-presale-box sale, active until applied box spend fills the 50-ETH cap (presaleOver latch; one-way, no admin setter)
  *

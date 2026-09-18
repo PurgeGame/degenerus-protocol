@@ -82,6 +82,8 @@ EXEMPT-ADVANCE	PARAM	randWord	payDailyJackpotCoinAndTickets	modules/DegenerusGam
 EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	payDailyJackpotCoinAndTickets	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payDailyJackpotCoinAndTickets from the advance stack
 EXEMPT-ADVANCE	PARAM	randWord	_payCarryoverTickets	modules/DegenerusGameAdvanceModule.sol	advance-only carryover-leg wrapper delegatecalling JackpotModule.payCarryoverTickets with the rngGate word
 EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payCarryoverTickets	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payCarryoverTickets from the advance stack
+EXEMPT-ADVANCE	PARAM	randWord	_payEarlyBirdTickets	modules/DegenerusGameAdvanceModule.sol	advance-only early-bird-leg wrapper delegatecalling JackpotModule.payEarlyBirdTickets with the rngGate word
+EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payEarlyBirdTickets	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payEarlyBirdTickets from the advance stack
 EXEMPT-ADVANCE	PARAM	randWord	_payDailyCoinJackpot	modules/DegenerusGameAdvanceModule.sol	advance-only wrapper (purchaseLevel==1 path) for payDailyFlipJackpot; randWord is the rngGate word or its BONUS_TRAITS_TAG salt
 EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payDailyCoinJackpot	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payDailyFlipJackpot from the advance stack
 EXEMPT-ADVANCE	ARG	coinflip.processCoinflipPayouts	rngGate	modules/DegenerusGameAdvanceModule.sol	rngGate forwards the word _applyDailyRng just sealed for `day`; the coinflip day result is stored once per epoch
@@ -139,8 +141,8 @@ EXEMPT-ADVANCE	PARAM	randWord	payDailyJackpotCoinAndTickets	modules/DegenerusGam
 PURE-DERIVE	ARG	EntropyLib.hash2	payDailyJackpotCoinAndTickets	modules/DegenerusGameJackpotModule.sol	hash2(randWord, lvl) ticket entropy; pure
 EXEMPT-ADVANCE	PARAM	randWord	payCarryoverTickets	modules/DegenerusGameJackpotModule.sol	advance carryover-leg delegatecall target; randWord = the day's rngGate word; re-rolls the bonus board at frozen dailyIdx; buckets advance-written
 PURE-DERIVE	ARG	EntropyLib.hash2	payCarryoverTickets	modules/DegenerusGameJackpotModule.sol	hash2(randWord, sourceLevel) carryover ticket entropy, the same derivation the fused stage used; pure
-EXEMPT-ADVANCE	PARAM	rngWord	_runEarlyBirdTicketJackpot	modules/DegenerusGameJackpotModule.sol	private, reached from payDailyJackpot on the early-bird day; the budget is a pool magnitude, winners keccak of the word
-PURE-DERIVE	ARG	EntropyLib.hash2	_runEarlyBirdTicketJackpot	modules/DegenerusGameJackpotModule.sol	hash2(rngWord, lvl); pure
+EXEMPT-ADVANCE	PARAM	randWord	payEarlyBirdTickets	modules/DegenerusGameJackpotModule.sol	advance early-bird-leg delegatecall target; randWord = the day's rngGate word; re-rolls the bonus board at frozen dailyIdx; entries latched by payDailyJackpot, winners keccak of the word
+PURE-DERIVE	ARG	EntropyLib.hash2	payEarlyBirdTickets	modules/DegenerusGameJackpotModule.sol	hash2(randWord, level + 1) early-bird ticket entropy, the same derivation the fused stage used; pure
 EXEMPT-ADVANCE	PARAM	randWord	_distributePoolBackedTickets	modules/DegenerusGameJackpotModule.sol	private advance-stack ticket distribution; entropy hash2(randWord, lvl); the budget is a magnitude
 PURE-DERIVE	ARG	EntropyLib.hash2	_distributePoolBackedTickets	modules/DegenerusGameJackpotModule.sol	hash2(randWord, lvl); pure
 EXEMPT-ADVANCE	PARAM	entropy	_distributeTicketJackpot	modules/DegenerusGameJackpotModule.sol	private advance-stack: bucket counts + winner draws over lvlTraitEntry[sourceLvl] from the chained entropy

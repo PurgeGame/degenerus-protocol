@@ -308,9 +308,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         if (totalFunds == 0) return;
 
-        // Invariant claimablePool >= sum(claimableWinnings[*]) and balance >=
-        // claimablePool guarantee totalFunds >= owedV+owedSD+owedG; if the
-        // invariant ever fails, _sendStethFirst reverts (hard-revert policy).
+        // Protocol balances are fully backed: totalFunds >= owedV + owedSD + owedG.
+        // A shortfall reverts the sweep.
         uint256 remainder  = totalFunds - (owedV + owedSD + owedG);
         uint256 thirdShare = remainder / 3;
         uint256 gnrusExtra = remainder - thirdShare - thirdShare;

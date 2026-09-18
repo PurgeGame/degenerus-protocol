@@ -506,12 +506,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
                 uint256 budget = (curPool * dailyBps) / 10_000;
 
-                // Run the early-bird ticket jackpot on day 1 only.
-                // This day replaces the normal daily carryover flow.
-                if (isEarlyBirdDay) {
-                    _runEarlyBirdTicketJackpot(lvl + 1, randWord);
-                }
-
                 // Gas optimization: 20% = 1/5 (cheaper than * 2000 / 10000)
                 uint256 dailyTicketBudget = budget / 5;
                 // Jackpot phase: the currentPrizePool floor (>= 10 ETH) dwarfs the ticket price, so
@@ -587,6 +581,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     carryoverEntries,
                     sourceLevelOffset
                 );
+
+                // Day 1 only: price the early-bird ticket jackpot (3% of futurePrizePool, moved
+                // future -> next now) and latch its entries at bits 144..207 of the same word.
+                // The winners (up to another 100) are drawn from the next advance's own stage
+                // (payEarlyBirdTickets), so the day-1 ETH leg and the early-bird leg never
+                // share a tx. Nothing since the golden-ticket resolve writes the future pool,
+                // so the 3% is priced off the same basis it always was, ahead of the ETH leg.
+                if (isEarlyBirdDay) {
+                    dailyTicketBudgetsPacked |= _priceEarlyBirdTickets(lvl + 1) << 144;
+                }
 
                 dailyEthBudget = budget;
             }
@@ -754,10 +758,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @notice Phase 2 of the daily jackpot: the coin jackpot and the day's own ticket leg.
     /// @dev Called by advanceGame when dailyJackpotCoinTicketsPending is true. The daily is a
     ///      chain of advance txs so each stays under the per-tx gas cap: Phase 1 pays the ETH,
-    ///      this stage pays FLIP and the main-board tickets, and the carryover ticket leg (up to
-    ///      another 100 winners) runs from its own stage on the next advance
-    ///      (payCarryoverTickets). Phase 1's packed budgets stay in place for that stage when a
-    ///      carryover was priced; otherwise they are cleared here.
+    ///      on day 1 the early-bird ticket leg (up to 100 winners) runs from its own stage
+    ///      before this one (payEarlyBirdTickets), this stage pays FLIP and the main-board
+    ///      tickets, and the carryover ticket leg (up to another 100 winners) runs from its own
+    ///      stage on the next advance (payCarryoverTickets). Phase 1's packed budgets stay in
+    ///      place for that stage when a carryover was priced; otherwise they are cleared here.
     ///
     ///      Traits are derived inline from randWord (main via isBonus=false, bonus via isBonus=true).
     ///      Uses stored values from Phase 1:
@@ -857,41 +862,50 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Execute the early-bird ticket jackpot from the unified future pool.
-    ///      Routes through the shared ticket distributor so the budget→ticket
-    ///      conversion (`_budgetToEntries`, the same 4-entries-per-ticket basis
-    ///      every other jackpot path uses) and the winner cap match the daily and
-    ///      purchase-phase jackpots: `cap = min(wholeTickets, 100)` gives every drawn
-    ///      winner at least one whole ticket (replacing the fixed-100 split that floored
-    ///      sub-100-ticket budgets to zero); every winner takes the same `tickets / cap`
-    ///      tickets and the `tickets % cap` leftover is not queued, while the bucket
-    ///      winner counts rotate their remainder. Winners drawn from `lvlTraitEntry[lvl]`, tickets queued at
-    ///      `lvl` (= outer level + 1). The full 3% budget always moves future→next.
-    function _runEarlyBirdTicketJackpot(uint24 lvl, uint256 rngWord) private {
+    /// @dev Prices the early-bird ticket jackpot from the unified future pool: the full 3%
+    ///      budget always moves future -> next (a single net move on the packed slot; future
+    ///      funds the budget, next backs the queued tickets), converted on the same
+    ///      4-entries-per-ticket basis every other jackpot path uses (`_budgetToEntries`).
+    /// @param lvl The level the early-bird tickets are priced and queued at (outer level + 1).
+    /// @return entries The early-bird entry count payEarlyBirdTickets distributes.
+    function _priceEarlyBirdTickets(uint24 lvl) private returns (uint256 entries) {
         (uint128 nextBal, uint128 futureBal) = _getPrizePools();
         uint256 totalBudget = (uint256(futureBal) * 300) / 10_000; // 3%
-        if (totalBudget == 0) return;
-
-        (uint256 entries, ) = _budgetToEntries(totalBudget, lvl);
-        if (entries != 0) {
-            _distributeTicketJackpot(
-                lvl,
-                lvl,
-                _rollWinningTraits(rngWord, true),
-                entries,
-                EntropyLib.hash2(rngWord, lvl),
-                TICKET_JACKPOT_MAX_WINNERS,
-                239,
-                false // bonus board: no ETH distribution, no solo quadrant
-            );
-        }
-
-        // Single net move on the packed slot: future funds the budget,
-        // next backs the queued tickets. Nothing above reads the slot.
+        if (totalBudget == 0) return 0;
+        (entries, ) = _budgetToEntries(totalBudget, lvl);
         _setPrizePools(
             nextBal + uint128(totalBudget),
             futureBal - uint128(totalBudget)
         );
+    }
+
+    /// @notice The early-bird ticket leg of the day-1 daily jackpot, from its own advance stage.
+    /// @dev Called by advanceGame on the advance after payDailyJackpot priced it (the top field
+    ///      of dailyTicketBudgetsPacked), with the same day's word from rngGate, ahead of the
+    ///      coin+tickets stage. Phase 1 already moved the full 3% budget future -> next; this
+    ///      distributes the latched entries through the shared ticket distributor (the same
+    ///      `cap = min(wholeTickets, 100)` winner cap as the daily and purchase-phase jackpots:
+    ///      every drawn winner takes the same `tickets / cap` whole tickets, the `tickets % cap`
+    ///      leftover is not queued, and the bucket winner counts rotate their remainder).
+    ///      Winners come from `lvlTraitEntry[level + 1]` on the day's bonus traits, re-rolled
+    ///      from the word exactly as the carryover stage re-rolls its board; tickets queue at
+    ///      level + 1. Clears its own field and leaves the rest of the packed budgets for the
+    ///      coin+tickets stage. The lock held since the request keeps every input frozen.
+    /// @param randWord VRF entropy (the day's recorded word).
+    function payEarlyBirdTickets(uint256 randWord) external {
+        uint256 packed = dailyTicketBudgetsPacked;
+        uint24 lvl = level + 1;
+        _distributeTicketJackpot(
+            lvl,
+            lvl,
+            _rollWinningTraits(randWord, true),
+            uint64(packed >> 144),
+            EntropyLib.hash2(randWord, lvl),
+            TICKET_JACKPOT_MAX_WINNERS,
+            239,
+            false // bonus board: no ETH distribution, no solo quadrant
+        );
+        dailyTicketBudgetsPacked = packed & ((uint256(1) << 144) - 1);
     }
 
     /// @notice Distribute yield surplus (stETH appreciation) to stakeholders.
@@ -2536,6 +2550,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
     }
 
+    /// @dev The day-1 early-bird entries ride bits 144..207 of the same word; payDailyJackpot
+    ///      ORs them in after this pack and payEarlyBirdTickets reads and clears them.
     function _packDailyTicketBudgets(
         uint8 counterStep,
         uint256 dailyEntries,

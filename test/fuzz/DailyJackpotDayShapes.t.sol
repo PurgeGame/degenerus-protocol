@@ -4,6 +4,8 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 
@@ -22,11 +24,17 @@ contract DayShapeHarness is GoldenTicketHarness {
     function counter() external view returns (uint8) { return jackpotCounter; }
     function routedLevel() external view returns (uint24) { return _activeTicketLevel(); }
     function carryoverPending() external view returns (bool) { return _carryoverLegPending(); }
+    function earlyBirdPending() external view returns (bool) { return _earlyBirdLegPending(); }
+    function earlyBirdEntries() external view returns (uint256) { return uint64(dailyTicketBudgetsPacked >> 144); }
+    function coinTicketsPending() external view returns (bool) { return dailyJackpotCoinTicketsPending; }
+    function setCompressedFlag(uint8 v) external { compressedJackpotFlag = v; }
 }
 
 /// @title DailyJackpotDayShapes -- the early-bird day and the final physical day move the pools as documented
 /// @notice A jackpot phase runs five daily draws. Day one (counter 0) is the EARLY-BIRD day: a
-///         3% slice of the future pool runs a bonus-board ticket jackpot and moves to next, the
+///         3% slice of the future pool is priced as a bonus-board ticket jackpot and moved to
+///         next by the ETH stage, which latches the entries for the early-bird stage that runs
+///         them on the next advance (payEarlyBirdTickets) ahead of the coin+tickets stage; the
 ///         day's own ticket budget is credited to next directly, and no carryover is priced.
 ///         The FINAL physical day (counter + step reaching the cap) pays 100% of the remaining
 ///         current pool: a fifth to tickets, the rest to ETH, the current pool ends at zero,
@@ -78,6 +86,12 @@ contract DailyJackpotDayShapes is Test {
             h.seedBucket(LVL, trait, 60, uint160(0x4000) + uint160(i) * 1000);
             h.seedBucket(LVL + 1, trait, 60, uint160(0x8000) + uint160(i) * 1000);
         }
+        // The early-bird stage draws the BONUS board at LVL + 1 (no hero wager is set, so the
+        // bonus traits are the salted word's raw roll); seed those buckets too.
+        uint8[4] memory bonus = JackpotBucketLib.getRandomTraits(EntropyLib.hash2(word, uint256(keccak256("BONUS_TRAITS"))));
+        for (uint8 i; i < 4; ++i) {
+            h.seedBucket(LVL + 1, bonus[i], 60, uint160(0xC000) + uint160(i) * 1000);
+        }
     }
 
     function test_earlyBirdDayMovesThreePercentOfFutureAndCreditsItsTicketBudgetToNext() public {
@@ -102,6 +116,76 @@ contract DailyJackpotDayShapes is Test {
         uint256 gained = uint256(next1) - uint256(next0) - earlyBird;
         assertGe(gained, dailyEntries * unit, "next was credited the day's ticket budget");
         assertLt(gained, (dailyEntries + 1) * unit, "and nothing beyond it");
+
+        // The ETH stage priced the leg but drew no ticket winner: the entries wait in the latch
+        // for the early-bird stage, which distributes them at LVL + 1 and clears only its field.
+        assertTrue(h.earlyBirdPending(), "the early-bird leg is latched for its own stage");
+        assertFalse(h.carryoverPending(), "the latch never reads as a carryover leg");
+        assertEq(h.earlyBirdEntries(), (earlyBird << 2) / PriceLookupLib.priceForLevel(LVL + 1), "the latched entries are the 3% slice priced at the next level");
+        assertTrue(h.coinTicketsPending(), "the coin+tickets stage still waits behind it");
+        (uint128 next2, uint128 fut2) = h.poolsView();
+        vm.recordLogs();
+        h.payEarlyBirdTickets(word);
+        uint256 ticketWins = _ticketWins(vm.getRecordedLogs(), LVL + 1);
+        assertGt(ticketWins, 0, "the early-bird stage drew ticket winners at the next level");
+        assertFalse(h.earlyBirdPending(), "the early-bird stage cleared its latch");
+        (uint8 step2, uint256 daily2, uint256 carry2, uint8 offset2) = h.ticketBudgets();
+        assertEq(step2, step, "the counter step survives the early-bird stage");
+        assertEq(daily2, dailyEntries, "the day's own ticket budget survives for the coin+tickets stage");
+        assertEq(carry2, 0);
+        assertEq(offset2, 0);
+        assertTrue(h.coinTicketsPending(), "the coin+tickets stage is still the next stage");
+        (uint128 next3, uint128 fut3) = h.poolsView();
+        assertEq(next3, next2, "the early-bird stage moves no pool: the ETH stage already did");
+        assertEq(fut3, fut2, "the future pool is untouched by the distribution");
+        assertEq(h.counter(), 0, "the counter waits for the day's seal");
+    }
+
+    /// @dev Turbo (flag 2, counter 0) collapses all five logical days into the one physical day-1
+    ///      daily: the ETH stage is also the final physical day and steps the counter by the cap.
+    ///      The early-bird leg still runs exactly once from its own stage, before the coin+tickets
+    ///      stage that then reaches the cap and ends the level.
+    function test_turboDayOneRunsTheEarlyBirdLegOnceFromItsOwnStageBeforeTheCounterReachesTheCap() public {
+        h.setJackpotCounter(0);
+        h.setCompressedFlag(2);
+        h.setJackpotPhase(true);
+        h.setLocked(true);
+        uint256 word = _board(0x7B0);
+        (, uint128 fut0) = h.poolsView();
+        vm.recordLogs();
+        h.payDailyJackpot(true, LVL, word);
+        Vm.Log[] memory logs1 = vm.getRecordedLogs();
+        assertEq(_ticketWins(logs1, LVL + 1), 0, "the ETH stage drew no early-bird winner");
+        assertEq(h.currentPoolView(), 0, "turbo day 1 is the final physical day: the whole current pool is spent");
+        (uint8 step, , uint256 carryoverEntries,) = h.ticketBudgets();
+        assertEq(step, 5, "turbo steps the counter by the cap");
+        assertEq(carryoverEntries, 0, "no carryover on the early-bird day, turbo or not");
+        assertTrue(h.earlyBirdPending());
+        uint256 earlyBird = (uint256(fut0) * 300) / 10_000;
+        assertEq(h.earlyBirdEntries(), (earlyBird << 2) / PriceLookupLib.priceForLevel(LVL + 1));
+        assertEq(h.counter(), 0, "the counter has not moved before the leg stages");
+
+        vm.recordLogs();
+        h.payEarlyBirdTickets(word);
+        assertGt(_ticketWins(vm.getRecordedLogs(), LVL + 1), 0, "the early-bird stage drew its winners");
+        assertFalse(h.earlyBirdPending());
+        assertEq(h.counter(), 0, "the early-bird stage never touches the counter");
+
+        bool pending = h.payDailyJackpotCoinAndTickets(word);
+        assertFalse(pending, "no carryover leg follows");
+        assertEq(h.counter(), 5, "the coin+tickets stage steps to the cap; the advance then ends the level");
+        assertFalse(h.earlyBirdPending());
+        assertFalse(h.carryoverPending());
+        assertFalse(h.coinTicketsPending());
+    }
+
+    /// @dev Count JackpotTicketWin logs queued at `queueLvl`.
+    function _ticketWins(Vm.Log[] memory logs, uint24 queueLvl) internal pure returns (uint256 n) {
+        bytes32 topic = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].topics[0] != topic) continue;
+            if (uint24(uint256(logs[i].topics[2])) == queueLvl) ++n;
+        }
     }
 
     function test_finalPhysicalDayPaysTheWholeCurrentPoolAndPricesCarryoverAtTheNextLevel() public {

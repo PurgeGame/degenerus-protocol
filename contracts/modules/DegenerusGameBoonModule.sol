@@ -1036,6 +1036,16 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             uint256 s0 = bp.slot0;
             uint8 newTier = _whaleBpsToTier(bps);
             uint8 existingTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
+            // A dead lane never blocks a fresh award: the deity gift path applies without the
+            // box-roll expiry sweep, so liveness is re-checked here — a deity-stamped lane lives
+            // only on its day, a lootbox-rolled one for the same four days purchaseWhalePass honours.
+            {
+                uint24 heldDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
+                uint24 heldDeityDay = uint24(s0 >> BP_DEITY_WHALE_DAY_SHIFT);
+                bool live = heldDay != 0 &&
+                    (heldDeityDay != 0 ? heldDeityDay == currentDay : currentDay <= heldDay + 4);
+                if (!live) existingTier = 0;
+            }
             // Only a genuine tier upgrade applies the boon and (re)sets its expiry; an
             // ignored lower/equal-tier roll is a no-op and must not refresh the timer.
             if (newTier > existingTier) {

@@ -1391,6 +1391,10 @@ contract CrapsBattle is LootboxCraps {
                 uint256 p = slot % _BONUS_SLOTS_PER_DAY;
                 if (p == 0) revert NoSuchBattle();
                 w = _windowTerms(uint24(slot / _BONUS_SLOTS_PER_DAY), p - 1);
+                // The decode must round-trip: the day is read as a uint24, so a slot offset by a
+                // multiple of 2^27 would name this same window while the clock and arm latch
+                // are checked on the caller's number. Only the window's own slot is a slot.
+                if (w.bound != slot) revert NoSuchBattle();
                 w.entrants = uint32(_battles[w.key]);
             }
         }
@@ -1435,7 +1439,9 @@ contract CrapsBattle is LootboxCraps {
     /// @param betId The slip: `(slot << 64) | seat`.
     /// @param chips Where up to seven chips go; the draw places the remainder of ten.
     /// @custom:reverts NotYourBet If the caller does not own the slip.
-    /// @custom:reverts BetLocked If the slot has closed, or a day-wide entry's first window has.
+    /// @custom:reverts BetLocked If a day-wide entry's first window has closed.
+    /// @custom:reverts BonusPeriodSpent If a scheduled window's period has come round, its
+    ///         table is already bound, or a custom battle's close time has passed.
     /// @custom:reverts BadRandomCount If the new board names more than seven chips.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     function amendSlip(uint256 betId, uint32 chips) public {
@@ -2829,10 +2835,12 @@ contract CrapsBattle is LootboxCraps {
     ///      Every kind runs the SAME private path its paid twin runs — the same validation, seat
     ///      writer, counters and logs — with the recipient in the owner's place and the comp bit
     ///      on the burn, which is what makes FLIP charge the lane instead of a wallet. A comped
-    ///      seat starts on a BLANK board, which `amendSlip` re-spreads like any other; a comp
-    ///      consumes no boon and reports no quest, and a boon already on an upgraded seat is
-    ///      kept. Scheduled windows only: a custom battle is its creator's to fill. Any failure
-    ///      reverts the whole call, and an insufficient lane reverts inside FLIP.
+    ///      seat starts on a BLANK board; `amendSlip` re-spreads it like any other window seat
+    ///      once its day is live. A window-ahead reservation (kind 5) on a future day instead
+    ///      reverts `RngNotReady` at `_windowTerms` until that day opens. A comp consumes no
+    ///      boon and reports no quest, and a boon already on an upgraded seat is kept. Scheduled
+    ///      windows only: a custom battle is its creator's to fill. Any failure reverts the
+    ///      whole call, and an insufficient lane reverts inside FLIP.
     /// @param code One comp, packed:
     ///             bits 0..159   the player comped — never zero;
     ///             bits 160..167 the kind — 0 one of today's windows · 1 today's whole day ·
@@ -3000,6 +3008,10 @@ contract CrapsBattle is LootboxCraps {
         if (_slotIndex[slot] != 0) revert BonusPeriodSpent();
         Window memory w = _slotWindow(slot);
         if (_battles[w.key] == 0) revert BonusPeriodSpent();
+        // Only a day that OPENED can arm. A day whose word was backfilled through a stall never
+        // ran `openBonusDay`, so it banked no ladder and the keeper sweeps its seats as lapsed;
+        // a window-ahead comp seeded before the stall must not arm that day a second way.
+        if (_boostBudget[uint24(slot / _BONUS_SLOTS_PER_DAY)] == 0) revert BonusPeriodSpent();
         index = _armSlot(slot, w);
     }
 

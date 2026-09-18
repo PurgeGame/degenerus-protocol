@@ -93,6 +93,10 @@ interface IDegenerusGameJackpotModule {
     /// @param randWord Random word for distribution (the same day's word)
     function payCarryoverTickets(uint256 randWord) external;
 
+    /// @notice Pays the early-bird ticket leg the day-1 ETH stage left pending
+    /// @param randWord Random word for distribution (the same day's word)
+    function payEarlyBirdTickets(uint256 randWord) external;
+
     /// @notice Pay the golden-ticket grand to a foil pack holding two all-gold tickets.
     /// @dev Delegatecall-only; pushed by the foil drain (_pushFoilGrand) when a pack
     ///      files with two or more all-gold tickets. Not reachable from claimGoldenTicket.

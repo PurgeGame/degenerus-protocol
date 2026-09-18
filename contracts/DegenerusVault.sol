@@ -611,11 +611,17 @@ contract DegenerusVault {
     }
 
     /// @notice Recover the vault's prepaid afking ETH back into vault reserves.
-    /// @dev Permissionless (no owner gate): game.withdrawAfkingFunding sends to the CALLER (this
-    ///      vault), so the recovered ETH only ever lands in the vault's own receive() — an external
-    ///      trigger cannot redirect it. A zero balance is a no-op (withdrawAfkingFunding(0) returns).
-    ///      Available anytime pre-sweep; reverts after the 30-day final sweep (the afking reservation
-    ///      is forfeited with claimablePool, claimable-equivalent).
+    /// @dev Permissionless: any caller, not just the vault owner, can move the vault's staged
+    ///      afking half back at any time. game.withdrawAfkingFunding sends to the CALLER (this
+    ///      vault), so the recovered ETH only ever lands in the vault's own receive() — it never
+    ///      leaves the vault. A zero balance is a no-op (withdrawAfkingFunding(0) returns).
+    ///      Draining it empties the afking leg of the vault's own daily auto-buy for that day,
+    ///      which then draws claimable instead — it does not brick. It can also drop claimable +
+    ///      afking below totalBudget + floorWei in _resolveSalvageBuyer, failing the vault's
+    ///      salvage-buyer test and reverting a sellFarFutureEntries swap whose only counterparty
+    ///      was the vault, until the owner re-stages via depositAfkingFunding. Available anytime
+    ///      pre-sweep; reverts after the 30-day final sweep (the afking reservation is forfeited
+    ///      with claimablePool, claimable-equivalent).
     function recoverAfkingFunding() external {
         gamePlayer.withdrawAfkingFunding(gamePlayer.afkingFundingOf(address(this)));
     }

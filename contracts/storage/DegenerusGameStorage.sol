@@ -528,13 +528,9 @@ abstract contract DegenerusGameStorage {
     ///      Access through _getCurrentPrizePool()/_setCurrentPrizePool() helpers.
     uint128 internal currentPrizePool;
 
-    /// @dev Aggregate ETH liability across all packed balances (claimable + afking halves).
-    ///      Used for solvency checks: game must hold >= claimablePool ETH.
-    ///
-    ///      INVARIANT: claimablePool >= Σ (claimable + afking halves of balancesPacked[*]).
-    ///      Equality holds in steady state; decimator settlement reserves the full pool up front,
-    ///      so claimablePool is transiently over-reserved (strictly greater) until per-winner
-    ///      claims credit. Every component is credited/debited in tandem to maintain it.
+    /// @dev Aggregate ETH reserve for player winnings and afking funding.
+    ///      INVARIANT: claimablePool >= total payable winnings + total afking funding.
+    ///      Decimator settlement reserves the full pool before individual claims are credited.
     ///
     ///      uint128 max ~3.4e20 ETH — far exceeds total ETH supply.
     ///      Packed into slot 1 alongside currentPrizePool.
@@ -582,8 +578,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
     ///      Layout: [counterStep (8 bits @ 0)] [dailyEntries (64 bits @ 8)]
     ///              [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
-    ///      Set by the ETH stage; the coin+tickets stage consumes the first three and, when
-    ///      a carryover was priced, leaves the word for the carryover stage, which zeroes it.
+    ///              [earlyBirdEntries (64 bits @ 144)]
+    ///      Set by the ETH stage; on the early-bird day the early-bird stage consumes the
+    ///      last field and clears it; the coin+tickets stage consumes the first three and,
+    ///      when a carryover was priced, leaves the word for the carryover stage, which
+    ///      zeroes it.
     uint256 internal dailyTicketBudgetsPacked;
 
     // =========================================================================
@@ -818,7 +817,7 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted when final sweep forfeits unclaimed winnings 30 days post-gameover.
     event FinalSwept(uint256 totalFunds);
 
-    /// @dev Emitted when ETH is credited to a player's claimable balance.
+    /// @dev Emitted when a player's claimable balance is credited.
     event PlayerCredited(address indexed player, uint256 amount);
 
     /// @dev Emitted when a VRF word is bound to a lootbox RNG index (mid-day finalize,
@@ -943,6 +942,14 @@ abstract contract DegenerusGameStorage {
     ///      in dailyTicketBudgetsPacked. The day stays locked until that stage seals it.
     function _carryoverLegPending() internal view returns (bool) {
         return !dailyJackpotCoinTicketsPending && dailyTicketBudgetsPacked != 0;
+    }
+
+    /// @dev True while the early-bird ticket leg of a jackpot-phase day-1 daily waits for its
+    ///      own advance stage: the ETH stage priced it into the top field of
+    ///      dailyTicketBudgetsPacked. The coin+tickets stage is not reached until that stage
+    ///      clears the field, so the day stays locked across all three.
+    function _earlyBirdLegPending() internal view returns (bool) {
+        return dailyTicketBudgetsPacked >> 144 != 0;
     }
 
     /// @dev True when gameover liveness guard would fire within ~1 day (day-granularity).
@@ -3378,7 +3385,8 @@ abstract contract DegenerusGameStorage {
     uint16 internal _subOpenCursor;
 
     /// @dev The day the process STAGE was last reset for. When the advance first enters
-    ///      a new `day` (`_afkingResetDay != day`), it resets `subsFullyProcessed` + the
+    ///      a new `day` with the lock down and `rngWordByDay[day]` still uncommitted
+    ///      (`_afkingResetDay != day`), it resets `subsFullyProcessed` + the
     ///      `_subCursor` ONCE, before that day's STAGE drains — a forward-looking reset
     ///      (at the start of the new day, not trailing after the prior day completes),
     ///      firing exactly once per day regardless of which RNG path runs.

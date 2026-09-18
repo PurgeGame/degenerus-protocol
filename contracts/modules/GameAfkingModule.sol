@@ -488,9 +488,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
 
         // msg.value > 0 credits the Game's afkingFunding ledger in-context (the Game
-        // holds the ETH; claimablePool moved in tandem so the paired delta keeps
-        // claimablePool >= Σ claimableWinnings + Σ afkingFunding — the pool also
-        // reserves unclaimed decimator rounds above those sums). It credits the
+        // holds the ETH; claimablePool increases by the same amount). It credits the
         // SAME bucket the draws debit: the resolved funding source — the non-self
         // `fundingSource` for an operator-funded sub (already approved just
         // above, so the funder consented to fund this subscriber), else the subscriber

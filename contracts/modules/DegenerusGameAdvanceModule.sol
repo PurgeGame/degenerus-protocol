@@ -173,6 +173,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      STAGE_JACKPOT_COIN_TICKETS / STAGE_JACKPOT_PHASE_ENDED priced it, so the two
     ///      100-winner ticket legs never share a tx. Seals the day on a non-final daily.
     uint8 private constant STAGE_JACKPOT_CARRYOVER_TICKETS = 13;
+    /// @dev The early-bird ticket leg of the day-1 jackpot-phase daily, paid on the advance
+    ///      after STAGE_JACKPOT_DAILY_STARTED priced it and ahead of the coin+tickets stage,
+    ///      so the 305-winner ETH leg and the 100-winner early-bird leg never share a tx.
+    uint8 private constant STAGE_JACKPOT_EARLY_BIRD_TICKETS = 14;
     // No deferred-composition stage is left: the subscriber STAGE is entry-gated on
     // !rngLockedFlag, so it can never complete in a tx that also has a buffered word /
     // pending backfill.
@@ -568,7 +572,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // per-tx gas ceiling — at ANY subscriber cap. The stamp-before-request
             // ordering is untouched: an unlocked advance walks the stage to completion
             // and only then reaches rngGate to fire the day's request.
-            if (!locked) {
+            // Committed-word gate: the STAGE also never runs once rngWordByDay[day] holds
+            // a word. After a VRF stall the fulfil crank backfills every gap day's word and
+            // records the wall day's, and the RNGREUSE re-walk then enters those days with
+            // the lock already down — unlocked, yet holding a public word. The stamp must
+            // precede the word, so the block keys on both: lock down AND word uncommitted.
+            // A normal day is untouched (its word is written by rngGate, after this block).
+            if (!locked && rngWordByDay[day] == 0) {
                 if (_afkingResetDay != day) {
                     _afkingResetDay = day;
                     subsFullyProcessed = false;
@@ -794,6 +804,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // === JACKPOT PHASE ===
+
+            // Early-bird ticket leg of the day-1 daily: the stage after the one that priced
+            // it, on the same recorded word, ahead of the coin+tickets stage that seals the
+            // day. The lock has held since the request, so nothing sits between the halves.
+            if (_earlyBirdLegPending()) {
+                _payEarlyBirdTickets(rngWord);
+                stage = STAGE_JACKPOT_EARLY_BIRD_TICKETS;
+                break;
+            }
 
             // Complete coin+ticket distribution
             if (dailyJackpotCoinTicketsPending) {
@@ -1342,6 +1361,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     function _payCarryoverTickets(uint256 randWord) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
             .delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payCarryoverTickets.selector, randWord));
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Pay the pending early-bird ticket leg via jackpot module delegatecall.
+    /// @param randWord The day's recorded VRF word.
+    function _payEarlyBirdTickets(uint256 randWord) private {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
+            .delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payEarlyBirdTickets.selector, randWord));
         if (!ok) _revertDelegate(data);
     }
 
@@ -2266,6 +2293,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // let _livenessTriggered read false again while gameOver stays true — reopening every
         // liveness-gated paid entrypoint. A dead game seals no day, so nothing else wants it.
         if (!gameOver) dailyIdx = day;
+        bool wasLocked = rngLockedFlag;
         rngLockedFlag = false;
         rngWordCurrent = 0;
         vrfRequestId = 0;
@@ -2289,7 +2317,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 yieldAccumulator,
                 day
             );
-            _afKingSubDraw(day);
+            if (wasLocked) _afKingSubDraw(day);
         }
     }
 
@@ -2306,8 +2334,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      RNG-freeze: every input is frozen across [request -> unlock] — the ring
     ///      and Sub span fields mutate only in the pre-request STAGE and the
     ///      lock-gated subscribe/cancel path — and the word is domain-separated
-    ///      ("SEATDRAW") from every other consumer. Gap days backfilled after a
-    ///      stall never seal through _unlockRng, so they hold no drawing.
+    ///      ("SEATDRAW") from every other consumer. Runs only at a seal that
+    ///      releases the lock (the caller's `wasLocked`): a gap day re-walked after
+    ///      a stall, and the wall day recorded in the same fulfil crank, seal with
+    ///      the lock already down and a word public since that crank, so they hold
+    ///      no drawing.
     function _afKingSubDraw(uint24 day) private {
         uint256 len = _subscribers.length;
         uint256 word = rngWordByDay[day];

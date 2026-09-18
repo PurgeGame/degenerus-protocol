@@ -17,7 +17,7 @@ OWNER	boonPacked	modules/DegenerusGameBoonModule.sol	NOT A STORAGE WRITE: issueD
 OWNER	boxCursorIndex	modules/DegenerusGameLootboxModule.sol	openHumanBoxes persists the open frontier index; sole writer of the human-box sweep cursor pair
 OWNER	boxCursor	modules/DegenerusGameLootboxModule.sol	openHumanBoxes persists the intra-index resume position; sole writer, paired with boxCursorIndex
 HELPER	centuryBonusUsed	storage/DegenerusGameStorage.sol	_setCenturyUsedFor stamps (level<<224|used); the x00 bonus cap mutator
-OWNER	claimablePool	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding release liability: pool -= payout in tandem with the per-player debit (solvency identity claimablePool >= sum balances)
+OWNER	claimablePool	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding release liability: pool -= payout in tandem with the per-player debit
 OWNER	claimablePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots adds the level-transition claimableDelta after crediting winners; one of the paired liability writers
 OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_creditDecJackpotClaimCore moves the lootbox half of a decimator claim out of the reserved pool (pool -= lootboxPortion) when it becomes a box, not claimable ETH
 OWNER	claimablePool	modules/DegenerusGameDegeneretteModule.sol	_addClaimableEth pairs pool += with _creditClaimable for Degenerette ETH wins; same identity as every other crediting site
@@ -35,7 +35,7 @@ OWNER	dailyFoilDraw	modules/DegenerusGameJackpotModule.sol	payDailyJackpot/emitD
 INIT	dailyIdx	DegenerusGame.sol	constructor seeds dailyIdx to the deploy day so gap detection starts there
 OWNER	dailyIdx	modules/DegenerusGameAdvanceModule.sol	_unlockRng seals the completed day (skipped at gameOver so the deadman's staleness survives); the crank is the sole runtime writer
 OWNER	dailyJackpotCoinTicketsPending	modules/DegenerusGameJackpotModule.sol	payDailyJackpot sets the phase-2 latch, payDailyJackpotCoinAndTickets clears it; both in the jackpot module
-OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets; payDailyJackpotCoinAndTickets consumes them and zeroes the word unless a carryover was priced, which payCarryoverTickets then consumes and zeroes
+OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets; payEarlyBirdTickets consumes and clears the day-1 early-bird field; payDailyJackpotCoinAndTickets consumes the rest and zeroes the word unless a carryover was priced, which payCarryoverTickets then consumes and zeroes
 OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimatorJackpot writes [lvl]; runTerminalDecimatorJackpot writes [lvl+1] deliberately to avoid aliasing a live regular round
 OWNER	decDayOneActive	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest clears on a fresh daily request and arms at the x4/x99 window open; sole writer
 OWNER	decWindowOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest opens at x4/x99 and closes at x5/x00 on the level-promoting request; sole writer

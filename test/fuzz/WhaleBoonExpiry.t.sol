@@ -207,4 +207,24 @@ contract WhaleBoonExpiry is DeployProtocol {
 
         assertTrue(_whaleLaneIsZero(player), "deity whale lane must clear once currentDay != deityWhaleDay");
     }
+
+    /// @notice Boundary case: whaleDay = currentDay - 4, exactly at the edge of the 4-day
+    ///         window (`currentDay > whaleDayLocal + 4` reduces to currentDay > currentDay,
+    ///         false). Companion to test_lapsedLootboxWhaleBoonClears (whaleDay = currentDay
+    ///         - 5, one day past the edge, clears) -- together the two pin the exact `+4`
+    ///         boundary from both sides.
+    function test_whaleBoonAtFourDayBoundarySurvivesSweep() public {
+        address player = makeAddr("whaleBoundary");
+        vm.deal(player, 100 ether);
+
+        uint24 currentDay = game.currentDayView();
+        _injectWhaleBoon(player, currentDay - 4, 0, 3);
+
+        _triggerSweep(player, 5005);
+
+        (uint24 whaleDayAfter, uint24 deityWhaleDayAfter, uint8 tierAfter) = _readWhaleLane(player);
+        assertEq(tierAfter, 3, "whale tier must survive exactly at the 4-day boundary");
+        assertEq(whaleDayAfter, currentDay - 4, "whaleDay must be untouched at the boundary");
+        assertEq(deityWhaleDayAfter, 0, "deityWhaleDay must stay 0");
+    }
 }
