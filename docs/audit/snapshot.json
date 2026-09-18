@@ -1,7 +1,7 @@
 {
   "date": "2026-09-18",
   "status": "working-tree snapshot at the base revision; not an audited deployment",
-  "base_commit": "1df5f574c",
+  "base_commit": "2d350e4f9",
   "source_file_count": 58,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -80,5 +80,5 @@
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "evidence recorded at 1df5f574c on 2026-09-18: see docs/VERIFICATION.md, Evidence status."
+  "verification": "evidence recorded at 2d350e4f9 on 2026-09-18: see docs/VERIFICATION.md, Evidence status."
 }
