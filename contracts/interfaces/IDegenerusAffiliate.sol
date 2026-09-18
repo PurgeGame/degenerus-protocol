@@ -117,8 +117,9 @@ interface IDegenerusAffiliate {
 
     /// @notice Get the referrer address for a player.
     /// @dev Never returns address(0): resolves to the VAULT when the player has no valid
-    ///      referrer (code unset, locked, vault-coded, or its owner unresolvable), so
-    ///      referral chains always terminate at the VAULT.
+    ///      referrer (code unset, locked, vault-coded, or its owner unresolvable). Chains are
+    ///      not acyclic (VAULT and SDGNRS refer each other; mutual player referrals are
+    ///      allowed); payouts walk at most two upline hops from the direct referrer.
     /// @param player The player to look up.
     /// @return The referrer's address (the VAULT when the player has no real referrer).
     function getReferrer(address player) external view returns (address);

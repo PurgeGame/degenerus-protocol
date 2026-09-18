@@ -41,14 +41,19 @@ interface IsDGNRS {
 
 /// @dev Game interface for RNG lock (unwrap guard), game-over check (burn guard), and level (vesting).
 interface IDegenerusGame {
+    /// @notice Whether the daily RNG lock is active, as implemented by DegenerusGame.
     function rngLocked() external view returns (bool);
+    /// @notice Whether the game has ended, as implemented by DegenerusGame.
     function gameOver() external view returns (bool);
+    /// @notice Timestamp the game ended, 0 if still active, as implemented by DegenerusGame.
     function gameOverTimestamp() external view returns (uint48);
+    /// @notice The game's current level, as implemented by DegenerusGame.
     function level() external view returns (uint24);
 }
 
 /// @dev Vault interface for DGVE ownership check (unwrap auth).
 interface IDegenerusVault {
+    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -81,28 +86,47 @@ contract DGNRS {
     // =====================================================================
 
     /// @notice Emitted on every token transfer (including mint and burn)
+    /// @param from Sender (zero on mint).
+    /// @param to Recipient (zero on burn).
+    /// @param amount Amount transferred, in wei.
     event Transfer(address indexed from, address indexed to, uint256 amount);
     /// @notice Emitted when an allowance is set via approve
+    /// @param owner The account granting the allowance.
+    /// @param spender The account authorized to spend it.
+    /// @param amount The new allowance amount.
     event Approval(address indexed owner, address indexed spender, uint256 amount);
     /// @notice Emitted when DGNRS is burned through to sDGNRS for ETH + stETH + FLIP
+    /// @param from The address whose DGNRS was burned.
+    /// @param amount DGNRS burned.
+    /// @param ethOut ETH paid out.
+    /// @param stethOut stETH paid out.
+    /// @param flipOut FLIP paid out.
     event BurnThrough(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 flipOut);
     /// @notice Emitted when DGVE majority holder unwraps DGNRS back to soulbound sDGNRS
+    /// @param recipient The address receiving the unwrapped sDGNRS.
+    /// @param amount Amount unwrapped.
     event UnwrapTo(address indexed recipient, uint256 amount);
 
     // =====================================================================
     //                          ERC20 METADATA
     // =====================================================================
 
+    /// @notice The token name.
     string public constant name = "Degenerus Protocol Revenue Token";
+    /// @notice The token symbol.
     string public constant symbol = "DGNRS";
+    /// @notice The token decimals.
     uint8 public constant decimals = 18;
 
     // =====================================================================
     //                          ERC20 STATE
     // =====================================================================
 
+    /// @notice The total DGNRS supply.
     uint256 public totalSupply;
+    /// @notice Token balance per holder.
     mapping(address => uint256) public balanceOf;
+    /// @notice Approved spend amount per owner and spender.
     mapping(address => mapping(address => uint256)) public allowance;
 
     // =====================================================================
@@ -129,6 +153,8 @@ contract DGNRS {
     //                          CONSTRUCTOR
     // =====================================================================
 
+    /// @notice Mints DGNRS 1:1 against sDGNRS already deposited to this contract, splitting
+    ///         creator and vesting allocations from the rest.
     constructor() {
         uint256 deposited = staked.balanceOf(address(this));
         if (deposited == 0) revert Insufficient();
@@ -326,6 +352,10 @@ contract DGNRS {
     error NothingToSweep();
 
     /// @notice Emitted when 1-year sweep distributes remaining backing
+    /// @param ethToGnrus ETH sent to GNRUS.
+    /// @param stethToGnrus stETH sent to GNRUS.
+    /// @param ethToVault ETH sent to the vault.
+    /// @param stethToVault stETH sent to the vault.
     event YearSweep(uint256 ethToGnrus, uint256 stethToGnrus, uint256 ethToVault, uint256 stethToVault);
 
     /// @notice Sweep remaining DGNRS backing 50-50 to GNRUS and VAULT after 1 year post-gameover.

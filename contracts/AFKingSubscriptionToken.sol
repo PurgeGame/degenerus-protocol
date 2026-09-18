@@ -38,9 +38,10 @@ pragma solidity 0.8.34;
  *
  * @dev SEAT MODEL (sub <=> seat):
  *      - Fixed 2,000 serials, minted only through three bounded tranches:
- *        2 permanent construction seats — serial 1 to SDGNRS, serial 2 to
- *        the VAULT (default colors; neither has an ERC721-out path, so both
- *        protocol self-subscribers hold their seats forever) — a 1,000-seat
+ *        2 construction seats — serial 1 to SDGNRS, serial 2 to the VAULT
+ *        (default colors). SDGNRS has no ERC721-out path; the vault can move
+ *        seats via afkingSeatTransfer but the seat lock keeps it holding at
+ *        least one while subscribed, which it perpetually is — a 1,000-seat
  *        FREE tranche minted to pass buyers when they buy (one per address
  *        for life, enforced by the game's SEAT_CLAIMED latch; past 1,000 a
  *        pass simply confers no seat), and a 998-seat VAULT tranche the vault
@@ -102,11 +103,13 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 interface IIcons32 {
     /// @notice Get the SVG path data for icon at index i.
     /// @param i Icon index (0-31).
+    /// @return The icon's SVG path data.
     function data(uint256 i) external view returns (string memory);
 
     /// @notice Get the human-readable symbol name.
     /// @param quadrant Quadrant index (0-3, 8 symbols each).
     /// @param idx Symbol index within the quadrant (0-7).
+    /// @return The symbol's human-readable name.
     function symbol(uint256 quadrant, uint8 idx) external view returns (string memory);
 }
 
@@ -119,8 +122,11 @@ interface IIcons32 {
 ///      the one mutator — AFKING_SUB_TOKEN-only game-side, called by
 ///      reclaimSeat after seizing a forfeited seat.
 interface ISeatGameViews {
+    /// @notice Clears the seat-encumbered flag on `holder`'s subscription, as implemented by
+    ///         DegenerusGame.
     function clearSeatEncumbrance(address holder) external;
 
+    /// @notice A player's afking subscription status, as implemented by DegenerusGame.
     function subInfo(
         address player
     )
@@ -133,11 +139,13 @@ interface ISeatGameViews {
             uint24 afkCoveredThroughDay
         );
 
+    /// @notice Packed seat-lock/forfeit data for `player`'s mint, as implemented by DegenerusGame.
     function mintPackedFor(address player) external view returns (uint256);
 }
 
 /// @dev Vault interface for DGVE ownership check (admin surface auth).
 interface IDegenerusVaultOwner {
+    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -145,6 +153,7 @@ interface IDegenerusVaultOwner {
 /// @dev A reverting or empty external render falls back to the internal renderer;
 ///      the staticcall is not gas-capped, and the renderer is owner-set and trusted.
 interface ISeatRendererV1 {
+    /// @notice Renders a seat's full SVG/metadata art, as implemented by the owner-set renderer.
     function render(
         uint256 tokenId,
         uint8 symbolId,
@@ -161,6 +170,7 @@ interface ISeatRendererV1 {
 
 /// @dev Minimal ERC721 receiver interface for the safe-transfer variants.
 interface IERC721Receiver {
+    /// @notice Standard ERC721 receiver hook, called on safe transfers to contract recipients.
     function onERC721Received(
         address operator,
         address from,
@@ -184,7 +194,7 @@ contract AFKingSubscriptionToken {
     /// @notice Thrown when zero address is provided where not allowed
     error ZeroAddress();
 
-    /// @notice symbolId >= 32 at claim
+    /// @notice symbolId >= 32 on a restyle
     error InvalidTrait();
 
     /// @notice Thrown when a transfer would empty an encumbered holder's
@@ -221,12 +231,21 @@ contract AFKingSubscriptionToken {
       +======================================================================+*/
 
     /// @notice ERC721 transfer (from = address(0) for mints)
+    /// @param from Previous holder (zero on mint).
+    /// @param to New holder.
+    /// @param tokenId The seat's serial.
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
 
     /// @notice ERC721 single-token approval
+    /// @param owner The seat's current holder.
+    /// @param approved The address approved to transfer it (zero clears the approval).
+    /// @param tokenId The seat's serial.
     event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
 
     /// @notice ERC721 operator approval
+    /// @param owner The account granting the operator approval.
+    /// @param operator The address approved (or unapproved) to manage all of owner's seats.
+    /// @param approved True to approve, false to revoke.
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
     /// @notice Emitted when a seat is minted — on a pass PURCHASE (game-driven) or
     ///         from the vault's 998-seat tranche. Art is the deterministic default and
@@ -268,6 +287,8 @@ contract AFKingSubscriptionToken {
     );
 
     /// @notice External renderer changed
+    /// @param previousRenderer The renderer being replaced (zero if none was set).
+    /// @param newRenderer The renderer now in effect (zero disables the external renderer).
     event RendererUpdated(address indexed previousRenderer, address indexed newRenderer);
 
     /*+======================================================================+
@@ -356,14 +377,17 @@ contract AFKingSubscriptionToken {
         _;
     }
 
+    /// @notice Mints the two protocol self-subscriber seats and registers this contract's
+    ///         ENS reverse name.
     constructor() {
-        // The protocol self-subscribers' permanent seats: serial 1 to SDGNRS,
-        // serial 2 to the VAULT (default colors). Neither leaves: SDGNRS has no
-        // transfer surface, and the seat lock binds a last seat held by an active
-        // subscriber, which both perpetually are (the vault's 998-seat tranche
-        // mints fresh serials to others, so selling never touches this one). Both
-        // hold real seats forever and the game's coin gate and the seat lock need
-        // no protocol special cases.
+        // The protocol self-subscribers' construction seats: serial 1 to SDGNRS,
+        // serial 2 to the VAULT (default colors). SDGNRS has no transfer surface,
+        // so serial 1 never leaves. The vault can transfer any seat it holds, but
+        // the seat lock binds the LAST seat of an active subscriber, which the
+        // vault perpetually is — so it always keeps at least one seat (the vault's
+        // 998-seat tranche mints fresh serials to others). Both hold real seats
+        // forever and the game's coin gate and the seat lock need no protocol
+        // special cases.
         nextSerial = 1;
         _mintSeat(ContractAddresses.SDGNRS, 0, DEFAULT_BG, DEFAULT_TRIM);
         _mintSeat(ContractAddresses.VAULT, 0, DEFAULT_BG, DEFAULT_TRIM);
@@ -385,7 +409,9 @@ contract AFKingSubscriptionToken {
       |                         ERC721 METADATA                              |
       +======================================================================+*/
 
+    /// @notice The collection name.
     function name() external pure returns (string memory) { return "AFKing Subscription Token"; }
+    /// @notice The collection symbol.
     function symbol() external pure returns (string memory) { return "AFK"; }
 
     /// @notice Seats minted so far (serials 1..totalSupply; no burn path)
@@ -551,21 +577,25 @@ contract AFKingSubscriptionToken {
       |                          ERC721 VIEWS                                |
       +======================================================================+*/
 
+    /// @notice Seat count held by `account`.
     function balanceOf(address account) external view returns (uint256) {
         if (account == address(0)) revert ZeroAddress();
         return _balances[account];
     }
 
+    /// @notice Current holder of seat `tokenId`.
     function ownerOf(uint256 tokenId) public view returns (address ownerAddr) {
         ownerAddr = _owners[tokenId];
         if (ownerAddr == address(0)) revert InvalidToken();
     }
 
+    /// @notice The address approved to transfer seat `tokenId` (zero if none).
     function getApproved(uint256 tokenId) external view returns (address) {
         if (_owners[tokenId] == address(0)) revert InvalidToken();
         return _tokenApprovals[tokenId];
     }
 
+    /// @notice Whether `operator` is approved to manage all of `ownerAddr`'s seats.
     function isApprovedForAll(
         address ownerAddr,
         address operator
@@ -573,6 +603,7 @@ contract AFKingSubscriptionToken {
         return _operatorApprovals[ownerAddr][operator];
     }
 
+    /// @notice Declares support for IERC721, IERC721Metadata and IERC165.
     function supportsInterface(bytes4 id) external pure returns (bool) {
         return id == 0x80ac58cd  // IERC721
             || id == 0x5b5e139f  // IERC721Metadata

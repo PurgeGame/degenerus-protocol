@@ -34,8 +34,10 @@ import {
 
 /// @dev Minimal stETH interface (ERC20 subset)
 interface IStETH {
+    /// @notice stETH balance of an account.
     /// @param account Address to query balance of.
     function balanceOf(address account) external view returns (uint256);
+    /// @notice Transfer stETH to a recipient.
     /// @param to Recipient address.
     /// @param amount Transfer amount in wei.
     function transfer(address to, uint256 amount) external returns (bool);
@@ -43,16 +45,23 @@ interface IStETH {
 
 /// @dev Admin interface for VRF shutdown during final sweep.
 interface IDegenerusAdminShutdown {
+    /// @notice Cancel the VRF subscription and sweep LINK to the vault (DegenerusAdmin,
+    ///         game-over only).
     function shutdownVrf() external;
 }
 
 /// @dev GNRUS interface for gameover GNRUS cleanup.
 interface IGNRUSGameOver {
+    /// @notice Burn GNRUS's remaining unallocated balance at game over (GNRUS, one-shot).
     function burnAtGameOver() external;
+    /// @notice Record the final-sweep timestamp on GNRUS, anchoring its post-sweep recovery gates.
     function onFinalSweep() external;
 }
 
+/// @dev FLIP interface for the gameover worthless-token tombstone flood.
 interface IFlipTombstone {
+    /// @notice Flood FLIP's vault mint allowance with the one-shot worthless-token
+    ///         tombstone signal.
     function tombstoneAtGameOver() external;
 }
 
@@ -86,6 +95,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
 
+    /// @notice Emitted when the VRF coordinator is wired or rotated.
+    /// @param previous Coordinator address before this update (zero on the initial wiring).
+    /// @param current Coordinator address now in effect.
     event VrfCoordinatorUpdated(
         address indexed previous,
         address indexed current

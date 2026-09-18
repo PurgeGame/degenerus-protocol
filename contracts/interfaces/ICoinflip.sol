@@ -46,6 +46,10 @@ uint8 constant RECORD_KINDS = 5;
 interface ICoinflip {
     /// @notice Emitted whenever a player's coinflip claim-state changes (claimable + carry + claim
     ///         cursor), so off-chain consumers can reconstruct valuation from logs without an eth_call.
+    /// @param player The player whose claim-state changed.
+    /// @param claimableStored Post-update claimable FLIP balance.
+    /// @param autoRebuyCarry Post-update rolling auto-rebuy carry.
+    /// @param lastClaim Post-update claim cursor day.
     event CoinflipClaimState(
         address indexed player,
         uint128 claimableStored,
@@ -81,14 +85,15 @@ interface ICoinflip {
     function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
 
     /// @notice Claim up to `amount` of the auto-rebuy carry as minted FLIP while staying on auto-rebuy.
-    /// @dev Settles all resolved days first (wins roll into the carry, a pending loss zeroes it),
-    ///      then withdraws from the settled carry; the remainder keeps rolling. Blocked during
-    ///      the RNG lock. Take-profit chunks surfaced by the settle bank into the claimable side.
+    /// @dev Runs the bounded claim walk first (wins roll into the carry, a loss zeroes it),
+    ///      then withdraws from the settled carry; the remainder keeps rolling. Blocked while
+    ///      today's flip is unapplied (`flipResolvedToday()` false), whether or not the game's
+    ///      RNG lock is up. Take-profit chunks surfaced by the settle bank into the claimable side.
     /// @param player The player claiming (address(0) for msg.sender).
     /// @param amount Maximum carry to claim.
     /// @return claimed The actual amount minted from the carry.
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
-    /// @custom:reverts RngLocked If a VRF request is pending.
+    /// @custom:reverts RngLocked If today's flip has not been applied yet.
     /// @custom:reverts AutoRebuyNotEnabled If the player is not on auto-rebuy.
     function claimCoinflipCarry(address player, uint256 amount) external returns (uint256 claimed);
 
@@ -115,7 +120,8 @@ interface ICoinflip {
     /// @param player The player configuring auto-rebuy (address(0) for msg.sender).
     /// @param enabled Whether auto-rebuy should be enabled.
     /// @param takeProfit The threshold amount; winnings above this are auto-claimed in multiples.
-    /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
+    /// @custom:reverts RngLocked If the player is already on auto-rebuy and today's flip has not
+    ///                 been applied yet; enabling from off is never blocked.
     /// @custom:reverts AutoRebuyAlreadyEnabled If enabling when already enabled (in strict mode).
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function setCoinflipAutoRebuy(
@@ -128,7 +134,7 @@ interface ICoinflip {
     /// @dev Only callable when auto-rebuy is already enabled. Processes pending claims before updating.
     /// @param player The player configuring (address(0) for msg.sender).
     /// @param takeProfit The new threshold amount for auto-claiming multiples.
-    /// @custom:reverts RngLocked If VRF randomness is currently being resolved.
+    /// @custom:reverts RngLocked If today's flip has not been applied yet.
     /// @custom:reverts AutoRebuyNotEnabled If player does not have auto-rebuy enabled.
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function setCoinflipAutoRebuyTakeProfit(
@@ -161,7 +167,8 @@ interface ICoinflip {
       +======================================================================+*/
 
     /// @notice Credit flip stake to a player without burning tokens.
-    /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP) for rewards.
+    /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP,
+    ///      PARIMUTUEL, CRAPS) for rewards.
     ///      Never touches the biggest-flip record (credits carry recordAmount 0).
     /// @param player The player receiving the flip credit.
     /// @param amount Amount of flip credit to add to next day's stake.
@@ -200,6 +207,9 @@ interface ICoinflip {
     ///      share of the record pool, plus the sDGNRS leg at 1/500 scale. Callers gate
     ///      each record's entry floor before paying for the call. The flip record arms
     ///      internally on direct deposits, never here.
+    /// @param kind Which record (RECORD_KIND_*), excluding flip and dice run.
+    /// @param player The player whose candidate is being armed.
+    /// @param candidate The candidate mark to ratchet the record with.
     /// @return The FLIP claimed from the record pool (0 when the candidate only ratcheted
     ///         the mark). Coinflip does NOT credit it — the caller folds it into the FLIP
     ///         its own path already pays, so a claim costs no second stake write.

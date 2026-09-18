@@ -31,6 +31,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
 /// @dev Vault interface for the DGVE-majority bounty-eligibility tier (cold path).
 interface IDegenerusVaultOwner {
+    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
     function isVaultOwner(address account) external view returns (bool);
     /// @notice Vault-owner salvage-buyer fallback config: whether the vault buys far-future tickets
     ///         when sDGNRS cannot fund the swap, and the ETH (wei) reserve it keeps untouched.
@@ -41,8 +42,13 @@ interface IDegenerusVaultOwner {
 ///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
 ///      and mint streak helpers (credits on completed 1x price ETH quest).
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
-    error InvalidDistance(); // mint-streak distance argument out of range
-    error InvalidQuantity(); // quantity argument is zero or out of range (mint units, whale-pass count, or a salvage quantity that is not a whole-ticket multiple of 4)
+    /// @notice Thrown when a far-future salvage swap's target level lies less than 6 or more
+    ///         than 100 levels from the current level.
+    error InvalidDistance();
+    /// @notice Thrown when a quantity argument is zero or out of range: here, a far-future
+    ///         salvage entry count that is not a multiple of 4 or exceeds a uint32; in
+    ///         DegenerusGameWhaleModule, a whale-pass count of zero or above 100.
+    error InvalidQuantity();
 
     /// @dev Jackpots processed per level before the phase ends. Mirrors the per-module copies;
     ///      declared here for _activeTicketLevel's final-jackpot-day reroute.
@@ -174,6 +180,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      non-whole-ticket quantity; does NOT check ownership (the executing path checks
     ///      holdings at debit). The split clamps the ticket leg to <= totalBudget so the preview is safe for
     ///      a too-small bundle (the executing path separately requires totalBudget >= one current entry).
+    /// @param levels Target far-future levels for each swap line (parallel to quantities).
+    /// @param quantities Entry quantities per line (n; must be nonzero, a multiple of 4, and
+    ///        <= uint32 max).
     /// @param cl The active ticket level (caller-computed, shared with the split).
     /// @param oneTicketWei priceForLevel(cl), the whole-ticket price (caller-computed; one entry = /4).
     /// @param seed The per-player daily salvage seed (_farFutureSeed — one computation
@@ -243,7 +252,8 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @param seed The per-player daily salvage seed (same word as _quoteFarFutureSwap).
     /// @param buyer The counterparty funding the swap (sDGNRS, or the vault on the owner-enabled fallback).
     /// @return ethCashWei ETH part relabeled to the player (cashWei - the FLIP part's ETH value).
-    /// @return flipTokens FLIP base units transferred from the buyer to the player.
+    /// @return flipTokens FLIP base units the buyer's FLIP is burned for and the player is
+    ///         credited with (burn + flip credit in MintModule, not a token transfer).
     function _quoteFarFutureFlipSplit(
         uint256 cashWei,
         uint256 priceWei,
@@ -475,7 +485,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
      *      no claimable or pool state.
      *
      * @param player Address of the player making the purchase.
-     * @param lvl Target level for this purchase (level+1 during purchase phase, level during jackpot phase).
+     * @param lvl Target level for this purchase (`_activeTicketLevel()`: level+1 during the
+     *        purchase phase and once the final jackpot draw is locked or the phase transition is
+     *        underway, else the current jackpot level).
      * @param mintUnits Scaled ticket units purchased.
      *
      * ## Activity Score State Updates
@@ -598,7 +610,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         }
 
         // ---------------------------------------------------------------------
-        // New level with ≥4 units: Full state update
+        // New level with >= 400 scaled units (one whole ticket): full state update
         // ---------------------------------------------------------------------
 
         // Check for whale pass frozen state
@@ -609,7 +621,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         bool isFrozen = frozenUntilLevel > 0 && lvl <= frozenUntilLevel;
 
         // If frozen, skip updating total (it's pre-set by whale pass)
-        // If we've reached the frozen level, clear the flag and resume normal tracking
+        // Once past the frozen level, clear the flag and resume normal tracking
         if (frozenUntilLevel > 0 && lvl > frozenUntilLevel) {
             // Clear frozen flag and whale pass type - resume normal tracking from here
             data = BitPackingLib.setPacked(

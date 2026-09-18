@@ -148,6 +148,12 @@ contract DegenerusGameMintModule is
     // Events
     // -------------------------------------------------------------------------
 
+    /// @notice Emitted when ETH is applied to a lootbox order, whether bought directly
+    ///         (`beginBoxOrder`) or system-granted (`recordCoverBox`: pass purchases and
+    ///         the afking auto-buy).
+    /// @param buyer The player whose lootbox order this ETH applies to.
+    /// @param index The shared lootbox RNG index the order queued at.
+    /// @param amount The ETH value applied to the order for this call.
     event LootBoxBuy(
         address indexed buyer,
         uint48 indexed index,
@@ -157,8 +163,9 @@ contract DegenerusGameMintModule is
     /// @param buyer The player who bought the box.
     /// @param index The shared lootbox RNG index the box queued at.
     /// @param amount The applied box ETH (post-clamp).
-    /// @param closing True iff this buy crossed the 50-ETH cap (latches presaleOver;
-    ///        sweeps the Pool.PresaleBox remainder at this box's open).
+    /// @param closing True iff this buy crossed the 50-ETH cap (latches presaleOver and
+    ///        records this buyer as presaleCloser, who receives the Pool.PresaleBox remainder
+    ///        once the human-box sweep has opened every presale box).
     event PresaleBoxBuy(
         address indexed buyer,
         uint48 indexed index,
@@ -935,7 +942,7 @@ contract DegenerusGameMintModule is
     /// @notice Purchase tickets and loot boxes for a buyer.
     /// @dev Delegatecalled by DegenerusGame. Handles payment routing, affiliates, and queues.
     /// @param buyer Recipient of the purchased items.
-    /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100).
+    /// @param entryQuantityScaled Purchase units: 100 = one entry (a quarter ticket), 400 = one whole ticket.
     /// @param boxOrder Packed box order: [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
     /// @param affiliateCode Referral code for affiliate attribution.
     /// @param payKind Payment kind selector (ETH/claimable/combined).
@@ -980,11 +987,13 @@ contract DegenerusGameMintModule is
     }
 
     /// @notice Redeem FLIP for current-jackpot tickets — allowed only inside the jackpot window.
-    /// @dev Reverts unless the FLIP purchase window is open: the prize target is met in the purchase
-    ///      phase, or the jackpot phase is live, with no RNG in flight. Outside that window FLIP ticket
-    ///      purchases revert so bonus tickets and prize ETH accrue to real-ETH buyers.
+    /// @dev Reverts unless the FLIP purchase window is open. The window latches open on the first
+    ///      redeem that lands with the prize target met and no RNG in flight, stays open through the
+    ///      jackpot days (later daily locks do not close it), and is cleared by the advance at the
+    ///      final jackpot day's RNG request. While closed, FLIP ticket purchases revert so bonus
+    ///      tickets and prize ETH accrue to real-ETH buyers.
     /// @param buyer Recipient of the purchased tickets.
-    /// @param entryQuantityScaled Number of tickets to purchase (2 decimals, scaled by 100).
+    /// @param entryQuantityScaled Purchase units: 100 = one entry (a quarter ticket), 400 = one whole ticket.
     function redeemFlip(
         address buyer,
         uint256 entryQuantityScaled
@@ -1242,8 +1251,9 @@ contract DegenerusGameMintModule is
     ///      claimablePool) covers totalBudget above the owner-set reserve floor; else address(0) (no buyer
     ///      can fund). The vault owner stages reserve ETH into the afking half via depositAfkingFunding.
     ///      Shared by the executing path and the preview so the displayed counterparty matches the one
-    ///      charged. The vault config is a freeze-safe owner storage read (never a VRF-window value), and
-    ///      the whole swap reverts under rngLockedFlag at the entrypoint, so this never runs in the lock.
+    ///      charged. The vault config is a freeze-safe owner storage read (never a VRF-window value); the
+    ///      executing swap reverts under rngLockedFlag at its entrypoint, and the view preview may run in
+    ///      the lock because it writes nothing.
     /// @param totalBudget The -EV ETH budget the buyer must fund above its floor.
     /// @return buyer The counterparty (sDGNRS, the vault, or address(0) if none can fund).
     function _resolveSalvageBuyer(uint256 totalBudget) internal view returns (address buyer) {
@@ -1775,15 +1785,17 @@ contract DegenerusGameMintModule is
     }
 
     /// @notice Buy tickets/lootbox (earning 25% presale-box credit) AND a presale box
-    ///         in one call, sharing one RNG index. The mint leg is funded by msg.value;
-    ///         the box leg is funded from the caller's claimable (a ledger move,
-    ///         covered by the just-earned + banked credit gate).
+    ///         in one call, sharing one RNG index. The mint leg takes fresh ETH up to its
+    ///         own cost (none for Claimable payKind); the rest of msg.value funds the box,
+    ///         with any shortfall drawn from the buyer's claimable, then afking balance. The
+    ///         box is gated by the just-earned + banked presale-box credit.
     /// @param buyer Player receiving both legs (already operator-resolved by the entrypoint).
     /// @param entryQuantityScaled Tickets to buy (0 to skip).
     /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
-    /// @param boxAmount Requested presale-box ETH (>= PRESALE_BOX_MIN, claimable-funded).
+    /// @param boxAmount Requested presale-box ETH (>= PRESALE_BOX_MIN; leftover msg.value
+    ///        first, then the buyer's claimable/afking).
     function buyLootboxAndPresaleBox(
         address buyer,
         uint256 entryQuantityScaled,

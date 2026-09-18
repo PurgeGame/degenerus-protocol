@@ -53,8 +53,9 @@ interface IDegenerusVaultOwner {
  *         and per-level sDGNRS-weighted governance controlling GNRUS distribution.
  * @dev GNRUS is minted entirely to this contract at deploy. Each level, the winning
  *      charity slot's recipient receives 2% of the remaining unallocated GNRUS.
- *      GNRUS holders can burn tokens to redeem a proportional share of both ETH and stETH
- *      held by this contract. Funding arrives via game distributions.
+ *      GNRUS holders can burn tokens to redeem a proportional share of the combined backing
+ *      (ETH + stETH held here plus game-side claimable), paid ETH-first with stETH covering
+ *      any remainder. Funding arrives via game distributions.
  *
  * ARCHITECTURE:
  * - 1T GNRUS minted to address(this) at deploy (unallocated pool)
@@ -113,33 +114,60 @@ contract GNRUS {
     // =====================================================================
 
     /// @notice Emitted on mint, burn, and governance distribution (indexer compat)
+    /// @param from Sender (zero on mint).
+    /// @param to Recipient (zero on burn).
+    /// @param amount Amount transferred, in wei.
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
     /// @notice Emitted when GNRUS is burned for proportional ETH + stETH
+    /// @param burner The address whose GNRUS was burned.
+    /// @param gnrusAmount GNRUS burned.
+    /// @param ethOut ETH paid out.
+    /// @param stethOut stETH paid out.
     event Burn(address indexed burner, uint256 gnrusAmount, uint256 ethOut, uint256 stethOut);
 
     /// @notice Emitted when a vote is cast on a charity slot
+    /// @param level The level the vote is cast in.
+    /// @param slot The charity slot voted for.
+    /// @param voter The address casting the vote.
+    /// @param weight The voter's weight applied to the slot.
     event Voted(uint24 indexed level, uint8 indexed slot, address indexed voter, uint256 weight);
 
     /// @notice Emitted when a level resolves with a winning slot
+    /// @param level The resolved level.
+    /// @param slot The winning charity slot.
+    /// @param recipient The charity address the slot resolved to.
+    /// @param gnrusDistributed GNRUS distributed to the recipient.
     event LevelResolved(uint24 indexed level, uint8 indexed slot, address recipient, uint256 gnrusDistributed);
 
     /// @notice Emitted when a level resolves with no eligible winner
+    /// @param level The skipped level.
     event LevelSkipped(uint24 indexed level);
 
     /// @notice Emitted when gameover finalization burns unallocated GNRUS (ethClaimed/stethClaimed always 0; final ETH/stETH is pushed to the vault/sDGNRS/GNRUS by the game, not claimed here)
+    /// @param gnrusBurned Unallocated GNRUS burned.
+    /// @param ethClaimed Always 0 (final ETH is pushed elsewhere, not claimed here).
+    /// @param stethClaimed Always 0 (final stETH is pushed elsewhere, not claimed here).
     event GameOverFinalized(uint256 gnrusBurned, uint256 ethClaimed, uint256 stethClaimed);
 
     /// @notice Emitted when the vault owner sweeps unredeemed GNRUS residual to the vault after the recovery delay
+    /// @param ethSwept ETH swept to the vault.
+    /// @param stethSwept stETH swept to the vault.
     event ResidualSweptToVault(uint256 ethSwept, uint256 stethSwept);
 
     /// @notice Emitted when setCharity writes directly to current slate (instant-apply branch)
+    /// @param slot The charity slot written.
+    /// @param recipient The charity address now in that slot.
     event CharityApplied(uint8 indexed slot, address indexed recipient);
 
     /// @notice Emitted when setCharity writes to pending edit queue (queue branch)
+    /// @param slot The charity slot queued for edit.
+    /// @param recipient The charity address queued for that slot.
     event CharityQueued(uint8 indexed slot, address indexed recipient);
 
     /// @notice Emitted per applied pending edit during pickCharity flush. recipient == address(0) signals a flush-removed slot.
+    /// @param slot The charity slot the flushed edit applies to.
+    /// @param recipient The charity address now in that slot, or zero if the edit removed it.
     event CharityFlushed(uint8 indexed slot, address indexed recipient);
 
     // =====================================================================
@@ -311,9 +339,10 @@ contract GNRUS {
     //                       BURN-FOR-REDEMPTION
     // =====================================================================
 
-    /// @notice Burn GNRUS to receive proportional ETH and stETH
-    /// @dev Burns `amount` GNRUS from msg.sender and transfers proportional shares of
-    ///      both ETH and stETH held by this contract. Last-holder sweep: if the caller's
+    /// @notice Burn GNRUS to receive a proportional share of the backing, as ETH and/or stETH
+    /// @dev Burns `amount` GNRUS from msg.sender and pays its proportional share of the
+    ///      combined backing (ETH + stETH + game claimable), ETH-first with stETH covering
+    ///      the remainder. Last-holder sweep: if the caller's
     ///      entire balance equals `amount` or all externally-held GNRUS equals `amount`,
     ///      sweeps the full caller balance to avoid dust.
     ///      CEI: state updates and events before external transfers. stETH before ETH (ETH last).
@@ -412,7 +441,8 @@ contract GNRUS {
 
     /// @notice Redeem a holder's entire GNRUS on their behalf, paying the holder its full
     ///         proportional ETH + stETH share.
-    /// @dev Vault-owner-only, post-gameOver. Lets a holder that never calls burn() itself (a lost or
+    /// @dev Vault-owner-only, after the final sweep (`sweptAt != 0`). Lets a holder that never
+    ///      calls burn() itself (a lost or
     ///      contract address, or a charity that has wound down) be made whole so its share is not left
     ///      stranded. Value-preserving — the holder receives exactly what burn() would pay it; the
     ///      vault owner cannot extract the holder's value. Reverts if the holder's ETH sink rejects.
@@ -431,8 +461,8 @@ contract GNRUS {
     /// @notice Sweep any ETH and stETH still held by GNRUS to the vault, after a long recovery delay.
     /// @dev Vault-owner-only. Recovers charity backing left unredeemed once the game is long over —
     ///      the final-sweep residual pushed when no holders remained, or the share of a holder that
-    ///      never redeemed. Gated on gameOver plus RESIDUAL_RECOVERY_DELAY (the 30-day final-sweep
-    ///      window plus a 3-year holder grace period), so holders have a multi-year window to redeem
+    ///      never redeemed. Gated on the final sweep having run plus RESIDUAL_RECOVERY_DELAY (three
+    ///      years from the actual `sweptAt` timestamp), so holders have a multi-year window to redeem
     ///      (directly or via vaultRedeemFor) before the residual is reclaimed.
     function sweepResidualToVault() external {
         if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();

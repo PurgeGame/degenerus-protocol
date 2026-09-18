@@ -10,6 +10,7 @@ import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 ///      packed chips and every term of the run, and reads the run back. Reached by STATICCALL —
 ///      the engine holds no storage and can change nothing.
 interface ICrapsEngine {
+    /// @notice CrapsEngine's pure play of one slip to its stop.
     function settleSlip(
         uint256 packedChips,
         uint256 chipFlip,
@@ -28,6 +29,8 @@ interface ICrapsEngine {
 ///      FLIP back, because nothing here is ever given back. Every payment — a run's winnings, a
 ///      pot, a lane — ships as coinflip credit.
 interface IFlipCoin {
+    /// @notice FLIP.sol's burn of `amount` from `target`'s FLIP balance, consuming settled
+    ///         coinflip winnings only for the shortfall.
     function burnCoin(address target, uint256 amount) external;
     /// @dev The paid-craps twin. Takes the price with action flags in its low byte and hands back
     ///      the one-hot craps-boon tier consumed by this burn (0 on every burn that consumed none).
@@ -37,32 +40,39 @@ interface IFlipCoin {
 }
 
 /// @dev The vault's ownership test — a majority DGVE holder. The only authority this contract
-///      recognises, and it grants exactly one thing: the right to OPEN a custom battle.
+///      recognises: it opens a custom battle, names the vault's day board (`setVaultBoard`),
+///      and grants or revokes battle creators (`setBattleCreator`).
 interface IVaultOwnership {
+    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
     function isVaultOwner(address account) external view returns (bool);
 }
 
 /// @dev Requests the lootbox word that will fill a newly selected table index.
 interface IGameLootboxRng {
+    /// @notice DegenerusGame's mid-day lootbox VRF request trigger.
     function requestLootboxRng() external;
 }
 
 /// @dev Supplies the entry-time standing used for a battle's minimum-score gate and last
 ///      merit component. An exact score tie is resolved from the table word.
 interface IGameActivityScore {
+    /// @notice DegenerusGame's aggregate activity-score read for `player`.
     function playerActivityScore(address player) external view returns (uint256 scorePoints);
 }
 
 /// @dev Run winnings and competitive battle pots pay as next-day coinflip stake. The batch lane
 ///      lets a slot settle many entrants with one external call.
 interface ICoinflipStake {
+    /// @notice Coinflip's credit of `amount` FLIP stake to `player`.
     function creditFlip(address player, uint256 amount) external;
+    /// @notice Coinflip's batched credit of `amounts` FLIP stake to `players`.
     function creditFlipBatch(address[] calldata players, uint256[] calldata amounts) external;
     /// @notice Arm THE BIGGEST DICE RUN — the fifth category of the shared BIGGEST record.
     /// @dev CRAPS only, and this kind only: the generic `armRecord` door is the GAME's and
     ///      carries the four existing kinds' 20%-improvement claim rule, which is not this one's.
     ///      Coinflip credits the claim itself, so a finalization makes ONE call and the player
     ///      takes ONE credit.
+    /// @param player The run's owner, credited with the claim.
     /// @param candidate The winner's high point over its starting bankroll, in basis points.
     /// @dev DECLARED WITHOUT ITS RETURN, deliberately. `Coinflip` returns the FLIP it claimed and
     ///      logs it in `BigRecordUpdated`; nothing on this side of the call needs the figure, so
@@ -134,8 +144,8 @@ contract CrapsBattle is LootboxCraps {
     /// @notice The battle asks for more standing than the caller held at entry.
     error ScoreRequiredForBonus();
 
-    /// @notice An entrant supplied neither zero nor seven selected chips, or a custom battle's
-    ///         standing bar exceeds `_MAX_MIN_SCORE`.
+    /// @notice A board's packed word sets bits outside the ten three-bit legs, or names more
+    ///         than seven chips.
     error BadRandomCount();
 
     /// @notice A board stacks more than three player-selected chips on a single leg.
@@ -217,7 +227,8 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _EVENT_LEAD = 15 minutes;
 
     /// @notice The routine windows' tiers, as whole FLIP: total buy-in (bankroll PLUS bounty),
-    ///         the bounty inside it, and the house seed that rides on top. Drawn 7:2:1.
+    ///         the bounty inside it, and the house seed that rides on top. The opener draws its
+    ///         tier flat; every later routine window draws 7:2:1.
     uint256 internal constant _BONUS_SMALL_BANKROLL = 300;
     uint256 internal constant _BONUS_MED_BANKROLL = 1200;
     uint256 internal constant _BONUS_LARGE_BANKROLL = 3000;
@@ -248,17 +259,16 @@ contract CrapsBattle is LootboxCraps {
     ///         the action they booked. It is a RATE ON THE HANDLE and not an estimate of burn —
     ///         the table does not measure what it kept, and this figure has never claimed to.
     ///
-    ///         WHY TWELVE. Measured post-boost on the shipped resolver across the nine scheduled
-    ///         depth/target formats at five million runs a cell, the weakest still leaves the
-    ///         table 13.72% of the bankroll it was bought with — a run that goes broke has its
-    ///         remainder deleted, and that deletion is what pays for the subsidy. Twelve sits
-    ///         under the worst cell, so the linear term cannot outrun the engine's own take at
-    ///         any format on the schedule.
+    ///         WHY TWELVE. Measured post-boost on the shipped resolver at five million runs a
+    ///         cell, the weakest scheduled cell still leaves the table 13.72% of the bankroll it
+    ///         was bought with — a run that goes broke has its remainder deleted, and that
+    ///         deletion is what pays for the subsidy. Twelve sits under the worst cell, so the
+    ///         linear term cannot outrun the engine's own take anywhere on the schedule.
     ///
     ///         A WHOLE-RUN FIGURE, NOT A PER-BET EDGE — the two are nothing alike here. A slip
-    ///         re-bets its whole bankroll hand after hand chasing five to fifty times it out of
-    ///         two to ten rounds of depth, so what decides the loss is almost never the edge on
-    ///         any leg; it is that the run busts first.
+    ///         re-bets its whole bankroll hand after hand chasing five times it out of five
+    ///         rounds of depth, so what decides the loss is almost never the edge on any leg; it
+    ///         is that the run busts first.
     uint256 internal constant _BOOST_ACTION_BPS = 1200;
     uint256 internal constant _BPS_DENOMINATOR = 10_000;
 
@@ -439,16 +449,19 @@ contract CrapsBattle is LootboxCraps {
     /// @notice Granularity of battle stakes, seeds and tier boosts.
     uint256 internal constant _BATTLE_STAKE_UNIT = 100 ether;
 
-    /// @notice The activity score at which house money pays in full. ANYONE may play any battle —
-    ///         nothing gates the door — but a winner below this collects only `1 / (floor - score)`
-    ///         of the BOOST, and the rest is burned. Score 11 takes all of it, 6 takes a sixth, 1
-    ///         takes an eleventh, and a scoreless wallet takes NONE.
+    /// @notice The activity score at which house money pays in full. A scheduled window gates
+    ///         nobody at the door (a custom battle may set its own bar); a winner below this
+    ///         collects only `1 / (floor - score)` of the BOOST, and the rest is banked in the
+    ///         progressive — or, for a progressive award, simply stays in the pool. Score 11
+    ///         takes all of it, 6 takes a sixth, 1 takes an eleventh, and a scoreless wallet
+    ///         takes NONE.
     ///
     ///         It bites exactly where a sybil profits and nowhere else. Splitting a bankroll over
     ///         fresh wallets buys more seats in a field that allows one, but the only free money
     ///         in the pot is the house's — every bounty was posted by the seat that holds it. So
-    ///         the entrants' stakes and the busted crumbs always pay out whole, and only the
-    ///         subsidy is rationed. A single account that plays clears this within days.
+    ///         the bounties and donations always pay out whole, a bust's remainder is deleted
+    ///         where it busted, and only the subsidy is rationed. A single account that plays
+    ///         clears this within days.
     uint256 internal constant _SYBIL_SCORE_FLOOR = 12;
 
     /// @notice The two sizes a protocol day's high-roller lane can take, and how often. One roll
@@ -501,9 +514,10 @@ contract CrapsBattle is LootboxCraps {
     ///      exceed seven.
     uint256 internal constant _BET_CHIPS_SHIFT = 160;
     uint256 internal constant _BET_CHIPS_MASK = 0x3FFFFFFF;
-    /// @dev The entrant's standing, frozen at entry. Chip composition may be amended before the
-    ///      slot closes, but this score component never changes: standing earned after joining
-    ///      must not decide a race already entered.
+    /// @dev The entrant's standing: captured at entry, re-read by every permitted `amendSlip`,
+    ///      and frozen from the moment amendments close — the slot's entry close, or a day
+    ///      ticket's first-window close. Standing earned after that cannot decide a race
+    ///      already entered.
     uint256 internal constant _BET_SCORE_SHIFT = 190;
     uint256 internal constant _BET_SCORE_MASK = 0xFFFF;
 
@@ -641,7 +655,8 @@ contract CrapsBattle is LootboxCraps {
     ///                       * a bust ranks on shooters completed.
     ///        bits 16..59  THE MONEY: the raw ENDING bankroll in whole FLIP — a goal's payout
     ///                     figure, a bust's surviving remainder — never the high point.
-    ///        bits  0..15  the entrant's STANDING, frozen at entry.
+    ///        bits  0..15  the entrant's STANDING as the slip last recorded it (entry or the
+    ///                     last amendment), frozen once amendments close.
     ///
     ///      Exact equality is resolved separately by the table word's deterministic ordering of
     ///      bet ids, so settlement order cannot choose the winner.
@@ -678,8 +693,9 @@ contract CrapsBattle is LootboxCraps {
     /// @param chips         The ten leg counts as one thirty-bit word, three bits each — the nine
     ///                      light legs at bits 0..26 and the dark side at 27..29. Zero is a blank
     ///                      ticket; the draw places all ten chips.
-    /// @param standing      The entrant's activity score, frozen at entry — the last merit
-    ///                      component before a word-derived exact-tie break.
+    /// @param standing      The entrant's activity score as the slip last recorded it — at entry
+    ///                      or the last `amendSlip` — frozen once amendments close; the last
+    ///                      merit component before a word-derived exact-tie break.
     /// @dev The header is created at placement. Its chip slice may change through `amendSlip`
     ///      before close; settlement never writes the bet, and the slot's cursor carries its
     ///      settled mark.
@@ -857,7 +873,7 @@ contract CrapsBattle is LootboxCraps {
     ///      whatever its own window says it is, and the seat plays all seven of them.
     uint256 internal _vaultBoard;
 
-    /// @dev THE PROGRESSIVE. One balance, shared by all nine scheduled formats and by every day.
+    /// @dev THE PROGRESSIVE. One balance, shared by every scheduled window of every day.
     ///      Funded once when a protocol day opens — half of what that day's main allocation
     ///      raised — and topped up by every wei of the protocol's own subsidy that a winner's
     ///      activity standing would not admit. It is a virtual emission liability, counted the
@@ -887,10 +903,12 @@ contract CrapsBattle is LootboxCraps {
     ///
     ///      Read once a day, by that day's EVENT, to decide whether its progressive rung doubles.
     ///
-    ///      KEYED BY ADDRESS ALONE, not by (day, address), because only the LATEST day can ever
-    ///      be asked about: the event reads its OWN day and nothing else, so a later day's win
-    ///      simply overwrites a spent one and the map never needs clearing. A stale entry from
-    ///      any earlier day fails the equality and is indistinguishable from never having won.
+    ///      KEYED BY ADDRESS ALONE, not by (day, address): the map holds only the most
+    ///      recently RESOLVED routine win for that address, not necessarily the latest DAY.
+    ///      `resolveSlot` is permissionless per armed slot, so routine fields do not finalize
+    ///      in day order — a later-resolved win overwrites whatever day was stored before it,
+    ///      even one from a day that has not yet had its own event read. A stale entry from
+    ///      any other day fails the equality and is indistinguishable from never having won.
     ///
     ///      WRITTEN ON THE VICTORY, NOT ON THE AWARD. A routine winner qualifies its day whether
     ///      or not its own run cleared a progressive cutoff, so the write lives where the field
@@ -1025,7 +1043,9 @@ contract CrapsBattle is LootboxCraps {
     /// @notice An open slip's chips were re-spread by its owner. `chips` is the same thirty-bit
     ///         word `CrapsSlipPlaced` carries in its low bits — ten counts, the dark side at
     ///         27..29, and ZERO for a blank ticket that has handed its board back to the dice.
-    ///         Every other term of the slip is the slot's and cannot move.
+    ///         The same call re-reads the owner's standing into the slip; that figure is not
+    ///         logged here and is read back off the bet word. Every other term of the slip is
+    ///         the slot's and cannot move.
     event CrapsSlipAmended(uint256 indexed betId, uint256 chips);
 
     /// @notice A wager settled.
@@ -1044,10 +1064,11 @@ contract CrapsBattle is LootboxCraps {
     /// @param winnerId The winning seat within this battle's slot, not the full packed bet id.
     /// @param winningPeak The winner's HIGH POINT in whole FLIP: the largest bankroll it held at
     ///        a completed-shooter boundary. What a scheduled field ranks on.
-    /// @dev THE SHOOTER COUNT IS NOT RESTATED HERE. It is still in the composite the scoreboard
-    ///      holds — a bust's primary is its shooter count and a CUSTOM goal's is its speed rank —
-    ///      and `Battle.winningHands` decodes it; the log carries the figures the two products
-    ///      actually differ on and leaves the derivable one in the word it came from.
+    /// @dev THE SHOOTER COUNT IS NOT RESTATED HERE. A bust's primary is its shooter count, and
+    ///      `Battle.winningHands` decodes it from the composite the scoreboard holds; a Goal's
+    ///      primary is its high point in every product, custom included, so a Goal's hand count
+    ///      is not recoverable and reads zero. The log carries the figures the two stops differ
+    ///      on and leaves the derivable one in the word it came from.
     /// @param winningEnd The winner's raw ENDING bankroll in whole FLIP — what it was paid on. A
     ///        goal that gave ground after latching ends BELOW its peak and above its target.
     /// @param winningScoreBps The high point over the run's own starting bankroll, in basis
@@ -1325,8 +1346,8 @@ contract CrapsBattle is LootboxCraps {
             // ordinary battle never pays for a lane it does not run.
             if (high) ++_highField[w.key];
         }
-        // Settlement never writes this word. Before the slot closes, `amendSlip` may replace only
-        // its chip slice; the owner, the frozen standing and the stakes flag remain fixed.
+        // Settlement never writes this word. Before the slot closes, `amendSlip` may replace its
+        // chip slice and refresh its standing; the owner and the stakes flag remain fixed.
         _writeSlip(betId, player, chips, standing, high ? _BET_HIGH_BIT : 0, multiple - 1, boonMask);
     }
 
@@ -1401,13 +1422,14 @@ contract CrapsBattle is LootboxCraps {
     }
 
 
-    /// @notice Name or re-spread zero through seven chips on an open slip. Only the COMPOSITION moves: the
-    ///         bankroll, target, bounty and seat are all the SLOT's, so no value moves and no
-    ///         field changes. A blank ticket may name a pick this way, which is how the vault
-    ///         steers the seats it takes automatically. Allowed until the slot closes, which is
-    ///         the moment its table is bound — for a slip that came in through `enterBonusDay`,
-    ///         only until the first window of that entry closes, and for a DAY ticket, its own
-    ///         day's period zero: a reservation on a future day re-spreads freely until then.
+    /// @notice Name or re-spread zero through seven chips on an open slip, refreshing the slip's
+    ///         standing to what the owner holds now. The bankroll, target, bounty and seat are
+    ///         all the SLOT's, so no value moves and no field changes. A blank ticket may name a
+    ///         pick this way, which is how the vault steers the seats it takes automatically.
+    ///         Allowed until the slot closes, which is the moment its table is bound — for a slip
+    ///         that came in through `enterBonusDay`, only until the first window of that entry
+    ///         closes, and for a DAY ticket, its own day's period zero: a reservation on a future
+    ///         day re-spreads freely until then.
     /// @param betId The slip: `(slot << 64) | seat`.
     /// @param chips Where up to seven chips go; the draw places the remainder of ten.
     /// @custom:reverts NotYourBet If the caller does not own the slip.
@@ -1535,6 +1557,8 @@ contract CrapsBattle is LootboxCraps {
 
     /// @dev Count an entrant into its battle. The first one carries the stake echo in with it;
     ///      after that the word is a bare increment.
+    /// @param key        The battle being entered.
+    /// @param stakeUnits The bounty this battle posts, echoed in only by the first entrant.
     /// @return n This entrant's index within its own field, 1-based — the low half of its bet id.
     function _enterBattle(bytes32 key, uint256 stakeUnits) private returns (uint256 n) {
         uint256 g = _battles[key];
@@ -1632,6 +1656,14 @@ contract CrapsBattle is LootboxCraps {
     ///      two id bases and the running action, and via-IR runs out of slots with the readiness
     ///      checks and the decoded window still live above it. The same split the session loops in
     ///      `Craps` use, for the same reason.
+    /// @param slot        The window/battle slot being walked.
+    /// @param from        First dense seat ordinal to resolve, inclusive.
+    /// @param end         One past the last dense seat ordinal offered this call.
+    /// @param ownN        The field's own entrant count — seats above it are day tickets.
+    /// @param dayBase     The bet-id base for day-ticket seats beyond `ownN`.
+    /// @param w           The window being settled.
+    /// @param word        The window's settling word.
+    /// @param budgetUnits The charge budget metering how many seats this call actually walks.
     /// @return staked The bankroll this batch's seats put up — the action a later day's bonus
     ///         budget is drawn against.
     /// @return high The high-lane part of that action.
@@ -1799,6 +1831,9 @@ contract CrapsBattle is LootboxCraps {
     ///      refund cursor, free because a remainder-zero slot is never a battle and never settles.
     ///      Restitution is IN KIND — a reservation was a claim on one future day seat, and a pass
     ///      credit is exactly that claim again.
+    /// @param daySlot_    The day's separator slot (remainder zero), home to its refund cursor.
+    /// @param day         The lapsed day being refunded.
+    /// @param budgetUnits The charge budget metering how many seats this call refunds.
     /// @return doneAll The whole day refunded — the separator, and its seven never-opened
     ///         windows with it, are now crossable.
     /// @return moved Whether this call refunded anybody — real, one-time progress even when the
@@ -1832,6 +1867,9 @@ contract CrapsBattle is LootboxCraps {
     /// @dev REVERT-FREE for the authorized caller, and that is load-bearing: the jackpot's comp
     ///      lane calls this bare from inside the daily advance, so a new revert path here is an
     ///      advance-liveness regression, not a local style choice.
+    /// @param player The account credited.
+    /// @param normal Normal-lane passes to bank.
+    /// @param high   High-lane passes to bank.
     /// @return normalCredited What the normal lane actually banked after saturation — a caller
     ///         pricing value off it never charges for a credit the ceiling refused. Only the
     ///         normal lane reports: the one pricing caller sends normals alone, and the high
@@ -1846,8 +1884,8 @@ contract CrapsBattle is LootboxCraps {
         if (high != 0) _credit(player, true, high);
     }
 
-    /// @notice The Craps progressive's live balance, in FLIP wei — one pool, shared by all nine
-    ///         scheduled formats.
+    /// @notice The Craps progressive's live balance, in FLIP wei — one pool, shared by every
+    ///         scheduled window.
     /// @dev The SECOND reader production keeps, and for the same kind of reason as the first: it
     ///      is the one figure of the whole system that is not a pure function of published inputs.
     ///      Reconstructing it means replaying every day's funding and every finalized field's
@@ -1879,6 +1917,8 @@ contract CrapsBattle is LootboxCraps {
     /// @param stakeUnits The bounty each entrant posts, in `_BATTLE_STAKE_UNIT` granules.
     /// @param minScore  The standing bar this battle asks of its entrants.
     /// @param closeTime When entry shuts. From then, anyone may `closeBattle` it.
+    /// @param multiEntry Whether one account may hold more than one seat in this battle.
+    /// @param highRollerMult The high-roller lane's multiple, or zero for no high lane.
     /// @return slot The battle's slot — what an entrant joins and a settler resolves.
     function createBattle(
         uint32 played,
@@ -2454,6 +2494,9 @@ contract CrapsBattle is LootboxCraps {
     /// @dev Bank credits, SATURATING at the lane's ceiling. A lootbox sweep is permissionless and
     ///      must never revert on a full lane, so the excess is dropped and announced rather than
     ///      thrown — and the ceiling is four billion passes, which no box can approach.
+    /// @param player The account being credited.
+    /// @param high   Which lane: true for the high lane, false for normal.
+    /// @param add    Passes to add to that lane.
     /// @return got What actually banked, which is `add` everywhere short of the ceiling. The
     ///         award split prices its pass slice off this figure, so a saturated lane leaves the
     ///         refused units' value liquid rather than deleting it.
@@ -2481,6 +2524,8 @@ contract CrapsBattle is LootboxCraps {
     ///      normal units pays HIGH, at most thirty of them, and one award never mixes lanes.
     ///      DETERMINISTIC on purpose — the winner is receiving FLIP in this same transaction, so
     ///      fractional dust rides home as change and no coin is tossed.
+    /// @param key    The window/battle the award belongs to.
+    /// @param player The award's recipient.
     /// @param taggedGross The award in FLIP wei, with its `_SPLIT_SRC_*` tag in the top byte.
     /// @return banked The exact FLIP value of the passes actually credited — what the caller
     ///         removes from the liquid payment. Zero banks nothing and emits nothing.
@@ -2528,8 +2573,10 @@ contract CrapsBattle is LootboxCraps {
     /// @notice Buy `count` consecutive future days outright, at the fixed price.
     /// @dev The PRICE IS FIXED AND PAID NOW, before the target days draw their terms or their
     ///      high-roller multiple. That is what is being bought: a day whose cost is not yet known,
-    ///      at a number that cannot move. Redemption never tops up and never refunds, whichever
-    ///      way the day lands, and an unredeemed day is simply gone.
+    ///      at a number that cannot move. The seat itself is written now — there is nothing to
+    ///      redeem — and whichever terms the day draws, nothing is topped up or returned. A day
+    ///      the advance never opens is swept by the scheduled cursor, and each seat on it comes
+    ///      back as one pass credit of its lane.
     ///
     ///      The burn goes FIRST and the run is vetted as it is written; a day the run cannot
     ///      take reverts the whole call and the burn unwinds with it, so a rejected range still
@@ -2939,6 +2986,7 @@ contract CrapsBattle is LootboxCraps {
     ///         transaction — so the dice were unknowable to every entrant however late it is shut.
     ///         The request fired below is the one that fills it.
     /// @param slot The window: `day * _BONUS_SLOTS_PER_DAY + period + 1`.
+    /// @return index The table index bound to this window, `_currentIndex()` at arming time.
     function armBonusWindow(uint64 slot) external returns (uint48 index) {
         (,, uint256 open) = _currentBonusSlot();
         // Anything below the window currently taking bets has stopped taking them — on this day or
@@ -3055,6 +3103,9 @@ contract CrapsBattle is LootboxCraps {
     ///         Sold only while the first window is still taking bets: a whole-day ticket is a
     ///         commitment made before any of the day is spent. Past that, take what is left one
     ///         window at a time through `enterBonusBattle`.
+    /// @param chips    Chip allocation entered at every window; an all-zero allocation takes the
+    ///                 whole day blind.
+    /// @param multiple The day's high-roller multiple to enter at, or 1 for the ordinary lane.
     /// @return placed How many windows took the entry.
     /// @custom:reverts BonusPeriodSpent If the day's first window has already closed.
     function enterBonusDay(uint32 chips, uint16 multiple) public returns (uint256 placed) {
@@ -3138,9 +3189,10 @@ contract CrapsBattle is LootboxCraps {
     ///         table, which does not exist while the field is forming — so this is the whole of
     ///         what is knowable at entry, and `boostOf` is where the drawn figure appears once
     ///         that word lands.
-    /// @dev `mid` is the ladder's mean and therefore the day's budgeted seventh exactly, which is
-    ///      what makes a day's budget an EXPECTATION rather than a cap: the realised total can
-    ///      land far above it or far below.
+    /// @dev `mid` is the ladder's mean and therefore this window's share of the day's budget
+    ///      exactly — half for the event, the other half split across the six routine windows
+    ///      by tier (`_windowShare`) — which is what makes a day's budget an EXPECTATION rather
+    ///      than a cap: the realised total can land far above it or far below.
     function _bonusBoostBand(uint24 day, uint256 period)
         internal
         view
@@ -3175,12 +3227,11 @@ contract CrapsBattle is LootboxCraps {
     ///      to a race rather than an empty table, and a window nobody turns up to is still one the
     ///      two of them settle between themselves.
     ///
-    ///      Both burns are fail-soft, and NEITHER body is comped. A seat that was never funded
-    ///      still counts in `entrants`, so the pot would pay out one more bounty than the field
-    ///      burned — house money conjured out of a failed payment. Both bodies now accrue day
-    ///      passes from their own lootboxes, so a house that cannot pay is a house that had
-    ///      neither FLIP nor a pass, and a window it misses still opens and still pays whoever
-    ///      turns up.
+    ///      Each body pays with a banked pass first and a fail-soft FLIP burn second. When
+    ///      neither covers it, the two part ways: the vault sits the day out, and the HOUSE is
+    ///      seated anyway — one unfunded seat that still counts in `entrants`, so the field pays
+    ///      one bounty nobody burned. That is the price of every window having a field, bounded
+    ///      to a single seat per day and visible as a `CrapsSlipPlaced` with no burn beside it.
     function _seatDayLane(uint256 daySlot, uint256 cost) private {
         _seatBody(daySlot, ContractAddresses.SDGNRS, cost);
         _seatBody(daySlot, ContractAddresses.VAULT, cost);
@@ -3285,13 +3336,13 @@ contract CrapsBattle is LootboxCraps {
     }
 
     /// @dev The shape a window takes, drawn from its own roll — a tournament format, not a
-    ///      derivation of the entry fee. Six of the day's seven are routine and pick a tier
-    ///      7:2:1 — small, medium, large; the LAST is the event, with a buy-in drawn in round
-    ///      thousands and a seed of one whole buy-in. The event shuts `_EVENT_LEAD` BEFORE the
-    ///      day turns over, so it settles in the run-up to the jackpot rather than after it. Every window is a table bet, ten of
-    ///      which are the base a round puts down; it draws how deep the bankroll runs on that
-    ///      base (two, five or ten rounds) and how far the target sits from it (five, ten,
-    ///      twenty or fifty times), so the same buy-in can be a sprint or a long grind.
+    ///      derivation of the entry fee. Six of the day's seven are routine and pick a tier —
+    ///      small, medium, large — the opener flat and the rest 7:2:1; the LAST is the event,
+    ///      with a bankroll drawn from a 1,500-step ladder and a bounty charged on top. The
+    ///      event shuts `_EVENT_LEAD` BEFORE the day turns over, so it settles in the run-up to
+    ///      the jackpot rather than after it. Every window runs its bankroll FIVE rounds deep
+    ///      and chases FIVE times it (`_SCHED_BANK_MULT`, `_SCHED_GOAL`); a round is ten chips
+    ///      on the board the bankroll sizes.
     ///
     ///      Everything returned satisfies the table's own bands by construction — bankroll floor,
     ///      the bankroll ceiling over the board, the battle goal floor, and a bounty inside its
@@ -3362,13 +3413,13 @@ contract CrapsBattle is LootboxCraps {
                 // from a quarter to a half of it and charged ON TOP. So the headline figure is the
                 // run the player actually gets, not a number the bounty is then carved out of.
                 //
-                // It boosts one whole BANKROLL, not the entry cost: the bounty roll already sets
-                // what the field puts up, and paying the protocol's share off that same roll would
-                // reward it twice. The draw's mean of ~10,400 is therefore the day's expected
-                // boost from here; the two tails carry a quarter of it between them, which is why
-                // they are this rare. Closing on the day's own boundary, this is the one window
-                // the NEXT day's word settles, which is what gives it a full day to gather a
-                // field.
+                // The bankroll sets the field's stake and nothing else: the event's subsidy is
+                // HALF the day's ladder budget (`_windowShare`), whatever bankroll it drew, and
+                // then the boost lottery on top of that share. The two tails are rare because
+                // they are the biggest tables of the month, not because they carry a subsidy of
+                // their own. The event shuts `_EVENT_LEAD` before turnover and settles on the
+                // lootbox index it binds when armed, like every other window; the early close is
+                // what puts its settlement in the run-up to the jackpot.
                 uint256 tail = roll % 100;
                 bankrollFlip = tail < 5 ? 30_000 : (tail < 7 ? 60_000 : 1500 * (1 + ((roll >> 8) % 10)));
                 // Floored to the bounty granule: a quarter of an odd thousand lands on half a
@@ -3585,14 +3636,15 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    /// @dev What a window pays its winner on top of the stakes, in stake units — the day's
-    ///      budgeted seventh times whichever rung the table drew.
+    /// @dev What a window pays its winner on top of the stakes, in stake units — the window's
+    ///      share of the day's budget (`_windowShare`) times whichever rung the table drew.
     ///
     ///      EVERY WINDOW IS A LOTTERY, and the rung always comes off the word that SETTLES the
     ///      table. That word does not exist while entry is open, so a field forms knowing the
     ///      ceiling and the odds and nothing else; it lands the moment the table's VRF word does,
-    ///      which is BEFORE a single hand is settled. The ladder averages exactly one, so a day
-    ///      spends its budget in EXPECTATION and any single window can pay forty times its share.
+    ///      which is BEFORE a single hand is settled. The ladder averages exactly one before the
+    ///      payout granule rounding, so a day spends its budget in EXPECTATION and any single
+    ///      window can pay `_BOOST_MAX_MULT` — a hundred — times its share.
     /// @dev A FRACTIONAL COPY of a run's result: `floor(p * y / r)`, where `r` is the bankroll
     ///      the run actually played and `y` is capital riding alongside it. A bust has `p == 0`
     ///      and so returns nothing; a run that doubled its bankroll doubles `y` too.
@@ -3621,6 +3673,9 @@ contract CrapsBattle is LootboxCraps {
     ///      widened — the same order the main lane uses, which is what keeps every figure the
     ///      table pays a whole number of granules, and what makes the two parts add back to the
     ///      full-standing figure exactly.
+    /// @param w      The window whose high lane is being split.
+    /// @param word   The window's settling word, source of the boost draw.
+    /// @param header The seat's bet header, whose standing bits ration the split.
     /// @return paid What the seat may carry — the whole thing at standing `_SYBIL_SCORE_FLOOR`.
     /// @return denied The rest. Protocol money, so it is banked in the progressive rather than
     ///         left unminted; zero at full standing, always.
@@ -3646,6 +3701,13 @@ contract CrapsBattle is LootboxCraps {
     ///      The lane's boost rides with them, rationed by the same standing that rations the main
     ///      one — placed at RISK rather than paid, which is what stops a sole high roller from
     ///      being a way to draw house money down for free.
+    /// @param w      The window the high seat belongs to.
+    /// @param sc     The seat's settlement score, compared against the lane's running best.
+    /// @param seat   The seat's dense ordinal, used as the tie-break and lane winner id.
+    /// @param word   The window's settling word.
+    /// @param header The seat's bet header.
+    /// @param p      The seat's own settled payout, ridden pro rata against the lane's combined
+    ///               extra plus boost.
     /// @return ride What the run returned on that capital; zero on a bust, and zero is expected.
     /// @return extra The bounty part of it, which is player money and therefore real action. The
     ///         boost part is protocol money and is deliberately NOT booked — recycling emitted
@@ -3891,10 +3953,11 @@ contract CrapsBattle is LootboxCraps {
     }
 
     /// @dev How much of a window's boost a winner holding `held` standing may carry off. The
-    ///      standing is the FROZEN one its slip recorded when it sat down, so nothing the winner
+    ///      standing is the one its slip recorded when amendments closed, so nothing the winner
     ///      does after the dice can move it. At the floor the boost pays whole; below it the
     ///      winner takes one part in `floor - held`; a scoreless wallet takes none at all. What is
-    ///      not taken is simply never minted.
+    ///      not taken is banked in the progressive by the caller, or left in the pool when the
+    ///      award was the progressive's own.
     /// @dev Collapse a boost, in granules, onto the figure it is actually paid at.
     function _roundBoost(uint256 units) internal pure returns (uint256) {
         if (units <= _BOOST_ROUND_ABOVE) return units;
@@ -4142,10 +4205,14 @@ contract CrapsBattle is LootboxCraps {
     ///      A BUST NEVER QUALIFIES, however high it got: its `peakFlip` is zero, which is below
     ///      every cutoff. A custom battle neither draws on the pool nor funds it and is excluded
     ///      by the caller before this helper is reached.
+    /// @param w The window the finalized winner played.
     /// @param peakFlip The finalized winner's HIGH POINT in whole FLIP, straight off the
     ///        scoreboard the field just closed. Nothing is re-run to obtain it.
     /// @param score That high point over the run's own starting bankroll, in basis points — the
     ///        same figure the finalization log carries, computed once by the caller.
+    /// @param winnerId The winner's bet id, logged with the payout.
+    /// @param winnerWord The winner's settled bet header, whose standing bits ration the boost.
+    /// @param winner The winner's address, credited with the payout.
     function _payProgressive(
         Window memory w,
         uint256 peakFlip,

@@ -198,14 +198,25 @@ contract sDGNRS {
     event PoolTransfer(Pool indexed pool, address indexed to, uint256 amount);
 
     /// @notice Emitted when a player submits a gambling burn redemption
+    /// @param player The player submitting the redemption.
+    /// @param sdgnrsAmount sDGNRS burned into the redemption.
+    /// @param ethValueOwed Base (100%) ETH-equivalent owed if the redemption resolves a win.
     /// @param flipEscrowed FLIP backing (wei) removed from sDGNRS at submit and escrowed,
     ///        contingent on the resolving day's coinflip (paid to the redeemer only on a win)
+    /// @param periodIndex The redemption period (day) this submission resolves against.
     event RedemptionSubmitted(address indexed player, uint256 sdgnrsAmount, uint256 ethValueOwed, uint256 flipEscrowed, uint24 periodIndex);
 
     /// @notice Emitted when a redemption period is resolved with a roll
+    /// @param periodIndex The resolved redemption period (day).
+    /// @param roll The resolved roll (25-175).
     event RedemptionResolved(uint24 indexed periodIndex, uint16 roll);
 
     /// @notice Emitted when a player claims their resolved redemption.
+    /// @param player The claimant.
+    /// @param roll The resolved roll the claim paid against.
+    /// @param ethPayout ETH paid to the claimant.
+    /// @param lootboxEth ETH staked into a lootbox roll for the claimant (0 if terminal or
+    ///        below the dust floor).
     /// @param flipPaid Escrowed FLIP (wei) minted to the redeemer as a flip credit — nonzero only
     ///        on a winning resolving-day coinflip; 0 on a loss or in terminal mode (FLIP ignored).
     event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid);
@@ -236,7 +247,9 @@ contract sDGNRS {
     ///      / `pendingRedemptionEthValue()` / `pendingResolveDay()` getters preserve the original ABI.
     uint128 private _totalSupply;
 
-    /// @dev Total reserved redemption ETH value across all unresolved periods, backed by this
+    /// @dev Total reserved redemption ETH value across all outstanding gambling-burn claims
+    ///      (unresolved and resolved-but-unclaimed: submit adds the MAX share, resolve lowers the
+    ///      day to its roll, each paid claim releases its rolled share), backed by this
     ///      contract's own ETH + stETH custody (the ETH leg moves it in; the custody leg pins
     ///      existing holdings). uint96 holds 7.9e28 wei (~658x the total ETH supply) —
     ///      real-ETH-bounded, safe. Packed into slot 0.
@@ -285,8 +298,8 @@ contract sDGNRS {
     } // 96 + 16 + 96 = 208 bits (1 slot); the composite outer key (player, day) carries the day reference.
 
     /// @dev Per-day unresolved gambling-burn pool, packed to 1 slot via denomination conversion.
-    ///      Three fields packed into a single 256-bit slot (FLIP is settled at submit, so no
-    ///      per-day FLIP base is tracked):
+    ///      Three fields packed into a single 256-bit slot (the FLIP escrow is per-claim in
+    ///      `PendingRedemption.flipEscrow`, so no per-day FLIP base is tracked):
     ///        bits 0-63   : ethBase    — gwei units (1e9 wei divisor)
     ///        bits 64-127 : supplySnapshot — whole tokens (1e18 raw divisor)
     ///        bits 128-191: burned     — whole tokens (1e18 raw divisor)
@@ -307,8 +320,10 @@ contract sDGNRS {
         uint64 burned;
     }
 
+    /// @notice Per-player-per-day pending redemption record awaiting resolution.
     mapping(address => mapping(uint24 => PendingRedemption)) public pendingRedemptions;
-    mapping(uint24 => uint16) public redemptionPeriods;   // day => resolved roll (0 = unresolved, 25-175 = resolved)
+    /// @notice Resolved redemption roll per day (0 = unresolved, 25-175 = resolved).
+    mapping(uint24 => uint16) public redemptionPeriods;
 
     mapping(uint24 => DayPending) internal pendingByDay;
 
@@ -352,14 +367,15 @@ contract sDGNRS {
     /// @dev Minimum ETH size for a redemption lootbox (0.01 ETH). At claim the rolled value splits
     ///      50/50 into a direct-ETH leg and a lootbox leg; if the lootbox half lands below this floor
     ///      (i.e. total rolled value under ~0.02 ETH), the lootbox leg is dropped entirely. The player
-    ///      keeps only the direct half plus the FLIP share settled at submit; the dropped lootbox
+    ///      keeps only the direct half plus whatever the escrowed FLIP pays on the day+1 coinflip; the dropped lootbox
     ///      value is NOT paid out to the player — it is forfeited back to sDGNRS's own claimable on the
     ///      Game as free backing, raising backing for remaining holders. Live-game only; terminal
     ///      claims are already 100% direct.
     uint256 private constant MIN_REDEMPTION_LOOTBOX_ETH = 0.01 ether;
 
-    /// @dev FLIP base unit (1000 ETH worth) — the ETH→FLIP conversion numerator for the keeper
-    ///      box-bounty, matching the Game's PRICE_COIN_UNIT. FLIP per ETH = PRICE_COIN_UNIT / mintPrice.
+    /// @dev 1,000 FLIP in base units — the FLIP one whole ticket mints, and the ETH→FLIP conversion
+    ///      numerator for the keeper box-bounty, matching the Game's PRICE_COIN_UNIT.
+    ///      FLIP per ETH = PRICE_COIN_UNIT / mintPrice.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
     /// @dev Keeper box-bounty target (ETH wei) per settled redemption claim. Sized so the FLIP
@@ -434,16 +450,18 @@ contract sDGNRS {
 
         // Protocol-owned self-subscription: claimable-first daily lootbox
         // buy of flat quantity 1. Self-consent —
-        // sDGNRS IS the player (player == msg.sender). sDGNRS holds the permanent
-        // deity-pass bit (granted in the DegenerusGame constructor), so the afking's
-        // pass-OR-pay gate reads an unbounded pass horizon (type(uint24).max) at zero cost.
+        // sDGNRS IS the player (player == msg.sender). The afking module exempts the
+        // pinned SDGNRS address from its seat-token and purchase gates, so this subscribe
+        // lands before the seat token is deployed; the token's constructor then mints
+        // sDGNRS its construction seat.
         // The afking surface is GAME-resident; self-subscribe directly against the
         // GAME (subscriber == msg.sender ⇒ the GAME's self-consent path, no operator
         // approval needed).
         // Coinflip auto-rebuy is NOT enabled here: during the 20-day seed window
-        // sDGNRS's daily flip wins mint to its wallet balance (redemption backing);
-        // Coinflip arms perpetual auto-rebuy (0 take-profit) once the final
-        // seeded day settles.
+        // sDGNRS's daily flip wins accumulate as unminted coinflip claimable backing
+        // (sDGNRS never holds a FLIP wallet balance); Coinflip arms perpetual
+        // auto-rebuy (0 take-profit) once the final seeded day settles, after which
+        // wins roll into the carry.
         game.subscribe(address(this), true, false, 1, address(0));
 
         // Pre-approve GAME to pull stETH for both redemption claim legs. claimRedemption funds
@@ -540,7 +558,8 @@ contract sDGNRS {
         return _totalSupply;
     }
 
-    /// @notice Total physically-segregated redemption ETH across all unresolved periods (wei).
+    /// @notice Total physically-segregated redemption ETH across all outstanding (unresolved or
+    ///         resolved-but-unclaimed) gambling-burn claims (wei).
     /// @dev ABI-preserving view over the packed slot-0 field (cross-contract + harness readers).
     function pendingRedemptionEthValue() external view returns (uint256) {
         return _pendingRedemptionEthValue;
@@ -730,7 +749,8 @@ contract sDGNRS {
     ///      ETH-only: at submit the MAX (175%) payout was physically segregated and tracked in
     ///      pendingRedemptionEthValue; here that reservation is lowered from MAX to the rolled
     ///      amount (accounting only — the over-pull stays in this contract as free backing, no
-    ///      transfer back to claimable). FLIP is already fully settled at submit (no roll).
+    ///      transfer back to claimable). The FLIP escrow is not rolled here: it left sDGNRS's
+    ///      backing at submit and pays at claim on the day+1 coinflip result.
     /// @param roll The random roll result (range 25-175, applied as percentage).
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
     function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external {
@@ -773,14 +793,16 @@ contract sDGNRS {
     /// @notice Claim a resolved gambling-burn redemption for `player` on day `day`.
     /// @dev Requires `redemptionPeriods[day] != 0` (period resolved). Reads composite-keyed
     ///      `pendingRedemptions[player][day]`; deletes that slot on a full claim.
-    ///      ETH-only: FLIP is fully settled at submit (no claim-time FLIP leg).
+    ///      The FLIP escrow removed at submit pays here only when the day+1 coinflip won:
+    ///      principal plus that day's win reward. A loss pays no FLIP; terminal mode skips it.
     ///      Live game: PERMISSIONLESS — anyone may settle `player`'s claim, all value to `player`.
     ///      Both halves of the rolled ETH route to the Game (50% credits the player's claimable
     ///      winnings, 50% funds lootbox rewards), so a third-party trigger pushes no ETH and the
     ///      winner holds no exclusive timing control over the lootbox draw.
-    ///      Terminal mode (liveness triggered): SELF-CLAIM only, since the payout direct-pushes
-    ///      ETH rather than crediting the Game. 100% direct with no lootbox leg — a game-claimable
-    ///      credit would forfeit in the post-gameover sweep.
+    ///      Terminal mode (liveness triggered): only `player` or an operator `player` approved on
+    ///      the GAME may call, since the payout is pushed straight to `player` (ETH, with stETH
+    ///      covering any ETH shortfall) rather than credited to the Game. 100% direct with no
+    ///      lootbox leg — a game-claimable credit would forfeit in the post-gameover sweep.
     /// @param player Claimant whose redemption to settle.
     /// @param day Wall-clock day whose claim to settle.
     function claimRedemption(address player, uint24 day) external {
@@ -814,7 +836,7 @@ contract sDGNRS {
     /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
     /// @dev Players with nothing pending for `day` are skipped, not reverted, so one stale
     ///      address can't poison a mass-claim sweep. LIVE-GAME ONLY: in terminal mode a batch could
-    ///      settle only the caller's own entry (all others are access-restricted self-claims),
+    ///      settle only entries the caller is the player or approved operator for (all others revert),
     ///      which the single claimRedemption already does — so the batch reverts once game is over.
     /// @param players Claimants whose redemptions to settle.
     /// @param day Wall-clock day whose claims to settle.
@@ -884,7 +906,7 @@ contract sDGNRS {
             // value under ~0.02 ETH), the lootbox leg is dropped. Its value is NOT paid to the player
             // and NOT turned into a lootbox — it is forfeited back to sDGNRS's own claimable on the
             // Game (its canonical backing ledger), raising backing for remaining holders. The player
-            // keeps only the direct half (plus the FLIP share settled at submit). The lootbox leg
+            // keeps only the direct half (plus whatever the escrowed FLIP pays on the flip). The lootbox leg
             // is then skipped by its `lootboxEth != 0` guard and the forfeit leg credits sDGNRS.
             if (lootboxEth < MIN_REDEMPTION_LOOTBOX_ETH) {
                 forfeitEth = lootboxEth;
@@ -933,7 +955,7 @@ contract sDGNRS {
         emit RedemptionClaimed(player, roll, ethDirect, lootboxEth, flipPaid);
 
         if (isTerminal) {
-            // 100% direct push (self-claim enforced by callers; the untrusted .call comes after
+            // 100% direct push (player/operator restriction enforced by callers; the untrusted .call comes after
             // the slot delete above — CEI).
             _payEth(player, ethDirect);
             return true;
@@ -1039,12 +1061,13 @@ contract sDGNRS {
 
     /// @dev Core gambling burn logic. Burns sDGNRS from burnFrom, reserves the MAX (175%)
     ///      proportional ETH payout (moved out of claimableWinnings[SDGNRS], or pinned against
-    ///      this contract's own ETH + stETH custody; fail-closed if neither covers), and settles
-    ///      the proportional FLIP share entirely
-    ///      at submit as a conserved coinflip flip-credit (no reserve, no roll, no claim-time FLIP).
+    ///      this contract's own ETH + stETH custody; fail-closed if neither covers), and removes
+    ///      the proportional whole-token FLIP share from sDGNRS's backing into a per-claim escrow
+    ///      that pays at claim only on a winning day+1 coinflip (no ETH-style reserve, no roll).
     ///      Enforces 50% supply cap per day (lazy-init) and 160 ETH per-(wallet, day) EV cap.
     ///      Writes the per-claim slot at composite key `pendingRedemptions[beneficiary][currentPeriod]`,
-    ///      so a wallet can accumulate distinct claims across multiple unresolved days.
+    ///      so a wallet can hold distinct unclaimed claims across multiple days (only one day's
+    ///      pool is ever unresolved; resolved days stay claimable until settled).
     function _submitGamblingClaimFrom(address beneficiary, address burnFrom, uint256 amount) private {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();

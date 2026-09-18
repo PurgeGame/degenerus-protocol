@@ -52,6 +52,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *      jackpot sealed, so the foil numbers equal the coin jackpot's.
  */
 interface IFoilWwxrp {
+    /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
     function mintPrize(address to, uint256 amount) external;
 }
 
@@ -64,11 +65,21 @@ contract DegenerusGameFoilPackModule is
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
-    error FoilAlreadyBought(); // Buyer already holds a foil pack for this cycle level.
-    error StaleAdvance(); // Simulated day is more than one day ahead of the processed daily index; multi-day stall detected.
-    error NoClaimableMatch(); // The given (player, day, ticketIndex, drawKind) tuple does not resolve to a claimable foil match.
-    error StaleBatch(); // The batch's opening tuple is not claimable: the list has already been swept.
-    error NoGoldenTicket(); // No pack at that cycle, its lines have not resolved yet, it holds under three golds, or it is already claimed.
+    /// @notice Thrown when the buyer already holds a foil pack for this cycle level.
+    error FoilAlreadyBought();
+    /// @notice Thrown when the simulated day is more than one day ahead of the processed
+    ///         daily index, indicating a multi-day stall.
+    error StaleAdvance();
+    /// @notice Thrown when the given (player, day, ticketIndex, drawKind) tuple does not
+    ///         resolve to a claimable foil match.
+    error NoClaimableMatch();
+    /// @notice Thrown when the batch's opening tuple is not claimable because the list has
+    ///         already been swept.
+    error StaleBatch();
+    /// @notice Thrown when there is no pack at that cycle, its lines have not resolved yet,
+    ///         it holds under three golds, it is already claimed, or it holds two or more
+    ///         all-gold tickets (the grand route, paid by the drain, never the pull).
+    error NoGoldenTicket();
 
     // -------------------------------------------------------------------------
     // External Contract References (compile-time constants)
@@ -205,7 +216,7 @@ contract DegenerusGameFoilPackModule is
     ///      sibling leg to the mint ticket/lootbox leg: address(this) == GAME. A direct call on the deployed module would trap the
     ///      in-flight msg.value against empty local state. Liveness is gated by the purchase
     ///      path. This handles the ENTIRE foil leg so a foil pack counts exactly like a
-    ///      ticket purchase: its own payment (75/25 pool), the 20/5 affiliate, the ten
+    ///      ticket purchase: its own payment (75/25 pool), the 25|20/5 affiliate, the ten
     ///      price-equivalent mint units, the daily MINT_ETH primary + level quest, the mint
     ///      streak, the recycle bonus, the boost freeze, the queue push, and the foil
     ///      secondary quest. Kept a separate leg (not folded into the ticket path) so the
@@ -308,7 +319,7 @@ contract DegenerusGameFoilPackModule is
             uint32((FOIL_PACK_TICKETS * 4 * QTY_SCALE) << snapS)
         );
 
-        // Affiliate, fresh 25% at levels 0-3 / 20% at 4+ and 5% recycle exactly like a
+        // Affiliate, fresh 25% at affiliate levels 1-3 / 20% at 4+ (paid at level + 1) and 5% recycle exactly like a
         // normal ticket mint: the fresh portion (cost - claimableUsed, fresh ETH plus the
         // afking-drawn principal) at the fresh rate, the claimable portion at the recycle
         // rate, both frozen at level + 1 like the ticket affiliate (score 0, same as
@@ -1194,7 +1205,9 @@ contract DegenerusGameFoilPackModule is
     ///      + the buyer's frozen multBps, filed into the jackpot trait buckets (no
     ///      stamp; the claim re-derives the same lines). foilCursor makes a
     ///      budget-short deferral resumable; a whole buyer defers (never a partial pack)
-    ///      when the leftover budget can't cover the fixed 35-unit charge. A bucket
+    ///      when the leftover budget can't cover a pack's 83-unit worst case
+    ///      (16 entries x 5 + 3); the pack is then charged what it actually wrote, and a
+    ///      grand adds GRAND_DRAIN_UNITS on top, saturating at zero. A bucket
     ///      whose word is not yet sealed (a future day) stops the walk — it does not
     ///      gate the current jackpot.
     ///
@@ -1316,17 +1329,27 @@ contract DegenerusGameFoilPackModule is
     ///      the four boosted four-quadrant lines via the shared _deriveFoilLines, then
     ///      file all sixteen traits into the cycle level's trait buckets. No stamp —
     ///      the claim re-derives the SAME lines from rngWordByDay[resolveDay] + the
-    ///      frozen multBps, so the stored record stays just (multBps, resolveDay).
+    ///      frozen multBps, so the record stores only (resolveDay, multBps, the buy-time
+    ///      activity score) and no line data.
     ///
     ///      Counts the pack's gold on the way past. The lines are already in memory and
     ///      already unpacked below, so reading how much gold they hold is opcode work on
     ///      data this function has in hand — a fraction of a percent of the sixteen
     ///      entry writes it is here to do. Only the grand acts on it: the ladder and its
     ///      kicker stay a pull, off this budgeted path.
+    /// @param packedLvlBuyer Packed queue entry: buyer address, cycle level, and registry position.
+    /// @param entropy Day's VRF word driving the four boosted lines.
     /// @param terminal Whether liveness has triggered; suppresses the grand push, so the
     ///        terminal drain never carves a pool the terminal jackpot is settling from.
+    /// @param counts Shared scratch: per-trait occurrence counter for this level, re-zeroed
+    ///        before return.
+    /// @param touchedTraits Shared scratch: trait IDs touched this call, for the batch write.
     /// @return grandPaid True when this pack pushed the grand, so the caller can charge
     ///         its writes against the batch budget.
+    /// @return units Budget units this pack actually wrote: 3 fixed (record + cursor
+    ///         bookkeeping) plus, per touched trait bucket, 3 per zero-to-nonzero slot write
+    ///         (an empty bucket's length, each fresh data word) and 1 per rewrite of a nonzero
+    ///         slot (a populated bucket's length, the partial tail word), for the caller's room charge.
     function _resolveFoilBuyer(
         uint256 packedLvlBuyer,
         uint256 entropy,
@@ -1495,7 +1518,8 @@ contract DegenerusGameFoilPackModule is
     ///      the reachable surface is unchanged.
     /// @param player The pack's buyer, who the grand credits.
     /// @param lvl The pack's cycle level.
-    /// @param golds The pack's total gold quadrants — 8, 12 or 16.
+    /// @param golds The pack's total gold quadrants — 8 to 16 (at least two all-gold tickets,
+    ///        the other tickets holding 0-3 golds each).
     /// @param allGold How many of the pack's four tickets came out all gold (2..4).
     function _pushFoilGrand(
         address player,

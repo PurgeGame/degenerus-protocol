@@ -80,9 +80,15 @@ contract FLIP {
 
     /// @notice Standard ERC20 transfer event.
     /// @dev Emitted on transfer, mint (from=0), and burn (to=0).
+    /// @param from Sender (zero on mint).
+    /// @param to Recipient (zero on burn).
+    /// @param amount Amount transferred, in wei.
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
     /// @notice Standard ERC20 approval event.
+    /// @param owner The account granting the allowance.
+    /// @param spender The account authorized to spend it.
+    /// @param amount The new allowance amount.
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     /// @notice Emitted when a player burns FLIP during a decimator window.
@@ -92,6 +98,8 @@ contract FLIP {
     event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket);
 
     /// @notice Emitted on a terminal decimator (death bet) burn.
+    /// @param player The burner's address.
+    /// @param amountBurned The amount burned (18 decimals).
     event TerminalDecimatorBurn(address indexed player, uint256 amountBurned);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
@@ -244,6 +252,7 @@ contract FLIP {
     /// @dev Reference to the coinflip contract for claim/consume operations.
     ICoinflip internal constant coinflip = ICoinflip(ContractAddresses.COINFLIP);
 
+    /// @notice Registers this contract's ENS reverse name; takes no arguments.
     constructor() {
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -468,7 +477,8 @@ contract FLIP {
 
     /// @notice Internal burn helper - destroys tokens.
     /// @dev Decreases totalSupply and sender balance. Emits Transfer to address(0).
-    ///      SECURITY: Burns BEFORE any external calls (CEI pattern) in burnCoin/decimatorBurn/burnForCoinflip/burnCoinForSalvage/terminalDecimatorBurn.
+    ///      Ordering in burnCoin/burnCoinForCraps/decimatorBurn: the trusted coinflip shortfall
+    ///      consumption runs first, then this burn, then any boon/quest/game accounting calls.
     /// @param from The address to burn from (cannot be zero).
     /// @param amount The amount to burn (18 decimals).
     function _burn(address from, uint256 amount) internal {
@@ -610,7 +620,8 @@ contract FLIP {
 
     /// @notice One-shot gameover tombstone: floods the VAULT mint allowance by 1e36 wei as a
     ///         worthless-token overhang signal. The signal lands only in supplyIncUncirculated(),
-    ///         vaultMintAllowance(), and balanceOf(VAULT) — circulating totalSupply() is untouched.
+    ///         vaultMintAllowance(), and balanceOfWithClaimable(VAULT) — balanceOf(VAULT) and
+    ///         circulating totalSupply() are untouched.
     /// @dev GAME-only (the gameover-drain caller); fires exactly once (the _tombstoneFlooded latch
     ///      no-ops any re-entry); the add is CHECKED via _toUint128 (reverts on uint128 overflow).
     function tombstoneAtGameOver() external {
@@ -701,7 +712,8 @@ contract FLIP {
             return 0;
         }
 
-        // CEI: the burn lands before any downstream trusted call, exactly as `decimatorBurn` does.
+        // Ordering as in `decimatorBurn`: coinflip shortfall consumption, then the burn, then the
+        // downstream boon/quest calls.
         uint256 consumed = _consumeCoinflipShortfall(player, gross);
         _burn(player, gross - consumed);
 

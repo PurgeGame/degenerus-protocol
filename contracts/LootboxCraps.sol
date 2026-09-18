@@ -8,6 +8,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 ///      (DegenerusGame.sol:509) because the lootbox RNG index and the per-index VRF words are
 ///      `internal` storage with no typed getter — the same escape hatch `DegenerusGameLens` uses.
 interface IGameSlotReader {
+    /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
     function extsload(bytes32 slot) external view returns (bytes32 value);
 }
 
@@ -107,9 +108,9 @@ contract LootboxCraps is Craps {
     }
 
     /// @notice The protocol's daily VRF word for `day`, or zero if that day has not sealed one.
-    /// @dev Read-only, and used only to pace a bonus that pays no one automatically. Nothing a
-    ///      bet's outcome depends on is derived from it: a table's dice come from its own index
-    ///      word, which is still undrawn while bets bind.
+    /// @dev Read-only. No dice come from it: a table's rolls come from its own index word, which
+    ///      is still undrawn while bets bind. The scheduled layer above reads it for a day's
+    ///      window terms and high multiple, all of which are public before any seat is taken.
     function _dailyWordAt(uint24 day) internal view returns (uint256) {
         return uint256(_extsload(bytes32(_hash2(day, RNG_WORD_BY_DAY_SLOT))));
     }

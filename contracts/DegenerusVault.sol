@@ -115,7 +115,9 @@ interface ICoinPlayerActions {
 ///      re-spreading the chips on slips it already owns. Comping somebody else a seat is not one
 ///      of them — that goes through the comp door below.
 interface ICrapsPlayerActions {
+    /// @notice Join a custom craps battle, as implemented by CrapsBattle.
     function enterBattle(uint64 slot, uint32 chips, uint16 multiple) external returns (uint256);
+    /// @notice Re-spread the chips on a slip the vault already owns, as implemented by CrapsBattle.
     function amendSlip(uint256 betId, uint32 chips) external;
 }
 
@@ -123,17 +125,21 @@ interface ICrapsPlayerActions {
 ///      days, a day-ticket upgrade or banked passes for a named player, charged to the FLIP comp
 ///      lane the table itself feeds. Vault-only on the table's side; the table prices it.
 interface ICrapsComps {
+    /// @notice Charges a comp to the vault's FLIP comp lane, as implemented by CrapsBattle.
     function vaultComp(uint256 code) external returns (uint256 charged);
 }
 
 /// @dev Minimal ERC20 surface for sweeping foreign tokens the vault has no other handling for.
 interface IERC20Sweep {
+    /// @notice Standard ERC20 transfer, used to sweep a foreign token out of the vault.
     function transfer(address to, uint256 amount) external returns (bool);
+    /// @notice Standard ERC20 balanceOf, used to size a foreign-token sweep.
     function balanceOf(address account) external view returns (uint256);
 }
 
 /// @dev Minimal ERC721 surface for sweeping foreign NFTs sent to the vault.
 interface IERC721Sweep {
+    /// @notice Standard ERC721 transferFrom, used to sweep a foreign NFT out of the vault.
     function transferFrom(address from, address to, uint256 tokenId) external;
 }
 
@@ -472,6 +478,9 @@ contract DegenerusVault {
     event CrapsCompGranted(address indexed operator, address indexed to, uint8 kind, uint256 charged);
 
     /// @notice The vault owner set what `who` may still comp, in FLIP wei
+    /// @param operator The vault owner that set the allowance.
+    /// @param who The address the allowance is set for.
+    /// @param amount The new remaining comp allowance, in FLIP wei.
     event CrapsCompAllowanceSet(address indexed operator, address indexed who, uint256 amount);
 
     // ---------------------------------------------------------------------
@@ -566,9 +575,10 @@ contract DegenerusVault {
 
         // Protocol-owned self-subscription: claimable-first daily lootbox
         // buy of flat quantity 1, no FLIP rebuy. Self-consent —
-        // the vault IS the player (player == msg.sender). The vault holds the
-        // permanent deity pass (granted in the DegenerusGame constructor), so the
-        // afking's pass-OR-pay gate takes the free 30-day extend at zero cost.
+        // the vault IS the player (player == msg.sender). The afking module
+        // exempts the pinned VAULT address from its seat-token and purchase
+        // gates, so this subscribe lands before the seat token is deployed; the
+        // token's constructor then mints the vault its construction seat.
         // The afking surface is GAME-resident; self-subscribe directly against
         // the GAME (subscriber == msg.sender ⇒ the GAME's self-consent path, no
         // operator approval needed).
@@ -624,7 +634,7 @@ contract DegenerusVault {
 
     /// @notice Purchase tickets and lootboxes for the vault
     /// @dev Combines msg.value with vault ETH balance if ethValue > 0
-    /// @param entryQuantityScaled Number of tickets to purchase
+    /// @param entryQuantityScaled Purchase units (400 = one whole ticket = 4 entries)
     /// @param boxOrder Packed box order (0 to skip; see purchase()).
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method for minting
@@ -645,7 +655,7 @@ contract DegenerusVault {
     }
 
     /// @notice Purchase FLIP tickets through the game contract
-    /// @param entryQuantityScaled Number of tickets to purchase
+    /// @param entryQuantityScaled Purchase units (400 = one whole ticket = 4 entries)
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If entryQuantityScaled is zero
     function gamePurchaseTicketsFlip(uint256 entryQuantityScaled) external onlyVaultOwner {
@@ -666,7 +676,7 @@ contract DegenerusVault {
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of tickets (must satisfy game rules)
     /// @param customTraits Custom packed traits
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost; values >= 4 revert.
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value); ETH bets only
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If msg.value + ethValue exceeds vault balance
@@ -752,6 +762,7 @@ contract DegenerusVault {
     ///                  bounty and the same standing in the battle, at that multiple of the
     ///                  bankroll and that multiple of whatever the table returns.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @return betId The slip: `(slot << 64) | seat`.
     function crapsEnterBattle(uint64 slot, uint32 chips, uint16 multiple) external onlyVaultOwner returns (uint256 betId) {
         return ICrapsPlayerActions(ContractAddresses.CRAPS).enterBattle(slot, chips, multiple);
     }
@@ -878,12 +889,12 @@ contract DegenerusVault {
 
     /// @notice Transfer a vault-held AFKing seat out — the disposal path for
     ///         eviction-forfeit repossessions sent in by the token's
-    ///         reclaimSeat (the vault otherwise has no ERC721-out path).
+    ///         reclaimSeat.
     /// @dev The token's seat lock still binds the vault as `from`: a transfer
     ///      emptying the vault's balance reverts SeatInUse token-side (the
-    ///      vault is a permanently active subscriber), so the construction
-    ///      seat's tenure survives any disposal sequence — only surplus
-    ///      seats can leave.
+    ///      vault is a permanently active subscriber), so the vault always
+    ///      retains at least one seat. The lock is serial-agnostic: any seat,
+    ///      including the construction serial, may leave while another stays.
     /// @param tokenId Vault-held seat serial to transfer
     /// @param to Recipient of the seat
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
@@ -966,12 +977,12 @@ contract DegenerusVault {
 
     /// @notice Sweep a foreign ERC721 out of the vault.
     /// @dev Access: vault owner. Rescues NFTs sent here by outside parties, which otherwise
-    ///      have no exit — the only NFT-out path is afkingSeatTransfer, hardwired to the
+    ///      have no exit — the other NFT-out path, afkingSeatTransfer, is hardwired to the
     ///      AFKing seat token.
     ///      No exclusion list, because nothing here needs one: the vault reads no NFT
     ///      ownership or balance for accounting; the AFKing seat lock lives in the token, so a
     ///      transfer emptying this contract's seat balance still reverts SeatInUse and the
-    ///      construction seat's tenure survives; and deity passes are soulbound, so they
+    ///      vault always keeps at least one seat; and deity passes are soulbound, so they
     ///      revert on their own.
     ///      Plain transferFrom, not safeTransferFrom: the caller picks `to`, and the receiver
     ///      hook would only add a failure mode on contract recipients.
@@ -1191,7 +1202,7 @@ contract DegenerusVault {
     }
 
     /// @dev View helper for FLIP reserves.
-    /// @return mainReserve DGVF claimable reserve (allowance + vault balance + claimable)
+    /// @return mainReserve DGVF claimable reserve (vault mint allowance + claimable coinflip winnings)
     function _coinReservesView() private view returns (uint256 mainReserve) {
         mainReserve = flipToken.vaultMintAllowance();
         uint256 claimable = coinflipPlayer.previewClaimCoinflips(address(this));

@@ -31,8 +31,10 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 /// @dev Read surface the lens needs from the game: the raw-slot escape hatch plus
 ///      the authoritative aggregate score.
 interface IDegenerusGameLensSource {
+    /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
     function extsload(bytes32 slot) external view returns (bytes32 value);
 
+    /// @notice DegenerusGame's aggregate activity-score read for `player`.
     function playerActivityScore(address player) external view returns (uint256 scorePoints);
 }
 
@@ -497,7 +499,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice A player's foil-pack record for a cycle level (foilRecord[lvl][player]):
-    ///         the frozen boost, frozen score, seed day, and frozen snap exponent.
+    ///         presence, resolve day, frozen boost (bps) and frozen activity score.
     function foilRecordOf(
         address game,
         uint24 lvl,

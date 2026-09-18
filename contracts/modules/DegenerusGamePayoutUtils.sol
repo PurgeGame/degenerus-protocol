@@ -52,6 +52,8 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
     ///      remainder to claimableWinnings and returns it (mirrors _addClaimableEth): the
     ///      caller folds it into its claimableDelta so the single claimablePool bump and the
     ///      source-pool debit both cover it exactly once, preserving the solvency identity.
+    /// @param winner Address credited with whole half-passes and any sub-half-pass remainder.
+    /// @param amount Payout amount in wei to convert into half-passes plus remainder.
     /// @return remainderCredited Wei credited to claimableWinnings (0 if none) for the caller to fold.
     function _queueWhalePassClaimCore(
         address winner,

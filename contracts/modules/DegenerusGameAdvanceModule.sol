@@ -41,10 +41,10 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
-/// @dev GNRUS interface for level-transition governance resolution.
 /// @dev The craps table's daily opener. Only the game may call it, and it never reverts — see
 ///      `CrapsBattle.openBonusDay`.
 interface ICrapsBonusDay {
+    /// @notice CrapsBattle's daily bonus-window opener.
     function openBonusDay() external;
 }
 
@@ -52,27 +52,33 @@ interface ICrapsBonusDay {
 ///      close — no stipend, no try/catch — because `creditPasses` is revert-free for the game by
 ///      contract: a full lane saturates and reports rather than throws.
 interface ICrapsPassCredit {
+    /// @notice CrapsBattle's revert-free bank of `normal`/`high` pass credits to `player`.
     function creditPasses(address player, uint32 normal, uint32 high) external;
 }
 
+/// @dev GNRUS interface for level-transition governance resolution.
 interface IGNRUSResolve {
+    /// @notice GNRUS's charity-pick resolution for `level`.
     function pickCharity(uint24 level) external;
 }
 
 /// @dev Admin surface for the guarded LINK/ETH valuation. Passing one whole LINK yields
 ///      wei-per-LINK, capped and staleness-checked, or zero when it cannot be priced.
 interface IAdminLinkValue {
+    /// @notice DegenerusAdmin's guarded LINK-to-ETH valuation for `amount`.
     function linkAmountToEth(uint256 amount) external view returns (uint256);
 }
 
 /// @dev Vault interface for the >50.1%-DGVE owner check (daily VRF retry head start).
 interface IVaultOwnerCheck {
+    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
     function isVaultOwner(address account) external view returns (bool);
 }
 
 /// @dev WWXRP surface for the century BAF-incinerator draw: level-x99 burn
 ///      entries resolve to one winner when the x00 BAF skips.
 interface IWwxrpIncinerator {
+    /// @notice WWXRP's incinerator draw, resolving `bracket`'s pool to one winner.
     function resolveIncinerator(uint24 bracket, uint256 rngWord, uint256 poolWei) external returns (address winner);
 }
 
@@ -83,14 +89,29 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     // error E() — inherited from DegenerusGameStorage
-    error MidDayActive(); // A mid-day ticket-swap VRF request is already in flight; cannot start another lootbox RNG request.
-    error PreResetWindow(); // Request blocked: within the 1-minute pre-reset window before the daily boundary to avoid competing with daily jackpot RNG.
-    error InsufficientLink(); // VRF subscription LINK balance is below the minimum required for a lootbox RNG request.
-    error NoPendingLootbox(); // No pending lootbox ETH or FLIP value; nothing to trigger a mid-day RNG request for.
-    error BelowThreshold(); // Pending lootbox ETH-equivalent value is below the configured threshold required to trigger mid-day RNG.
-    error RngInFlight(); // A VRF request is already in flight (rngRequestTime != 0); cannot start another.
-    error GasTooHigh(); // Block basefee is above the mid-day ceiling; the request would bill the subscription at a bad price.
+    /// @notice Thrown when a mid-day ticket-swap VRF request is already in flight, blocking
+    ///         another lootbox RNG request.
+    error MidDayActive();
+    /// @notice Thrown within the 1-minute pre-reset window before the daily boundary, where a
+    ///         request would compete with daily jackpot RNG.
+    error PreResetWindow();
+    /// @notice Thrown when the VRF subscription's LINK balance is below the minimum required
+    ///         for a lootbox RNG request.
+    error InsufficientLink();
+    /// @notice Thrown when there is no pending lootbox ETH or FLIP value to trigger a mid-day
+    ///         RNG request for.
+    error NoPendingLootbox();
+    /// @notice Thrown when the pending lootbox ETH-equivalent value is below the configured
+    ///         threshold required to trigger mid-day RNG.
+    error BelowThreshold();
+    /// @notice Thrown when a VRF request is already in flight (`rngRequestTime != 0`).
+    error RngInFlight();
+    /// @notice Thrown when the block basefee is above the mid-day ceiling, where the request
+    ///         would bill the subscription at a bad price.
+    error GasTooHigh();
+    /// @notice Thrown when advance is called before its daily boundary time has arrived.
     error NotTimeYet();
+    /// @notice Thrown when a required RNG word has not been fulfilled yet.
     error RngNotReady();
     // error RngLocked() — inherited from DegenerusGameStorage
 
@@ -98,6 +119,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                              EVENTS                                  |
       +======================================================================+*/
 
+    /// @notice Emitted at the end of an advanceGame call, reporting the stage it stopped at.
+    /// @param stage The STAGE_* constant the advance reached.
+    /// @param lvl The level live when the advance stopped.
     event Advance(uint8 stage, uint24 lvl);
     /// @dev The level-transition skim, reported as the two amounts it moves: `take` from
     ///      next into future, `insuranceSkim` from next into the yield accumulator. The
@@ -152,7 +176,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // No deferred-composition stage is left: the subscriber STAGE is entry-gated on
     // !rngLockedFlag, so it can never complete in a tx that also has a buffered word /
     // pending backfill.
+    /// @notice Emitted when a day's RNG word is finalized: the raw VRF (or fallback) word plus
+    ///         any reverseFlip nudges applied on top of it.
+    /// @param day The day the word is recorded for.
+    /// @param rawWord The word before nudges.
+    /// @param nudges The reversal count added to `rawWord`.
+    /// @param finalWord The recorded word: `rawWord + nudges`.
     event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
+    /// @notice Emitted when staking excess ETH into stETH via Lido reverts or Lido is paused.
+    /// @param amount The ETH that failed to stake.
     event StEthStakeFailed(uint256 amount);
 
     /// @notice Emitted when DGNRS is rewarded to the top affiliate.
@@ -479,8 +511,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         unchecked {
                             cw += totalFlipReversals;
                         }
-                        // preIdx is the current lootbox index and its word slot
-                        // is known-empty here, so store and emit directly.
+                        // preIdx is the reserved pending index (one below the live
+                        // reserve index) and its word slot is known-empty here, so
+                        // store and emit directly.
                         lootboxRngWordByIndex[preIdx] = cw;
                         emit LootboxRngApplied(preIdx, cw, vrfRequestId);
                     }
@@ -503,8 +536,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // --- Afking process STAGE: stamp the funded subscriber set BEFORE the day
             // requests its RNG. Runs on the new-day path only, after the daily
             // ticket-drain gate and strictly before rngGate. The mid-day same-day path
-            // returns earlier, so the STAGE never runs mid-day. Chunked by SUB_STAGE_BATCH across advance calls
-            // (BUY_BATCH-style) so a large set stays under the 16.7M advance-chain
+            // returns earlier, so the STAGE never runs mid-day. Chunked by
+            // SUB_STAGE_WEIGHT_BUDGET across advance calls (BUY_BATCH-style) so a
+            // large set stays under the 16.7M advance-chain
             // ceiling — mirrors the ticketsFullyProcessed partial-drain discipline:
             // break + return mult while !subsFullyProcessed; set true only at cursor
             // end; then fall through to rngGate.
@@ -1120,7 +1154,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Compute take
             uint256 take = (memNext * bps) / 10_000;
 
-            // ±25% multiplicative variance (triangular: avg of two uniform VRF rolls)
+            // Triangular variance (avg of two uniform VRF rolls) with half-width
+            // max(25% of take, 10% of nextPool), capped at take; the final take is
+            // capped at 80% of nextPool below.
             if (take != 0) {
                 uint256 halfWidth = (take * NEXT_SKIM_VARIANCE_BPS) / 10_000;
                 uint256 minWidth = (memNext * NEXT_SKIM_VARIANCE_MIN_BPS) / 10_000;
@@ -1310,8 +1346,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Pay daily FLIP jackpot via jackpot module delegatecall.
-    ///      Called each day during purchase phase in its own transaction.
-    ///      Awards 0.25% of prize pool target in FLIP to trait-matched winners in [minLevel, maxLevel].
+    ///      Called during purchase-phase daily processing, in the same advance as the daily jackpot.
+    ///      Awards 0.25% of the previous level's recorded pool (levelPrizePool[lvl-1]) in
+    ///      FLIP to trait-matched winners in [minLevel, maxLevel].
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
     /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
@@ -1692,10 +1729,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Game-over RNG gate with fallback for stalled VRF.
-    ///      After the 14-day GAMEOVER_RNG_FALLBACK_DELAY, uses earliest historical VRF word as
-    ///      fallback (more secure than blockhash since it's already verified on-chain and
-    ///      cannot be manipulated).
+    ///      After the 14-day GAMEOVER_RNG_FALLBACK_DELAY (or at once on the deadman), derives
+    ///      the word from up to five early historical VRF words hashed with the current day
+    ///      and block.prevrandao (_getHistoricalRngFallback).
     ///      Also resolves any pending gambling burn redemptions (mirrors rngGate behavior).
+    /// @param ts Current block timestamp.
+    /// @param day Day the entropy is resolved for.
+    /// @param lvl Level live at game-over; zero skips the terminal day's coinflip settlement
+    ///        (the bonus is always 0 here).
+    /// @param isTicketJackpotDay True if this is the last purchase day.
     /// @return word RNG word, 1 if request sent, or 0 if waiting on fallback.
     function _gameOverEntropy(uint48 ts, uint24 day, uint24 lvl, bool isTicketJackpotDay)
         private
@@ -1731,7 +1773,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (!deadman && ts - rngRequestTime < GAMEOVER_RNG_FALLBACK_DELAY) {
                 revert RngNotReady();
             }
-            // Use earliest historical VRF word as fallback (more secure than blockhash)
+            // Bounded early-history hash mixed with currentDay and prevrandao
             uint256 fallbackWord = _getHistoricalRngFallback(day);
             // Cancel any reverseFlip nudge from the fallback word: the VRF-dead fallback
             // never set rngLockedFlag, so reverseFlip stayed open and a committer could
@@ -1816,9 +1858,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      (non-manipulable), prevrandao adds unpredictability at the cost of 1-bit
     ///      validator manipulation (propose or skip). Acceptable trade-off for a
     ///      gameover-only fallback path when VRF is dead.
-    ///      If no historical words exist, falls through to prevrandao-only
-    ///      entropy. This can only happen at level 0 (zero VRF history means
-    ///      zero completed advances), so the 1-bit validator bias is irrelevant.
+    ///      The scan covers day keys 1 .. min(currentDay, 30) - 1 only; if it finds no
+    ///      words, the hash uses zero combined history with currentDay and prevrandao.
     /// @param currentDay Current day index.
     /// @return word Combined historical entropy.
     function _getHistoricalRngFallback(uint24 currentDay) private view returns (uint256 word) {
@@ -1872,15 +1913,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
       |                    FUTURE TICKET ACTIVATION                          |
       +======================================================================+
-      |  Future ticket rewards are staged per level and drained on every     |
-      |  advance over a rolling near-future range (lvl+1..lvl+4 in jackpot   |
-      |  phase, purchaseLevel+1..+4 in purchase), before the day's draws.    |
-      |  Far-future entries promote at each level transition.                |
+      |  Far-future entries (> level+5) live in their own key space. At each |
+      |  phase transition the one level that crosses into the near-future    |
+      |  window (level + 5) is drained here, once. The rolling near-future   |
+      |  window itself is swept every advance by _runProcessTicketBatch.     |
       +======================================================================+*/
 
     /// @dev Process a batch of future ticket rewards for the specified level.
-    ///      Drained on every advance over the rolling near-future range (not only at the prior level's jackpot).
-    /// @param lvl Target level to activate (typically current level + 1).
+    ///      Called only from the phase-transition leg for the far-future level that just
+    ///      crossed into the window.
+    /// @param lvl Far-future level to activate (purchaseLevel + 4).
     /// @param entropy Today's daily RNG word (from rngGate) used for rarity rolls.
     /// @return worked True if any queued entries were processed.
     /// @return finished True if all queued entries for this level are processed.
@@ -2050,8 +2092,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev Activate the prize pool freeze. If not already frozen, pre-seeds the pending
     ///      future-pool buffer with 1% of futurePrizePool so Degenerette ETH wins can resolve
     ///      during freeze without waiting for bet inflow. Unconsumed remainder rolls back to
-    ///      futurePool via _unfreezePool. If already frozen (jackpot phase), accumulators keep
-    ///      growing.
+    ///      futurePool via _unfreezePool. If already frozen (a re-request inside the same
+    ///      locked daily/transition chain), accumulators keep growing.
     function _freezePool() internal {
         if (!prizePoolFrozen) {
             prizePoolFrozen = true;
@@ -2305,7 +2347,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (derivedWord == 0) derivedWord = 1;
             rngWordByDay[gapDay] = derivedWord;
             // Gap days are calendar days that elapsed during the stall (no advance ran on
-            // them), so none is a level-0 or first-jackpot day — always non-bonus (0).
+            // them); every backfilled day is paid with bonus 0 regardless of phase or level.
             coinflip.processCoinflipPayouts(0, derivedWord, gapDay);
             emit DailyRngApplied(gapDay, derivedWord, 0, derivedWord);
             unchecked {

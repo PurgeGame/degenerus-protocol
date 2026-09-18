@@ -36,6 +36,7 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 ///      inside the Game, so the external call reaches the table with msg.sender == GAME. The
 ///      door makes no external calls and saturates at the lane cap instead of reverting.
 interface ICrapsPassCredit {
+    /// @notice Bank a rolled pass award as day-pass credits, revert-free (CrapsBattle, game-only).
     function creditPasses(address player, uint32 normal, uint32 high) external;
 }
 
@@ -53,13 +54,28 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     // error E() — inherited from DegenerusGameStorage
     // error InvalidQuantity() — inherited from DegenerusGameMintStreakUtils
-    error MinQuantityRequired(); // At a century milestone level (passLevel % 100 == 0) a standard-price purchase must take at least two whale passes; the boon-discount branch is not gated.
-    error InvalidLevelForPass(); // Current game level is not eligible for a lazy pass purchase (not level 0-2, x9, x0, or an unlocked century) and the caller has no valid lazy pass boon.
-    error DeityPassConflict(); // Buyer already holds a deity pass, which is incompatible with purchasing a lazy pass.
-    error PassNotExpired(); // The player's existing frozen pass has more than 7 levels remaining and is not yet eligible for early renewal.
-    error InvalidSymbol(); // Symbol ID is out of the valid range (must be 0-31).
-    error SymbolTaken(); // The requested deity symbol has already been claimed by another buyer.
-    error AlreadyOwnsDeityPass(); // The buyer already holds a deity pass; only one per address is permitted.
+    /// @notice Thrown when, at a century milestone level (passLevel % 100 == 0), a
+    ///         standard-price purchase takes fewer than two whale passes; the
+    ///         boon-discount branch is not gated.
+    error MinQuantityRequired();
+    /// @notice Thrown when the current game level is not eligible for a lazy pass
+    ///         purchase (not level 0-2, x9, x0, or an unlocked century) and the caller
+    ///         has no valid lazy pass boon.
+    error InvalidLevelForPass();
+    /// @notice Thrown when the buyer already holds a deity pass, which is incompatible
+    ///         with purchasing a lazy pass.
+    error DeityPassConflict();
+    /// @notice Thrown when the player's existing frozen pass has more than 7 levels
+    ///         remaining and is not yet eligible for early renewal.
+    error PassNotExpired();
+    /// @notice Thrown when the symbol ID is out of the valid range (must be 0-31).
+    error InvalidSymbol();
+    /// @notice Thrown when the requested deity symbol has already been claimed by
+    ///         another buyer.
+    error SymbolTaken();
+    /// @notice Thrown when the buyer already holds a deity pass; only one per address
+    ///         is permitted.
+    error AlreadyOwnsDeityPass();
     // error RngLocked() — inherited from DegenerusGameStorage
 
     // -------------------------------------------------------------------------
@@ -198,11 +214,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /**
      * @notice Purchase a 100-level whale pass.
-     * @dev Available at any level. Tickets always start at x1.
+     * @dev Available at any level. The 100-level span starts at current level + 1.
      *      - Boosts levelCount by delta between current freeze and new freeze (max 100, no double dipping).
-     *      - Queues 20 × quantity bonus entries/lvl for levels passLevel-9; the rest of the span
-     *        is awarded as whole tickets (4 entries each): quantity/2 tickets on every level, plus
-     *        one ticket every 2nd level when quantity is odd (1 pass = 1 whole ticket per 2 levels).
+     *      - Queues 20 × awardQty bonus entries/lvl for levels passLevel-9; the rest of the span
+     *        is awarded as whole tickets (4 entries each): awardQty/2 tickets on every level, plus
+     *        one ticket every 2nd level when awardQty is odd (1 pass = 1 whole ticket per 2 levels).
+     *        awardQty = paid quantity plus the bulk bonus below.
      *      - Bulk buy: every 5 passes in one purchase award one more pass's entries; the
      *        price, lootbox, DGNRS, affiliate and Craps credit follow the paid quantity.
      *      - Lootbox: 10% of price, as one custom box per pass bought; fewer, larger boxes as
@@ -266,7 +283,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 BitPackingLib.MASK_24
         );
 
-        // Pass covers 100 levels starting from current level
+        // Pass covers 100 levels starting from the next level
         uint24 ticketStartLevel = passLevel;
 
         // Calculate freeze extension and stat boost (delta-based, no double dipping)
@@ -488,7 +505,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        ticket prices across the 10-level window at levels 3+.
      *      - Awards a lootbox equal to 10% of pass value.
      *      - Boon purchases apply the boon's tier discount (10/25/50%) to the payment amount.
-     *      - Affiliate: fresh 25% (levels 0-3) or 20% (levels 4+), 5% recycled, of the price
+     *      - Affiliate: fresh 25% (affiliate levels 1-3, i.e. current level 0-2) or 20% (4+), 5% recycled, of the price
      *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
      * @param buyer The address receiving the pass.
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
@@ -547,7 +564,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             (prevData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) &
                 BitPackingLib.MASK_24
         );
-        // Allow if <7 levels remain on freeze (early renewal window)
+        // Allow if 7 or fewer levels remain on freeze (early renewal window)
         if (frozenUntilLevel > currentLevel + 7) revert PassNotExpired();
 
         uint24 startLevel = currentLevel == 0 ? 1 : currentLevel + 1;
@@ -602,7 +619,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             presaleBoxCredit[buyer] += totalPrice / 4;
         }
 
-        // Affiliate, fresh 25% at levels 0-3 / 20% at 4+ and 5% recycle exactly like a
+        // Affiliate, fresh 25% at affiliate levels 1-3 / 20% at 4+ (paid at level + 1) and 5% recycle exactly like a
         // normal ticket mint: the fresh portion (freshPaid) at the fresh rate, the
         // claimable/afking-funded remainder at the recycle rate, both frozen at level + 1
         // like the ticket affiliate (score 0, same as tickets). The FLIP basis converts at
@@ -873,7 +890,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
 
     /// @dev Compute the total ETH cost of a 10-level lazy pass starting at startLevel.
-    ///      Cost equals the sum of per-level ticket prices (4 tickets per level).
+    ///      Cost equals the sum of per-level ticket prices (one whole ticket, 4 entries, per level).
     function _lazyPassCost(
         uint24 startLevel
     ) private pure returns (uint256 total) {
@@ -910,6 +927,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param affiliateAddr Direct referrer (receives 0.5% of the unreserved affiliate pool).
     /// @param upline Second-level referrer (receives 0.1% of the unreserved affiliate pool).
     /// @param upline2 Third-level referrer (receives 0.05% of the unreserved affiliate pool).
+    /// @param currentLevel Current game level, used to read the level's DGNRS allocation.
     function _rewardDeityPassDgnrs(
         address buyer,
         address affiliateAddr,

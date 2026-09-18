@@ -337,7 +337,8 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant QUICK_PLAY_PAYOUTS_N3_HEROCOMMON_PACKED = 0x00020899000065880000161e000007d200000279000000fd0000000000000000;  // N3/heroCOMMON EV=100.0000
     uint256 private constant QUICK_PLAY_PAYOUTS_N4_PACKED = 0x000241430000708c0000188c000008a5000002be000001190000000000000000;  // N4/heroGOLD EV=99.9999
 
-    /// @dev Per-N S=9 jackpot tier (exceeds 32-bit slot; held as separate uint256).
+    /// @dev Per-N S=9 jackpot tier. Each pin fits uint32; it is held apart because the
+    ///      packed word is full at eight 32-bit lanes (S=0..7).
     ///      Values are strictly monotonic in N.
     uint256 private constant QUICK_PLAY_PAYOUT_N0_S9 = 10_756_411; // 107,564.11x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N1_S9 = 12_583_037; // 125,830.37x bet
@@ -345,7 +346,8 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant QUICK_PLAY_PAYOUT_N3_S9 = 17_512_324; // 175,123.24x bet
     uint256 private constant QUICK_PLAY_PAYOUT_N4_S9 = 20_916_435; // 209,164.35x bet
 
-    /// @dev Per-(N, hero-is-gold) S=8 tier (separate uint256, exceeds 32-bit slot).
+    /// @dev Per-(N, hero-is-gold) S=8 tier, held apart for the same reason as S=9 (the
+    ///      packed word has no ninth lane).
     ///      Calibrated to basePayoutEV = 100 centi-x per honest sub-case.
     ///      N0/N4 collapse to one table each; N∈{1,2,3} split _HEROGOLD / _HEROCOMMON.
     uint256 private constant QUICK_PLAY_PAYOUT_N0_S8 =     5124517;  // N0/heroCOMMON    51,245.17x bet
@@ -442,8 +444,9 @@ contract DegenerusGameDegeneretteModule is
     // [202..217] activityScore (16 bits)
     // [218..219] heroQuadrant (2 bits): always-on hero quadrant (0..3)
     //
-    /// EV-equality across picks: each pick maps to exactly one of 5 per-N tables;
-    /// basePayoutEV is calibrated to 100 centi-x per table; runtime payout =
+    /// EV-equality across picks: each pick maps to exactly one base table — eight
+    /// (N, heroIsGold) cases on the honest ETH/FLIP lane, five by-N cases on the rigged
+    /// WWXRP lane; basePayoutEV is calibrated to 100 centi-x per table; runtime payout =
     /// bet × basePayout_N(M) × roiBps / 1_000_000. No per-outcome correction needed.
     //
     // -------------------------------------------------------------------------
@@ -560,8 +563,9 @@ contract DegenerusGameDegeneretteModule is
         // Once game-over liveness has drained the balance into claimable, resolving a
         // pending bet would credit ETH claimable out of the already-distributed
         // futurePrizePool residual, pushing claimablePool above the ETH balance
-        // (unbacked obligation). Same guard as claimWhalePass: pending bets are settled
-        // by the game-over drain, never resolved into claimable after it.
+        // (unbacked obligation). Same guard as claimWhalePass. Pending bets are NOT settled
+        // by the game-over drain: their stakes stay in the pools the terminal distribution
+        // already paid out, so nothing is credited to claimable after it.
         if (_livenessTriggered()) revert GameOver();
         // Permissionless: a resolved bet only ever credits the player who placed it, never the
         // caller, so anyone may settle any player's pending bets (zero address = caller).
@@ -600,9 +604,10 @@ contract DegenerusGameDegeneretteModule is
     // Internal Bet Logic
     // -------------------------------------------------------------------------
 
-    /// @dev Internal implementation for placing a Degenerette bet. The bet (and its quest
-    ///      progress / winnings) belongs to `player`; the funds are debited from `funder`
-    ///      (== player for a self/approved bet, == the caller for a permissionless gift).
+    /// @dev Internal implementation for placing a Degenerette bet. The bet and its winnings
+    ///      belong to `player`; the funds are debited from `funder` (== player for a
+    ///      self/approved bet, == the caller for a permissionless gift), and the quest
+    ///      progress goes to `funder` — the spender earns the quest.
     function _placeDegeneretteBet(
         address player,
         address funder,
@@ -1791,7 +1796,7 @@ contract DegenerusGameDegeneretteModule is
     // Box-spin BoxSpin.betId header. Bit 63 is a box-origin sentinel (real bet nonces increment
     // from 1, so they never reach it); bits 62-60 carry the spin type; bits 59-0 are seed entropy
     // (a unique per-box-spin id). The off-chain UI reads `betId >> 63` (is-box-spin) and
-    // `(betId >> 60) & 7` (type) directly off the indexed topic.
+    // `(betId >> 60) & 7` (type) off the event's data field (only `player` is indexed).
     uint256 private constant BOX_BETID_SENTINEL = uint256(1) << 63;
     uint8 private constant BOX_SPIN_TYPE_WWXRP = 0;
     uint8 private constant BOX_SPIN_TYPE_FLIP = 1;
@@ -1836,7 +1841,7 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Mirrors a regular WWXRP bet spin: the same reel rig, the rigged tables + total-RTP
     ///      bonus redistribution, and the S==9 bracket whale-halfpass award (deduped
     ///      one-per-10-level-bracket, shared with ordinary WWXRP jackpots). No pool / ETH touch —
-    ///      WWXRP is minted directly.
+    ///      the payout is returned and the calling box entry mints its WWXRP lane once.
     function resolveWwxrpSpinFromBox(
         address player,
         uint256 stake,
@@ -1905,8 +1910,10 @@ contract DegenerusGameDegeneretteModule is
 
     /// @notice Three FLIP Degenerette spins under one survival flip (mint-only, safe on any box).
     /// @dev The total stake splits into three equal per-spin stakes (totalStake / 3; the 0-2 wei integer remainder is dropped, un-staked); the summed payout then double-or-
-    ///      nothings on one fair flip (EV-neutral) before a single FLIP mint. No pool / ETH /
-    ///      recirc touch, so this is solvency-safe on every box path including recirc.
+    ///      nothings on one fair flip (EV-neutral) and is returned for the box entry's FLIP
+    ///      lane (credited via coinflip.creditFlip at flush; only the record-bounty chain mints
+    ///      here). No pool / ETH / recirc touch, so this is solvency-safe on every box path
+    ///      including recirc.
     function resolveFlipSpinsFromBox(
         address player,
         uint256 totalStake,
@@ -2055,7 +2062,7 @@ contract DegenerusGameDegeneretteModule is
         ResolveAcc memory acc;
         // A box spin stakes a lootbox roll's budget rather than a placed bet, so it
         // never touches the biggest-spin record — that arms only on a placed ETH
-        // bet's amountPerSpin.
+        // bet's total wager (amountPerSpin x spinCount).
         (uint256 lootboxShare, ) = _distributePayout(
             player,
             CURRENCY_ETH,

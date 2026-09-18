@@ -178,6 +178,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     // Construction
     // =========================================================================
 
+    /// @notice Registers this contract's ENS reverse name; takes no arguments.
     constructor() {
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -452,7 +453,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     /// @return openRound The round a bet placed now would join (0 when betting is closed).
     /// @return overCount Bets on the OVER side of `round`.
     /// @return underCount Bets on the UNDER side of `round`.
-    /// @return questReward FLIP a bet placed right now would earn from the quest.
+    /// @return questReward The quest's nominal reward at the current phase counter, before the
+    ///         eligibility gates `placeBet` applies; quoted even while the market is closed.
     /// @return side The player's side on `round`: 1 = OVER, 2 = UNDER (0 = no bet).
     /// @return claimed True once the player has taken the payout for `round`.
     /// @return outcome `round`'s outcome (0 = unsettled).

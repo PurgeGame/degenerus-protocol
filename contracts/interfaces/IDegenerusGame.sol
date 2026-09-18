@@ -26,9 +26,9 @@ pragma solidity 0.8.34;
 
 /// @notice Payment method for ticket purchases.
 enum MintPaymentKind {
-    DirectEth,   // Pay with fresh ETH only
-    Claimable,   // Pay with claimable winnings only
-    Combined,    // Pay with both ETH and claimable (combined purchase bonus)
+    DirectEth,   // Fresh ETH first; prepaid afking covers a shortfall; claimable never drawn
+    Claimable,   // No fresh ETH; claimable (to its 1-wei sentinel), then prepaid afking
+    Combined,    // Fresh ETH first, then claimable, then prepaid afking
     Internal     // Protocol-internal debit (shortfall, salvage, redemption, game-over sweep)
 }
 
@@ -50,8 +50,9 @@ interface IDegenerusGame {
     function gameOver() external view returns (bool);
 
     /// @notice Whether the liveness-timeout game-over trigger is currently active.
-    /// @dev True on day-timeout (365 at level 0, 120 at level 1+) with VRF healthy,
-    ///      or whenever VRF has been stalled ≥ 14 days. False during sub-grace VRF stalls.
+    /// @dev Purchase phase: true past the purchase deadline (365 days at level 0, 120
+    ///      after) unless a pre-deadline VRF request is still inside its 14-day grace.
+    ///      Jackpot / last-purchase: true only once no day has sealed for 120 days.
     function livenessTriggered() external view returns (bool);
 
     /// @notice Check if the final fund forfeiture has executed (all funds forfeited).
@@ -65,10 +66,14 @@ interface IDegenerusGame {
     /// @return True if decimator entries are allowed.
     function decWindow() external view returns (bool);
 
-    /// @notice Check if the current jackpot phase is compressed (3 days instead of 5).
-    /// @dev Compressed mode activates when the purchase-phase target is met within the
-    ///      first 2 daily advances, signaling high player interest.
-    /// @return Compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d).
+    /// @notice Raw jackpot compression flag.
+    /// @dev Latched at target-met: 1 (compressed, 3 logical days) when the target is met
+    ///      within 3 days of the purchase start; 2 (turbo, 1 day) when the target is met within
+    ///      1 day of the purchase start on any level (a BAF level latches it at the sealed day's
+    ///      settlement, every other level at the morning arm). A turbo's 2 lingers through the
+    ///      next level's first purchase-day settlement as the coinflip bonus latch; 3 marks a
+    ///      back-to-back turbo armed on that day.
+    /// @return Raw flag: 0=normal, 1=compressed, 2=turbo or lingering bonus latch, 3=chained turbo.
     function jackpotCompressionTier() external view returns (uint8);
 
     /// @notice Get comprehensive purchase information in a single call.
@@ -79,7 +84,7 @@ interface IDegenerusGame {
     /// @return lvl Actual current game level.
     /// @return inJackpotPhase True if jackpot phase is active.
     /// @return lastPurchaseDay_ True once the level's prize target is met (jackpot transition pending); purchases stay open.
-    /// @return rngLocked_ True if RNG is locked (VRF pending).
+    /// @return rngLocked_ True during daily RNG processing, from request through the day seal.
     /// @return priceWei Current buy-now mint price in wei (at the routed ticket level).
     function purchaseInfo()
         external
@@ -107,8 +112,9 @@ interface IDegenerusGame {
     /// @return bettingOpen True while the jackpot phase is live, its draws have not ended
     ///         (phaseTransitionActive clear) and the level is not turbo
     ///         (compressedJackpotFlag < 2). The RNG lock is not consulted: the market
-    ///         consumes no randomness and its terms are write-once. Game over needs no leg —
-    ///         it is only ever declared with the flag already down for good.
+    ///         consumes no randomness and its terms are write-once. `bettingOpen` has no
+    ///         gameOver leg: a deadman-triggered game over inside a jackpot phase leaves
+    ///         jackpotPhaseFlag set, so the market can still read open after game over.
     /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
     ///         phase runs five logical jackpot days; the counter reads k once logical day k's
     ///         processing completes, and completing day 5 ends the phase in the same advance,
@@ -143,6 +149,11 @@ interface IDegenerusGame {
 
     /// @notice Get raw deity boon state for off-chain or viewer contract computation.
     /// @param deity The deity address to query.
+    /// @return dailySeed RNG seed for today's boon generation (0 until today's VRF word lands).
+    /// @return day Current day index.
+    /// @return usedMask Bitmask of slots already used (bit i = slot i used).
+    /// @return decimatorOpen Whether decimator boons are available.
+    /// @return deityPassAvailable Whether deity pass boons can be generated.
     function deityBoonData(
         address deity
     ) external view returns (
@@ -258,7 +269,7 @@ interface IDegenerusGame {
 
     /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
     /// @param player Winner whose claim to resolve.
-    /// @param lvl Level to claim from (must be the last decimator).
+    /// @param lvl Resolved level whose unclaimed winning position is being settled (any snapshotted round).
     function claimDecimatorJackpot(address player, uint24 lvl) external;
 
     /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
@@ -287,7 +298,7 @@ interface IDegenerusGame {
     /// @return paid The sDGNRS actually transferred.
     function payRecordSdgnrs(address player, uint256 shareBps) external returns (uint256 paid);
 
-    /// @notice Check if RNG is currently locked (VRF request pending).
+    /// @notice Check if the daily RNG processing lock is set (request through day seal; not set for mid-day requests).
     /// @return True if RNG is locked, false otherwise.
     function rngLocked() external view returns (bool);
 
@@ -331,7 +342,8 @@ interface IDegenerusGame {
     /// @param boxOrder Packed box order (0 to skip; see purchase()).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
-    /// @param boxAmount Requested presale-box ETH (claimable-funded).
+    /// @param boxAmount Requested presale-box ETH (funded by the mint leg's leftover fresh ETH,
+    ///        then claimable, then afking).
     function buyLootboxAndPresaleBox(
         address buyer,
         uint256 entryQuantityScaled,
@@ -354,9 +366,9 @@ interface IDegenerusGame {
     /// @param player The betting player (address(0) = msg.sender).
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
     /// @param amountPerSpin Bet amount per ticket.
-    /// @param spinCount Number of spins (1-10). Each spin resolves independently.
-    /// @param customTraits Custom packed traits (use 0 for random).
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero.
+    /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP, 1..5 WWXRP). Each spin resolves independently.
+    /// @param customTraits Four packed quadrant bytes; all-zero is a valid fixed selection, not random.
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost; values >= 4 revert.
     function placeDegeneretteBet(
         address player,
         uint8 currency,

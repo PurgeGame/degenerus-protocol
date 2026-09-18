@@ -85,6 +85,7 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 
 /// @dev Vault interface for DGVE ownership check (admin function access control).
 interface IDegenerusVaultOwnerGame {
+    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -111,8 +112,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     // error E() — inherited from DegenerusGameStorage
-    error SelfBoon(); // Deity attempted to issue a boon to themselves.
-    error ValueMismatch(); // Amount is zero or msg.value does not match the required amount.
+    /// @notice Thrown when a deity issues a boon to itself.
+    error SelfBoon();
+    /// @notice Thrown when the amount is zero or msg.value does not match it.
+    error ValueMismatch();
+    /// @notice Thrown when a reversal's live cost no longer matches the caller's quote.
     error NudgeCostChanged();
 
     // error RngLocked() — inherited from DegenerusGameStorage
@@ -125,7 +129,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice No resolvable work in the supplied batch (degeneretteResolve at zero resolutions).
     error NoWork();
-    error OutOfBounds(); // A tunable parameter was set outside its permitted range.
+    /// @notice Thrown when a tunable parameter is set outside its permitted range.
+    error OutOfBounds();
 
     /*+======================================================================+
       |                              EVENTS                                  |
@@ -384,9 +389,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  gates and the mineFlip bounty payee read the real caller. These are the |
       |  canonical afking entrypoints. `subscribe` is the SINGLE subscription    |
       |  mutator (create / replace / cancel). The afking box-open is reached via |
-      |  mineFlip's router (which also drains human boxes after the afking ones, |
-      |  the same as openBoxes) and, unrewarded, via openBoxes; the module's     |
-      |  cursor walk is exposed as drainAfkingBoxes, not re-stubbed here.        |
+      |  mineFlip's router (human boxes only on a call whose afking walk opened  |
+      |  nothing; openBoxes always runs both legs) and, unrewarded, via          |
+      |  openBoxes; the module's cursor walk is exposed as drainAfkingBoxes, not |
+      |  re-stubbed here.                                                        |
       +==========================================================================+*/
 
     /// @notice Start or extend a daily afking subscription for `player`.
@@ -414,7 +420,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work
-    ///         (advance → afking-box open) and pay ONE bounty. The bounty
+    ///         (advance → box open → craps upkeep) and pay ONE bounty. The bounty
     ///         credits msg.sender (preserved via delegatecall).
     /// @dev The signature matches the module function exactly (identical selector), so the calldata
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
@@ -557,11 +563,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Pay the sDGNRS leg of an all-time record claim.
-    /// @dev Access: COINFLIP only, which owns the four records and computes the
-    ///      claim's accrued pool share. Pays that share at 1/500 scale from the
-    ///      sDGNRS reward pool — 0.01% to 0.15% of the pool per claim across the
-    ///      share curve. transferFromPool clamps to the available balance and
-    ///      returns the exact decrement, zero on an empty pool.
+    /// @dev Access: COINFLIP only, which owns the all-time records (flip, spin, luckbox,
+    ///      buy, dice run) and computes the claim's accrued pool share. Pays that share
+    ///      at 1/500 scale from the sDGNRS reward pool — 0.01% to 0.15% of the pool per
+    ///      claim across the share curve. transferFromPool clamps to the available
+    ///      balance and returns the exact decrement, zero on an empty pool.
     /// @param player Recipient of the sDGNRS.
     /// @param shareBps The claim's accrued record-pool share in bps.
     /// @return paid The sDGNRS actually transferred.
@@ -870,7 +876,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Purchase tickets with FLIP.
     /// @dev Main entry point for FLIP ticket purchases. Mirrors purchase() but for FLIP payments.
-    ///      SECURITY: Blocked when RNG is locked.
+    ///      SECURITY: The redemption window latches open only with no RNG in flight;
+    ///      once open it stays usable through the jackpot days' locks until the final
+    ///      jackpot request clears it.
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param entryQuantityScaled Purchase units (400 = 4*QTY_SCALE = one whole ticket = 4 entries; 0 to skip).
     function redeemFlip(
@@ -1594,6 +1602,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         _claimWinningsInternal(msg.sender, true, type(uint256).max);
     }
 
+    /// @param player Account whose accrued winnings are claimed.
+    /// @param stethFirst True to pay out in stETH before ETH.
     /// @param maxClaim Maximum claimable winnings (wei) to draw pre-gameOver (partial cashout);
     ///        ignored post-gameOver, when the claim settles ALL claimable + afking.
     function _claimWinningsInternal(address player, bool stethFirst, uint256 maxClaim) private {
@@ -2183,7 +2193,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Access: ADMIN only — called from the LINK donation hook once the donated LINK
     ///      has reached the VRF coordinator, so credit only ever trails LINK the
     ///      subscription already holds. Handled inline (not delegated): the body is one
-    ///      SLOAD, two divisions and one SSTORE, so the module delegatecall's cold account
+    ///      SLOAD, one add and one SSTORE, so the module delegatecall's cold account
     ///      access would cost more than the code it saves.
     ///      The donated LINK is banked verbatim, with no reward multiplier applied — a
     ///      request debits a multiple of what it actually bills, so the price lives at
@@ -2408,9 +2418,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      `lvl > level + 5`. Reading one space alone under-reports — the write key drops the
     ///      committed cohort at every daily slot swap, and misses far-future buys entirely. The
     ///      three keys are pairwise distinct (slot bit 23, far-future bit 22), so nothing is
-    ///      counted twice. No overflow guard on the sum: each lane is uint32-bounded and a
-    ///      combined total past that needs ~10.7M tickets at one level, the same economically
-    ///      unreachable scale the uint32 caps were stripped at.
+    ///      counted twice. No overflow guard on the sum: each lane is a uint32 entry count,
+    ///      and a combined total past 2^32 entries needs ~1.07 billion whole tickets at one
+    ///      level (4 entries each), the same economically unreachable scale the uint32
+    ///      caps were stripped at.
     /// @param lvl Target level for the queued entries.
     /// @param player Player address to query.
     /// @return The number of entries owed (fractional remainder resolves at batch time).
@@ -2430,6 +2441,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice View Degenerette packed bet info for a player/betId.
     /// @param player Player address to query.
     /// @param betId Bet identifier for the player.
+    /// @return packed The raw packed bet word, unchanged from storage.
     function degeneretteBetInfo(
         address player,
         uint64 betId
@@ -2482,15 +2494,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Whether the liveness-timeout game-over trigger is currently active.
-    /// @dev Returns true either on day-timeout (365/120) with VRF healthy, or
-    ///      whenever VRF has been stalled for _VRF_GRACE_PERIOD. During a sub-grace
-    ///      VRF stall, returns false so proposal-based coordinator rotation is possible.
+    /// @dev Outside jackpot / last-purchase: true once the purchase deadline
+    ///      (365 days at level 0, 120 after) has passed with no request in flight, or
+    ///      with a pre-deadline request that has now stalled for _VRF_GRACE_PERIOD.
+    ///      Inside jackpot / last-purchase: true only when the VRF-death deadman fires
+    ///      (no day sealed for _VRF_DEADMAN_DAYS). A sub-grace stall past the deadline
+    ///      reads false so a coordinator rotation can still be proposed.
     function livenessTriggered() external view returns (bool) {
         return _livenessTriggered();
     }
 
     /// @notice Get the yield surplus (stETH appreciation above all pool obligations).
-    /// @dev Calculated as: (ETH balance + stETH balance) - (current + next + claimable + future pools)
+    /// @dev Calculated as: (ETH balance + stETH balance) - (current + next + future +
+    ///      claimable pools + yieldAccumulator + pending next/future freeze buffers).
     /// @return The yield surplus value (ETH wei).
     function yieldPoolView() external view returns (uint256) {
         uint256 totalBalance = address(this).balance +
@@ -2632,9 +2648,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         _endPhase's own turbo test. Compressed (1) keeps three physical days and
     ///         stays open.
     ///
-    ///         Game over needs no leg: it is only ever declared out of a failed purchase
-    ///         phase, where the flag is already down and, with no transition ever coming,
-    ///         stays down.
+    ///         Game over has no leg of its own: GameOver latches `gameOver = true` without
+    ///         touching `jackpotPhaseFlag` or `phaseTransitionActive`, so a deadman-triggered
+    ///         game over inside a jackpot phase leaves the phase flags exactly as they stood —
+    ///         `bettingOpen` can still read true, and the market can keep taking bets on a
+    ///         round that will never settle.
     /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
     ///         phase runs five logical jackpot days; the counter reads k once logical day k's
     ///         processing completes, and completing day 5 ends the phase in the same advance,
@@ -2679,7 +2697,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return lvl Actual current game level.
     /// @return inJackpotPhase True if jackpot phase is active.
     /// @return lastPurchaseDay_ True if prize pool target is met.
-    /// @return rngLocked_ True if VRF request is pending.
+    /// @return rngLocked_ True during daily RNG processing, from request through the day seal.
     /// @return priceWei Current buy-now mint price in wei (at the routed ticket level).
     function purchaseInfo()
         external
@@ -2824,9 +2842,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Get pending whale pass claim amount for a player.
+    /// @notice Get a player's deferred whale-pass claims.
     /// @param player Player address to query.
-    /// @return Amount of ETH claimable as whale pass tickets.
+    /// @return Number of half whale passes owed (100 entries each).
     function whalePassClaimAmount(
         address player
     ) external view returns (uint256) {

@@ -26,7 +26,8 @@ pragma solidity 0.8.34;
 
 /// @notice Requirements for completing a quest
 struct QuestRequirements {
-    /// @notice Number of mints required (whole tickets)
+    /// @notice Count required for count-based quests: whole tickets (MINT_FLIP), foil packs (FOIL)
+    ///         or craps actions (CRAPS_*)
     uint32 mints;
     /// @notice Token amount required - FLIP in base units (18 decimals) for token quests, wei for ETH quests
     uint256 tokenAmount;
@@ -81,7 +82,7 @@ interface IDegenerusQuests {
     ) external;
 
     /// @notice Records player flip activity and checks quest completion
-    /// @dev Called by the game contract when a player performs a coinflip
+    /// @dev Called by COINFLIP when a player stakes a coinflip (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE)
     /// @param player The address of the player who flipped
     /// @param flipCredit The amount of flip credit used
     /// @return reward The quest reward amount earned (0 if quest not completed)
@@ -93,7 +94,7 @@ interface IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
     /// @notice Records player decimator activity and checks quest completion
-    /// @dev Called by the game contract when a player uses the decimator
+    /// @dev Called by FLIP when a player burns into the decimator (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE)
     /// @param player The address of the player
     /// @param burnAmount The amount of tokens burned in the decimator
     /// @return reward The quest reward amount earned (0 if quest not completed)
@@ -129,7 +130,8 @@ interface IDegenerusQuests {
     ) external returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot);
 
     /// @notice Records player affiliate activity and checks quest completion
-    /// @dev Called by the game contract when a player earns affiliate rewards
+    /// @dev Called by AFFILIATE when an affiliate's earnings are credited (onlyCoin admits COIN,
+    ///      COINFLIP, GAME and AFFILIATE)
     /// @param player The address of the player
     /// @param amount The amount of affiliate rewards earned
     /// @return reward The quest reward amount earned (0 if quest not completed)
@@ -244,7 +246,9 @@ interface IDegenerusQuests {
 
     /// @notice Credit the growth-bet participation quest for a player.
     /// @dev Called directly by PARIMUTUEL when a bet is placed, and gated on that identity.
-    ///      Idempotent within a level — a repeat call in the same version epoch pays 0.
+    ///      Idempotence comes from PARIMUTUEL's one-bet-per-round gate, not this call itself —
+    ///      the internal bit only short-circuits a repeat until level-quest progress rewrites
+    ///      the word within the same version epoch.
     /// @param player The player who placed the bet.
     /// @param lvl The level the bet was placed on, which the caller already read from the
     ///        game in this same call — passing it through saves re-reading it.
@@ -266,7 +270,7 @@ interface IDegenerusQuests {
 
     /// @notice Returns a player's level quest state for frontend display.
     /// @param player The player address to query.
-    /// @return questType The active level quest type (0-8).
+    /// @return questType The active level quest type (1-8, or 11 for the craps day-pass quest).
     /// @return progress The player's accumulated progress.
     /// @return target The target value for completion.
     /// @return completed Whether the player has completed the quest this level.

@@ -31,6 +31,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @dev Vault interface for DGVE ownership check (admin render surface auth).
 interface IDegenerusVaultOwner {
+    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -42,6 +43,7 @@ interface IDegenerusVaultOwner {
 ///      metadata; the staticcall is not gas-capped, and the renderer is
 ///      owner-set and trusted.
 interface IRecordBountyRendererV1 {
+    /// @notice Returns the full tokenURI for `tokenId`, as implemented by the owner-set renderer.
     function tokenURI(
         uint256 tokenId,
         address holder,
@@ -67,18 +69,34 @@ contract DegenerusRecordBounty {
     // Errors
     // -------------------------------------------------------------------------
 
+    /// @notice Thrown when a caller lacks the required authority (not COINFLIP for
+    ///         `recordSet`, not a DGVE-majority vault owner for the render setters).
     error NotAuthorized();
+    /// @notice Thrown when a record kind or tokenId is outside the valid 0-4 range.
     error InvalidToken();
+    /// @notice Thrown when a recipient address is the zero address.
     error ZeroAddress();
+    /// @notice Thrown when a render color string is not a valid hex color.
     error InvalidColor();
+    /// @notice Thrown on any transfer, approval or approval-for-all call: trophies are soulbound.
     error Soulbound();
 
     // -------------------------------------------------------------------------
     // Events (ERC721)
     // -------------------------------------------------------------------------
 
+    /// @notice Emitted when a trophy mints or moves to a new holder.
+    /// @param from Previous holder (zero address on the deploy-time mint).
+    /// @param to New holder.
+    /// @param tokenId Record kind = tokenId (0-4).
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+    /// @notice Emitted when the external renderer address is changed.
+    /// @param previousRenderer The renderer being replaced (zero if none was set).
+    /// @param newRenderer The renderer now in effect (zero disables the external renderer).
     event RendererUpdated(address indexed previousRenderer, address indexed newRenderer);
+    /// @notice Emitted when the on-chain render colors are changed.
+    /// @param outlineColor New hex color for the card outline, rings and wordmark.
+    /// @param backgroundColor New hex color for the card background.
     event RenderColorsUpdated(string outlineColor, string backgroundColor);
 
     // -------------------------------------------------------------------------
@@ -100,6 +118,7 @@ contract DegenerusRecordBounty {
     mapping(address => uint256) private _balances;
 
     IDegenerusVaultOwner private constant vault = IDegenerusVaultOwner(ContractAddresses.VAULT);
+    /// @notice The optional external renderer contract (zero when unset, using the internal art).
     address public renderer;
 
     string private _outlineColor = "#3f1a82";
@@ -110,6 +129,7 @@ contract DegenerusRecordBounty {
         _;
     }
 
+    /// @notice Mints all five trophies to the VAULT and registers this contract's ENS reverse name.
     constructor() {
         // Every trophy starts with the VAULT — the protocol itself, not a person —
         // and the first player to put a mark on a record takes its trophy from
@@ -195,7 +215,9 @@ contract DegenerusRecordBounty {
     // ERC721 Metadata
     // -------------------------------------------------------------------------
 
+    /// @notice The collection name.
     function name() external pure returns (string memory) { return "The BIGGEST Degenerus"; }
+    /// @notice The collection symbol.
     function symbol() external pure returns (string memory) { return "BIGGEST"; }
 
     /// @notice Set optional external renderer — it owns the entire token
@@ -392,6 +414,7 @@ contract DegenerusRecordBounty {
     // ERC165
     // -------------------------------------------------------------------------
 
+    /// @notice Declares support for IERC721, IERC721Metadata and IERC165.
     function supportsInterface(bytes4 id) external pure returns (bool) {
         return id == 0x80ac58cd  // IERC721
             || id == 0x5b5e139f  // IERC721Metadata
@@ -402,21 +425,25 @@ contract DegenerusRecordBounty {
     // ERC721 Views
     // -------------------------------------------------------------------------
 
+    /// @notice Trophy count held by `account` (0-5, one per record kind it currently holds).
     function balanceOf(address account) external view returns (uint256) {
         if (account == address(0)) revert ZeroAddress();
         return _balances[account];
     }
 
+    /// @notice Current holder of record kind `tokenId`.
     function ownerOf(uint256 tokenId) external view returns (address ownerAddr) {
         if (tokenId >= KINDS) revert InvalidToken();
         ownerAddr = _holders[tokenId];
     }
 
+    /// @notice Always the zero address: trophies are soulbound and never approved for transfer.
     function getApproved(uint256 tokenId) external view returns (address) {
         if (tokenId >= KINDS) revert InvalidToken();
         return address(0);
     }
 
+    /// @notice Always false: trophies are soulbound and never approved for transfer.
     function isApprovedForAll(address, address) external pure returns (bool) {
         return false;
     }
@@ -425,22 +452,27 @@ contract DegenerusRecordBounty {
     // ERC721 Mutations (soulbound — all transfers blocked)
     // -------------------------------------------------------------------------
 
+    /// @notice Always reverts: trophies are soulbound and cannot be approved.
     function approve(address, uint256) external pure {
         revert Soulbound();
     }
 
+    /// @notice Always reverts: trophies are soulbound and cannot be approved.
     function setApprovalForAll(address, bool) external pure {
         revert Soulbound();
     }
 
+    /// @notice Always reverts: trophies are soulbound and only move via `recordSet`.
     function transferFrom(address, address, uint256) external pure {
         revert Soulbound();
     }
 
+    /// @notice Always reverts: trophies are soulbound and only move via `recordSet`.
     function safeTransferFrom(address, address, uint256) external pure {
         revert Soulbound();
     }
 
+    /// @notice Always reverts: trophies are soulbound and only move via `recordSet`.
     function safeTransferFrom(address, address, uint256, bytes calldata) external pure {
         revert Soulbound();
     }

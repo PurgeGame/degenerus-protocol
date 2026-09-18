@@ -31,7 +31,8 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 /// @dev Icons32 data contract interface for SVG path data and symbol names.
 interface IIcons32 {
     /// @notice Get the SVG path data for icon at index i.
-    /// @param i Icon index (0-31).
+    /// @param i Icon index (0-31 here — the range this contract's mint gate allows;
+    ///        Icons32Data itself also accepts 32 for the affiliate badge).
     function data(uint256 i) external view returns (string memory);
 
     /// @notice Get the human-readable symbol name.
@@ -42,6 +43,7 @@ interface IIcons32 {
 
 /// @dev Vault interface for DGVE ownership check.
 interface IDegenerusVaultOwner {
+    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -70,18 +72,37 @@ contract DegenerusDeityPass {
     // Errors
     // -------------------------------------------------------------------------
 
+    /// @notice Thrown when the caller is neither the DGVE-majority vault owner (owner-only
+    ///         setters) nor the game contract (`mint`).
     error NotAuthorized();
+    /// @notice Thrown when a token query targets a token that does not exist, or `mint`
+    ///         targets a tokenId >= 32 or one already minted.
     error InvalidToken();
+    /// @notice Thrown when a zero address is passed where an account or recipient is required.
     error ZeroAddress();
+    /// @notice Thrown when `setRenderColors` is given a string that is not a valid hex color.
     error InvalidColor();
+    /// @notice Thrown on any transfer/approval call — passes are permanently non-transferable.
     error Soulbound();
 
     // -------------------------------------------------------------------------
     // Events (ERC721)
     // -------------------------------------------------------------------------
 
+    /// @notice Emitted on mint (`from` is always address(0); passes are soulbound, so this is
+    ///         the only Transfer this contract ever emits).
+    /// @param from The prior owner (always address(0)).
+    /// @param to The new owner.
+    /// @param tokenId The minted token's symbol ID.
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+    /// @notice Emitted when the owner sets or clears the external renderer.
+    /// @param previousRenderer The renderer address before the change.
+    /// @param newRenderer The renderer address after the change (address(0) disables it).
     event RendererUpdated(address indexed previousRenderer, address indexed newRenderer);
+    /// @notice Emitted when the owner updates the on-chain render colors.
+    /// @param outlineColor The new card outline hex color.
+    /// @param backgroundColor The new card background hex color.
+    /// @param nonCryptoSymbolColor The new non-crypto symbol hex color.
     event RenderColorsUpdated(string outlineColor, string backgroundColor, string nonCryptoSymbolColor);
 
     // -------------------------------------------------------------------------
@@ -92,6 +113,7 @@ contract DegenerusDeityPass {
     mapping(address => uint256) private _balances;
 
     IDegenerusVaultOwner private constant vault = IDegenerusVaultOwner(ContractAddresses.VAULT);
+    /// @notice The optional external renderer contract (address(0) uses the internal renderer).
     address public renderer;
 
     uint16 private constant ICON_VB = 512;
@@ -145,7 +167,9 @@ contract DegenerusDeityPass {
     // ERC721 Metadata
     // -------------------------------------------------------------------------
 
+    /// @notice The collection name.
     function name() external pure returns (string memory) { return "Degenerus Deity Pass"; }
+    /// @notice The collection symbol.
     function symbol() external pure returns (string memory) { return "DEITY"; }
 
     /// @notice Set optional external renderer. Set to address(0) to disable.
@@ -453,6 +477,7 @@ contract DegenerusDeityPass {
     // ERC165
     // -------------------------------------------------------------------------
 
+    /// @notice ERC165 interface support check (IERC721, IERC721Metadata, IERC165).
     function supportsInterface(bytes4 id) external pure returns (bool) {
         return id == 0x80ac58cd  // IERC721
             || id == 0x5b5e139f  // IERC721Metadata
@@ -463,21 +488,26 @@ contract DegenerusDeityPass {
     // ERC721 Views
     // -------------------------------------------------------------------------
 
+    /// @notice ERC721 balance of `account` (reverts on the zero address).
     function balanceOf(address account) external view returns (uint256) {
         if (account == address(0)) revert ZeroAddress();
         return _balances[account];
     }
 
+    /// @notice ERC721 owner of `tokenId` (reverts if it does not exist).
     function ownerOf(uint256 tokenId) external view returns (address ownerAddr) {
         ownerAddr = _owners[tokenId];
         if (ownerAddr == address(0)) revert InvalidToken();
     }
 
+    /// @notice Always returns address(0) — a soulbound token has no approvals to report
+    ///         (reverts if `tokenId` does not exist).
     function getApproved(uint256 tokenId) external view returns (address) {
         if (_owners[tokenId] == address(0)) revert InvalidToken();
         return address(0);
     }
 
+    /// @notice Always false — soulbound tokens have no operator approvals.
     function isApprovedForAll(address, address) external pure returns (bool) {
         return false;
     }
@@ -486,22 +516,27 @@ contract DegenerusDeityPass {
     // ERC721 Mutations (soulbound — all transfers blocked)
     // -------------------------------------------------------------------------
 
+    /// @notice Disabled — always reverts Soulbound.
     function approve(address, uint256) external pure {
         revert Soulbound();
     }
 
+    /// @notice Disabled — always reverts Soulbound.
     function setApprovalForAll(address, bool) external pure {
         revert Soulbound();
     }
 
+    /// @notice Disabled — always reverts Soulbound.
     function transferFrom(address, address, uint256) external pure {
         revert Soulbound();
     }
 
+    /// @notice Disabled — always reverts Soulbound.
     function safeTransferFrom(address, address, uint256) external pure {
         revert Soulbound();
     }
 
+    /// @notice Disabled — always reverts Soulbound.
     function safeTransferFrom(address, address, uint256, bytes calldata) external pure {
         revert Soulbound();
     }

@@ -117,20 +117,25 @@ interface ISeatToken {
  *                   never a payee. The two-tier funding-skip exemption keys on
  *                   the un-spoofable pinned `ContractAddresses.VAULT` / `SDGNRS`
  *                   identity (on `player`, never `src`) — no settable exemption.
- * @custom:invariant NO error-swallowing valve anywhere: the funded process buy is
- *                   revert-free by construction; a class-B solvency underflow FAILS
- *                   LOUD (the `claimablePool -=` propagates, it is never swallowed).
- *                   There is no try-block / handler pair.
+ * @custom:invariant No error-swallowing valve on the funded delivery path: the funded
+ *                   process buy is revert-free by construction; a class-B solvency
+ *                   underflow FAILS LOUD (the `claimablePool -=` propagates, it is never
+ *                   swallowed). The one try/catch is `_crapsKeep`, which isolates the
+ *                   external craps table from the keeper crank and moves no value.
  */
 contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /*------------------------------------------------------------------
                               Custom errors
     ------------------------------------------------------------------*/
-    // error RngLocked() — inherited from DegenerusGameStorage. Reverts a
-    error SmiteeAfkingImmune(); // smite() target is an active afking subscriber and is immune to smite stacks.
-    error SmiteCeilingReached(); // smite() target already holds 10 or more curse points (5-stack ceiling); cannot add more smite stacks.
-    // subscribe (create / replace / cancel) attempted during the RNG freeze
-    // window: the subscriber set must be frozen across [request -> unlock].
+    // error RngLocked() — inherited from DegenerusGameStorage. Reverts a subscribe
+    // (create / replace / cancel) attempted during the RNG freeze window: the subscriber
+    // set must be frozen across [request -> unlock].
+    /// @notice Thrown when smite() targets an active afking subscriber, which is immune to
+    ///         smite stacks.
+    error SmiteeAfkingImmune();
+    /// @notice Thrown when smite() targets a player who already holds 10 or more curse
+    ///         points (5-stack ceiling) and cannot take on more smite stacks.
+    error SmiteCeilingReached();
     /// @dev Third-party subscribe(player, ...) where the caller is neither the
     ///      player nor a game operator the player approved; OR a non-zero,
     ///      non-self fundingSource that has not operator-approved the subscriber.
@@ -483,8 +488,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
 
         // msg.value > 0 credits the Game's afkingFunding ledger in-context (the Game
-        // holds the ETH; claimablePool moved in tandem so the invariant
-        // claimablePool == Σ claimableWinnings + Σ afkingFunding holds). It credits the
+        // holds the ETH; claimablePool moved in tandem so the paired delta keeps
+        // claimablePool >= Σ claimableWinnings + Σ afkingFunding — the pool also
+        // reserves unclaimed decimator rounds above those sums). It credits the
         // SAME bucket the draws debit: the resolved funding source — the non-self
         // `fundingSource` for an operator-funded sub (already approved just
         // above, so the funder consented to fund this subscriber), else the subscriber
@@ -1244,8 +1250,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      the warm Sub stamp is the box record (no cold ledger). boons OFF ⇒ `amount` = spend.
     /// @dev DOUBLE-DRAW GUARD: the lootbox path STAMPS only — the
     ///      single EV-cap RMW happens at OPEN, fed the FROZEN `evMultiplierBps`
-    ///      derived from the stamped `score`. The ticket path defers all EV to the
-    ///      MintModule buy (it computes the ticket's own activity score on the buy path).
+    ///      derived from the stamped `score`. The ticket path queues the paid quantity
+    ///      directly (`_queueEntriesScaled`, no century bonus) and accrues its own
+    ///      10%/15% FLIP buyer bonus into the Sub slot; no MintModule buy runs.
     /// @dev NO error-swallowing valve: a funded slice is
     ///      revert-free by construction; there is no pre-emptive lootbox skip;
     ///      rule-(1) unfunded eviction is a separate pre-buy decision
@@ -1303,7 +1310,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 _sdgnrsBonusLevel = currentLevel;
                 uint256 box = cl / 20;
                 // 500 ETH ceiling: bounds the ticket-drain work one box can queue. At a
-                // large claimable the box resolves (45% ticket-roll) into entries the
+                // large claimable the box resolves (40% ticket-roll) into entries the
                 // advance chain drains at a bounded per-call budget; an uncapped box could
                 // queue millions of entries and stall level commit past the liveness window.
                 // Well inside the uint24 milli-ETH Sub-stamp field (~16,777 ETH), so the
@@ -1738,7 +1745,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // opens it first. Entry budgets are always >= OPEN_ITEM_WEIGHT, so a call can
             // never wedge with zero progress.
             if (budgetUnits - unitsUsed < OPEN_ITEM_WEIGHT) break;
-            // Guaranteed-non-reverting under the entry-gate + the readiness pre-gate.
+            // Non-reverting on this module's own gates (entry gate + readiness pre-gate);
+            // a downstream craps pass delivery that fails on both lanes propagates by
+            // design, leaving the box unconsumed for retry.
             _openAfkingBox(player, sub, word);
             unchecked {
                 ++opened;
@@ -1753,10 +1762,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work this
-    ///         call (priority advance → box open) and pay ONE bounty. The OPEN category
-    ///         drains BOTH box types in one call — afking boxes first, then human boxes
-    ///         with the remaining budget — mirroring the unrewarded `openBoxes` valve, so a
-    ///         keeper is paid to clear either backlog.
+    ///         call (priority advance → box open → craps upkeep) and pay ONE bounty. The
+    ///         OPEN category walks the afking ring first; only a walk that opened nothing
+    ///         hands its remaining budget to the human-box sweep, and only a call that
+    ///         opened no box of either kind cranks the craps table with what is left.
     /// @dev ROUTER one-category STRUCTURAL early-return: the rngLock-aware O(1) predicates
     ///      pick the first category with work; the advance and open bounties can never
     ///      stack in one tx (advance — the expensive leg — never co-runs with an open). NO
@@ -1773,9 +1782,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      process STAGE runs inside `advanceGame` (the required path), so the
     ///      advance leg's `unit · 2 · mult` IS the process bounty, scaled by the
     ///      AdvanceModule's day-epoch stall `mult` (1/2/4/6). The OPEN leg pays
-    ///      the `OPEN_KNEE` work-scaled pro-rate on the COMBINED afking+human open
-    ///      count (boxes are bountied identically; pay for work done, farm-by-splitting
-    ///      resistant). `mult == 0` (the gameover advance path) pays no bounty.
+    ///      the `OPEN_KNEE` work-scaled pro-rate on knee credit: one per afking open
+    ///      (net of the forced-split carry), one per entry-weight of human walk units
+    ///      (pay for work done, farm-by-splitting resistant). The craps leg pays the
+    ///      flat CRAPS_KEEP_FLAT_FLIP. `mult == 0` (the gameover advance path) pays no
+    ///      bounty.
     function mineFlip() external {
         uint256 bountyEarned;
         // Category for the unified credit below. The two legs are a strict if/else, so
@@ -2079,7 +2090,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev ETH-denominated spend → FLIP base units at the buy-context ticket price —
     ///      the VALUATION BASIS for the lootbox-branch affiliate routing (affiliate +
     ///      quest rewards are FLIP flip-credit, never an ETH cut). A faithful
-    ///      copy of MintModule._ethToFlipValue; PRICE_COIN_UNIT (= 1000 ETH)
+    ///      copy of MintModule._ethToFlipValue; PRICE_COIN_UNIT (= 1000 FLIP in 18-decimal base units)
     ///      is the inherited Storage constant already used at the bounty unit. Pure —
     ///      no ETH moves, no state.
     function _ethToFlip(
@@ -2201,8 +2212,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @notice Cashout-curse SET (delegatecall target from the Game's claimWinnings): a stale
     ///         ghost-cashout adds a saturating +2 stack. Cheapest-first bails skip the SSTORE
     ///         for infra addresses (protects the sDGNRS redemption-snapshot score), gameOver, a
-    ///         non-stale claimant, deity/whale-pass holders, an already-capped counter, and an
-    ///         active afker. Net: +2 only on a stale cashout by a non-exempt, below-cap player.
+    ///         non-stale claimant, deity holders, active lazy/whale-pass holders, an
+    ///         already-capped counter, and an active afker. Net: +2 only on a stale
+    ///         cashout by a non-exempt, below-cap player.
     function maybeCurse(address player) external {
         if (
             player == ContractAddresses.VAULT ||
@@ -2267,5 +2279,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
 /// @dev Minimal deity-pass owner view for the smite gate (soulbound, tokenId = symbolId 0-31).
 interface IDegenerusDeityPassOwner {
+    /// @notice DegenerusDeityPass's ERC721 owner of `tokenId` (reverts if it does not exist).
     function ownerOf(uint256 tokenId) external view returns (address);
 }

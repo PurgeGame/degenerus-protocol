@@ -29,8 +29,8 @@ pragma solidity 0.8.34;
  * @notice Pure activity-score reward curves shared across the Degenerus contracts.
  * @dev All functions are internal and pure, so the compiler inlines them with no
  *      runtime call boundary. Centralizing the math keeps the decimator multiplier and
- *      bucket ladder identical between FLIP and the decimator module, and the century
- *      bonus identical between the mint and afking paths — one source of truth.
+ *      bucket ladder identical between FLIP and the decimator module, and gives the
+ *      manual mint's century bonus one home — one source of truth.
  *
  *      Value-curve shape: a steep early ramp to vA at the seg-A knee K, a shallow middle
  *      leg to vB at ACTIVITY_SEG_B_KNEE_POINTS, then a long near-flat crawl to MAX at
@@ -85,7 +85,7 @@ library ActivityCurveLib {
     }
 
     // -------------------------------------------------------------------------
-    // Century mint/afking bonus (bps of base quantity; 10000 = 100%)
+    // Century mint bonus (bps of base quantity; 10000 = 100%)
     // -------------------------------------------------------------------------
 
     uint256 internal constant CENTURY_K_POINTS = 305; // seg-A knee
@@ -93,7 +93,7 @@ library ActivityCurveLib {
     uint256 internal constant CENTURY_VB_BPS = 9_800; // 98% at the seg-B knee
     uint256 internal constant CENTURY_MAX_BPS = 10_000; // 100% at the effective cap
 
-    /// @notice Century purchase/afking bonus as bps of the base quantity.
+    /// @notice Century purchase bonus as bps of the base quantity (manual mints only; afking deliveries skip it).
     /// @dev Caller computes bonusQty = baseQty * centuryBps(score) / CENTURY_MAX_BPS.
     function centuryBps(uint256 score) internal pure returns (uint256) {
         if (score <= CENTURY_K_POINTS) {
@@ -174,7 +174,9 @@ library ActivityCurveLib {
     uint16 internal constant BUCKET_T2 = 1_000;
 
     /// @notice Decimator bucket from an activity score, clamped up to `minBucket`.
+    /// @param score The activity score to bucket.
     /// @param minBucket Per-path floor (5 on normal levels, 2 on century/terminal).
+    /// @return bucket The decimator bucket (2-11, or `BUCKET_BASE` floored to `minBucket`).
     function decBucket(
         uint256 score,
         uint8 minBucket

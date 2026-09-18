@@ -290,6 +290,13 @@ contract DegenerusAffiliate {
     //                              CONSTRUCTOR
     // =====================================================================
 
+    /// @notice Wires the VAULT and sDGNRS default codes as each other's referrer, then
+    ///         registers the deploy-time bootstrap affiliate codes and referrals.
+    /// @param bootstrapOwners Owners of the bootstrap affiliate codes to create.
+    /// @param bootstrapCodes Bootstrap affiliate codes, one per owner.
+    /// @param bootstrapKickbacks Kickback percentage per bootstrap code.
+    /// @param bootstrapPlayers Players to register a bootstrap referral for.
+    /// @param bootstrapReferralCodes Referral code each bootstrap player is registered under.
     constructor(
         address[] memory bootstrapOwners,
         bytes32[] memory bootstrapCodes,
@@ -369,8 +376,8 @@ contract DegenerusAffiliate {
      * - code_ != bytes32(0) (reserved for "no code")
      * - code_ != REF_CODE_LOCKED (reserved sentinel value)
      * - code_ not in address-derived range (uint256(code_) <= type(uint160).max)
-     * - code_ not already taken
      * - kickbackPct <= 25 (max 25% kickback)
+     * - code_ not already taken
      *
      * @param code_ The affiliate code to claim (typically a short string cast to bytes32).
      * @param kickbackPct Percentage of rewards returned to referred players (0-25).
@@ -408,8 +415,9 @@ contract DegenerusAffiliate {
     /**
      * @notice Get the referrer address for a player.
      * @dev Never returns address(0): resolves to the VAULT when the player has no valid
-     *      referrer (code unset, locked, vault-coded, or its owner unresolvable), so
-     *      referral chains always terminate at the VAULT.
+     *      referrer (code unset, locked, vault-coded, or its owner unresolvable). Chains are
+     *      not acyclic (VAULT and SDGNRS refer each other; mutual player referrals are
+     *      allowed); payouts walk at most two upline hops from the direct referrer.
      * @param player The player to look up.
      * @return The referrer's address (the VAULT when the player has no real referrer).
      */
@@ -446,7 +454,7 @@ contract DegenerusAffiliate {
      * +--------------------------------------------------------------------+
      *
      * REWARD RATES:
-     * - Fresh ETH (levels 0-3): 25% (REWARD_SCALE_FRESH_L1_3_BPS = 2500)
+     * - Fresh ETH (levels 1-3): 25% (REWARD_SCALE_FRESH_L1_3_BPS = 2500)
      * - Fresh ETH (levels 4+): 20% (REWARD_SCALE_FRESH_L4P_BPS = 2000)
      * - Recycled ETH (all levels): 5% (REWARD_SCALE_RECYCLED_BPS = 500)
      *
@@ -540,12 +548,12 @@ contract DegenerusAffiliate {
         mapping(address => uint256) storage earned = affiliateCoinEarned[lvl];
 
         // Apply reward percentage based on ETH type and level.
-        // - Fresh ETH (levels 0-3): 25%
+        // - Fresh ETH (levels 1-3, paid at level + 1): 25%
         // - Fresh ETH (levels 4+): 20%
         // - Recycled ETH: 5%
         uint256 rewardScaleBps;
         if (isFreshEth) {
-            // Fresh ETH: 25% for first 4 levels (0-3), 20% for levels 4+
+            // Fresh ETH: 25% at levels 1-3, 20% at levels 4+ (lvl is the paying level + 1)
             rewardScaleBps = lvl <= 3
                 ? REWARD_SCALE_FRESH_L1_3_BPS
                 : REWARD_SCALE_FRESH_L4P_BPS;
@@ -889,7 +897,8 @@ contract DegenerusAffiliate {
         uint256 u2Share = ((sumB - skipU2) * 5) / 100;
         uint256 aShare = sumB - u1Share - u2Share;
 
-        // Leaderboard credit to A at the current level (sumB scaled ×1e18 to the base-unit maps).
+        // Leaderboard credit to A at the next level (level() + 1, the level the subs' tickets buy
+        // into; sumB scaled ×1e18 to the base-unit maps).
         uint24 lvl = afkingDrain.level() + 1;
         uint256 scaled = sumB * 1 ether;
         mapping(address => uint256) storage earned = affiliateCoinEarned[lvl];

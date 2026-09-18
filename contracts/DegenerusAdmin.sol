@@ -135,7 +135,7 @@ interface IDegenerusGameAdmin {
         bytes32 keyHash_
     ) external;
 
-    /// @notice Swap game-held ETH for stETH via external DEX, sending stETH to recipient.
+    /// @notice Exchange caller-supplied ETH 1:1 for game-held stETH, sending the stETH to recipient.
     /// @param recipient Address to receive stETH.
     /// @param amount Amount of ETH to swap.
     function adminSwapEthForStEth(
@@ -193,6 +193,8 @@ interface ICoinflipLinkReward {
 
 /// @dev Chainlink price feed interface (AggregatorV3).
 interface IAggregatorV3 {
+    /// @notice The feed's latest round data (price in `answer`), as implemented by the
+    ///         Chainlink LINK/ETH aggregator.
     function latestRoundData()
         external
         view
@@ -203,18 +205,23 @@ interface IAggregatorV3 {
             uint256 updatedAt,
             uint80 answeredInRound
         );
+    /// @notice The feed's answer decimals, as implemented by the Chainlink LINK/ETH aggregator.
     function decimals() external view returns (uint8);
 }
 
 /// @dev Vault interface for ownership check.
 interface IDegenerusVaultOwner {
+    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
     function isVaultOwner(address account) external view returns (bool);
 }
 
 /// @dev sDGNRS interface for governance voting weight and voting supply.
 interface IsDGNRSVotes {
+    /// @notice The total sDGNRS supply, as implemented by sDGNRS.
     function totalSupply() external view returns (uint256);
+    /// @notice An address's sDGNRS balance, as implemented by sDGNRS.
     function balanceOf(address account) external view returns (uint256);
+    /// @notice The circulating sDGNRS eligible to vote, as implemented by sDGNRS.
     function votingSupply() external view returns (uint256);
 }
 
@@ -254,52 +261,104 @@ contract DegenerusAdmin {
     // CUSTOM ERRORS
     // =========================================================================
 
+    /// @notice Thrown when the caller is not the DGVE-majority vault owner.
     error NotOwner();
+    /// @notice Thrown when the caller is not the address a function is restricted to
+    ///         (the game contract, the vault owner, or the LINK token, depending on the call).
     error NotAuthorized();
+    /// @notice Thrown when a proposed coordinator or key hash is the zero value.
     error ZeroAddress();
+    /// @notice Thrown when a coordinator-swap or feed-swap proposal is filed before its
+    ///         path's minimum stall duration has elapsed.
     error NotStalled();
+    /// @notice Thrown when a coordinator swap is proposed before a VRF subscription is wired.
     error NotWired();
+    /// @notice Thrown when a LINK donation arrives with no VRF subscription wired.
     error NoSubscription();
+    /// @notice Thrown when a swap, donation, or LINK forward amount is zero, or the forward
+    ///         itself fails.
     error InvalidAmount();
-    error SubscriptionActive(); // Named pair is the live subscription, not a retired one.
-    error TransferFailed(); // A LINK transfer returned false.
+    /// @notice Thrown when a recovery call names the live coordinator/subscription pair
+    ///         instead of a retired one.
+    error SubscriptionActive();
+    /// @notice Thrown when a LINK transfer returns false.
+    error TransferFailed();
+    /// @notice Thrown when a call that requires the game still running is made after game over.
     error GameOver();
+    /// @notice Thrown when a feed-swap proposal is filed while the price feed is still healthy.
     error FeedHealthy();
+    /// @notice Thrown when a proposed price feed's decimals do not match the expected feed decimals.
     error InvalidFeedDecimals();
+    /// @notice Thrown when a vote or execution targets a proposal that is not active.
     error ProposalNotActive();
+    /// @notice Thrown when a vote or execution targets a proposal past its lifetime.
     error ProposalExpired();
+    /// @notice Thrown when a community-path proposer's voting sDGNRS stake is below the
+    ///         required minimum.
     error InsufficientStake();
+    /// @notice Thrown when the proposer (or, on the admin path, the vault) already has an
+    ///         active proposal.
     error AlreadyHasActiveProposal();
 
     // =========================================================================
     // EVENTS
     // =========================================================================
 
+    /// @notice Emitted when the wired VRF coordinator and subscription are set or swapped.
+    /// @param coordinator The coordinator now in effect.
+    /// @param subId The subscription now in effect.
     event CoordinatorUpdated(
         address indexed coordinator,
         uint256 indexed subId
     );
+    /// @notice Emitted when the game contract is registered as a consumer on the VRF subscription.
+    /// @param consumer The registered consumer address.
     event ConsumerAdded(address indexed consumer);
+    /// @notice Emitted when a new VRF subscription is created.
+    /// @param subId The created subscription ID.
     event SubscriptionCreated(uint256 indexed subId);
+    /// @notice Emitted when a VRF subscription is cancelled.
+    /// @param subId The cancelled subscription ID.
+    /// @param to Address the coordinator refunds any remaining subscription balance to.
     event SubscriptionCancelled(uint256 indexed subId, address indexed to);
 
-    /// @dev Emitted when a retired subscription's LINK is routed onward. `amount` is the LINK
-    ///      delivered to `to`: the live subscription while the game runs, the vault after game
-    ///      over. A failed forward reverts the call, so the event never reports zero.
+    /// @notice Emitted when a retired subscription's LINK is routed onward. A failed forward
+    ///         reverts the call, so the event never reports zero.
+    /// @param subId The retired subscription the LINK was recovered from.
+    /// @param to Where the recovered LINK was routed: the live subscription while the game
+    ///        runs, the vault after game over.
+    /// @param amount LINK amount routed.
     event SubscriptionRecovered(
         uint256 indexed subId,
         address indexed to,
         uint256 amount
     );
+    /// @notice Emitted when the VRF subscription is cancelled and its LINK swept at game over.
+    /// @param subId The subscription cancelled.
+    /// @param to The vault address the swept LINK is sent to.
+    /// @param sweptAmount LINK balance forwarded (0 if there was nothing to sweep or the
+    ///        forward failed).
     event SubscriptionShutdown(
         uint256 indexed subId,
         address indexed to,
         uint256 sweptAmount
     );
+    /// @notice Emitted when a LINK donation credits a donor's flip stake.
+    /// @param player The donor credited.
+    /// @param amount FLIP-denominated flip stake credited.
     event LinkCreditRecorded(address indexed player, uint256 amount);
+    /// @notice Emitted when the LINK/ETH price feed address is set or swapped.
+    /// @param oldFeed Previous feed address (zero if none was set).
+    /// @param newFeed New feed address now in effect.
     event LinkEthFeedUpdated(address indexed oldFeed, address indexed newFeed);
 
     // Governance events
+    /// @notice Emitted when a VRF coordinator-swap proposal is filed.
+    /// @param proposalId The new proposal's ID.
+    /// @param proposer The address that filed the proposal.
+    /// @param coordinator The proposed VRF coordinator.
+    /// @param keyHash The proposed VRF key hash.
+    /// @param path The proposal's path (Admin or Community).
     event ProposalCreated(
         uint256 indexed proposalId,
         address indexed proposer,
@@ -307,17 +366,29 @@ contract DegenerusAdmin {
         bytes32 keyHash,
         ProposalPath path
     );
+    /// @notice Emitted when a vote is cast on a coordinator-swap proposal.
+    /// @param proposalId The proposal voted on.
+    /// @param voter The address casting the vote.
+    /// @param approve True to approve, false to reject.
+    /// @param weight The voter's sDGNRS weight (wei) applied to the vote.
     event VoteCast(
         uint256 indexed proposalId,
         address indexed voter,
         bool approve,
         uint256 weight
     );
+    /// @notice Emitted when a coordinator-swap proposal passes and executes.
+    /// @param proposalId The executed proposal's ID.
+    /// @param coordinator The new VRF coordinator now wired.
+    /// @param newSubId The new VRF subscription created for it.
     event ProposalExecuted(
         uint256 indexed proposalId,
         address coordinator,
         uint256 newSubId
     );
+    /// @notice Emitted when a coordinator-swap proposal is killed — voted down, or found moot
+    ///         because VRF recovered before it could execute.
+    /// @param proposalId The killed proposal's ID.
     event ProposalKilled(uint256 indexed proposalId);
 
     // =========================================================================
@@ -432,19 +503,34 @@ contract DegenerusAdmin {
     uint256 private feedValidFromId;
 
     // Feed governance events
+    /// @notice Emitted when a price-feed-swap proposal is filed.
+    /// @param proposalId The new proposal's ID.
+    /// @param proposer The address that filed the proposal.
+    /// @param feed The proposed price feed (zero to disable).
+    /// @param path The proposal's path (Admin or Community).
     event FeedProposalCreated(
         uint256 indexed proposalId,
         address indexed proposer,
         address feed,
         ProposalPath path
     );
+    /// @notice Emitted when a vote is cast on a price-feed-swap proposal.
+    /// @param proposalId The proposal voted on.
+    /// @param voter The address casting the vote.
+    /// @param approve True to approve, false to reject.
+    /// @param weight The voter's sDGNRS weight (wei) applied to the vote.
     event FeedVoteCast(
         uint256 indexed proposalId,
         address indexed voter,
         bool approve,
         uint256 weight
     );
+    /// @notice Emitted when a price-feed-swap proposal passes and executes.
+    /// @param proposalId The executed proposal's ID.
+    /// @param feed The new price feed now in effect (zero if disabled).
     event FeedProposalExecuted(uint256 indexed proposalId, address feed);
+    /// @notice Emitted when a price-feed-swap proposal is killed by being voted down.
+    /// @param proposalId The killed proposal's ID.
     event FeedProposalKilled(uint256 indexed proposalId);
 
     // =========================================================================
@@ -518,6 +604,8 @@ contract DegenerusAdmin {
     // CONSTRUCTOR
     // =========================================================================
 
+    /// @notice Creates the VRF subscription, wires the game as its consumer, and wires the
+    ///         coordinator config into the game contract.
     constructor() {
         uint256 subId = vrfCoordinator.createSubscription();
 
@@ -658,7 +746,8 @@ contract DegenerusAdmin {
 
     /// @notice Vote on an active feed swap proposal.
     /// @dev Votes are changeable. After recording, checks execute/kill conditions.
-    ///      Reverts if feed has recovered — auto-cancellation.
+    ///      Reverts while the feed reads healthy; the proposal is left untouched and can resume if
+    ///      the feed degrades again before its lifetime expires.
     /// @param proposalId ID of the feed proposal to vote on.
     /// @param approve True to approve, false to reject.
     /// @dev Zero-weight calls (no sDGNRS) skip vote recording and just check
@@ -760,8 +849,8 @@ contract DegenerusAdmin {
     // LIQUIDITY MANAGEMENT
     // =========================================================================
 
-    /// @notice Swap game-held ETH for stETH via external DEX, sending stETH to caller.
-    /// @dev Forwards msg.value as the ETH amount to swap.
+    /// @notice Exchange the owner's msg.value 1:1 for game-held stETH, sent to the caller.
+    /// @dev Forwards msg.value; the game keeps the ETH and transfers the same nominal stETH.
     function swapGameEthForStEth() external payable onlyOwner {
         if (msg.value == 0) revert InvalidAmount();
         gameAdmin.adminSwapEthForStEth{value: msg.value}(msg.sender, msg.value);

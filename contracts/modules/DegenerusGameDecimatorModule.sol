@@ -370,6 +370,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Anyone may crank any winner's claim; payout always credits `player`, never the
     ///      caller. Resolution-into-claimable only (no ETH leaves here). Whole Whale Pass
     ///      units in a large lootbox portion materialize immediately on this single path.
+    /// @param player The winner whose claim this resolves (payout always credits them).
     /// @param lvl Level to claim from.
     /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
     /// @custom:reverts DecAlreadyClaimed When caller has already claimed for this level.
@@ -797,6 +798,17 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // Terminal Decimator Events
     // -------------------------------------------------------------------------
 
+    /// @notice Emitted when a terminal decimator burn is recorded.
+    /// @param player The burner.
+    /// @param lvl Current game level.
+    /// @param bucket The player's activity bucket for this level (fixed at the first burn).
+    /// @param subBucket The player's tie-break subbucket within `bucket` (fixed at the first burn).
+    /// @param effectiveAmount This burn's amount after the activity multiplier and the
+    ///        per-level cap.
+    /// @param weightedAmount The delta this burn added to the player's stored weighted-burn
+    ///        aggregate, after the time multiplier and uint88 saturation.
+    /// @param timeMultBps The time multiplier applied (bps), derived from days remaining on
+    ///        the death clock.
     event TerminalDecBurnRecorded(
         address indexed player,
         uint24 indexed lvl,
@@ -836,10 +848,23 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     // Terminal Decimator Errors
     // -------------------------------------------------------------------------
 
+    /// @notice Thrown when there is no active terminal decimator claim round: at claim,
+    ///         when no round has resolved (`lastTerminalDecClaimRound.lvl == 0`); at boost,
+    ///         when the death clock has already triggered game-over liveness.
     error TerminalDecNotActive();
+    /// @notice Thrown at claim when the caller did not win the terminal decimator round:
+    ///         no stale-cleared entry at the resolved level, a subbucket that did not win,
+    ///         a zero total burn, or a zero computed payout.
     error TerminalDecNotWinner();
+    /// @notice Thrown when `recordTerminalDecBurn` is called with 7 or fewer days remaining
+    ///         on the death clock (burns are blocked in the final cooldown window).
     error TerminalDecDeadlinePassed();
+    /// @notice Thrown when `boostTerminalDecimator` cannot apply: days remaining on the death
+    ///         clock is not yet zero, the caller has no committed entry at the current level,
+    ///         the caller's effective quest streak is zero, or the entry has no weighted burn.
     error TerminalDecNotBoostable();
+    /// @notice Thrown when `boostTerminalDecimator` is called on an entry already boosted
+    ///         this level (one-time per level).
     error TerminalDecAlreadyBoosted();
 
     // -------------------------------------------------------------------------
@@ -1130,6 +1155,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Validate and consume terminal dec claim.
+    /// @param player The claimant.
     /// @return amountWei Pro-rata payout amount.
     /// @return lvl The resolved terminal decimator level (for the claim event).
     function _consumeTerminalDecClaim(

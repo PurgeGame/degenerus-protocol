@@ -36,6 +36,7 @@ import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 /// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
 interface IWwxrpMintPrize {
+    /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
     function mintPrize(address to, uint256 amount) external;
 }
 
@@ -45,6 +46,7 @@ interface IWwxrpMintPrize {
 ///      ignoring the pair. Called BARE — no stipend, no try/catch — because `creditPasses` is
 ///      revert-free for the Game by contract, and this call rides the daily advance.
 interface ICrapsCompPassCredit {
+    /// @notice Bank a rolled pass award as day-pass credits, revert-free (CrapsBattle, game-only).
     function creditPasses(address player, uint32 normal, uint32 high)
         external
         returns (uint32 normalCredited);
@@ -230,7 +232,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Small-lootbox threshold for the jackpot lootbox portion split.
     uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
 
-    /// @dev Golden-ticket consolation when the bonus board shows 0 golds: 100 WWXRP.
+    /// @dev Golden-ticket consolation when the armed ticket's resolving main board shows 0 golds: 100 WWXRP.
     uint256 private constant GOLDEN_TICKET_WWXRP = 100 ether;
 
     /// @dev Golden-ticket routes, stamped on GoldenTicketWin. BOARD is the armed
@@ -859,10 +861,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      Routes through the shared ticket distributor so the budget→ticket
     ///      conversion (`_budgetToEntries`, the same 4-entries-per-ticket basis
     ///      every other jackpot path uses) and the winner cap match the daily and
-    ///      purchase-phase jackpots: `cap = min(entries, 100)` gives every drawn
-    ///      winner >=1 unit (replacing the fixed-100 split that floored sub-100-ticket
-    ///      budgets to zero), with the exact base+remainder rotation keeping the award
-    ///      fully backed. Winners drawn from `lvlTraitEntry[lvl]`, tickets queued at
+    ///      purchase-phase jackpots: `cap = min(wholeTickets, 100)` gives every drawn
+    ///      winner at least one whole ticket (replacing the fixed-100 split that floored
+    ///      sub-100-ticket budgets to zero); every winner takes the same `tickets / cap`
+    ///      tickets and the `tickets % cap` leftover is not queued, while the bucket
+    ///      winner counts rotate their remainder. Winners drawn from `lvlTraitEntry[lvl]`, tickets queued at
     ///      `lvl` (= outer level + 1). The full 3% budget always moves future→next.
     function _runEarlyBirdTicketJackpot(uint24 lvl, uint256 rngWord) private {
         (uint128 nextBal, uint128 futureBal) = _getPrizePools();
@@ -976,6 +979,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Distributes pool-backed tickets to trait winners. The sole caller folds the budget's
     ///      full nextPrizePool credit into its own packed-slot write, so this helper only queues the
     ///      tickets that credit backs.
+    /// @param lvl Level at which the tickets are queued (the current purchase level).
+    /// @param winningTraitsPacked Packed winning trait IDs for the 4 buckets.
+    /// @param budget ETH budget backing the tickets.
+    /// @param randWord VRF entropy for winner selection.
     /// @param ticketConversionBps Fraction of budget used for ticket calculation (10000 = 100%).
     ///        The caller moves the full budget to nextPrizePool regardless of this parameter.
     function _distributePoolBackedTickets(
@@ -1005,6 +1012,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Distributes ticket rewards to winners drawn from winning trait pools.
+    /// @param sourceLvl Level whose ticket queue supplies candidate winners.
+    /// @param queueLvl Level at which the awarded tickets are queued.
+    /// @param winningTraitsPacked Packed winning trait IDs for the 4 buckets.
+    /// @param entries Total entries backing this draw (converted to whole tickets).
+    /// @param entropy RNG state driving winner selection.
+    /// @param maxWinners Cap on the draw's total winner count (lowered to the whole tickets the
+    ///        budget covers, then split across the active buckets).
+    /// @param saltBase Base salt for per-bucket entropy derivation.
     /// @param excludeSolo True on main-board legs, where the solo quadrant already
     ///        pays the day's headline ETH prize to a single winner: that quadrant is
     ///        dropped from the ticket draw so matching it means the big prize or
@@ -1159,6 +1174,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Computes bucket winner counts for active trait buckets (including virtual deity entries).
     ///      Also returns each trait's bucket length and deity address so the
     ///      distribution loop reuses them instead of re-reading storage.
+    /// @param lvl Level whose trait entry queues are counted.
+    /// @param traitIds Winning trait IDs for the 4 buckets.
+    /// @param maxWinners Total winner count to split across the active buckets (base share each,
+    ///        remainder rotated from an entropy-picked start).
+    /// @param entropy RNG state for rotation and scaling.
     /// @param excludeIdx Bucket dropped from the draw, or `_NO_QUADRANT_EXCLUDE`.
     ///        Dropping is skipped when it would leave no active bucket, so the
     ///        award is never stranded against backing already moved to nextPrizePool.
@@ -1378,20 +1398,22 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @notice Pay the golden-ticket grand to a foil pack holding two all-gold
     ///         tickets — the second route into the same top rung the armed board pays.
-    /// @dev Delegatecall-only entry, invoked by the foil gold claim
-    ///      (DegenerusGameFoilPackModule._settleGoldenTicket) so both routes share ONE
-    ///      grand definition and can never drift. Runs in the Game's storage context:
-    ///      the guard rejects a direct call on the deployed module, and no facade stub
-    ///      exposes the selector, so the foil gold claim is the only reachable caller.
+    /// @dev Delegatecall-only entry, invoked by the foil drain
+    ///      (DegenerusGameFoilPackModule._pushFoilGrand, inside advanceGame as the pack's
+    ///      sixteen entries are filed) so both routes share ONE grand definition and can
+    ///      never drift. Runs in the Game's storage context: the guard rejects a direct
+    ///      call on the deployed module, and no facade stub exposes the selector, so the
+    ///      foil drain is the only reachable caller — the grand lands at advance time,
+    ///      never on a player's claim.
     ///      The armed-board state is untouched — a foil grand neither arms, resolves,
     ///      nor consumes an armed board, so a pending arm still resolves on its own
     ///      next draw.
     /// @param winner The foil buyer whose pack rolled the two all-gold tickets.
     /// @param lvl The pack's cycle level (the flip-credit rate's basis).
-    /// @param golds The pack's total gold quadrants — 8, 12 or 16, since the grand
-    ///        fires on two, three or four all-gold tickets. Stamped as the event's
-    ///        goldCount; always above the board route's 0-4 range, so the two routes
-    ///        never read alike even on the count alone.
+    /// @param golds The pack's total gold quadrants — 8 to 16, since the grand fires on
+    ///        two or more all-gold tickets and the remaining tickets hold 0-3 golds each.
+    ///        Stamped as the event's goldCount; always above the board route's 0-4 range,
+    ///        so the two routes never read alike even on the count alone.
     function payGoldenTicketGrand(
         address winner,
         uint24 lvl,
@@ -1423,6 +1445,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param isJackpotPhase True during jackpot phase (solo bucket gets whale pass).
     /// @param armGold True when the main board rolled 4 golds — the solo bucket
     ///        winner becomes the armed golden-ticket candidate for the next draw.
+    /// @param unit Per-winner rounding unit; non-solo bucket shares round down to a
+    ///        multiple of unit * winnerCount (0 skips rounding).
     /// @return paidEth Total ETH actually paid out in this call.
     function _processDailyEth(
         uint24 lvl,
@@ -1702,10 +1726,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         } else {
             // Grand: 25% of futurePrizePool in ETH; the rest of the headline owed
             // 75% in half-passes / 25% in flip credit. The headline counts the
-            // three prize pools plus the segregated yield accumulator — all
-            // written only by the advance path. Claimable is player money
-            // already owed, and the pending accumulators move with in-window
-            // purchases, so neither may size a VRF-derived award.
+            // three prize pools plus the segregated yield accumulator — all frozen to the
+            // advance path for the VRF window this runs in (in-window purchases land in the
+            // pending accumulators). Claimable is player money already owed, and the pending
+            // accumulators move with in-window purchases, so neither may size a VRF-derived award.
             ethAward = futBal / 4;
             uint256 headline = _getCurrentPrizePool() +
                 nextBal +
@@ -2001,7 +2025,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @notice Pays daily FLIP jackpot to random ticket holders.
-    /// @dev Runs every day in its own transaction. Awards 0.25% of prize pool target in FLIP.
+    /// @dev Runs every day in its own transaction. Awards 0.25% of the previous level's
+    ///      recorded prize pool (`levelPrizePool[lvl - 1]`, the ratchet target before any
+    ///      century floor), converted to FLIP at the current level's ticket price.
     ///      75% goes to near-future trait-matched winners in [minLevel, maxLevel].
     ///      25% goes to far-future ticketQueue holders ([lvl+5, lvl+99]).
     /// @param lvl Current level.
@@ -2019,6 +2045,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param lvl Level keying the prize pool snapshot for the budget.
     /// @param currLevel Current game level (storage `level` at call time), used
     ///        for FLIP pricing.
+    /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
+    /// @param maxLevel Maximum target level for near-future coin distribution (inclusive).
+    /// @param bonusTraitsPacked Packed winning trait IDs for the near-future draw.
+    /// @param randWord VRF entropy for winner selection.
     function _runFlipJackpot(
         uint24 lvl,
         uint24 currLevel,
@@ -2051,6 +2081,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      jackpots replace the ETH jackpot. First coin call (the "main") uses
     ///      bonus-derived traits from randWord. Second coin call uses traits from
     ///      a salted randWord (keccak256(randWord, BONUS_TRAITS_TAG)).
+    /// @param randWord VRF entropy for both trait rolls.
     /// @param bonusTargetLevel Target level for the first (main-equivalent) coin distribution.
     function emitDailyWinningTraits(uint24, uint256 randWord, uint24 bonusTargetLevel) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
@@ -2473,7 +2504,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @dev Calculate 0.25% of prize pool target in FLIP.
+    /// @dev Calculate 0.25% of the previous level's recorded prize pool (`levelPrizePool[lvl - 1]`,
+    ///      the ratchet target before any century floor), converted to FLIP at the current
+    ///      level's ticket price.
     /// @param lvl Level keying the prize pool snapshot (purchase level on the
     ///        payDailyFlipJackpot path, where it differs from the current level).
     /// @param currLevel Current game level, used for FLIP pricing.
@@ -2731,17 +2764,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
      * @dev Selects target level based on probability, then Bernoulli-collapses
      *      the scaled ticket count to a whole-ticket count before queueing.
      *      Uses actual game pricing for the selected target level.
-     *      Entropy bit allocation in the per-roll keccak word `entropy`
-     *      (evolved via EntropyLib.hash2 on entry, so every bit — including
-     *      the low bits read below — is full-diffusion keccak output):
-     *        bits[0..12]     path/level selection — `entropy % 100` range roll,
-     *                        `(entropy / 100) % 4` near offset,
-     *                        `(entropy / 100) % 46` far offset
-     *        bits[96..127]   jackpotTicketRoundUp % 100 — Bernoulli whole-ticket
-     *                        collapse sub-roll (uint32 window, modulo bias ~2e-8)
-     *      The two consumption windows are separated by 80+ bits of the same
-     *      256-bit keccak word, so the round-up sub-roll is statistically
-     *      independent of the path/level selection.
+     *      Entropy use in the per-roll keccak word `entropy` (evolved via
+     *      EntropyLib.hash2 on entry, so it is full-diffusion keccak output):
+     *        full word        path/level selection — `entropy % 100` range roll,
+     *                         `(entropy / 100) % 4` near offset,
+     *                         `(entropy / 100) % 46` far offset (modular reductions
+     *                         of the whole 256-bit value)
+     *        bits[96..127]    jackpotTicketRoundUp % 100 — Bernoulli whole-ticket
+     *                         collapse sub-roll (uint32 window, modulo bias ~2e-8)
+     *      The round-up slice is a 32-bit window of a word whose full-width residues
+     *      drive the path roll; with keccak diffusion the correlation between the two
+     *      is negligible.
      * @param winner Address to receive tickets.
      * @param amount ETH amount for this roll.
      * @param minTargetLevel Minimum target level (usually current level during SETUP phase).
@@ -2783,9 +2816,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // fractional part rounds up with probability frac/QTY_SCALE using
         // bits[96..127] of the per-roll entropy word — a uint32 window, wide enough
         // that the % QTY_SCALE modulo bias is negligible (~2e-8).
-        // Saturate at the uint32 ceiling instead of wrapping: an award above ~42.9M scaled
-        // whole-tickets in a single roll is only reachable at economically-impossible prize
-        // sizes; a graceful cap avoids a silent modular wrap to a tiny count.
+        // Saturate at the uint32 ceiling instead of wrapping: an award above 4,294,967,295
+        // scaled units (~42.9M whole tickets) in a single roll is only reachable at
+        // economically-impossible prize sizes; a graceful cap avoids a silent modular wrap
+        // to a tiny count.
         uint32 scaledWholeTickets = wholeTicketsScaled > type(uint32).max
             ? type(uint32).max
             : uint32(wholeTicketsScaled);

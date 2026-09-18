@@ -209,7 +209,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Epoch counter + bafTop board length per BAF bracket level.
     mapping(uint24 => BafLevel) internal bafLevel;
 
-    /// @notice Day index of the most recent BAF jackpot resolution (any bracket).
+    /// @notice Day index of the most recent BAF resolution or skip (any bracket).
     uint24 internal lastBafResolvedDay;
 
     constructor() {
@@ -776,7 +776,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |                         VIEW FUNCTIONS                               |
       +======================================================================+*/
 
-    /// @notice Day index of the most recent BAF jackpot resolution.
+    /// @notice Day index of the most recent BAF resolution or skip.
     function getLastBafResolvedDay() external view returns (uint24) {
         return lastBafResolvedDay;
     }

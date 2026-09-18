@@ -104,18 +104,22 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 /// @dev Minimal Game surface consumed by the daily draw (views only; the
 ///      draw never mutates game state).
 interface IDrawGame {
+    /// @notice DegenerusGame's recorded VRF word for `day` (0 if none recorded yet).
     function rngWordForDay(uint24 day) external view returns (uint256);
 
+    /// @notice DegenerusGame's aggregate activity-score read for `player`.
     function playerActivityScore(
         address player
     ) external view returns (uint256);
 
+    /// @notice DegenerusGame's current level.
     function level() external view returns (uint24);
 }
 
 /// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized
 ///      flip creditor alongside game/quests/affiliate/admin/sDGNRS).
 interface IDrawCoinflip {
+    /// @notice Coinflip's credit of `amount` FLIP stake to `player`.
     function creditFlip(address player, uint256 amount) external;
 }
 
@@ -329,8 +333,8 @@ contract WWXRP {
     /// @dev Vault contract address authorized to mint from uncirculating reserve
     address internal constant MINTER_VAULT = ContractAddresses.VAULT;
 
-    /// @dev Game views consumed by the daily draw (day index, daily word,
-    ///      activity score, VRF freshness, game-over flag)
+    /// @dev Game views consumed by the draws: the day's RNG word, activity score
+    ///      and level (day indexing is computed locally)
     IDrawGame private constant game = IDrawGame(ContractAddresses.GAME);
 
     /// @dev Coinflip contract credited with draw prizes (FLIP-denominated stake)
@@ -870,7 +874,8 @@ contract WWXRP {
     }
 
     /// @notice Locate the winning entry for a prize day by binary search over
-    ///         the strictly increasing cumulative endpoints. View-only helper
+    ///         the nondecreasing cumulative endpoints (saturated entries are
+    ///         zero-width and can never win). View-only helper
     ///         for claim callers/indexers; never used in state-changing paths.
     /// @return found True when the day has a prize and a winning entry.
     /// @return entryIndex Index to pass to claim().

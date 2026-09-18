@@ -56,7 +56,7 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
  * Quest Lifecycle
  * -----------------------------------------------------------------------------
  * 1. GAME (AdvanceModule) calls `rollDailyQuest()` with VRF entropy at day transition
- * 2. Slot 0 is always a fixed "deposit new ETH" quest (mint with ETH)
+ * 2. Slot 0 is always the fixed MINT_ETH quest: ETH-denominated ticket/lootbox spend, fresh or recycled
  * 3. Slot 1 is a weighted-random quest from the remaining quest types
  * 4. Player actions trigger handle* functions (handlePurchase, handleFlip, etc.)
  * 5. Progress accumulates until target is met; each completion (primary, secondary, level) credits streak
@@ -218,7 +218,9 @@ contract DegenerusQuests is IDegenerusQuests {
     uint256 private constant QUEST_RANDOM_REWARD = 100 ether;
 
     /// @dev Milestone streak-shield grant: +1 shield each time the quest streak reaches a
-    ///      new multiple of this interval (100, 200, …). Idempotent via shieldCenturyHighWater.
+    ///      new multiple of this interval (100, 200, …). shieldCenturyHighWater is a uint8
+    ///      and saturates at century 255 (streak 25,500); past that bound it can refill
+    ///      already-consumed shields.
     uint16 private constant CENTURY_SHIELD_INTERVAL = 100;
 
     /// @dev Held-balance cap for the century milestone grant: the milestone path never lifts a
@@ -397,8 +399,9 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Per-player quest state including progress, streak, and streak shields.
     mapping(address => PlayerQuestState) private questPlayerState;
 
-    /// @notice Active level quest type (1-9). Zero means no quest active.
-    ///         Zeroed at level transition RNG request, set when RNG arrives.
+    /// @notice Active level quest type: 1-3, 5-8 from the weighted roll, or 11
+    ///         (CRAPS_DAY_PASS) from the level roll's tail. Seeded to MINT_ETH at deploy and
+    ///         overwritten by each rollLevelQuest; never zeroed between levels.
     ///         Packs with levelQuestVersion in one slot.
     uint8 private levelQuestType;
 
@@ -431,10 +434,9 @@ contract DegenerusQuests is IDegenerusQuests {
         // identical (empty) state, so an announced-in-advance quest confers no edge, and the
         // active type is public from the event either way.
         //
-        // MINT_ETH is the only type guaranteed reachable in level 1's purchase phase: the
-        // FLIP-denominated types need FLIP nobody has yet, and foil / decimator / affiliate /
-        // degenerette / lootbox all depend on surfaces that are not live or not yet fundable at
-        // genesis. `_canRollDecimatorQuest` would reject the decimator type here anyway (`lvl < 5`).
+        // MINT_ETH is the chosen genesis level quest: it is the action every level-1 player
+        // takes anyway, and it is ETH-funded (the FLIP-denominated types need FLIP nobody has
+        // yet; `_canRollDecimatorQuest` would reject the decimator type here anyway, `lvl < 5`).
         //
         // Version starts at 1, not 0, so a player carrying the zero-initialized
         // `levelQuestPlayerState` takes the normal stale-progress reset path rather than
@@ -706,8 +708,10 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      balance above CENTURY_SHIELD_MAX_HELD — a player already at or above the cap gets
     ///      nothing. `shieldCenturyHighWater` tracks the highest century already credited and
     ///      re-arms DOWN when the streak drops below it (a reset/decay), so a player who loses the
-    ///      streak and genuinely re-climbs earns each century marker again. Within a run it prevents
-    ///      double-crediting a century already passed. Reuses streakShield consumed in `_questSyncState`.
+    ///      streak and genuinely re-climbs earns each century marker again. `shieldCenturyHighWater`
+    ///      is a uint8 and saturates at century 255 (streak 25,500); past that bound every write
+    ///      recomputes an owed grant and can refill shields already consumed. Reuses streakShield
+    ///      consumed in `_questSyncState`.
     function _grantCenturyShield(address player, PlayerQuestState storage state) private {
         uint256 century = uint256(state.streak) / CENTURY_SHIELD_INTERVAL;
         uint256 highWater = state.shieldCenturyHighWater;
@@ -766,8 +770,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      the Game-side handback anchor (`afkingCoveredDay` — the day before the sub ended,
      *      floored at the funded high-water, since any covered-day lag on a live sub is
      *      protocol-caused) and `lastActiveDay` (which
-     *      captures manual completions during the run — slot completions still bump it even though
-     *      they are streak-neutral while afking). The rolled-day bitmap then answers whether any
+     *      captures manual primary completions during the run — a slot-0 completion still bumps it
+     *      even though it is streak-neutral while afking). The rolled-day bitmap then answers whether any
      *      playable quest existed strictly after that anchor and before `currentDay`; skipped stall
      *      days have no bit, and a delivered anchor remains valid even when its quest rolls later.
      *      Anchors the manual system at that handback day and clears
@@ -1009,8 +1013,8 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev The daily join quest's own leg, shaped exactly like `_handleFoilPackQuest`: pass/fail,
-    ///      one action, no accumulation. Private so `recordCrapsAction` can fold its reward into
-    ///      the same coinflip credit the boon rides.
+    ///      one action, no accumulation. Private: it returns the reward for `recordCrapsAction`
+    ///      to credit.
     /// @return reward FLIP earned, for the caller to credit (0 when nothing completed).
     function _crapsJoinQuest(address player) private returns (uint256 reward) {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
@@ -1178,7 +1182,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      score forwarding.
      * @param player The player who purchased.
      * @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
-     *        (fresh + recycled), credited 1:1 to MINT_ETH quest.
+     *        (fresh + recycled), credited to the MINT_ETH quest (daily progress in milli-ETH after
+     *        per-action truncation; level progress in wei).
      * @param flipMintQty FLIP-paid ticket-equivalent mint units.
      * @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled).
      * @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets).
@@ -1293,9 +1298,9 @@ contract DegenerusQuests is IDegenerusQuests {
         uint32 outStreak = state.streak;
 
         // --- ETH mint quest progress ---
-        // Gross ETH spend on tickets + lootboxes (fresh + recycled) is credited 1:1
-        // in wei to the MINT_ETH quest. Slot 0 is always the MINT_ETH quest, so only
-        // that slot can match.
+        // Gross ETH spend on tickets + lootboxes (fresh + recycled) is credited to the
+        // MINT_ETH quest (daily progress accumulates in milli-ETH, level progress in wei).
+        // Slot 0 is always the MINT_ETH quest, so only that slot can match.
         if (ethMintSpendWei != 0) {
             DailyQuest memory quest = quests[0];
             if (quest.day == currentDay && quest.questType == QUEST_TYPE_MINT_ETH) {
@@ -1529,8 +1534,9 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Player-specific view of quests with fixed requirements and progress.
-     * @dev Handles streak decay preview: if player missed a day (gap > 1), the effective
-     *      streak shown is 0, matching what would happen on their next action.
+     * @dev Handles streak decay preview: if rolled quest days sit strictly inside the gap since
+     *      the player's anchor and exceed their streak shields, the effective streak shown is 0,
+     *      matching what the next action's sync would do (unrolled stall days do not count).
      *      This is the recommended view function for frontends displaying quest UI.
      * @param player The player address to query.
      * @return viewData Comprehensive view including quests, progress, completion, and streak.
@@ -1712,6 +1718,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - MINT_ETH, LOOTBOX, DEGENERETTE_ETH → req.tokenAmount (ETH wei)
      *      - FLIP, DECIMATOR, AFFILIATE, DEGENERETTE_FLIP → req.tokenAmount (FLIP base units)
      * @param quest The quest to calculate requirements for.
+     * @param slot The quest's slot index (for MINT_ETH, slot 0 scales the target by the 1x
+     *        deposit multiplier, any other slot by the 2x lootbox multiplier).
      * @return req Requirements struct with either mints count or tokenAmount.
      */
     function _questRequirements(DailyQuest memory quest, uint8 slot) private view returns (QuestRequirements memory req) {
@@ -1979,7 +1987,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      missed day.
      *
      *      Streak Reset Logic:
-     *      - Uses lastActiveDay if set (any slot completion), else lastCompletedDay
+     *      - Uses lastActiveDay if set (primary completions, streak-bonus awards, the foil floor
+     *        and afking finalize write it), else lastCompletedDay
      *      - If a rolled quest day sits strictly inside the gap, the streak resets unless
      *        shields cover every such missed day
      *      - On new day, resets completionMask and snapshots baseStreak
@@ -2185,6 +2194,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param entropy VRF entropy (typically swapped halves of primary entropy).
      * @param primaryType The primary quest type (to exclude from selection).
      * @param decAllowed True if decimator quests can be rolled.
+     * @param tailType The caller's context-specific fallback type, weighted 1 outside the
+     *        weighted array and returned when the weighted walk falls through.
      * @return The selected quest type.
      */
     function _bonusQuestType(
@@ -2408,9 +2419,10 @@ contract DegenerusQuests is IDegenerusQuests {
             return (reward, questType, streak, false);
         }
 
-        // A slot-1 completion is only reachable once slot 0 is already completed
-        // (every caller gates on completionMask bit 0), so there is no other slot
-        // left to complete.
+        // A slot-1 completion is only reachable once slot 0 is already completed, or
+        // while afking (_secondaryLocked waives the primary for an active run, whose
+        // funded auto-buy stands in for it); either way there is no other slot left
+        // to complete here.
         if (slot == 1) {
             return (reward, questType, streak, true);
         }
@@ -2436,6 +2448,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @dev Attempts to complete the other slot if its progress meets the target.
+     * @param player The completing player, forwarded to `_questComplete`.
      * @param state Storage reference to player's quest state.
      * @param quests Memory copy of active quests.
      * @param slot The slot to check for completion.
@@ -2624,7 +2637,7 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      FLIP-denominated types target 20,000 FLIP, and AFFILIATE 6,000 FLIP
     ///      (10x its own lower daily target).
     ///      No ETH cap applied (unlike daily quests).
-    /// @param questType The quest type constant (1-9, 0 reserved as unrolled sentinel).
+    /// @param questType The quest type constant (1-9 or 11 CRAPS_DAY_PASS; 0 reserved as unrolled sentinel).
     /// @param mintPrice Current mint price in wei.
     /// @return Target value in the same units as handler progress deltas.
     function _levelQuestTargetValue(uint8 questType, uint256 mintPrice) internal pure returns (uint256) {
@@ -2766,9 +2779,10 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      afking run: the sub is buying this level's tickets out of the player's own
     ///      funding — participation as real as a manual mint, just never routed through
     ///      the units tally — and a funded seat clears the loyalty bar besides. The level
-    ///      quest proper keeps the plain gate. Idempotent within a level: a second call
-    ///      in the same version epoch pays 0, which is what makes one-bet-per-round and
-    ///      one-reward-per-round agree.
+    ///      quest proper keeps the plain gate. PARIMUTUEL's one-bet-per-round gate is the
+    ///      real idempotence guarantee here — bit 137 only short-circuits a repeat within
+    ///      the same version epoch until the next level-quest progress event rewrites the
+    ///      word and clears it.
     /// @param player The player who placed the bet.
     /// @param lvl The level the bet was placed on. Taken from the caller rather than read
     ///        back off the game: PARIMUTUEL is the only permitted caller and it read this
@@ -2825,6 +2839,11 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Returns a player's level quest state for frontend display.
     /// @dev Reads levelQuestType, levelQuestVersion, and levelQuestPlayerState for the player's current level.
     /// @param player The player address to query.
+    /// @return questType The active level quest type (1-8, or 11 for the craps day-pass quest).
+    /// @return progress The player's accumulated progress.
+    /// @return target The target value for completion.
+    /// @return completed Whether the player has completed the quest this level.
+    /// @return eligible Whether the player is eligible for level quests.
     function getPlayerLevelQuestView(address player)
         external
         view

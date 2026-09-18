@@ -94,10 +94,11 @@ interface IDegenerusGameJackpotModule {
     function payCarryoverTickets(uint256 randWord) external;
 
     /// @notice Pay the golden-ticket grand to a foil pack holding two all-gold tickets.
-    /// @dev Delegatecall-only; the foil gold claim is the only caller.
+    /// @dev Delegatecall-only; pushed by the foil drain (_pushFoilGrand) when a pack
+    ///      files with two or more all-gold tickets. Not reachable from claimGoldenTicket.
     /// @param winner The foil buyer whose pack rolled the two all-gold tickets.
     /// @param lvl The pack's cycle level.
-    /// @param golds The pack's total gold quadrants (8, 12 or 16).
+    /// @param golds The pack's total gold quadrants across its four tickets (8..16).
     function payGoldenTicketGrand(
         address winner,
         uint24 lvl,
@@ -176,7 +177,7 @@ interface IDegenerusGameDecimatorModule {
 
     /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
     /// @param player Winner whose claim to resolve.
-    /// @param lvl Level to claim from (must be the last decimator).
+    /// @param lvl Resolved level whose unclaimed winning position is being settled (any snapshotted round).
     function claimDecimatorJackpot(address player, uint24 lvl) external;
 
     /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
@@ -332,7 +333,7 @@ interface IDegenerusGameMintModule {
     /// @param entropy VRF-derived entropy for rarity rolls (caller passes today's daily RNG word)
     /// @return worked Whether any processing was done
     /// @return finished Whether all pending tickets are processed
-    /// @return writesUsed Number of storage writes used
+    /// @return writesUsed Write-budget units consumed (weighted writes and skips), not a raw SSTORE count.
     function processFutureTicketBatch(
         uint24 lvl,
         uint256 entropy
@@ -560,9 +561,9 @@ interface IDegenerusGameDegeneretteModule {
     /// @param player The player address (use zero address for msg.sender)
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP)
     /// @param amountPerSpin Bet amount per ticket
-    /// @param spinCount Number of spins (1..10). Each spin resolves independently.
+    /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP, 1..5 WWXRP). Each spin resolves independently.
     /// @param customTraits Custom packed traits
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost, or 0xFF for no hero
+    /// @param heroQuadrant Hero quadrant (0-3) for payout boost; values >= 4 revert.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
@@ -586,6 +587,8 @@ interface IDegenerusGameDegeneretteModule {
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
+    /// @return wwxrpOut The spin's WWXRP payout, returned for the box entry's WWXRP lane (the
+    ///         caller mints once).
     function resolveWwxrpSpinFromBox(
         address player,
         uint256 stake,
@@ -603,6 +606,8 @@ interface IDegenerusGameDegeneretteModule {
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
+    /// @return flipOut The summed payout after its survival flip, returned for the box entry's
+    ///         FLIP lane (credited by the caller at flush).
     function resolveFlipSpinsFromBox(
         address player,
         uint256 totalStake,
@@ -675,7 +680,8 @@ interface IGameAfkingModule {
     ) external payable;
 
     /// @notice Unified permissionless router: do ONE category of pending work this call
-    ///         (advance → box open: afking boxes first, then human boxes) and pay ONE bounty.
+    ///         (advance, else box open — afking ring first, human sweep only when it opened
+    ///         nothing — else scheduled craps upkeep) and pay ONE bounty.
     function mineFlip() external;
 
     /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor under a weighted
@@ -760,8 +766,10 @@ interface IDegenerusGameFoilPackModule {
     /// @notice Deliver one foil pack (four tickets) for the active cycle. Delegatecall
     ///         target invoked by the mint module's purchase path (the foil leg of an
     ///         additive ticket/lootbox/foil buy). Handles the foil leg's own payment
-    ///         (the canonical fresh -> claimable -> afking waterfall), 75/25 pool split, 20/5
-    ///         affiliate, and delivery (boost freeze, queue push). The foil's mint units,
+    ///         (the canonical fresh -> claimable -> afking waterfall), 75/25 pool split,
+    ///         25/5 affiliate at game levels 0-2 and 20/5 from game level 3 (fresh/recycled,
+    ///         paid at level + 1 like the ticket affiliate), and
+    ///         delivery (boost freeze, queue push). The foil's mint units,
     ///         streak, and secondary quest are recorded by the purchase path.
     /// @param buyer Player receiving the pack (already operator-resolved).
     /// @param ethSent Fresh ETH the purchase path allocated to the foil leg.
@@ -792,8 +800,9 @@ interface IDegenerusGameFoilPackModule {
 
     /// @notice Claim a foil pack's gold (permissionless).
     /// @dev A FLIP ladder on the pack's total gold count from three up, plus a kicker
-    ///      for one all-gold ticket; two all-gold tickets take the golden-ticket grand
-    ///      instead. The pack's lines are re-derived from the sealed word its buy froze
+    ///      for one all-gold ticket. Two all-gold tickets take the grand instead — pushed
+    ///      automatically by the foil drain, so this call reverts for such a pack. The
+    ///      pack's lines are re-derived from the sealed word its buy froze
     ///      against, so nothing about the gold is stored. The win credits to `player`,
     ///      never the caller, and a pack pays at most once.
     /// @param player Pack owner the win credits to.

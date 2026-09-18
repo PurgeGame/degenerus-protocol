@@ -77,9 +77,25 @@ contract Coinflip {
       |                              EVENTS                                  |
       +======================================================================+*/
 
+    /// @notice Emitted when a coinflip deposit is credited to the player's pending stake.
+    /// @param player The depositor credited.
+    /// @param creditedFlip The deposit principal in FLIP wei (the quest and recycling bonuses that
+    ///        join the stake are not included); 0 on a zero-amount deposit.
     event CoinflipDeposit(address indexed player, uint256 creditedFlip);
+    /// @notice Emitted when a player's coinflip auto-rebuy is turned on or off.
+    /// @param player The player whose auto-rebuy state changed.
+    /// @param enabled True when auto-rebuy is now on, false when turned off.
     event CoinflipAutoRebuyToggled(address indexed player, bool enabled);
+    /// @notice Emitted when a player's auto-rebuy take-profit threshold is set or updated.
+    /// @param player The auto-rebuy player.
+    /// @param stopAmount The take-profit threshold: winnings bank in whole multiples of it,
+    ///        the remainder rolls.
     event CoinflipAutoRebuyStopSet(address indexed player, uint256 stopAmount);
+    /// @notice Emitted when a coinflip deposit completes a quest.
+    /// @param player The player credited with the quest reward.
+    /// @param questType The completed quest's type identifier.
+    /// @param streak The player's streak count at completion.
+    /// @param reward The FLIP bonus credited for completing the quest.
     event QuestCompleted(
         address indexed player,
         uint8 questType,
@@ -162,6 +178,7 @@ contract Coinflip {
     /// @notice Emitted whenever a player's coinflip claim-state changes, so off-chain consumers can
     ///         reconstruct claimable + carry from logs alone (no eth_call). Carries the committed
     ///         post-update state of the three mutable PlayerCoinflipState fields.
+    /// @param player          The player whose claim-state changed.
     /// @param claimableStored Post-update PlayerCoinflipState.claimableStored.
     /// @param autoRebuyCarry  Post-update PlayerCoinflipState.autoRebuyCarry.
     /// @param lastClaim       Post-update PlayerCoinflipState.lastClaim (the claim cursor; lets an
@@ -177,16 +194,29 @@ contract Coinflip {
       |                          CUSTOM ERRORS                               |
       +======================================================================+*/
 
+    /// @notice Thrown when a nonzero deposit amount is below the minimum stake.
     error AmountLTMin();
+    /// @notice Thrown when the caller is not one of the contracts allowed to credit flip stake.
     error OnlyFlipCreditors();
+    /// @notice Thrown when the caller is not the FLIP contract.
     error OnlyFLIP();
+    /// @notice Thrown when the caller is not sDGNRS.
     error OnlysDGNRS();
+    /// @notice Thrown when the caller is not the game contract.
     error OnlyDegenerusGame();
+    /// @notice Thrown when the caller is not the craps table.
     error OnlyCraps();
+    /// @notice Thrown when a take-profit or off action targets a player without auto-rebuy enabled.
     error AutoRebuyNotEnabled();
+    /// @notice Thrown when a strict enable call targets a player who already has auto-rebuy on.
     error AutoRebuyAlreadyEnabled();
+    /// @notice Thrown when an auto-rebuy action is attempted while today's flip is frozen for RNG.
     error RngLocked();
+    /// @notice Thrown when sDGNRS's redemption submit (withdrawRedeemedFlip) asks for more FLIP
+    ///         backing than its settled claimable plus auto-rebuy carry hold.
     error Insufficient();
+    /// @notice Thrown when the caller acts on behalf of a player without that player's
+    ///         operator approval.
     error NotApproved();
 
     /*+======================================================================+
@@ -194,9 +224,13 @@ contract Coinflip {
       +======================================================================+*/
 
     // Constant contract references (addresses from ContractAddresses)
+    /// @notice The FLIP coin contract.
     IFLIP public constant flip = IFLIP(ContractAddresses.COIN);
+    /// @notice The main game contract.
     IDegenerusGame public constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
+    /// @notice The jackpots contract.
     IDegenerusJackpots public constant jackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
+    /// @notice The WWXRP consolation-prize contract.
     IWWXRP public constant wwxrp = IWWXRP(ContractAddresses.WWXRP);
 
     // Constants
@@ -286,7 +320,9 @@ contract Coinflip {
     // its own floor, with same-day repeats priced at the 5% floor of the already-
     // reduced pool (see armDiceRunRecord). The game-armed marks sit at the end of
     // the storage section so every prior slot keeps its index.
+    /// @notice Shared FLIP pool the biggest-* all-time records draw their claim payouts from.
     uint128 public recordPool = 10_000 ether;
+    /// @notice The all-time biggest single flip deposit, in FLIP wei.
     uint128 public biggestFlipEver;
 
     // RNG state + the five per-category record claim clocks (all pack into one slot)
@@ -331,7 +367,9 @@ contract Coinflip {
     ///      index; the flip mark packs with recordPool above). biggestSpinEver and
     ///      biggestLuckboxEver are ETH wei; biggestBuyEver is whole tickets.
     uint128 public biggestSpinEver;
+    /// @notice The all-time biggest lootbox deposit, in ETH wei.
     uint128 public biggestLuckboxEver;
+    /// @notice The all-time biggest ticket buy, in whole tickets.
     uint128 public biggestBuyEver;
     /// @dev THE BIGGEST DICE RUN, in score basis points: the winning scheduled craps
     ///      run's high point over its own starting bankroll, 10,000 = 1x. Packed into
@@ -433,11 +471,12 @@ contract Coinflip {
       +======================================================================+*/
 
     /// @notice Deposit FLIP into the daily coinflip system.
-    /// @dev The deposit (stake, quest progress, winnings) belongs to `player`. The player or an
-    ///      approved operator funds it from the player's settled winnings first and their wallet
-    ///      FLIP for the remainder; any other caller funds the whole stake from their own FLIP —
-    ///      a permissionless gift (the caller pays, the player gets the stake) that never touches
-    ///      the player's winnings. The recycling bonus pays on the winnings leg only.
+    /// @dev The stake and its winnings belong to `player`; quest progress goes to whoever funds
+    ///      the deposit, and any quest reward it completes joins the player's stake. The player
+    ///      or an approved operator funds it from the player's settled winnings first and their
+    ///      wallet FLIP for the remainder; any other caller funds the whole stake from their own
+    ///      FLIP — a permissionless gift (the caller pays, the player gets the stake) that never
+    ///      touches the player's winnings. The recycling bonus pays on the winnings leg only.
     /// @param player The stake owner — i.e. the player (address(0) or msg.sender for self-deposit).
     /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims).
     function depositCoinflip(address player, uint256 amount) external {
@@ -453,8 +492,9 @@ contract Coinflip {
         _depositCoinflip(player, funder, amount, player == msg.sender);
     }
 
-    /// @dev Internal deposit for daily coinflip mode. The stake (quest progress, winnings)
-    ///      belongs to `player`; the FLIP principal is funded claimable-first when funder == player
+    /// @dev Internal deposit for daily coinflip mode. The stake and its winnings belong to
+    ///      `player`; quest progress is `funder`'s, with any completed quest's reward folded into
+    ///      the player's stake. The FLIP principal is funded claimable-first when funder == player
     ///      (a self/approved deposit) and burned from `funder`'s wallet for whatever the settled
     ///      winnings did not cover. A permissionless gift (funder == the caller) is wallet-only.
     function _depositCoinflip(
@@ -944,8 +984,9 @@ contract Coinflip {
     /// @dev Append `player`'s weighted interval to the armed day's draw book.
     ///      Weight is the whole-FLIP floor of the raw deposited principal, so a
     ///      player's win probability is their recorded principal over the day's
-    ///      total by interval measure: repeat deposits are additive and splitting
-    ///      a deposit (or a wallet) moves no probability. The uint96 cumulative
+    ///      total by interval measure: weights add after each deposit is floored to
+    ///      whole FLIP, so splitting a deposit (or a wallet) changes nothing but the
+    ///      sub-FLIP dust each piece drops. The uint96 cumulative
     ///      lane cannot saturate — FLIP supply is uint128-wei capped (~3.4e20
     ///      whole tokens) against a 7.9e28 lane.
     function _appendBafDrawEntry(
@@ -1062,6 +1103,9 @@ contract Coinflip {
     /// @dev GAME only — the modules gate each record's entry floor at the call site
     ///      before paying for this call, and each passes its own kind as a constant.
     ///      The flip record arms internally on direct deposits; nothing routes it here.
+    /// @param kind Which record (RECORD_KIND_*), excluding flip and dice run.
+    /// @param player The player whose candidate is being armed.
+    /// @param candidate The candidate mark to ratchet the record with.
     /// @return The FLIP claimed from the pool, for the calling module to fold into the
     ///         FLIP its own path already pays. Nothing is credited here.
     function armRecord(
@@ -1342,9 +1386,11 @@ contract Coinflip {
 
     /// @notice Claim up to `amount` of the auto-rebuy carry as minted FLIP while
     ///         staying on auto-rebuy; the remainder keeps rolling.
-    /// @dev Settles all resolved days FIRST — wins roll into the carry per the
-    ///      take-profit config and a pending loss zeroes it — then withdraws from the
-    ///      settled carry. Blocked while today's flip is frozen for the same reason as the
+    /// @dev Runs the ordinary bounded claim walk FIRST — up to `COIN_CLAIM_FIRST_DAYS` days on
+    ///      a first claim and `COIN_CLAIM_DAYS` after, wins rolling into the carry per the
+    ///      take-profit config and a loss zeroing it — then withdraws from the carry as
+    ///      settled so far. A longer backlog needs the walk repeated before the carry is final.
+    ///      Blocked while today's flip is frozen for the same reason as the
     ///      rebuy toggle: the carry is the pending day's stake, and the day's word may
     ///      already be on-chain before the resolution walk applies it. Take-profit
     ///      chunks surfaced by the settle bank into claimableStored (claimCoinflips
@@ -1651,6 +1697,7 @@ contract Coinflip {
     ///      perturbs no other consumer of that word. Winner = the entry with the
     ///      smallest cumulative endpoint strictly above the roll, by binary search.
     /// @param rngWord The BAF transition VRF word.
+    /// @return winner The drawn winner, or address(0) if the armed day recorded no entries.
     function bafDrawWinner(uint256 rngWord) external view returns (address winner) {
         uint24 day = bafDrawDay;
         uint256 header = bafDrawHeader[day];
@@ -1830,10 +1877,10 @@ contract Coinflip {
     ///      deposited. Clamping makes that impossible by construction instead of by an
     ///      invariant every caller has to keep holding.
     ///
-    ///      The clamp is unreachable in practice: FLIP caps total supply at uint128 and
-    ///      a stake never exceeds supply. It is here so that if the credit paths ever
-    ///      outgrow that, the failure is one capped stake rather than a neighbouring
-    ///      day's books. Fresh SLOAD/SSTORE.
+    ///      A stake is not bounded by supply — the constructor seeds stakes without a mint,
+    ///      a deposit burns the FLIP it stakes, and credits add stake nobody minted — so the
+    ///      clamp is the bound: if the credit paths ever reach it, the failure is one capped
+    ///      stake rather than a neighbouring day's books. Fresh SLOAD/SSTORE.
     function _setFlipStake(uint24 day, address p, uint256 weiAmount) internal {
         if (weiAmount > type(uint128).max) weiAmount = type(uint128).max;
         uint256 shift = (day & 1) * 128;
@@ -1868,18 +1915,18 @@ contract Coinflip {
     ///      Base is the recycled amount (the re-bet or auto-rebuy carry being deposited).
     ///      Bonus feeds into creditedFlip, not back into claimableStored (no feedback loop).
     ///      Rate-only, so the same percentage applies at every size: splitting a recycle
-    ///      across several deposits earns exactly what one deposit would, and the RTP the
-    ///      day's reward percent is sized against holds for a whale and a minnow alike.
+    ///      across several deposits earns what one deposit would, to the wei each call
+    ///      floors, and the RTP the day's reward percent is sized against holds for a
+    ///      whale and a minnow alike.
     function _recyclingBonus(
         uint256 amount
     ) private pure returns (uint256 bonus) {
         bonus = (amount * uint256(RECYCLE_BONUS_BPS)) / uint256(BPS_DENOMINATOR);
     }
 
-    /// @dev Calculate the target day for new coinflip deposits.
-    ///      Derived locally from GameTimeLib — the same time-only source that
-    ///      DegenerusGame.currentDayView resolves to — so this equals the game's
-    ///      day index without a cross-contract call.
+    /// @dev The target day for new coinflip deposits: tomorrow's index. GameTimeLib is the
+    ///      same time-only source DegenerusGame.currentDayView resolves to, so the day is
+    ///      derived locally without a cross-contract call.
     function _targetFlipDay() internal view returns (uint24) {
         return GameTimeLib.currentDayIndex() + 1;
     }

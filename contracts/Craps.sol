@@ -24,8 +24,9 @@ pragma solidity 0.8.34;
 ///
 ///        * The light side "pays and stays": a win credits winnings only, the stake remains at risk,
 ///          and the stake is lost when the bet dies. The pass line pays every natural and every
-///          point made until its first loss — a come-out craps or the seven-out. Place bets and
-///          hardways can pay many times but die once, on the 7.
+///          point made until its first loss — a come-out craps or the seven-out. Place bets pay
+///          many times and die once, on the seven-out; a hardway pays many times and dies on its
+///          matching easy total or the seven-out.
 ///        * Don't Pass is the one wager that does NOT stay: it is a single decision per shooter,
 ///          settled the first time the dice answer it, and it returns its own stake with the
 ///          winnings when it wins. A barred twelve is the only push, and it leaves the same wager
@@ -75,9 +76,11 @@ contract Craps {
     // ---------------------------------------------------------------------------------------
 
     /// @notice Hard bound on the length of one hand.
-    /// @dev A hand ends on a seven-out; its length is geometric with mean ~8.53 rolls. The per-roll
-    ///      hazard is ~1/8.53, so the chance of reaching 512 rolls is on the order of 1e-28 — far
-    ///      below any threshold worth pricing. The cap exists so the loop provably terminates.
+    /// @dev A hand ends on a seven-out, which only a point phase can produce: the hand is a
+    ///      four-state process (come-out, point 4/10, 5/9, 6/8) with a seven-out hazard of zero
+    ///      on the come-out and 1/6 on a point, mean length ~8.53 rolls. The chance a hand is
+    ///      still alive after 512 rolls is ~1.5e-33 — far below any threshold worth pricing. The
+    ///      cap exists so the loop provably terminates.
     ///      A hand that hits it has every still-live stake refunded rather than being silently
     ///      confiscated.
     uint256 internal constant _MAX_ROLLS = 512;
@@ -181,8 +184,8 @@ contract Craps {
     ///      Both money fields are bounded by the same argument: 512 rolls of the whole board at
     ///      the uint24 leg maximum comes to under 2^98, and the profit is a part of that amount.
     ///      `_settleSlip` adds the boost straight onto the packed word, which is safe on the same
-    ///      figure — a boost is at most a fraction of the profit, so the sum stays fourteen orders
-    ///      of magnitude clear of the cursor. The cursor itself is the roll budget plus one
+    ///      figure — a boost is at most a fraction of the profit, so the sum stays under 2^99,
+    ///      thirteen bits clear of the cursor. The cursor itself is the roll budget plus one
     ///      terminator per shooter, far inside its 32 bits.
     uint256 private constant _HR_LOG_SHIFT = 112;
     uint256 private constant _HR_PROFIT_SHIFT = 144;
@@ -232,8 +235,9 @@ contract Craps {
     }
 
     /// @notice The full account of one bet-slip run: the same wager repeated shooter after shooter
-    ///         out of a bankroll, until it cannot cover another round, reaches the goal, or hits a
-    ///         hard execution bound. Either failure is a bust.
+    ///         out of a bankroll. Reaching the goal latches the win and the run plays on behind
+    ///         the goal as a protected reserve; the run stops when it cannot post the next
+    ///         shooter or hits a hard execution bound — a bust before the latch, a Goal after it.
     /// @param bankrollIn   What the slip started with.
     /// @param bankrollOut  What was left when it stopped — the settlement figure. Includes any
     ///                     sub-stake remainder; stopping never confiscates it.
@@ -307,10 +311,18 @@ contract Craps {
     ///      Loop state note: `cur` packs the hand counter, the round's mandatory multiplier, the
     ///      roll cursor and the goal latch into one stack slot (see `_CUR_HANDS_MASK`) — via-IR
     ///      runs out of stack here with them separate.
+    /// @param b          The slip's chip stakes to play, shooter after shooter.
+    /// @param seed       The window's shooter seed.
+    /// @param bankroll   The bankroll the run starts on, in wei.
+    /// @param goal       The bankroll that latches a Goal, in wei.
+    /// @param cap        Shooter cap on the run.
+    /// @param rollBudget Roll cap on the run.
+    /// @param player     The slip's owner, who seasons the survival coin.
     /// @param boost Packed schedule: the eligible-shooter percentage in bits 0..7, the percent
     ///              added to an eligible shooter's profit in bits 8..15, and above them the
     ///              ONE-BASED hand ordinal of this seat's rotation turn, or zero for none. Zero
     ///              is no schedule.
+    /// @return r The run: bankroll in and out, its peak, hands, units, rolls and the stop.
     function _settleSlip(
         Bets memory b,
         bytes32 seed,
@@ -505,8 +517,9 @@ contract Craps {
         uint256 returned;
 
         unchecked {
-            // A board with no line bet skips the point machine entirely; every other shape runs
-            // the general one. A line-ONLY board is not worth a third machine: the dice place
+            // A board with no line bet runs the no-pass-line specialization — the same point
+            // machine without the pass-line bookkeeping; every other shape runs the general one.
+            // A line-ONLY board is not worth a third machine: the dice place
             // three of the ten chips uniformly over ten legs, so one board in 1,000 stays
             // line-only even when all seven picked chips are on the line.
             if (st & ST_PASS_LIVE == 0) {

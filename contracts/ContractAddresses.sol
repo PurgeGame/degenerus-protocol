@@ -25,8 +25,9 @@ pragma solidity 0.8.34;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
-// Compile-time constants populated by the deploy script.
-// The deploy pipeline predicts addresses and patches this file before compilation.
+/// @title ContractAddresses
+/// @notice Compile-time constant addresses for every Degenerus Protocol contract. The deploy
+///         pipeline predicts addresses and patches this file before compilation.
 library ContractAddresses {
     uint48 internal constant DEPLOY_DAY_BOUNDARY = 0;
     bytes32 internal constant VRF_KEY_HASH =

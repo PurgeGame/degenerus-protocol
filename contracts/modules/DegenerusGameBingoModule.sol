@@ -48,10 +48,14 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     // error E() — inherited from DegenerusGameStorage
-    error ScoreTooLow(); // Thrown when the player (the claim beneficiary — claims are permissionless, so not necessarily the caller) is not a deity holder and their affiliate score is below AFFILIATE_DGNRS_MIN_SCORE.
+    /// @notice Thrown when the player (the claim beneficiary — claims are permissionless, so not
+    ///         necessarily the caller) is not a deity holder and their affiliate score is below
+    ///         AFFILIATE_DGNRS_MIN_SCORE.
+    error ScoreTooLow();
 
-    /// @notice Thrown when caller does not own the slot at the cited trait/index,
-    ///         or the slot index is out of bounds for that trait's bucket.
+    /// @notice Thrown when the claim beneficiary (`player`, not necessarily the caller) does
+    ///         not own the slot at the cited trait/index, or the slot index is out of bounds
+    ///         for that trait's bucket.
     error NotSlotOwner();
 
     /// @notice Thrown when the symbol is out of range (>= 32).
@@ -126,12 +130,11 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // Permissionless: a settled claim only ever credits the slot owner, never the caller.
         if (player == address(0)) player = msg.sender;
         // ---- Validation (gameOver hard cutoff + range gates) ----
-        // No level upper-bound guard: the 8-color ownership check below is
-        // self-gating — an unresolved/future-level bucket is empty, so the
-        // require fails closed on its own. claimBingo only READS lvlTraitEntry
-        // (never writes it) and writes only its own claim flag, so a read
-        // against an in-flight/future bucket simply reverts; it cannot corrupt
-        // VRF state (freeze-safe; no level gate is needed).
+        // No level upper-bound guard: the 8-color ownership check below is the gate —
+        // an unmaterialized bucket is empty and fails it, while a bucket the sweep has
+        // already filled for a future level qualifies on ownership alone. claimBingo
+        // only READS lvlTraitEntry (never writes it) and writes only its own claim flag,
+        // so this cannot corrupt VRF state (freeze-safe; no level gate is needed).
         if (gameOver) revert GameOver();
         if (symbol >= 32) revert InvalidSymbol();
         if (bingoClaimed[level][player]) revert AlreadyClaimed();

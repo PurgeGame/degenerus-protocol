@@ -479,11 +479,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_DECIMATOR_25_BONUS_BPS = 2500;
     /// @dev 50% decimator boost in basis points
     uint16 private constant LOOTBOX_DECIMATOR_50_BONUS_BPS = 5000;
-    /// @dev 10 point activity boon bonus
+    /// @dev Activity award: +10 to the mint-level count and quest streak
     uint24 private constant LOOTBOX_ACTIVITY_BOON_10_BONUS = 10;
-    /// @dev 25 point activity boon bonus
+    /// @dev Activity award: +25 to the mint-level count and quest streak
     uint24 private constant LOOTBOX_ACTIVITY_BOON_25_BONUS = 25;
-    /// @dev 50 point activity boon bonus
+    /// @dev Activity award: +50 to the mint-level count and quest streak
     uint24 private constant LOOTBOX_ACTIVITY_BOON_50_BONUS = 50;
     /// @dev Quest-streak shields granted per quest-shield boon
     uint16 private constant LOOTBOX_QUEST_SHIELD_GRANT = 1;
@@ -523,11 +523,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint8 private constant BOON_DECIMATOR_50 = 15;
     /// @dev Boon type: 10% whale discount
     uint8 private constant BOON_WHALE_10 = 16;
-    /// @dev Boon type: 10 point activity bonus
+    /// @dev Boon type: +10 activity award (mint-level count + quest streak)
     uint8 private constant BOON_ACTIVITY_10 = 17;
-    /// @dev Boon type: 25 point activity bonus
+    /// @dev Boon type: +25 activity award (mint-level count + quest streak)
     uint8 private constant BOON_ACTIVITY_25 = 18;
-    /// @dev Boon type: 50 point activity bonus
+    /// @dev Boon type: +50 activity award (mint-level count + quest streak)
     uint8 private constant BOON_ACTIVITY_50 = 19;
     /// @dev Boon type: 25% lootbox boost
     uint8 private constant BOON_LOOTBOX_25 = 22;
@@ -620,7 +620,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_LAZY_PASS_25 = 8;
     /// @dev Weight for 50% lazy pass discount boon
     uint16 private constant BOON_WEIGHT_LAZY_PASS_50 = 2;
-    /// @dev Combined weight of deity pass discount boons (10% + 25% + 50%)
+    /// @dev Combined weight of deity pass discount boons (10% + 20% + 35%)
     uint16 private constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
     /// @dev Weights for the degenerette stake boons. ETH and FLIP taper hard (200/50/10)
     ///      because their stake bonus is real value; WWXRP sits flat at 200 across all three
@@ -647,8 +647,9 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      (pre-decimator, pre-deity-pass) need no adjustment.
     uint16 private constant BOON_WEIGHT_TOTAL = 2856;
     /// @dev Exact closed form of the weighted max-value table used to normalize boon frequency.
-    ///      Every fixed-price family contributes 1568 ETH of weight*value; every FLIP-priced
-    ///      family collapses to 3270 times the live ticket price; lazy discounts collapse to
+    ///      Every fixed-price family contributes 1568 ETH of weight*value; the FLIP-priced
+    ///      families collapse to BOON_PRICE_WEIGHT = 4182 times the live ticket price (3270
+    ///      coinflip/whale-pass/degenerette + 912 craps); lazy discounts collapse to
     ///      6 times the ten-level lazy-pass value. Activity, quest-shield and WWXRP boons carry
     ///      weight but intentionally contribute zero value.
     ///
@@ -710,12 +711,18 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint256 private constant WHALE_PASS_STANDARD_PRICE =
         4 ether;
 
-    error SelfBoon(); // deity attempted to issue a boon to themselves
-    error InvalidSlot(); // deity boon slot index is >= DEITY_DAILY_BOON_COUNT
-    error RecipientAlreadyBoonedToday(); // recipient already received a deity boon on the current day
-    error RecipientBoonCapReached(); // recipient hit the lifetime cap on boons from this deity
-    error SlotAlreadyUsed(); // deity boon slot has already been used on the current day
-    error RngNotReady(); // deity boon requested before the day's word landed
+    /// @notice Thrown when a deity attempts to issue a boon to themselves.
+    error SelfBoon();
+    /// @notice Thrown when the deity boon slot index is >= DEITY_DAILY_BOON_COUNT.
+    error InvalidSlot();
+    /// @notice Thrown when the recipient already received a deity boon on the current day.
+    error RecipientAlreadyBoonedToday();
+    /// @notice Thrown when the recipient hit the lifetime cap on boons from this deity.
+    error RecipientBoonCapReached();
+    /// @notice Thrown when the deity boon slot has already been used on the current day.
+    error SlotAlreadyUsed();
+    /// @notice Thrown when a deity boon is requested before the day's RNG word has landed.
+    error RngNotReady();
 
     /// @notice Draw boons for every box in one opened entry.
     /// @dev Delegatecall entrypoint from the Lootbox module; runs in the Game's storage context.
@@ -870,9 +877,10 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      state makes the discount spendable. Decimator tiers are always delivered even
     ///      outside a burn window — a lootbox-sourced decimator boon carries NO time expiry
     ///      (BoonModule: "no time expiry, only deity day"), so it simply waits for the next
-    ///      window; discarding it would destroy a bankable reward. Every other type is
-    ///      likewise always deliverable — lazy boons bypass the purchase level gate at
-    ///      consumption, so no level condition exists for them.
+    ///      window; discarding it would destroy a bankable reward. No other family is
+    ///      filtered here: lazy boons bypass the purchase level gate at consumption, so
+    ///      they carry no level condition (a deity holder cannot buy a lazy pass at all,
+    ///      which the lane simply tolerates).
     function _deliverBoon(
         address player,
         uint8 boonType,
@@ -893,10 +901,13 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
     ///      Both sources use upgrade semantics (only if higher tier/amount).
-    ///      Lootbox boons: emit events, deity day = 0.
-    ///      Deity boons: no events, deity day = day.
+    ///      Lootbox boons: emit LootBoxReward, deity day = 0.
+    ///      Deity boons: no LootBoxReward (issuance logs DeityBoonIssued; instant awards
+    ///      keep their own BoonConsumed/MintRecorded/quest events), deity day = day.
     ///      All boon state is stored in boonPacked[player] (2-slot packed struct).
-    ///      Players can hold one boon per category simultaneously (8 categories).
+    ///      Players can hold one boon per packed lane simultaneously (coinflip, lootbox,
+    ///      purchase, decimator, whale, lazy, deity pass, craps, and one per Degenerette
+    ///      currency); activity, quest-shield and whale-pass awards credit instantly.
     ///      Isolated bit fields per category -- applying a boon in one category cannot
     ///      affect another category's bits (targeted bitmask operations: & ~mask | value).
     function _applyBoon(
@@ -1185,7 +1196,9 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      activity-score input) plus the matching quest-streak bonus. Both legs saturate
     ///      rather than revert — an award must never be able to brick a box open or a gift.
     /// @param player Award recipient.
-    /// @param amt Activity points awarded (10, 25 or 50).
+    /// @param amt Units added to the mint-level count and to the quest streak (10, 25 or 50).
+    ///        The activity SCORE moves by whatever the score formula makes of them
+    ///        (`_mintCountBonusPoints`, capped at 25, plus the streak-derived points).
     /// @param currentDay Day index the award is credited on.
     function _creditActivity(address player, uint24 amt, uint24 currentDay) private {
         uint256 prevData = mintPacked_[player];

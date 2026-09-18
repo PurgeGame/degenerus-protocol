@@ -49,7 +49,7 @@ interface IsDGNRS {
     function poolBalance(Pool pool) external view returns (uint256);
 
     /// @notice Transfer sDGNRS from a pool to a recipient
-    /// @dev Restricted to authorized game contracts only
+    /// @dev Restricted to the game contract.
     /// @param pool Pool identifier to transfer from
     /// @param to Recipient address
     /// @param amount Amount of sDGNRS to transfer
