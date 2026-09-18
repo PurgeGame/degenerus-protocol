@@ -122,21 +122,22 @@ advance calls. Test gas caps must not be raised simply to make a regression pass
 ## Evidence status
 
 Recorded on 2026-09-18 (Node 24.18.0, Foundry 1.6.0-nightly, solc 0.8.34) at the manifest's
-base revision `1df5f574c`. The whole-tree Foundry rows were measured one commit earlier, at
-`1190f44a4`; the only source difference is the removal of a dead internal helper from
-`CrapsBattle.sol` (runtime bytecode identical), covered by the craps slice, the gates, the size
-row and the Slither rescan, all of which were run at the base revision itself.
+base revision `2d350e4f9`. The whole-tree Foundry rows were measured on that revision's
+sources before they were committed; the far-future suites were re-run after the last
+working-tree change to `DegenerusGameMintModule.sol` was reverted to the committed text.
+Gates, oracle, sizes and the static-analysis rows were run at the committed revision.
 
 | Check | Result |
 | --- | --- |
-| Foundry, whole `test/` tree in the seven compile units above | 2,435 passed, 0 failed, 104 skipped, 297 suites |
-| Foundry unit 1 (craps, gas, economics, mutation) at the base revision | 613 passed, 0 failed, 13 skipped |
+| Foundry, whole `test/` tree in the seven compile units above | 2,460 passed, 0 failed, 104 skipped, 313 suites |
+| Foundry unit 1 (craps, gas, economics, mutation) | 631 passed, 0 failed, 13 skipped |
 | Hardhat `make test-hardhat` | 1,656 passing, 22 pending, 0 failing |
-| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03` (empty-bucket skip rate), both accepted reds; needs `python3` and `scripts/data/derive_5_tables.py` |
+| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`, both pre-disclosed reds |
 | Eleven `make check-*` gates and the storage layout oracle | all pass |
-| Slither 0.11.5, 182 contracts, rescanned at the base revision | 4,118 results, 187 High; zero new High or Medium versus the prior scan; one High gone (`uninitialized-state` on the decimator's removed price helper, the shared-storage class) and one Low gone (`timestamp` on the removed craps settlement preview) |
+| Slither 0.11.5, 182 contracts, rescanned at the base revision | 4,120 results, 187 High; High and Medium composition identical to the prior scan (one `uninitialized-state` key re-keyed by the new early-bird latch helper, the shared-storage class) |
 | Aderyn 0.6.8 | 10 High, 22 Low, unchanged |
-| EIP-170 runtime size, checked-in pins | largest 24,444 bytes (`DegenerusGameMintModule`, 132 spare); `CrapsBattle` 23,884 (692 spare); none over |
+| Worst-case advance stages, cold state, word applied in the same transaction | jackpot-phase day one 10,424,211 (ETH leg) and 8,076,401 (early-bird leg, its own stage); purchase-phase daily 13,837,513; all under 16,777,216 (`test/gas/JackpotDayOneWorstCase.t.sol`, `PurchaseDailyWorstCase.t.sol`) |
+| EIP-170 runtime size, checked-in pins | largest 24,559 bytes (`DegenerusGameAdvanceModule`, 17 spare); `DegenerusGameMintModule` 24,444 (132 spare); `CrapsBattle` 23,930 (646 spare); none over |
 
 
 Some `test/repro` tests deliberately assert an undesirable current behavior: a passing
