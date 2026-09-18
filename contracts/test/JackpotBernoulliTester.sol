@@ -8,8 +8,9 @@ pragma solidity 0.8.34;
 ///           - EV-neutrality of the round-up: `E[whole] * 100 ≈ scaledTickets`
 ///             (exact under an ideal uniform mod-100 draw; the uint32 % 100 bias is ~2e-8)
 ///           - Boundary cases at scaledTickets ∈ {0, 1, 99, 100, 101, 199, 200}
-///           - bits[96..127] bit-slice independence from the bits[0..12]
-///             path/level-selection consumers in the same `entropy` word
+///           - bits[96..127] bit-slice independence from the path/level-selection
+///             consumers, which reduce the whole `entropy` word modularly
+///             (`entropy % 100`, `(entropy / 100) % 4`, `(entropy / 100) % 46`)
 ///           - 2-roll uniqueness across the `EntropyLib.hash2(entropy, entropy)`
 ///             keccak self-mix evolution between the medium-amount-branch rolls
 /// @dev    The arithmetic mirrored here is the instruction sequence that ships in

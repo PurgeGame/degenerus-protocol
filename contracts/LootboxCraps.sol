@@ -110,7 +110,9 @@ contract LootboxCraps is Craps {
     /// @notice The protocol's daily VRF word for `day`, or zero if that day has not sealed one.
     /// @dev Read-only. No dice come from it: a table's rolls come from its own index word, which
     ///      is still undrawn while bets bind. The scheduled layer above reads it for a day's
-    ///      window terms and high multiple, all of which are public before any seat is taken.
+    ///      window terms and high multiple, all of which are public before anyone enters an
+    ///      opened window directly; a day reserved ahead is seated before its word exists, which
+    ///      is the reservation's whole point.
     function _dailyWordAt(uint24 day) internal view returns (uint256) {
         return uint256(_extsload(bytes32(_hash2(day, RNG_WORD_BY_DAY_SLOT))));
     }

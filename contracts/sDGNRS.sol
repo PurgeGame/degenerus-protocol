@@ -214,7 +214,8 @@ contract sDGNRS {
     /// @notice Emitted when a player claims their resolved redemption.
     /// @param player The claimant.
     /// @param roll The resolved roll the claim paid against.
-    /// @param ethPayout ETH paid to the claimant.
+    /// @param ethPayout The direct leg's ETH value: credited to `player`'s Game claimable while
+    ///        the game is live; pushed as ETH (stETH covering any shortfall) in terminal mode.
     /// @param lootboxEth ETH staked into a lootbox roll for the claimant (0 if terminal or
     ///        below the dust floor).
     /// @param flipPaid Escrowed FLIP (wei) minted to the redeemer as a flip credit — nonzero only
@@ -320,7 +321,7 @@ contract sDGNRS {
         uint64 burned;
     }
 
-    /// @notice Per-player-per-day pending redemption record awaiting resolution.
+    /// @notice Per-player-per-day redemption record, held from submit until the claim clears it.
     mapping(address => mapping(uint24 => PendingRedemption)) public pendingRedemptions;
     /// @notice Resolved redemption roll per day (0 = unresolved, 25-175 = resolved).
     mapping(uint24 => uint16) public redemptionPeriods;
@@ -875,7 +876,8 @@ contract sDGNRS {
     }
 
     /// @dev Shared settle core for the single and batch claim entry points. Callers must have
-    ///      verified the period is resolved and (in terminal mode) the self-claim rule; the
+    ///      verified the period is resolved and (in terminal mode) that the caller is `player`
+    ///      or an operator `player` approved on the Game; the
     ///      pending-claim existence check lives here (one slot load), returning false on an
     ///      empty (player, day) slot so the batch path skips and the single path reverts.
     function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isTerminal, uint256 rngWordNext) private returns (bool) {

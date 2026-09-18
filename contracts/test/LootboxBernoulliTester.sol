@@ -40,8 +40,9 @@ contract LootboxBernoulliTester {
     /// @notice Bernoulli whole-ticket collapse on bits[224..255] of `seed`.
     /// @dev Instruction-sequence parity with the Bernoulli-collapse sub-step of the manual
     ///      branch of `_settleLootboxRoll`. Production wraps this with the upstream
-    ///      distress-bonus adjustment (and its own uint32 saturation) and the downstream
-    ///      `_queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false)`:
+    ///      distress-bonus adjustment (and its own uint32 saturation) and, downstream,
+    ///      accumulates `whole` per level offset (`_addBoxTickets`), flushing each level once
+    ///      through `_queueEntries(player, level, wholeTicketsToEntries(whole), false)`:
     ///        uint32 scaledPre = futureTickets;
     ///        uint32 whole = futureTickets / uint32(QTY_SCALE);
     ///        uint32 frac  = futureTickets % uint32(QTY_SCALE);
@@ -82,10 +83,11 @@ contract LootboxBernoulliTester {
     ///         `DegenerusGameLootboxModule._settleLootboxRoll`: runs the Bernoulli
     ///         collapse, then applies the `payColdBustConsolation && whole == 0` gate
     ///         that decides whether the WWXRP cold-bust payout fires.
-    /// @dev    Instruction-sequence parity with the production gate:
-    ///           _queueEntries(player, rollLevel, whole, false);
+    /// @dev    Instruction-sequence parity with the production gate, which sits after the roll's
+    ///         `whole` is accumulated into the entry (`_addBoxTickets`) and folds the consolation
+    ///         into the entry's WWXRP lane for the flush:
     ///           if (payColdBustConsolation && whole == 0) {
-    ///               wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount));
+    ///               acc.wwxrp += _boxWwxrpStake(rollAmount);
     ///           }
     ///         The manual callers and `resolveAfkingBox` pass `payColdBustConsolation = true`;
     ///         the other auto-resolve callers (`resolveLootboxDirect`,

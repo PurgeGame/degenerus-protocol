@@ -1020,11 +1020,13 @@ contract CrapsBattle is LootboxCraps {
     ///              contract never disagree about where a chip went.
     ///            - bits 32..159 the bet id, itself `(slot << 64) | seat`.
     ///            - bits 160..167 the entry multiple MINUS ONE, so 0 reads as one copy of the run.
-    ///            - bits 190..205 the standing the seat froze at entry, at the same shift the bet
-    ///              stores it, which is what lets one constant decode both. Nothing the owner does
-    ///              afterwards moves it: it breaks a dead-level scoreboard and it rations the
-    ///              boost a winner carries off, so a reader that cannot see it can order a field
-    ///              only down to a tie and can quote a subsidy only after the fact.
+    ///            - bits 190..205 the standing the seat held when this log was written, at the
+    ///              same shift the bet stores it, which is what lets one constant decode both. The
+    ///              log itself never changes, but the stored standing does: `amendSlip` re-reads
+    ///              the owner's standing, and the bet's copy at the time the field folds is what
+    ///              breaks a dead-level scoreboard and rations the boost a winner carries off. A
+    ///              reader that cannot see the bet word can order a field only down to a tie and
+    ///              can quote a subsidy only after the fact.
     ///            - bit 217 the high flag on a window seat; bits 217..223 a day ticket's per-period
     ///              high mask, bit `217 + p` for period `p` — the same bits the bet stores, so a
     ///              banked high pass seated at one copy of the run still reads as high.

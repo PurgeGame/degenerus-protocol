@@ -872,15 +872,15 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      boon would block a later useful one under upgrade-only semantics — and emits
     ///      `BoonDiscarded` so indexers keep the full draw history.
     ///
-    ///      Only PERMANENTLY dead types are discarded, and only the deity-pass family
-    ///      qualifies: the recipient already holds a pass, or supply is capped, so no future
-    ///      state makes the discount spendable. Decimator tiers are always delivered even
+    ///      Only PERMANENTLY dead types are discarded, and the deity-pass family is the only
+    ///      one filtered here: the recipient already holds a pass, or supply is capped, so no
+    ///      future state makes the discount spendable. Decimator tiers are always delivered even
     ///      outside a burn window — a lootbox-sourced decimator boon carries NO time expiry
     ///      (BoonModule: "no time expiry, only deity day"), so it simply waits for the next
-    ///      window; discarding it would destroy a bankable reward. No other family is
-    ///      filtered here: lazy boons bypass the purchase level gate at consumption, so
-    ///      they carry no level condition (a deity holder cannot buy a lazy pass at all,
-    ///      which the lane simply tolerates).
+    ///      window; discarding it would destroy a bankable reward. Lazy boons bypass the
+    ///      purchase level gate at consumption, so they carry no level condition; a deity
+    ///      holder cannot buy a lazy pass at all, and that dead case is delivered anyway
+    ///      rather than filtered.
     function _deliverBoon(
         address player,
         uint8 boonType,

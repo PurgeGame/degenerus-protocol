@@ -2025,9 +2025,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @notice Pays daily FLIP jackpot to random ticket holders.
-    /// @dev Runs every day in its own transaction. Awards 0.25% of the previous level's
-    ///      recorded prize pool (`levelPrizePool[lvl - 1]`, the ratchet target before any
-    ///      century floor), converted to FLIP at the current level's ticket price.
+    /// @dev Runs in the purchase-phase daily advance, in the same transaction as the daily
+    ///      jackpot. Awards 0.25% of the previous level's recorded prize pool
+    ///      (`levelPrizePool[lvl - 1]`, the ratchet target before any century floor), converted
+    ///      to FLIP at the current level's ticket price.
     ///      75% goes to near-future trait-matched winners in [minLevel, maxLevel].
     ///      25% goes to far-future ticketQueue holders ([lvl+5, lvl+99]).
     /// @param lvl Current level.

@@ -161,7 +161,9 @@ contract DegenerusGameDegeneretteModule is
     /// @param packedSpins Per-spin reels packed low→high, each spin = [playerTraits:32 |
     ///        resultTraits:32 | score:8] (72 bits, spin 0 lowest); bits 216-223 = spin count;
     ///        bit 224 = FLIP survival flag (1 = the survival flip won; unused for WWXRP/ETH).
-    /// @param payout Total reward: FLIP/WWXRP minted, or the ETH gross (= ethShare + the recirc).
+    /// @param payout Total reward: WWXRP minted, FLIP (returned to the box caller and credited
+    ///        through coinflip at flush; only the record-bounty chain mints here), or the ETH
+    ///        gross (= ethShare + the recirc).
     /// @param ethShare ETH credited to the player's claimable winnings (0 for WWXRP/FLIP). The
     ///        recirculated remainder is derivable as `payout - ethShare` (ETH only); that recirc
     ///        box emits its own LootBoxOpened / BoxSpin so its contents are itemized.
@@ -360,7 +362,7 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant QUICK_PLAY_PAYOUT_N4_S8 =     7388959;  // N4/heroGOLD    73,889.59x bet
 
     // -------------------------------------------------------------------------
-    // WWXRP Bonus EV Redistribution (Full Ticket — 5 per-N factor tables)
+    // WWXRP Bonus EV Redistribution (Full Ticket — 8 honest (N, heroIsGold) factor tables)
     // -------------------------------------------------------------------------
     //
     // Per-N factors derived from each N's basePayout schedule + binomial-
@@ -1908,7 +1910,7 @@ contract DegenerusGameDegeneretteModule is
         );
     }
 
-    /// @notice Three FLIP Degenerette spins under one survival flip (mint-only, safe on any box).
+    /// @notice Three FLIP Degenerette spins under one survival flip (FLIP-only, safe on any box).
     /// @dev The total stake splits into three equal per-spin stakes (totalStake / 3; the 0-2 wei integer remainder is dropped, un-staked); the summed payout then double-or-
     ///      nothings on one fair flip (EV-neutral) and is returned for the box entry's FLIP
     ///      lane (credited via coinflip.creditFlip at flush; only the record-bounty chain mints

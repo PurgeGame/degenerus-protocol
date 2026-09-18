@@ -693,7 +693,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      buy side counts a held cover box too); the one exception is an afking cover that
     ///      finds a full entry with no custom to fold into — it takes the cover lane as the
     ///      101st box, since a delivery the player did not choose must never fail. Pass
-    ///      deposits merge held and new customs at the value-weighted average size, which can
+    ///      deposits merge held and new customs at the count-weighted average size (total value
+    ///      over total box count), which can
     ///      move either way. The player's own EV score/level freeze on the first box either
     ///      way, so a cover arriving first is what seeds them.
     /// @custom:reverts E When a pass purchase (`count != 0`) finds the entry full with no custom
@@ -783,7 +784,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (count != 0 || (held >= MAX_BOXES_PER_ORDER && cHeld != 0)) {
             // A pass purchase lands in the custom lane: one box per pass while the entry has the
             // room, fewer and larger ones as the cap closes. Customs already held fold in at the
-            // value-weighted average size (which can land below a held size) and a full entry
+            // count-weighted average size, total value over total box count (which can land
+            // below a held size), and a full entry
             // still takes the value without a new box. An afking cover that finds the entry full
             // folds into a held custom the same way; with no custom to fold into it takes the
             // cover lane below, the one box the ceiling admits past the hundred, since a

@@ -67,7 +67,8 @@ interface IDegenerusGame {
     function decWindow() external view returns (bool);
 
     /// @notice Raw jackpot compression flag.
-    /// @dev Latched at target-met: 1 (compressed, 3 logical days) when the target is met
+    /// @dev Latched at target-met: 1 (compressed: the five logical jackpot days settle over three
+    ///      physical days, the day counter stepping 0, 1, 3, end) when the target is met
     ///      within 3 days of the purchase start; 2 (turbo, 1 day) when the target is met within
     ///      1 day of the purchase start on any level (a BAF level latches it at the sealed day's
     ///      settlement, every other level at the morning arm). A turbo's 2 lingers through the
