@@ -302,9 +302,15 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
         // --- Slot 0: Whale ---
         uint24 whaleDayLocal = uint24(s0 >> BP_WHALE_DAY_SHIFT);
-        {
+        if (whaleDayLocal != 0) {
             uint24 deityWhaleDay = uint24(s0 >> BP_DEITY_WHALE_DAY_SHIFT);
             if (deityWhaleDay != 0 && deityWhaleDay != currentDay) {
+                s0 = s0 & BP_WHALE_CLEAR;
+                changed0 = true;
+                whaleDayLocal = 0;
+            } else if (currentDay > whaleDayLocal + 4) {
+                // Lootbox-rolled discount lapses after the same 4-day window purchaseWhalePass
+                // honours, so a lapsed tier no longer blocks a lower re-roll as a "downgrade".
                 s0 = s0 & BP_WHALE_CLEAR;
                 changed0 = true;
                 whaleDayLocal = 0;
@@ -1358,14 +1364,15 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         return ((table >> (byteIndex * 8)) & 0xFF) * 0.01 ether;
     }
 
-    /// @dev Activate a 100-level whale pass for a player by recording an O(1)
-    ///      pending claim. Opens are uniform O(1) regardless of pass status.
-    ///      Materialization (stats + 100 levels × tickets) is deferred to the
-    ///      player-paid `claimWhalePass` endpoint, where the stats helper is
-    ///      applied immediately after the read-then-zero of `whalePassClaims[player]`.
+    /// @dev Activate a full 100-level whale pass for a player by recording an O(1)
+    ///      pending claim: two half-passes = 200 entries = one whole ticket every other
+    ///      level. Opens are uniform O(1) regardless of pass status. Materialization
+    ///      (stats + 100 levels × tickets) is deferred to the player-paid `claimWhalePass`
+    ///      endpoint, where the stats helper is applied immediately after the
+    ///      read-then-zero of `whalePassClaims[player]`.
     function _activateWhalePass(address player) private {
-        // O(1) record of one half-pass claim.
-        whalePassClaims[player] += 1;
+        // O(1) record of one full pass (two half-passes).
+        whalePassClaims[player] += 2;
     }
 
     /// @notice Issue a deity boon to a recipient

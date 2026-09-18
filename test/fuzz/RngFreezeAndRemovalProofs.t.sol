@@ -443,7 +443,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     ///         assertion: after a box-open that triggers the type-28 whale-pass boon, the slot
     ///         value is non-zero AND the transaction did not revert (no freeze-lock interference
     ///         on this write).
-    /// @dev    Source-level proof complement: assert the `whalePassClaims[player] += 1;` write site
+    /// @dev    Source-level proof complement: assert the `whalePassClaims[player] +=` write site
     ///         is byte-present in the LootboxModule (post-Plan-335-02 shape).
     function testWhalePassClaimsWriteIsNonFrozenSlot() public view {
         // Box-order migration: the deity-boon issuance delegatecall (and this box-open whale-pass

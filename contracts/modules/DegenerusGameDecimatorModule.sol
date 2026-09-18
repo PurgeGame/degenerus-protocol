@@ -421,8 +421,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
     /// @dev Non-claimable entries (already claimed / non-winner) are skipped, not reverted,
-    ///      so one stale address can't poison a mass-claim sweep. Whole Whale Pass units are
-    ///      accumulated in `whalePassClaims`; any sub-unit remainder still resolves here.
+    ///      so one stale address can't poison a mass-claim sweep. Whole half-pass units (2.25 ETH
+    ///      of ticket face each) accumulate in `whalePassClaims`; any sub-unit remainder still
+    ///      resolves here.
     /// @param players Winners whose claims to resolve.
     /// @param lvl Level to claim from (any persisted round; snapshots never expire).
     /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
@@ -474,21 +475,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // caller during a live game (no liveness need post-gameOver). Counts only settled boxes —
         // already-claimed and non-winner entries are skipped above and earn nothing. The ETH-value
         // tracks the per-box settle gas at the 0.5-gwei reference (FLIP per ETH = PRICE_COIN_UNIT /
-        // mintPrice, so the credit holds its gas-reimbursement value across the price curve).
+        // the routed ticket price the Game's mintPrice quotes, so the credit holds its
+        // gas-reimbursement value across the price curve).
         if (!over && settled != 0) {
             coinflip.creditFlip(
                 msg.sender,
                 (settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
-                    _mintPriceInContext()
+                    PriceLookupLib.priceForLevel(_activeTicketLevel())
             );
         }
-    }
-
-    /// @dev In-context mint price for the box-bounty ETH→FLIP conversion, mirroring the Game's
-    ///      `mintPrice` (the active ticket level's price): jackpot phase targets the current level,
-    ///      purchase phase the next. Read from shared storage so the bounty math needs no self-call.
-    function _mintPriceInContext() private view returns (uint256) {
-        return PriceLookupLib.priceForLevel(jackpotPhaseFlag ? level : level + 1);
     }
 
     /// @dev Shared claim core for the single and batch entry points. The lootbox portion's

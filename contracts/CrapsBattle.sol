@@ -3682,7 +3682,7 @@ contract CrapsBattle is LootboxCraps {
     /// @return denied The rest. Protocol money, so it is banked in the progressive rather than
     ///         left unminted; zero at full standing, always.
     function _laneBoostSplit(Window memory w, uint256 word, uint256 header)
-        private
+        internal
         view
         returns (uint256 paid, uint256 denied)
     {
@@ -4346,33 +4346,5 @@ contract CrapsBattle is LootboxCraps {
         // Always zero: a bonus window admits anybody. Kept in the tuple because a client reads
         // the same shape for a custom battle, which may still set one.
         minScore = (w.terms >> _TERM_SCORE_SHIFT) & _BET_MINSCORE_MASK;
-    }
-
-    /// @notice What `betId` would settle to, if its table has rolled.
-    /// @dev Exactly what a settlement will pay — same computation, not a second copy of it.
-    function previewSettlement(uint256 betId) external view returns (uint256 won, uint256 paid) {
-        uint256 header = _bets[betId];
-        if (address(uint160(header)) == address(0)) revert NoSuchBet();
-        // Through `_indexOf`, so a slip previews on the table its slot actually shut onto.
-        uint256 word = _wordAt(_indexOf(betId >> 64));
-        if (word == 0) revert RngNotReady();
-        Window memory w = _slotWindow(betId >> 64);
-        Settlement memory s = _settlementOf(betId, header, w, word);
-        // The same scaling a settlement applies, and in the same place: after the rounding.
-        unchecked {
-            uint256 scale = header & _BET_HIGH_BIT != 0 ? w.highMult : 1;
-            won = s.won * scale;
-            paid = s.paid * scale;
-            // `paid` is still the bare scaled payment here, so it doubles as the boon base.
-            paid += _boonBonus((header >> _BET_BOON_SHIFT) & _BET_BOON_MASK, paid);
-            // A SOLE high roller's extra bounties and its lane's boost ride this same run, so a
-            // preview that left them out would under-quote the one seat they belong to. A
-            // CONTESTED lane is paid to one of its seats when the field finishes, not returned by
-            // a run, so it is no part of what this quotes.
-            if (header & _BET_HIGH_BIT != 0 && uint32(_highField[w.key]) == 1) {
-                (uint256 lane,) = _laneBoostSplit(w, word, header);
-                paid += _ride(s.paid, (scale - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT + lane, w.bankroll);
-            }
-        }
     }
 }
