@@ -1,7 +1,7 @@
 {
-  "date": "2026-09-17",
+  "date": "2026-09-18",
   "status": "working-tree snapshot at the base revision; not an audited deployment",
-  "base_commit": "dde6275ef",
+  "base_commit": "988d0374b",
   "source_file_count": 58,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -80,5 +80,5 @@
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "evidence recorded at the base revision on 2026-09-17: see docs/VERIFICATION.md, Evidence status"
+  "verification": "evidence recorded at dde6275ef on 2026-09-17: see docs/VERIFICATION.md, Evidence status. The 2026-09-18 delta (988d0374b) is comment-only: comment-stripped sources are byte-identical, so the recorded evidence carries."
 }
