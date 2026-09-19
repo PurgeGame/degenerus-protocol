@@ -134,6 +134,9 @@ async function main() {
     verifyAddresses(predicted, deployedAddrs);
     console.log("  All addresses verified.");
 
+    // One batch after all CREATEs; never consume a predicted deployment nonce.
+    await (await contracts.GAME.initProtocolDeity({ gasLimit: 16_777_216 })).wait();
+
     // Wire Icons32Data. Symbol-ordered dataset only — the legacy
     // icons32Data.json is badge-FILE ordered and mismaps the cards quadrant.
     // A local chain is disposable, so finalize() here matches the testnet and

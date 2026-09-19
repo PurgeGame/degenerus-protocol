@@ -133,6 +133,11 @@ async function main() {
     verifyAddresses(predicted, deployed);
     console.log("All addresses match predictions.\n");
 
+    // Keep this transaction after all CREATEs so predicted addresses do not shift.
+    const game = await hre.ethers.getContractAt("DegenerusGame", deployed.get("GAME"), deployer);
+    const genesisReceipt = await (await game.initProtocolDeity({ gasLimit: 16_777_216 })).wait();
+    console.log(`Protocol deities initialized together (${genesisReceipt.gasUsed} gas).\n`);
+
     // 7b. Record the vault's constructor-deployed share tokens (DGVF/DGVE) so
     // downstream tooling (ens-register.js forward records) can reach them.
     const vault = await hre.ethers.getContractAt(

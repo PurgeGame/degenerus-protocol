@@ -59,13 +59,30 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
         emit log_named_uint("empty_walk_plus_daily_including_intrinsic", used);
         assertEq(stage, STAGE_PURCHASE_DAILY, "empty cleanup must fall through to the full daily");
         assertEq(ethAwards, PURCHASE_ETH_WINNERS, "all ETH draws must execute");
-        assertEq(tickets, PURCHASE_PHASE_TICKET_MAX_WINNERS, "all ticket awards must execute");
+        assertEq(tickets, 0, "the ticket leg waits for its own stage");
         assertEq(
             uint24(uint256(vm.load(address(game), bytes32(uint256(62)))) >> 32),
             1000,
             "entire empty foil tail must advance"
         );
         assertLt(used, EIP7825_TX_GAS_CAP, "composed empty scan and payout exceed cap");
+
+        // The priced ticket leg pays from the next advance on the same recorded word.
+        vm.recordLogs();
+        before = gasleft();
+        game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
+        used = before - gasleft() + 21_064;
+        logs = vm.getRecordedLogs();
+        tickets = 0;
+        stage = 255;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == TICKET_WIN_SIG) ++tickets;
+            if (logs[i].topics[0] == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
+        }
+        emit log_named_uint("ticket_stage_including_intrinsic", used);
+        assertEq(stage, 15, "the purchase ticket stage must follow");
+        assertEq(tickets, PURCHASE_PHASE_TICKET_MAX_WINNERS, "all ticket awards must execute in the ticket stage");
+        assertLt(used, EIP7825_TX_GAS_CAP, "ticket stage exceeds cap");
     }
 }
 

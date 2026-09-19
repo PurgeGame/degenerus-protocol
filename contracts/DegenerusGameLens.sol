@@ -27,6 +27,7 @@ pragma solidity 0.8.34;
 import {DegenerusGameMintStreakUtils} from "./modules/DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
+import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 
 /// @dev Read surface the lens needs from the game: the raw-slot escape hatch plus
 ///      the authoritative aggregate score.
@@ -60,6 +61,93 @@ interface IDegenerusGameLensSource {
 ///      be called — they would read this contract's empty storage; the lens carries
 ///      explicit mirrors that source the same fields via extsload instead.
 contract DegenerusGameLens is DegenerusGameMintStreakUtils {
+    /// @notice Registered deity by owner-list index (genesis first, then paid, in order).
+    function deityOwnerAt(address game, uint256 index) external view returns (address owner) {
+        uint256 base;
+        assembly { base := deityPassOwners.slot }
+        if (index >= _sload(game, bytes32(base))) revert E();
+        owner = address(uint160(_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + index))));
+    }
+
+    /// @notice Paid deity sales, excluding genesis, used by the public price curve.
+    function deityPassSalesCount(address game) external view returns (uint8) {
+        uint256 base;
+        uint256 offset;
+        assembly { base := deityPassSales.slot offset := deityPassSales.offset }
+        return uint8(_sload(game, bytes32(base)) >> (offset * 8));
+    }
+
+    /// @notice Exact FLIP principal, scaled weight, entry count and award mask for a draw.
+    function protocolBoonPool(address game, address issuer, uint24 day)
+        public view returns (ProtocolBoonPool memory pool)
+    {
+        uint256 base;
+        assembly { base := protocolBoonPools.slot }
+        uint256 word = _sload(game, _mapSlot(uint256(day), uint256(_mapSlot(issuer, base))));
+        pool.totalDonatedWei = uint112(word);
+        pool.totalWeight = uint64(word >> 112);
+        pool.entryCount = uint32(word >> 176);
+        pool.awardedMask = uint8(word >> 208);
+    }
+
+    /// @notice Immutable donor, cumulative weight, 100-FLIP amount units and score snapshot.
+    /// @dev An absent index returns zero fields, matching a mapping read.
+    function protocolBoonEntryAt(address game, address issuer, uint24 day, uint32 index)
+        public view returns (ProtocolBoonEntry memory entry)
+    {
+        uint256 base;
+        assembly { base := protocolBoonEntries.slot }
+        bytes32 daySlot = _mapSlot(uint256(day), uint256(_mapSlot(issuer, base)));
+        uint256 word = _sload(game, _mapSlot(uint256(index), uint256(daySlot)));
+        entry.donor = address(uint160(word));
+        entry.cumulativeWeight = uint64(word >> 160);
+        entry.amountUnits = uint8(word >> 224);
+        entry.scoreSnapshot = uint16(word >> 232);
+    }
+
+    /// @notice Preview a donor's 100-FLIP weight units and current score multiplier.
+    /// @dev Full `amount` funds coinflip; scaled weight keeps the common factor of 800.
+    function protocolBoonQuote(address game, address donor, uint256 amount)
+        external view returns (uint8 amountUnits, uint16 score, uint16 multiplierUnits, uint64 weight)
+    {
+        if (amount < 100 ether || amount > 25_000 ether) revert E();
+        amountUnits = uint8(amount / 100 ether);
+        uint256 rawScore = IDegenerusGameLensSource(game).playerActivityScore(donor);
+        if (rawScore > type(uint16).max) revert E();
+        score = uint16(rawScore);
+        multiplierUnits = uint16(ActivityCurveLib.boonDrawMultUnits(rawScore));
+        weight = uint64(uint256(amountUnits) * multiplierUnits);
+    }
+
+    /// @notice Locate all three winning intervals without an on-chain donor sweep.
+    /// @dev Historical outcomes stay inspectable after automatic next-day issuance.
+    function findProtocolBoonWinners(address game, address issuer, uint24 day)
+        external view returns (bool ready, address[3] memory winners, uint32[3] memory indices, uint64[3] memory rolls)
+    {
+        if (day == 0 || day == type(uint24).max) return (false, winners, indices, rolls);
+        ProtocolBoonPool memory pool = protocolBoonPool(game, issuer, day);
+        uint256 word = _rngWordByDayOf(game, day + 1);
+        if (pool.totalWeight == 0 || word == 0) {
+            return (false, winners, indices, rolls);
+        }
+        for (uint8 slot; slot < 3; ++slot) {
+            uint64 roll = uint64(uint256(keccak256(abi.encode(
+                PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, word
+            ))) % pool.totalWeight);
+            uint32 lo;
+            uint32 hi = pool.entryCount;
+            while (lo < hi) {
+                uint32 mid = lo + (hi - lo) / 2;
+                if (protocolBoonEntryAt(game, issuer, day, mid).cumulativeWeight <= roll) lo = mid + 1;
+                else hi = mid;
+            }
+            indices[slot] = lo;
+            rolls[slot] = roll;
+            winners[slot] = protocolBoonEntryAt(game, issuer, day, lo).donor;
+        }
+        ready = true;
+    }
+
     /// @dev Mirrors DegenerusGameMintStreakUtils.JACKPOT_LEVEL_CAP (private there).
     uint8 private constant LENS_JACKPOT_LEVEL_CAP = 5;
 

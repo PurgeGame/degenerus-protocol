@@ -95,9 +95,9 @@ describe("DegenerusGame", function () {
       const { game, vault, sdgnrs } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
       const sdgnrsAddr = await sdgnrs.getAddress();
-      // Tickets owed at level 1 should be 16 for vault and sdgnrs
-      expect(await game.entriesOwedView(1, vaultAddr)).to.equal(16n);
-      expect(await game.entriesOwedView(1, sdgnrsAddr)).to.equal(16n);
+      // Genesis deities: one whole ticket (4 entries) per level for vault and sdgnrs
+      expect(await game.entriesOwedView(1, vaultAddr)).to.equal(4n);
+      expect(await game.entriesOwedView(1, sdgnrsAddr)).to.equal(4n);
     });
 
     it("purchaseInfo returns consistent initial state", async function () {

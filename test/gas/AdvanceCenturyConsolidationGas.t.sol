@@ -15,6 +15,10 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
     function seed(uint256 word, uint128 nextPool, uint128 futurePool) external {
         uint24 day = _simulatedDayIndex();
         level = 99;
+        // Real maximum supply, with prior transition coverage committed.
+        for (uint256 i = deityPassOwners.length; i < 32; ++i) {
+            deityPassOwners.push(address(uint160(0xDE170000 + i)));
+        }
         purchaseStartDay = day - 21;
         dailyIdx = day - 1;
         lastPurchaseDay = true;
@@ -33,8 +37,8 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
 
         // Perpetual tickets populate every BAF candidate level in a live game.
         for (uint24 target = 105; target <= 199; ++target) {
-            _seedQueued(_tqFarFutureKey(target), target, ContractAddresses.SDGNRS, uint80(16 << 8));
-            _seedQueued(_tqFarFutureKey(target), target, ContractAddresses.VAULT, uint80(16 << 8));
+            _seedQueued(_tqFarFutureKey(target), target, ContractAddresses.SDGNRS, uint80(4 << 8));
+            _seedQueued(_tqFarFutureKey(target), target, ContractAddresses.VAULT, uint80(4 << 8));
         }
 
         // The selected word has 50 different (level, trait) buckets. All four

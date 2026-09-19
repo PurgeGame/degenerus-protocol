@@ -90,8 +90,10 @@ describe("DegenerusDeityPass", function () {
       expect(nonCrypto).to.equal("#111111");
     });
 
-    it("no tokens are minted on deploy (balanceOf for any user is 0)", async function () {
-      const { deityPass, alice, bob } = await getFixture();
+    it("genesis mints belong to the vault and sDGNRS; public users start empty", async function () {
+      const { deityPass, vault, sdgnrs, alice, bob } = await getFixture();
+      expect(await deityPass.ownerOf(0)).to.equal(await vault.getAddress());
+      expect(await deityPass.ownerOf(6)).to.equal(await sdgnrs.getAddress());
       expect(await deityPass.balanceOf(alice.address)).to.equal(0n);
       expect(await deityPass.balanceOf(bob.address)).to.equal(0n);
     });
@@ -273,20 +275,20 @@ describe("DegenerusDeityPass", function () {
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
 
-      const tx = await deityPass.connect(gameSigner).mint(alice.address, 0);
+      const tx = await deityPass.connect(gameSigner).mint(alice.address, 4);
       await expect(tx)
         .to.emit(deityPass, "Transfer")
-        .withArgs(ZERO_ADDRESS, alice.address, 0n);
+        .withArgs(ZERO_ADDRESS, alice.address, 4n);
       await stopImpersonate(gameAddr);
 
-      expect(await deityPass.ownerOf(0)).to.equal(alice.address);
+      expect(await deityPass.ownerOf(4)).to.equal(alice.address);
       expect(await deityPass.balanceOf(alice.address)).to.equal(1n);
     });
 
     it("reverts with NotAuthorized when a non-GAME address tries to mint", async function () {
       const { deityPass, alice, bob } = await getFixture();
       await expect(
-        deityPass.connect(alice).mint(bob.address, 0)
+        deityPass.connect(alice).mint(bob.address, 4)
       ).to.be.revertedWithCustomError(deityPass, "NotAuthorized");
     });
 
@@ -335,17 +337,18 @@ describe("DegenerusDeityPass", function () {
       await stopImpersonate(gameAddr);
     });
 
-    it("can mint all 32 tokens (tokenId 0 to 31)", async function () {
+    it("can mint the remaining 30 tokens alongside the two genesis passes", async function () {
       const { deityPass, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
 
       for (let i = 0; i < 32; i++) {
+        if (i === 0 || i === 6) continue;
         await deityPass.connect(gameSigner).mint(alice.address, i);
       }
       await stopImpersonate(gameAddr);
 
-      expect(await deityPass.balanceOf(alice.address)).to.equal(32n);
+      expect(await deityPass.balanceOf(alice.address)).to.equal(30n);
     });
 
     it("mint at tokenId 31 (last valid) succeeds", async function () {
@@ -373,7 +376,7 @@ describe("DegenerusDeityPass", function () {
   describe("ERC721 view functions", function () {
     it("ownerOf reverts with InvalidToken for unminted tokenId", async function () {
       const { deityPass } = await getFixture();
-      await expect(deityPass.ownerOf(0)).to.be.revertedWithCustomError(
+      await expect(deityPass.ownerOf(4)).to.be.revertedWithCustomError(
         deityPass,
         "InvalidToken"
       );
@@ -401,7 +404,7 @@ describe("DegenerusDeityPass", function () {
 
     it("getApproved reverts with InvalidToken for unminted token", async function () {
       const { deityPass } = await getFixture();
-      await expect(deityPass.getApproved(0)).to.be.revertedWithCustomError(
+      await expect(deityPass.getApproved(4)).to.be.revertedWithCustomError(
         deityPass,
         "InvalidToken"
       );
@@ -462,7 +465,7 @@ describe("DegenerusDeityPass", function () {
   describe("tokenURI()", function () {
     it("reverts with InvalidToken for unminted token", async function () {
       const { deityPass } = await getFixture();
-      await expect(deityPass.tokenURI(0)).to.be.revertedWithCustomError(
+      await expect(deityPass.tokenURI(4)).to.be.revertedWithCustomError(
         deityPass,
         "InvalidToken"
       );
@@ -470,15 +473,15 @@ describe("DegenerusDeityPass", function () {
 
     it("returns a non-empty string for a minted token", async function () {
       const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 0);
-      const uri = await deityPass.tokenURI(0);
+      await mintViaGame(deityPass, game, alice.address, 4);
+      const uri = await deityPass.tokenURI(4);
       expect(uri.length).to.be.gt(0);
     });
 
     it("starts with 'data:application/json;base64,' prefix", async function () {
       const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 0);
-      const uri = await deityPass.tokenURI(0);
+      await mintViaGame(deityPass, game, alice.address, 4);
+      const uri = await deityPass.tokenURI(4);
       expect(uri.startsWith("data:application/json;base64,")).to.be.true;
     });
 
@@ -493,8 +496,8 @@ describe("DegenerusDeityPass", function () {
 
     it("contains 'data:image/svg+xml;base64,' in the image field", async function () {
       const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 0);
-      const uri = await deityPass.tokenURI(0);
+      await mintViaGame(deityPass, game, alice.address, 4);
+      const uri = await deityPass.tokenURI(4);
       const base64Part = uri.replace("data:application/json;base64,", "");
       const json = Buffer.from(base64Part, "base64").toString("utf8");
       expect(json).to.include("data:image/svg+xml;base64,");
@@ -502,10 +505,10 @@ describe("DegenerusDeityPass", function () {
 
     it("returns a distinct URI for each tokenId", async function () {
       const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 0);
+      await mintViaGame(deityPass, game, alice.address, 4);
       await mintViaGame(deityPass, game, alice.address, 8);
 
-      const uri0 = await deityPass.tokenURI(0);
+      const uri0 = await deityPass.tokenURI(4);
       const uri8 = await deityPass.tokenURI(8);
       expect(uri0).to.not.equal(uri8);
     });
@@ -528,17 +531,17 @@ describe("DegenerusDeityPass", function () {
   describe("transferFrom()", function () {
     it("reverts with Soulbound", async function () {
       const { deityPass, game, alice, bob } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 0);
+      await mintViaGame(deityPass, game, alice.address, 4);
       await expect(
-        deityPass.connect(alice).transferFrom(alice.address, bob.address, 0)
+        deityPass.connect(alice).transferFrom(alice.address, bob.address, 4)
       ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
 
     it("reverts with Soulbound even for non-owner caller", async function () {
       const { deityPass, game, alice, bob, carol } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 0);
+      await mintViaGame(deityPass, game, alice.address, 4);
       await expect(
-        deityPass.connect(bob).transferFrom(alice.address, carol.address, 0)
+        deityPass.connect(bob).transferFrom(alice.address, carol.address, 4)
       ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
   });
@@ -550,14 +553,14 @@ describe("DegenerusDeityPass", function () {
   describe("safeTransferFrom()", function () {
     it("reverts with Soulbound (no-data overload)", async function () {
       const { deityPass, game, alice, bob } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 6);
+      await mintViaGame(deityPass, game, alice.address, 7);
       await expect(
         deityPass
           .connect(alice)
           ["safeTransferFrom(address,address,uint256)"](
             alice.address,
             bob.address,
-            6
+            7
           )
       ).to.be.revertedWithCustomError(deityPass, "Soulbound");
     });
@@ -585,8 +588,8 @@ describe("DegenerusDeityPass", function () {
   describe("boundary tokenId edge cases", function () {
     it("tokenId 0 (minimum valid) can be minted and queried", async function () {
       const { deityPass, game, alice } = await getFixture();
-      await mintViaGame(deityPass, game, alice.address, 0);
-      expect(await deityPass.ownerOf(0)).to.equal(alice.address);
+      await mintViaGame(deityPass, game, alice.address, 4);
+      expect(await deityPass.ownerOf(4)).to.equal(alice.address);
     });
 
     it("tokenId 31 (maximum valid) can be minted and queried", async function () {

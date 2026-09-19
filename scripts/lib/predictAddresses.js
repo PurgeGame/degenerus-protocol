@@ -10,8 +10,10 @@ const JACKPOT_RESET_TIME = 82620n;
  *
  * Constraints:
  *  - COIN (N+12) before VAULT (N+21): vault reads vaultMintAllowance()
- *  - GAME (N+14) + modules (N+1..11) before SDGNRS (N+22): staked calls initPerpetualTickets; vault/staked
+ *  - GAME (N+14) + modules (N+1..11) before SDGNRS (N+22): vault/staked
  *    constructors self-subscribe via the game-resident afking path (game.subscribe, SUB-09)
+ *  - Both protocol deity grants run together in one initProtocolDeity transaction AFTER
+ *    every CREATE, so the additional initialization does not shift predicted addresses.
  *  - GAME_AFKING_MODULE (N+11) before VAULT (N+21) / SDGNRS (N+22): the v55 afking surface is
  *    game-resident (DegenerusGame delegatecalls GameAfkingModule); the vault/staked constructor
  *    self-subscribes hit live module code only if GAME + the afking module are deployed first.

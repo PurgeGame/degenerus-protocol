@@ -414,6 +414,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     function _mintDeity(string memory name) internal returns (address holder, uint256 dId) {
         holder = makeAddr(name);
         dId = _nextDeityId++;
+        if (dId == 6) dId = _nextDeityId++; // symbol 6 is the sDGNRS genesis deity
         vm.prank(address(game));
         deityPass.mint(holder, dId);
     }

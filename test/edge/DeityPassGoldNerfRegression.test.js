@@ -424,6 +424,13 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
         // No deity: entire `if (deity != address(0))` block skipped
         expect(goldTierVirtualCount(GOLD_TRAIT, 50n, false)).to.equal(0n);
         expect(goldTierVirtualCount(COMMON_TRAIT, 50n, false)).to.equal(0n);
+        for (const color of [5, 6]) {
+          expect(goldTierVirtualCount(color << 3, 0n, true)).to.equal(1n);
+          expect(goldTierVirtualCount(color << 3, 199n, true)).to.equal(1n);
+          expect(goldTierVirtualCount(color << 3, 200n, true)).to.equal(2n);
+          expect(goldTierVirtualCount(color << 3, 500n, true)).to.equal(5n);
+          expect(goldTierVirtualCount(color << 3, 500n, false)).to.equal(0n);
+        }
         // Boundary: bucket size pushes common-tier above the floor.
         expect(goldTierVirtualCount(COMMON_TRAIT, 200n, true)).to.equal(4n);
         // fullSymId >= 32: branch skipped entirely (no deity slot exists).
@@ -1213,7 +1220,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
           const deityBaseSlot = deriveStorageSlot("deityBySymbol");
 
-          // CONFIRM deityBySymbol[0] is zero (fixture default; no seeding).
+          // Explicit no-deity fixture: symbol 0 belongs to the vault at genesis.
+          await seedDeityBySymbol(gameAddr, 0, ZERO_ADDRESS, deityBaseSlot);
           const deityRead = await readDeityBySymbol(
             gameAddr,
             0,

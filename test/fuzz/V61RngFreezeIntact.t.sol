@@ -66,7 +66,8 @@ contract V61RngFreezeIntact is DeployProtocol {
     bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(address,uint256)");
 
     uint256 private _t;
-    uint8 private _nextDeityId;
+    // Symbols 0 and 6 are the genesis deities (VAULT / SDGNRS); mint players from 1, skipping 6.
+    uint8 private _nextDeityId = 1;
 
     // The observable outcome of an AFPAY waterfall spend (everything a VRF/block-entropy read could perturb).
     struct AfpayOutcome {
@@ -515,6 +516,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     function _mintDeity(string memory name) internal returns (address holder, uint256 deityId) {
         holder = makeAddr(name);
         deityId = _nextDeityId++;
+        if (deityId == 6) deityId = _nextDeityId++;
         vm.prank(address(game));
         deityPass.mint(holder, deityId);
     }

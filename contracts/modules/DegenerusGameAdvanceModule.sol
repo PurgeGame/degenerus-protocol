@@ -31,6 +31,7 @@ import {
     IDegenerusGameJackpotModule,
     IDegenerusGameMintModule,
     IDegenerusGameFoilPackModule,
+    IDegenerusGameBoonModule,
     IGameAfkingModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IVRFCoordinator, VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
@@ -178,6 +179,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      after STAGE_JACKPOT_DAILY_STARTED priced it and ahead of the coin+tickets stage,
     ///      so the 305-winner ETH leg and the 128-winner early-bird leg never share a tx.
     uint8 private constant STAGE_JACKPOT_EARLY_BIRD_TICKETS = 14;
+    /// @dev The ticket leg of a purchase-phase daily, paid from the advance after the one
+    ///      that priced it (STAGE_PURCHASE_DAILY) on the same recorded word; seals the day.
+    uint8 private constant STAGE_PURCHASE_DAILY_TICKETS = 15;
     // No deferred-composition stage is left: the subscriber STAGE is entry-gated on
     // !rngLockedFlag, so it can never complete in a tx that also has a buffered word /
     // pending backfill.
@@ -680,8 +684,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     // inside processFutureTicketBatch, yet we still break here for the per-tx
                     // one-batch gas discipline. Re-assert the marker so the next advance's
                     // resumingFF check skips the (already-completed) transition housekeeping —
-                    // otherwise _processPhaseTransition re-runs and double-credits the SDGNRS/VAULT
-                    // perpetual jackpot entries. On that next advance the FF queue is empty, so the
+                    // otherwise transition housekeeping re-runs needlessly (deity watermarks
+                    // independently prevent duplicate perpetual grants). On that next advance the FF queue is empty, so the
                     // batch returns finished with no work and the transition completes cleanly.
                     if (ffFinished) {
                         ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT;
@@ -714,6 +718,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // === PURCHASE PHASE ===
             if (!inJackpot) {
+                // Ticket leg of the purchase-phase daily: the stage after the one that
+                // priced it, on the same recorded word. The lock has held since the request,
+                // so the purchase level is still un-promoted and nothing sits between the
+                // halves. This stage seals the day, so the last-purchase latch it may set
+                // never coexists with a held lock across transactions.
+                if (_purchaseTicketLegPending()) {
+                    _payPurchaseDailyTickets(rngWord);
+                    _sealPurchaseDay(purchaseLevel, day, wallDay, psd);
+                    stage = STAGE_PURCHASE_DAILY_TICKETS;
+                    break;
+                }
+
                 // Pre-target: daily jackpots while building prize pool.
                 // lastPurchase equals lastPurchaseDay here (read after the turbo
                 // write, inside !inJackpot, with no writer on the path between).
@@ -730,35 +746,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         payDailyJackpot(false, purchaseLevel, rngWord);
                         _payDailyCoinJackpot(purchaseLevel, rngWord, purchaseLevel + 1, purchaseLevel + 4);
                     }
-                    bool targetMet = _getNextPrizePool() > _prizePoolTarget(purchaseLevel);
-                    // Do not latch on an RNGREUSE replay day. Its NEXT day may also have a cached
-                    // backfill word, which would let rngGate bypass the sole `level = lvl` writer in
-                    // _finalizeRngRequest and enter jackpot one level behind. Latch only after the
-                    // walk reaches the real wall day; the following calendar day then necessarily
-                    // takes the normal request path and promotes the level. `day >= psd` also makes
-                    // the compressed-phase subtraction safe after the death-clock adjustment.
-                    if (targetMet && day == wallDay && day >= psd) {
-                        lastPurchaseDay = true;
-                        // x0 (BAF) level: arm tomorrow's flip day for the
-                        // weighted depositor draw — the sealed day's direct
-                        // deposits stake day + 1, the day the transition word
-                        // resolves. Turbo-speed x0: the one-day collapse
-                        // latches here rather than at the morning arm, leaving
-                        // the rest of the sealed day as a real last-purchase
-                        // window ahead of the collapse; that transition request
-                        // collapses all five logical jackpot days exactly as an
-                        // armed turbo does.
-                        bool bafLevel_ = purchaseLevel % 10 == 0;
-                        if (bafLevel_) {
-                            coinflip.armBafDraw(day + 1);
-                        }
-                        if (bafLevel_ && day - psd <= 1) {
-                            compressedJackpotFlag = 2;
-                        } else if (day - psd <= 3) {
-                            compressedJackpotFlag = 1;
-                        }
-                    }
-                    _unlockRng(day);
+                    // A priced ticket leg seals the day from its own stage instead.
+                    if (!_purchaseTicketLegPending()) _sealPurchaseDay(purchaseLevel, day, wallDay, psd);
                     stage = STAGE_PURCHASE_DAILY;
                     break;
                 }
@@ -1364,6 +1353,48 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @dev Pay the pending purchase-phase ticket leg via jackpot module delegatecall.
+    /// @param randWord The day's recorded VRF word.
+    function _payPurchaseDailyTickets(uint256 randWord) private {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
+            .delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payPurchaseDailyTickets.selector, randWord));
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Seal a purchase-phase day: latch the level's last purchase day when the next-pool
+    ///      target is met, arm the x0 BAF draw and the compressed shapes, then unlock.
+    ///      Do not latch on an RNGREUSE replay day. Its NEXT day may also have a cached
+    ///      backfill word, which would let rngGate bypass the sole `level = lvl` writer in
+    ///      _finalizeRngRequest and enter jackpot one level behind. Latch only after the
+    ///      walk reaches the real wall day; the following calendar day then necessarily
+    ///      takes the normal request path and promotes the level. `day >= psd` also makes
+    ///      the compressed-phase subtraction safe after the death-clock adjustment.
+    function _sealPurchaseDay(uint24 purchaseLevel, uint24 day, uint24 wallDay, uint24 psd) private {
+        bool targetMet = _getNextPrizePool() > _prizePoolTarget(purchaseLevel);
+        if (targetMet && day == wallDay && day >= psd) {
+            lastPurchaseDay = true;
+            // x0 (BAF) level: arm tomorrow's flip day for the
+            // weighted depositor draw — the sealed day's direct
+            // deposits stake day + 1, the day the transition word
+            // resolves. Turbo-speed x0: the one-day collapse
+            // latches here rather than at the morning arm, leaving
+            // the rest of the sealed day as a real last-purchase
+            // window ahead of the collapse; that transition request
+            // collapses all five logical jackpot days exactly as an
+            // armed turbo does.
+            bool bafLevel_ = purchaseLevel % 10 == 0;
+            if (bafLevel_) {
+                coinflip.armBafDraw(day + 1);
+            }
+            if (bafLevel_ && day - psd <= 1) {
+                compressedJackpotFlag = 2;
+            } else if (day - psd <= 3) {
+                compressedJackpotFlag = 1;
+            }
+        }
+        _unlockRng(day);
+    }
+
     /// @dev Pay the pending early-bird ticket leg via jackpot module delegatecall.
     /// @param randWord The day's recorded VRF word.
     function _payEarlyBirdTickets(uint256 randWord) private {
@@ -1660,6 +1691,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // gate skips buffered historical days; rngGate's recorded-word return makes
                 // this once per day. The opener's revert-freedom is pinned by the craps tests.
                 ICrapsBonusDay(ContractAddresses.CRAPS).openBonusDay();
+
+                // The word is now finalized and yesterday's pools are closed.
+                // Six bounded draws share this existing daily RNG call; no player
+                // claim or additional advance step. Recorded-word retries skip it.
+                if (day > 1 && (
+                    protocolBoonPools[ContractAddresses.VAULT][day - 1].totalWeight != 0 ||
+                    protocolBoonPools[ContractAddresses.SDGNRS][day - 1].totalWeight != 0
+                )) {
+                    (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+                        abi.encodeWithSelector(IDegenerusGameBoonModule.resolveProtocolBoonDraws.selector, day)
+                    );
+                    if (!ok) _revertDelegate(data);
+                }
             }
 
             // Resolve the sentinel-stamped gambling-burn pool if any. Reading the
@@ -1993,8 +2037,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         (finished, worked) = abi.decode(data, (bool, bool));
     }
 
-    /// @dev Process jackpot→purchase transition housekeeping (vault perpetual tickets + auto-stake).
-    ///      Vault addresses (SDGNRS, VAULT) get generic queued tickets.
+    /// @dev Process jackpot→purchase transition housekeeping (deity perpetual tickets + auto-stake).
+    ///      All deity owners, including VAULT/SDGNRS, get one ordinary queued ticket.
     /// @param purchaseLevel Current purchase level (level + 1).
     function _processPhaseTransition(uint24 purchaseLevel) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(

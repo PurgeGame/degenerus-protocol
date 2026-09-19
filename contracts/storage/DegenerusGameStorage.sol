@@ -578,11 +578,13 @@ abstract contract DegenerusGameStorage {
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
     ///      Layout: [counterStep (8 bits @ 0)] [dailyEntries (64 bits @ 8)]
     ///              [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
-    ///              [earlyBirdEntries (64 bits @ 144)]
-    ///      Set by the ETH stage; on the early-bird day the early-bird stage consumes the
-    ///      last field and clears it; the coin+tickets stage consumes the first three and,
-    ///      when a carryover was priced, leaves the word for the carryover stage, which
-    ///      zeroes it.
+    ///              [earlyBirdEntries (64 bits @ 144)] [purchaseEntries (48 bits @ 208)]
+    ///      Jackpot phase: set by the ETH stage; on the early-bird day the early-bird stage
+    ///      consumes the earlyBird field and clears it; the coin+tickets stage consumes the
+    ///      first three and, when a carryover was priced, leaves the word for the carryover
+    ///      stage, which zeroes it. Purchase phase: the daily prices its ticket leg into the
+    ///      top field and the purchase ticket stage consumes and clears it. The two phases
+    ///      never hold fields at once, and every predicate masks its own field.
     uint256 internal dailyTicketBudgetsPacked;
 
     // =========================================================================
@@ -943,7 +945,7 @@ abstract contract DegenerusGameStorage {
     ///      advance stage: the coin+tickets stage cleared its latch and left Phase 1's budgets
     ///      in dailyTicketBudgetsPacked. The day stays locked until that stage seals it.
     function _carryoverLegPending() internal view returns (bool) {
-        return !dailyJackpotCoinTicketsPending && dailyTicketBudgetsPacked != 0;
+        return !dailyJackpotCoinTicketsPending && (dailyTicketBudgetsPacked & ((uint256(1) << 208) - 1)) != 0;
     }
 
     /// @dev True while the early-bird ticket leg of a jackpot-phase day-1 daily waits for its
@@ -951,7 +953,14 @@ abstract contract DegenerusGameStorage {
     ///      dailyTicketBudgetsPacked. The coin+tickets stage is not reached until that stage
     ///      clears the field, so the day stays locked across all three.
     function _earlyBirdLegPending() internal view returns (bool) {
-        return dailyTicketBudgetsPacked >> 144 != 0;
+        return uint64(dailyTicketBudgetsPacked >> 144) != 0;
+    }
+
+    /// @dev True while the ticket leg of a purchase-phase daily waits for its own advance
+    ///      stage: payDailyJackpot(false) priced it into the top field of
+    ///      dailyTicketBudgetsPacked. The day stays locked until that stage seals it.
+    function _purchaseTicketLegPending() internal view returns (bool) {
+        return dailyTicketBudgetsPacked >> 208 != 0;
     }
 
     /// @dev True when gameover liveness guard would fire within ~1 day (day-granularity).
@@ -1586,6 +1595,25 @@ abstract contract DegenerusGameStorage {
         }
     }
 
+    /// @dev Append up to eight nonzero owner positions packed low-lane first. Overwrite
+    ///      stale tail lanes after queue reuse; preserve only the live prefix. Used by
+    ///      deity renewal to update the queue length once per packed group.
+    function _tqAppendLanes(uint24 key, uint256 lanes, uint256 count) internal {
+        uint256[] storage q = ticketQueue[key];
+        assembly ("memory-safe") {
+            let len := sload(q.slot)
+            mstore(0, q.slot)
+            let slot := add(keccak256(0, 32), shr(3, len))
+            let fill := and(len, 7)
+            let shift := shl(5, fill)
+            let prefix := and(sload(slot), sub(shl(shift, 1), 1))
+            sstore(slot, or(prefix, shl(shift, lanes)))
+            let room := sub(8, fill)
+            if gt(count, room) { sstore(add(slot, 1), shr(shl(5, room), lanes)) }
+            sstore(q.slot, add(len, count))
+        }
+    }
+
     /// @dev Read the packed queue word holding logical entry index `index` (eight lanes per word).
     function _tqWordAt(uint256[] storage q, uint256 index) internal view returns (uint256 word) {
         assembly ("memory-safe") {
@@ -2183,8 +2211,15 @@ abstract contract DegenerusGameStorage {
     ///      Ownership itself is tracked by the HAS_DEITY_PASS bit in mintPacked_.
     mapping(address => uint96) internal deityPassPricePaid;
 
-    /// @dev List of deity pass owners for iteration.
+    /// @dev Every soulbound deity, genesis and paid, in registration order. Each holds one
+    ///      perpetual ticket per level: the initial grant covers through level + 100 at
+    ///      registration and every level transition extends every owner by one level
+    ///      (queuePerpetualTickets), which the advance runs exactly once per transition.
     address[] internal deityPassOwners;
+
+    uint8 internal constant VAULT_DEITY_SYMBOL = 0;
+    uint8 internal constant SDGNRS_DEITY_SYMBOL = 6;
+    uint32 internal constant DEITY_PERPETUAL_ENTRIES = 4;
 
     /// @dev Reverse lookup: symbol ID (0-31) → current owner address.
     mapping(uint8 => address) internal deityBySymbol;
@@ -3828,6 +3863,32 @@ abstract contract DegenerusGameStorage {
     ///      it is exhausted or seated), so exhausted holes are never rescanned and a
     ///      long-lived seat can never pin the cursor. Cleared at queue release.
     uint256 internal ticketSeats;
+
+    /// @dev Paid deity purchases only: the two genesis grants never advance pricing.
+    uint8 internal deityPassSales;
+
+    /// @dev 216 bits. Principal stays in wei; weight uses 100-FLIP units times
+    ///      the score multiplier scaled by 800. Three award bits, one per boon.
+    struct ProtocolBoonPool {
+        uint112 totalDonatedWei;
+        uint64 totalWeight;
+        uint32 entryCount;
+        uint8 awardedMask;
+    }
+
+    /// @dev 248 bits, one slot. At most uint32.max entries of weight <=600,000
+    ///      puts cumulative weight below 2^52. Raw principal per pool is <2^107 wei.
+    struct ProtocolBoonEntry {
+        address donor;
+        uint64 cumulativeWeight;
+        uint8 amountUnits;
+        uint16 scoreSnapshot;
+    }
+
+    mapping(address => mapping(uint24 => ProtocolBoonPool)) internal protocolBoonPools;
+    mapping(address => mapping(uint24 => mapping(uint32 => ProtocolBoonEntry))) internal protocolBoonEntries;
+
+    bytes32 internal constant PROTOCOL_BOON_WINNER_TAG = keccak256("degenerus.protocol.boon.winner");
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

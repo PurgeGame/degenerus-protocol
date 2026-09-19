@@ -98,7 +98,7 @@ contract V61AfkingSpendHandler is Test {
         deity = address(uint160(0xDE17A));
         actors.push(deity);
         vm.deal(deity, 1_000 ether);
-        deityId = 0;
+        deityId = 31; // symbols 0 and 6 are the genesis deities; the focused ids start at 1
         vm.prank(address(game));
         deityPass.mint(deity, deityId);
     }

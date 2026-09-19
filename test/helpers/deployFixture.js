@@ -97,7 +97,11 @@ export async function deployFullProtocol() {
     }
   }
 
+  // Both protocol passes and their packed ticket queues initialize in one transaction.
+  const genesisReceipt = await (await contracts.GAME.initProtocolDeity({ gasLimit: 16_777_216 })).wait();
+
   return {
+    genesisReceipt,
     // Signers
     deployer,
     alice,

@@ -142,7 +142,7 @@ describe("WhaleBoonDeityLapse", function () {
     // Alice needs deity status to issue boons.
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9000, 200);
     const currentDay = await game.currentDayView();
@@ -169,7 +169,7 @@ describe("WhaleBoonDeityLapse", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9500, 200);
     const currentDay = await game.currentDayView();

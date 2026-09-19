@@ -779,7 +779,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         try {
           await game
             .connect(buyer)
-            .purchaseDeityPass(buyer.address, i, hre.ethers.ZeroHash, {
+            .purchaseDeityPass(buyer.address, i < 5 ? i + 1 : i + 2, hre.ethers.ZeroHash, {
               value: hre.ethers.parseEther(priceEth.toString()),
             });
           deityCount++;

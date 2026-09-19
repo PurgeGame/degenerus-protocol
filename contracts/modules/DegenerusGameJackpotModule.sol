@@ -728,7 +728,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // Single packed-slot RMW folds every leg: credit the ticket leg's backing to nextPrizePool
         // and debit the future pool (drip consumed + ETH paid + insurance skim). ticketLegBudget and
         // insuranceCut are nonzero only when ethDaySlice is, so both ride this write;
-        // _distributePoolBackedTickets below does not credit next itself. futureBal is still exact —
+        // the deferred ticket stage does not credit next itself. futureBal is still exact —
         // nothing above writes prizePoolsPacked (purchase-phase distribution never reaches the solo
         // whale-pass leg). The ticket leg, the skim and the ETH leg partition ethDaySlice exactly and
         // paidEth never exceeds the ETH leg, so the three debits sum to at most the 1% slice and the
@@ -748,15 +748,46 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
         }
 
+        // Price the ticket leg here and pay it from its own advance stage
+        // (payPurchaseDailyTickets): the 120-winner cold draw is the heaviest block of
+        // the purchase daily, so it never shares a transaction with the ETH and FLIP
+        // legs. The packed-slot write above already moved the whole budget to
+        // nextPrizePool; only the entries it backs wait in the top field of
+        // dailyTicketBudgetsPacked. A 50% conversion keeps the pool/ticket backing
+        // ratio. The day stays locked until that stage seals it.
         if (ticketLegBudget != 0) {
-            _distributePoolBackedTickets(
-                lvl,
-                winningTraitsPacked,
-                ticketLegBudget,
-                randWord,
-                5_000 // 50% ticket conversion — improves pool/ticket backing ratio
-            );
+            (uint256 entries, ) = _budgetToEntries(ticketLegBudget / 2, lvl);
+            // Awards are whole tickets, so a leg under one ticket pays nobody: seal now
+            // rather than spend a crank on an empty stage.
+            if (entries >= ENTRIES_PER_TICKET) dailyTicketBudgetsPacked = entries << 208;
         }
+    }
+
+    /// @notice The ticket leg of the purchase-phase daily, from its own advance stage.
+    /// @dev Called by advanceGame on the advance after payDailyJackpot(false) priced it, with
+    ///      the same day's recorded word. The main board is the one the pricing stage rolled
+    ///      and recorded in dailyFoilDraw for the day it priced (dailyIdx has not moved: the
+    ///      pricing stage does not seal while this leg is pending), and the winner entropy is
+    ///      the value the single-tx form used, so the draw is unchanged by the split. Tickets
+    ///      queue at the purchase level, which the held lock keeps un-promoted between the two
+    ///      stages. Clears the field it consumes; the caller seals the day.
+    /// @param randWord VRF entropy (the day's recorded word).
+    function payPurchaseDailyTickets(uint256 randWord) external {
+        uint256 packed = dailyTicketBudgetsPacked;
+        uint256 entries = packed >> 208;
+        uint24 lvl = level + 1;
+        (, uint32 winningTraitsPacked, , ) = _foilDrawFor(uint256(dailyIdx) + 1);
+        _distributeTicketJackpot(
+            lvl,
+            lvl,
+            winningTraitsPacked,
+            entries,
+            EntropyLib.hash2(randWord, lvl),
+            PURCHASE_PHASE_TICKET_MAX_WINNERS,
+            242,
+            true // main board: solo quadrant took the ETH remainder
+        );
+        dailyTicketBudgetsPacked = packed & ((uint256(1) << 208) - 1);
     }
 
     /// @notice Phase 2 of the daily jackpot: the coin jackpot and the day's own ticket leg.
@@ -993,41 +1024,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // =========================================================================
     // Internal Helpers — Ticket Rewards
     // =========================================================================
-
-    /// @dev Distributes pool-backed tickets to trait winners. The sole caller folds the budget's
-    ///      full nextPrizePool credit into its own packed-slot write, so this helper only queues the
-    ///      tickets that credit backs.
-    /// @param lvl Level at which the tickets are queued (the current purchase level).
-    /// @param winningTraitsPacked Packed winning trait IDs for the 4 buckets.
-    /// @param budget ETH budget backing the tickets.
-    /// @param randWord VRF entropy for winner selection.
-    /// @param ticketConversionBps Fraction of budget used for ticket calculation (10000 = 100%).
-    ///        The caller moves the full budget to nextPrizePool regardless of this parameter.
-    function _distributePoolBackedTickets(
-        uint24 lvl,
-        uint32 winningTraitsPacked,
-        uint256 budget,
-        uint256 randWord,
-        uint16 ticketConversionBps
-    ) private {
-        // Distribute tickets to winners (may use reduced basis for backing ratio)
-        // Tickets are queued at the current purchase level (`lvl`), matching the
-        // nextPrizePool credit the caller applied that backs them.
-        uint256 ticketBasis = (budget * ticketConversionBps) / 10_000;
-        (uint256 entries, ) = _budgetToEntries(ticketBasis, lvl);
-        if (entries != 0) {
-            _distributeTicketJackpot(
-                lvl,
-                lvl,
-                winningTraitsPacked,
-                entries,
-                EntropyLib.hash2(randWord, lvl),
-                PURCHASE_PHASE_TICKET_MAX_WINNERS,
-                242,
-                true // main board: solo quadrant took the ETH remainder
-            );
-        }
-    }
 
     /// @dev Distributes ticket rewards to winners drawn from winning trait pools.
     /// @param sourceLvl Level whose ticket queue supplies candidate winners.
@@ -1953,15 +1949,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Virtual deity entry count for a trait bucket of size `len` (zero
     ///      when no deity holds the trait's symbol):
     ///        Gold tier (color == 7): flat 1 virtual entry.
-    ///        Common tier (color in [0..6]): floor(2% of bucket), minimum 2.
+    ///        Colors 5/6: floor(1% of bucket), minimum 1.
+    ///        Colors 0..4: floor(2% of bucket), minimum 2.
     function _deityVirtualCount(
         uint8 trait,
         uint256 len,
         address deity
     ) private pure returns (uint256 virtualCount) {
         if (deity != address(0)) {
-            if (((trait >> 3) & 7) == 7) {
+            uint8 color = (trait >> 3) & 7;
+            if (color == 7) {
                 virtualCount = 1;
+            } else if (color >= 5) {
+                virtualCount = len / 100;
+                if (virtualCount == 0) virtualCount = 1;
             } else {
                 virtualCount = len / 50;
                 if (virtualCount < 2) virtualCount = 2;

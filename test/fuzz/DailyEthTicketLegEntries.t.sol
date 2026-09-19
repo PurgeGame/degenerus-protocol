@@ -40,7 +40,7 @@ contract DailyEthTicketLegEntries is Test {
         ReturnZeroSink sink = new ReturnZeroSink();
         vm.etch(ContractAddresses.STETH_TOKEN, address(sink).code);
         vm.etch(ContractAddresses.JACKPOTS, address(sink).code);
-        h.setLevel(LVL);
+        h.setLevel(LVL - 1); // the purchase level LVL is level + 1, as the advance passes it
         h.setJackpotCounter(1); // an ordinary purchase day: no early-bird, not final
         h.setDailyIdx(10);
         h.setCurrentPool(1000 ether);
@@ -66,6 +66,8 @@ contract DailyEthTicketLegEntries is Test {
         uint256 word = _board();
         vm.recordLogs();
         h.payDailyJackpot(false, LVL, word);
+        // The priced ticket leg pays from the next advance stage on the same word.
+        h.payPurchaseDailyTickets(word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // The arithmetic the leg is meant to deliver.

@@ -110,6 +110,11 @@ abstract contract DeployProtocol is Test {
     /// @notice Deploy the full protocol. Must be called from setUp().
     /// @dev Uses vm.warp(86400) to match the fixed timestamp in patchForFoundry.js.
     function _deployProtocol() internal {
+        _deployProtocol(true);
+    }
+
+    /// @dev Genesis batching tests leave the one-time setup for the measured transaction.
+    function _deployProtocol(bool initializeDeities) internal {
         // Set timestamp to match patchForFoundry.js DEPLOY_TIMESTAMP = 86400
         vm.warp(86400);
 
@@ -171,7 +176,7 @@ abstract contract DeployProtocol is Test {
         // Vault constructor calls COIN.vaultMintAllowance() + game.subscribe(...) (SUB-09)
         vault = new DegenerusVault();                  // N+20 = nonce 25
 
-        // Stonk constructor calls game.subscribe(...) (SUB-09 self-subscribe) + initPerpetualTickets()
+        // Stonk constructor calls game.subscribe(...) (SUB-09 self-subscribe).
         // Mints creator's 20% to DGNRS address
         sdgnrs = new sDGNRS();           // N+21 = nonce 26
 
@@ -216,6 +221,7 @@ abstract contract DeployProtocol is Test {
         // Craps dice engine — appended, so it shifts no earlier nonce. Pure, no ctor args; the
         // table STATICCALLs ContractAddresses.CRAPS_ENGINE, so it must resolve to code here.
         crapsEngine = new CrapsEngine();                                    // N+30 = nonce 35
+        if (initializeDeities) game.initProtocolDeity();
     }
 
     /// @dev Give `player` an AFKing seat (the sole afking credential — subscribe reverts

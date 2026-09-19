@@ -7,7 +7,6 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract CompGameDouble {
     function subscribe(address, bool, bool, uint8, address) external payable {}
-    function initPerpetualTickets() external {}
 }
 
 /// @dev Records what the vault asked of the table's comp door, in order, and can refuse.

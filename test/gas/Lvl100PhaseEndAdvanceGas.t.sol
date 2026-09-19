@@ -103,6 +103,9 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         uint24 day = _simulatedDayIndex();
 
         _seedJackpotDay(lvl, day);
+        for (uint256 i = deityPassOwners.length; i < 32; ++i) {
+            deityPassOwners.push(address(uint160(0xDE170000 + i)));
+        }
         jackpotCounter = 0; // _endPhase zeroed it on the previous advance
         phaseTransitionActive = true;
         subsFullyProcessed = true;

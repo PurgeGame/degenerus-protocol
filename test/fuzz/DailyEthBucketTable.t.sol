@@ -73,8 +73,11 @@ contract DailyEthBucketTable is Test {
 
     function test_purchasePhaseTableRotatesAroundTheSoloQuadrant() public {
         (uint256 word, uint8[4] memory traits) = _board(LVL, 0xD1CE);
+        h.setLevel(LVL - 1); // the purchase level LVL is level + 1, as the advance passes it
         vm.recordLogs();
         h.payDailyJackpot(false, LVL, word);
+        // The priced ticket leg pays from the next advance stage on the same word.
+        h.payPurchaseDailyTickets(word);
         uint256 unit = PriceLookupLib.priceForLevel(LVL + 1) >> 2;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (uint256[4] memory count, uint256[4] memory total) = _tally(logs, traits, unit);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -11,7 +12,9 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {DayOneSeeder, DayOneFixture} from "./JackpotDayOneWorstCase.t.sol";
 
 /// @title PurchaseDailyWorstCase — the per-tx gas ceiling of the PURCHASE-PHASE daily advance.
-/// @notice STAGE_PURCHASE_DAILY (6) pays three winner-capped legs in ONE advanceGame tx:
+/// @notice STAGE_PURCHASE_DAILY (6) pays the ETH and FLIP legs and prices the ticket leg in one
+///         advanceGame tx; STAGE_PURCHASE_DAILY_TICKETS (15) pays that ticket leg from the next
+///         advance on the same recorded word and seals the day. The three winner-capped legs:
 ///           - the daily ETH leg: fixed buckets [24,16,8,1] = 49 winners off 23% of the 1%
 ///             futurePrizePool drip (`payDailyJackpot(false)` -> `_processDailyEth`);
 ///           - the daily ticket leg: up to PURCHASE_PHASE_TICKET_MAX_WINNERS = 120 winners
@@ -78,6 +81,19 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         levelPrizePool[s.lvl] = s.prevPool;
         currentPrizePool = uint128(100 ether);
         _setPrizePools(s.nextPool, s.futurePool);
+
+        // The empty-FLIP split deliberately excludes protocol participation too:
+        // real genesis passes now supply virtual buckets and far-future tickets.
+        if (s.bonusHolders == 0) {
+            deityBySymbol[VAULT_DEITY_SYMBOL] = address(0);
+            deityBySymbol[SDGNRS_DEITY_SYMBOL] = address(0);
+        }
+        if (s.ffHolders == 0) {
+            for (uint24 c = pl + 5; c <= pl + 99; ++c) {
+                uint256[] storage emptyQueue = ticketQueue[_tqFarFutureKey(c)];
+                assembly ("memory-safe") { sstore(emptyQueue.slot, 0) }
+            }
+        }
 
         // Keep registry position 0 out of every seeded level (a zero lane index understates gas).
         for (uint24 L = pl; L <= pl + 4; ++L) {
@@ -169,6 +185,12 @@ abstract contract FreshWordLeg is DeployProtocol {
         uint256 reqId = mockVRF.lastRequestId();
         require(reqId == before + 1, "arm: one VRF request fired");
         mockVRF.fulfillRandomWords(reqId, word);
+        // Include both funded deity pools at the maximum uint32 search depth in
+        // every measured fresh-word composition, not just a standalone draw.
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(ProtocolBoonDrawSeeder).runtimeCode);
+        ProtocolBoonDrawSeeder(address(game)).seedPools(day, word);
+        vm.etch(address(game), original);
     }
 
     /// @dev Logs emitted by the coinflip and craps contracts: the word-apply leg's own footprint.
@@ -197,6 +219,7 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
 
     uint8 internal constant STAGE_PURCHASE_DAILY = 6;
+    uint8 internal constant STAGE_PURCHASE_DAILY_TICKETS = 15;
     uint16 internal constant PURCHASE_ETH_WINNERS = 49; // 24 + 16 + 8 + 1
     uint16 internal constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
     uint16 internal constant DAILY_COIN_MAX_WINNERS = 50;
@@ -372,23 +395,33 @@ contract PurchaseDailyWorstCase is PurchaseDailyFixture {
 
     function test_PurchaseDaily_49Eth_120Tickets_58Flip_Latch_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_FULL (stage 6): 49 ETH, 120 tickets, 50+8 FLIP, latch + BAF arm", used, t);
+        _emitTally("PURCHASE_DAILY_FULL (stage 6): 49 ETH, priced tickets, 50+8 FLIP, latch + BAF arm", used, t);
         emit log_named_uint("PURCHASE_DAILY_STAGE_WORST_CASE_GAS", used);
 
         // Non-vacuity: every leg MUST have run at its cap, or the ceiling is not one.
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
         assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "the ETH leg paid all 49 fixed-bucket winners");
-        assertEq(t.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket leg paid the full 120-winner cap");
+        assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
         assertEq(t.flipWins, DAILY_COIN_MAX_WINNERS, "the near-FLIP leg paid all 50 pulls");
         assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "the far-FLIP leg paid all 8 samples");
         assertEq(t.compWins, 0, "no comp mode at this FLIP budget");
-        assertTrue(t.bafArmed, "the target-met latch armed the BAF draw at the x0 purchase level");
+        assertFalse(t.bafArmed, "the latch waits for the sealing ticket stage");
         // Sampling is with replacement: nearly every winner must still be a distinct cold address.
         assertEq(t.ethDistinct, 49, "all ETH winners are distinct cold addresses");
-        assertEq(t.ticketDistinct, 120, "all ticket winners are distinct cold addresses");
         assertGe(t.flipDistinct, 48, "at least 48 of the 50 near-FLIP winners are distinct cold addresses");
 
         assertLt(used, EIP7825_TX_GAS_CAP, "PURCHASE DAILY: the full stage must clear EIP-7825");
+
+        // The ticket leg rides the next advance on the same recorded word and seals the day.
+        (uint256 ticketUsed, Tally memory tk) = _measure();
+        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
+        emit log_named_uint("PURCHASE_DAILY_TICKET_STAGE_WORST_CASE_GAS", ticketUsed);
+        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
+        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
+        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
+        assertEq(tk.ticketDistinct, 120, "all ticket winners are distinct cold addresses");
+        assertTrue(tk.bafArmed, "the sealing ticket stage latched last purchase day and armed the BAF draw");
+        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
     }
 }
 
@@ -400,16 +433,26 @@ contract PurchaseDailyNoLatch is PurchaseDailyFixture {
 
     function test_PurchaseDaily_AllCaps_NoLatch_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_NO_LATCH (stage 6): 49 ETH, 120 tickets, 50+8 FLIP", used, t);
+        _emitTally("PURCHASE_DAILY_NO_LATCH (stage 6): 49 ETH, priced tickets, 50+8 FLIP", used, t);
         emit log_named_uint("PURCHASE_DAILY_NO_LATCH_GAS", used);
 
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
         assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
-        assertEq(t.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "120 ticket winners");
+        assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
         assertEq(t.flipWins, DAILY_COIN_MAX_WINNERS, "50 near-FLIP pulls");
         assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "8 far-FLIP samples");
         assertFalse(t.bafArmed, "no latch: no BAF arm");
         assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
+
+        // The ticket leg rides the next advance on the same recorded word and seals the day.
+        (uint256 ticketUsed, Tally memory tk) = _measure();
+        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
+        emit log_named_uint("PURCHASE_DAILY_NO_LATCH_TICKET_STAGE_GAS", ticketUsed);
+        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
+        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
+        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
+        assertFalse(tk.bafArmed, "no latch: no BAF arm");
+        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
     }
 }
 
@@ -421,15 +464,24 @@ contract PurchaseDailyEthTicketsOnly is PurchaseDailyFixture {
 
     function test_PurchaseDaily_49Eth_120Tickets_NoFlipWinners_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_ETH_TICKETS_ONLY (stage 6): 49 ETH, 120 tickets, empty FLIP boards", used, t);
+        _emitTally("PURCHASE_DAILY_ETH_TICKETS_ONLY (stage 6): 49 ETH, priced tickets, empty FLIP boards", used, t);
         emit log_named_uint("PURCHASE_DAILY_ETH_TICKET_LEGS_GAS", used);
 
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
         assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
-        assertEq(t.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "120 ticket winners");
+        assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
         assertEq(t.flipWins, 0, "no near-FLIP winner drawn");
         assertEq(t.farWins, 0, "no far-FLIP winner drawn");
         assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
+
+        // The ticket leg rides the next advance on the same recorded word and seals the day.
+        (uint256 ticketUsed, Tally memory tk) = _measure();
+        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
+        emit log_named_uint("PURCHASE_DAILY_ETH_TICKET_LEGS_TICKET_STAGE_GAS", ticketUsed);
+        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
+        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
+        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
+        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
     }
 }
 
@@ -462,17 +514,26 @@ contract PurchaseDailyCompMode is PurchaseDailyFixture {
 
     function test_PurchaseDaily_AllCaps_CompMode_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_COMP_MODE (stage 6): 49 ETH, 120 tickets, comp quadrant + FLIP", used, t);
+        _emitTally("PURCHASE_DAILY_COMP_MODE (stage 6): 49 ETH, priced tickets, comp quadrant + FLIP", used, t);
         emit log_named_uint("PURCHASE_DAILY_COMP_MODE_GAS", used);
 
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
         assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
-        assertEq(t.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "120 ticket winners");
+        assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
         assertEq(t.compWins, 6, "the comp quadrant banked all 6 comp slots");
         // 37 or 38 non-comp pulls remain depending on which quadrant went comp.
         assertGe(t.flipWins, 37, "the non-comp quadrants still paid every scheduled pull");
         assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "8 far-FLIP samples");
         assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
+
+        // The ticket leg rides the next advance on the same recorded word and seals the day.
+        (uint256 ticketUsed, Tally memory tk) = _measure();
+        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
+        emit log_named_uint("PURCHASE_DAILY_COMP_MODE_TICKET_STAGE_GAS", ticketUsed);
+        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
+        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
+        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
+        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
     }
 }
 
@@ -488,7 +549,7 @@ contract PurchaseDailyWithRngApply is PurchaseDailyFixture, FreshWordLeg {
 
     function test_PurchaseDaily_AllCaps_WithRngApplyLeg_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_WITH_RNG_APPLY (stage 6): word applied + 49 ETH, 120 tickets, 50+8 FLIP, latch", used, t);
+        _emitTally("PURCHASE_DAILY_WITH_RNG_APPLY (stage 6): word applied + 49 ETH, priced tickets, 50+8 FLIP, latch", used, t);
         (uint256 cfLogs, uint256 crLogs) = _countLegLogs(lastLogs);
         emit log_named_uint("  coinflip_logs", cfLogs);
         emit log_named_uint("  craps_logs", crLogs);
@@ -496,16 +557,26 @@ contract PurchaseDailyWithRngApply is PurchaseDailyFixture, FreshWordLeg {
 
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran in the word-apply tx");
         assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
-        assertEq(t.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "120 ticket winners");
+        assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
         assertEq(t.flipWins, DAILY_COIN_MAX_WINNERS, "50 near-FLIP pulls");
         assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "8 far-FLIP samples");
         assertEq(t.ethDistinct, 49, "all ETH credits are fresh recipient writes");
-        assertEq(t.ticketDistinct, 120, "all ticket credits are fresh recipient writes");
         assertEq(t.flipDistinct, 50, "all near-FLIP credits are fresh recipient writes");
-        assertTrue(t.bafArmed, "latch + BAF arm");
+        assertFalse(t.bafArmed, "the latch waits for the sealing ticket stage");
         assertGe(cfLogs, 1, "coinflip.processCoinflipPayouts ran in the measured tx");
         assertGe(crLogs, 8, "craps openBonusDay opened the day's 7 windows in the measured tx");
         assertLt(used, EIP7825_TX_GAS_CAP, "TRUE CEILING: purchase daily incl. word apply clears EIP-7825");
+
+        // The ticket leg rides the next advance on the same recorded word and seals the day.
+        (uint256 ticketUsed, Tally memory tk) = _measure();
+        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
+        emit log_named_uint("PURCHASE_DAILY_TRUE_CEILING_TICKET_STAGE_GAS", ticketUsed);
+        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
+        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
+        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
+        assertEq(tk.ticketDistinct, 120, "all ticket winners are distinct cold addresses");
+        assertTrue(tk.bafArmed, "the sealing ticket stage latched last purchase day and armed the BAF draw");
+        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
     }
 }
 

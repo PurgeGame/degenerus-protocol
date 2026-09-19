@@ -146,8 +146,16 @@ abstract contract DayOneFixture is DeployProtocol {
     uint256 internal constant GOLD_MASK = (uint256(0x38) << 0) | (uint256(0x38) << 6) | (uint256(0x38) << 12)
         | (uint256(0x38) << 18);
 
-    function _allGoldWord(bytes32 tag) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(tag))) | GOLD_MASK;
+    /// @dev Bits 0-2 of each quadrant trait are the symbol. Symbols 0 and 6 are the genesis
+    ///      deities, whose virtual entries would turn an empty gold board into deity wins, so a
+    ///      quadrant that hashes to one of them is nudged to a neighbouring symbol; every other
+    ///      quadrant keeps its hashed symbol so the seeded draws are unchanged.
+    function _allGoldWord(bytes32 tag) internal pure returns (uint256 word) {
+        word = uint256(keccak256(abi.encodePacked(tag))) | GOLD_MASK;
+        for (uint256 q; q < 4; ++q) {
+            uint256 sym = (word >> (q * 6)) & 7;
+            if (sym == 0 || sym == 6) word ^= uint256(1) << (q * 6); // 0 -> 1, 6 -> 7
+        }
     }
 
     function _plainWord(bytes32 tag) internal pure returns (uint256) {

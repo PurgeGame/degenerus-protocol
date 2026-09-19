@@ -82,6 +82,8 @@ EXEMPT-ADVANCE	PARAM	randWord	payDailyJackpotCoinAndTickets	modules/DegenerusGam
 EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	payDailyJackpotCoinAndTickets	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payDailyJackpotCoinAndTickets from the advance stack
 EXEMPT-ADVANCE	PARAM	randWord	_payCarryoverTickets	modules/DegenerusGameAdvanceModule.sol	advance-only carryover-leg wrapper delegatecalling JackpotModule.payCarryoverTickets with the rngGate word
 EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payCarryoverTickets	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payCarryoverTickets from the advance stack
+EXEMPT-ADVANCE	PARAM	randWord	_payPurchaseDailyTickets	modules/DegenerusGameAdvanceModule.sol	private advance wrapper: forwards the day's recorded word to the purchase ticket-leg stage
+EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payPurchaseDailyTickets	modules/DegenerusGameAdvanceModule.sol	purchase ticket-leg delegatecall carrying the recorded word to GAME_JACKPOT_MODULE.payPurchaseDailyTickets inside the locked advance
 EXEMPT-ADVANCE	PARAM	randWord	_payEarlyBirdTickets	modules/DegenerusGameAdvanceModule.sol	advance-only early-bird-leg wrapper delegatecalling JackpotModule.payEarlyBirdTickets with the rngGate word
 EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payEarlyBirdTickets	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payEarlyBirdTickets from the advance stack
 EXEMPT-ADVANCE	PARAM	randWord	_payDailyCoinJackpot	modules/DegenerusGameAdvanceModule.sol	advance-only wrapper (purchaseLevel==1 path) for payDailyFlipJackpot; randWord is the rngGate word or its BONUS_TRAITS_TAG salt
@@ -143,8 +145,8 @@ EXEMPT-ADVANCE	PARAM	randWord	payCarryoverTickets	modules/DegenerusGameJackpotMo
 PURE-DERIVE	ARG	EntropyLib.hash2	payCarryoverTickets	modules/DegenerusGameJackpotModule.sol	hash2(randWord, sourceLevel) carryover ticket entropy, the same derivation the fused stage used; pure
 EXEMPT-ADVANCE	PARAM	randWord	payEarlyBirdTickets	modules/DegenerusGameJackpotModule.sol	advance early-bird-leg delegatecall target; randWord = the day's rngGate word; re-rolls the bonus board at frozen dailyIdx; entries latched by payDailyJackpot, winners keccak of the word
 PURE-DERIVE	ARG	EntropyLib.hash2	payEarlyBirdTickets	modules/DegenerusGameJackpotModule.sol	hash2(randWord, level + 1) early-bird ticket entropy, the same derivation the fused stage used; pure
-EXEMPT-ADVANCE	PARAM	randWord	_distributePoolBackedTickets	modules/DegenerusGameJackpotModule.sol	private advance-stack ticket distribution; entropy hash2(randWord, lvl); the budget is a magnitude
-PURE-DERIVE	ARG	EntropyLib.hash2	_distributePoolBackedTickets	modules/DegenerusGameJackpotModule.sol	hash2(randWord, lvl); pure
+EXEMPT-ADVANCE	PARAM	randWord	payPurchaseDailyTickets	modules/DegenerusGameJackpotModule.sol	advance purchase-ticket-leg delegatecall target; randWord = the day's rngGate word; re-rolls the main board at frozen inputs and draws the priced entries with hash2(randWord, lvl), the same derivation the fused stage used
+PURE-DERIVE	ARG	EntropyLib.hash2	payPurchaseDailyTickets	modules/DegenerusGameJackpotModule.sol	hash2(randWord, lvl) purchase ticket entropy, the same derivation the fused stage used; pure
 EXEMPT-ADVANCE	PARAM	entropy	_distributeTicketJackpot	modules/DegenerusGameJackpotModule.sol	private advance-stack: bucket counts + winner draws over lvlTraitEntry[sourceLvl] from the chained entropy
 EXEMPT-ADVANCE	PARAM	entropy	_distributeTicketsToBuckets	modules/DegenerusGameJackpotModule.sol	private advance-stack per-bucket loop; entropy threaded, deities are admin state
 EXEMPT-ADVANCE	PARAM	entropy	_distributeTicketsToBucket	modules/DegenerusGameJackpotModule.sol	private advance-stack: _randTraitTicket(entropy, trait, salt) winners, tickets queued with rngBypass
@@ -253,3 +255,5 @@ EXEMPT-ADVANCE	PARAM	randomWord	_drawCoinEntry	modules/DegenerusGameJackpotModul
 NOT-RNG	PARAM	word	_bucketOwnerFromWord	storage/DegenerusGameStorage.sol	packed uint32 owner registry references loaded from a trait bucket, not an entropy word
 PURE-DERIVE	ARG	PackedTicketSampleLib.begin	sampleFarFutureTickets	DegenerusGame.sol	BAF samples a frozen far-future level in a nonempty range; the remaining entropy selects its packed word and lane rotation.
 PURE-DERIVE	ARG	EntropyLib.hash2	sampleFarFutureTickets	DegenerusGame.sol	Mix the committed entropy and filled candidate count for another level when fewer than four slots have been filled.
+CONSUMER-SEALED	PARAM	menuWord	_drawProtocolBoons	modules/DegenerusGameBoonModule.sol	Previous-day word selects the published next-day deity menu; absent predecessor falls back to the finalized award-day word after entries close; pure issuer/day/slot mix separate from the winner domain
+CONSUMER-SEALED	PARAM	winnerWord	_drawProtocolBoons	modules/DegenerusGameBoonModule.sol	Award-day finalized word selects closed prior-day cumulative intervals; entries and snapshotted scores cannot change after the calendar day closes

@@ -56,7 +56,7 @@ contract V61Smite is DeployProtocol {
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
     uint256 private _t;
-    uint8 private _nextDeityId;
+    uint8 private _nextDeityId = 1; // symbol 0 is the VAULT genesis deity
 
     function setUp() public {
         _deployProtocol();
@@ -284,6 +284,7 @@ contract V61Smite is DeployProtocol {
     function _mintDeity(string memory name) internal returns (address holder, uint256 deityId) {
         holder = makeAddr(name);
         deityId = _nextDeityId++;
+        if (deityId == 6) deityId = _nextDeityId++; // symbol 6 is the sDGNRS genesis deity
         vm.prank(address(game));
         deityPass.mint(holder, deityId);
     }

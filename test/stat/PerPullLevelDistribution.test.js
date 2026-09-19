@@ -484,9 +484,11 @@ describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotFl
       // array — distinct from the 5 named signers (deployer/alice/bob/carol/
       // dan/eve) to keep the buyer fingerprints separate.
       const deityBuyers = [others[0], others[1], others[2], others[3]];
+      let paidSales = 0;
       for (let q = 0; q < 4; q++) {
         const symbolId = fullSymIds[q];
-        const k = q; // owners.length grows by 1 each iteration
+        if (symbolId === 0 || symbolId === 6) continue; // genesis owns these symbols
+        const k = paidSales++;
         const basePrice = hre.ethers.parseEther(
           (24 + (k * (k + 1)) / 2).toString(),
         );

@@ -115,7 +115,7 @@ contract EthSolvencyInvariant is DeployProtocol {
         gameHandler.purchase(0, 400, 0.1 ether);
         whaleHandler.purchaseWhalePass(0, 1);
         whaleHandler.purchaseLazyPass(1);
-        whaleHandler.purchaseDeityPass(2, 0);
+        whaleHandler.purchaseDeityPass(2, 4);
         assertGt(gameHandler.ghost_totalDeposited(), 0, "fixture: ticket/box purchase");
         assertGt(whaleHandler.ghost_whalePassDeposited(), 0, "fixture: whale purchase");
         assertGt(whaleHandler.ghost_lazyPassDeposited(), 0, "fixture: lazy purchase");

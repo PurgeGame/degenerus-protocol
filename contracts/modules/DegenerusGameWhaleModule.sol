@@ -48,11 +48,21 @@ interface ICrapsPassCredit {
  *      reads/writes operate on the game contract's storage.
  */
 contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
-    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 (advance handles 101+).
-    /// @dev Delegatecalled by the Game facade, which restricts the caller to VAULT and SDGNRS and
-    ///      passes it as `who`; each calls exactly once from its own constructor.
-    function initPerpetualTickets(address who) external {
-        _queueEntryRange(who, 1, 100, 16, false); // 16 entries (= 4 whole tickets) per level
+    /// @notice Register both protocol deities and batch their first 100 perpetual tickets.
+    /// @dev One creator transaction after deployment; registration rejects a repeated grant.
+    function initProtocolDeity() external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (msg.sender != ContractAddresses.CREATOR) revert E();
+        _registerDeity(ContractAddresses.VAULT, VAULT_DEITY_SYMBOL);
+        _registerDeity(ContractAddresses.SDGNRS, SDGNRS_DEITY_SYMBOL);
+        emit EntriesQueuedRange(ContractAddresses.VAULT, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
+        emit EntriesQueuedRange(ContractAddresses.SDGNRS, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
+        uint24 currentLevel = level;
+        uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : 0;
+        for (uint24 lvl = 1; lvl <= 100; ++lvl) {
+            uint24 key = lvl > currentLevel + 5 ? _tqFarFutureKey(lvl) : lvl | writeSlotBit;
+            _queueGenesisDeities(lvl, key);
+        }
     }
 
 
@@ -207,11 +217,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     uint16 private constant DEITY_EARLY_LOOTBOX_BPS = 500;
 
     /// @dev Deity pass base price (24 ETH, unscaled). Price = 24 + T(n) where T(n) = n*(n+1)/2,
-    ///      n = passes sold so far, through the 27th pass (n = 26, 375 ETH); every later pass
-    ///      doubles the one before it, so the 32nd costs 12,000 ETH.
+    ///      n = paid sales, through the 24th paid pass (n = 23, 300 ETH); every later pass
+    ///      doubles the one before it, so the 30th costs 19,200 ETH.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
-    uint256 private constant DEITY_DOUBLING_ANCHOR_SOLD = 26;
-    uint256 private constant DEITY_DOUBLING_ANCHOR_PRICE = 375 ether;
+    uint256 private constant DEITY_DOUBLING_ANCHOR_SOLD = 23;
+    uint256 private constant DEITY_DOUBLING_ANCHOR_PRICE = 300 ether;
 
     /// @dev Deity pass boon expiry (4 game days, expires at jackpot reset).
     uint32 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
@@ -695,13 +705,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /**
      * @notice Purchase a deity pass for a specific symbol.
-     * @dev Available before gameOver. One per player, up to 32 total (one per symbol).
+     * @dev Available before gameOver. One per player, 30 paid plus two genesis passes (one per symbol).
      *      Buyer chooses from available symbols (0-31). Virtual trait-targeted jackpot
-     *      entries are computed at resolution time — no explicit ticket queuing needed.
+     *      entries are computed at resolution time; ordinary perpetual tickets are queued.
      *
-     *      Price: 24 + T(n) ETH where n = passes sold so far, T(n) = n*(n+1)/2, through the
-     *      27th pass (375 ETH); each pass after that doubles the previous price, so the
-     *      28th costs 750 ETH and the last (32nd) 12,000 ETH.
+     *      Price: 24 + T(n) ETH where n = paid sales, T(n) = n*(n+1)/2, through the
+     *      24th paid pass (300 ETH); then double each sale, ending at 19,200 ETH.
+     *      Genesis grants do not advance the curve.
      *
      *      Craps award (every deity purchase): below level 10 the lootbox is 5% of price
      *      and the buyer banks one HIGH-ROLLER Craps pass credit; from level 10 the
@@ -735,6 +745,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (rngLockedFlag) revert RngLocked();
         if (_livenessTriggered()) revert GameOver();
         if (symbolId >= 32) revert InvalidSymbol();
+        if (symbolId == VAULT_DEITY_SYMBOL || symbolId == SDGNRS_DEITY_SYMBOL) revert SymbolTaken();
         if (deityBySymbol[symbolId] != address(0)) revert SymbolTaken();
         // Link the buyer's referral before anything reads it, exactly as a ticket mint does:
         // payAffiliate stores the supplied code when the buyer has none yet, and keeps the
@@ -745,12 +756,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (affiliateCode != bytes32(0)) {
             affiliate.payAffiliate(0, affiliateCode, buyer, level + 1, true, 0);
         }
-        // mintPacked_[buyer] is read once and reused for the deity-bit set below — nothing
-        // between here and that write touches mintPacked_ or makes an external call.
+        // One deity per buyer; the shared registration helper sets the ownership bit.
         uint256 mp = mintPacked_[buyer];
         if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert AlreadyOwnsDeityPass();
 
-        uint256 basePrice = _deityPassBasePrice(deityPassOwners.length);
+        uint256 basePrice = _deityPassBasePrice(deityPassSales);
 
         // Apply discount boon if active (tier 1=10%, 2=20%, 3=35%)
         uint256 totalPrice = basePrice;
@@ -794,22 +804,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             presaleBoxCredit[buyer] += totalPrice / 4;
         }
 
-        uint256 deityPacked = BitPackingLib.setPacked(
-            mp,
-            BitPackingLib.HAS_DEITY_PASS_SHIFT,
-            1,
-            1
-        );
-        mintPacked_[buyer] = deityPacked;
-        emit MintRecorded(buyer, deityPacked);
-        deityPassOwners.push(buyer);
-        deityBySymbol[symbolId] = buyer;
-
-        // Mint ERC721 token (tokenId = symbolId)
-        IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(
-            buyer,
-            symbolId
-        );
+        _registerDeity(buyer, symbolId);
+        // The next transition extends every deity to level + 100. In the purchase phase
+        // passLevel is level + 1, so a 100-level grant ends at level + 100 and the next
+        // transition (targeting level + 101) continues it; in the jackpot phase the level
+        // is already promoted, passLevel is level + 1 and the next transition targets
+        // level + 100 itself, so the grant stops one level short.
+        _queueEntryRange(buyer, passLevel, jackpotPhaseFlag ? 99 : 100, DEITY_PERPETUAL_ENTRIES, false);
+        ++deityPassSales;
 
         // DGNRS rewards
         address affiliateAddr = affiliate.getReferrer(buyer);
@@ -823,11 +825,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         _rewardDeityPassDgnrs(buyer, affiliateAddr, upline, upline2, passLevel - 1);
 
-        // The deity buyer's OWN jackpot benefit is the virtual symbol-bucket entries
-        // (JackpotModule via deityBySymbol) — they get NO queued tickets. The whale pass the
+        // The buyer's perpetual ticket range was granted by _registerDeity above.
+        // The separate whale pass the
         // purchase confers goes to the deity's affiliate (affiliateAddr is always non-zero —
         // getReferrer defaults to VAULT when the buyer has no real referrer): queued immediately
-        // for 100 levels from passLevel (= level + 1), 20/lvl over the level-1-9 bonus window +
+        // for 100 levels from passLevel (= level + 1), 5/lvl over the level-1-9 bonus window +
         // one whole ticket every 2nd level standard, plus the whale-pass freeze/stat boost.
         uint24 ticketStartLevel = passLevel;
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
@@ -896,6 +898,61 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
     // Internal Helpers
     // -------------------------------------------------------------------------
+
+    /// @dev Shared paid/genesis ownership registration. Callers queue the initial
+    ///      range separately so genesis can append both owners in one packed group.
+    function _registerDeity(address buyer, uint8 symbolId) private {
+        uint256 mp = mintPacked_[buyer];
+        if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert AlreadyOwnsDeityPass();
+        if (deityBySymbol[symbolId] != address(0)) revert SymbolTaken();
+        if (deityPassOwners.length >= 32) revert E();
+        uint256 packed = mp | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
+        mintPacked_[buyer] = packed;
+        deityBySymbol[symbolId] = buyer;
+        deityPassOwners.push(buyer);
+        emit MintRecorded(buyer, packed);
+        IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(buyer, symbolId);
+    }
+
+    /// @dev Batch both genesis owners for one level. Registry length and packed
+    ///      queue lanes commit once; each fresh owner/owed record is one word write.
+    ///      Existing purchases and partial queue tails are preserved.
+    function _queueGenesisDeities(uint24 lvl, uint24 key) private {
+        EntryOwner[] storage owners = lvlEntryOwner[lvl];
+        uint256 ownerCount = owners.length;
+        uint256 records;
+        assembly ("memory-safe") {
+            mstore(0, owners.slot)
+            records := keccak256(0, 32)
+        }
+        uint256 lanes;
+        uint256 count;
+        for (uint256 i; i < 2; ++i) {
+            address buyer = i == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
+            uint80 packed = _entriesOwed(key, buyer);
+            if (packed != 0) {
+                uint32 owed = uint32(packed >> 8) + DEITY_PERPETUAL_ENTRIES;
+                _setEntryOwed(lvl, uint32(packed >> OWNER_IDX_SHIFT),
+                    (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
+                continue;
+            }
+            if (ownerCount >= type(uint32).max - 1) revert E();
+            uint32 pos = uint32(ownerCount + 1);
+            uint256 record = uint256(uint160(buyer)) | (
+                ((uint256(pos) << OWNER_IDX_SHIFT) | (uint256(DEITY_PERPETUAL_ENTRIES) << 8)) << 160
+            );
+            assembly ("memory-safe") { sstore(add(records, ownerCount), record) }
+            emit EntryOwnerRegistered(lvl, uint32(ownerCount), buyer);
+            ++ownerCount;
+            entryOwnerPosition[key][buyer] = pos;
+            lanes |= uint256(pos) << (count * 32);
+            ++count;
+        }
+        if (count != 0) {
+            assembly ("memory-safe") { sstore(owners.slot, ownerCount) }
+            _tqAppendLanes(key, lanes, count);
+        }
+    }
 
     /// @dev Compute the total ETH cost of a 10-level lazy pass starting at startLevel.
     ///      Cost equals the sum of per-level ticket prices (one whole ticket, 4 entries, per level).
@@ -1002,7 +1059,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     }
 
     /// @dev Undiscounted deity pass price with `sold` passes already taken: triangular through
-    ///      the anchor (sold 26 = 375 ETH), then doubling from the anchor.
+    ///      the anchor (23 paid sales = 300 ETH), then doubling from the anchor.
     function _deityPassBasePrice(uint256 sold) private pure returns (uint256) {
         if (sold <= DEITY_DOUBLING_ANCHOR_SOLD) {
             return DEITY_PASS_BASE + (sold * (sold + 1) * 1 ether) / 2;

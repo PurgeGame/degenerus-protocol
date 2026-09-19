@@ -40,6 +40,15 @@ pragma solidity 0.8.34;
  *      self-caps and callers pass the score through unclamped.
  */
 library ActivityCurveLib {
+    /// @notice Protocol boon-draw multiplier scaled by 800: 1x at zero, 2x at
+    ///         400, 3x at 1200, flat thereafter. Retain this scale in draw weight
+    ///         so even a minimum 100-FLIP entry keeps every whole-score increment.
+    function boonDrawMultUnits(uint256 score) internal pure returns (uint256) {
+        if (score <= 400) return 800 + 2 * score;
+        if (score < 1200) return 1600 + (score - 400);
+        return 2400;
+    }
+
     // -------------------------------------------------------------------------
     // Shared segment knees
     // -------------------------------------------------------------------------

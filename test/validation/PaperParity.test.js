@@ -659,7 +659,7 @@ describe("Paper Parity (Phase 46)", function () {
       const expectedPrice = ethers.parseEther("24");
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: expectedPrice });
+        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
     it("second deity pass (k=1): 25 ETH", async function () {
@@ -668,7 +668,7 @@ describe("Paper Parity (Phase 46)", function () {
       // Buy first pass
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, {
+        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, {
           value: ethers.parseEther("24"),
         });
 
@@ -685,7 +685,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, {
+        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, {
           value: ethers.parseEther("24"),
         });
       await game
@@ -1027,10 +1027,10 @@ describe("Paper Parity (Phase 46)", function () {
 
     it("deity pass prices are strictly increasing", async function () {
       const base = 24n;
-      // Triangular through k=26 (375 ETH), then doubling from that anchor.
-      const curve = (k) => (k <= 26n ? base + (k * (k + 1n)) / 2n : 375n << (k - 26n));
+      // Triangular through paid k=23 (300 ETH), then doubling from that anchor.
+      const curve = (k) => (k <= 23n ? base + (k * (k + 1n)) / 2n : 300n << (k - 23n));
       let prevPrice = 0n;
-      for (let k = 0n; k < 32n; k++) {
+      for (let k = 0n; k < 30n; k++) {
         const price = curve(k) * ethers.parseEther("1");
         expect(price).to.be.gt(
           prevPrice,
@@ -1040,12 +1040,11 @@ describe("Paper Parity (Phase 46)", function () {
       }
     });
 
-    it("27th deity pass (k=26) costs 375 ETH, then each pass doubles to 12,000 ETH at the 32nd", async function () {
-      // k=26: 24 + 26*27/2 = 24 + 351 = 375; k=27..31: 375 << 1..5
-      const curve = (k) => (k <= 26n ? 24n + (k * (k + 1n)) / 2n : 375n << (k - 26n));
-      expect(curve(26n)).to.equal(375n, "27th deity pass = 375 ETH");
-      expect(curve(27n)).to.equal(750n, "28th deity pass doubles the anchor");
-      expect(curve(31n)).to.equal(12000n, "32nd deity pass = 12,000 ETH");
+    it("24th paid deity pass costs 300 ETH, then doubles through the 30th at 19,200 ETH", async function () {
+      const curve = (k) => (k <= 23n ? 24n + (k * (k + 1n)) / 2n : 300n << (k - 23n));
+      expect(curve(23n)).to.equal(300n);
+      expect(curve(24n)).to.equal(600n);
+      expect(curve(29n)).to.equal(19200n);
     });
 
     it("coinflip minimum deposit: 100 FLIP", async function () {

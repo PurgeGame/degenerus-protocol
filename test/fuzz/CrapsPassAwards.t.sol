@@ -92,7 +92,7 @@ contract CrapsPassAwards is DeployProtocol {
         emit LootBoxBuy(buyer, 0, DEITY_FIRST_PRICE / 20);
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(buyer, true, 1);
-        _buyDeity(buyer, 0);
+        _buyDeity(buyer, 4);
 
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(buyer);
         assertEq(normal, 0, "early deity award is high-lane only");

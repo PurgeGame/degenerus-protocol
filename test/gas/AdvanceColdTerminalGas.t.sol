@@ -25,7 +25,7 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
         for (uint8 q; q < 4; ++q) {
             _seedBucketDistinct(10, traits[q], 5000, uint160(0x7E000000 + uint256(q) * 0x100000));
         }
-        for (uint256 i; i < 32; ++i) {
+        for (uint256 i; i < 30; ++i) {
             address owner = address(uint160(0xD3170000 + i));
             deityPassOwners.push(owner);
             deityPassPricePaid[owner] = 20 ether;
@@ -73,7 +73,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         emit log_named_uint("terminal_ETH_awards", winners);
         assertTrue(game.gameOver(), "terminal payout must complete");
         assertEq(winners, 305, "all terminal draw slots must execute");
-        assertEq(refunds, 640 ether, "all 32 deity refunds must execute");
+        assertEq(refunds, 600 ether, "30 paid refunds; genesis has no refund basis");
         assertEq(rngApplied, _fresh() ? 1 : 0, "expected entropy path");
         uint256 terminalRound = uint256(vm.load(address(game), bytes32(uint256(49))));
         assertEq(uint24(terminalRound), 9, "terminal decimator must resolve the current level");

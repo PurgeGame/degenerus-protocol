@@ -93,6 +93,10 @@ interface IDegenerusGameJackpotModule {
     /// @param randWord Random word for distribution (the same day's word)
     function payCarryoverTickets(uint256 randWord) external;
 
+    /// @notice Pay the purchase-phase daily's priced ticket leg from its own advance stage.
+    /// @param randWord The day's recorded VRF word.
+    function payPurchaseDailyTickets(uint256 randWord) external;
+
     /// @notice Pays the early-bird ticket leg the day-1 ETH stage left pending
     /// @param randWord Random word for distribution (the same day's word)
     function payEarlyBirdTickets(uint256 randWord) external;
@@ -214,9 +218,8 @@ interface IDegenerusGameDecimatorModule {
 /// @title IDegenerusGameWhaleModule
 /// @notice Interface for whale-tier purchases and premium passes
 interface IDegenerusGameWhaleModule {
-    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 for `who`.
-    /// @dev Delegatecall target of the Game facade's initPerpetualTickets (caller-gated there).
-    function initPerpetualTickets(address who) external;
+    /// @notice One-time creator-gated registration and ticket batch for both protocol deities.
+    function initProtocolDeity() external;
 
     /// @notice Purchases a whale pass for the buyer
     /// @param buyer Address receiving the pass
@@ -525,6 +528,12 @@ interface IDegenerusGameBoonModule {
     /// @notice Issues a deity boon from a deity to a recipient
     function issueDeityBoon(address deity, address recipient, uint8 slot) external;
 
+    /// @notice Stake the donor's FLIP and enter the calling protocol owner's boon draw.
+    function enterProtocolBoonDraw(address donor, uint256 amount) external;
+
+    /// @notice Automatically award both protocol owners' three closed daily draws. Advance-only delegate target.
+    function resolveProtocolBoonDraws(uint24 awardDay) external;
+
     /// @notice Consumes a player's coinflip OR craps boon and returns its value
     /// @dev ONE selector, two disjoint lanes, named by the caller: COINFLIP spends the coinflip
     ///      boon, COIN (FLIP) spends the craps boon. The Game façade authorizes exactly those two
@@ -746,7 +755,7 @@ interface IGameAfkingModule {
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
-    /// @notice Queue vault and SDGNRS perpetual tickets for a phase-transition target level.
+    /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
     function queuePerpetualTickets(uint24 targetLevel) external;
 
     /// @notice Seated round drain for a ticket queue: eight entries share each trait roll

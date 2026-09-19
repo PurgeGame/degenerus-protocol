@@ -84,7 +84,11 @@ contract JackpotWordSamplingTest is Test {
         expected.trait = JackpotBucketLib.getRandomTraits(uint256(keccak256(abi.encode(word, BONUS))))[0];
         expected.deity = withDeity ? address(0xD00D) : address(0);
         expected.effectiveLength = len;
-        if (withDeity) expected.effectiveLength += ((expected.trait >> 3) & 7) == 7 ? 1 : (len / 50 < 2 ? 2 : len / 50);
+        if (withDeity) {
+            uint8 color = (expected.trait >> 3) & 7;
+            // Gold: one virtual entry. Colors 5/6: floor(1%), minimum 1. Colors 0..4: floor(2%), minimum 2.
+            expected.effectiveLength += color == 7 ? 1 : (color >= 5 ? (len / 100 < 1 ? 1 : len / 100) : (len / 50 < 2 ? 2 : len / 50));
+        }
         uint256 cap = awards < 128 ? awards : 128;
         if (cap >= 8) cap = (cap / 8) * 8;
         expected.entriesEach = cap == 0 ? 0 : (awards / cap) * 4;

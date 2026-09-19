@@ -205,7 +205,7 @@ contract AfKingSeatToken is DeployProtocol {
         vm.deal(buyer, 24 ether);
 
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 24 ether}(buyer, 6, bytes32(0));
+        game.purchaseDeityPass{value: 24 ether}(buyer, 7, bytes32(0));
 
         assertEq(afkingSubToken.balanceOf(buyer), 1, "deity buyer receives a seat");
         assertEq(

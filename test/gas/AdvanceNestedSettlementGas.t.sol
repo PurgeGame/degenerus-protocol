@@ -133,7 +133,7 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
         emit log_named_uint("far_FLIP_awards", farWins);
         assertEq(stage, STAGE_PURCHASE_DAILY, "daily must finish in the RNG-apply transaction");
         assertEq(ethWins, PURCHASE_ETH_WINNERS, "all ETH awards must execute");
-        assertEq(ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "all ticket awards must execute");
+        assertEq(ticketWins, 0, "the ticket leg waits for its own stage");
         assertEq(compWins, _comps() ? 6 : 0, "expected coin jackpot branch must execute");
         assertEq(goldenWins, _extras() ? 1 : 0, "golden resolution must execute when armed");
         assertEq(goldenGrand, _extras(), "golden grand branch must execute when armed");
@@ -148,6 +148,23 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
             );
         }
         assertEq(settled, _sufficient() ? 399 : 34, "funded settlement commits; failed seat funding rolls back");
+
+        // The priced ticket leg pays from the next advance on the same recorded word.
+        vm.recordLogs();
+        before = gasleft();
+        game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
+        used = before - gasleft() + 21_064;
+        logs = vm.getRecordedLogs();
+        ticketWins = 0;
+        stage = 255;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == TICKET_WIN_SIG) ++ticketWins;
+            if (logs[i].topics[0] == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
+        }
+        emit log_named_uint("ticket_stage_including_intrinsic", used);
+        assertEq(stage, 15, "the purchase ticket stage must follow");
+        assertEq(ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "all ticket awards must execute in the ticket stage");
+        assertLt(used, EIP7825_TX_GAS_CAP, "ticket stage exceeds cap");
         assertLt(used, EIP7825_TX_GAS_CAP, "complete transaction exceeds cap");
     }
 }

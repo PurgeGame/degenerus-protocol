@@ -231,7 +231,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -242,7 +242,7 @@ describe("PriceEscalation", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
       await game
         .connect(bob)
         .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
@@ -262,7 +262,7 @@ describe("PriceEscalation", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(23) })
+          .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(23) })
       ).to.be.reverted;
     });
   });

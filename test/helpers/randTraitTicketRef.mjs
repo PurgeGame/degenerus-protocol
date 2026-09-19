@@ -113,8 +113,13 @@ export function goldTierVirtualCount(trait, len, deityPresent) {
   if (((traitNum >> 3) & 7) === 7) {
     return 1n;
   }
-  // Common tier: floor(len/50), minimum 2
   const lenBn = typeof len === "bigint" ? len : BigInt(len);
+  // Top two non-gold colors: floor(len/100), minimum 1.
+  if (((traitNum >> 3) & 7) >= 5) {
+    const vc = lenBn / 100n;
+    return vc < 1n ? 1n : vc;
+  }
+  // Lower colors: floor(len/50), minimum 2.
   const vc = lenBn / 50n;
   return vc < 2n ? 2n : vc;
 }

@@ -36,8 +36,8 @@ interface IDegenerusGamePlayer {
     function advanceGame() external;
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
     function mineFlip() external;
-    /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
-    function initPerpetualTickets() external;
+    /// @notice Enter the caller's protocol boon draw for the actual donating player.
+    function enterProtocolBoonDraw(address donor, uint256 amount) external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
     /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes
     ///      (player == address(this) == msg.sender) so the GAME's self-consent path passes
@@ -408,12 +408,17 @@ contract sDGNRS {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
         _;
     }
-
-
+    /// @notice Donate 100..25,000 FLIP to this contract's next-day coinflip stake,
+    ///         entering its three next-day boon draws with score-adjusted weight.
+    /// @dev The actual caller is the payer and entrant; only weight truncates to 100 FLIP.
+    function donateFlipForBoons(uint256 amount) external {
+        game.enterProtocolBoonDraw(msg.sender, amount);
+    }
 
     // =====================================================================
     //                          CONSTRUCTOR
     // =====================================================================
+
 
     /// @notice Initializes token supply and distributes to pools
     /// @dev Mints creator allocation to DGNRS wrapper address and pool allocations to this contract
@@ -444,10 +449,6 @@ contract sDGNRS {
         poolBalances[uint8(Pool.Lootbox)] = uint128(lootboxAmount);
         poolBalances[uint8(Pool.Reward)] = uint128(rewardAmount);
         poolBalances[uint8(Pool.PresaleBox)] = uint128(presaleBoxAmount);
-
-        // Queue this contract's perpetual tickets (levels 1-100). Moved out of the GAME
-        // constructor so GAME's deploy stays under the per-tx gas cap.
-        game.initPerpetualTickets();
 
         // Protocol-owned self-subscription: claimable-first daily lootbox
         // buy of flat quantity 1. Self-consent —

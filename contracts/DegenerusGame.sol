@@ -231,13 +231,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         purchaseStartDay = currentDay;
         dailyIdx = currentDay;
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
-        // Vault addresses get deity-equivalent score boost (no symbol, not in deityPassOwners).
-        // Fresh storage: these mapping slots are provably zero at construction (never written
-        // above), so pass literal 0 as the base and skip two cold SLOADs + the mask read.
-        mintPacked_[ContractAddresses.SDGNRS] = BitPackingLib.setPacked(0, BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
-        mintPacked_[ContractAddresses.VAULT] = BitPackingLib.setPacked(0, BitPackingLib.HAS_DEITY_PASS_SHIFT, 1, 1);
-        // Perpetual vault/SDGNRS tickets (levels 1-100) are queued post-deploy by VAULT and
-        // SDGNRS via initPerpetualTickets(), keeping GAME's deploy under the per-tx gas cap.
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -252,19 +245,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 (advance handles 101+).
-    /// @dev Split out of the constructor to keep GAME's deploy under the per-tx gas cap. VAULT and
-    ///      SDGNRS each call this exactly once from their own constructor (one deploy tx each), so
-    ///      no re-entry path exists. Restricted to those two protocol addresses — the only
-    ///      recipients of perpetual tickets — and queues for the caller only.
-    function initPerpetualTickets() external {
-        address who = msg.sender;
-        if (who != ContractAddresses.SDGNRS && who != ContractAddresses.VAULT) revert Unauthorized();
-        (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameWhaleModule.initPerpetualTickets.selector, who)
-        );
+    /// @notice Register both protocol deities and their perpetual tickets in one batch.
+    /// @dev Caller and one-time guards live in the module; identical selector forwards unchanged.
+    function initProtocolDeity() external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
+
+    /// @notice Enter the calling protocol owner's next-day boon draw for its donor.
+    /// @dev VAULT/SDGNRS-only, enforced in the module. Wrappers supply their actual caller.
+    function enterProtocolBoonDraw(address, uint256) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
+
 
     /*+======================================================================+
       |                           MODIFIERS                                  |
@@ -1211,7 +1206,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Get raw deity boon state for off-chain or viewer contract computation.
     /// @param deity The deity address to query.
-    /// @return dailySeed Yesterday's finalized RNG word for today's boons (0 if unavailable).
+    /// @return dailySeed Yesterday's finalized RNG word (0 if unavailable). Automatic
+    ///         protocol draws then use today's word, available through rngWordForDay.
     /// @return day Current day index.
     /// @return usedMask Bitmask of slots already used (bit i = slot i used).
     /// @return decimatorOpen Whether decimator boons are available.
@@ -1235,7 +1231,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         decimatorOpen = decWindowOpen;
         deityPassAvailable = deityPassOwners.length < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
         // The issuance day's menu is fixed by the preceding day's finalized word.
-        // A missing predecessor (including day 1) has no menu until that word exists.
+        // Manual gifts need this predecessor. Automatic protocol draws fall back
+        // to the award-day word when no predecessor exists.
         dailySeed = rngWordByDay[day - 1];
     }
 

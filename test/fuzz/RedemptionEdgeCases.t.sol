@@ -68,7 +68,10 @@ contract MaliciousReceiver {
 ///      Each function carries a `default.fuzz.runs = 10000` inline-config NatSpec override.
 ///      MIN_BURN_AMOUNT (1e18) and MAX_DAILY_REDEMPTION_EV (160 ether) mirror the private
 ///      sStonk constants verbatim.
-contract RedemptionEdgeCases is DeployProtocol {
+/// @dev Shared fixture and helpers for the two RedemptionEdgeCases halves. The suite is split
+///      across two contracts because a single one, embedding the whole protocol deployment plus
+///      twenty-two fuzz bodies, exceeds what the solc assembler can tag in one contract.
+abstract contract RedemptionEdgeCasesBase is DeployProtocol {
     // =====================================================================
     //                          CONSTANTS
     // =====================================================================
@@ -224,6 +227,24 @@ contract RedemptionEdgeCases is DeployProtocol {
     //                  EDGE-01: Pre-advance-gap burn safety
     // =====================================================================
 
+
+    /// @dev Sum the `amount` of every CoinflipStakeUpdated event crediting `who` in `logs`.
+    function _sumKeeperBounty(Vm.Log[] memory logs, address who) internal pure returns (uint256 total) {
+        bytes32 whoTopic = bytes32(uint256(uint160(who)));
+        for (uint256 i; i < logs.length; ++i) {
+            if (
+                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
+                logs[i].topics[1] == whoTopic
+            ) {
+                (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
+                total += amount;
+            }
+        }
+    }
+}
+
+/// @notice EDGE-01..EDGE-10 (see the file header).
+contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
     /// @notice EDGE-01 — 304-SPEC §3 lines 405-417. Wall-clock just flipped to day D and
     ///         day-D's advance has NOT yet fired. A burn from player A on day D must land in
     ///         `pendingByDay[D]` while a pre-existing `pendingByDay[D-1]` retains its
@@ -926,7 +947,10 @@ contract RedemptionEdgeCases is DeployProtocol {
     // =====================================================================
     //              EDGE-11: Burn during rngLocked window reverts
     // =====================================================================
+}
 
+/// @notice EDGE-11..EDGE-20, PERM-01..02 and BOUNTY-01 (see the file header).
+contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
     /// @notice EDGE-11 — 304-SPEC §3 lines 547-559. While `game.rngLocked() == true`,
     ///         any burn must revert BurnsBlockedDuringRng with no state mutation. Mocked via
     ///         vm.mockCall on game.rngLocked.
@@ -1570,20 +1594,6 @@ contract RedemptionEdgeCases is DeployProtocol {
         vm.prank(playerD);
         sdgnrs.claimRedemptionMany(players, uint24(dayD));
         assertEq(game.claimableWinningsOf(playerA), aAfter, "PERM-02: re-sweep must not double-credit");
-    }
-
-    /// @dev Sum the `amount` of every CoinflipStakeUpdated event crediting `who` in `logs`.
-    function _sumKeeperBounty(Vm.Log[] memory logs, address who) internal pure returns (uint256 total) {
-        bytes32 whoTopic = bytes32(uint256(uint160(who)));
-        for (uint256 i; i < logs.length; ++i) {
-            if (
-                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == whoTopic
-            ) {
-                (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
-                total += amount;
-            }
-        }
     }
 
     /// @notice BOUNTY-01: claimRedemptionMany pays the keeper a FLIP flip-credit per box it settles,

@@ -294,9 +294,9 @@ describe("GameLifecycle", function () {
         if (events.length > 0) finalStage = Number(events[0].args.stage);
       }
 
-      // STAGE_PURCHASE_DAILY = 6 is emitted when the daily jackpot is processed
-      // and RNG is unlocked.
-      expect(finalStage).to.equal(6);
+      // STAGE_PURCHASE_DAILY = 6 is emitted when the daily jackpot is processed; when it
+      // priced a ticket leg, STAGE_PURCHASE_DAILY_TICKETS = 15 pays it and unlocks RNG.
+      expect([6, 15]).to.include(finalStage);
     });
   });
 

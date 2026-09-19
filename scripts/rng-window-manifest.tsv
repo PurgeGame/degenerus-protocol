@@ -160,3 +160,4 @@ GATE	_dailyWordAt	upgradeReservedDay	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusDayOf	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusBoostBand	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusTermsFor	CrapsBattle.sol	READ
+CONSUMER-SEALED	rngWordByDay	resolveProtocolBoonDraws	modules/DegenerusGameBoonModule.sol	READ	Menu word D (fallback D+1 when D is absent) and winner word D+1; donation writes only current-day pools, so D intervals/principal/score snapshots are closed before D+1 requests. Menu and winners use separate hash domains. ProtocolBoonDraw verifies launch-day awards, pool immutability, and exact award-day gating.

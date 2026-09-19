@@ -15,6 +15,7 @@ contract TicketQueueCodecHarness is DegenerusGameStorage {
     }
     function bucketOwner(uint24 lvl) external view returns (address) { return _bucketOwnerAt(lvl, 17, 0); }
     function append(uint24 key, uint32 pos) external { _tqAppend(key, pos); }
+    function appendLanes(uint24 key, uint256 lanes, uint256 count) external { _tqAppendLanes(key, lanes, count); }
     function position(uint24 key, uint256 k) external view returns (uint32) {
         require(k < ticketQueue[key].length);
         return _tqPositionAt(ticketQueue[key], k);
@@ -57,6 +58,23 @@ contract TicketQueueCodecHarness is DegenerusGameStorage {
 contract TicketQueueCodecTest is Test {
     TicketQueueCodecHarness h;
     function setUp() public { h = new TicketQueueCodecHarness(); }
+
+    function testFuzz_BulkAppendPreservesLivePrefixAndClearsStaleTail(uint8 fillSeed, uint8 countSeed) public {
+        uint256 fill = bound(fillSeed, 0, 15);
+        uint256 count = bound(countSeed, 1, 8);
+        // Leave stale all-ones words behind the logical end, including spillover.
+        h.seedWord(77, type(uint256).max);
+        h.release(77);
+        for (uint256 i; i < fill; ++i) h.append(77, uint32(100 + i));
+        uint256 lanes;
+        for (uint256 i; i < count; ++i) lanes |= uint256(200 + i) << (32 * i);
+        h.appendLanes(77, lanes, count);
+        assertEq(h.length(77), fill + count);
+        for (uint256 i; i < fill; ++i) assertEq(h.position(77, i), 100 + i);
+        for (uint256 i; i < count; ++i) assertEq(h.position(77, fill + i), 200 + i);
+        h.append(77, 999);
+        assertEq(h.position(77, fill + count), 999);
+    }
 
     function test_ReferenceModelRootsMatchCompilerLayout() public view {
         (uint256 q, uint256 locator, uint256 owners) = h.roots();

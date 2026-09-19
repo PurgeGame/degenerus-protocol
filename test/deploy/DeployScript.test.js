@@ -26,11 +26,18 @@ describe("Deploy Pipeline", function () {
     }
   });
 
-  it("deployer nonce advances by exactly the deploy-order length", async function () {
+  it("deployer nonce covers every deployment and one combined genesis transaction", async function () {
     const f = await loadFixture(deployFullProtocol);
     const endNonce = await f.deployer.getNonce();
-    // startingNonce was captured after mock deploys, so only protocol deployments count.
-    expect(endNonce - f.startingNonce).to.equal(DEPLOY_ORDER.length);
+    // Genesis runs after all predicted CREATEs and consumes one additional nonce.
+    expect(endNonce - f.startingNonce).to.equal(DEPLOY_ORDER.length + 1);
+  });
+
+  it("initializes both real protocol passes within the transaction gas cap", async function () {
+    const f = await loadFixture(deployFullProtocol);
+    expect(await f.deityPass.ownerOf(0)).to.equal(await f.vault.getAddress());
+    expect(await f.deityPass.ownerOf(6)).to.equal(await f.sdgnrs.getAddress());
+    expect(f.genesisReceipt.gasUsed).to.be.lt(16_777_216n);
   });
 
   describe("Constructor side effects", function () {

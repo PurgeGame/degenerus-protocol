@@ -33,8 +33,8 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 interface IDegenerusGamePlayerActions {
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
     function mineFlip() external;
-    /// @notice Queue this caller's perpetual tickets for levels 1-100 (VAULT/SDGNRS only, once).
-    function initPerpetualTickets() external;
+    /// @notice Enter the caller's protocol boon draw for the actual donating player.
+    function enterProtocolBoonDraw(address donor, uint256 amount) external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
     /// @dev The afking subscription surface is GAME-resident. The vault self-subscribes
     ///      (player == address(this) == msg.sender) so the GAME's self-consent path passes
@@ -292,6 +292,8 @@ contract DegenerusVaultShare {
         if (msg.sender != ContractAddresses.VAULT) revert Unauthorized();
         _;
     }
+
+
 
     // ---------------------------------------------------------------------
     // CONSTRUCTOR
@@ -567,6 +569,14 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
     // CONSTRUCTOR
     // ---------------------------------------------------------------------
+
+    /// @notice Donate 100..25,000 FLIP to this contract's next-day coinflip stake,
+    ///         entering its three next-day boon draws with score-adjusted weight.
+    /// @dev The actual caller is the payer and entrant; only weight truncates to 100 FLIP.
+    function donateFlipForBoons(uint256 amount) external {
+        gamePlayer.enterProtocolBoonDraw(msg.sender, amount);
+    }
+
     /// @notice Deploy the vault and create all share class tokens
     /// @dev Deploys DGVF and DGVE tokens. Creator receives initial 1T supply of each.
     constructor() {
@@ -584,9 +594,7 @@ contract DegenerusVault {
         // operator approval needed).
         gamePlayer.subscribe(address(this), true, false, 1, address(0));
 
-        // Queue this vault's perpetual tickets (levels 1-100). Moved out of the GAME
-        // constructor so GAME's deploy stays under the per-tx gas cap.
-        gamePlayer.initPerpetualTickets();
+
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)

@@ -171,6 +171,13 @@ interface IDegenerusGame {
     /// @param slot Slot index (0-2).
     function issueDeityBoon(address deity, address recipient, uint8 slot) external;
 
+    /// @notice Initialize both protocol deities in one post-deployment batch (creator only, once).
+    function initProtocolDeity() external;
+
+    /// @notice Enter the caller's protocol boon draw, staking donor FLIP for tomorrow.
+    function enterProtocolBoonDraw(address donor, uint256 amount) external;
+
+
     /// @notice Get the future prize pool (single pool).
     /// @return Future prize pool amount in wei.
     function futurePrizePoolView() external view returns (uint256);

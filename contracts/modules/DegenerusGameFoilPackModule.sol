@@ -60,13 +60,63 @@ contract DegenerusGameFoilPackModule is
     DegenerusGamePayoutUtils,
     DegenerusGameMintStreakUtils
 {
-    uint32 private constant VAULT_PERPETUAL_ENTRIES = 16;
+    /// @notice One deity perpetual ticket per owner was queued at `targetLevel`.
+    /// @dev The owner set is the deity registry at that transition (genesis plus every
+    ///      DeityPassPurchased so far); fresh registrations emit EntryOwnerRegistered.
+    event DeityPerpetualQueued(uint24 indexed targetLevel, uint32 entriesPerOwner);
 
-    /// @notice Queue the two protocol owners' perpetual tickets at a phase transition.
-    /// @dev Advance delegates here with the target level; both writes retain advance-chain routing.
+    /// @notice Extend every deity's perpetual coverage by one level, at most 32 owners.
+    /// @dev The advance runs this exactly once per transition (the resumed-transition path
+    ///      skips the housekeeping), so every owner is extended unconditionally. Existing
+    ///      queued purchases and affiliate rewards share an owed record; append only newly
+    ///      enrolled owners. One event covers the batch.
     function queuePerpetualTickets(uint24 targetLevel) external {
-        _queueEntries(ContractAddresses.SDGNRS, targetLevel, VAULT_PERPETUAL_ENTRIES, true);
-        _queueEntries(ContractAddresses.VAULT, targetLevel, VAULT_PERPETUAL_ENTRIES, true);
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (targetLevel != level + 100) return;
+        uint24 key = _tqFarFutureKey(targetLevel);
+        uint256 lanes;
+        uint256 count;
+        EntryOwner[] storage owners = lvlEntryOwner[targetLevel];
+        uint256 ownerCount = owners.length;
+        uint256 originalCount = ownerCount;
+        uint256 records;
+        assembly ("memory-safe") {
+            mstore(0, owners.slot)
+            records := keccak256(0, 32)
+        }
+        uint256 total = deityPassOwners.length;
+        for (uint256 i; i < total; ++i) {
+            address owner = deityPassOwners[i];
+            uint80 packed = _entriesOwed(key, owner);
+            if (packed == 0) {
+                // Same full-registry policy as other advance-chain ticket awards.
+                if (ownerCount >= type(uint32).max - 1) continue;
+                uint32 pos = uint32(ownerCount + 1);
+                uint256 record = uint256(uint160(owner)) | (
+                    ((uint256(pos) << OWNER_IDX_SHIFT) | (uint256(DEITY_PERPETUAL_ENTRIES) << 8)) << 160
+                );
+                assembly ("memory-safe") { sstore(add(records, ownerCount), record) }
+                emit EntryOwnerRegistered(targetLevel, uint32(ownerCount), owner);
+                ++ownerCount;
+                entryOwnerPosition[key][owner] = pos;
+                lanes |= uint256(pos) << (count * 32);
+                if (++count == 8) {
+                    _tqAppendLanes(key, lanes, count);
+                    lanes = 0;
+                    count = 0;
+                }
+            } else {
+                uint256 owed = uint256(uint32(packed >> 8)) + DEITY_PERPETUAL_ENTRIES;
+                if (owed > type(uint32).max) owed = type(uint32).max;
+                _setEntryOwed(targetLevel, uint32(packed >> OWNER_IDX_SHIFT),
+                    (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
+            }
+        }
+        if (count != 0) _tqAppendLanes(key, lanes, count);
+        if (ownerCount != originalCount) {
+            assembly ("memory-safe") { sstore(owners.slot, ownerCount) }
+        }
+        if (total != 0) emit DeityPerpetualQueued(targetLevel, DEITY_PERPETUAL_ENTRIES);
     }
 
     // -------------------------------------------------------------------------
