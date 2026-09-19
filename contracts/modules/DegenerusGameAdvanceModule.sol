@@ -683,10 +683,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     // A batch that both WORKED and FINISHED clears ticketLevel (the resume marker)
                     // inside processFutureTicketBatch, yet we still break here for the per-tx
                     // one-batch gas discipline. Re-assert the marker so the next advance's
-                    // resumingFF check skips the (already-completed) transition housekeeping —
-                    // otherwise transition housekeeping re-runs needlessly (deity watermarks
-                    // independently prevent duplicate perpetual grants). On that next advance the FF queue is empty, so the
-                    // batch returns finished with no work and the transition completes cleanly.
+                    // resumingFF check skips the already-completed transition housekeeping;
+                    // the marker is the only guard against running it twice, and a second
+                    // run would grant every deity another perpetual ticket. On that next
+                    // advance the FF queue is empty, so the batch returns finished with no
+                    // work and the transition completes cleanly.
                     if (ffFinished) {
                         ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT;
                     }
