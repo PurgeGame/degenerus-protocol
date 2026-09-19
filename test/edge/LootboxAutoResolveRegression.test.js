@@ -403,8 +403,10 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       }
       const queueBody = extractBody(queueIdx);
       const queueScaledBody = extractBody(queueScaledIdx);
-      expect(queueBody.includes("entriesOwedPacked")).to.equal(true);
-      expect(queueScaledBody.includes("entriesOwedPacked")).to.equal(true);
+      expect(queueBody.includes("_entriesOwed(wk, buyer)")).to.equal(true);
+      expect(queueBody.includes("_setEntryOwed(targetLevel, uint32(packed >> OWNER_IDX_SHIFT),")).to.equal(true);
+      expect(queueScaledBody.includes("_entriesOwed(wk, buyer)")).to.equal(true);
+      expect(queueScaledBody.includes("_setEntryOwed(targetLevel, uint32(packed >> OWNER_IDX_SHIFT), newPacked)")).to.equal(true);
     });
 
     it("[04b] documented tradeoff: manual is per-lootbox-Bernoulli (higher variance); auto-resolve pools via rem-byte (deterministic accumulation)", function () {

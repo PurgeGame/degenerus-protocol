@@ -277,15 +277,15 @@
     "label": "ticketQueue",
     "offset": 0,
     "slot": 12,
-    "typeLabel": "mapping(uint24 => address[])"
+    "typeLabel": "mapping(uint24 => uint256[])"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "entriesOwedPacked",
+    "label": "entryOwnerPosition",
     "offset": 0,
     "slot": 13,
-    "typeLabel": "mapping(uint24 => mapping(address => uint80))"
+    "typeLabel": "mapping(uint24 => mapping(address => uint32))"
   },
   {
     "bytes": "4",
@@ -845,7 +845,7 @@
     "label": "lvlEntryOwner",
     "offset": 0,
     "slot": 67,
-    "typeLabel": "mapping(uint24 => address[])"
+    "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.EntryOwner[])"
   },
   {
     "bytes": "32",

@@ -30,6 +30,7 @@ import {
     IDegenerusGameGameOverModule,
     IDegenerusGameJackpotModule,
     IDegenerusGameMintModule,
+    IDegenerusGameFoilPackModule,
     IGameAfkingModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IVRFCoordinator, VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
@@ -171,11 +172,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint8 private constant STAGE_GAP_BACKFILLED = 12;
     /// @dev The carryover ticket leg of a jackpot-phase daily, paid on the advance after
     ///      STAGE_JACKPOT_COIN_TICKETS / STAGE_JACKPOT_PHASE_ENDED priced it, so the two
-    ///      100-winner ticket legs never share a tx. Seals the day on a non-final daily.
+    ///      96-winner ticket legs never share a tx. Seals the day on a non-final daily.
     uint8 private constant STAGE_JACKPOT_CARRYOVER_TICKETS = 13;
     /// @dev The early-bird ticket leg of the day-1 jackpot-phase daily, paid on the advance
     ///      after STAGE_JACKPOT_DAILY_STARTED priced it and ahead of the coin+tickets stage,
-    ///      so the 305-winner ETH leg and the 100-winner early-bird leg never share a tx.
+    ///      so the 305-winner ETH leg and the 128-winner early-bird leg never share a tx.
     uint8 private constant STAGE_JACKPOT_EARLY_BIRD_TICKETS = 14;
     // No deferred-composition stage is left: the subscriber STAGE is entry-gated on
     // !rngLockedFlag, so it can never complete in a tx that also has a buffered word /
@@ -238,7 +239,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint48 private constant DAILY_RNG_RETRY_TIMEOUT = 12 hours;
     uint48 private constant DAILY_RNG_RETRY_HEAD_START = 1 hours;
 
-    uint32 private constant VAULT_PERPETUAL_ENTRIES = 16;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1300;
     uint16 private constant NEXT_TO_FUTURE_BPS_DAY_STEP = 14;
@@ -1020,7 +1020,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint256 recordFundFlip = (levelPrizePool[lvl] * PRICE_COIN_UNIT) / (PriceLookupLib.priceForLevel(lvl) * 500);
         if (recordFundFlip != 0) coinflip.fundRecordPool(recordFundFlip);
         if (lvl % 100 == 0) {
-            levelPrizePool[lvl] = _getFuturePrizePool() / 3;
+            levelPrizePool[lvl] = (_getFuturePrizePool() * 40) / 100;
         }
         jackpotCounter = 0;
         // Turbo (2) survives phase end as the coinflip bonus-day latch: a
@@ -1208,11 +1208,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             emit PoolSkimApplied(lvl, take, insuranceSkim);
         }
 
-        // --- x00 yield accumulator dump: 50% into futurePool (memory) ---
+        // --- x00 yield accumulator dump: 40% into futurePool (memory) ---
         if ((lvl % 100) == 0) {
-            uint256 half = memYieldAcc >> 1;
-            memFuture += half;
-            memYieldAcc -= half;
+            uint256 dump = (memYieldAcc * 40) / 100;
+            memFuture += dump;
+            memYieldAcc -= dump;
         }
 
         // --- BAF + Decimator x00: draw from futurePool BEFORE keep roll ---
@@ -1271,7 +1271,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             claimableDelta += spend;
         }
 
-        // --- x00 keep roll (5d4 dice: 30-65% keep, avg ~47.5%) ---
+        // --- x00 keep roll (5d4 dice: 50-80% keep, avg 65%) ---
         // Operates on post-jackpot memFuture — all reward jackpots drew first.
         if ((lvl % 100) == 0) {
             uint256 seed = EntropyLib.hash2(rngWord, uint256(FUTURE_KEEP_TAG));
@@ -1279,7 +1279,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             unchecked {
                 total = (seed % 4) + ((seed >> 16) % 4) + ((seed >> 32) % 4) + ((seed >> 48) % 4) + ((seed >> 64) % 4);
             }
-            uint256 keepBps = 3000 + (total * 3500) / 15;
+            uint256 keepBps = 5000 + (total * 3000) / 15;
             if (keepBps < 10_000) {
                 uint256 moveWei = memFuture - (memFuture * keepBps) / 10_000;
                 memFuture -= moveWei;
@@ -1587,17 +1587,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
             coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day);
-            // The craps bonus day opens on the same crank that applied its word — the terms are
-            // drawn from that word, and the house's seat is paid out of coinflip backing that has
-            // only just settled above. Gated on the WALL day: a buffered historical day has no
-            // windows to open, so a gap backfill opens the current day exactly once rather than
-            // once per day it caught up. The callee cannot revert, and is NOT wrapped: a catch
-            // here would turn a future defect in it into a day that silently fails to open, with
-            // no revert and no event to say so. The pinned table has code from deploy onward and
-            // cannot lose it, so the only thing a wrapper could hide is a bug worth seeing.
-            if (day == _simulatedDayIndexAt(ts)) {
-                ICrapsBonusDay(ContractAddresses.CRAPS).openBonusDay();
-            }
             // Consume the turbo coinflip-bonus latch once the settlement it
             // marks (the next level's first purchase day) has been paid. A
             // chained day's flag 3 drops to 2 — the freshly-armed turbo for
@@ -1650,13 +1639,27 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             bool finalJackpotRun =
                 (jackpotPhaseFlag || isTicketJackpotDay) && jackpotCounter + foilJpStep >= JACKPOT_LEVEL_CAP;
             if (day == _simulatedDayIndexAt(ts)) {
+                bool decDayOne = decDayOneActive;
                 quests.rollDailyQuest(
                     day,
                     currentWord,
                     lastPurchaseDay && compressedJackpotFlag < 2,
                     finalJackpotRun && gapDays == 0,
-                    decDayOneActive && gapDays == 0
+                    decDayOne && gapDays == 0
                 );
+
+                // Spend sDGNRS's settled backing on the opening-day decimator before the
+                // craps seat. Roll today's quests first so both actions credit the right day.
+                // The recorded-word return makes this once per day, and the next fresh
+                // request clears decDayOneActive. FLIP only sizes and records the entry.
+                // On this opening-day path, lvl is the request-promoted level.
+                if (decDayOne) coin.autoDecimatorBurn(lvl + 1);
+
+                // The craps bonus day opens on the same crank that applied its word — the
+                // terms and the house's available backing have both settled. The WALL-day
+                // gate skips buffered historical days; rngGate's recorded-word return makes
+                // this once per day. The opener's revert-freedom is pinned by the craps tests.
+                ICrapsBonusDay(ContractAddresses.CRAPS).openBonusDay();
             }
 
             // Resolve the sentinel-stamped gambling-burn pool if any. Reading the
@@ -1994,10 +1997,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      Vault addresses (SDGNRS, VAULT) get generic queued tickets.
     /// @param purchaseLevel Current purchase level (level + 1).
     function _processPhaseTransition(uint24 purchaseLevel) private {
-        // Vault perpetual entries: 16 entries (= 4 whole tickets) per level for DGNRS and VAULT
-        uint24 targetLevel = purchaseLevel + 99;
-        _queueEntries(ContractAddresses.SDGNRS, targetLevel, VAULT_PERPETUAL_ENTRIES, true);
-        _queueEntries(ContractAddresses.VAULT, targetLevel, VAULT_PERPETUAL_ENTRIES, true);
+        (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameFoilPackModule.queuePerpetualTickets.selector, purchaseLevel + 99)
+        );
+        if (!ok) _revertDelegate(data);
 
         // Auto-stake all non-claimable ETH into stETH for yield generation.
         // Non-blocking: if stETH contract fails, game continues normally.

@@ -7,6 +7,7 @@ import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title SolvencyActionHandler — widens the SOLVENCY-01 action space to the pass + presale-box + claim
@@ -50,6 +51,7 @@ contract SolvencyActionHandler is Test {
     uint256 public ghost_foilBuys; // successful foil packs (short fresh leg -> claimable + afking tiers)
 
     // --- Call counters (coverage visibility) ---
+    uint256 public ghost_ticketViewViolations;
     uint256 public calls_whalePass;
     uint256 public calls_lazyPass;
     uint256 public calls_deityPass;
@@ -65,6 +67,12 @@ contract SolvencyActionHandler is Test {
     modifier useActor(uint256 seed) {
         currentActor = actors[bound(seed, 0, actors.length - 1)];
         _;
+        uint24 lvl = game.level();
+        if (!SolvencyObligations.ticketViewMatches(game, lvl, currentActor)
+            || !SolvencyObligations.ticketViewMatches(game, lvl + 1, currentActor)
+            || !SolvencyObligations.ticketViewMatches(game, lvl + 100, currentActor)) {
+            ++ghost_ticketViewViolations;
+        }
     }
 
     constructor(

@@ -65,6 +65,8 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     // One boon per day to Bob (recipient is limited to one boon per day). Slot 0
     // is always free on a fresh day because the deity's used-slot mask resets on
     // the day rollover.
+    // Seed the preceding day before the first issuance day.
+    await settleRngDay(game, deployer, mockVRF, 777n);
     for (let i = 0; i < PAIR_CAP; i++) {
       await settleRngDay(game, deployer, mockVRF, BigInt(1000 + i * 7));
       await expect(
@@ -88,6 +90,8 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
       .purchaseDeityPass(alice.address, 0, "0x0000000000000000000000000000000000000000000000000000000000000000", { value: eth(24) });
 
     // Fill the alice->bob pair to the cap.
+    // Seed the preceding day before the first issuance day.
+    await settleRngDay(game, deployer, mockVRF, 777n);
     for (let i = 0; i < PAIR_CAP; i++) {
       await settleRngDay(game, deployer, mockVRF, BigInt(2000 + i * 7));
       await game.connect(alice).issueDeityBoon(alice.address, bob.address, 0);
@@ -118,6 +122,8 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
       .purchaseDeityPass(dan.address, 1, "0x0000000000000000000000000000000000000000000000000000000000000000", { value: eth(25) });
 
     // Fill the alice->bob pair to the cap.
+    // Seed the preceding day before the first issuance day.
+    await settleRngDay(game, deployer, mockVRF, 777n);
     for (let i = 0; i < PAIR_CAP; i++) {
       await settleRngDay(game, deployer, mockVRF, BigInt(3000 + i * 7));
       await game.connect(alice).issueDeityBoon(alice.address, bob.address, 0);

@@ -61,7 +61,7 @@ interface ICoinflip {
     function claimCoinflipsFromFlip(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Consume coinflip winnings via FLIP for burns (no mint).
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
-    /// @notice Consume coinflip-resident backing (claimable -> carry) for a salvage swap.
+    /// @notice Consume coinflip-resident backing (claimable -> carry) for salvage or auto-decimator.
     function consumeFlipForSalvage(address player, uint256 amount) external returns (uint256 consumed);
     /// @notice Preview claimable + auto-rebuy carry coinflip backing (view).
     function previewSalvageFlipBacking(address player) external view returns (uint256);
@@ -177,6 +177,9 @@ contract FLIP {
 
     /// @dev Minimum FLIP amount for decimator burns (prevents dust spam).
     uint256 private constant DECIMATOR_MIN = 1000 ether;
+
+    /// @dev Maximum sDGNRS backing spent once per decimator opening.
+    uint256 private constant SDGNRS_DECIMATOR_CAP = 150_000 ether;
 
     /// @dev Minimum bucket for normal and level-100 decimators.
     uint8 private constant DECIMATOR_MIN_BUCKET_NORMAL = 5;
@@ -566,7 +569,7 @@ contract FLIP {
       +======================================================================+*/
 
     /// @dev Restricts access to the game contract.
-    ///      Used for: burnCoinForSalvage (the salvage burn, which reaches the auto-rebuy carry).
+    ///      Used for salvage burns and the automatic sDGNRS decimator entry, which reach carry.
     modifier onlyGame() {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         _;
@@ -575,8 +578,8 @@ contract FLIP {
     /// @dev Restricts access to GAME, PARIMUTUEL or CRAPS. Used for: burnCoin.
     ///      PARIMUTUEL burns exactly one fixed stake, and only from a player who is the
     ///      caller or has approved them, so the widening reaches no non-consenting balance.
-    ///      burnCoinForSalvage keeps plain onlyGame — the salvage burn drains the auto-rebuy
-    ///      carry as well, which no bet has any business touching.
+    ///      Carry-consuming salvage and automatic sDGNRS decimator burns keep plain onlyGame;
+    ///      ordinary table bets consume only held FLIP and settled claimables.
     ///      Rejection reuses the shared `OnlyGame()` generic, so a trace names OnlyGame() even
     ///      though PARIMUTUEL is equally admitted.
     modifier onlyGameOrParimutuel() {
@@ -787,6 +790,25 @@ contract FLIP {
       |  participation for the decimator jackpot.                            |
       +======================================================================+*/
 
+    /// @notice Enter sDGNRS once per decimator window with up to 150,000 FLIP of backing.
+    /// @dev GAME calls this on the opening day's advance, after coinflip settlement and
+    ///      before the craps seat. Uses the existing claimable -> carry consume path;
+    ///      the caller has settled the backing even while the game RNG lock is up.
+    ///      An empty/dust bankroll skips the window without blocking the advance.
+    ///      The opening-day RNG path calls this at most once (a stalled or late-consumed
+    ///      arming word skips the day, like the quest force); no separate FLIP latch is needed.
+    /// @param lvl Resolution level for the opening window (current game level + 1).
+    /// @return amount FLIP backing consumed, or zero when skipped.
+    function autoDecimatorBurn(uint24 lvl) external onlyGame returns (uint256 amount) {
+        address player = ContractAddresses.SDGNRS;
+        uint256 backing = coinflip.previewSalvageFlipBacking(player);
+        if (backing < DECIMATOR_MIN) return 0;
+        amount = backing < SDGNRS_DECIMATOR_CAP ? backing : SDGNRS_DECIMATOR_CAP;
+        amount = coinflip.consumeFlipForSalvage(player, amount);
+
+        _recordDecimatorBurn(player, amount, lvl);
+    }
+
     /// @notice Burn FLIP during an active Decimator window to accrue weighted participation.
     /// @dev SECURITY: Burns BEFORE downstream calls (CEI pattern).
     ///      Quest rewards are added to the base amount before bucket calculation.
@@ -815,6 +837,11 @@ contract FLIP {
         // CEI: burn before any downstream calls after coinflip consumption
         _burn(caller, amount - consumed);
 
+        _recordDecimatorBurn(caller, amount, lvl);
+    }
+
+    /// @dev Shared quest, activity, boon and bucket accounting after the funding leg is burned.
+    function _recordDecimatorBurn(address caller, uint256 amount, uint24 lvl) private {
         // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
         (uint256 questReward,,, bool completed) = questModule.handleDecimator(caller, amount);
         uint256 baseAmount = amount + (completed ? questReward : 0);

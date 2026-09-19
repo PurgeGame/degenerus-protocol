@@ -6,6 +6,9 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 
 /// @dev Exposes the drain's pricing constants.
 contract DrainPrices is DegenerusGameStorage {
+    function recordAtQueueIndex(uint24 lvl, uint256 index) external view returns (uint256) {
+        return _entryRecord(lvl, _tqPositionAt(ticketQueue[lvl], index));
+    }
     function unit() external pure returns (uint256) { return UNIT_GAS_BOUND; }
     function budget() external pure returns (uint256) { return WRITES_BUDGET_SAFE; }
     function roundUnits() external pure returns (uint256) { return ROUND_UNITS; }
@@ -56,10 +59,28 @@ contract TicketDrainWorstCaseBound is Test {
         assertGe(1 * p.unit(), DIRTY_SSTORE + COLD_SLOAD, "a dirty write plus its read exceeds one unit");
     }
 
+    function test_PositionLookupReadsOnlyLaneAndCombinedRecord() public {
+        uint24 lvl = 7;
+        uint256 queueBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(lvl), uint256(12))))));
+        uint256 ownerBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(lvl), uint256(67))))));
+        uint32 pos = 0x01000002;
+        bytes32 queueSlot = bytes32(queueBase + 1);
+        bytes32 recordSlot = bytes32(ownerBase + pos - 1);
+        vm.store(address(p), queueSlot, bytes32(uint256(pos) << 32));
+        uint256 record = uint160(address(0xBEEF)) | (uint256((uint80(pos) << 48) | (uint80(4) << 8)) << 160);
+        vm.store(address(p), recordSlot, bytes32(record));
+        vm.record();
+        assertEq(p.recordAtQueueIndex(lvl, 9), record);
+        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(p));
+        assertEq(reads.length, 2, "drain lookup must not touch an address locator");
+        assertEq(reads[0], queueSlot); assertEq(reads[1], recordSlot);
+        assertEq(writes.length, 0);
+    }
+
     function test_FixedCharges() public view {
         assertGe(1 * p.unit(), COLD_SLOAD + DIRTY_SSTORE, "a seat exit exceeds one unit");
-        assertGe(1 * p.unit(), 2 * COLD_SLOAD + DIRTY_SSTORE, "a dust skip exceeds one unit");
-        assertGe(p.joinUnits() * p.unit(), 2 * COLD_SLOAD + 2 * DIRTY_SSTORE, "a seat join exceeds its units");
+        assertGe(1 * p.unit(), 2 * COLD_SLOAD + DIRTY_SSTORE, "queue plus combined owner/owed read and dust clear exceeds one unit");
+        assertGe(p.joinUnits() * p.unit(), 2 * COLD_SLOAD + 2 * DIRTY_SSTORE, "a seat join with combined owner/owed record exceeds its units");
         assertGe(4 * p.unit(), FRESH_SSTORE + DIRTY_SSTORE, "a drain-time registration exceeds four units");
         assertGe(3 * p.unit(), 375 + 375 + 8 * 352 + 20_000, "a round's event and loops exceed three units");
         assertGe(1 * p.unit(), 16 * 400, "sixteen occurrences of LCG and scratch work exceed one unit");

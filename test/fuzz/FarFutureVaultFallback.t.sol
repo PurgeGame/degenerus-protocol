@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
@@ -28,7 +30,6 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
     uint256 private constant TICKET_QUEUE_SLOT = 12;
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
 
     // --- Coinflip storage: playerState mapping base slot (declaration order: coinflipStakePacked=0,
@@ -76,11 +77,6 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         return keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT));
     }
 
-    function _ownedPackedSlot(uint24 key, address who) internal pure returns (bytes32) {
-        bytes32 inner = keccak256(abi.encode(uint256(key), TICKETS_OWED_PACKED_SLOT));
-        return keccak256(abi.encode(who, uint256(inner)));
-    }
-
     function _queueBaseSlot(uint24 key) internal pure returns (bytes32) {
         return keccak256(abi.encode(uint256(key), TICKET_QUEUE_SLOT));
     }
@@ -91,16 +87,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     }
 
     function _seedFarTickets(address who, uint24 L, uint32 whole) internal returns (uint256 idx) {
-        uint24 key = ffk.ffKey(L);
-        uint32 entries = whole * 4;
-        uint40 packed = uint40(uint256(entries) << 8);
-        vm.store(address(game), _ownedPackedSlot(key, who), bytes32(uint256(packed)));
-        bytes32 lenSlot = _queueBaseSlot(key);
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(who))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-        idx = len;
+        return TicketQueueStorage.seed(address(game), ffk.ffKey(L), L, who, uint80(whole) * 4 << 8);
     }
 
     function _seedClaimable(address who, uint256 amt) internal {
@@ -142,7 +129,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     }
 
     function _ownedEntries(address who, uint24 L) internal view returns (uint32) {
-        uint256 packed = uint256(vm.load(address(game), _ownedPackedSlot(ffk.ffKey(L), who)));
+        uint256 packed = uint256(TicketQueueStorage.owed(address(game), ffk.ffKey(L), who));
         return uint32(packed >> 8);
     }
 

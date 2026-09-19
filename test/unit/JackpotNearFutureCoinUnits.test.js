@@ -100,10 +100,10 @@ function stripLineComments(body) {
 
 // Every structural pattern below is `\s*`-tolerant between tokens, so a formatter
 // breaking a ternary across lines does not invalidate the proof.
-function loadBody() {
+function loadBody(signature = "function _awardDailyCoinToTraitWinners(") {
   const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-  const body = extractBody(source, "function _awardDailyCoinToTraitWinners(");
-  expect(body, "`_awardDailyCoinToTraitWinners` body not found").to.not.equal(
+  const body = extractBody(source, signature);
+  expect(body, `${signature} body not found`).to.not.equal(
     null
   );
   return stripLineComments(body);
@@ -242,27 +242,29 @@ describe("JackpotNearFutureCoinUnits — 100-FLIP equal-share split (§3a)", fun
 
     it("[01g] `randomWord` still feeds both keccak draws (level sample + holder index)", function () {
       const body = loadBody();
+      const levelDraw = loadBody("function _drawCoinEntry(");
+      const wordDraw = loadBody("function _drawBucketEntry(");
       expect(
-        /\brandomWord\b/.test(body),
-        "`randomWord` must still appear — it drives the level and holder draws"
+        /_drawCoinEntry\(\s*minLevel,\s*range,\s*trait_i,\s*deityCache\[traitIdx\],\s*randomWord,\s*i,\s*cursors/.test(body),
+        "every scheduled pull must pass its VRF word and index to the level draw"
       ).to.equal(true);
       expect(
-        (body.match(/abi\.encode\(randomWord,\s*FLIP_LEVEL_TAG/g) || []).length,
+        (levelDraw.match(/abi\.encode\(randomWord,\s*FLIP_LEVEL_TAG,\s*pull/g) || []).length,
         "`randomWord` must feed the level-sample keccak"
       ).to.be.gte(1);
       expect(
-        (body.match(/EntropyLib\.hash4\(randomWord,/g) || []).length,
-        "`randomWord` must feed the holder-index draw (hash4 is byte-identical to the abi.encode form)"
+        (wordDraw.match(/EntropyLib\.hash4\(randomWord,\s*trait,\s*salt,\s*pull/g) || []).length,
+        "`randomWord` must seed every new packed-word group"
       ).to.be.gte(1);
     });
 
-    it("[01h] both `++i` loop increments are intact (empty-bucket continue + loop tail)", function () {
+    it("[01h] both `++i` loop increments are intact (comp skip + loop tail)", function () {
       const body = loadBody();
       const incCount = (body.match(/\+\+i\s*;/g) || []).length;
       expect(
         incCount,
-        "all three `++i` increments (comp-skip continue + empty-bucket continue + loop tail) must survive"
-      ).to.equal(3);
+        "comp-skip and loop-tail increments cover every scheduled pull; empty draws use the tail"
+      ).to.equal(2);
     });
   });
 

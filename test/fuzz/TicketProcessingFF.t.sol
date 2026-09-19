@@ -16,7 +16,7 @@ contract TicketProcessingFFHarness is DegenerusGameStorage {
 
     function setTicketQueue(uint24 key, uint256 count) external {
         for (uint256 i = 0; i < count; i++) {
-            ticketQueue[key].push(address(uint160(i + 1)));
+            _tqAppend(key, uint32(_registerEntryOwner(address(uint160(i + 1)), key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));
         }
     }
 
@@ -68,7 +68,7 @@ contract TicketProcessingFFHarness is DegenerusGameStorage {
         // Phase detection: are we resuming FF processing?
         bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
-        address[] storage queue = ticketQueue[rk];
+        uint256[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
 
         // Exit point 1: current queue empty
@@ -96,7 +96,7 @@ contract TicketProcessingFFHarness is DegenerusGameStorage {
 
         // Exit point 2: cursor past end
         if (idx >= total) {
-            delete ticketQueue[rk];
+            _releaseTicketQueue(rk);
             if (!inFarFuture) {
                 uint24 ffk = _tqFarFutureKey(lvl);
                 if (ticketQueue[ffk].length > 0) {
@@ -125,7 +125,7 @@ contract TicketProcessingFFHarness is DegenerusGameStorage {
         // Exit point 3: post-loop
         finished = (idx >= total);
         if (finished) {
-            delete ticketQueue[rk];
+            _releaseTicketQueue(rk);
             if (!inFarFuture) {
                 uint24 ffk = _tqFarFutureKey(lvl);
                 if (ticketQueue[ffk].length > 0) {

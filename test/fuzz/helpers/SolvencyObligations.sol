@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "./TicketQueueStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 
@@ -50,6 +51,13 @@ library SolvencyObligations {
     /// @param game The DegenerusGame under test.
     /// @return The sum of all ETH obligations the contract is liable to pay out.
     function obligations(DegenerusGame game) internal view returns (uint256) {
+        // Queue records share the registry slot; attest their boundaries while checking pool solvency.
+        uint24 active = game.level();
+        for (uint24 lvl = active; lvl <= active + 5; ++lvl) {
+            TicketQueueStorage.assertQueue(address(game), lvl);
+            TicketQueueStorage.assertQueue(address(game), lvl | uint24(1 << 23));
+            TicketQueueStorage.assertQueue(address(game), lvl | uint24(1 << 22));
+        }
         // Post-game-over: the live pools are dead (drain zeroed them and distributed the
         // difference to claimable). The only withdrawable ETH obligation is claimablePool.
         if (game.gameOver()) {
@@ -65,6 +73,13 @@ library SolvencyObligations {
             + game.yieldAccumulatorView()
             + pendingNext
             + pendingFuture;
+    }
+
+    function ticketViewMatches(DegenerusGame game, uint24 lvl, address player) internal view returns (bool) {
+        uint256 sum = uint32(TicketQueueStorage.owed(address(game), lvl, player) >> 8);
+        sum += uint32(TicketQueueStorage.owed(address(game), lvl | uint24(1 << 23), player) >> 8);
+        sum += uint32(TicketQueueStorage.owed(address(game), lvl | uint24(1 << 22), player) >> 8);
+        return uint32(sum) == game.entriesOwedView(lvl, player);
     }
 
     /// @notice Read the freeze-window pending buffer (no external view exists for it).

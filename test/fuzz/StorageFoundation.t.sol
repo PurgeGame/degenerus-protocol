@@ -86,7 +86,7 @@ contract StorageHarness is DegenerusGameAdvanceModule {
 
     // --- Ticket queue helper for revert tests ---
     function pushToTicketQueue(uint24 key, address addr) external {
-        ticketQueue[key].push(addr);
+        _tqAppend(key, uint32(_registerEntryOwner(addr, key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));
     }
 
     // --- Consolidated tail-pack accessor (levelDgnrsPacked, post-v62 fold) ---

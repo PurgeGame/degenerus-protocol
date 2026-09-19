@@ -20,22 +20,23 @@
 //   and the leftover is deliberately not minted. No winner may receive a different amount
 //   from another winner in the same draw.
 //
-//   The sampling loop discovers `found` (<= FAR_FUTURE_FLIP_SAMPLES) winners BEFORE the
-//   budget is known to divide, so truncating to `payCount` simply pays fewer of them.
-//   `winners[]` is already ordered by its own per-sample VRF draw, so taking a prefix
+//   The draw picks ONE far-future level and walks up to FAR_FUTURE_FLIP_SAMPLES lanes of a
+//   uniformly chosen packed queue word (PackedTicketSampleLib), so `found` is
+//   `min(len, FAR_FUTURE_FLIP_SAMPLES)` and truncating to `payCount` simply draws fewer
+//   lanes. The lane order is fixed by the VRF-chosen rotation, so taking a prefix
 //   introduces no new choice for anyone to steer — that is the load-bearing property here
-//   and it is asserted structurally below (the array is indexed `[i]`, never reordered).
+//   and it is asserted structurally below (draws are sequential `next` calls, never reordered).
 //
 //   The old ORDER property survives in its new form: the `payCount == 0` bail must sit
-//   between the unit math and the `creditFlipBatch` call, so an under-funded draw cannot
-//   reach the batch credit. What is gone: `perWinner`, the extra-unit window, the
+//   between the unit math and the first draw / the `creditFlipBatch` call, so an
+//   under-funded draw cannot reach the batch credit. What is gone: `perWinner`, the extra-unit window, the
 //   `(x / 1 ether) * 1 ether`
 //   floor, and any path that credits a sampled winner zero.
 //
 // TEST STRATEGY:
 //   `_awardFarFutureCoinJackpot` is `private` with the same fixture-coverage gap as its
 //   near-future sibling (ticketQueue state across 95 far-future levels, VRF word,
-//   per-sample draws). Load-bearing evidence is source-level structural proof; JS-side
+//   packed-word lane draws). Load-bearing evidence is source-level structural proof; JS-side
 //   BigInt unit math is the confirmation layer, and that math is EXACT.
 //
 // CROSS-CITES:
@@ -50,7 +51,7 @@ import path from "node:path";
 
 const ONE_FLIP = 10n ** 18n;
 const UNIT = 100n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_UNIT
-const FAR_FUTURE_FLIP_SAMPLES = 10n;
+const FAR_FUTURE_FLIP_SAMPLES = 8n;
 
 const MODULE_SOURCE_PATH = path.resolve(
   process.cwd(),
@@ -121,7 +122,7 @@ describe("JackpotFarFutureCoinUnits — 100-FLIP unit split (§3a)", function ()
   this.timeout(30_000);
 
   describe("Source-structural proof: `_awardFarFutureCoinJackpot` pays a prefix of the sampled winners in whole units", function () {
-    it("[01a] derives `units` from the budget and truncates the winner list to `min(units, found)`", function () {
+    it("[01a] derives `units` from the budget and truncates the draw count to `min(units, len, FAR_FUTURE_FLIP_SAMPLES)`", function () {
       const body = loadBody();
       expect(
         /uint256\s+units\s*=\s*farBudget\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
@@ -130,10 +131,14 @@ describe("JackpotFarFutureCoinUnits — 100-FLIP unit split (§3a)", function ()
         "`units` must be `farBudget / FlipRoundLib.FLIP_ROUND_UNIT`"
       ).to.equal(true);
       expect(
-        /uint256\s+payCount\s*=\s*units\s*<\s*found\s*\?\s*units\s*:\s*found\s*;/.test(
+        /uint256\s+payCount\s*=\s*len\s*<\s*FAR_FUTURE_FLIP_SAMPLES\s*\?\s*len\s*:\s*FAR_FUTURE_FLIP_SAMPLES\s*;/.test(
           body
         ),
-        "`payCount` must be `min(units, found)`"
+        "`payCount` must start as `min(len, FAR_FUTURE_FLIP_SAMPLES)`"
+      ).to.equal(true);
+      expect(
+        /if\s*\(\s*units\s*<\s*payCount\s*\)\s*payCount\s*=\s*units\s*;/.test(body),
+        "`payCount` must then be capped by `units`"
       ).to.equal(true);
       expect(
         /if\s*\(\s*payCount\s*==\s*0\s*\)\s*return\s*;/.test(body),
@@ -192,13 +197,17 @@ describe("JackpotFarFutureCoinUnits — 100-FLIP unit split (§3a)", function ()
       }
     });
 
-    it("[01e] the prefix is taken in place — `winners[]` is read by index and never reordered", function () {
+    it("[01e] the prefix is taken in place — lanes are drawn sequentially and never reordered", function () {
       const body = loadBody();
-      // The payout loop reads `winners[i]` / `winnerLevels[i]` directly, so the
-      // truncation is a prefix of an order fixed by the per-sample VRF draw.
+      // The payout loop draws the next lane of the VRF-chosen rotation on every
+      // iteration, so the truncation is a prefix of an order fixed by the draw.
       expect(
-        /batchPlayers\[i\]\s*=\s*winners\[i\]\s*;/.test(body),
-        "the payout loop must read `winners[i]` in place"
+        /PackedTicketSampleLib\.next\s*\(\s*cursor\s*,\s*len\s*\)/.test(body),
+        "the payout loop must draw each lane through `PackedTicketSampleLib.next(cursor, len)`"
+      ).to.equal(true);
+      expect(
+        /batchPlayers\[i\]\s*=\s*winner\s*;/.test(body),
+        "the payout loop must write the drawn `winner` in place"
       ).to.equal(true);
       expect(
         /for\s*\(\s*uint256\s+i\s*;\s*i\s*<\s*payCount\s*;\s*\)/.test(body),
@@ -211,27 +220,29 @@ describe("JackpotFarFutureCoinUnits — 100-FLIP unit split (§3a)", function ()
       ).to.equal(false);
     });
 
-    it("[01f] the sampling loop still fills `winners[]` from `FAR_FUTURE_FLIP_SAMPLES` draws", function () {
+    it("[01f] one level is drawn and an empty queue bails before the unit math", function () {
       const body = loadBody();
       expect(
-        /for\s*\(\s*uint8\s+s\s*;\s*s\s*<\s*FAR_FUTURE_FLIP_SAMPLES\s*;\s*\)/.test(
-          body
-        ),
-        "the sampling loop must still be bounded by `FAR_FUTURE_FLIP_SAMPLES`"
+        /uint24\s+candidate\s*=\s*lvl\s*\+\s*5\s*\+\s*uint24\s*\(\s*entropy\s*%\s*95\s*\)\s*;/.test(body),
+        "exactly one level in [lvl+5, lvl+99] must be chosen"
       ).to.equal(true);
       expect(
-        /if\s*\(\s*found\s*==\s*0\s*\)\s*return\s*;/.test(body),
-        "an empty sample must still bail before the unit math"
+        (body.match(/PackedTicketSampleLib\.begin\s*\(/g) || []).length,
+        "the word cursor must be begun exactly once — one level, one word"
+      ).to.equal(1);
+      expect(
+        /if\s*\(\s*len\s*==\s*0\s*\)\s*return\s*;/.test(body),
+        "an empty queue must bail before the unit math"
       ).to.equal(true);
     });
   });
 
   describe("Index-ordering proof: the zero-unit bail sits between the unit math and the batch credit", function () {
-    it("[02a] `found == 0` return → `units` → `payCount == 0` return → payout loop → `creditFlipBatch`", function () {
+    it("[02a] `len == 0` return → `units` → `payCount == 0` return → payout loop → `creditFlipBatch`", function () {
       const body = loadBody();
 
       const foundReturnIdx = body.search(
-        /if\s*\(\s*found\s*==\s*0\s*\)\s*return\s*;/
+        /if\s*\(\s*len\s*==\s*0\s*\)\s*return\s*;/
       );
       const unitsIdx = body.indexOf("uint256 units = farBudget");
       const payCountReturnIdx = body.search(
@@ -244,7 +255,7 @@ describe("JackpotFarFutureCoinUnits — 100-FLIP unit split (§3a)", function ()
 
       expect(
         foundReturnIdx,
-        "`if (found == 0) return;` empty-sample bail not found"
+        "`if (len == 0) return;` empty-queue bail not found"
       ).to.be.greaterThan(-1);
       expect(unitsIdx, "`units` derivation not found").to.be.greaterThan(-1);
       expect(
@@ -262,7 +273,7 @@ describe("JackpotFarFutureCoinUnits — 100-FLIP unit split (§3a)", function ()
 
       expect(
         foundReturnIdx,
-        "the empty-sample bail must precede the unit math"
+        "the empty-queue bail must precede the unit math"
       ).to.be.lessThan(unitsIdx);
       expect(
         unitsIdx,
@@ -310,15 +321,15 @@ describe("JackpotFarFutureCoinUnits — 100-FLIP unit split (§3a)", function ()
     });
 
     it("an unevenly-divisible budget pays equal shares and declines the leftover", function () {
-      // 27 units over 10 sampled winners → 2 units each, 7 units not minted.
+      // 27 units over 8 drawn lanes → 3 units each, 3 units not minted.
       const { payCount, amount, leftover } = splitUnits(
         27n * UNIT,
         FAR_FUTURE_FLIP_SAMPLES
       );
-      expect(payCount).to.equal(10n);
-      expect(amount).to.equal(2n * UNIT, "every winner takes the same 200 FLIP");
-      expect(leftover).to.equal(7n);
-      expect(payCount * amount).to.equal(20n * UNIT);
+      expect(payCount).to.equal(8n);
+      expect(amount).to.equal(3n * UNIT, "every winner takes the same 300 FLIP");
+      expect(leftover).to.equal(3n);
+      expect(payCount * amount).to.equal(24n * UNIT);
     });
 
     it("across a budget × found sweep: every paid winner is identical, clears 100 FLIP, and the budget is never overshot", function () {

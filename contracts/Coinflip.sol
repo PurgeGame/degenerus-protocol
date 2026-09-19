@@ -641,13 +641,13 @@ contract Coinflip {
         return _claimCoinflipsAmount(player, amount, false);
     }
 
-    /// @notice Consume `amount` of `player`'s coinflip-resident FLIP backing for a salvage swap (FLIP only).
+    /// @notice Consume `amount` of `player`'s coinflip-resident backing for salvage or auto-decimator (FLIP only).
     /// @dev Settle-then-drain waterfall matching the redemption desk's withdrawRedeemedFlip: settled
     ///      claimable FIRST (no mint — removes a future mint of the consumed slice), then the rolling
     ///      auto-rebuy carry. For the vault FLIP first drains the virtual allowance (its held leg);
     ///      sDGNRS has no wallet leg, so this covers its entire backing (claimable + carry). Reaching
-    ///      the carry is freeze-safe because the swap queues far-future entries first, and that sink
-    ///      reverts under the RNG lock, so this never runs mid-window.
+    ///      the carry is freeze-safe because salvage rejects the RNG lock and the automatic
+    ///      sDGNRS decimator entry requires today's flip to be settled before calling here.
     /// @param player The backing owner (sDGNRS or the vault).
     /// @param amount Maximum FLIP (wei) to consume from claimable + carry.
     /// @return consumed Actual amount removed (claimable consumed + carry decremented).
@@ -1497,11 +1497,11 @@ contract Coinflip {
         // once auto-rebuy is armed, winnings (including incoming credits staked via
         // creditSdgnrsBacking) settle into the rolling carry (structurally zero
         // return under 0-take-profit rebuy). FLIP leaves sDGNRS's position solely
-        // through a redemption/salvage consume leg.
+        // through a redemption/salvage consume leg or the opening-day decimator burn.
         //
-        // THE RESERVE IS STATIC ONCE ARMED: nothing drips from it onto the active flip.
-        // The table's player-funded craps burn is the coin's standing burn, so the reserve
-        // stays whole as the redemption backing it exists to be.
+        // The seed reserve does not drip onto the active flip. It remains available to
+        // redemptions, salvage, and the capped opening-day decimator entry; only new flip
+        // credits and existing carry ride the daily result after auto-rebuy is armed.
         PlayerCoinflipState storage sdgnrsState = playerState[
             ContractAddresses.SDGNRS
         ];

@@ -27,11 +27,13 @@ pragma solidity ^0.8.26;
 // layout.
 // =============================================================================
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
 contract TicketQueueReleaseGasTest is DeployProtocol {
     // ---- DegenerusGameStorage slot constants (see MintModuleDivergenceAcrossSplit) ----
-    /// @dev ticketQueue (mapping(uint24 => address[])) — slot 12.
+    /// @dev ticketQueue (mapping(uint24 => uint256[])) — slot 12.
     uint256 private constant SLOT_TICKET_QUEUE = 12;
     /// @dev packed slot 14: ticketCursor (uint32) offset 0; ticketLevel (uint24) offset 4.
     uint256 private constant SLOT_TICKET_CURSOR_LEVEL = 14;
@@ -62,15 +64,9 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         rk = LVL | TICKET_SLOT_BIT;
         address host = address(mintModule);
 
-        // Commit a 3,000-entry queue: length + 3,000 distinct nonzero element
-        // slots, written in setUp (a prior tx), so the test tx sees them as
-        // original-nonzero committed storage — the exact state under which the
-        // old `delete` paid its full per-slot clearing cost.
-        bytes32 lenSlot = keccak256(abi.encode(uint256(rk), SLOT_TICKET_QUEUE));
-        uint256 dataSlot = uint256(keccak256(abi.encode(lenSlot)));
-        vm.store(host, lenSlot, bytes32(QUEUE_LEN));
-        for (uint256 i = 0; i < QUEUE_LEN; ++i) {
-            vm.store(host, bytes32(dataSlot + i), bytes32(uint256(uint160(0x10000 + i))));
+        // Commit 3,000 registered owners as packed lanes before measuring O(1) release.
+        for (uint256 i; i < QUEUE_LEN; ++i) {
+            TicketQueueStorage.seed(host, rk, LVL, address(uint160(0x10000 + i)), 0);
         }
 
         // Cursor already at end-of-queue (all entries processed on prior txs);

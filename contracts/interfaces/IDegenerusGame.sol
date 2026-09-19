@@ -150,7 +150,7 @@ interface IDegenerusGame {
 
     /// @notice Get raw deity boon state for off-chain or viewer contract computation.
     /// @param deity The deity address to query.
-    /// @return dailySeed RNG seed for today's boon generation (0 until today's VRF word lands).
+    /// @return dailySeed Yesterday's finalized RNG word for today's boons (0 if unavailable).
     /// @return day Current day index.
     /// @return usedMask Bitmask of slots already used (bit i = slot i used).
     /// @return decimatorOpen Whether decimator boons are available.
@@ -407,10 +407,12 @@ interface IDegenerusGame {
     /// @return entries Array of player addresses holding sampled entries.
     function sampleTraitEntriesAtLevel(uint24 targetLvl, uint256 entropy) external view returns (uint8 trait, address[] memory entries);
 
-    /// @notice Sample up to 4 far-future ticket holders from ticketQueue.
-    /// @dev View function for BAF far-future selection; samples ticketQueue at levels [current+5, current+99].
+    /// @notice Sample four far-future candidate slots for BAF.
+    /// @dev Sample one populated level in [current+5, current+99], then additional levels
+    ///      only as needed to fill four slots; duplicate owners across levels are allowed.
+    ///      Call during BAF, before the current level's far-future promotion.
     /// @param entropy Random entropy for sampling (typically from VRF).
-    /// @return tickets Array of player addresses (length 0-4).
+    /// @return tickets Four live queue owners (addresses may repeat).
     function sampleFarFutureTickets(uint256 entropy) external view returns (address[] memory tickets);
 
 

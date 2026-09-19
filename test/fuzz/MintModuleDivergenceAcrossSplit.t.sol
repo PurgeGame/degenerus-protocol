@@ -58,6 +58,9 @@ pragma solidity ^0.8.26;
 // commit per `feedback_no_contract_commits`.
 // =============================================================================
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IDegenerusGameMintModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
@@ -76,7 +79,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     /// @dev lvlTraitEntry (mapping(uint24 => address[][256])) — slot 8.
     uint256 private constant SLOT_TRAIT_BURN_TICKET = 8;
 
-    /// @dev ticketQueue (mapping(uint24 => address[])) — slot 12.
+    /// @dev ticketQueue (mapping(uint24 => uint256[])) — slot 12.
     uint256 private constant SLOT_TICKET_QUEUE = 12;
 
     /// @dev entriesOwedPacked (mapping(uint24 => mapping(address => uint40))) — slot 13.
@@ -166,7 +169,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         return keccak256(abi.encode(_slotTicketQueueLen(rk)));
     }
 
-    /// @dev Compute the storage slot of `entriesOwedPacked[rk][player]` (the uint40 packed slot).
+    /// @dev Compute the storage slot of `_entriesOwed(rk, player)` (the uint40 packed slot).
     function _slotOwed(uint24 rk, address player) private pure returns (bytes32) {
         bytes32 inner = keccak256(abi.encode(uint256(rk), SLOT_TICKETS_OWED_PACKED));
         return keccak256(abi.encode(player, inner));
@@ -210,15 +213,15 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ) private {
         uint24 rk = lvl | TICKET_SLOT_BIT; // _tqReadKey with ticketWriteSlot=false (default)
 
-        // ticketQueue[rk].length = 1; ticketQueue[rk][0] = player
+        // Queue length is one lane naming registry position zero as ownerIdx+1 = 1.
         vm.store(host, _slotTicketQueueLen(rk), bytes32(uint256(1)));
-        vm.store(host, _slotTicketQueueData(rk), bytes32(uint256(uint160(player))));
+        vm.store(host, _slotTicketQueueData(rk), bytes32(uint256(1)));
 
-        // lvlEntryOwner[lvl] = [player]; entriesOwedPacked[rk][player] = (1 << 48) | (owed << 8)
+        // One combined owner/owed record; the queue-key locator stores position plus one.
         bytes32 ownersLen = keccak256(abi.encode(uint256(lvl), SLOT_LVL_ENTRY_OWNER));
         vm.store(host, ownersLen, bytes32(uint256(1)));
-        vm.store(host, bytes32(uint256(keccak256(abi.encode(ownersLen)))), bytes32(uint256(uint160(player))));
-        vm.store(host, _slotOwed(rk, player), bytes32((uint256(1) << 48) | (uint256(owed) << 8)));
+        vm.store(host, bytes32(uint256(keccak256(abi.encode(ownersLen)))), bytes32(uint256(uint160(player)) | (((uint256(1) << 48) | (uint256(owed) << 8)) << 160)));
+        vm.store(host, _slotOwed(rk, player), bytes32(uint256(1)));
 
         // ticketLevel = lvl (offset 4 within slot 14); ticketCursor = 0 (offset 0). Default 0.
         vm.store(
@@ -331,7 +334,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ) private {
         uint24 rk = lvl | TICKET_SLOT_BIT;
         // Wipe owedMap, queue, cursor/level, lvlTraitEntry for this scenario.
-        vm.store(host, _slotOwed(rk, player), bytes32(0));
+        TicketQueueStorage.setOwed(host, rk, player, 0);
         vm.store(host, _slotTicketQueueLen(rk), bytes32(0));
         // Data slot (single entry) — zero out for cleanliness; not strictly required since
         // length=0 means the data slot is unread, but the threat model accepts the cleanup.

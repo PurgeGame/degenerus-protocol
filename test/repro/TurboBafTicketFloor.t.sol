@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -319,15 +321,12 @@ contract TurboBafTicketFloor is DeployProtocol {
             );
     }
 
-    /// @dev entriesOwedPacked[key][player] >> 8 — the mapping sits at slot 13.
+    /// @dev _entriesOwed(key, player) >> 8 — the mapping sits at slot 13.
     function _entriesOwed(
         uint24 key,
         address player
     ) internal view returns (uint256) {
-        bytes32 outer = keccak256(abi.encode(uint256(key), uint256(13)));
-        return
-            uint256(vm.load(address(game), keccak256(abi.encode(player, outer)))) >>
-            8;
+        return uint32(TicketQueueStorage.owed(address(game), key, player) >> 8);
     }
 
     /// @dev level — slot 0, bytes [12:15).

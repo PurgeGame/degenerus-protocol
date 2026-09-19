@@ -13,7 +13,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 /// @notice A level boundary is a CHAIN of advance txs, not one tx. Two of them are measured here:
 ///
 ///           STAGE_JACKPOT_PHASE_ENDED (9) — payDailyJackpotCoinAndTickets + _endPhase, at its
-///             winner caps (100 main-board ticket, 50 near-coin, 10 far-coin), followed by
+///             winner caps (100 main-board ticket, 50 near-coin, 8 far-coin), followed by
 ///           STAGE_JACKPOT_CARRYOVER_TICKETS (13) — the carryover leg (100 more ticket winners)
 ///             the phase-end stage priced, paid as the first stage of the very next advance so
 ///             the two ticket legs never share one tx.
@@ -52,7 +52,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
         // _packDailyTicketBudgets(counterStep=1, dailyEntries=4000, carryoverEntries=4000, offset=0).
-        // 4000 entries = 1000 whole tickets, so both ticket legs saturate the 100-winner cap.
+        // 4000 entries = 1000 whole tickets, so both ticket legs saturate the 96-winner cap.
         dailyTicketBudgetsPacked =
             uint256(1) |
             (uint256(4000) << 8) |
@@ -86,11 +86,14 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
             }
         }
 
-        // Far-future coin samples: 10 draws over [lvl+5, lvl+99].
+        // Far-future coin samples: 8 lanes of one word at one level in [lvl+5, lvl+99];
+        // seed eight holders at every level so whichever the word picks pays the full count.
         for (uint24 L = lvl + 5; L <= lvl + 99; ++L) {
-            ticketQueue[_tqFarFutureKey(L)].push(
-                address(base + 0x20000000 + uint160(L))
-            );
+            for (uint160 i; i < 8; ++i) {
+                _tqAppend(_tqFarFutureKey(L), uint32(
+                    _registerEntryOwner(address(base + 0x20000000 + uint160(L) * 0x10 + i), L) >> OWNER_IDX_SHIFT
+                ));
+            }
         }
     }
 
@@ -129,7 +132,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         rngRequestTime = uint48(block.timestamp);
 
         levelPrizePool[lvl] = 1000 ether; // _endPhase record-pool fund (non-zero)
-        levelPrizePool[lvl - 1] = 1000 ether; // coin budget -> 50 near + 10 far winners
+        levelPrizePool[lvl - 1] = 1000 ether; // coin budget -> 50 near + 8 far winners
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = uint128(200 ether);
     }
@@ -246,9 +249,9 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
 
         // Non-vacuity: the composition MUST have run at its winner caps, or the ceiling is not one.
         assertEq(lastStage, STAGE_JACKPOT_PHASE_ENDED, "the phase-end stage ran");
-        assertEq(ticketWins, 100, "the main-board ticket leg paid the full 100-winner cap");
+        assertEq(ticketWins, 96, "the main-board ticket leg paid the full 96-winner cap");
         assertEq(flipWins, 50, "the near coin leg paid the full 50-winner cap");
-        assertEq(farWins, 10, "the far-future coin leg paid all 10 samples");
+        assertEq(farWins, 8, "the far-future coin leg paid all 8 lanes");
         // The century arm rides the transition close, not this tx — it must not fuse back onto the
         // binding stage.
         assertFalse(seedArmed, "the century arm does NOT ride the binding phase-end tx");
@@ -258,7 +261,7 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
         (used, ticketWins, flipWins, farWins, seedArmed) = _measure();
         emit log_named_uint("LVL100_CARRYOVER_LEG_ADVANCE_GAS", used);
         assertEq(lastStage, STAGE_JACKPOT_CARRYOVER_TICKETS, "the carryover leg ran as the next stage");
-        assertEq(ticketWins, 100, "the carryover ticket leg paid the full 100-winner cap");
+        assertEq(ticketWins, 96, "the carryover ticket leg paid the full 96-winner cap");
         assertEq(flipWins + farWins, 0, "no coin leg rides the carryover stage");
         assertFalse(seedArmed, "the century arm does NOT ride the carryover stage");
         assertLt(used, EIP7825_TX_GAS_CAP, "the carryover advance tx clears EIP-7825");

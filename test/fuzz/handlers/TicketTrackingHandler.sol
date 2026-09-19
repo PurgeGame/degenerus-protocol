@@ -4,6 +4,8 @@ pragma solidity ^0.8.26;
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {TicketQueueStorage} from "../helpers/TicketQueueStorage.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title TicketTrackingHandler -- Handler tracking ticket queue entries for invariant testing
@@ -79,27 +81,20 @@ contract TicketTrackingHandler is Test {
         } catch {}
     }
 
-    /// @notice Verify ticket owed consistency for all actors at a given level
-    /// @dev Checks that if ghost says a player has tickets, entriesOwedView confirms it
-    ///      (or they were already processed by advanceGame).
+    /// @notice Interleave queue draining with purchases and the separately targeted VRF handler.
+    function advance(uint256 actorSeed) external useActor(actorSeed) {
+        vm.prank(currentActor);
+        try game.advanceGame() {} catch {}
+    }
+
+    /// @notice Attest all three cohorts and the address-facing view against raw position records.
     function verifyConsistency(uint256 levelSeed) external view {
-        uint24 currentLevel = game.level();
-        if (currentLevel == 0) return;
-
-        // Check a level near the current level
-        uint24 checkLevel = uint24(bound(levelSeed, 0, currentLevel));
-
-        for (uint256 i = 0; i < actors.length; i++) {
-            address actor = actors[i];
-            if (ghost_hasTicketsAtLevel[checkLevel][actor]) {
-                // Player was queued at this level. Their tickets may have been
-                // consumed by advanceGame (owed drops to 0 after processing).
-                // So we only check that the system doesn't have negative owed
-                // (which is impossible with uint32 but is a sanity check).
-                uint32 owed = game.entriesOwedView(checkLevel, actor);
-                // owed is uint32, always >= 0. This is a structural sanity check.
-                assertTrue(owed >= 0, "ticketsOwed underflow");
-            }
+        uint24 checkLevel = uint24(bound(levelSeed, 0, uint256(game.level()) + 5));
+        TicketQueueStorage.assertQueue(address(game), checkLevel);
+        TicketQueueStorage.assertQueue(address(game), checkLevel | uint24(1 << 23));
+        TicketQueueStorage.assertQueue(address(game), checkLevel | uint24(1 << 22));
+        for (uint256 i; i < actors.length; ++i) {
+            assertTrue(SolvencyObligations.ticketViewMatches(game, checkLevel, actors[i]), "position/view mismatch");
         }
     }
 }

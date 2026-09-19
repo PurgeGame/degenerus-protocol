@@ -245,16 +245,14 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // accrual.
         if (decDayOneActive) {
             multBps = (multBps * DEC_DAY_ONE_BONUS_BPS) / BPS_DENOMINATOR;
-        }
-
-        // Final-purchase-day debuff: once the level's prize target is met, the
-        // activity multiplier receives a 0.9x debuff, floored at 1.0x — a burn
-        // placed with the level's outcome largely visible pays a haircut versus
-        // early commitment, but never drops below base weight (a multBps at or
-        // below 1.0x returns baseAmount in _decEffectiveAmount). Stacks
-        // multiplicatively with the day-one bonus and rides multBps, so
-        // DECIMATOR_MULTIPLIER_CAP still bounds the accrual.
-        if (lastPurchaseDay) {
+        } else if (lastPurchaseDay) {
+            // Final-purchase-day debuff: once the level's prize target is met, the
+            // activity multiplier receives a 0.9x debuff, floored at 1.0x — a burn
+            // placed with the level's outcome largely visible pays a haircut versus
+            // early commitment, but never drops below base weight (a multBps at or
+            // below 1.0x returns baseAmount in _decEffectiveAmount). Day-one burns
+            // take the bonus branch instead: the window arms on the last purchase
+            // day and its opening advance clears the flag only after the auto entry.
             multBps = (multBps * DEC_LAST_DAY_DEBUFF_BPS) / BPS_DENOMINATOR;
         }
 

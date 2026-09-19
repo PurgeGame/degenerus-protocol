@@ -17,7 +17,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///         `lvlTraitEntry` seeder + read-only accounting views; it overrides NO production
 ///         logic. `runTerminalJackpot` already feeds `_processDailyEth` the full
 ///         DAILY_ETH_MAX_WINNERS=305 ceiling at the DAILY_JACKPOT_SCALE_MAX_BPS=63_600 max
-///         scale (bucket counts 159/95/50/1), in ONE call -- exactly the JGAS-03 surface.
+///         scale (bucket counts 152/104/48/1), in ONE call -- exactly the JGAS-03 surface.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
 contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
     /// @dev Push `count` distinct, non-zero holder addresses into lvlTraitEntry[lvl][traitId].
@@ -53,7 +53,7 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
 
 /// @title JackpotSingleCallCorrectness -- JGAS-03 single-call 305-winner proofs
 /// @notice After the JGAS-02 two-call-split removal, the daily ETH jackpot pays all 305
-///         winners (buckets 159/95/50/1 at max scale) correctly in ONE call:
+///         winners (buckets 152/104/48/1 at max scale) correctly in ONE call:
 ///         - every bucket paid, exact per-winner amounts, none missed, none double-paid
 ///         - conservation: total ETH credited (claimable + whale-pass) == the distributed pool
 ///         - the single call fits under the mainnet block gas limit (worst-case-FIRST)
@@ -119,7 +119,7 @@ contract JackpotSingleCallCorrectness is Test {
     /// @dev A target level whose +1 price tier is a clean 0.04 ETH (unit = 0.01 ETH).
     uint24 internal constant TARGET_LVL = 110;
     /// @dev Pool well above the 200-ETH max-scale floor (JACKPOT_SCALE_SECOND_WEI), so the
-    ///      scaleBps pins to DAILY_JACKPOT_SCALE_MAX_BPS and the buckets hit 159/95/50/1.
+    ///      scaleBps pins to DAILY_JACKPOT_SCALE_MAX_BPS and the buckets hit 152/104/48/1.
     uint256 internal constant POOL_WEI = 1000 ether;
 
     function setUp() public {
@@ -131,20 +131,20 @@ contract JackpotSingleCallCorrectness is Test {
     // =========================================================================
 
     /// @notice JGAS-03: at max scale the daily-ETH jackpot pays exactly DAILY_ETH_MAX_WINNERS=305
-    ///         winners across the 4 buckets (159 + 95 + 50 + 1) in ONE call -- every bucket paid,
+    ///         winners across the 4 buckets (152 + 104 + 48 + 1) in ONE call -- every bucket paid,
     ///         each winner credited its exact per-winner bucket amount, none missed, none double
     ///         credited within its bucket, and total ETH credited == the distributed pool.
     function testSingleCallPaysAll305WithConservation() public {
         (uint8[4] memory traitIds, uint256 effectiveEntropy) = _deriveTraits(_word());
 
-        // Confirm the bucket geometry IS the 305 ceiling (159/95/50/1) BEFORE driving the call.
+        // Confirm the bucket geometry IS the 305 ceiling (152/104/48/1) BEFORE driving the call.
         uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
             POOL_WEI,
             effectiveEntropy,
             DAILY_JACKPOT_SCALE_MAX_BPS
         );
         assertEq(JackpotBucketLib.sumBucketCounts(bc), 305, "max-scale total == 305");
-        _assertCountMultiset(bc, [uint16(159), 95, 50, 1]);
+        _assertCountMultiset(bc, [uint16(152), 104, 48, 1]);
 
         // Seed each of the 4 winning-trait buckets with distinct holders (one disjoint address
         // range per trait), more than any bucket's winner count so no winner resolves to zero.
@@ -264,9 +264,9 @@ contract JackpotSingleCallCorrectness is Test {
     // =========================================================================
 
     /// @notice JGAS-03 worst-case-FIRST gas fit: the theoretical worst case for the daily-ETH
-    ///         path is the 305-winner max-scale single call (all 4 buckets, 159/95/50/1) -- no
+    ///         path is the 305-winner max-scale single call (all 4 buckets, 152/104/48/1) -- no
     ///         daily-ETH path produces more winners (DAILY_ETH_MAX_WINNERS = 305 is the hard
-    ///         cap, and MAX_BUCKET_WINNERS=250 never clips a 159 bucket). We measure THAT call's
+    ///         cap, and MAX_BUCKET_WINNERS=248 never clips a 152 bucket). We measure THAT call's
     ///         gas (gasleft delta) and assert it is < the mainnet 30M block gas limit, i.e. it
     ///         fits with margin. Full peg calibration + the margin attribution to the removed
     ///         per-winner autoRebuyState SLOAD is Phase 319 / JGAS-04; this plan's bar is "fits".
@@ -306,7 +306,7 @@ contract JackpotSingleCallCorrectness is Test {
     ///         daily-ETH worst case BEFORE measuring, then assert measured < 30M with margin and emit
     ///         the margin. 318-06 already proved 305 is structurally the max; JGAS-04 makes the
     ///         worst-case-first framing an explicit standalone assertion (the two hard caps:
-    ///         DAILY_ETH_MAX_WINNERS = 305 and MAX_BUCKET_WINNERS = 250 which never clips a 159 bucket)
+    ///         DAILY_ETH_MAX_WINNERS = 305 and MAX_BUCKET_WINNERS = 248 which never clips a 152 bucket)
     ///         and records the 30M - measured margin for the SUMMARY.
     function testJgas04WorstCaseFirstReframeWithMargin() public {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
@@ -321,10 +321,10 @@ contract JackpotSingleCallCorrectness is Test {
             DAILY_ETH_MAX_WINNERS,
             "JGAS-04 worst case: 305 winners == DAILY_ETH_MAX_WINNERS (the daily-ETH hard cap)"
         );
-        //  (b) no single bucket count can exceed MAX_BUCKET_WINNERS = 250, so the 159/95/50/1
+        //  (b) no single bucket count can exceed MAX_BUCKET_WINNERS = 248, so the 152/104/48/1
         //      geometry is never clipped — 305-across-4-buckets is the true maximum work shape.
         for (uint8 b; b < 4; ++b) {
-            assertLe(bc[b], 250, "JGAS-04 worst case: no bucket exceeds MAX_BUCKET_WINNERS = 250 (never clips 159)");
+            assertLe(bc[b], 248, "JGAS-04 worst case: no bucket exceeds MAX_BUCKET_WINNERS = 248 (never clips 152)");
         }
 
         _seedAllBuckets(traitIds);
@@ -613,7 +613,7 @@ contract JackpotSingleCallCorrectness is Test {
                     break;
                 }
             }
-            require(found, "bucket counts are not the 159/95/50/1 multiset");
+            require(found, "bucket counts are not the 152/104/48/1 multiset");
         }
     }
 

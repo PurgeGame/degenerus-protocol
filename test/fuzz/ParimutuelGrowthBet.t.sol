@@ -321,7 +321,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     // =====================================================================
 
     /// The reason boundary rounds are scoreable at all: a century level's term comes from
-    /// the pushed achieved pool, so _endPhase rewriting levelPrizePool[x00] to futurePool/3
+    /// the pushed achieved pool, so _endPhase rewriting levelPrizePool[x00] to 40% of futurePool
     /// cannot move it. Without this, the same round answers one way during the century's
     /// jackpot phase and the other way after — paying both sides and minting FLIP.
     function testCenturyTermIgnoresTheEndPhaseOverwrite() public {

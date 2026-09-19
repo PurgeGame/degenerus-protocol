@@ -180,6 +180,8 @@ for f in "${FILES[@]}"; do
   done < <(grep -hoE '\[\][[:space:]]+storage[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' "$f" | grep -oE '[A-Za-z_][A-Za-z0-9_]*$' | sort -u)
 done
 
+python3 scripts/lib/check_ticket_queue_codec.py "$CONTRACTS_DIR" || FAIL=1
+
 if [[ $FAIL -eq 0 ]]; then
   printf "%sPASS%s no unbounded dynamic-array delete in production contracts\n" "$GREEN" "$NC"
   exit 0

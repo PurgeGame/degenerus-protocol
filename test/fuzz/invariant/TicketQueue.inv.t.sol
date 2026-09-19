@@ -29,6 +29,7 @@ contract TicketQueueInvariant is DeployProtocol {
     /// @dev The TicketTrackingHandler verifies that entriesOwedView returns
     ///      sensible values for every tracked (level, player) pair.
     function invariant_noConsistencyViolations() public view {
+        for (uint256 lvl; lvl <= uint256(game.level()) + 5; ++lvl) ticketHandler.verifyConsistency(lvl);
         assertEq(
             ticketHandler.ghost_consistencyViolations(),
             0,

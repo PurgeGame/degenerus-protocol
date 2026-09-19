@@ -43,7 +43,7 @@ contract HalfPassAwardHarness is DegenerusGameStorage {
     ///      (write slot for lvl <= 5, far-future key beyond) and return owed entries.
     function owedAt(uint24 lvl, address buyer) external view returns (uint32) {
         uint24 key = lvl > level + 5 ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
-        return uint32(entriesOwedPacked[key][buyer] >> 8);
+        return uint32(_entriesOwed(key, buyer) >> 8);
     }
 
     function queueLenAt(uint24 lvl) external view returns (uint256) {

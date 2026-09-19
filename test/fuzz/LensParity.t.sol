@@ -40,6 +40,8 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         return _activeTicketLevel();
     }
 
+    function queue(address player, uint24 lvl) external { _queueEntries(player, lvl, 7, false); }
+
     // -- setters: write through the compiler's layout ------------------------
 
     function setSub(
@@ -335,6 +337,15 @@ contract LensParityTest is Test {
     // =========================================================================
     // Level DGNRS / decimator / terminal decimator / foil records
     // =========================================================================
+
+    function test_RegistryOwedWritesPreserveLensSlots() public {
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        harness.setLevelDgnrs(9, 123456, 789);
+        for (uint160 i; i < 19; ++i) harness.queue(address(0xCE00 + i), 9);
+        (uint128 allocation, uint128 claimed) = lens.levelDgnrsInfo(game, 9);
+        assertEq(allocation, 123456); assertEq(claimed, 789);
+        assertEq(lens.activeTicketLevelOf(game), harness.nativeActiveTicketLevel());
+    }
 
     function testFuzz_levelDgnrsInfo(uint24 lvl, uint128 allocation, uint128 claimed) public {
         harness.setLevelDgnrs(lvl, allocation, claimed);

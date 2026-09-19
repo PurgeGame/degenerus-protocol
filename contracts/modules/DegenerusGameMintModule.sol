@@ -340,8 +340,8 @@ contract DegenerusGameMintModule is
     ) external returns (bool worked, bool finished, uint32 writesUsed) {
         bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
-        mapping(address => uint80) storage owedMap = entriesOwedPacked[rk];
-        address[] storage queue = ticketQueue[rk];
+
+        uint256[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
         if (total == 0) {
             ticketCursor = 0;
@@ -389,7 +389,7 @@ contract DegenerusGameMintModule is
         // whole lane word. Survivors below the seat floor drain entry by entry.
         if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
             (idx, used) = _drainRounds(rk, lvl, writesBudget, idx, total, entropy, shift);
-            used = _drainSeatedSurvivors(queue, lvl, owedMap, writesBudget, used, entropy, shift, counts, touchedTraits);
+            used = _drainSeatedSurvivors(queue, lvl, writesBudget, used, entropy, shift, counts, touchedTraits);
         }
 
         while (idx < total && used < writesBudget) {
@@ -398,9 +398,9 @@ contract DegenerusGameMintModule is
                 uint32 take,
                 bool advance
             ) = _processOneTicketEntry(
-                    queue[idx],
+                    _tqPositionAt(queue, idx),
                     lvl,
-                    owedMap,
+
                     writesBudget - used,
                     processed,
                     entropy,
@@ -592,7 +592,7 @@ contract DegenerusGameMintModule is
         uint24 windowEnd = terminal ? anchor : anchor + 4;
         for (; t <= windowEnd; ) {
             uint24 rk = _tqReadKey(t);
-            address[] storage queue = ticketQueue[rk];
+            uint256[] storage queue = ticketQueue[rk];
             uint256 total = queue.length;
             if (total == 0) {
                 unchecked {
@@ -623,14 +623,13 @@ contract DegenerusGameMintModule is
                 ];
             }
 
-            mapping(address => uint80) storage owedMap = entriesOwedPacked[rk];
             uint32 used;
             uint32 processed;
             uint8 shift = _snapShiftFor(t);
 
             if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
                 (idx, used) = _drainRounds(rk, t, remaining, idx, total, entropy, shift);
-                used = _drainSeatedSurvivors(queue, t, owedMap, remaining, used, entropy, shift, counts, touchedTraits);
+                used = _drainSeatedSurvivors(queue, t, remaining, used, entropy, shift, counts, touchedTraits);
             }
 
             while (idx < total && used < remaining) {
@@ -639,9 +638,9 @@ contract DegenerusGameMintModule is
                     uint32 take,
                     bool advance
                 ) = _processOneTicketEntry(
-                        queue[idx],
+                        _tqPositionAt(queue, idx),
                         t,
-                        owedMap,
+
                         remaining - used,
                         processed,
                         entropy,
@@ -729,12 +728,7 @@ contract DegenerusGameMintModule is
                     room
                 )
             );
-        if (!ok) {
-            if (data.length == 0) revert E();
-            assembly ("memory-safe") {
-                revert(add(32, data), mload(data))
-            }
-        }
+        if (!ok) _revertDelegate(data);
         return abi.decode(data, (bool, bool));
     }
 
@@ -743,9 +737,9 @@ contract DegenerusGameMintModule is
     ///      exhausted holes to reach them. Runs only when fewer than ROUND_MIN_SEATS seats
     ///      remain (a fuller set keeps rolling as rounds next chunk).
     function _drainSeatedSurvivors(
-        address[] storage queue,
+        uint256[] storage queue,
         uint24 lvl,
-        mapping(address => uint80) storage owedMap,
+
         uint32 budget,
         uint32 used,
         uint256 entropy,
@@ -766,9 +760,9 @@ contract DegenerusGameMintModule is
                 uint32 take,
                 bool advance
             ) = _processOneTicketEntry(
-                    queue[qi],
+                    _tqPositionAt(queue, qi),
                     lvl,
-                    owedMap,
+
                     budget - used,
                     processed,
                     entropy,
@@ -819,12 +813,7 @@ contract DegenerusGameMintModule is
                     shift
                 )
             );
-        if (!ok) {
-            if (data.length == 0) revert E();
-            assembly ("memory-safe") {
-                revert(add(32, data), mload(data))
-            }
-        }
+        if (!ok) _revertDelegate(data);
         return abi.decode(data, (uint256, uint32));
     }
 
@@ -834,9 +823,9 @@ contract DegenerusGameMintModule is
     ///      write-back carries the snap-done marker so a budget-split resume never
     ///      divides it twice.
     function _processOneTicketEntry(
-        address player,
+        uint32 ownerPos,
         uint24 lvl,
-        mapping(address => uint80) storage owedMap,
+
         uint32 room,
         uint32 processed,
         uint256 entropy,
@@ -846,7 +835,9 @@ contract DegenerusGameMintModule is
         uint8[256] memory touchedTraits
     ) private returns (uint32 writesUsed, uint32 take, bool advance) {
         uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
-        uint80 packed = owedMap[player];
+        uint256 record = _entryRecord(lvl, ownerPos);
+        address player = address(uint160(record));
+        uint80 packed = uint80(record >> 160);
         if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
             packed = _snapOwedPacked(packed, shift);
         }
@@ -860,8 +851,8 @@ contract DegenerusGameMintModule is
             bool skip;
             (packed, skip) = _resolveZeroOwedRemainder(
                 packed,
-                owedMap,
-                player,
+                lvl,
+                ownerPos,
                 entropy,
                 baseKey,
                 snapDone
@@ -923,7 +914,7 @@ contract DegenerusGameMintModule is
         uint80 newPacked = (uint80(remainingOwed) << 8) | uint80(rem);
         if (newPacked != 0) newPacked |= snapDone | ownerBits;
         if (newPacked != packed) {
-            owedMap[player] = newPacked;
+            _setEntryOwed(lvl, ownerPos, newPacked);
         }
         advance = remainingOwed == 0;
     }
@@ -932,12 +923,6 @@ contract DegenerusGameMintModule is
     // Purchases and Loot Boxes
     // -------------------------------------------------------------------------
 
-    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 (advance handles 101+).
-    /// @dev Delegatecalled by the Game facade, which restricts the caller to VAULT and SDGNRS and
-    ///      passes it as `who`; each calls exactly once from its own constructor.
-    function initPerpetualTickets(address who) external {
-        _queueEntryRange(who, 1, 100, 16, false); // 16 entries (= 4 whole tickets) per level
-    }
 
     /// @notice Purchase tickets and loot boxes for a buyer.
     /// @dev Delegatecalled by DegenerusGame. Handles payment routing, affiliates, and queues.
@@ -1308,21 +1293,19 @@ contract DegenerusGameMintModule is
         uint256 idx
     ) internal {
         uint24 ffk = _tqFarFutureKey(L);
-        uint80 packed = entriesOwedPacked[ffk][player];
+        uint32 ownerPos = entryOwnerPosition[ffk][player];
+        uint80 packed = ownerPos == 0 ? 0 : uint80(_entryRecord(L, ownerPos) >> 160);
         uint32 owed = uint32(packed >> 8);
         if (owed < entries) revert E(); // ownership / over-sell guard
         uint8 rem = uint8(packed);
         uint32 newOwed = owed - entries;
         if (newOwed == 0 && rem == 0) {
-            address[] storage q = ticketQueue[ffk];
-            if (q[idx] != player) revert E(); // verify the caller-supplied index
-            uint256 lastPos = q.length - 1;
-            if (idx != lastPos) q[idx] = q[lastPos];
-            q.pop();
-            entriesOwedPacked[ffk][player] = 0;
+            uint256[] storage q = ticketQueue[ffk];
+            if (idx >= q.length || _tqOwnerAt(q, L, idx) != player) revert E();
+            _tqSwapPop(q, idx);
+            _setEntryOwed(L, ownerPos, 0);
         } else {
-            entriesOwedPacked[ffk][player] =
-                (packed & OWNER_IDX_MASK) | (uint80(newOwed) << 8) | uint80(rem);
+            _setEntryOwed(L, ownerPos, (packed & OWNER_IDX_MASK) | (uint80(newOwed) << 8) | uint80(rem));
         }
     }
 
@@ -1435,12 +1418,7 @@ contract DegenerusGameMintModule is
     ///      reason so an over-cap or custom-size-change surfaces as itself.
     function _lootboxLeg(bytes memory payload) private returns (bytes memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(payload);
-        if (!ok) {
-            if (data.length == 0) revert E();
-            assembly ("memory-safe") {
-                revert(add(32, data), mload(data))
-            }
-        }
+        if (!ok) _revertDelegate(data);
         return data;
     }
 

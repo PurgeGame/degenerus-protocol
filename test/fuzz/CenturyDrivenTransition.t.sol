@@ -149,7 +149,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
 
         // Fund the first century big so the level-200 floor sits far above later
         // ratchets: the century pool spills into futurePool at consolidation, and
-        // _endPhase reseeds levelPrizePool[100] from futurePool/3, so the floor only
+        // _endPhase reseeds levelPrizePool[100] from 40% of futurePool, so the floor only
         // towers over the post-reset ratchet when the century pool dwarfs that spill.
         // (The jackpot may run compressed — a target met this early legitimately
         // compresses the jackpot days, so _endPhase can reset levelPrizePool[100]

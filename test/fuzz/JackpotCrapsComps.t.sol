@@ -52,9 +52,9 @@ contract JackpotCompHarness is DegenerusGameJackpotModule, BucketSeed {
     }
 
     function seedFarQueue(uint24 lvl, uint256 count, uint160 base) external {
-        address[] storage q = ticketQueue[_tqFarFutureKey(lvl)];
+        uint256[] storage q = ticketQueue[_tqFarFutureKey(lvl)];
         for (uint256 i; i < count; ++i) {
-            q.push(address(base + uint160(i + 1)));
+            _tqAppend(_tqFarFutureKey(lvl), uint32(_registerEntryOwner(address(base + uint160(i + 1)), lvl) >> OWNER_IDX_SHIFT));
         }
     }
 
@@ -409,8 +409,8 @@ contract JackpotCrapsCompsTest is Test {
 
     // ── Selection parity, conservation, determinism ─────────────────────────
 
-    /// @dev The other quadrants' winners replay exactly from the published hashes: the branch
-    ///      changed WHO gets what, never how anyone is drawn.
+    /// @dev Each trait's eight draws rotate through its cached word, then reseed using the
+    ///      next group's first scheduled pull. Comp exclusion must not shift the other cursors.
     function test_nonCompSelectionReplaysFromThePublishedHashes() public {
         h.seedAllTraits(LVL, 8);
         _seedNear(4 * 5 * P);
@@ -431,8 +431,9 @@ contract JackpotCrapsCompsTest is Test {
         for (uint256 i; i < 50; ++i) {
             if (i % 4 == q) continue;
             uint8 trait = traits[i % 4];
-            // range == 1 collapses the level hash to LVL; the holder hash is the live rule.
-            uint256 idx = uint256(keccak256(abi.encode(WORD, trait, uint24(LVL), i))) % h.bucketLen(LVL, trait);
+            uint256 firstPull = (i / 32) * 32 + i % 4;
+            uint256 start = uint256(keccak256(abi.encode(WORD, trait, uint24(LVL), firstPull))) % 8;
+            uint256 idx = (start + (i / 4) % 8) % 8;
             address expected = h.bucketAt(LVL, trait, idx);
             // The i-th non-comp pull is the cursor-th FLIP log.
             uint256 seen;
@@ -449,6 +450,39 @@ contract JackpotCrapsCompsTest is Test {
             }
             ++cursor;
         }
+    }
+
+    /// @dev Level selection remains independent for every pull; returning to a bucket
+    ///      resumes its own packed word, including padding redraws in a 17-entry pool.
+    function test_interleavedLevelsKeepIndependentWordCursors() public {
+        for (uint24 j; j < 4; ++j) h.seedAllTraits(LVL + j, 17);
+        _seedNear(4 * P - 750);
+        vm.recordLogs();
+        h.payDailyFlipJackpot(LVL, WORD, LVL, LVL + 3);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256[16] memory counts;
+        uint256[16] memory seeds;
+        uint256 pull;
+        for (uint256 j; j < logs.length; ++j) {
+            if (logs[j].topics[0] != FLIP_WIN_SIG) continue;
+            uint24 selected = uint24(uint256(logs[j].topics[2]));
+            uint8 trait = uint8(uint256(logs[j].topics[3]));
+            uint256 offset = uint256(keccak256(abi.encode(WORD, LEVEL_TAG, pull))) % 4;
+            assertEq(selected, LVL + offset, "per-pull level distribution changed");
+            assertEq(trait >> 6, pull % 4);
+            uint256 key = offset * 4 + pull % 4;
+            uint256 lane = counts[key] % 8;
+            if (lane == 0) seeds[key] = uint256(keccak256(abi.encode(WORD, trait, selected, pull)));
+            uint256 start = seeds[key] % 24;
+            uint256 idx = (start / 8) * 8 + (start % 8 + lane) % 8;
+            if (idx >= 17) idx = uint256(keccak256(abi.encode(seeds[key], lane))) % 17;
+            (, uint256 emittedIndex) = abi.decode(logs[j].data, (uint256, uint256));
+            assertEq(emittedIndex, idx, "another bucket moved this cursor");
+            assertEq(address(uint160(uint256(logs[j].topics[1]))), h.bucketAt(selected, trait, idx));
+            ++counts[key];
+            ++pull;
+        }
+        assertEq(pull, 50);
     }
 
     /// @dev Conservation across fuzzed budgets: actually banked comp value plus actually
@@ -492,10 +526,10 @@ contract JackpotCrapsCompsTest is Test {
     ///      has always drawn from and its equal shares spend only its own 25%.
     function test_theFarFutureLegIsIsolated() public {
         h.seedAllTraits(LVL, 8);
-        // The sampler draws ten levels from [lvl+5, lvl+99]; seed them all so every pull finds
-        // a queue and the ten far winners land deterministically.
+        // The sampler draws eight lanes of one level in [lvl+5, lvl+99]; seed eight holders at
+        // every level so whichever it picks pays the eight far winners deterministically.
         for (uint24 d = 5; d < 100; ++d) {
-            h.seedFarQueue(LVL + d, 3, 0xBEEF0000);
+            h.seedFarQueue(LVL + d, 8, 0xBEEF0000);
         }
         _seedNear(4 * 5 * P);
         Vm.Log[] memory logs = _run();
@@ -510,9 +544,9 @@ contract JackpotCrapsCompsTest is Test {
             address w = address(uint160(uint256(logs[i].topics[1])));
             assertEq(uint160(w) & 0xFFFF0000, uint160(0xBEEF0000), "a far winner came from outside the queue");
         }
-        assertEq(farCount, 10, "ten fully seeded samples did not pay ten far winners");
+        assertEq(farCount, 8, "eight seeded lanes did not pay eight far winners");
         assertLe(farPaid, farBudget, "the far leg spent more than its own quarter");
-        assertEq(farPaid, ((farBudget / UNIT) / 10) * UNIT * 10, "the far shares are not the equal split");
+        assertEq(farPaid, ((farBudget / UNIT) / 8) * UNIT * 8, "the far shares are not the equal split");
     }
 
     /// @dev The production module must keep real deployment headroom — the same 24,400-byte

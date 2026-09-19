@@ -126,8 +126,8 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
     }
 
     function totalQueuedOwed(uint24 lvl, address player) external view returns (uint256) {
-        return uint256(uint32(entriesOwedPacked[lvl][player] >> 8)) +
-            uint256(uint32(entriesOwedPacked[lvl | TICKET_SLOT_BIT][player] >> 8));
+        return uint256(uint32(_entriesOwed(lvl, player) >> 8)) +
+            uint256(uint32(_entriesOwed(lvl | TICKET_SLOT_BIT, player) >> 8));
     }
 
     function ticketBufferState() external view returns (bool writeSlot, bool readDrained) {
@@ -135,9 +135,9 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
     }
 
     function _seedQueue(uint24 key, address player, uint32 entries) private {
-        ticketQueue[key].push(player);
-        entriesOwedPacked[key][player] =
-            _registerEntryOwner(player, uint24(key & ((uint24(1) << 22) - 1))) | (uint80(entries) << 8);
+        uint80 ownerBits = _registerEntryOwner(player, uint24(key & ((uint24(1) << 22) - 1)));
+        _tqAppend(key, uint32(ownerBits >> OWNER_IDX_SHIFT));
+        _seedOwedAt(key, player, ownerBits | (uint80(entries) << 8));
     }
 }
 

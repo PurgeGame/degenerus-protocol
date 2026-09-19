@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -711,33 +713,11 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     /// @dev Seed one queued address with `entries` owed onto the CURRENT READ side of
     ///      level key `lvl` (queue mapping slot 12, owed mapping slot 13).
     function _seedReadCohort(uint24 lvl, address who, uint32 entries) internal {
-        uint24 rk = _readKeyOf(lvl);
-        bytes32 lenSlot = keccak256(abi.encode(uint256(rk), uint256(12)));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        vm.store(
-            address(game),
-            bytes32(uint256(dataBase) + len),
-            bytes32(uint256(uint160(who)))
-        );
-        bytes32 owedSlot = keccak256(
-            abi.encode(who, keccak256(abi.encode(uint256(rk), uint256(13))))
-        );
-        vm.store(address(game), owedSlot, bytes32((uint256(entries) << 8) | _seedOwnerBits(lvl, who)));
+        TicketQueueStorage.seed(address(game), _readKeyOf(lvl), lvl, who, uint80(entries) << 8);
     }
 
     /// @dev Register `who` in lvlEntryOwner[lvl] (slot 67, append-only) the way every sink does at
     ///      queue time, returning the owner bits the owed word must carry (position + 1 << 48).
-    function _seedOwnerBits(uint24 lvl, address who) internal returns (uint256) {
-        bytes32 lenSlot = keccak256(abi.encode(uint256(lvl), uint256(67)));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        bytes32 elemSlot = bytes32(uint256(keccak256(abi.encode(lenSlot))) + len);
-        vm.store(address(game), elemSlot, bytes32(uint256(uint160(who))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-        return (len + 1) << 48;
-    }
-
     // ---------------------------------------------------------------------
     // Drive
     // ---------------------------------------------------------------------
@@ -970,15 +950,12 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             );
     }
 
-    /// @dev entriesOwedPacked[key][player] >> 8 — the mapping sits at slot 13.
+    /// @dev _entriesOwed(key, player) >> 8 — the mapping sits at slot 13.
     function _entriesOwed(
         uint24 key,
         address player
     ) internal view returns (uint256) {
-        bytes32 outer = keccak256(abi.encode(uint256(key), uint256(13)));
-        return
-            uint256(vm.load(address(game), keccak256(abi.encode(player, outer)))) >>
-            8;
+        return uint32(TicketQueueStorage.owed(address(game), key, player) >> 8);
     }
 
     /// @dev ticketWriteSlot — slot 0, byte 25.

@@ -9,13 +9,22 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 ///         `lvlEntryOwner[lvl]`, then append packed lanes naming that position.
 /// @dev Test-only. No contracts/*.sol is mutated.
 abstract contract BucketSeed is DegenerusGameStorage {
+    /// @dev Seed a queue owner's locator and positional owed field without weakening owner identity.
+    function _seedOwedAt(uint24 key, address player, uint80 packed) internal {
+        uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
+        if (pos != 0) entryOwnerPosition[key][player] = pos;
+        else pos = entryOwnerPosition[key][player];
+        require(pos != 0, "queue owner must be registered");
+        _setEntryOwed(key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), pos, packed);
+    }
+
     /// @dev Registry position for `player` at `lvl`: the last position when it is already
     ///      this player, otherwise a fresh push (test-side lookup-or-push).
     function _ownerIdxFor(uint24 lvl, address player) internal returns (uint256) {
-        address[] storage owners = lvlEntryOwner[lvl];
+        EntryOwner[] storage owners = lvlEntryOwner[lvl];
         uint256 len = owners.length;
-        if (len != 0 && owners[len - 1] == player) return len - 1;
-        owners.push(player);
+        if (len != 0 && owners[len - 1].owner == player) return len - 1;
+        owners.push(EntryOwner(player, 0));
         return len;
     }
 
@@ -35,9 +44,10 @@ abstract contract BucketSeed is DegenerusGameStorage {
     function _seedQueued(uint24 rk, uint24 lvl, address player, uint80 packedOwedRem) internal {
         // Keep position zero out of the seeded set: a zero lane index makes every word store a
         // no-op and understates gas.
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(address(1));
-        ticketQueue[rk].push(player);
-        entriesOwedPacked[rk][player] = _registerEntryOwner(player, lvl) | packedOwedRem;
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        uint80 ownerBits = _registerEntryOwner(player, lvl);
+        _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
+        _seedOwedAt(rk, player, ownerBits | packedOwedRem);
     }
 
     /// @dev Append `count` distinct, non-zero holders `base+1 .. base+count`, one occurrence each.

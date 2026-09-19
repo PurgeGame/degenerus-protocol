@@ -60,6 +60,15 @@ contract DegenerusGameFoilPackModule is
     DegenerusGamePayoutUtils,
     DegenerusGameMintStreakUtils
 {
+    uint32 private constant VAULT_PERPETUAL_ENTRIES = 16;
+
+    /// @notice Queue the two protocol owners' perpetual tickets at a phase transition.
+    /// @dev Advance delegates here with the target level; both writes retain advance-chain routing.
+    function queuePerpetualTickets(uint24 targetLevel) external {
+        _queueEntries(ContractAddresses.SDGNRS, targetLevel, VAULT_PERPETUAL_ENTRIES, true);
+        _queueEntries(ContractAddresses.VAULT, targetLevel, VAULT_PERPETUAL_ENTRIES, true);
+    }
+
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -429,9 +438,9 @@ contract DegenerusGameFoilPackModule is
         // buy never makes the drain walk a long empty day range.
         // Register the buyer at the cycle level now, so the drain pays no registry slot;
         // the position rides above the level in the bucketed word.
-        address[] storage owners = lvlEntryOwner[lvl];
+        EntryOwner[] storage owners = lvlEntryOwner[lvl];
         uint256 ownerIdx = owners.length;
-        owners.push(buyer);
+        owners.push(EntryOwner(buyer, 0));
         emit EntryOwnerRegistered(lvl, uint32(ownerIdx), buyer);
         foilBuyers[resolveDay].push(
             ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
@@ -902,6 +911,10 @@ contract DegenerusGameFoilPackModule is
         uint256[8] ownerIdx;
         uint256 seated;
         uint256 cur;
+        // Queue lanes are read-only during the call; adjacent seats share this cached word.
+        uint256 queueBase;
+        uint256 queueWordIndex;
+        uint256 queueWord;
     }
 
     /// @notice Seated round drain (delegatecall target of the mint module's two queue drains).
@@ -925,10 +938,17 @@ contract DegenerusGameFoilPackModule is
         uint256 entropy,
         uint8 shift
     ) external returns (uint256 nextIdx, uint32 used) {
-        address[] storage queue = ticketQueue[rk];
-        mapping(address => uint80) storage owedMap = entriesOwedPacked[rk];
+        uint256[] storage queue = ticketQueue[rk];
+
         RoundSeats memory st;
         st.cur = idx;
+        uint256 queueBase;
+        assembly ("memory-safe") {
+            mstore(0, queue.slot)
+            queueBase := keccak256(0, 32)
+        }
+        st.queueBase = queueBase;
+        st.queueWordIndex = type(uint256).max;
         uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
         uint256 levelSlot;
         assembly ("memory-safe") {
@@ -946,14 +966,14 @@ contract DegenerusGameFoilPackModule is
         // is skipped.
         uint256 word = ticketSeats;
         while (word != 0) {
-            used = _seatEntry(st, queue, (word & 0xffffffff) - 1, owedMap, lvl, entropy, snapDone, shift, used);
+            used = _seatEntry(st, (word & 0xffffffff) - 1, lvl, entropy, snapDone, shift, used);
             word >>= 32;
         }
 
         while (true) {
-            used = _fillSeats(st, queue, total, owedMap, lvl, entropy, snapDone, shift, room, used);
+            used = _fillSeats(st, total, lvl, entropy, snapDone, shift, room, used);
             if (st.seated < ROUND_MIN_SEATS || used + roundCost > room) break;
-            used += _runRound(st, lvl, levelSlot, round, entropy, owedMap);
+            used += _runRound(st, lvl, levelSlot, round, entropy);
             unchecked {
                 ++round;
             }
@@ -964,11 +984,9 @@ contract DegenerusGameFoilPackModule is
         // persists is the frontier.
         uint256 seated = st.seated;
         for (uint256 j; j < seated; ) {
-            owedMap[st.player[j]] =
+            _setEntryOwed(lvl, uint32(st.ownerIdx[j] + 1),
                 uint80((st.ownerIdx[j] + 1) << OWNER_IDX_SHIFT) |
-                (uint80(st.owed[j]) << 8) |
-                uint80(st.rem[j]) |
-                snapDone;
+                (uint80(st.owed[j]) << 8) | uint80(st.rem[j]) | snapDone);
             word |= (uint256(st.queueIdx[j]) + 1) << (32 * j);
             unchecked {
                 ++j;
@@ -984,9 +1002,8 @@ contract DegenerusGameFoilPackModule is
     /// @dev Fill empty seats from the queue frontier.
     function _fillSeats(
         RoundSeats memory st,
-        address[] storage queue,
         uint256 total,
-        mapping(address => uint80) storage owedMap,
+
         uint24 lvl,
         uint256 entropy,
         uint80 snapDone,
@@ -996,7 +1013,7 @@ contract DegenerusGameFoilPackModule is
     ) private returns (uint32) {
         while (st.seated < ROUND_SEATS && st.cur < total) {
             if (used + SEAT_JOIN_UNITS > room) break;
-            used = _seatEntry(st, queue, st.cur, owedMap, lvl, entropy, snapDone, shift, used);
+            used = _seatEntry(st, st.cur, lvl, entropy, snapDone, shift, used);
             unchecked {
                 ++st.cur;
             }
@@ -1009,17 +1026,26 @@ contract DegenerusGameFoilPackModule is
     ///      path does; a fully drained entry is skipped without a write.
     function _seatEntry(
         RoundSeats memory st,
-        address[] storage queue,
         uint256 qi,
-        mapping(address => uint80) storage owedMap,
+
         uint24 lvl,
         uint256 entropy,
         uint80 snapDone,
         uint8 shift,
         uint32 used
     ) private returns (uint32) {
-        address p = queue[qi];
-        uint80 packed = owedMap[p];
+        uint256 wordIndex = qi >> 3;
+        if (wordIndex != st.queueWordIndex) {
+            uint256 queueBase = st.queueBase;
+            uint256 lanes;
+            assembly ("memory-safe") { lanes := sload(add(queueBase, wordIndex)) }
+            st.queueWord = lanes;
+            st.queueWordIndex = wordIndex;
+        }
+        uint32 ownerPos = uint32(st.queueWord >> ((qi & 7) << 5));
+        uint256 record = _entryRecord(lvl, ownerPos);
+        address p = address(uint160(record));
+        uint80 packed = uint80(record >> 160);
         if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
             packed = _snapOwedPacked(packed, shift);
         }
@@ -1029,13 +1055,13 @@ contract DegenerusGameFoilPackModule is
             bool skip;
             (packed, skip) = _resolveZeroOwedRemainder(
                 packed,
-                owedMap,
-                p,
+                lvl,
+                ownerPos,
                 entropy,
                 (uint256(lvl) << 224) | (qi << 192) | (uint256(uint160(p)) << 32),
                 snapDone
             );
-            // A skipped dust entry still cost a queue read, an owed read and a zeroing write.
+            // A dust entry reads its queue lane and combined owner/owed record, then clears owed.
             ++used;
             if (skip) return used;
             owed = 1;
@@ -1111,8 +1137,7 @@ contract DegenerusGameFoilPackModule is
         uint24 lvl,
         uint256 levelSlot,
         uint32 round,
-        uint256 entropy,
-        mapping(address => uint80) storage owedMap
+        uint256 entropy
     ) private returns (uint32 used) {
         uint256 seed = uint256(keccak256(abi.encode(lvl, round, entropy)));
         uint256 seated = st.seated;
@@ -1158,7 +1183,7 @@ contract DegenerusGameFoilPackModule is
                     rem = 0;
                 }
                 if (owed == 0) {
-                    owedMap[st.player[j]] = 0;
+                    _setEntryOwed(lvl, uint32(st.ownerIdx[j] + 1), 0);
                     unchecked {
                         ++used;
                         ++j;

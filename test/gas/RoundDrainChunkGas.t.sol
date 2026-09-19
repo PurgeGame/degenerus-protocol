@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {BucketSeed} from "../helpers/BucketSeed.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
@@ -8,14 +10,14 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Extends the production mint module so one live `processTicketBatch` call runs a full
 ///      write-budget chunk in THIS contract's storage; adds queue seeders only.
-contract ChunkHarness is DegenerusGameMintModule {
+contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
     /// @dev Queue `n` buyers through the production purchase sink with purchase-time owner
     ///      registration, then flip the double buffer so they sit on the read key. `lvl` must
     ///      be within level + 5 (the near window) so the sink uses the write key.
     function seedViaPurchase(uint24 lvl, uint256 n, uint32 entriesScaled, uint160 base, bool warm) external {
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(address(1));
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             _queueEntriesScaled(p, lvl, entriesScaled, false);
@@ -23,7 +25,7 @@ contract ChunkHarness is DegenerusGameMintModule {
         ticketWriteSlot = !ticketWriteSlot;
         ticketLevel = warm ? lvl : 0;
         ticketCursor = warm ? 1 : 0;
-        if (warm) entriesOwedPacked[_tqReadKey(lvl)][address(base + 1)] = 0;
+        if (warm) _seedOwedAt(_tqReadKey(lvl), address(base + 1), 0);
     }
 
     /// @dev `n` dust entries: zero owed, a fractional remainder only, so every one resolves
@@ -32,18 +34,19 @@ contract ChunkHarness is DegenerusGameMintModule {
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
         uint24 rk = _tqReadKey(lvl);
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(address(1));
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            ticketQueue[rk].push(p);
-            entriesOwedPacked[rk][p] = _registerEntryOwner(p, lvl) | uint80(1); // rem = 1 (1%): almost always a skip
+            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
+            _seedOwedAt(rk, p, ownerBits | uint80(1)); // rem = 1 (1%): almost always a skip
         }
         ticketLevel = warm ? lvl : 0;
         ticketCursor = warm ? 1 : 0;
     }
 
     function owedOf(uint24 lvl, address p) external view returns (uint80) {
-        return entriesOwedPacked[_tqReadKey(lvl)][p];
+        return _entriesOwed(_tqReadKey(lvl), p);
     }
 
     function seed(uint24 lvl, uint256 n, uint32 owedEach, uint160 base, bool warm) external {
@@ -51,18 +54,19 @@ contract ChunkHarness is DegenerusGameMintModule {
         lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
         uint24 rk = _tqReadKey(lvl);
         // Position zero stays out of the seeded set (a zero lane makes word stores no-ops).
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(address(1));
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            ticketQueue[rk].push(p);
-            entriesOwedPacked[rk][p] = _registerEntryOwner(p, lvl) | (uint80(owedEach) << 8);
+            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
+            _seedOwedAt(rk, p, ownerBits | (uint80(owedEach) << 8));
         }
         // warm: pin level == lvl and a nonzero cursor so the chunk runs at the full budget.
         ticketLevel = warm ? lvl : 0;
         ticketCursor = warm ? 1 : 0;
         if (warm) {
             // keep index 0 as a drained placeholder
-            entriesOwedPacked[rk][address(base + 1)] = 0;
+            _seedOwedAt(rk, address(base + 1), 0);
         }
     }
 }

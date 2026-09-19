@@ -71,6 +71,50 @@ async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
   }
 }
 
+/** Replace a queue with ownerIdx+1 lanes; key flags are removed only for registry lookup. */
+async function seedTicketQueue(addr, key, holders) {
+  const lvl = BigInt(key) & ((1n << 22n) - 1n);
+  const ownersLen = ownerLengthSlot(lvl);
+  let ownerCount = await getStorage(addr, ownersLen);
+  const ownersData = dataBase(ownersLen);
+  const lanes = [];
+  for (const holder of holders) {
+    await setStorage(addr, ownersData + ownerCount, BigInt(holder));
+    ownerCount += 1n;
+    lanes.push(ownerCount);
+  }
+  await setStorage(addr, ownersLen, ownerCount);
+  const lengthSlot = mapSlot(key, 12n);
+  await setStorage(addr, lengthSlot, BigInt(holders.length));
+  const base = dataBase(lengthSlot);
+  for (let w = 0; w * 8 < lanes.length; ++w) {
+    let word = 0n;
+    for (let j = 0; j < 8 && w * 8 + j < lanes.length; ++j) {
+      word |= lanes[w * 8 + j] << BigInt(j * 32);
+    }
+    await setStorage(addr, base + BigInt(w), word);
+  }
+}
+
+/** Resolve a player's queue-key locator, then read the owed field at registry bit 160. */
+async function entryOwnerRecordSlot(addr, key, player) {
+  const outer = mapSlot(key, 13n);
+  const locator = BigInt(hre.ethers.keccak256(
+    hre.ethers.AbiCoder.defaultAbiCoder().encode(["address", "uint256"], [player, outer])
+  ));
+  const position = (await getStorage(addr, locator)) & LANE_MASK;
+  if (position === 0n) return null;
+  const lvl = BigInt(key) & ((1n << 22n) - 1n);
+  return pad32(dataBase(ownerLengthSlot(lvl)) + position - 1n);
+}
+
+async function readEntriesOwed(addr, key, player) {
+  const slot = await entryOwnerRecordSlot(addr, key, player);
+  if (slot === null) return 0n;
+  const record = await getStorage(addr, slot);
+  return (record >> 160n) & ((1n << 80n) - 1n);
+}
+
 /** Decode the bucket back to holder addresses through the registry. */
 async function readTraitBucket(addr, lvl, trait, opts = {}) {
   const traitSlot = opts.traitSlot ?? TRAIT_SLOT;
@@ -84,7 +128,7 @@ async function readTraitBucket(addr, lvl, trait, opts = {}) {
   for (let i = 0; i < len; ++i) {
     if (i % 8 === 0) word = await getStorage(addr, base + BigInt(i >> 3));
     const lane = (word >> BigInt(32 * (i & 7))) & LANE_MASK;
-    const owner = await getStorage(addr, ownersData + lane);
+    const owner = (await getStorage(addr, ownersData + lane)) & ((1n << 160n) - 1n);
     out.push(hre.ethers.getAddress("0x" + owner.toString(16).padStart(40, "0")));
   }
   return out;
@@ -96,5 +140,8 @@ export {
   bucketLengthSlot,
   ownerLengthSlot,
   seedTraitBucket,
+  seedTicketQueue,
+  readEntriesOwed,
+  entryOwnerRecordSlot,
   readTraitBucket,
 };

@@ -40,9 +40,9 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
     function pushFoilBuyer(uint24 day, uint24 lvl, address buyer) external {
         // Register the buyer at the cycle level the way the live buy does, carrying the
         // position above the level in the bucketed word.
-        address[] storage owners = lvlEntryOwner[lvl];
+        EntryOwner[] storage owners = lvlEntryOwner[lvl];
         uint256 ownerIdx = owners.length;
-        owners.push(buyer);
+        owners.push(EntryOwner(buyer, 0));
         foilBuyers[day].push(
             ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
         );

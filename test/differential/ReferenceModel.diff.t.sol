@@ -54,11 +54,11 @@ contract ReferenceModelDiffTest is Test {
     // =====================================================================
     // Reference 2 — trait bucket base counts (from JackpotBucketLib NatSpec)
     // =====================================================================
-    // "Base counts [25, 15, 8, 1] are rotated by entropy for fairness" — rotation offset is the
+    // "Base counts [24, 16, 8, 1] are rotated by entropy for fairness" — rotation offset is the
     // bottom 2 bits of entropy. The reference re-derives the rotation independently and also asserts
     // the multiset invariant (output is always a permutation of the base set).
     function _refTraitCounts(uint256 entropy) internal pure returns (uint16[4] memory out) {
-        uint16[4] memory base = [uint16(25), 15, 8, 1];
+        uint16[4] memory base = [uint16(24), 16, 8, 1];
         uint256 offset = entropy & 3;
         for (uint256 i = 0; i < 4; i++) {
             out[i] = base[(i + offset) % 4];
@@ -71,15 +71,15 @@ contract ReferenceModelDiffTest is Test {
         for (uint256 i = 0; i < 4; i++) {
             assertEq(got[i], want[i], "trait bucket rotation diverges from spec");
         }
-        // Independent multiset invariant: the result is always a permutation of {25,15,8,1}.
+        // Independent multiset invariant: the result is always a permutation of {24,16,8,1}.
         uint256 sum;
         uint256 prod = 1;
         for (uint256 i = 0; i < 4; i++) {
             sum += got[i];
             prod *= got[i];
         }
-        assertEq(sum, 25 + 15 + 8 + 1, "trait counts must sum to the base total (permutation)");
-        assertEq(prod, uint256(25) * 15 * 8 * 1, "trait counts must be a permutation of the base set");
+        assertEq(sum, 24 + 16 + 8 + 1, "trait counts must sum to the base total (permutation)");
+        assertEq(prod, uint256(24) * 16 * 8 * 1, "trait counts must be a permutation of the base set");
     }
 
     // =====================================================================
@@ -98,22 +98,25 @@ contract ReferenceModelDiffTest is Test {
         return maxScaleBps;
     }
 
-    /// @notice Drives the production scaler so the observed large-bucket count isolates the
-    ///         piecewise-linear scale multiplier. Compares against the reference scale applied
-    ///         to the largest base bucket (25).
+    /// @notice Compares every scaled bucket against independently rounded base counts,
+    ///         including scales through the production 6.36x ceiling.
     function testFuzz_scale_matchesSpec(uint256 ethPool, uint32 maxScaleBps) public pure {
         ethPool = bound(ethPool, 0, 10_000 ether);
-        maxScaleBps = uint32(bound(maxScaleBps, 20_000, 40_000)); // >= 2x per the spec's monotonic curve
+        maxScaleBps = uint32(bound(maxScaleBps, 20_000, 63_600)); // >= 2x per the spec's monotonic curve
 
-        uint16[4] memory base = [uint16(25), 15, 8, 1];
+        uint16[4] memory base = [uint16(24), 16, 8, 1];
         uint16[4] memory got =
             JackpotBucketLib.scaleTraitBucketCounts(base, ethPool, maxScaleBps);
 
         uint256 scaleBps = _refScaleBps(ethPool, maxScaleBps);
-        // Largest bucket (25) — spec: scaled = base * scaleBps / 10_000, floored at base.
-        uint256 wantLarge = (uint256(25) * scaleBps) / 10_000;
-        if (wantLarge < 25) wantLarge = 25;
-        assertEq(uint256(got[0]), wantLarge, "bucket scaling diverges from documented piecewise-linear spec");
+        // The production scaler mutates `base`; derive expected counts independently.
+        for (uint256 i = 0; i < 3; i++) {
+            uint256 baseCount = (3 - i) * 8;
+            uint256 want = (baseCount * scaleBps) / 10_000;
+            uint256 remainder = want % 8;
+            want = want - remainder + (remainder >= 4 ? 8 : 0);
+            assertEq(uint256(got[i]), want, "bucket scaling diverges from documented piecewise-linear spec");
+        }
 
         // Solo bucket (base 1) is never scaled.
         assertEq(uint256(got[3]), 1, "solo bucket must stay 1 (unscaled) per spec");

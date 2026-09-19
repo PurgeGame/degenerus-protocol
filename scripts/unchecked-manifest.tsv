@@ -17,15 +17,12 @@ NO-OVERFLOW-OP	DegenerusGame.sol	claimAffiliateDgnrs	1	++i	Loop counter bounded 
 NO-OVERFLOW-OP	DegenerusGame.sol	degeneretteResolve	1	++totalResolved	`++totalResolved` and `++successCount` each run at most once per loop iteration, and the loop runs len = players.length times (:1742).
 NO-OVERFLOW-OP	DegenerusGame.sol	degeneretteResolve	2	++i	`++i` under the `if (i == len) break` at :1776 with len = players.length; bounded by the array length.
 NO-OVERFLOW-OP	DegenerusGame.sol	_currentNudgeCost	1	--reversals	`--reversals` runs only inside `while (reversals != 0)` at :2251, so the operand is >= 1 at every decrement.
-SCALE-BOUNDED	DegenerusGame.sol	entriesOwedView	1	return uint32(entriesOwedPacked[_tqReadKey(lvl)][player] >> 8) + uint32(entriesOwedPacked[	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): three uint32 lanes summed in uint32 with no cap or saturation; only the scale note at :2406-2408 (~10.7M tickets at one level). View-only.
+SCALE-BOUNDED	DegenerusGame.sol	entriesOwedView	1	return uint32(_entriesOwed(_tqReadKey(lvl), player) >> 8) + uint32(_entriesOwed(_tqWriteKe	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): three uint32 lanes summed in uint32 with no cap or saturation; only the scale note at :2406-2408 (~10.7M tickets at one level). View-only.
 BOUNDED	DegenerusGame.sol	getWinnings	1	return stored - 1	`stored <= 1` returns early at :2778, so `stored - 1` runs only for stored >= 2.
 NO-OVERFLOW-OP	DegenerusGame.sol	afkingSnapshot	1	++i	Loop counter bounded by `i < n` with n = players.length (:2808); array length bound.
 NO-OVERFLOW-OP	DegenerusGame.sol	sampleTraitEntriesAtLevel	1	++i	Loop counter bounded by `i < take` where take = min(len,4) at :2866; at most 4 iterations.
-NO-OVERFLOW-OP	DegenerusGame.sol	sampleFarFutureTickets	1	++found	`++found` is gated by `found < 4` in the loop condition at :2891 and by the `tmp[4]` fixed array; max value 4 in a uint8.
-NO-OVERFLOW-OP	DegenerusGame.sol	sampleFarFutureTickets	2	++s	`++s` bounded by the `s < 10` loop condition at :2891; max 10 in a uint8.
-NO-OVERFLOW-OP	DegenerusGame.sol	sampleFarFutureTickets	3	++i	`++i` bounded by `i < found` with found <= 4 (:2912).
 NO-OVERFLOW-OP	DegenerusGame.sol	getEntries	1	++i	`++i` bounded by `i < end`, end = min(offset+limit, total) computed in checked math at :2946-2947 and total = a.length.
-SCALE-BOUNDED	DegenerusGame.sol	getPlayerPurchases	1	tickets = uint32(entriesOwedPacked[_tqReadKey(lvl)][player] >> 8) + uint32(entriesOwedPack	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): same uint32 three-lane sum as entriesOwedView; each lane is uint32-bounded, the sum has no cap or guard. View-only accessor.
+SCALE-BOUNDED	DegenerusGame.sol	getPlayerPurchases	1	tickets = uint32(_entriesOwed(_tqReadKey(lvl), player) >> 8) + uint32(_entriesOwed(_tqWrit	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): same uint32 three-lane sum as entriesOwedView; each lane is uint32-bounded, the sum has no cap or guard. View-only accessor.
 WRAP-INTENDED	modules/DegenerusGameAdvanceModule.sol	advanceGame	1	cw += totalFlipReversals	cw is the raw 256-bit VRF word; adding uint64 totalFlipReversals (storage :487) is an entropy mix read only by lootbox word derivation, so a 2^256 wrap is uniform-preserving.
 NO-OVERFLOW-OP	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots	1	total = (seed % 4) + ((seed >> 16) % 4) + ((seed >> 32) % 4) + ((seed >> 48) % 4) + ((seed	Five terms, each a `% 4` result <= 3, summed into uint256: max total 15; the shifts are on an already-full-width hash so nothing leaves range.
 NO-OVERFLOW-OP	modules/DegenerusGameAdvanceModule.sol	requestLootboxRng	1	++t	Loop counter on uint24 t bounded by end = level + 5 (:1393); the increment runs only while t <= end, so it cannot approach 2^24.
@@ -79,7 +76,7 @@ NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_computeBucketCounts	1	++a
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_computeBucketCounts	2	++i	Loop counter of `for (uint8 i; i < 4; )` at :1149; bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_computeBucketCounts	3	--activeCount	Guard at :1177 requires the excluded bit set in activeMask, which is only set at :1161 alongside ++activeCount, so activeCount >= 1 here; no underflow.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_computeBucketCounts	4	++i	Loop counter of `for (uint8 i; i < 4; )` at :1191; bounded by the literal 4.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_computeBucketCounts	5	--remainder	Decrement sits inside `while (remainder != 0)` at :1201, so remainder >= 1 at every execution; no underflow.
+BOUNDED	modules/DegenerusGameJackpotModule.sol	_computeBucketCounts	5	remainder -= group	Caller rounds maxWinners to a multiple of 8 when >=8; group is 8 then, otherwise 1. baseCount and remainder are group multiples; while remainder != 0 therefore implies remainder >= group.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_pickSoloQuadrant	1	++goldCount	uint8 incremented at most once per iteration of the 4-iteration loop at :1234, so goldCount <= 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_pickSoloQuadrant	2	++i	Loop counter of `for (uint8 i; i < 4; )` at :1234; bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_allGold	1	++i	Loop counter of `for (uint8 i; i < 4; )` at :1260; bounded by the literal 4.
@@ -96,15 +93,12 @@ NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	5	++idx	Lo
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_randTraitTicket	1	++i	Loop counter of `for (uint256 i; i < numWinners; )` at :1954 with numWinners a uint8 parameter (<= 255).
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	1	++t	Loop counter of `for (uint8 t; t < 4; )` at :2063; bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	2	++i	Loop counter of `for (uint256 i; i < end; )` at :2119 (comp-quadrant skip arm) with end <= DAILY_COIN_MAX_WINNERS = 50 (:331).
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	3	++i	Same loop at :2119 (empty-bucket continue arm); end <= DAILY_COIN_MAX_WINNERS = 50 (:331).
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	4	++found	found indexes arrays of length cap; non-comp end == cap, comp mode skips 12-13 i%4==compQuadrant pulls so non-comp pulls equal cap = 37+(q>>1) exactly (:2105).
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	5	++i	Tail increment of `for (uint256 i; i < end; )` at :2119; end <= DAILY_COIN_MAX_WINNERS = 50 (:331).
+NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	3	++found	found indexes arrays of length cap; non-comp end == cap, comp mode skips 12-13 i%4==compQuadrant pulls so non-comp pulls equal cap = 37+(q>>1) exactly (:2105).
+NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	4	++i	Tail increment of `for (uint256 i; i < end; )` at :2119; end <= DAILY_COIN_MAX_WINNERS = 50 (:331).
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_payCrapsComps	1	++found	found is incremented only while the loop condition `found < target` holds (:2201) with target <= CRAPS_COMP_MAX_SLOTS (:2198), the length of the winners/levels/ticketIdxs arrays.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_payCrapsComps	2	i += 4	i starts at quadrant <= 3 (masked &3 at :2076) and the loop condition `i < DAILY_COIN_MAX_WINNERS` (50, :331) at :2201 caps it, so i <= 53.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_payCrapsComps	3	++s	Loop counter of `for (uint256 s; s < found; )` at :2235 with found <= CRAPS_COMP_MAX_SLOTS.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardFarFutureCoinJackpot	1	++found	uint8 incremented at most once per iteration of `for (uint8 s; s < FAR_FUTURE_FLIP_SAMPLES; )` at :2277, so found <= 10 = the winners/winnerLevels array length.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardFarFutureCoinJackpot	2	++s	Loop counter of `for (uint8 s; s < FAR_FUTURE_FLIP_SAMPLES; )` at :2277; FAR_FUTURE_FLIP_SAMPLES = 10.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardFarFutureCoinJackpot	3	++i	Loop counter of `for (uint256 i; i < payCount; )` at :2313 with payCount <= found <= 10.
+NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardFarFutureCoinJackpot	1	++i	Loop counter satisfies i < payCount <= FAR_FUTURE_FLIP_SAMPLES = 8; bounded by one packed word.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	runBafJackpot	1	++i	Loop counter of `for (uint256 i; i < winnersLen; )` at :2568 with winnersLen = winnersArr.length returned by jackpots.runBafJackpot; array-length bounded.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_jackpotTicketRoll	1	whole += 1	whole = scaledWholeTickets / QTY_SCALE at :2763 with scaledWholeTickets saturated to uint32.max at :2760 and QTY_SCALE = 100 (storage :190), so whole <= 42,949,672 and +1 stays in uint32.
 BOUNDED	modules/DegenerusGameLootboxModule.sol	_mergeBoxOrder	1	priorNominal = (sHeld + LB_MED_MULTIPLE * mHeld + LB_LARGE_MULTIPLE * lHeld) * price + cHe	Tier counts <= 255 (LB_COUNT_MASK, Storage:1455), order total <= MAX_BOXES_PER_ORDER=100 (:469), price <= 0.24e18 (PriceLookupLib:44-63), customWei <= 2^48*1e12; products <= ~2.8e28.
@@ -176,3 +170,6 @@ BOUNDED	modules/DegenerusGameFoilPackModule.sol	_runRound	2	seatOwners |= (st.ow
 BOUNDED	modules/DegenerusGameFoilPackModule.sol	_runRound	3	owed -= owed > 4 ? 4 : owed	Subtrahend is min(owed, 4) so the difference is never negative.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	4	++used	Write-unit counter: at most 8 seat exits plus the round's charged writes, reserved by the caller before the round.
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_runRound	5	++k	Compaction index k <= j < seated <= 8.
+NO-OVERFLOW-OP	DegenerusGame.sol	sampleFarFutureTickets	1	++attempt	Empty-level re-roll; the outer walk runs while attempt < 8, so attempt never exceeds 8.
+NO-OVERFLOW-OP	DegenerusGame.sol	sampleFarFutureTickets	2	++i	The lane loop runs while i < take <= 4; maximum i is 4.
+NO-OVERFLOW-OP	DegenerusGame.sol	sampleFarFutureTickets	3	++attempt	Nonempty-level step of the same walk; attempt < 8 bounds it.

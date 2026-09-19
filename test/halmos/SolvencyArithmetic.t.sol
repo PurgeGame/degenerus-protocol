@@ -76,8 +76,8 @@ contract SolvencyArithmeticTest is Test {
     }
 
     // NOTE: there is no winner-total cap function to prove. The total is bounded
-    //       structurally by the bucket geometry: base [25,15,8,1] scaled by at most
-    //       DAILY_JACKPOT_SCALE_MAX_BPS (6.36x) gives 159+95+50+1 = 305, with the solo
+    //       structurally by the bucket geometry: base [24,16,8,1] scaled by at most
+    //       DAILY_JACKPOT_SCALE_MAX_BPS (6.36x) gives 152+104+48+1 = 305, with the solo
     //       bucket never scaled. The gas suite pins that ceiling directly.
 
     // -------------------------------------------------------------------------

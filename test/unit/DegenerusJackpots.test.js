@@ -680,42 +680,14 @@ describe("DegenerusJackpots", function () {
       return hre.ethers.toBeHex(dataStart + BigInt(index), 32);
     }
 
-    /**
-     * Compute the storage slot for ticketQueue[key].length
-     * ticketQueue is at slot 13. mapping(uint24 => address[]).
-     */
-    function ticketQueueSlot(key) {
-      return hre.ethers.keccak256(
-        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [key, 12])
-      );
-    }
-
-    function ticketQueueDataSlot(lengthSlot, index) {
-      const dataStart = BigInt(hre.ethers.keccak256(lengthSlot));
-      return hre.ethers.toBeHex(dataStart + BigInt(index), 32);
-    }
-
-    /** Write an address array into lvlTraitEntry[level][trait] */
+    /** Seed trait lanes and the owners they reference. */
     async function setTraitBurnTicket(gameAddr, level, trait, addresses) {
       await bucketSeed.seedTraitBucket(gameAddr, level, trait, addresses);
     }
 
-    /** Write an address array into ticketQueue[key] (for FF tickets) */
+    /** Seed packed owner-position lanes for a far-future key. */
     async function setTicketQueue(gameAddr, key, addresses) {
-      const lenSlot = ticketQueueSlot(key);
-      await hre.ethers.provider.send("hardhat_setStorageAt", [
-        gameAddr,
-        lenSlot,
-        hre.ethers.toBeHex(addresses.length, 32),
-      ]);
-      for (let i = 0; i < addresses.length; i++) {
-        const dataSlot = ticketQueueDataSlot(lenSlot, i);
-        await hre.ethers.provider.send("hardhat_setStorageAt", [
-          gameAddr,
-          dataSlot,
-          hre.ethers.toBeHex(addresses[i], 32),
-        ]);
-      }
+      await bucketSeed.seedTicketQueue(gameAddr, key, addresses);
     }
 
     /** Set game level (slot 0, offset 18 = 3 bytes at byte 18) */

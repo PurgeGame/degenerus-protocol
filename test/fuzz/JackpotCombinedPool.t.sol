@@ -16,7 +16,7 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
     /// @dev Push `count` addresses into ticketQueue[key] as address(uint160(i+1))
     function setTicketQueue(uint24 key, uint256 count) external {
         for (uint256 i = 0; i < count; i++) {
-            ticketQueue[key].push(address(uint160(i + 1)));
+            _tqAppend(key, uint32(_registerEntryOwner(address(uint160(i + 1)), key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));
         }
     }
 
@@ -46,7 +46,7 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
     }
 
     function getQueueEntry(uint24 key, uint256 idx) external view returns (address) {
-        return ticketQueue[key][idx];
+        return _tqOwnerAt(ticketQueue[key], key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
     }
 
     // -- Combined pool selection (core under test) --
@@ -62,17 +62,17 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
     function _selectWinner(uint24 candidate, uint256 entropy)
         internal view returns (address winner, bool found)
     {
-        address[] storage readQueue = ticketQueue[_tqReadKey(candidate)];
+        uint256[] storage readQueue = ticketQueue[_tqReadKey(candidate)];
         uint256 readLen = readQueue.length;
-        address[] storage ffQueue = ticketQueue[_tqFarFutureKey(candidate)];
+        uint256[] storage ffQueue = ticketQueue[_tqFarFutureKey(candidate)];
         uint256 ffLen = ffQueue.length;
         uint256 combinedLen = readLen + ffLen;
 
         if (combinedLen != 0) {
             uint256 idx = (entropy >> 32) % combinedLen;
             winner = idx < readLen
-                ? readQueue[idx]
-                : ffQueue[idx - readLen];
+                ? _tqOwnerAt(readQueue, candidate, idx)
+                : _tqOwnerAt(ffQueue, candidate, idx - readLen);
             found = (winner != address(0));
         }
     }

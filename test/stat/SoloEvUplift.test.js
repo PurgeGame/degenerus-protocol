@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Phase 261 STAT-06 — per-surface 100K-sample EV-uplift Monte Carlo.
 // D-04: per-surface assertion model (final-day / daily / purchase, three independent sims).
-// D-05: base bucket counts [25, 15, 8, 1]; ethPool below JACKPOT_SCALE_MIN_WEI so
-//       bucketCountsForPool returns base unchanged. No pool-scaling confound.
+// D-05: base bucket counts [24, 16, 8, 1]; ethPool below JACKPOT_SCALE_MIN_WEI so
+//       bucketCountsForPool returns the base counts unchanged. No pool-scaling confound.
 // D-06: ±5% relative tolerance (5σ safety at 100K samples).
 // D-07: owns-the-gold-quadrant-ticket model — for each draw conditioned on >=1 gold,
 //       compute (with-priority EV) = 1/goldCount × solo-payout-per-ticket
@@ -96,7 +96,7 @@ function jsWeightedColorBucket(rnd) {
 // Trait byte color extraction matches contracts/DegenerusTraitUtils.sol.
 const COLOR_PROB = [0.25000, 0.25000, 0.25000, 0.12500, 0.06250, 0.03125, 0.02344, 0.00781];
 
-// Surface BPS share vectors at base bucket counts [25, 15, 8, 1].
+// Surface BPS share vectors at base bucket counts [24, 16, 8, 1].
 // final-day source: FINAL_DAY_SHARES_PACKED (DegenerusGameJackpotModule.sol L150-154).
 // daily / purchase source: DAILY_JACKPOT_SHARES_PACKED (DegenerusGameJackpotModule.sol L158-159).
 const SURFACES = {
@@ -104,7 +104,7 @@ const SURFACES = {
   daily:    { name: "daily",     shareBps: [2000, 2000, 2000, 2000], analyticalUplift: 3.21, seed: 0xC010_0062 },
   purchase: { name: "purchase",  shareBps: [2000, 2000, 2000, 2000], analyticalUplift: 3.21, seed: 0xC010_0063 },
 };
-const BASE_COUNTS = [25, 15, 8, 1];
+const BASE_COUNTS = [24, 16, 8, 1];
 const SAMPLES = 100_000;
 const TOLERANCE_REL = 0.05; // ±5% relative per D-06
 
@@ -127,7 +127,7 @@ describe("STAT-06 — per-surface EV uplift over 100K conditioned-on->=1-gold sa
   this.timeout(600000); // 10 min budget per surface — three back-to-back 100K MCs
 
   for (const [key, surf] of Object.entries(SURFACES)) {
-    it(`${surf.name} surface measured uplift within ±5% of analytical ${surf.analyticalUplift}× at base counts [25,15,8,1]`, async function () {
+    it(`${surf.name} surface measured uplift within ±5% of analytical ${surf.analyticalUplift}× at base counts [24,16,8,1]`, async function () {
       const { tester } = await loadFixture(deployTester);
       const rng = makeRng(surf.seed);
 

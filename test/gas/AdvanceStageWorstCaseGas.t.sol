@@ -57,7 +57,7 @@ contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
 ///      The seeder pushes N players into the read-slot ticketQueue with `owed` traits each and
 ///      sets the lootbox RNG entropy word the batch reads at index 1. A worst-case batch mints up
 ///      to WRITES_BUDGET_SAFE write-units of cold lvlTraitEntry SSTOREs in one call.
-contract TicketBatchStageHarness is DegenerusGameMintModule {
+contract TicketBatchStageHarness is DegenerusGameMintModule, BucketSeed {
     /// @dev Shared seeding: `n` distinct players each owing `owedEach` traits into the current
     ///      read-slot queue for `lvl`, plus a non-zero lootbox entropy word at index 0 (the word
     ///      the batch reads via lootboxRngWordByIndex[ _lrRead(INDEX) - 1 ]).
@@ -66,14 +66,15 @@ contract TicketBatchStageHarness is DegenerusGameMintModule {
         lootboxRngWordByIndex[0] = uint256(keccak256("367_ticketbatch_entropy")) | 1;
 
         uint24 rk = _tqReadKey(lvl);
-        address[] storage queue = ticketQueue[rk];
-        mapping(address => uint80) storage owedMap = entriesOwedPacked[rk];
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(address(1));
+        uint256[] storage queue = ticketQueue[rk];
+
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            queue.push(p);
+            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
             // packed layout: owed in bits [8:], remainder in bits [0:8]. Set owed=owedEach, rem=0.
-            owedMap[p] = _registerEntryOwner(p, lvl) | (uint80(owedEach) << 8);
+            _seedOwedAt(rk, p, ownerBits | (uint80(owedEach) << 8));
         }
     }
 
@@ -130,7 +131,7 @@ contract AdvanceStageWorstCaseGas is Test {
     /// @dev The real mainnet block gas limit (foundry inflates block_gas_limit to 30e9 for the harness).
     uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
 
-    /// @dev Pool well above the 200-ETH max-scale floor so the bucket geometry pins to 159/95/50/1 = 305.
+    /// @dev Pool well above the 200-ETH max-scale floor so the bucket geometry pins to 152/104/48/1 = 305.
     uint256 internal constant POOL_WEI = 1000 ether;
     uint24 internal constant TARGET_LVL = 110;
 
@@ -165,7 +166,7 @@ contract AdvanceStageWorstCaseGas is Test {
     ///      every bucket's winner selection resolves to real (non-zero) addresses (never address(0)).
     function _seedAllBuckets(uint8[4] memory traitIds) internal {
         for (uint8 q; q < 4; ++q) {
-            // disjoint address base per bucket; 260 > MAX_BUCKET_WINNERS(250) so no clipping artifact.
+            // disjoint address base per bucket; 260 > MAX_BUCKET_WINNERS(248) so no clipping artifact.
             jp.seedBucket(TARGET_LVL, traitIds[q], 260, uint160(uint256(0x1000) + uint256(q) * 0x10000));
         }
     }
@@ -175,7 +176,7 @@ contract AdvanceStageWorstCaseGas is Test {
     // =========================================================================
 
     /// @notice MEASURED worst-case for the daily-ETH jackpot distribution at the DAILY_ETH_MAX_WINNERS=305
-    ///         hard cap (buckets 159/95/50/1 at max scale). This is the IDENTICAL `_processDailyEth` loop
+    ///         hard cap (buckets 152/104/48/1 at max scale). This is the IDENTICAL `_processDailyEth` loop
     ///         that stages 8 (purchase-phase payDailyJackpot), 11 (jackpot-phase fresh daily) and 12
     ///         (game-over runTerminalJackpot) all execute. Drives the live external entry with the
     ///         msg.sender==GAME guard satisfied via prank and brackets the call with gasleft().

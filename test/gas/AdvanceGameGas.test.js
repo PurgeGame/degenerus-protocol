@@ -1061,7 +1061,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
   // 16. Worst-Case Gas Benchmark (Post-Split)
   //
   // Theoretical worst case for _processDailyEth (daily two-call split):
-  //   Pool >= 200 ETH -> max scale 6.36x -> bucket counts 159/95/50/1 = 305
+  //   Pool >= 200 ETH -> max scale 6.36x -> bucket counts 152/104/48/1 = 305
   //   All 305 winners are unique addresses with autorebuy enabled.
   //   Each winner: _randTraitTicket (SSTORE) + _payNormalBucket/_handleSoloBucketWinner
   //   + _processAutoRebuy (_calcAutoRebuy + _queueEntries + pool writes) + event.
@@ -1202,7 +1202,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       // Step 2: Fund pool — 5 buyers * 20 bundles * 2.4 ETH = 240 ETH total
       // 30% to nextPool = ~72 ETH; 70% to futurePool = ~168 ETH.
-      // After consolidation (keep roll ~47.5% of future to current + memNext):
+      // After consolidation (keep roll ~35% of future to current + memNext):
       // currentPool ~ 72 + 80 = ~152 ETH. At 152 ETH: ~3.9x scale -> ~98/59/31/1 = 189 winners.
       await fundPoolHeavy(game, players.slice(0, 5), 20);
 

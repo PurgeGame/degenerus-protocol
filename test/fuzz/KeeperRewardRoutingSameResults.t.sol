@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -549,44 +551,20 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     // ---- far-future ticket seeding (ticketQueue slot 12 / entriesOwedPacked slot 13) ----
 
-    function _ownedPackedSlot(uint24 key, address who) internal pure returns (bytes32) {
-        bytes32 inner = keccak256(abi.encode(uint256(key), TICKETS_OWED_PACKED_SLOT));
-        return keccak256(abi.encode(who, uint256(inner)));
-    }
-
     function _queueBaseSlot(uint24 key) internal pure returns (bytes32) {
         return keccak256(abi.encode(uint256(key), TICKET_QUEUE_SLOT));
     }
 
     /// @dev Register `who` in lvlEntryOwner[lvl] (slot 67, append-only) the way every sink does at
     ///      queue time, returning the owner bits the owed word must carry (position + 1 << 48).
-    function _seedOwnerBits(uint24 lvl, address who) internal returns (uint256) {
-        bytes32 lenSlot = keccak256(abi.encode(uint256(lvl), uint256(67)));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        bytes32 elemSlot = bytes32(uint256(keccak256(abi.encode(lenSlot))) + len);
-        vm.store(address(game), elemSlot, bytes32(uint256(uint160(who))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-        return (len + 1) << 48;
-    }
-
     /// @dev Seed `whole` far-future tickets for `who` at level L (packed: owed=whole*4 entries << 8 | rem).
     ///      Appends `who` to ticketQueue[ffk(L)].
     function _seedFarTickets(address who, uint24 L, uint32 whole) internal {
-        uint24 key = ffk.ffKey(L);
-        uint32 entries = whole * 4;
-        uint256 packed = (uint256(entries) << 8) | _seedOwnerBits(L, who); // rem = 0
-        vm.store(address(game), _ownedPackedSlot(key, who), bytes32(packed));
-
-        bytes32 lenSlot = _queueBaseSlot(key);
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        bytes32 elemSlot = bytes32(uint256(dataBase) + len);
-        vm.store(address(game), elemSlot, bytes32(uint256(uint160(who))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
+        TicketQueueStorage.seed(address(game), ffk.ffKey(L), L, who, uint80(whole) * 4 << 8);
     }
 
     function _owedPackedOf(uint24 L, address who) internal view returns (uint40) {
-        return uint40(uint256(vm.load(address(game), _ownedPackedSlot(ffk.ffKey(L), who))));
+        return uint40(uint256(TicketQueueStorage.owed(address(game), ffk.ffKey(L), who)));
     }
 
     function _ffQueueLen(uint24 L) internal view returns (uint256) {
@@ -612,16 +590,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     /// @dev Seed `whole` current-level tickets for `who` at the read key (packed: owed=whole*4 entries
     ///      << 8 | rem) and append `who` to ticketQueue[readKey]. Mirrors the far-future seed shape.
     function _seedReadSlotTickets(uint24 readKey, address who, uint32 whole) internal {
-        uint32 entries = whole * 4;
-        uint256 packed = (uint256(entries) << 8) | _seedOwnerBits(readKey & ~TICKET_SLOT_BIT, who);
-        vm.store(address(game), _ownedPackedSlot(readKey, who), bytes32(packed));
-
-        bytes32 lenSlot = _queueBaseSlot(readKey);
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        bytes32 elemSlot = bytes32(uint256(dataBase) + len);
-        vm.store(address(game), elemSlot, bytes32(uint256(uint160(who))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
+        TicketQueueStorage.seed(address(game), readKey, readKey & ~TICKET_SLOT_BIT, who, uint80(whole) * 4 << 8);
     }
 
     /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 24 at c4d48008), preserving every other

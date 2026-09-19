@@ -81,6 +81,10 @@ contract V61SolvencyAfpay is DeployProtocol {
     ///         the raw balancesPacked slot for each tracked address (the de-duplicated UNION of both handlers'
     ///         tracked sets) and sums both halves; asserts the total equals claimablePool. A dropped paired
     ///         debit on EITHER surface (or a double-counted half) would break this.
+    function invariant_queueViewsMatchPositionAccounting() public view {
+        assertEq(solvencyHandler.ghost_ticketViewViolations(), 0, "queue view disagrees with position record");
+    }
+
     function invariant_v61PoolEqualsSumOfHalves() public view {
         address[] memory addrs = _unionTrackedAddrs();
         uint256 sum;

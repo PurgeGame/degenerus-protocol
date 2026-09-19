@@ -46,6 +46,8 @@
 //     NOT raw `lvl`. Storage-layout slot index pinned to 13 (BLK-2 lock).
 //   TST-MINTCLN-05 — satisfied by this JSDoc header (no separate test case).
 
+import { readEntriesOwed, entryOwnerRecordSlot } from "../helpers/bucketSeed.js";
+
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -541,36 +543,21 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
     }
 
     it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8) | owner<<48) 80-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
-      try {
-        const forgeOut = execSync(
-          "forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout 2>/dev/null"
-        ).toString();
-        let slotIdx = null;
-        for (const line of forgeOut.split("\n")) {
-          if (!line.includes("entriesOwedPacked")) continue;
-          const cells = line.split("|").map((c) => c.trim());
-          for (let k = 0; k < cells.length; k++) {
-            if (cells[k] === "entriesOwedPacked") {
-              if (k + 2 < cells.length) {
-                const candidate = cells[k + 2];
-                if (/^[0-9]+$/.test(candidate)) {
-                  slotIdx = candidate;
-                }
-              }
-              break;
-            }
-          }
-          if (slotIdx) break;
-        }
-        expect(slotIdx).to.equal(
-          "13",
-          "forge inspect must report entriesOwedPacked at slot 13 (BLK-2 lock)"
-        );
-      } catch (err) {
-        console.log(
-          `[TST-MINTCLN-04 storage-layout gate SKIPPED — forge not on PATH or output unparseable: ${err.message}]`
-        );
-      }
+      const layout = JSON.parse(execSync(
+        "forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout --json",
+        { env: { ...process.env, FOUNDRY_SKIP: '["test/**","script/**"]' } }
+      ).toString());
+      const locator = layout.storage.find((entry) => entry.label === "entryOwnerPosition");
+      const owners = layout.storage.find((entry) => entry.label === "lvlEntryOwner");
+      expect(locator.slot).to.equal("13");
+      expect(owners.slot).to.equal("67");
+      expect(layout.types[locator.type].label).to.equal("mapping(uint24 => mapping(address => uint32))");
+      const ownerArray = layout.types[layout.types[owners.type].value];
+      const record = layout.types[ownerArray.base];
+      expect(record.numberOfBytes).to.equal("32");
+      expect(record.members.map(({ label, slot, offset }) => ({ label, slot, offset }))).to.deep.equal([
+        { label: "owner", slot: "0", offset: 0 }, { label: "owed", slot: "0", offset: 20 }
+      ]);
 
       const { fixture, gameAddr, ticketWriteSlot } = await setupQueuedState();
       const { game, alice } = fixture;
@@ -588,14 +575,8 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       const abi = hre.ethers.AbiCoder.defaultAbiCoder();
       for (const { lvl, path } of pairs) {
         const rk = computeRk(lvl, path, ticketWriteSlot);
-        const parentSlot = hre.ethers.keccak256(
-          abi.encode(["uint256", "uint256"], [rk, TICKETS_OWED_PACKED_BASE_SLOT])
-        );
-        const slot = hre.ethers.keccak256(
-          abi.encode(["address", "uint256"], [alice.address, parentSlot])
-        );
-        const slotBytes = await hre.ethers.provider.getStorage(gameAddr, slot);
-        const packed = BigInt(slotBytes);
+        const slot = await entryOwnerRecordSlot(gameAddr, rk, alice.address);
+        const packed = await readEntriesOwed(gameAddr, rk, alice.address);
         const rem = Number(packed & 0xFFn);
         const owed = Number((packed >> 8n) & 0xFFFFFFFFn);
 

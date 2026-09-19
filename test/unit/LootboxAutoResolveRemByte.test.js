@@ -90,7 +90,7 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
       //       (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
       // The owner-registry bits above bit 48 ride along untouched.
       expect(
-        /entriesOwedPacked\[wk\]\[buyer\]\s*=\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(body),
+        /_setEntryOwed\(targetLevel,\s*uint32\(packed\s*>>\s*OWNER_IDX_SHIFT\),\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(body),
         "_queueEntries must pack `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` with rem carried from existing slot"
       ).to.equal(true);
 

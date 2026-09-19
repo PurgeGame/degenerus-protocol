@@ -54,35 +54,36 @@ library JackpotBucketLib {
     // -------------------------------------------------------------------------
 
     /// @dev Computes base winner counts for each of the 4 trait buckets.
-    ///      Base counts [25, 15, 8, 1] are rotated by entropy for fairness.
+    ///      Base counts [24, 16, 8, 1] rotate by entropy; scaleTraitBucketCounts rounds
+    ///      scaled non-solo payouts to full groups of eight.
     /// @param entropy Used for rotation offset (bottom 2 bits).
     /// @return counts Winner counts for each bucket [bucket0, bucket1, bucket2, bucket3].
     function traitBucketCounts(uint256 entropy) internal pure returns (uint16[4] memory counts) {
-        // Base counts [25,15,8,1] (large/mid/small/solo) rotated by entropy for fairness across
+        // Base counts [24,16,8,1] (large/mid/small/solo) rotated by entropy for fairness across
         // traits: counts[i] = base[(i + offset) & 3]. Unrolled to a 4-way branch on the offset to
         // skip allocating the base[4] scratch array. The solo bucket (1) lands on soloBucketIndex,
         // which bucketShares treats as the remainder bucket; its ETH share is set by the caller's
-        // shareBps table. Rotations MUST stay [25,15,8,1]/[15,8,1,25]/[8,1,25,15]/[1,25,15,8].
+        // shareBps table. Rotations MUST stay [24,16,8,1]/[16,8,1,24]/[8,1,24,16]/[1,24,16,8].
         uint8 offset = uint8(entropy & 3);
         if (offset == 0) {
-            counts[0] = 25;
-            counts[1] = 15;
+            counts[0] = 24;
+            counts[1] = 16;
             counts[2] = 8;
             counts[3] = 1;
         } else if (offset == 1) {
-            counts[0] = 15;
+            counts[0] = 16;
             counts[1] = 8;
             counts[2] = 1;
-            counts[3] = 25;
+            counts[3] = 24;
         } else if (offset == 2) {
             counts[0] = 8;
             counts[1] = 1;
-            counts[2] = 25;
-            counts[3] = 15;
+            counts[2] = 24;
+            counts[3] = 16;
         } else {
             counts[0] = 1;
-            counts[1] = 25;
-            counts[2] = 15;
+            counts[1] = 24;
+            counts[2] = 16;
             counts[3] = 8;
         }
     }
@@ -90,7 +91,8 @@ library JackpotBucketLib {
     /// @dev Scales base bucket counts by jackpot size (excluding solo).
     ///      1x under 10 ETH, linearly to 2x by 50 ETH, linearly to maxScaleBps by 200 ETH, then flat.
     ///      The solo bucket is never scaled, so the total is bounded by the base geometry times
-    ///      maxScaleBps: at the production 6.36x ceiling [25,15,8,1] -> [159,95,50,1] = 305 winners.
+    ///      maxScaleBps: round each non-solo count to the nearest eight (ties round up).
+    ///      Base payouts are [24,16,8,1]; the 6.36x ceiling pays [152,104,48,1] = 305.
     function scaleTraitBucketCounts(
         uint16[4] memory baseCounts,
         uint256 ethPool,
@@ -98,10 +100,10 @@ library JackpotBucketLib {
     ) internal pure returns (uint16[4] memory) {
         // Mutate + return baseCounts directly — a named return would alloc a dead uint16[4]
         // that line-1 immediately aliases to baseCounts.
-        if (ethPool < JACKPOT_SCALE_MIN_WEI) return baseCounts;
-
         uint256 scaleBps;
-        if (ethPool < JACKPOT_SCALE_FIRST_WEI) {
+        if (ethPool <= JACKPOT_SCALE_MIN_WEI) {
+            scaleBps = JACKPOT_SCALE_BASE_BPS;
+        } else if (ethPool < JACKPOT_SCALE_FIRST_WEI) {
             uint256 range = JACKPOT_SCALE_FIRST_WEI - JACKPOT_SCALE_MIN_WEI;
             uint256 progress = ethPool - JACKPOT_SCALE_MIN_WEI;
             scaleBps = JACKPOT_SCALE_BASE_BPS + (progress * (JACKPOT_SCALE_FIRST_BPS - JACKPOT_SCALE_BASE_BPS)) / range;
@@ -113,18 +115,15 @@ library JackpotBucketLib {
             scaleBps = maxScaleBps;
         }
 
-        if (scaleBps != JACKPOT_SCALE_BASE_BPS) {
-            for (uint8 i; i < 4; ) {
-                uint16 baseCount = baseCounts[i];
-                if (baseCount > 1) {
-                    uint256 scaled = (uint256(baseCount) * scaleBps) / 10_000;
-                    if (scaled < baseCount) scaled = baseCount;
-                    if (scaled > type(uint16).max) scaled = type(uint16).max;
-                    baseCounts[i] = uint16(scaled);
-                }
-                unchecked {
-                    ++i;
-                }
+        for (uint8 i; i < 4; ) {
+            uint16 baseCount = baseCounts[i];
+            if (baseCount > 1) {
+                uint256 scaled = ((uint256(baseCount) * scaleBps + 40_000) / 80_000) * 8;
+                if (scaled > 65_528) scaled = 65_528; // largest uint16 multiple of eight
+                baseCounts[i] = uint16(scaled);
+            }
+            unchecked {
+                ++i;
             }
         }
 

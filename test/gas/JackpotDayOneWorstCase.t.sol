@@ -13,13 +13,13 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 /// @notice The early-bird day (`jackpotCounter == 0`) carries TWO winner-capped legs, each from its
 ///         own advance tx:
 ///           - STAGE_JACKPOT_DAILY_STARTED (10): `_processDailyEth` at the DAILY_ETH_MAX_WINNERS = 305
-///             cap (buckets 159/95/50/1 once `dailyEthBudget >= JACKPOT_SCALE_SECOND_WEI = 200 ETH`),
+///             cap (buckets 152/104/48/1 once `dailyEthBudget >= JACKPOT_SCALE_SECOND_WEI = 200 ETH`),
 ///             which also prices the early-bird budget (3% of futurePrizePool, moved future -> next)
 ///             and latches its entry count; then
 ///           - STAGE_JACKPOT_EARLY_BIRD_TICKETS (14): `payEarlyBirdTickets` at the
-///             TICKET_JACKPOT_MAX_WINNERS = 100 cap (25 per bonus quadrant of lvl+1, once the 3%
-///             covers 100 tickets at priceForLevel(lvl+1)).
-///         The other two 100-winner ticket legs of the same daily likewise run from their own stages
+///             EARLY_BIRD_MAX_WINNERS = 128 cap (32 per bonus quadrant of lvl+1, once the 3%
+///             covers 128 tickets at priceForLevel(lvl+1)).
+///         The other two 96-winner ticket legs of the same daily likewise run from their own stages
 ///         (payDailyJackpotCoinAndTickets, payCarryoverTickets). This suite measures BOTH txs on the
 ///         REAL advanceGame bytecode at every cap, with every winner a distinct address holding no
 ///         claimable / no queued entries (cold SSTOREs), on the worst ETH-leg branch (all-gold board
@@ -79,8 +79,8 @@ contract DayOneSeeder is DegenerusGame, BucketSeed {
         // ETH budget = curPool * dailyBps(6..14%) * 80% must reach the 200 ETH max-scale floor at the
         // 6% floor: 6000 * 0.06 * 0.8 = 288 ETH >= 200 -> 305 winners on every word.
         currentPrizePool = uint128(6000 ether);
-        // Early-bird budget = 3% of futurePrizePool; 100 tickets at priceForLevel(lvl+1) = 0.04 ETH
-        // need >= 133.4 ETH of future pool even after a golden grand takes its 25% first.
+        // Early-bird budget = 3% of futurePrizePool. This pool covers the 128-winner cap
+        // even after a golden grand takes its 25% first.
         _setPrizePools(uint128(50 ether), uint128(1000 ether));
 
         for (uint8 q; q < 4; ++q) {
@@ -124,12 +124,12 @@ abstract contract DayOneFixture is DeployProtocol {
     uint8 internal constant STAGE_JACKPOT_DAILY_STARTED = 10;
     uint8 internal constant STAGE_JACKPOT_EARLY_BIRD_TICKETS = 14;
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
-    uint16 internal constant TICKET_JACKPOT_MAX_WINNERS = 100;
+    uint16 internal constant EARLY_BIRD_MAX_WINNERS = 128;
 
     uint24 internal constant LVL = 110;
     uint160 internal constant BASE = uint160(0x1000000000);
-    uint256 internal constant ETH_HOLDERS = 5000; // per main-board bucket: 159 draws repeat ~2.5x
-    uint256 internal constant EB_HOLDERS = 2000; // per bonus-board bucket: 25 draws repeat ~0.16x
+    uint256 internal constant ETH_HOLDERS = 5000; // largest main-board bucket: 152 draws repeat ~2.3x
+    uint256 internal constant EB_HOLDERS = 2000; // per bonus bucket: four sampled words at the 128 cap
 
     struct Tally {
         uint8 stage;
@@ -183,7 +183,7 @@ abstract contract DayOneFixture is DeployProtocol {
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         address[] memory ethW = new address[](DAILY_ETH_MAX_WINNERS + 8);
-        address[] memory tkW = new address[](TICKET_JACKPOT_MAX_WINNERS + 8);
+        address[] memory tkW = new address[](EARLY_BIRD_MAX_WINNERS + 8);
         for (uint256 i; i < logs.length; ++i) {
             bytes32 t0 = logs[i].topics[0];
             if (t0 == ETH_WIN_SIG) {
@@ -250,16 +250,16 @@ abstract contract DayOneFixture is DeployProtocol {
     }
 }
 
-/// @notice HEADLINE: day-1 stage at 305 ETH winners + 100 early-bird winners, all-gold board, golden grand.
+/// @notice HEADLINE: day-1 stage at 305 ETH winners + 128 early-bird winners, all-gold board, golden grand.
 contract JackpotDayOneWorstCase is DayOneFixture {
     function setUp() public {
         _seed(_allGoldWord("jackpot-day-one-gold"), ETH_HOLDERS, EB_HOLDERS, true);
     }
 
-    function test_DayOne_305Eth_100EarlyBird_AllGold_GoldenGrand_Measured() public {
+    function test_DayOne_305Eth_128EarlyBird_AllGold_GoldenGrand_Measured() public {
         (uint256 used1, Tally memory t1, uint256 used2, Tally memory t2) = _measureBoth();
         _emitTally("DAY1_FULL tx1 (stage 10): 305 ETH, all-gold, golden grand", used1, t1);
-        _emitTally("DAY1_FULL tx2 (stage 14): 100 early-bird", used2, t2);
+        _emitTally("DAY1_FULL tx2 (stage 14): 128 early-bird", used2, t2);
         emit log_named_uint("JACKPOT_DAY1_ETH_STAGE_WORST_CASE_GAS", used1);
         emit log_named_uint("JACKPOT_DAY1_EARLY_BIRD_STAGE_WORST_CASE_GAS", used2);
         emit log_named_uint("JACKPOT_DAY1_BOTH_STAGES_SUM_GAS", used1 + used2);
@@ -267,16 +267,16 @@ contract JackpotDayOneWorstCase is DayOneFixture {
         // Non-vacuity: each leg MUST have run at its cap on the worst branch, or the ceiling is
         // not one.
         assertEq(t1.ethWins, DAILY_ETH_MAX_WINNERS, "the ETH leg paid the full 305-winner cap");
-        assertEq(t2.ticketWins, TICKET_JACKPOT_MAX_WINNERS, "the early-bird leg paid the full 100-winner cap");
+        assertEq(t2.ticketWins, EARLY_BIRD_MAX_WINNERS, "the early-bird leg paid the full 128-winner cap");
         assertEq(t1.whalePassWins, 1, "the solo bucket took the whale-pass path");
         assertTrue(t1.goldenArmed, "the all-gold board armed a golden ticket on the solo winner");
         assertTrue(t1.goldenGrand, "the armed golden ticket resolved as the grand in the same call");
         // Sampling is with replacement: nearly every winner must still be a distinct cold address.
         assertGe(t1.ethDistinct, 295, "at least 295 of the 305 ETH winners are distinct cold addresses");
-        assertGe(t2.ticketDistinct, 97, "at least 97 of the 100 early-bird winners are distinct cold addresses");
+        assertGe(t2.ticketDistinct, 125, "at least 125 of the 128 early-bird winners are distinct cold addresses");
 
         assertLt(used1, EIP7825_TX_GAS_CAP, "DAY-1 ETH STAGE: 305 ETH winners must clear EIP-7825");
-        assertLt(used2, EIP7825_TX_GAS_CAP, "DAY-1 EARLY-BIRD STAGE: 100 ticket winners must clear EIP-7825");
+        assertLt(used2, EIP7825_TX_GAS_CAP, "DAY-1 EARLY-BIRD STAGE: 128 ticket winners must clear EIP-7825");
         assertLt(used2, GAS_TARGET, "the early-bird stage alone sits under the 10M design target");
     }
 }
@@ -303,21 +303,21 @@ contract JackpotDayOneEthLegOnly is DayOneFixture {
     }
 }
 
-/// @notice SPLIT (b): the early-bird leg with the main board empty — 100 ticket winners + fixed overhead.
+/// @notice SPLIT (b): the early-bird leg with the main board empty — 128 ticket winners + fixed overhead.
 contract JackpotDayOneEarlyBirdOnly is DayOneFixture {
     function setUp() public {
         _seed(_allGoldWord("jackpot-day-one-gold"), 0, EB_HOLDERS, true);
     }
 
-    function test_DayOne_NoEth_100EarlyBird_Measured() public {
+    function test_DayOne_NoEth_128EarlyBird_Measured() public {
         (uint256 used1, Tally memory t1, uint256 used2, Tally memory t2) = _measureBoth();
         _emitTally("DAY1_EB_ONLY tx1 (stage 10): empty main board, all-gold, golden grand", used1, t1);
-        _emitTally("DAY1_EB_ONLY tx2 (stage 14): 100 early-bird", used2, t2);
+        _emitTally("DAY1_EB_ONLY tx2 (stage 14): 128 early-bird", used2, t2);
         emit log_named_uint("JACKPOT_DAY1_EMPTY_ETH_STAGE_GAS", used1);
         emit log_named_uint("JACKPOT_DAY1_EARLY_BIRD_LEG_ONLY_GAS", used2);
 
         assertEq(t1.ethWins, 0, "no ETH winner was drawn");
-        assertEq(t2.ticketWins, TICKET_JACKPOT_MAX_WINNERS, "the early-bird leg paid the full 100-winner cap");
+        assertEq(t2.ticketWins, EARLY_BIRD_MAX_WINNERS, "the early-bird leg paid the full 128-winner cap");
         assertLt(used1, EIP7825_TX_GAS_CAP, "empty ETH stage clears EIP-7825");
         assertLt(used2, EIP7825_TX_GAS_CAP, "early-bird stage alone clears EIP-7825");
     }
@@ -329,15 +329,15 @@ contract JackpotDayOnePlainBoard is DayOneFixture {
         _seed(_plainWord("jackpot-day-one-plain"), ETH_HOLDERS, EB_HOLDERS, false);
     }
 
-    function test_DayOne_305Eth_100EarlyBird_PlainBoard_Measured() public {
+    function test_DayOne_305Eth_128EarlyBird_PlainBoard_Measured() public {
         (uint256 used1, Tally memory t1, uint256 used2, Tally memory t2) = _measureBoth();
         _emitTally("DAY1_PLAIN tx1 (stage 10): 305 ETH, no gold, no golden ticket", used1, t1);
-        _emitTally("DAY1_PLAIN tx2 (stage 14): 100 early-bird", used2, t2);
+        _emitTally("DAY1_PLAIN tx2 (stage 14): 128 early-bird", used2, t2);
         emit log_named_uint("JACKPOT_DAY1_ETH_STAGE_PLAIN_BOARD_GAS", used1);
         emit log_named_uint("JACKPOT_DAY1_EARLY_BIRD_STAGE_PLAIN_BOARD_GAS", used2);
 
         assertEq(t1.ethWins, DAILY_ETH_MAX_WINNERS, "the ETH leg paid the full 305-winner cap");
-        assertEq(t2.ticketWins, TICKET_JACKPOT_MAX_WINNERS, "the early-bird leg paid the full 100-winner cap");
+        assertEq(t2.ticketWins, EARLY_BIRD_MAX_WINNERS, "the early-bird leg paid the full 128-winner cap");
         assertFalse(t1.goldenArmed, "no gold quadrant: no golden arm");
         assertFalse(t1.goldenGrand, "no armed ticket: no golden resolve");
         assertLt(used1, EIP7825_TX_GAS_CAP, "plain-board day-1 ETH stage clears EIP-7825");
@@ -348,7 +348,7 @@ contract JackpotDayOnePlainBoard is DayOneFixture {
 /// @notice Measure stage 14 in a separate transaction from the stage that wrote its budget.
 contract JackpotDayOneEarlyBirdCold is DayOneFixture {
     function setUp() public {
-        _seed(_allGoldWord("jackpot-day-one-gold"), ETH_HOLDERS, EB_HOLDERS, true);
+        _seed(_allGoldWord("jackpot-day-one-gold"), ETH_HOLDERS, EB_HOLDERS * 10, true);
         game.advanceGame();
     }
 
@@ -356,8 +356,8 @@ contract JackpotDayOneEarlyBirdCold is DayOneFixture {
         (uint256 used, Tally memory t) = _measure();
         _emitTally("DAY1_EARLY_BIRD_COLD: stage 10 committed in setUp", used, t);
         assertEq(t.stage, STAGE_JACKPOT_EARLY_BIRD_TICKETS, "stage 14 must run next");
-        assertEq(t.ticketWins, TICKET_JACKPOT_MAX_WINNERS, "all 100 ticket awards must run");
-        assertGe(t.ticketDistinct, 97, "at least 97 cold ticket recipients");
+        assertEq(t.ticketWins, EARLY_BIRD_MAX_WINNERS, "all 128 ticket awards must run");
+        assertEq(t.ticketDistinct, 128, "every ticket recipient must be distinct and cold");
         assertEq(t.ethWins, 0, "the ETH stage must not repeat");
         assertFalse(t.goldenArmed || t.goldenGrand, "golden-ticket processing must not repeat");
         assertLt(used, GAS_TARGET, "the cold early-bird stage must stay below 10M gas");

@@ -8,14 +8,14 @@ import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMint
 ///      registry can be filled to its 32-bit lane ceiling by a raw length write.
 contract RegistryCapHarness is DegenerusGameMintModule {
     function fill(uint24 lvl, uint256 len) external {
-        address[] storage owners = lvlEntryOwner[lvl];
+        EntryOwner[] storage owners = lvlEntryOwner[lvl];
         assembly ("memory-safe") {
             sstore(owners.slot, len)
         }
     }
     function ownerCount(uint24 lvl) external view returns (uint256) { return lvlEntryOwner[lvl].length; }
     function queueLen(uint24 lvl) external view returns (uint256) { return ticketQueue[_tqWriteKey(lvl)].length; }
-    function owedOf(uint24 lvl, address p) external view returns (uint80) { return entriesOwedPacked[_tqWriteKey(lvl)][p]; }
+    function owedOf(uint24 lvl, address p) external view returns (uint80) { return _entriesOwed(_tqWriteKey(lvl), p); }
     function entries(address p, uint24 lvl, uint32 n, bool crank) external { _queueEntries(p, lvl, n, crank); }
     function scaled(address p, uint24 lvl, uint32 n, bool crank) external { _queueEntriesScaled(p, lvl, n, crank); }
     function range(address p, uint24 lvl, uint24 num, uint32 n, bool crank) external { _queueEntryRange(p, lvl, num, n, crank); }

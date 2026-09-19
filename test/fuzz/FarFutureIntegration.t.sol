@@ -146,7 +146,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
     // ==================== Internal Helpers ====================
 
     /// @notice Read the length of the FF queue for a given level from game contract storage
-    /// @dev ticketQueue is a mapping(uint24 => address[]) at slot 15.
+    /// @dev ticketQueue is a mapping(uint24 => uint256[]) at slot 15.
     ///      For a dynamic array in a mapping, the length is stored at:
     ///        keccak256(abi.encode(uint256(key), uint256(baseSlot)))
     function _ffQueueLength(uint24 lvl) internal view returns (uint256) {

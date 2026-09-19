@@ -48,6 +48,14 @@ interface ICrapsPassCredit {
  *      reads/writes operate on the game contract's storage.
  */
 contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
+    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 (advance handles 101+).
+    /// @dev Delegatecalled by the Game facade, which restricts the caller to VAULT and SDGNRS and
+    ///      passes it as `who`; each calls exactly once from its own constructor.
+    function initPerpetualTickets(address who) external {
+        _queueEntryRange(who, 1, 100, 16, false); // 16 entries (= 4 whole tickets) per level
+    }
+
+
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------

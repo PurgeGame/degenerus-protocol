@@ -43,6 +43,8 @@
 //   - 278-01-SUMMARY.md (Wave 1 landed the deletions + the whole-ticket emits)
 //   - test/unit/LootboxAutoResolveRemByte.test.js (Phase 275 rem-byte snapshot precedent)
 
+import { readEntriesOwed, entryOwnerRecordSlot } from "../helpers/bucketSeed.js";
+
 import { expect } from "chai";
 import hre from "hardhat";
 import fs from "node:fs";
@@ -66,51 +68,13 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 );
 
 // ---------------------------------------------------------------------------
-// entriesOwedPacked slot-derivation — D-278-TST-CROSS-DEPTH-01 live-state read.
-//
-// `entriesOwedPacked` is declared `mapping(uint24 => mapping(address => uint48))`
-// in DegenerusGameStorage.sol. The compiled storage layout (hardhat
-// build-info `storageLayout`) places it at STORAGE SLOT 13 in DegenerusGame and
-// every module (the modules share DegenerusGame's layout because they are
-// delegatecall targets over the same storage).
-//
-// For a Solidity nested mapping `m[k1][k2]` rooted at `baseSlot`, the value
-// slot is the standard double-keccak nesting:
-//   inner = keccak256(abi.encode(k1, baseSlot))
-//   slot  = keccak256(abi.encode(k2, inner))
-// Here k1 is the `uint24` write-key `wk` (abi-encoded to a full 32-byte word)
-// and k2 is the `address` buyer. The packed `uint48` value occupies the low
-// 48 bits of the slot word; `rem = uint8(value)` is its low 8 bits, the
-// owed-entries count is `value >> 8` (bits [8..39]), and the snap-done marker
-// rides bit 40. Reading the low 40 bits isolates owed+rem below that marker.
-//
-// This slot math is cross-checked at runtime against the public
-// `entriesOwedView(lvl, player)` accessor (which returns `packed >> 8` for the
-// `_tqWriteKey(lvl)` key) — if the derivation drifts, the cross-check fails.
-// ---------------------------------------------------------------------------
-const TICKETS_OWED_PACKED_BASE_SLOT = 13n;
-
-function entriesOwedPackedSlot(wk, buyer) {
-  const abi = hre.ethers.AbiCoder.defaultAbiCoder();
-  // Inner mapping slot: keccak256(abi.encode(uint24 wk, uint256 baseSlot)).
-  // uint24 abi-encodes to a full left-padded 32-byte word, so encoding `wk`
-  // as a plain integer is equivalent.
-  const inner = hre.ethers.keccak256(
-    abi.encode(["uint256", "uint256"], [BigInt(wk), TICKETS_OWED_PACKED_BASE_SLOT])
-  );
-  // Value slot: keccak256(abi.encode(address buyer, bytes32 inner)).
-  return hre.ethers.keccak256(
-    abi.encode(["address", "bytes32"], [buyer, inner])
-  );
-}
-
-// Read the live `entriesOwedPacked[wk][buyer]` word straight out of the
-// Game contract's storage and split it into { packed, owed, rem }.
+// Slot 13 maps (encoded queue key, player) to a uint32 registry position plus one.
+// Slot 67 maps the bare level to one-slot owner records: address at bit 0, uint80 owed at bit 160.
+// The helper derives both keccak paths; the public accessor independently attests owed totals.
 async function readTicketsOwedSlot(gameAddress, wk, buyer) {
-  const slot = entriesOwedPackedSlot(wk, buyer);
-  const raw = await hre.ethers.provider.getStorage(gameAddress, slot);
-  const word = BigInt(raw);
-  // The value is uint48, but owed (bits [8..39]) and rem (bits [0..7]) both sit
+  const slot = await entryOwnerRecordSlot(gameAddress, wk, buyer);
+  const word = await readEntriesOwed(gameAddress, wk, buyer);
+  // The value is uint80, but owed (bits [8..39]) and rem (bits [0..7]) both sit
   // in the low 40 bits; masking there isolates them below the bit-40 snap-done
   // marker, mirroring the contract's `uint32(packed >> 8)` owed read.
   const packed = word & ((1n << 40n) - 1n);
@@ -704,7 +668,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       const queueBody = extractBody(storage, "function _queueEntries(");
       expect(queueBody, "_queueEntries body not found").to.not.equal(null);
       expect(
-        /entriesOwedPacked\[wk\]\[buyer\]\s*=\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(
+        /_setEntryOwed\(targetLevel,\s*uint32\(packed\s*>>\s*OWNER_IDX_SHIFT\),\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(
           queueBody
         ),
         "_queueEntries must pack `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` with rem carried from the existing slot"

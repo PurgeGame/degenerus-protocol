@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -22,7 +24,6 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
     uint256 private constant BALANCES_PACKED_SLOT = 7; // claimable (low128) | afking (high128)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
     uint256 private constant TICKET_QUEUE_SLOT = 12;
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
 
     FFKeyHarness private ffk;
@@ -47,11 +48,7 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
         // Seed the seller with 10 whole far-future tickets (40 entries) at level 110 (d=20 from cl=90).
         uint24 L = 110;
         uint24 key = ffk.ffKey(L);
-        vm.store(address(game), _ownedPackedSlot(key, seller), bytes32(uint256(uint40(uint256(40) << 8))));
-        bytes32 lenSlot = _queueBaseSlot(key);
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        vm.store(address(game), bytes32(uint256(keccak256(abi.encode(lenSlot))) + len), bytes32(uint256(uint160(seller))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
+        uint256 len = TicketQueueStorage.seed(address(game), key, L, seller, uint80(40) << 8);
 
         levels = new uint32[](1);
         qtys = new uint256[](1);
@@ -90,7 +87,7 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
         game.sellFarFutureEntries(seller, levels, qtys, idxs);
 
         assertEq(_ownedEntries(seller, 110), 0, "far entries fully sold");
-        uint256 queued = uint256(vm.load(address(game), _ownedPackedSlot(90, seller)));
+        uint256 queued = uint256(TicketQueueStorage.owed(address(game), 90, seller));
         assertEq(uint32(queued >> 8), 1, "one complete current-level entry minted");
     }
 
@@ -157,16 +154,11 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
         return 7000 + (uint256(keccak256(abi.encodePacked(player, priorDayWord))) % 4001);
     }
 
-    function _ownedPackedSlot(uint24 key, address who) internal pure returns (bytes32) {
-        bytes32 inner = keccak256(abi.encode(uint256(key), TICKETS_OWED_PACKED_SLOT));
-        return keccak256(abi.encode(who, uint256(inner)));
-    }
-
     function _queueBaseSlot(uint24 key) internal pure returns (bytes32) {
         return keccak256(abi.encode(uint256(key), TICKET_QUEUE_SLOT));
     }
 
     function _ownedEntries(address who, uint24 L) internal view returns (uint32) {
-        return uint32(uint256(vm.load(address(game), _ownedPackedSlot(ffk.ffKey(L), who))) >> 8);
+        return uint32(uint256(TicketQueueStorage.owed(address(game), ffk.ffKey(L), who)) >> 8);
     }
 }

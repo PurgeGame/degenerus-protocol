@@ -542,8 +542,8 @@ describe("SecurityEconHardening", function () {
     });
 
     it("traitBucketCounts always returns valid base counts for all entropy values", async function () {
-      // Test the rotation: for any entropy & 3, base counts [25,15,8,1] are rotated
-      // This is a structural test: the sum should always be 49 (25+15+8+1)
+      // Test the rotation: for any entropy & 3, base counts [24,16,8,1] are rotated
+      // This is a structural test: the sum should always be 49 (24+16+8+1)
       // and all values should be > 0.
       // We verify indirectly by ensuring the game deploys and initial state is valid.
       const { game } = await loadFixture(deployFullProtocol);

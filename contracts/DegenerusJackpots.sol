@@ -391,8 +391,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
-        // Slices D and D2: two independent 5% draws to far-future ticket holders
-        // (3% 1st / 2% 2nd by BAF score). The ++salt at the head of each pass keeps
+        // Slices D and D2: each draws four far-future candidate slots, grouped by
+        // level (3% 1st / 2% 2nd by BAF score). The ++salt at the head of each pass keeps
         // the salt/entropy sequence (2 then 3 after slice B) and draw independence.
         for (uint256 pass; pass < 2; ) {
             unchecked { ++salt; }

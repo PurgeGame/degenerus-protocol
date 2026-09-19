@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
@@ -64,9 +66,7 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
     }
 
     function _owedAt(uint24 lvl, address who) private view returns (uint32) {
-        bytes32 first = keccak256(abi.encode(uint256(_keyFor(lvl)), ENTRIES_OWED_SLOT));
-        bytes32 second = keccak256(abi.encode(uint256(uint160(who)), uint256(first)));
-        return uint32(uint256(vm.load(address(game), second)) >> 8);
+        return uint32(TicketQueueStorage.owed(address(game), _keyFor(lvl), who) >> 8);
     }
 
     function _queueLenAt(uint24 lvl) private view returns (uint256) {

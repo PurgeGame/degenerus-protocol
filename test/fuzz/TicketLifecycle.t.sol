@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -37,8 +39,8 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///                [25:26]ticketWriteSlot [26:27]prizePoolFrozen [27:28]presaleOver
 ///                [28:29]subsFullyProcessed [29:30]presaleDrained [30:31]ticketRedemptionOpen
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
-///      - ticketQueue: slot 12 (mapping(uint24 => address[]))
-///      - entriesOwedPacked: slot 13 (mapping(uint24 => mapping(address => uint40)))
+///      - ticketQueue: slot 12 (mapping(uint24 => uint256[]))
+///      - entryOwnerPosition: slot 13 (mapping(uint24 => mapping(address => uint32)))
 ///      - prizePoolsPacked: slot 2 ([future:128][next:128])
 ///
 /// @dev Requirement coverage:
@@ -191,6 +193,28 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @notice Buy tickets during purchase phase, verify they route to purchaseLevel (level+1)
     ///         and are processed to zero after advanceGame cycles.
     /// @dev SRC-01: Purchase-phase tickets route to level+1 write key and drain to zero after transition
+    function test_MultiwordPurchasesDrainAndSamePlayersBuyAgain() public {
+        uint24 key = _writeKeyForLevel(1);
+        for (uint160 i; i < 19; ++i) {
+            address player = address(0xDA00 + i);
+            vm.deal(player, 100 ether);
+            _buyTickets(player, 400);
+            assertEq(_ticketsOwed(key, player), 4);
+        }
+        assertGe(_queueLength(key), 19);
+        _driveToLevel(2);
+        _flushAdvance();
+        for (uint160 i; i < 19; ++i) assertEq(_ticketsOwed(key, address(0xDA00 + i)), 0);
+        (, bool inJackpot,,, ) = game.purchaseInfo();
+        uint24 target = inJackpot ? game.level() : game.level() + 1;
+        uint24 nextKey = _writeKeyForLevel(target);
+        for (uint160 i; i < 19; ++i) {
+            address player = address(0xDA00 + i);
+            _buyTickets(player, 400);
+            assertGe(_ticketsOwed(nextKey, player), 4);
+        }
+    }
+
     function testPurchasePhaseTicketsProcessed() public {
         assertEq(game.level(), 0, "Should start at level 0");
 
@@ -2360,17 +2384,10 @@ contract TicketLifecycleTest is DeployProtocol {
 
     // ==================== Storage Inspection Helpers ====================
 
-    /// @notice Read entriesOwedPacked[key][who] from game contract storage.
+    /// @notice Read _entriesOwed(key, who) from game contract storage.
     ///         Returns the raw uint40 packed value: upper 32 bits = tickets owed, lower 8 = remainder.
     function _ticketsOwed(uint24 key, address who) internal view returns (uint32 owed) {
-        // entriesOwedPacked is mapping(uint24 => mapping(address => uint40)) at SLOT 14.
-        // First level: keccak256(abi.encode(key, 14))
-        // Second level: keccak256(abi.encode(who, firstLevelSlot))
-        bytes32 firstLevel = keccak256(abi.encode(uint256(key), uint256(TICKETS_OWED_PACKED_SLOT)));
-        bytes32 secondLevel = keccak256(abi.encode(uint256(uint160(who)), uint256(firstLevel)));
-        uint256 raw = uint256(vm.load(address(game), secondLevel));
-        // packed = (uint40(owed) << 8) | uint40(remainder)
-        owed = uint32(raw >> 8);
+        return uint32(TicketQueueStorage.owed(address(game), key, who) >> 8);
     }
 
     /// @notice Read the length of the FF queue for a given level from game contract storage

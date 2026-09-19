@@ -23,7 +23,7 @@ contract AdvanceHarness is DegenerusGameAdvanceModule {
 
     // --- Ticket queue helpers ---
     function pushToTicketQueue(uint24 key, address addr) external {
-        ticketQueue[key].push(addr);
+        _tqAppend(key, uint32(_registerEntryOwner(addr, key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));
     }
 
     function getQueueLength(uint24 key) external view returns (uint256) {

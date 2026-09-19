@@ -41,7 +41,7 @@ contract TicketRoutingHarness is DegenerusGameStorage {
     }
 
     function getQueueEntry(uint24 wk, uint256 idx) external view returns (address) {
-        return ticketQueue[wk][idx];
+        return _tqOwnerAt(ticketQueue[wk], wk & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
     }
 
     function tqWriteKey(uint24 lvl) external view returns (uint24) {
@@ -65,6 +65,15 @@ contract TicketRoutingTest is Test {
         vm.warp(block.timestamp + 1 days);
         harness = new TicketRoutingHarness();
         harness.setLevel(10);
+    }
+
+    function test_MixedRangeAcrossThreeQueueWords() public {
+        for (uint160 i; i < 19; ++i) harness.queueTicketRange(address(0xBB00 + i), 13, 6, 3);
+        for (uint24 lvl = 13; lvl <= 18; ++lvl) {
+            uint24 key = lvl <= 15 ? harness.tqWriteKey(lvl) : harness.tqFarFutureKey(lvl);
+            assertEq(harness.getQueueLength(key), 19);
+            for (uint160 i; i < 19; ++i) assertEq(harness.getQueueEntry(key, i), address(0xBB00 + i));
+        }
     }
 
     // =========================================================================

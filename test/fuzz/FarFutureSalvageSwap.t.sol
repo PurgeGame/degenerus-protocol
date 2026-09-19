@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -40,7 +42,6 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;  // mapping(address => uint256)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;    // mapping(uint32 => uint256)
     uint256 private constant TICKET_QUEUE_SLOT = 12;       // mapping(uint24 => address[])
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13; // mapping(uint24 => mapping(address => uint40))
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;      // uint128 packed at offset 16 of slot 1
 
     // No-arb reference figures from 325-ATTEST-SWAP (the LOCKED references the test asserts against).
@@ -75,11 +76,6 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         return keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT));
     }
 
-    function _ownedPackedSlot(uint24 key, address who) internal pure returns (bytes32) {
-        bytes32 inner = keccak256(abi.encode(uint256(key), TICKETS_OWED_PACKED_SLOT));
-        return keccak256(abi.encode(who, uint256(inner)));
-    }
-
     function _queueBaseSlot(uint24 key) internal pure returns (bytes32) {
         return keccak256(abi.encode(uint256(key), TICKET_QUEUE_SLOT));
     }
@@ -93,19 +89,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     /// @dev Seed `whole` far-future tickets for `who` at level L (packed: owed=whole*4 entries << 8 | rem).
     ///      Pushes `who` into ticketQueue[ffk(L)] and returns the index of that push.
     function _seedFarTickets(address who, uint24 L, uint32 whole) internal returns (uint256 idx) {
-        uint24 key = ffk.ffKey(L);
-        uint32 entries = whole * 4;
-        uint40 packed = uint40(uint256(entries) << 8); // rem = 0
-        vm.store(address(game), _ownedPackedSlot(key, who), bytes32(uint256(packed)));
-
-        // Append `who` to ticketQueue[key]: read length, write element, bump length.
-        bytes32 lenSlot = _queueBaseSlot(key);
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        bytes32 elemSlot = bytes32(uint256(dataBase) + len);
-        vm.store(address(game), elemSlot, bytes32(uint256(uint160(who))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-        idx = len;
+        return TicketQueueStorage.seed(address(game), ffk.ffKey(L), L, who, uint80(whole) * 4 << 8);
     }
 
     /// @dev Seed claimableWinnings[who] = amt and bump claimablePool by the same so the invariant
@@ -134,7 +118,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     }
 
     function _ownedEntries(address who, uint24 L) internal view returns (uint32) {
-        uint256 packed = uint256(vm.load(address(game), _ownedPackedSlot(ffk.ffKey(L), who)));
+        uint256 packed = uint256(TicketQueueStorage.owed(address(game), ffk.ffKey(L), who));
         return uint32(packed >> 8);
     }
 
@@ -671,6 +655,31 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     ///         ticketQueue[ffk]; a partial sell does NOT pop (seller stays enrolled, packed != 0); the
     ///         far-future sampler returns only live holders after the pop; and a stale queueIndex
     ///         (q[idx] != player) REVERTS the line.
+    function test_FullSaleSwapsTailAcrossQueueWords() public {
+        _setPriorDayRngWord(uint256(keccak256("cross-word-sale")));
+        _seedClaimable(ContractAddresses.SDGNRS, 500 ether);
+        uint24 lvl = game.level() + 7;
+        uint24 key = ffk.ffKey(lvl);
+        uint256 index = _seedFarTickets(seller, lvl, 50);
+        for (uint160 i; i < 19; ++i) _seedFarTickets(address(0xDD00 + i), lvl, 2);
+        uint256 n = _ffQueueLen(lvl);
+        address[] memory expected = new address[](n);
+        for (uint256 i; i < n; ++i) expected[i] = TicketQueueStorage.ownerAt(address(game), key, lvl, i);
+        uint32[] memory levels = new uint32[](1); levels[0] = lvl;
+        uint256[] memory qtys = new uint256[](1); qtys[0] = 200;
+        uint256[] memory indices = new uint256[](1); indices[0] = index;
+        vm.prank(seller);
+        game.sellFarFutureEntries(seller, levels, qtys, indices);
+        expected[index] = expected[n - 1];
+        assertEq(_ffQueueLen(lvl), n - 1);
+        for (uint256 i; i < n - 1; ++i) {
+            assertEq(TicketQueueStorage.ownerAt(address(game), key, lvl, i), expected[i]);
+            if (uint160(expected[i]) >= 0xDD00 && uint160(expected[i]) < 0xDD13) assertEq(_ownedEntries(expected[i], lvl), 8);
+        }
+        assertEq(_ownedEntries(seller, lvl), 0);
+        TicketQueueStorage.assertQueue(address(game), key);
+    }
+
     function test_SWAP09_SwapPopMembershipMaintained() public {
         _setPriorDayRngWord(uint256(keccak256("pop_jitter")));
         _seedClaimable(ContractAddresses.SDGNRS, 500 ether);
@@ -717,13 +726,21 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
 
         // --- Far-future sampler returns only live holders after the pop (no address(0)/stale leak) ---
         // After popping `seller` from Lfull, the remaining holders there are the constructor-seeded
-        // sDGNRS + VAULT. Sample broadly and assert no zero address surfaces.
+        // sDGNRS + VAULT. BAF samples after the request increments level: model that
+        // read-only context so +5 is still queued, then restore it before further swaps.
+        bytes32 priorState = vm.load(address(game), bytes32(0));
+        vm.store(address(game), bytes32(0), bytes32(
+            (uint256(priorState) & ~(uint256(type(uint24).max) << 96)) | (uint256(cl) << 96)
+        ));
         for (uint256 s = 0; s < 32; ++s) {
             address[] memory sampled = game.sampleFarFutureTickets(uint256(keccak256(abi.encode("samp", s))));
+            assertEq(sampled.length, 4, "BAF sampler must fill all candidate slots");
             for (uint256 i = 0; i < sampled.length; ++i) {
                 assertTrue(sampled[i] != address(0), "sampler leaked a zero/stale address after swap-pop");
             }
         }
+
+        vm.store(address(game), bytes32(0), priorState);
 
         // --- Stale queueIndex (q[idx] != player) REVERTS the line ---
         uint24 Lstale = uint24(cl + 8);

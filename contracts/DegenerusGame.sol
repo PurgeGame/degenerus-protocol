@@ -71,6 +71,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
+import {PackedTicketSampleLib} from "./libraries/PackedTicketSampleLib.sol";
+import {EntropyLib} from "./libraries/EntropyLib.sol";
 
 /*+==============================================================================+
   |                     EXTERNAL INTERFACE DEFINITIONS                           |
@@ -258,8 +260,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function initPerpetualTickets() external {
         address who = msg.sender;
         if (who != ContractAddresses.SDGNRS && who != ContractAddresses.VAULT) revert Unauthorized();
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameMintModule.initPerpetualTickets.selector, who)
+        (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameWhaleModule.initPerpetualTickets.selector, who)
         );
         if (!ok) _revertDelegate(data);
     }
@@ -705,9 +707,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (shift != 0) {
             // Projected entries for the target at the PREVIOUS level's final pool
             // target — settled history whose _endPhase (including the x00
-            // futurePool/3 rewrite) has already run, so the floor's basis can
+            // futurePool*0.4 rewrite) has already run, so the floor's basis can
             // never decrease after the declaration. levelPrizePool[level] would
-            // be live: an x00's value shrinks to futurePool/3 at its phase end,
+            // be live: an x00's value shrinks to 40% of futurePool at its phase end,
             // letting a jackpot-phase declaration overstate the floor.
             uint256 projected = (levelPrizePool[lvl == 0 ? 0 : lvl - 1] << 2) /
                 PriceLookupLib.priceForLevel(targetLevel);
@@ -1209,7 +1211,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Get raw deity boon state for off-chain or viewer contract computation.
     /// @param deity The deity address to query.
-    /// @return dailySeed RNG seed for today's boon generation (0 until today's VRF word lands).
+    /// @return dailySeed Yesterday's finalized RNG word for today's boons (0 if unavailable).
     /// @return day Current day index.
     /// @return usedMask Bitmask of slots already used (bit i = slot i used).
     /// @return decimatorOpen Whether decimator boons are available.
@@ -1232,10 +1234,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         usedMask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
         decimatorOpen = decWindowOpen;
         deityPassAvailable = deityPassOwners.length < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
-        // 0 until today's VRF word lands — callers render no boons while it's 0
-        // (mirrors the rngWordByDay[day] gate on issueDeityBoon). No placeholder
-        // seed: a preview built from fake entropy wouldn't match the real boons.
-        dailySeed = rngWordByDay[day];
+        // The issuance day's menu is fixed by the preceding day's finalized word.
+        // A missing predecessor (including day 1) has no menu until that word exists.
+        dailySeed = rngWordByDay[day - 1];
     }
 
     /// @notice Issue a deity boon to a recipient.
@@ -2429,9 +2430,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ) external view returns (uint32) {
         unchecked {
             return
-                uint32(entriesOwedPacked[_tqReadKey(lvl)][player] >> 8) +
-                uint32(entriesOwedPacked[_tqWriteKey(lvl)][player] >> 8) +
-                uint32(entriesOwedPacked[_tqFarFutureKey(lvl)][player] >> 8);
+                uint32(_entriesOwed(_tqReadKey(lvl), player) >> 8) +
+                uint32(_entriesOwed(_tqWriteKey(lvl), player) >> 8) +
+                uint32(_entriesOwed(_tqFarFutureKey(lvl), player) >> 8);
         }
     }
 
@@ -2603,7 +2604,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      is simply a ratio below 1.
     ///
     ///      Century levels are read through _growthRatchet rather than levelPrizePool,
-    ///      because _endPhase overwrites levelPrizePool[x00] with futurePool/3 once the
+    ///      because _endPhase overwrites levelPrizePool[x00] with 40% of futurePool once the
     ///      century's jackpot phase ends. Serving the pushed achieved pool instead keeps
     ///      each term write-once: a boundary round scores the growth the game actually
     ///      delivered, and its answer can never change after it first settles.
@@ -2870,7 +2871,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Sample up to 4 trait burn entries from a specific level.
-    /// @dev Used by BAF scatter to sample the next level's entry holders.
+    /// @dev BAF scatter reads a random packed word and rotates its lanes. Tail padding
+    ///      is redrawn over valid entries so the last word keeps equal entry weighting.
     /// @param targetLvl The level to sample from.
     /// @param entropy Random seed (typically VRF word) for trait and offset selection.
     /// @return traitSel Selected trait ID.
@@ -2887,54 +2889,65 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
         uint256 take = len > 4 ? 4 : len;
         entries = new address[](take);
-        uint256 start = (entropy >> 40) % len;
+        PackedTicketSampleLib.Cursor memory cursor;
+        uint256 base = PackedTicketSampleLib.begin(cursor, len, entropy >> 40);
+        cursor.word = _bucketWordAt(targetLvl, traitSel, base);
         for (uint256 i; i < take; ) {
-            entries[i] = _bucketOwnerAt(targetLvl, traitSel, (start + i) % len);
+            (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, len);
+            uint256 word = redrawn ? _bucketWordAt(targetLvl, traitSel, index) : cursor.word;
+            entries[i] = _bucketOwnerFromWord(targetLvl, word, index);
             unchecked {
                 ++i;
             }
         }
     }
 
-    /// @notice Sample up to 4 far-future ticket holders from ticketQueue.
-    /// @dev View function for BAF far-future selection; samples levels [current+5, current+99].
-    ///      Tries up to 10 random levels, returns however many non-zero holders are found (max 4).
-    /// @param entropy Random entropy for sampling (typically from VRF).
-    /// @return tickets Array of player addresses (length 0-4).
+    /// @notice Sample up to four far-future candidate slots for BAF.
+    /// @dev Start with one level in [level+5, level+99]; if it has fewer holders than
+    ///      the remaining slots, fill them from another random level. Duplicate owners
+    ///      across levels are allowed. BAF runs after the level increments and before
+    ///      far-future promotion; perpetual tickets keep every candidate level nonempty,
+    ///      so each level normally fills at least one slot and the loop visits at most
+    ///      four levels. An empty level is skipped rather than sampled, and the walk is
+    ///      bounded, so a queue emptied outside that invariant shortens the result
+    ///      instead of reverting the advance.
+    /// @param entropy Random entropy for selecting levels and packed-word samples.
+    /// @return tickets Up to four candidate slots, each naming a live queue owner.
     function sampleFarFutureTickets(
         uint256 entropy
     ) external view returns (address[] memory tickets) {
-        uint24 currentLvl = level;
-        address[4] memory tmp;
-        uint8 found;
-        uint256 word = entropy;
-
-        for (uint8 s; s < 10 && found < 4; ) {
-            word = uint256(keccak256(abi.encodePacked(word, s)));
-            uint24 candidate = currentLvl + 5 + uint24(word % 95);
-
-            address[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
+        uint24 firstLevel = level + 5;
+        tickets = new address[](4);
+        uint256 found;
+        for (uint256 attempt; found < 4 && attempt < 8; ) {
+            uint24 target = firstLevel + uint24(entropy % 95);
+            uint256[] storage queue = ticketQueue[_tqFarFutureKey(target)];
             uint256 len = queue.length;
-            if (len != 0) {
-                uint256 idx = (word >> 32) % len;
-                address winner = queue[idx];
-                if (winner != address(0)) {
-                    tmp[found] = winner;
-                    unchecked {
-                        ++found;
-                    }
-                }
+            if (len == 0) {
+                // Re-roll the level under a salt the nonempty path never uses.
+                entropy = EntropyLib.hash2(entropy, 0x100 | attempt);
+                unchecked { ++attempt; }
+                continue;
             }
-            unchecked {
-                ++s;
+            uint256 take = 4 - found;
+            if (len < take) take = len;
+            PackedTicketSampleLib.Cursor memory cursor;
+            uint256 base = PackedTicketSampleLib.begin(cursor, len, entropy >> 32);
+            cursor.word = _tqWordAt(queue, base);
+            for (uint256 i; i < take; ) {
+                (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, len);
+                uint256 word = redrawn ? _tqWordAt(queue, index) : cursor.word;
+                uint32 position = uint32(word >> ((index & 7) << 5));
+                tickets[found + i] = address(uint160(_entryRecord(target, position)));
+                unchecked { ++i; }
             }
+            found += take;
+            entropy = EntropyLib.hash2(entropy, found);
+            unchecked { ++attempt; }
         }
-
-        tickets = new address[](found);
-        for (uint8 i; i < found; ) {
-            tickets[i] = tmp[i];
-            unchecked {
-                ++i;
+        if (found < 4) {
+            assembly ("memory-safe") {
+                mstore(tickets, found)
             }
         }
     }
@@ -2989,9 +3002,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24 lvl = level;
         unchecked {
             tickets =
-                uint32(entriesOwedPacked[_tqReadKey(lvl)][player] >> 8) +
-                uint32(entriesOwedPacked[_tqWriteKey(lvl)][player] >> 8) +
-                uint32(entriesOwedPacked[_tqFarFutureKey(lvl)][player] >> 8);
+                uint32(_entriesOwed(_tqReadKey(lvl), player) >> 8) +
+                uint32(_entriesOwed(_tqWriteKey(lvl), player) >> 8) +
+                uint32(_entriesOwed(_tqFarFutureKey(lvl), player) >> 8);
         }
     }
 

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -721,16 +723,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     /// @dev Seed `whole` current-level tickets for `who` at the read key (packed: owed=whole*4 << 8 | rem)
     ///      and append `who` to ticketQueue[readKey], so advanceDue() sees a non-empty read slot.
     function _seedReadSlotTickets(uint24 readKey, address who, uint32 whole) internal {
-        uint32 entries = whole * 4;
-        uint40 packed = uint40(uint256(entries) << 8);
-        bytes32 owedInner = keccak256(abi.encode(uint256(readKey), TICKETS_OWED_PACKED_SLOT));
-        vm.store(address(game), keccak256(abi.encode(who, uint256(owedInner))), bytes32(uint256(packed)));
-
-        bytes32 lenSlot = keccak256(abi.encode(uint256(readKey), TICKET_QUEUE_SLOT));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(who))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
+        TicketQueueStorage.seed(address(game), readKey, readKey & ~TICKET_SLOT_BIT, who, uint80(whole) * 4 << 8);
     }
 
     /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 26), preserving the rest of slot 0.

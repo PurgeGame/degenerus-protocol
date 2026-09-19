@@ -80,10 +80,10 @@ contract GameSeeder is DegenerusGame, BucketSeed {
 
     function _seedSlot(uint24 key, uint160 base, uint256 owed) private {
         address p = address(base + 1);
-        ticketQueue[key].push(p);
+        uint80 ownerBits = _registerEntryOwner(p, uint24(key & ((uint24(1) << 22) - 1)));
+        _tqAppend(key, uint32(ownerBits >> OWNER_IDX_SHIFT));
         // packed layout: owed in bits [8:], remainder in bits [0:8].
-        entriesOwedPacked[key][p] =
-            _registerEntryOwner(p, uint24(key & ((uint24(1) << 22) - 1))) | (uint80(owed) << 8);
+        _seedOwedAt(key, p, ownerBits | (uint80(owed) << 8));
     }
 }
 

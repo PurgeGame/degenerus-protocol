@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 
 /// @title DailyEthBucketTable -- the daily ETH leg's winner table and quarter-price granule
-/// @notice The purchase-phase daily jackpot pays four trait buckets from the 20 / 12 / 6 / 1
+/// @notice The purchase-phase daily jackpot pays four trait buckets from the 24 / 16 / 8 / 1
 ///         table, rotated so the entropy-picked solo quadrant is the ONE-winner bucket and takes
 ///         the pool's remainder, and every other bucket's share is floored to whole quarters of
 ///         the NEXT level's price per winner. Mutation v78 left the table's figures, the rotation
@@ -86,7 +86,7 @@ contract DailyEthBucketTable is Test {
         }
 
         // The solo quadrant is the one-winner bucket; the next three around the wheel take
-        // 20, 12 and 6 (`base[(i + offset) & 3]` with the offset pinned to the solo pick).
+        // 24, 16 and 8 (`base[(i + offset) & 3]` with the offset pinned to the solo pick).
         uint8 solo = 4;
         for (uint8 q; q < 4; q++) {
             if (count[q] == 1) {
@@ -95,14 +95,14 @@ contract DailyEthBucketTable is Test {
             }
         }
         assertLt(solo, 4, "the solo quadrant's bucket has exactly one winner");
-        assertEq(count[(solo + 1) & 3], 20, "the bucket after the solo quadrant takes twenty winners");
-        assertEq(count[(solo + 2) & 3], 12, "then twelve");
-        assertEq(count[(solo + 3) & 3], 6, "then six");
+        assertEq(count[(solo + 1) & 3], 24, "the bucket after the solo quadrant takes twenty-four winners");
+        assertEq(count[(solo + 2) & 3], 16, "then sixteen");
+        assertEq(count[(solo + 3) & 3], 8, "then eight");
         // The solo quadrant took the ETH remainder, so the pool-backed ticket leg skips it and
         // spreads its winners over the other three.
         assertEq(ticketWinners[solo], 0, "no ticket winner in the solo quadrant");
         for (uint8 q; q < 4; q++) {
-            if (q != solo) assertGt(ticketWinners[q], 0, "every other quadrant wins tickets");
+            if (q != solo) assertEq(ticketWinners[q], 40, "each other quadrant gets five full words of winners");
         }
 
         // Every non-remainder bucket is 20% of the ETH leg floored to whole granules per winner,

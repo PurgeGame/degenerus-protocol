@@ -40,7 +40,7 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
     }
 
     function ownerIdxBitsOf(uint24 lvl, address p) external view returns (uint256) {
-        return uint256(entriesOwedPacked[_tqReadKey(lvl)][p] >> OWNER_IDX_SHIFT);
+        return uint256(_entriesOwed(_tqReadKey(lvl), p) >> OWNER_IDX_SHIFT);
     }
 
     function ownerAt(uint24 lvl, uint8 trait, uint256 k) external view returns (address) {
@@ -56,7 +56,7 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
     }
 
     function owedOf(uint24 lvl, address p) external view returns (uint80) {
-        return entriesOwedPacked[_tqReadKey(lvl)][p];
+        return _entriesOwed(_tqReadKey(lvl), p);
     }
 
     function roundCounter() external view returns (uint32) {

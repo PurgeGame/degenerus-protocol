@@ -727,7 +727,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     error RecipientBoonCapReached();
     /// @notice Thrown when the deity boon slot has already been used on the current day.
     error SlotAlreadyUsed();
-    /// @notice Thrown when a deity boon is requested before the day's RNG word has landed.
+    /// @notice Thrown when a deity boon is requested before the preceding day's RNG word has landed.
     error RngNotReady();
 
     /// @notice Draw boons for every box in one opened entry.
@@ -1388,7 +1388,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @notice Issue a deity boon to a recipient
     /// @dev Deity can issue up to 3 boons per day, one per recipient per day.
     ///      A deity can issue at most DEITY_RECIPIENT_BOON_CAP boons to any one
-    ///      recipient over the game's lifetime.
+    ///      recipient over the game's lifetime. The menu uses the preceding day's
+    ///      finalized RNG, so it can be previewed one game day before issuance.
     /// @param deity The deity pass holder issuing the boon
     /// @param recipient The player receiving the boon
     /// @param slot The slot index (0-2) to use
@@ -1396,7 +1397,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @custom:reverts SelfBoon When deity tries to issue boon to themselves
     /// @custom:reverts InvalidSlot When slot is >= 3
     /// @custom:reverts Unauthorized When deity does not own a deity pass
-    /// @custom:reverts RngNotReady When no RNG is available for the day
+    /// @custom:reverts RngNotReady When the preceding day has no finalized RNG word
     /// @custom:reverts RecipientAlreadyBoonedToday When recipient already received a boon today
     /// @custom:reverts RecipientBoonCapReached When this deity has hit the lifetime boon cap for the recipient
     /// @custom:reverts SlotAlreadyUsed When slot was already used today
@@ -1407,7 +1408,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (mintPacked_[deity] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
 
         uint24 day = _simulatedDayIndex();
-        uint256 rngWord = rngWordByDay[day];
+        uint256 rngWord = rngWordByDay[day - 1];
         if (rngWord == 0) revert RngNotReady();
         // Day + used-mask share one slot (deityBoonPacked). On a day rollover the mask
         // starts empty: a stale day's mask is never read (every reader gates on the day
@@ -1442,10 +1443,10 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @param deity The deity address
     /// @param day The day index
     /// @param slot The slot index (0-2)
-    /// @param rngWord The day's VRF word (`rngWordByDay[day]`, nonzero-checked by the caller)
+    /// @param rngWord The preceding day's finalized word (`rngWordByDay[day - 1]`, checked by the caller)
     /// @return boonType The boon type (1-43; 10-12 and 20-21 are unused)
     /// @dev Static modulus + static mapping: the day's three-slot menu is fixed the moment
-    ///      the word lands. Eligibility must not reach the modulus — the issuer controls
+    ///      the preceding day's word lands. Eligibility must not reach the modulus — the issuer controls
     ///      issuance timing, so any live term here would let a deity re-map a slot by
     ///      issuing before/after a window or supply flip. Decimator AND deity-pass tiers
     ///      are excluded UNCONDITIONALLY (not eligibility-gated — that would be the same

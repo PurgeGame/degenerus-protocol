@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {BucketSeed} from "../helpers/BucketSeed.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
@@ -10,19 +12,20 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @title SnapValveHarness — drives the REAL processTicketBatch drain with a
 ///        non-zero snapShift. Test-only; NO contracts/*.sol is mutated. Adds only
 ///        seeders, setters, and inspection views over the inherited module.
-contract SnapValveHarness is DegenerusGameMintModule {
+contract SnapValveHarness is DegenerusGameMintModule, BucketSeed {
     function seedQueue(uint24 lvl, uint256 n, uint32 owedEach, uint8 remEach, uint160 base) external {
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("snapvalve_entropy")) | 1;
 
         uint24 rk = _tqReadKey(lvl);
-        address[] storage queue = ticketQueue[rk];
-        mapping(address => uint80) storage owedMap = entriesOwedPacked[rk];
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(address(1));
+        uint256[] storage queue = ticketQueue[rk];
+
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            queue.push(p);
-            owedMap[p] = _registerEntryOwner(p, lvl) | (uint80(owedEach) << 8) | uint80(remEach);
+            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
+            _seedOwedAt(rk, p, ownerBits | (uint80(owedEach) << 8) | uint80(remEach));
         }
         ticketCursor = 0;
         ticketLevel = 0;
@@ -42,7 +45,7 @@ contract SnapValveHarness is DegenerusGameMintModule {
     }
 
     function owedPacked(uint24 lvl, address p) external view returns (uint80) {
-        return entriesOwedPacked[_tqReadKey(lvl)][p];
+        return _entriesOwed(_tqReadKey(lvl), p);
     }
 
     function snapDoneBit() external pure returns (uint80) {
@@ -59,12 +62,13 @@ contract SnapValveHarness is DegenerusGameMintModule {
 
     function seedFarFutureQueue(uint24 lvl, uint256 n, uint32 owedEach, uint160 base) external {
         uint24 ffk = _tqFarFutureKey(lvl);
-        address[] storage queue = ticketQueue[ffk];
-        mapping(address => uint80) storage owedMap = entriesOwedPacked[ffk];
+        uint256[] storage queue = ticketQueue[ffk];
+
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            queue.push(p);
-            owedMap[p] = _registerEntryOwner(p, lvl) | (uint80(owedEach) << 8);
+            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            _tqAppend(ffk, uint32(ownerBits >> OWNER_IDX_SHIFT));
+            _seedOwedAt(ffk, p, ownerBits | (uint80(owedEach) << 8));
         }
         // Arm the FF resume marker so processFutureTicketBatch drains the FF key.
         ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;

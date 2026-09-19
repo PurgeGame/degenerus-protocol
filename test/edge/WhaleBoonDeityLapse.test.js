@@ -31,7 +31,7 @@ import {
  * `forge inspect DegenerusGame storage-layout` on the working tree). The whale lane
  * occupies bits 200-255 of slot0: whaleDay[24] | deityWhaleDay[24] | whaleTier[8].
  *
- * A deity boon's type is a weighted roll over the day's VRF word
+ * A deity boon's type is a weighted roll over the preceding day's finalized VRF word
  * (DeityBoonViewer._boonFromRoll mirrors DegenerusGameBoonModule._boonFromRoll), so
  * getting a specific type (BOON_WHALE_10 = 16, the 10% / tier-1 whale discount) means
  * settling RNG day by day and scanning the deity's three daily slots until one offers

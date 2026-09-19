@@ -214,6 +214,10 @@ interface IDegenerusGameDecimatorModule {
 /// @title IDegenerusGameWhaleModule
 /// @notice Interface for whale-tier purchases and premium passes
 interface IDegenerusGameWhaleModule {
+    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 for `who`.
+    /// @dev Delegatecall target of the Game facade's initPerpetualTickets (caller-gated there).
+    function initPerpetualTickets(address who) external;
+
     /// @notice Purchases a whale pass for the buyer
     /// @param buyer Address receiving the pass
     /// @param quantity Number of passes to purchase
@@ -243,9 +247,7 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
-    /// @notice Queue the perpetual vault/SDGNRS tickets for levels 1-100 for `who`.
-    /// @dev Delegatecall target of the Game facade's initPerpetualTickets (caller-gated there).
-    function initPerpetualTickets(address who) external;
+
 
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer
@@ -744,6 +746,9 @@ interface IGameAfkingModule {
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
+    /// @notice Queue vault and SDGNRS perpetual tickets for a phase-transition target level.
+    function queuePerpetualTickets(uint24 targetLevel) external;
+
     /// @notice Seated round drain for a ticket queue: eight entries share each trait roll
     ///         and every quadrant is one packed lane word. Delegatecall target of the mint
     ///         module's queue drains; hosted here for EIP-170 room.

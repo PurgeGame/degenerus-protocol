@@ -39,17 +39,27 @@ contract QueueHarness is DegenerusGameAdvanceModule {
     }
 
     function getQueueEntry(uint24 key, uint256 idx) external view returns (address) {
-        return ticketQueue[key][idx];
+        return _tqOwnerAt(ticketQueue[key], key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
     }
 
     function getTicketsOwedPacked(uint24 key, address buyer) external view returns (uint80) {
-        return entriesOwedPacked[key][buyer];
+        return _entriesOwed(key, buyer);
     }
 
     function getTicketsOwed(uint24 key, address buyer) external view returns (uint32) {
-        return uint32(entriesOwedPacked[key][buyer] >> 8);
+        return uint32(_entriesOwed(key, buyer) >> 8);
     }
 
+    function setLock(bool locked) external { rngLockedFlag = locked; }
+    function positionAt(uint24 key, uint256 i) external view returns (uint32) {
+        return _tqPositionAt(ticketQueue[key], i);
+    }
+    function recordAt(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecord(lvl, pos); }
+    function retire(uint24 key) external {
+        uint24 lvl = key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
+        for (uint256 i; i < ticketQueue[key].length; ++i) _setEntryOwed(lvl, _tqPositionAt(ticketQueue[key], i), 0);
+        _releaseTicketQueue(key);
+    }
     // --- State helpers ---
     function getTicketWriteSlot() external view returns (bool) {
         return ticketWriteSlot;
@@ -95,6 +105,35 @@ contract QueueDoubleBufferTest is Test {
         // Foundry's default block.timestamp is 1; ts - JACKPOT_RESET_TIME would revert Panic(0x11).
         vm.warp(block.timestamp + 1 days);
         harness = new QueueHarness();
+    }
+
+    function test_LockedWritesAcrossWordsKeepReadRecordsFrozen() public {
+        uint24 frozenKey = harness.exposed_tqWriteKey(LEVEL);
+        for (uint160 i; i < 19; ++i) harness.exposed_queueEntries(address(0xCA00 + i), LEVEL, 10);
+        uint256[19] memory frozen;
+        for (uint256 i; i < 19; ++i) frozen[i] = harness.recordAt(LEVEL, harness.positionAt(frozenKey, i));
+        harness.setTicketsFullyProcessed(true);
+        harness.exposed_swapTicketSlot(LEVEL);
+        harness.setLock(true);
+        uint24 liveKey = harness.exposed_tqWriteKey(LEVEL);
+        for (uint160 i; i < 19; ++i) harness.exposed_queueEntriesScaled(address(0xCA00 + i), LEVEL, 725);
+        for (uint256 i; i < 19; ++i) {
+            address player = address(uint160(0xCA00 + i));
+            assertEq(harness.recordAt(LEVEL, harness.positionAt(frozenKey, i)), frozen[i]);
+            assertTrue(harness.positionAt(frozenKey, i) != harness.positionAt(liveKey, i));
+            assertEq(harness.getTicketsOwed(frozenKey, player), 10);
+            assertEq(harness.getTicketsOwed(liveKey, player), 7);
+            assertEq(harness.getQueueEntry(liveKey, i), player);
+        }
+        harness.retire(frozenKey);
+        harness.setLock(false);
+        harness.setTicketsFullyProcessed(true);
+        harness.exposed_swapTicketSlot(LEVEL);
+        harness.exposed_queueEntries(address(0xCA00), LEVEL, 13);
+        assertEq(harness.getQueueLength(frozenKey), 1);
+        assertEq(harness.getTicketsOwed(frozenKey, address(0xCA00)), 13);
+        assertEq(harness.getTicketsOwed(liveKey, address(0xCA00)), 7);
+        assertGt(harness.positionAt(frozenKey, 0), 38, "re-enrolment needs its own immutable registry position");
     }
 
     // =========================================================================
