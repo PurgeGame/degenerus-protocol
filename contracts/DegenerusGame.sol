@@ -1374,72 +1374,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    // -------------------------------------------------------------------------
-    // Terminal Decimator (Death Bet)
-    // -------------------------------------------------------------------------
-
-    /// @notice Record a terminal decimator burn.
-    /// @dev Delegatecalls to DecimatorModule. Access: coin contract only.
-    ///      Signature: recordTerminalDecBurn(address player, uint24 lvl, uint256 baseAmount) —
-    ///      the player performing the burn, the current game level, and the burn amount before
-    ///      the time-weighted multiplier. The signature matches the module function exactly
-    ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
-    ///      contract-size headroom for no behavior change.
-    function recordTerminalDecBurn(
-        address,
-        uint24,
-        uint256
-    ) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Apply the caller's final-day terminal decimator streak boost.
-    /// @dev Delegatecalls to DecimatorModule. Permissionless; credits msg.sender.
-    ///      The signature matches the module function exactly (identical selector), so the calldata
-    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    function boostTerminalDecimator() external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Resolve terminal decimator at GAMEOVER.
-    /// @dev Access: Game-only (self-call from handleGameOverDrain).
-    ///      Signature: runTerminalDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) —
-    ///      the total ETH prize pool for terminal decimator resolution, the level number at which
-    ///      gameover was triggered, and the VRF-derived randomness seed for winner selection. The
-    ///      signature matches the module function exactly (identical selector), so the calldata
-    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    /// @return returnAmountWei Amount to return (non-zero if no winners or already resolved).
-    function runTerminalDecimatorJackpot(
-        uint256,
-        uint24,
-        uint256
-    ) external returns (uint256 returnAmountWei) {
-        if (msg.sender != address(this)) revert OnlySelf();
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert EmptyReturn();
-        return abi.decode(data, (uint256));
-    }
-
-    /// @notice Terminal decimator window. Open except lastPurchaseDay, gameOver, and
-    ///         level 0: the terminal claim round's zero-initialized sentinel reads a
-    ///         level-0 gameover as already resolved, so a level-0 round can never pay
-    ///         its burners — burns are rejected instead of accepted unwinnable.
-    /// @return open True if terminal decimator burns are allowed.
-    /// @return lvl Current game level.
-    function terminalDecWindow() external view returns (bool open, uint24 lvl) {
-        lvl = level;
-        open = !gameOver && !lastPurchaseDay && lvl != 0;
-    }
-
     /// @notice Game-over terminal jackpot: Day-5-style bucket distribution to the final ticket cohort.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
     ///      Updates claimablePool internally — callers must NOT double-count.
@@ -1509,18 +1443,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
-
-    /// @notice Claim terminal Decimator jackpot for caller.
-    /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
-    ///      The signature matches the module function exactly (identical selector), so the calldata
-    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    function claimTerminalDecimatorJackpot() external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
 
     /*+========================================================================================+
       |                    CLAIMING WINNINGS (ETH)                                             |
@@ -2779,8 +2701,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ) external view returns (uint256 scorePoints) {
         // Unified effective quest streak: a live afking sub reads the Sub-side compute-on-read
         // (the run's funded days + in-run secondaries); everyone else reads the decay-aware manual
-        // streak, which zeroes a lapsed stale-high streak so it can't inflate terminal-decimator
-        // weight, lootbox EV, or sDGNRS claims.
+        // streak, which zeroes a lapsed stale-high streak so it can't inflate
+        // lootbox EV or sDGNRS claims.
         uint32 streak = _effectiveQuestStreak(player);
         return _playerActivityScore(player, streak);
     }

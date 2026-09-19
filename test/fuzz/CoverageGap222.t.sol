@@ -372,14 +372,6 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         vm.prank(buyer);
-        (bool o5, ) = address(coin).call(
-            abi.encodeWithSignature(
-                "terminalDecimatorBurn(address,uint256)",
-                buyer,
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
         (bool o6, ) = address(coin).call(
             abi.encodeWithSignature(
                 "vaultEscrow(uint256)",
@@ -398,7 +390,6 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(o2, "coin.burnForCoinflip rejected non-game caller");
         assertFalse(o3, "coin.burnCoin rejected non-game caller");
         assertFalse(o4, "coin.decimatorBurn rejected non-game caller");
-        assertFalse(o5, "coin.terminalDecimatorBurn rejected non-game caller");
         assertFalse(o6, "coin.vaultEscrow rejected non-vault caller");
         assertFalse(o7, "coin.vaultMintTo rejected non-vault caller");
     }
@@ -1462,15 +1453,6 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         vm.prank(buyer);
-        (bool o3, ) = address(game).call(
-            abi.encodeWithSignature(
-                "runTerminalDecimatorJackpot(uint256,uint24,uint256)",
-                uint256(1 ether),
-                uint24(0),
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
         (bool o4, ) = address(game).call(
             abi.encodeWithSignature(
                 "runTerminalJackpot(uint256,uint24,uint256)",
@@ -1487,22 +1469,11 @@ contract CoverageGap222 is DeployProtocol {
                 uint24(0)
             )
         );
-        vm.prank(buyer);
-        (bool o7, ) = address(game).call(
-            abi.encodeWithSignature(
-                "recordTerminalDecBurn(address,uint24,uint256)",
-                buyer,
-                uint24(0),
-                uint256(1)
-            )
-        );
         // All EOA calls must revert (self-call guard: msg.sender != address(this)).
         assertFalse(o1, "game.runDecimatorJackpot rejected external caller");
         assertFalse(o2, "game.runBafJackpot rejected external caller");
-        assertFalse(o3, "game.runTerminalDecimatorJackpot rejected external caller");
         assertFalse(o4, "game.runTerminalJackpot rejected external caller");
         assertFalse(o6, "game.claimDecimatorJackpot rejected caller without claim");
-        assertFalse(o7, "game.recordTerminalDecBurn rejected external caller");
     }
 
     function test_gap_game_resolveRedemptionLootbox_guard() public {

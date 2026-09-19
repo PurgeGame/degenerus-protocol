@@ -121,35 +121,6 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         decBucketBurnTotal[lvl][denom][subBucket] = v;
     }
 
-    function setTerminalDecBet(
-        address p,
-        uint80 totalBurn,
-        uint88 weightedBurn,
-        uint8 bucket,
-        uint8 subBucket,
-        uint48 burnLevel,
-        bool boosted
-    ) external {
-        terminalDecBets[p] = TerminalDecBet({
-            totalBurn: totalBurn,
-            weightedBurn: weightedBurn,
-            bucket: bucket,
-            subBucket: subBucket,
-            burnLevel: burnLevel,
-            boosted: boosted
-        });
-    }
-
-    /// @dev Same key derivation as the terminal decimator write sites
-    ///      (keccak256(abi.encode(lvl, denom, subBucket))).
-    function setTerminalBucketTotal(uint48 lvl, uint8 denom, uint8 subBucket, uint256 v) external {
-        terminalDecBucketBurnTotal[keccak256(abi.encode(lvl, denom, subBucket))] = v;
-    }
-
-    function setTerminalClaimRound(uint24 lvl, uint96 poolWei, uint128 totalBurn) external {
-        lastTerminalDecClaimRound = TerminalDecClaimRound({lvl: lvl, poolWei: poolWei, totalBurn: totalBurn});
-    }
-
     function setFoilRecord(uint24 lvl, address p, uint256 w) external {
         foilRecord[lvl][p] = w;
     }
@@ -335,7 +306,7 @@ contract LensParityTest is Test {
     }
 
     // =========================================================================
-    // Level DGNRS / decimator / terminal decimator / foil records
+    // Level DGNRS / decimator / foil records
     // =========================================================================
 
     function test_RegistryOwedWritesPreserveLensSlots() public {
@@ -375,38 +346,6 @@ contract LensParityTest is Test {
         subBucket = uint8(bound(subBucket, 0, 12));
         harness.setDecBucketTotal(lvl, denom, subBucket, v);
         assertEq(lens.decBucketTotal(game, lvl, denom, subBucket), v, "bucket total");
-    }
-
-    function testFuzz_terminalDecBetOf(
-        address p,
-        uint80 totalBurn,
-        uint88 weightedBurn,
-        uint8 bucket,
-        uint8 subBucket,
-        uint48 burnLevel,
-        bool boosted
-    ) public {
-        harness.setTerminalDecBet(p, totalBurn, weightedBurn, bucket, subBucket, burnLevel, boosted);
-        DegenerusGameLens.TerminalDecEntry memory e = lens.terminalDecBetOf(game, p);
-        assertEq(e.totalBurn, totalBurn, "totalBurn");
-        assertEq(e.weightedBurn, weightedBurn, "weightedBurn");
-        assertEq(e.bucket, bucket, "bucket");
-        assertEq(e.subBucket, subBucket, "subBucket");
-        assertEq(e.burnLevel, burnLevel, "burnLevel");
-        assertEq(e.boosted, boosted, "boosted");
-    }
-
-    function testFuzz_terminalDecBucketTotal(uint48 lvl, uint8 denom, uint8 subBucket, uint256 v) public {
-        harness.setTerminalBucketTotal(lvl, denom, subBucket, v);
-        assertEq(lens.terminalDecBucketTotal(game, lvl, denom, subBucket), v, "terminal bucket total");
-    }
-
-    function testFuzz_terminalDecClaimRound(uint24 lvl, uint96 poolWei, uint128 totalBurn) public {
-        harness.setTerminalClaimRound(lvl, poolWei, totalBurn);
-        (uint24 l, uint96 pw, uint128 tb) = lens.terminalDecClaimRound(game);
-        assertEq(l, lvl, "lvl");
-        assertEq(pw, poolWei, "poolWei");
-        assertEq(tb, totalBurn, "totalBurn");
     }
 
     function testFuzz_foilRecordOf(uint24 lvl, address p, uint24 resolveDay, uint16 multBps, uint16 score, uint8 snap)

@@ -50,7 +50,6 @@ POOL-TO-POOL	_setFuturePrizePool	_claimDecimatorJackpotFor	modules/DegenerusGame
 POOL-TO-POOL	_setPendingPools	_claimDecimatorJackpotFor	modules/DegenerusGameDecimatorModule.sol	READ	same lootbox half on the frozen path (pending future instead of live); same pairing
 PRE-COUNTED	_creditClaimable	_creditDecJackpotClaimCore	modules/DegenerusGameDecimatorModule.sol	READ	ETH half of a live decimator claim; aggregate counted at snapshot
 POOL-TO-POOL	claimablePool	_creditDecJackpotClaimCore	modules/DegenerusGameDecimatorModule.sol	WRITE	lootbox half leaves claimable, paired with the future += at the caller
-PRE-COUNTED	_creditClaimable	claimTerminalDecimatorJackpot	modules/DegenerusGameDecimatorModule.sol	READ	terminal round pre-counted at the game-over drain (claimablePool += decSpend)
 PAIRED-CREDIT	_creditClaimable	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	READ	per-player half of the same tandem credit
 PAIRED-CREDIT	claimablePool	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	WRITE	aggregate + per-player in tandem; funded by the running pool debit in _distributePayout
 VALUE-IN	_setPendingPools	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet lands in pending future during freeze; claimable/afking-funded shortfall leg pre-debited via _settleShortfall (relabel)
@@ -62,10 +61,10 @@ POOL-TO-POOL	_setPendingPools	resolveEthSpinFromBox	modules/DegenerusGameDegener
 VALUE-IN	_setPendingPools	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix)
 VALUE-IN	_setPrizePools	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in live pools (75/25 split)
 DRAIN-ZERO	claimablePool	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
-PAIRED-CREDIT	_creditClaimable	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	per-owner refunds; aggregate bumped once via totalRefunded
+PAIRED-CREDIT	_creditClaimable	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	per-owner refunds aggregate into totalRefunded; terminal affiliate credit paired with its own claimablePool increment
 DRAIN-ZERO	_setCurrentPrizePool	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools zeroed at the game-over drain
 DRAIN-ZERO	_setPrizePools	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools (next|future) zeroed in one packed setter at the game-over drain; value re-credited as claimable or distributed
-POOL-TO-POOL	claimablePool	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	two sites: refund total and terminal-decimator round - both move drained live-pool value into claimable
+POOL-TO-POOL	claimablePool	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	two sites: refund total and terminal affiliate share - both move distributable ETH into claimable
 DRAIN-ZERO	prizePoolPendingPacked	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	pending buffer folded into the drained total and zeroed
 DRAIN-ZERO	yieldAccumulator	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	yield accumulator folded into the drained total and zeroed
 MUTATOR-DEF	_addNextPrizePool	_addNextPrizePool	modules/DegenerusGameJackpotModule.sol	READ	canonical helper definition

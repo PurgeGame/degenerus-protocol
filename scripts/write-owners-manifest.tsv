@@ -21,7 +21,7 @@ OWNER	claimablePool	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding releas
 OWNER	claimablePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots adds the level-transition claimableDelta after crediting winners; one of the paired liability writers
 OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_creditDecJackpotClaimCore moves the lootbox half of a decimator claim out of the reserved pool (pool -= lootboxPortion) when it becomes a box, not claimable ETH
 OWNER	claimablePool	modules/DegenerusGameDegeneretteModule.sol	_addClaimableEth pairs pool += with _creditClaimable for Degenerette ETH wins; same identity as every other crediting site
-OWNER	claimablePool	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain adds deity refunds and decimator spend; handleFinalSweep zeroes it after debiting VAULT/SDGNRS/GNRUS (terminal, GO_SWEPT latch guards later withdraws)
+OWNER	claimablePool	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain adds deity refunds and the terminal affiliate share; handleFinalSweep zeroes it after debiting VAULT/SDGNRS/GNRUS (terminal, GO_SWEPT latch guards later withdraws)
 OWNER	claimablePool	modules/DegenerusGameJackpotModule.sol	jackpot payouts (_processDailyEth liabilityDelta, golden ticket, yield surplus) add liability in tandem with _creditClaimable
 OWNER	claimablePool	modules/DegenerusGameLootboxModule.sol	creditRedemptionDirect (SDGNRS pays in) += and pullRedemptionReserve -= in tandem with SDGNRS's balancesPacked half
 OWNER	claimablePool	modules/DegenerusGameMintModule.sol	_purchaseForWithCached folds the ticket+lootbox legs' claimable/afking draws into one pool decrement after _settleShortfallNoPool debited the player
@@ -36,7 +36,6 @@ INIT	dailyIdx	DegenerusGame.sol	constructor seeds dailyIdx to the deploy day so 
 OWNER	dailyIdx	modules/DegenerusGameAdvanceModule.sol	_unlockRng seals the completed day (skipped at gameOver so the deadman's staleness survives); the crank is the sole runtime writer
 OWNER	dailyJackpotCoinTicketsPending	modules/DegenerusGameJackpotModule.sol	payDailyJackpot sets the phase-2 latch, payDailyJackpotCoinAndTickets clears it; both in the jackpot module
 OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets; payEarlyBirdTickets consumes and clears the day-1 early-bird field; payDailyJackpotCoinAndTickets consumes the rest and zeroes the word unless a carryover was priced, which payCarryoverTickets then consumes and zeroes; in the purchase phase payDailyJackpot(false) prices the ticket leg into the top field and payPurchaseDailyTickets consumes and clears it
-OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimatorJackpot writes [lvl]; runTerminalDecimatorJackpot writes [lvl+1] deliberately to avoid aliasing a live regular round
 OWNER	decDayOneActive	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest clears on a fresh daily request and arms at the x4/x99 window open; sole writer
 OWNER	decWindowOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest opens at x4/x99 and closes at x5/x00 on the level-promoting request; sole writer
 OWNER	degeneretteBetNonce	modules/DegenerusGameDegeneretteModule.sol	_placeDegeneretteBetCore increments the per-player bet nonce; sole writer
@@ -115,8 +114,6 @@ OWNER	_subOpenCursor	modules/GameAfkingModule.sol	_autoOpen persists the ring cu
 OWNER	_subscriberIndex	modules/GameAfkingModule.sol	_addToSet/_removeFromSet maintain the 1-indexed membership map; sole writer
 OWNER	_subscribers	modules/GameAfkingModule.sol	_removeFromSet swap-and-pop (push/pop elsewhere in the module); sole writer
 OWNER	subsFullyProcessed	modules/DegenerusGameAdvanceModule.sol	advanceGame clears on a new day and sets when the subscriber stage drains; sole writer
-OWNER	terminalDecBets	modules/DegenerusGameDecimatorModule.sol	recordTerminalDecBurn lazily resets a stale-level entry; sole writer
-OWNER	terminalDecBucketBurnTotal	modules/DegenerusGameDecimatorModule.sol	recordTerminalDecBurn adds credited weight; boostTerminalDecimator re-keys/adjusts conserving total; sole writer
 OWNER	ticketCursor	modules/DegenerusGameAdvanceModule.sol	advanceGame zeroes the cursor when it hands the far-future drain to the mint module (ticketLevel = ffLevel|FF bit); the mint module owns the walk
 OWNER	ticketCursor	modules/DegenerusGameMintModule.sol	processTicketBatch/processFutureTicketBatch persist the mid-queue resume position and zero at queue release; the crank only zeroes at the FF hand-off
 OWNER	ticketLevel	modules/DegenerusGameAdvanceModule.sol	advanceGame sets the FF resume marker at the phase transition and re-asserts it after a finished FF batch so housekeeping never re-runs
@@ -148,3 +145,4 @@ OWNER	ticketRound	modules/DegenerusGameFoilPackModule.sol	drainRounds advances t
 OWNER	ticketSeats	modules/DegenerusGameFoilPackModule.sol	drainRounds records the seats still holding entries when a chunk ends (queue indices plus one, queue order) so the next chunk re-seats them without rescanning holes
 OWNER	ticketSeats	modules/DegenerusGameMintModule.sol	_drainSeatedSurvivors pops seats it drains by index below the seat floor; processFutureTicketBatch clears it on an empty queue
 OWNER	ticketSeats	storage/DegenerusGameStorage.sol	_releaseTicketQueue clears the seats with the drained queue
+OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimatorJackpot freezes winning subbuckets at the resolved level

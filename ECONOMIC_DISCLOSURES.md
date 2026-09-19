@@ -45,5 +45,11 @@ Pass denominations and fixed future retail prices differ intentionally; expected
 constants are not promises of a realized payout.
 
 Game-over distribution and the later final sweep have distinct deadlines and beneficiaries.
+After existing claim liabilities and applicable paid-deity refunds are reserved, 2% of the
+distributable terminal pool is credited to the top affiliate for the terminal ticket level;
+the remainder goes to that level's terminal ticket jackpot. With no ranked affiliate, the
+ticket jackpot receives the entire distributable pool. Affiliate score must be claimed
+before the terminal settlement transaction to affect this award. Later affiliate claims
+cannot change the credited winner. The terminal decimator has been removed.
 Read `DegenerusGameGameOverModule` and the reserve-token terminal paths for the exact
 claim/forfeiture rules. Owner authority is enumerated in [Security](SECURITY.md).

@@ -229,34 +229,6 @@ interface IDegenerusGame {
         uint256 rngWord
     ) external returns (uint256 claimableDelta);
 
-    // Terminal Decimator (Death Bet)
-
-    /// @notice Record a terminal decimator burn entry for a player.
-    /// @param player The player burning.
-    /// @param lvl The current game level.
-    /// @param baseAmount The base FLIP amount burned.
-    function recordTerminalDecBurn(
-        address player,
-        uint24 lvl,
-        uint256 baseAmount
-    ) external;
-
-    /// @notice Run the terminal decimator jackpot distribution.
-    /// @param poolWei Total ETH pool to distribute.
-    /// @param lvl The game level for winner sampling.
-    /// @param rngWord Random word for winner selection.
-    /// @return returnAmountWei ETH returned undistributed.
-    function runTerminalDecimatorJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
-    ) external returns (uint256 returnAmountWei);
-
-    /// @notice Check if the terminal decimator window is open.
-    /// @return open True if terminal decimator bets are accepted.
-    /// @return lvl The current level for terminal decimator.
-    function terminalDecWindow() external view returns (bool open, uint24 lvl);
-
     /// @notice Game-over terminal jackpot: Day-5-style bucket distribution to the final ticket cohort.
     /// @param poolWei Total ETH to distribute.
     /// @param targetLvl Level to sample winners from.
@@ -283,10 +255,6 @@ interface IDegenerusGame {
     /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
     /// @dev Non-claimable entries are skipped, not reverted.
     function claimDecimatorJackpotMany(address[] calldata players, uint24 lvl) external;
-
-    /// @notice Claim terminal Decimator jackpot for caller.
-    /// @dev Only callable post-GAMEOVER. Level is read from the resolved claim round.
-    function claimTerminalDecimatorJackpot() external;
 
     /// @notice Back an sDGNRS redemption reservation: segregate game-side ETH, or verify custody.
     /// @dev Access: sDGNRS only. Called at gambling-burn submit, fail-closed. Two legs: when

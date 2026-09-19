@@ -97,11 +97,6 @@ contract FLIP {
     /// @param bucket The effective bucket weight assigned (lower = more valuable).
     event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket);
 
-    /// @notice Emitted on a terminal decimator (death bet) burn.
-    /// @param player The burner's address.
-    /// @param amountBurned The amount burned (18 decimals).
-    event TerminalDecimatorBurn(address indexed player, uint256 amountBurned);
-
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The account tied to the escrow: the original transfer sender when routed to VAULT via _transfer, address(0) on a direct mint to VAULT, or the calling contract (GAME/VAULT) for vaultEscrow/tombstoneAtGameOver.
     /// @param amount The amount added to vault mint allowance (18 decimals).
@@ -246,7 +241,7 @@ contract FLIP {
       |  • VAULT, ADMIN, COINFLIP                                            |
       +======================================================================+*/
 
-    /// @notice The main game contract; provides RNG-lock state, level, decimator/terminal-decimator windows, operator-approval checks, and activity-score/boon bookkeeping.
+    /// @notice The main game contract; provides RNG-lock state, level, decimator windows, operator-approval checks, and activity-score/boon bookkeeping.
     IDegenerusGame internal constant degenerusGame = IDegenerusGame(ContractAddresses.GAME);
 
     /// @notice The quest module handling daily quests and streak tracking.
@@ -866,41 +861,4 @@ contract FLIP {
         emit DecimatorBurn(caller, amount, bucketUsed);
     }
 
-    /*+======================================================================+
-      |                   TERMINAL DECIMATOR (DEATH BET)                     |
-      +======================================================================+
-      |  Always-open burn betting on GAMEOVER. Time multiplier rewards       |
-      |  early conviction. Total loss if level completes normally.           |
-      +======================================================================+*/
-
-    /// @notice Burn FLIP as a terminal decimator (death bet).
-    /// @dev Always open (no milestone gating). Blocked on lastPurchaseDay (level completing,
-    ///      death bet can never fire), gameOver, level 0 (unresolvable sentinel round), and
-    ///      after the death-clock deadline.
-    ///      Bucket computed internally using lvl 100 rules (min bucket 2).
-    /// @param player Player address to burn for (address(0) = msg.sender).
-    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 FLIP).
-    function terminalDecimatorBurn(address player, uint256 amount) external {
-        address caller;
-        if (player == address(0) || player == msg.sender) {
-            caller = msg.sender;
-        } else {
-            if (!degenerusGame.isOperatorApproved(player, msg.sender)) {
-                revert NotApproved();
-            }
-            caller = player;
-        }
-
-        if (amount < DECIMATOR_MIN) revert AmountLTMin();
-
-        (bool open, uint24 lvl) = degenerusGame.terminalDecWindow();
-        if (!open) revert NotDecimatorWindow();
-
-        uint256 consumed = _consumeCoinflipShortfall(caller, amount);
-        _burn(caller, amount - consumed);
-
-        degenerusGame.recordTerminalDecBurn(caller, lvl, amount);
-
-        emit TerminalDecimatorBurn(caller, amount);
-    }
 }

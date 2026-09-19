@@ -32,7 +32,11 @@ Ticket and ordinary lootbox ETH funds protocol prize pools. Presale-box ETH is c
 also receives the sDGNRS `PresaleBox` pool remainder once presale is drained. Jackpot and redemption paths create claimable
 obligations or game-specific credits; moving ETH/stETH to a player follows the relevant
 claim/recipient checks. Permissionless processing is not authority to redirect payment.
-Game-over processing distributes remaining obligations and later sweeps unclaimed balances.
+Game-over processing reserves existing claims and applicable deity refunds, credits 2% of
+the remaining pool to the terminal level's top affiliate, and sends the rest to the main
+terminal ticket jackpot. If no affiliate is ranked, the jackpot receives the entire pool.
+The affiliate winner is fixed at settlement; later score claims do not reopen the award.
+The later final sweep handles unclaimed balances.
 Read the terminal paths separately from live-game withdrawal paths.
 
 FLIP has special routing for VAULT and sDGNRS: their backing/allowances are not ordinary

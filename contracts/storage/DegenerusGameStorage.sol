@@ -2898,15 +2898,14 @@ abstract contract DegenerusGameStorage {
     ///      into ONE slot (96 + 128 + 32 = 256 bits).
     struct DecClaimRound {
         /// @notice ETH prize pool available for claims. uint96 (7.9e28 wei = 7.9e10 ETH,
-        ///         far above any reachable pool; mirrors TerminalDecClaimRound.poolWei).
+        ///         far above any reachable pool).
         uint96 poolWei;
         /// @notice Total qualifying burn across winning subbuckets (denominator for
         ///         pro-rata). Sum of per-burn effective amounts: the base is the FLIP
         ///         burned plus a boon of up to 50% on at most 50k FLIP of it, then the
         ///         activity multiplier (up to 1.7833x, x1.2 on day one) applies until
         ///         DECIMATOR_MULTIPLIER_CAP, beyond which burns count 1x. Supply-capped
-        ///         at uint128; realistic per-level totals sit ~1e8x under it. Mirrors
-        ///         TerminalDecClaimRound.totalBurn.
+        ///         at uint128; realistic per-level totals sit ~1e8x under it.
         uint128 totalBurn;
         /// @notice Stored seed for the claim-time lootbox draw only. The winning subbuckets
         ///         are selected from the FULL VRF word at snapshot and stored separately in
@@ -2982,39 +2981,34 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Terminal Decimator (Always-Open Death Bet)
+    // Deity sales and protocol boon draws
     // =========================================================================
 
-    /// @dev Per-player terminal decimator entry. Packed into a single 256-bit slot (240/256 bits).
-    ///      totalBurn: pre-time-multiplier cumulative burn (capped at DECIMATOR_MULTIPLIER_CAP).
-    ///      weightedBurn: post-time-multiplier cumulative burn (used for claim share calculation).
-    ///      bucket: bucket denominator (2-12), computed from activity score using lvl 100 rules.
-    ///      subBucket: deterministic from keccak256(player, level, bucket).
-    ///      burnLevel: which level this entry belongs to (stale detection for lazy reset).
-    ///      boosted: set once a final-day streak boost has been applied this level (one-time).
-    struct TerminalDecBet {
-        uint80 totalBurn;
-        uint88 weightedBurn;
-        uint8 bucket;
-        uint8 subBucket;
-        uint48 burnLevel;
-        bool boosted;
-    }
-    mapping(address => TerminalDecBet) internal terminalDecBets;
+    /// @dev Paid deity purchases only: the two genesis grants never advance pricing.
+    uint8 internal deityPassSales;
 
-    /// @dev Per-bucket aggregates for terminal decimator.
-    ///      Key: keccak256(abi.encode(level, denom, subBucket)) -> total weighted burn.
-    mapping(bytes32 => uint256) internal terminalDecBucketBurnTotal;
-
-    /// @dev Resolution snapshot for terminal decimator claims (set at GAMEOVER).
-    ///      Packed into a single 256-bit slot (248/256 bits).
-    ///      No rngWord needed — claims are 100% ETH post-GAMEOVER (auto-rebuy skipped).
-    struct TerminalDecClaimRound {
-        uint24 lvl;
-        uint96 poolWei;
-        uint128 totalBurn;
+    /// @dev 216 bits. Principal stays in wei; weight uses 100-FLIP units times
+    ///      the score multiplier scaled by 800. Three award bits, one per boon.
+    struct ProtocolBoonPool {
+        uint112 totalDonatedWei;
+        uint64 totalWeight;
+        uint32 entryCount;
+        uint8 awardedMask;
     }
-    TerminalDecClaimRound internal lastTerminalDecClaimRound;
+
+    /// @dev 248 bits, one slot. At most uint32.max entries of weight <=600,000
+    ///      puts cumulative weight below 2^52. Raw principal per pool is <2^107 wei.
+    struct ProtocolBoonEntry {
+        address donor;
+        uint64 cumulativeWeight;
+        uint8 amountUnits;
+        uint16 scoreSnapshot;
+    }
+
+    mapping(address => mapping(uint24 => ProtocolBoonPool)) internal protocolBoonPools;
+    mapping(address => mapping(uint24 => mapping(uint32 => ProtocolBoonEntry))) internal protocolBoonEntries;
+
+    bytes32 internal constant PROTOCOL_BOON_WINNER_TAG = keccak256("degenerus.protocol.boon.winner");
 
     // =========================================================================
     // Boon Packed Storage
@@ -3863,32 +3857,6 @@ abstract contract DegenerusGameStorage {
     ///      it is exhausted or seated), so exhausted holes are never rescanned and a
     ///      long-lived seat can never pin the cursor. Cleared at queue release.
     uint256 internal ticketSeats;
-
-    /// @dev Paid deity purchases only: the two genesis grants never advance pricing.
-    uint8 internal deityPassSales;
-
-    /// @dev 216 bits. Principal stays in wei; weight uses 100-FLIP units times
-    ///      the score multiplier scaled by 800. Three award bits, one per boon.
-    struct ProtocolBoonPool {
-        uint112 totalDonatedWei;
-        uint64 totalWeight;
-        uint32 entryCount;
-        uint8 awardedMask;
-    }
-
-    /// @dev 248 bits, one slot. At most uint32.max entries of weight <=600,000
-    ///      puts cumulative weight below 2^52. Raw principal per pool is <2^107 wei.
-    struct ProtocolBoonEntry {
-        address donor;
-        uint64 cumulativeWeight;
-        uint8 amountUnits;
-        uint16 scoreSnapshot;
-    }
-
-    mapping(address => mapping(uint24 => ProtocolBoonPool)) internal protocolBoonPools;
-    mapping(address => mapping(uint24 => mapping(uint32 => ProtocolBoonEntry))) internal protocolBoonEntries;
-
-    bytes32 internal constant PROTOCOL_BOON_WINNER_TAG = keccak256("degenerus.protocol.boon.winner");
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

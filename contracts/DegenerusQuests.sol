@@ -1566,7 +1566,7 @@ contract DegenerusQuests is IDegenerusQuests {
     ///         exposes as baseStreak, computed WITHOUT materializing the per-quest view structs
     ///         (a cheap read for reward scaling). A streak lapsed past its shields reads 0, so a
     ///         stale-high raw streak (built then abandoned with no quest sync) can't inflate
-    ///         downstream reward scaling — terminal-decimator weight, lootbox EV, or sDGNRS claims.
+    ///         downstream reward scaling — lootbox EV or sDGNRS claims.
     /// @param player The player address to query.
     /// @return The effective (decay-applied) reward streak.
     function effectiveBaseStreak(address player) external view returns (uint32) {

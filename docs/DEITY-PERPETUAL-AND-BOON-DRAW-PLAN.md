@@ -183,10 +183,11 @@ approved operator. Public paid deities retain their ordinary manual-gift rules.
 
 ## Storage and read interface
 
-New shared state is appended after the existing fields. The deity registry keeps
-its existing root and one-slot element stride. This is a new-deployment change, not
-an in-place migration of an
-already deployed registry.
+The deity registry keeps its existing root and one-slot element stride. After
+terminal-decimator removal, `deityPassSales`, `protocolBoonPools`, and
+`protocolBoonEntries` occupy its former slots 47–49; all other surviving fields
+retain their positions. This layout is for a new deployment, not an in-place
+migration of existing contract state.
 
 | Record | Fields | Bits |
 |---|---|---:|

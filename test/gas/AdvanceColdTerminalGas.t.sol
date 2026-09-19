@@ -30,11 +30,7 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
             deityPassOwners.push(owner);
             deityPassPricePaid[owner] = 20 ether;
         }
-        for (uint8 denominator = 2; denominator <= 12; ++denominator) {
-            for (uint8 sub; sub < denominator; ++sub) {
-                terminalDecBucketBurnTotal[keccak256(abi.encode(uint24(9), denominator, sub))] = 1 ether;
-            }
-        }
+
     }
 }
 
@@ -51,6 +47,10 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         vm.etch(address(game), type(ColdTerminalSeeder).runtimeCode);
         ColdTerminalSeeder(payable(address(game))).seed(word, _fresh());
         vm.etch(address(game), original);
+        vm.prank(address(0xAFF1));
+        affiliate.createAffiliateCode(bytes32("TERMINAL"), 0);
+        vm.prank(address(game));
+        affiliate.payAffiliate(1000 ether, bytes32("TERMINAL"), address(0xAFF2), 10, true, 0);
         vm.deal(address(game), 5000 ether);
     }
 
@@ -75,11 +75,8 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         assertEq(winners, 305, "all terminal draw slots must execute");
         assertEq(refunds, 600 ether, "30 paid refunds; genesis has no refund basis");
         assertEq(rngApplied, _fresh() ? 1 : 0, "expected entropy path");
-        uint256 terminalRound = uint256(vm.load(address(game), bytes32(uint256(49))));
-        assertEq(uint24(terminalRound), 9, "terminal decimator must resolve the current level");
-        assertEq(uint128(terminalRound >> 120), 11 ether, "all eleven winning decimator buckets must contribute");
-        assertGt(uint96(terminalRound >> 24), 0, "terminal decimator must reserve a real payout");
-        assertLt(used, 16_777_216, "terminal transaction exceeds cap");
+        assertEq(game.claimableWinningsOf(address(0xAFF1)), 88 ether, "affiliate gets 2% after refunds");
+        assertLt(used, 15_000_000, "terminal transaction exceeds review target");
     }
 }
 

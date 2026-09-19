@@ -171,9 +171,9 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             (, bytes32[] memory writes) = vm.accesses(address(game));
             assertEq(writes.length, 2, "one packed header write and one packed entry write");
             // Donations may only change the day's packed header and their own entry.
-            bytes32 issuerRoot = keccak256(abi.encode(address(vault), uint256(70)));
+            bytes32 issuerRoot = keccak256(abi.encode(address(vault), uint256(48)));
             bytes32 poolSlot = keccak256(abi.encode(uint256(day), issuerRoot));
-            bytes32 entryRoot = keccak256(abi.encode(uint256(day), keccak256(abi.encode(address(vault), uint256(71)))));
+            bytes32 entryRoot = keccak256(abi.encode(uint256(day), keccak256(abi.encode(address(vault), uint256(49)))));
             bytes32 entrySlot = keccak256(abi.encode(i, entryRoot));
             for (uint256 j; j < writes.length; ++j) {
                 assertTrue(writes[j] == poolSlot || writes[j] == entrySlot, "unrelated game state changed");

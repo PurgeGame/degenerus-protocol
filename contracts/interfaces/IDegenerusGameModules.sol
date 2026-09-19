@@ -192,27 +192,6 @@ interface IDegenerusGameDecimatorModule {
     /// @dev Non-claimable entries are skipped, not reverted.
     function claimDecimatorJackpotMany(address[] calldata players, uint24 lvl) external;
 
-    // Terminal Decimator (Death Bet)
-
-    /// @notice Record a terminal decimator burn.
-    function recordTerminalDecBurn(
-        address player,
-        uint24 lvl,
-        uint256 baseAmount
-    ) external;
-
-    /// @notice Final-day streak boost for the caller's terminal decimator entry.
-    function boostTerminalDecimator() external;
-
-    /// @notice Resolve terminal decimator at GAMEOVER.
-    function runTerminalDecimatorJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
-    ) external returns (uint256 returnAmountWei);
-
-    /// @notice Claim terminal decimator jackpot for caller.
-    function claimTerminalDecimatorJackpot() external;
 }
 
 /// @title IDegenerusGameWhaleModule

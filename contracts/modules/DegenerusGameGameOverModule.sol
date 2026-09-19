@@ -103,10 +103,12 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         address indexed current
     );
 
-    /// @dev Deity-pass early-gameover refunds, as one aggregate. The per-owner credits are
-    ///      the only ones in the drain, so `totalRefunded` bounds them exactly; a per-owner
-    ///      event would cost a log per holder on a path that already walks the whole set.
+    /// @dev Deity-pass early-gameover refunds, as one aggregate. `totalRefunded` bounds
+    ///      the refund credits exactly, without a separate refund event per holder.
     event DeityPassRefundsSettled(uint256 totalRefunded);
+
+    /// @notice The terminal level's leading affiliate received its one-time ETH share.
+    event TerminalAffiliatePaid(address indexed affiliate, uint24 indexed level, uint256 amount);
 
     // error E() — inherited from DegenerusGameStorage
 
@@ -119,8 +121,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      Distribution logic:
     ///      - If game ended early (levels 0-9): refund of the price paid (capped at 20 ETH) per deity pass,
     ///        FIFO by purchase order, budget-capped to available funds minus claimablePool
-    ///      - Remaining funds: 10% to Decimator, 90% to the phase-correct terminal ticket cohort
-    ///      - Decimator refunds flow to terminal jackpot pool
+    ///      - Remaining funds: 2% to the terminal level's top affiliate, 98% to its ticket cohort
+    ///      - No ranked affiliate: the entire remaining pool goes to the terminal ticket cohort
     ///      - Any uncredited remainder later swept by handleFinalSweep three-way to vault / sDGNRS / GNRUS
     ///
     ///      Reads rngWordByDay[day] for entropy; reverts if funds exist but word is not yet available.
@@ -188,8 +190,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             if (totalRefunded != 0) {
                 claimablePool += uint128(totalRefunded); // Safe: totalRefunded bounded by preRefundAvailable which fits uint128
                 // The per-owner credits above carry no domain event. One aggregate marker
-                // names them: this function credits nothing else, so the receipt's refund
-                // rows are exactly the credits summing to totalRefunded.
+                // names the refund total separately from the affiliate and ticket awards.
                 emit DeityPassRefundsSettled(totalRefunded);
             }
         }
@@ -241,32 +242,26 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         // remaining tracks unallocated funds.
         uint256 remaining = available;
 
-        // 10% Terminal Decimator (death bet) -- refunds flow back to remaining for terminal jackpot
-        uint256 decPool = remaining / 10;
-        if (decPool != 0) {
-            uint256 decRefund = IDegenerusGame(address(this)).runTerminalDecimatorJackpot(decPool, lvl, rngWord);
-            uint256 decSpend = decPool - decRefund;
-            if (decSpend != 0) {
-                claimablePool += uint128(decSpend); // Safe: decSpend bounded by decPool which is a fraction of available
-            }
-            remaining -= decPool;
-            remaining += decRefund;
+        // Claim-time affiliate scores can still change later. Fix and credit the
+        // winner here once, using the same level as the terminal ticket cohort.
+        uint24 terminalLevel = _gameOverTicketLevel(lvl);
+        (address top,) = affiliate.affiliateTop(terminalLevel);
+        uint256 affiliateShare = remaining / 50;
+        if (top != address(0) && affiliateShare != 0) {
+            _creditClaimable(top, affiliateShare);
+            claimablePool += uint128(affiliateShare);
+            remaining -= affiliateShare;
+            emit TerminalAffiliatePaid(top, terminalLevel, affiliateShare);
         }
 
-        // 90% (+ decimator refund) to the final ticket cohort (Day-5-style bucket distribution).
+        // All remaining ETH goes to the final ticket cohort (Day-5-style distribution).
         // gameOver=true prevents auto-rebuy inside _addClaimableEth (tickets worthless post-game).
         // Pay from the SAME phase-correct level the AdvanceModule terminal drain materialized:
         // current `lvl` in jackpot phase and in the locked last-purchase transition (where level was
         // already promoted), otherwise purchase-phase `lvl + 1`. Any leftover from empty trait
         // buckets stays in the contract until handleFinalSweep (30 days later) folds it into the
         // three-way split to vault / sDGNRS / GNRUS.
-        if (remaining != 0) {
-            IDegenerusGame(address(this)).runTerminalJackpot(
-                remaining,
-                _gameOverTicketLevel(lvl),
-                rngWord
-            );
-        }
+        IDegenerusGame(address(this)).runTerminalJackpot(remaining, terminalLevel, rngWord);
     }
 
     /// @notice Final sweep of all remaining funds after 30 days post-gameover.

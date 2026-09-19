@@ -44,7 +44,7 @@ interface IDegenerusGameLensSource {
 ///         the game's `extsload` raw-slot reader. Decodes the packed records that have
 ///         no per-field getters on the game (EIP-170 headroom lives here for free):
 ///         the full afking Sub record, the per-level affiliate DGNRS pool, decimator
-///         and terminal-decimator bets with their subbucket aggregates, foil-pack
+///         bets with their subbucket aggregates, foil-pack
 ///         records, and a per-component activity-score breakdown.
 ///
 ///         Deployment-decoupled periphery: not referenced by ContractAddresses, takes
@@ -194,16 +194,6 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint8 bucket; // 0 = no entry this level
         uint8 subBucket;
         bool claimed;
-    }
-
-    /// @notice A player's terminal decimator entry (terminalDecBets[player]).
-    struct TerminalDecEntry {
-        uint80 totalBurn;
-        uint88 weightedBurn;
-        uint8 bucket;
-        uint8 subBucket;
-        uint48 burnLevel; // stale-detection level key
-        bool boosted;
     }
 
     /// @notice A player's foil-pack record for a cycle level (foilRecord[lvl][player]).
@@ -530,56 +520,6 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         // mapping(uint24 => uint256[13][13]): [denom] strides 13 slots, [subBucket] one.
         uint256 arrBase = uint256(_mapSlot(uint256(lvl), base));
         return _sload(game, bytes32(arrBase + uint256(denom) * 13 + subBucket));
-    }
-
-    /// @notice A player's terminal decimator entry (terminalDecBets[player]).
-    function terminalDecBetOf(
-        address game,
-        address player
-    ) external view returns (TerminalDecEntry memory e) {
-        uint256 base;
-        assembly {
-            base := terminalDecBets.slot
-        }
-        uint256 w = _sload(game, _mapSlot(player, base));
-        e.totalBurn = uint80(w);
-        e.weightedBurn = uint88(w >> 80);
-        e.bucket = uint8(w >> 168);
-        e.subBucket = uint8(w >> 176);
-        e.burnLevel = uint48(w >> 184);
-        e.boosted = uint8(w >> 232) != 0;
-    }
-
-    /// @notice Aggregated terminal-decimator weighted burn for a
-    ///         level/denominator/subbucket (terminalDecBucketBurnTotal; key =
-    ///         keccak256(abi.encode(level, denom, subBucket)), the module's own key).
-    function terminalDecBucketTotal(
-        address game,
-        uint48 lvl,
-        uint8 denom,
-        uint8 subBucket
-    ) external view returns (uint256) {
-        uint256 base;
-        assembly {
-            base := terminalDecBucketBurnTotal.slot
-        }
-        bytes32 key = keccak256(abi.encode(lvl, denom, subBucket));
-        return _sload(game, keccak256(abi.encode(key, base)));
-    }
-
-    /// @notice The terminal decimator resolution snapshot set at GAMEOVER
-    ///         (lastTerminalDecClaimRound): claim level, ETH pool, pro-rata total.
-    function terminalDecClaimRound(
-        address game
-    ) external view returns (uint24 lvl, uint96 poolWei, uint128 totalBurn) {
-        uint256 slot;
-        assembly {
-            slot := lastTerminalDecClaimRound.slot
-        }
-        uint256 w = _sload(game, bytes32(slot));
-        lvl = uint24(w);
-        poolWei = uint96(w >> 24);
-        totalBurn = uint128(w >> 120);
     }
 
     /*+======================================================================+

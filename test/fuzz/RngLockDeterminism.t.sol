@@ -11,7 +11,7 @@ pragma solidity ^0.8.26;
 //
 // Aggregated at Wave-2 (plan 301-06) from 5 Wave-1 contributions:
 //   01-SCAFFOLD     : header + helpers + sec1 PayDailyJackpot + sec3 RunTerminalJackpot
-//   02-JACKPOT      : sec2 PayDailyJackpotCoinAndTickets + sec4 RunTerminalDecimatorJackpot
+//   02-JACKPOT      : sec2 PayDailyJackpotCoinAndTickets
 //   03-LOOTBOX      : sec6 ResolveRedemptionLootbox + sec7 ResolveLootboxCommon
 //                     + sec8 DegeneretteLootboxDirect + sec13 DecimatorAwardLootbox
 //   04-MIXED        : sec10 MintTraitGeneration + sec11 FlipCoinflipResolve
@@ -52,15 +52,6 @@ contract RngLockDeterminism is DeployProtocol {
     // lootboxOrder (the packed box-order word) = slot 15; the whole word is zeroed on open, so
     // nonzero/zero is still the box-owed signal regardless of the internal bit layout.
     uint256 constant SLOT_LOOTBOX_ETH = 15;
-    // Defensive slot constants for sec4 RunTerminalDecimatorJackpot
-    // contribution. Exact values are placeholders; aggregator hash captures
-    // post-resolution storage state at these slots for byte-identity
-    // comparison. The values do not need to be the canonical mapping bases
-    // -- they only need to be deterministic between perturbed and baseline
-    // runs (which they are, since both runs read the same slots).
-    uint256 constant SLOT_DEC_BUCKET_OFFSET_PACKED = 100;
-    uint256 constant SLOT_LAST_TERMINAL_DEC_CLAIM_ROUND = 101;
-
     VRFHandler public vrfHandler;
     uint256 private _lastFulfilledReqId;
     uint256 constant DRAIN_MAX_ITERATIONS = 50;
@@ -670,110 +661,6 @@ contract RngLockDeterminism is DeployProtocol {
             baselineOutputs,
             "PayDailyJackpotCoinAndTickets VRF outputs must be byte-identical under perturbation"
         );
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    // sec4 -- RunTerminalDecimatorJackpot (RNGLOCK-CATALOG sec4)
-    // From 301-02 JACKPOT-CLUSTER contribution.
-    // ════════════════════════════════════════════════════════════════════
-
-    function testFuzz_RngLockDeterminism_RunTerminalDecimatorJackpot(
-        uint256 vrfWord,
-        uint256 perturbSeed
-    ) public {
-        // SKIP: RNGLOCK-FIXREC.md sec13..sec17 -- terminal-decimator prizePoolsPacked + decBucketOffsetPacked cluster -- v44.0 D-43N-V44-HANDOFF-13 flips this to strict assertion
-        vm.skip(true);
-        vm.assume(vrfWord != 0);
-        uint256 preLockSnap = _snapshotPreLock();
-
-        address decBurner = makeAddr("decBurner");
-        vm.deal(decBurner, 10 ether);
-
-        if (!game.gameOver()) {
-            vm.warp(block.timestamp + 366 days);
-            try game.advanceGame() {} catch {
-                vm.assume(false);
-            }
-            if (!game.gameOver()) {
-                vm.assume(false);
-            }
-        }
-
-        game.advanceGame();
-        uint256 reqId = mockVRF.lastRequestId();
-        if (reqId == 0 || !game.rngLocked()) {
-            vm.assume(false);
-        }
-
-        _perturb(perturbSeed);
-        assertTrue(
-            game.rngLocked(),
-            "lock must not lift under perturbation (catalog sec4 invariant)"
-        );
-
-        _deliverMockVrf(reqId, vrfWord);
-
-        uint24 perturbedLvl = game.level();
-        bytes32 perturbedDecBucketSlot = keccak256(
-            abi.encode(uint256(perturbedLvl), uint256(SLOT_DEC_BUCKET_OFFSET_PACKED))
-        );
-        uint64 perturbedDecBucket = uint64(uint256(
-            vm.load(address(game), perturbedDecBucketSlot)
-        ));
-        bytes32 perturbedClaimRound = vm.load(
-            address(game),
-            bytes32(uint256(SLOT_LAST_TERMINAL_DEC_CLAIM_ROUND))
-        );
-        bool perturbedGameOver = game.gameOver();
-
-        bytes32 perturbedOutputs = keccak256(
-            abi.encode(perturbedDecBucket, perturbedClaimRound, perturbedGameOver)
-        );
-
-        _revertToPreLock(preLockSnap);
-
-        if (!game.gameOver()) {
-            vm.warp(block.timestamp + 366 days);
-            try game.advanceGame() {} catch {
-                vm.assume(false);
-            }
-            if (!game.gameOver()) {
-                vm.assume(false);
-            }
-        }
-
-        game.advanceGame();
-        uint256 baselineReqId = mockVRF.lastRequestId();
-        if (baselineReqId == 0 || !game.rngLocked()) {
-            vm.assume(false);
-        }
-
-        _deliverMockVrf(baselineReqId, vrfWord);
-
-        uint24 baselineLvl = game.level();
-        bytes32 baselineDecBucketSlot = keccak256(
-            abi.encode(uint256(baselineLvl), uint256(SLOT_DEC_BUCKET_OFFSET_PACKED))
-        );
-        uint64 baselineDecBucket = uint64(uint256(
-            vm.load(address(game), baselineDecBucketSlot)
-        ));
-        bytes32 baselineClaimRound = vm.load(
-            address(game),
-            bytes32(uint256(SLOT_LAST_TERMINAL_DEC_CLAIM_ROUND))
-        );
-        bool baselineGameOver = game.gameOver();
-
-        bytes32 baselineOutputs = keccak256(
-            abi.encode(baselineDecBucket, baselineClaimRound, baselineGameOver)
-        );
-
-        _assertVrfOutputByteIdentity(
-            perturbedOutputs,
-            baselineOutputs,
-            "RunTerminalDecimatorJackpot VRF outputs must be byte-identical under perturbation"
-        );
-
-        decBurner;
     }
 
     // ════════════════════════════════════════════════════════════════════

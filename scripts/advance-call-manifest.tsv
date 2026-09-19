@@ -15,7 +15,7 @@
 # openHumanBoxes, _crapsKeep under try). Module roots: Mint.processTicketBatch/processFutureTicketBatch,
 # Afking.processSubscriberStage, Jackpot.payDailyJackpot/payEarlyBirdTickets/payDailyJackpotCoinAndTickets/payCarryoverTickets/payDailyFlipJackpot/
 # distributeYieldSurplus, GameOver.handleGameOverDrain/handleFinalSweep, the facade self-calls
-# runBafJackpot/runDecimatorJackpot/runTerminalJackpot/runTerminalDecimatorJackpot/emitDailyWinningTraits.
+# runBafJackpot/runDecimatorJackpot/runTerminalJackpot/emitDailyWinningTraits.
 #
 # Classes: CRANK-PINNED (bare, on the crank, pin required) · CRANK-TRY (wrapped at the site) ·
 # CRANK-CAUGHT (bare at the site, but every crank path to it crosses an upstream try/catch —
@@ -65,14 +65,10 @@ OFF-CRANK	delegatecall:IDegenerusGameBoonModule.issueDeityBoon	issueDeityBoon	De
 CRANK-SELF	lowlevel:delegatecall	recordDecBurn	DegenerusGame.sol	BARE		FLIP decimator callback, including opening-day autoDecimatorBurn; own-storage entry accounting
 CRANK-SELF	lowlevel:delegatecall	runDecimatorJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from _consolidatePoolsAndRewardJackpots -> GAME_DECIMATOR_MODULE.runDecimatorJackpot; bubble intentional
 CRANK-SELF	lowlevel:delegatecall	runBafJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from _consolidatePoolsAndRewardJackpots -> GAME_JACKPOT_MODULE.runBafJackpot; bubble intentional
-OFF-CRANK	lowlevel:delegatecall	recordTerminalDecBurn	DegenerusGame.sol	BARE		FLIP terminal-decimator burn callback (player burn)
-OFF-CRANK	lowlevel:delegatecall	boostTerminalDecimator	DegenerusGame.sol	BARE		player entry boostTerminalDecimator
-CRANK-SELF	lowlevel:delegatecall	runTerminalDecimatorJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from GameOverModule.handleGameOverDrain (advance game-over path) -> GAME_DECIMATOR_MODULE; bubble intentional
 CRANK-SELF	lowlevel:delegatecall	runTerminalJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from GameOverModule.handleGameOverDrain (advance game-over path) -> GAME_JACKPOT_MODULE; bubble intentional
 CRANK-SELF	lowlevel:delegatecall	emitDailyWinningTraits	DegenerusGame.sol	BARE		OnlySelf facade self-called from advanceGame (purchaseLevel==1 daily) -> GAME_JACKPOT_MODULE.emitDailyWinningTraits; bubble intentional
 OFF-CRANK	lowlevel:delegatecall	claimDecimatorJackpot	DegenerusGame.sol	BARE		permissionless decimator claim (player-side, separate tx)
 OFF-CRANK	lowlevel:delegatecall	claimDecimatorJackpotMany	DegenerusGame.sol	BARE		permissionless decimator batch claim (player-side, separate tx)
-OFF-CRANK	lowlevel:delegatecall	claimTerminalDecimatorJackpot	DegenerusGame.sol	BARE		player terminal decimator claim
 OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	_claimWinningsWithCurse	DegenerusGame.sol	BARE		claimWinnings / claimWinnings(amount) player claim path; GNRUS, sDGNRS and VAULT redemptions call it as players
 OFF-CRANK	lowlevel:call	withdrawAfkingFunding	DegenerusGame.sol	BARE		player / VAULT afking funding withdrawal entry
 OFF-CRANK	lowlevel:delegatecall	claimAffiliateDgnrs	DegenerusGame.sol	BARE		player affiliate DGNRS claim
@@ -153,8 +149,6 @@ CRANK-PINNED	IDegenerusQuests.awardQuestStreakShield	_applyBoon	modules/Degeneru
 CRANK-PINNED	IDegenerusQuests.awardQuestStreakBonus	_creditActivity	modules/DegenerusGameBoonModule.sol	BARE	test/repro/QuestStreakStallForgiveness.t.sol;test/fuzz/QuestBoonAfkingStreakLoss.t.sol	Activity boon on the keeper open legs (_applyBoon -> _creditActivity); callee gated OnlyGame only, streak math clamped
 OFF-CRANK	ICoinflip.creditFlip	claimDecimatorJackpotMany	modules/DegenerusGameDecimatorModule.sol	BARE		Player batch-claim entry (facade claimDecimatorJackpotMany stub); pays the caller's claim bounty
 OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.resolveLootboxDirect	_awardDecimatorLootbox	modules/DegenerusGameDecimatorModule.sol	BARE		Reached only via _claimDecimatorJackpotFor <- claimDecimatorJackpot/Many (player claims); runDecimatorJackpot never calls it
-OFF-CRANK	IDegenerusGame.playerActivityScore	recordTerminalDecBurn	modules/DegenerusGameDecimatorModule.sol	BARE		Entry is FLIP.sol's player burn hook (OnlyCoin gate); not on the advance, VRF, or keeper paths
-OFF-CRANK	IDegenerusGame.playerActivityScore	boostTerminalDecimator	modules/DegenerusGameDecimatorModule.sol	BARE		Permissionless player boost entry (facade boostTerminalDecimator stub); credits msg.sender
 OFF-CRANK	IDegenerusAffiliate.payAffiliate	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); affiliate kickback leg
 OFF-CRANK	IDegenerusAffiliate.payAffiliate	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); affiliate kickback leg
 OFF-CRANK	ICoinflip.creditFlip	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); kickback credit to the buyer
@@ -168,7 +162,6 @@ CRANK-PINNED	IStETH.balanceOf	handleGameOverDrain	modules/DegenerusGameGameOverM
 CRANK-PINNED	IGNRUSGameOver.burnAtGameOver	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE	test/integration/CharityGameHooks.test.js;test/integration/GnrusRecovery.test.js	Game-over drain; callee onlyGame, AlreadyFinalized only on a second call and the gameOver latch makes this the single call
 CRANK-PINNED	IsDGNRS.burnAtGameOver	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE	test/unit/DGNRSLiquid.test.js;test/integration/CharityGameHooks.test.js	Game-over drain; callee onlyGame, returns on zero pool balance, unchecked burn, no external call
 CRANK-PINNED	IFlipTombstone.tombstoneAtGameOver	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE	test/fuzz/FlipTombstone.t.sol	Game-over drain; callee OnlyGame then one-shot early return, only an allowance write
-CRANK-SELF	IDegenerusGame.runTerminalDecimatorJackpot	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE		External self-call; facade OnlySelf stub delegatecalls own DECIMATOR module runTerminalDecimatorJackpot, bubbled on purpose
 CRANK-SELF	IDegenerusGame.runTerminalJackpot	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE		External self-call; facade OnlySelf stub delegatecalls own JACKPOT module runTerminalJackpot, bubbled on purpose
 CRANK-PINNED	IGNRUSGameOver.onFinalSweep	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	BARE	test/integration/GnrusRecovery.test.js	Post-gameover final sweep stage (dispatch at advance:788); callee onlyGame, stamps sweptAt only
 CRANK-TRY	IDegenerusAdminShutdown.shutdownVrf	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	TRY		Catch swallows any admin/coordinator failure on VRF subscription shutdown so the sweep still pays out
@@ -265,3 +258,4 @@ OFF-CRANK	IDegenerusGame.playerActivityScore	enterProtocolBoonDraw	modules/Degen
 OFF-CRANK	IDegenerusCoin.burnCoin	enterProtocolBoonDraw	modules/DegenerusGameBoonModule.sol	BARE		Donation-only authorized payer debit; atomic with issuer stake
 OFF-CRANK	ICoinflip.creditFlip	enterProtocolBoonDraw	modules/DegenerusGameBoonModule.sol	BARE		Donation-only exact principal credited to issuer's next-day coinflip
 CRANK-SELF	delegatecall:IDegenerusGameBoonModule.resolveProtocolBoonDraws	rngGate	modules/DegenerusGameAdvanceModule.sol	BARE	test/gas/ProtocolBoonAdvanceGas.t.sol;test/fuzz/ProtocolBoonDraw.t.sol	Daily RNG settlement; six <=32-read searches, collisions retain/upgrade, empty/resolved/expired work skips
+CRANK-PINNED	IDegenerusAffiliate.affiliateTop	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	BARE	test/fuzz/TerminalAffiliatePayout.t.sol	One view read of the terminal level leaderboard; pinned AFFILIATE reads stored address/score and cannot invoke recipient code
