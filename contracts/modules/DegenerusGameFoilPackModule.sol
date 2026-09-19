@@ -126,9 +126,6 @@ contract DegenerusGameFoilPackModule is
     // error E() — inherited from DegenerusGameStorage
     /// @notice Thrown when the buyer already holds a foil pack for this cycle level.
     error FoilAlreadyBought();
-    /// @notice Thrown when the simulated day is more than one day ahead of the processed
-    ///         daily index, indicating a multi-day stall.
-    error StaleAdvance();
     /// @notice Thrown when the given (player, day, ticketIndex, drawKind) tuple does not
     ///         resolve to a claimable foil match.
     error NoClaimableMatch();
@@ -310,17 +307,7 @@ contract DegenerusGameFoilPackModule is
         uint24 lvl = _activeTicketLevel();
         if (_foilBoughtThisLevel(buyer, lvl)) revert FoilAlreadyBought();
 
-        // Forward-commit guard (multi-day stall only): the resolving daily word must be
-        // unknowable at buy. In normal operation — caught up, or the brief pre-request
-        // slice one day ahead — the resolving day's VRF is a fresh future request, so the
-        // lines cannot be known. The one exception is a MULTI-day stall (the advance >= 2
-        // days behind the wall): there the pending VRF word gap-backfills the unprocessed
-        // days from an already-public word, so a buyer could grind addresses offline for
-        // one whose derived lines win and buy it. Block foil until the advance catches up
-        // (anyone can call it; it is keeper-incentivized). _simulatedDayIndex() is
-        // timestamp-only, so this `day` is reused for resolveDay below.
         uint24 day = _simulatedDayIndex();
-        if (day > dailyIdx + 1) revert StaleAdvance();
 
         // Price: ten ticket prices for the level. The fresh ETH the purchase path carved
         // for the foil leg covers it first (overpay ignored); any shortfall runs the
@@ -460,14 +447,10 @@ contract DegenerusGameFoilPackModule is
         uint256 score = _playerActivityScore(buyer, afkLive ? afkStreak : streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
-        // Resolve day = the next day whose daily word is genuinely future at buy.
-        // Default tomorrow (day + 1): its word can't be requested until then. The lone
-        // exception is the brief slice after the wall day rolls but before that day's RNG
-        // was requested (!rngLockedFlag && dailyIdx < day) — today's word is still
-        // unrequested, so resolve against today. The multi-day-stall guard above bounds
-        // `day` to at most dailyIdx + 1 here, so neither choice can land on a day the
-        // gap-backfill would fill from an already-public word.
-        uint24 resolveDay = (!rngLockedFlag && dailyIdx < day) ? day : day + 1;
+        // Resolve against tomorrow, like a coinflip deposit. Tomorrow's word cannot exist
+        // yet in any state: caught up, locked on a pending request, or re-walking a stall
+        // (a stall that outlasts tomorrow derives its word from a VRF word not yet delivered).
+        uint24 resolveDay = day + 1;
 
         // Freeze the record: resolveDay (>= 1), multBps (>= 20000), and the buy-time
         // activity score. The slot is non-zero, so its presence IS the one-per-cycle cap.
