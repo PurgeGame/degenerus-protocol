@@ -123,10 +123,13 @@ interface ICrapsPlayerActions {
 
 /// @dev The craps table's comp door: one of today's windows, today's whole day, a run of future
 ///      days, a day-ticket upgrade or banked passes for a named player, charged to the FLIP comp
-///      lane the table itself feeds. Vault-only on the table's side; the table prices it.
+///      lane the table itself feeds. The table also accepts comp-funded battle donations
+///      from the vault; other donation callers pay from their own FLIP.
 interface ICrapsComps {
     /// @notice Charges a comp to the vault's FLIP comp lane, as implemented by CrapsBattle.
     function vaultComp(uint256 code) external returns (uint256 charged);
+    /// @notice Add to an open battle's prize pool, charging the vault's comp lane.
+    function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 charged);
 }
 
 /// @dev Minimal ERC20 surface for sweeping foreign tokens the vault has no other handling for.
@@ -479,6 +482,13 @@ contract DegenerusVault {
     /// @param charged FLIP wei the comp lane paid for it
     event CrapsCompGranted(address indexed operator, address indexed to, uint8 kind, uint256 charged);
 
+    /// @notice Comp budget was donated to a joinable custom battle or daily window.
+    /// @param operator Vault owner or comp delegate who funded the pool.
+    /// @param custom True for a custom battle, false for today's daily window.
+    /// @param index Custom battle number or daily window period.
+    /// @param charged FLIP wei charged to the comp lane and added to the pool.
+    event CrapsCompDonated(address indexed operator, bool indexed custom, uint256 indexed index, uint256 charged);
+
     /// @notice The vault owner set what `who` may still comp, in FLIP wei
     /// @param operator The vault owner that set the allowance.
     /// @param who The address the allowance is set for.
@@ -537,8 +547,8 @@ contract DegenerusVault {
     uint96 private _salvageVaultFloorWei;
 
     /// @notice FLIP wei of craps comps an address other than the vault owner may still assign
-    ///         through `crapsComp`. Set by the owner, spent by the holder at the table's own
-    ///         prices, drawn from the same FLIP comp lane. The owner's own grants never touch it.
+    ///         through `crapsComp` or `crapsCompDonate`. Set by the owner and charged at the
+    ///         table's prices, from the same FLIP comp lane. The owner's own calls never touch it.
     mapping(address => uint256) public crapsCompAllowanceOf;
 
     // ---------------------------------------------------------------------
@@ -807,9 +817,7 @@ contract DegenerusVault {
     /// @custom:reverts Insufficient If the batch is empty, or exceeds the caller's allowance
     /// @custom:reverts ZeroAddress If any code names the zero address
     function crapsComp(uint256[] calldata codes) external {
-        bool owner = _isVaultOwner(msg.sender);
-        uint256 allowance = owner ? 0 : crapsCompAllowanceOf[msg.sender];
-        if (!owner && allowance == 0) revert NotVaultOwner();
+        (bool owner, uint256 allowance) = _crapsCompBudget();
         uint256 n = codes.length;
         if (n == 0) revert Insufficient();
         uint256 total;
@@ -821,7 +829,32 @@ contract DegenerusVault {
             total += charged;
             emit CrapsCompGranted(msg.sender, to, uint8(code >> 160), charged);
         }
-        // A delegate spends its allowance at the table's own prices; the owner spends nothing here.
+        _spendCrapsCompBudget(owner, allowance, total);
+    }
+
+    /// @notice Donate comp budget to a battle pool while it is still taking entries.
+    /// @dev Uses the same shared FLIP comp lane and delegate allowance as `crapsComp`.
+    ///      A refused donation or insufficient allowance reverts the entire operation.
+    /// @param custom True for a custom battle, false for one of today's daily windows.
+    /// @param index The custom battle's number, or the daily window's period (0..6).
+    /// @param granules Donation in 100-FLIP units: 10 adds 1,000 FLIP to the pool.
+    /// @return charged FLIP wei charged to the comp lane and added to the pool.
+    function crapsCompDonate(bool custom, uint256 index, uint24 granules) external returns (uint256 charged) {
+        (bool owner, uint256 allowance) = _crapsCompBudget();
+        charged = ICrapsComps(ContractAddresses.CRAPS).donate(custom, index, granules);
+        _spendCrapsCompBudget(owner, allowance, charged);
+        emit CrapsCompDonated(msg.sender, custom, index, charged);
+    }
+
+    function _crapsCompBudget() private view returns (bool owner, uint256 allowance) {
+        owner = _isVaultOwner(msg.sender);
+        allowance = owner ? 0 : crapsCompAllowanceOf[msg.sender];
+        if (!owner && allowance == 0) revert NotVaultOwner();
+    }
+
+    /// @dev Shared by grants and donations: owner calls use only the table's comp lane;
+    ///      delegates also debit their individual limit by the table's actual charge.
+    function _spendCrapsCompBudget(bool owner, uint256 allowance, uint256 total) private {
         if (!owner) {
             if (total > allowance) revert Insufficient();
             unchecked {
@@ -830,8 +863,8 @@ contract DegenerusVault {
         }
     }
 
-    /// @notice Let `who` assign craps comps through `crapsComp` up to `amount` FLIP wei, charged
-    ///         to the comp lane at the table's prices. Replaces any earlier figure; zero revokes.
+    /// @notice Let `who` grant craps comps or donate to battle pools up to `amount` FLIP wei,
+    ///         charged to the shared comp lane. Replaces any earlier figure; zero revokes.
     /// @param who The delegate.
     /// @param amount What they may still comp, in FLIP wei.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE

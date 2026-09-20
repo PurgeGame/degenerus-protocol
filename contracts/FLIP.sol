@@ -106,9 +106,9 @@ contract FLIP {
     /// @param amount The amount consumed from allowance (18 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
-    /// @notice The craps comp lane paid for a seat, a reservation, an upgrade or banked passes.
-    /// @param player Who was comped.
-    /// @param amount The FLIP wei the lane was charged — the entry's own price.
+    /// @notice The craps comp lane paid for an entry, passes, an upgrade or a battle donation.
+    /// @param player Who was comped, or the vault for a battle donation.
+    /// @param amount The FLIP wei charged to the lane.
     event CrapsCompSpent(address indexed player, uint256 amount);
 
     /// @notice A completed craps battle fed the comp lane.
@@ -207,7 +207,7 @@ contract FLIP {
     bool private _tombstoneFlooded;
 
     /// @notice The craps comp lane: FLIP-wei the vault may spend seating players at the craps
-    ///         table, and nothing else. An ACCOUNTING allowance — never minted, never a balance,
+    ///         table or funding battle pools. An ACCOUNTING allowance — never minted, never a balance,
     ///         out of `vaultMintTo`'s reach — that the table feeds at two percent of every
     ///         completed battle's eligible bankroll and a comp burn spends. Opens on the converted
     ///         lifetime pass allowance: two hundred normal day passes at their pass value. Packed
@@ -697,8 +697,8 @@ contract FLIP {
         uint256 gross = grossAndFlags & ~CRAPS_FLAG_MASK;
         uint8 flags = uint8(grossAndFlags & CRAPS_FLAG_MASK);
 
-        // A COMP. The vault seated somebody: the comp lane pays, the player's own FLIP is not
-        // touched, no boon is consumed and no quest is credited — the seat is a gift, not a spend.
+        // A COMP. The vault funded an entry or a battle pool: the comp lane pays, no wallet
+        // FLIP is touched, no boon is consumed and no quest is credited.
         if (flags & CRAPS_FLAG_COMP != 0) {
             uint128 charge = _toUint128(gross);
             uint128 lane = _crapsCompAllowance;

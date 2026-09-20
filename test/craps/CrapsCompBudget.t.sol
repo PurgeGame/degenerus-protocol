@@ -9,6 +9,10 @@ import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins, MockFlip} from "./CrapsPins.sol";
 
 contract CompHarness is CrapsViews {
+    function seedToCeiling(bytes32 key) external {
+        _battles[key] = (_battles[key] & ~(_BG_SEED_MASK << _BG_SEED_SHIFT)) | (_BG_SEED_MASK << _BG_SEED_SHIFT);
+    }
+
     function highSeatsOf(bytes32 key) external view returns (uint256) {
         return uint32(_highField[key]);
     }
@@ -269,6 +273,124 @@ contract CrapsCompBudgetTest is CrapsPins {
     }
 
     // ── The comp door ───────────────────────────────────────────────────────
+
+    event CrapsBonusDonated(bytes32 indexed battleKey, address indexed donor, uint256 amount, uint256 seed);
+
+    function test_aVaultDonationChargesOnlyTheCompLane() public {
+        uint64 slot = _openBattle(craps, 300, 4, 5, 0);
+        uint256 index = slot - craps.CUSTOM_SLOT_BASE();
+        vm.prank(alice);
+        uint256 betId = craps.enterBattle(slot, _blank(), 1);
+        bytes32 key = craps.battleKeyOf(betId);
+        uint256 before = flip.compLane();
+        uint256 burned = flip.totalBurned();
+        flip.setNextBoonMask(4);
+
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectEmit(true, true, false, true, address(craps));
+        emit CrapsBonusDonated(key, ContractAddresses.VAULT, 10 * GRANULE, 10 * GRANULE);
+        uint256 charged = craps.donate(true, index, 10);
+
+        assertEq(charged, 10 * GRANULE);
+        assertEq(flip.compLane(), before - charged);
+        assertEq(craps.battleOf(key).seed, charged);
+        assertEq(flip.totalBurned(), burned, "comp donation burned wallet FLIP");
+        assertEq(flip.nextBoonMask(), 4, "comp donation consumed a boon");
+        assertEq(flip.lastCrapsFlags(), 0x10, "donation reported a player action");
+        (uint256 entrants,) = craps.fieldOf(key);
+        assertEq(entrants, 1, "donation created an entry");
+    }
+
+    function test_aVaultCanDonateToADailyWindowWithoutFeedingBackTheDonation() public {
+        uint24 day = _openDay(10);
+        _seat(alice, 1, 1);
+        _seat(bob, 1, 1);
+        (bytes32 key,,,) = craps.bonusWindowOf(1);
+        uint256 before = flip.compLane();
+        vm.prank(ContractAddresses.VAULT);
+        craps.donate(false, 1, 50);
+        assertEq(flip.compLane(), before - 50 * GRANULE);
+        assertEq(craps.battleOf(key).seed, 50 * GRANULE);
+        (uint256 bank,,) = craps.windowOf(_slotAt(day, 1));
+        uint256 n = _settle(day, 1, 0xBEEF, WHOLE_FIELD);
+        assertEq(flip.compLane(), before - 50 * GRANULE + _expected(bank, n, 0, 10));
+    }
+
+    function test_aCompDonationPaysTheSameWinnerExactlyWhatWasAdded() public {
+        uint64 slot = _openBattle(craps, 300, 4, 5, 2);
+        uint256 index = slot - craps.CUSTOM_SLOT_BASE();
+        vm.prank(alice);
+        uint256 betId = craps.enterBattle(slot, _blank(), 1);
+        vm.prank(bob);
+        craps.enterBattle(slot, _blank(), 1);
+        bytes32 key = craps.battleKeyOf(betId);
+        uint256 snap = vm.snapshotState();
+        _closeOn(craps, slot, 9, 0xBEEF);
+        PaidOut memory baseline = _onlyPot(craps, slot, WHOLE_FIELD);
+        assertTrue(vm.revertToState(snap));
+
+        vm.prank(ContractAddresses.VAULT);
+        craps.donate(true, index, 45);
+        _closeOn(craps, slot, 9, 0xBEEF);
+        PaidOut memory donated = _onlyPot(craps, slot, WHOLE_FIELD);
+        assertEq(donated.betId, baseline.betId, "donation changed winner selection");
+        assertEq(donated.amount, baseline.amount + 45 * GRANULE, "donation was rationed or rounded");
+        assertEq(craps.battleOf(key).seed, 45 * GRANULE);
+    }
+
+    function test_compDonationsRespectBothTheCloseTimeAndArmedLatch() public {
+        uint24 day = _openDay(10);
+        _seat(alice, 1, 1);
+        _pastWindow(1);
+        uint256 before = flip.compLane();
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        craps.donate(false, 1, 10);
+
+        uint256 ts = vm.getBlockTimestamp();
+        _arm(day, 1, 0xBEEF);
+        // Rewind only the clock to prove the armed latch independently rejects the donation.
+        vm.warp(ts - 1);
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        craps.donate(false, 1, 10);
+        assertEq(flip.compLane(), before);
+    }
+
+    function test_aRefusedCompDonationCannotMoveSeedOrBudget() public {
+        uint64 slot = _openBattle(craps, 300, 4, 5, 0);
+        vm.prank(alice);
+        uint256 betId = craps.enterBattle(slot, _blank(), 1);
+        bytes32 key = craps.battleKeyOf(betId);
+        uint256 index = slot - craps.CUSTOM_SLOT_BASE();
+        flip.setCompLane(10 * GRANULE - 1);
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(MockFlip.MockCompLaneShort.selector);
+        craps.donate(true, index, 10);
+        assertEq(craps.battleOf(key).seed, 0);
+        assertEq(flip.compLane(), 10 * GRANULE - 1);
+
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(CrapsBattle.SeedAboveMax.selector);
+        craps.donate(true, index, 0);
+        craps.seedToCeiling(key);
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(CrapsBattle.SeedAboveMax.selector);
+        craps.donate(true, index, 1);
+        assertEq(craps.battleOf(key).seed, uint256(0x7FFFFFFF) * GRANULE);
+        assertEq(flip.compLane(), 10 * GRANULE - 1);
+    }
+
+    function test_aPlayerDonationStillBurnsWalletFlip() public {
+        _openDay(10);
+        uint256 before = flip.compLane();
+        uint256 burned = flip.burned(alice);
+        vm.prank(alice);
+        uint256 amount = craps.donate(false, 1, 10);
+        assertEq(amount, 10 * GRANULE);
+        assertEq(flip.burned(alice), burned + amount);
+        assertEq(flip.compLane(), before);
+    }
 
     function test_aCompedWindowSeatIsThePaidSeatWithAnotherOwner() public {
         uint24 day = _openDay(10);

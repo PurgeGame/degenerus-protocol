@@ -58,6 +58,16 @@ must precede the day draw and prevent duplicate or conflicting seats.
 For comp upgrades, the event field `burned` records the allowance charge; no player
 FLIP is burned.
 
+The vault owner and authorized comp delegates can also fund an open battle pool through
+`DegenerusVault.crapsCompDonate(custom, index, granules)`. `custom = true` selects a
+custom battle by its number; `false` selects one of today's daily window periods (0–6).
+Each granule is 100 FLIP, so `crapsCompDonate(true, 1, 10)` adds 1,000 FLIP to custom
+battle 1. The shared comp budget and a delegate's remaining allowance are debited
+atomically. The table applies the ordinary donation cap and joinability checks;
+closed or armed battles cannot receive funds. These donations earn no additional
+comp allowance and consume no boon or quest credit. `CrapsCompDonated` records the
+operator and charge; the table's `CrapsBonusDonated` records the vault as donor.
+
 ## Ticket materialization
 
 Purchases queue owed entries; the drain assigns traits from committed entropy. Four

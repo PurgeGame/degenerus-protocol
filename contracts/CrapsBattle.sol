@@ -934,7 +934,8 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _CRAPS_FLAG_NORMAL = 0x4;
     uint256 internal constant _CRAPS_FLAG_HIGH = 0x8;
     /// @dev The comp bit: FLIP charges the craps comp lane instead of the player, consumes no boon
-    ///      and reports no quest. Set ONLY by `vaultComp`; every player door passes zero.
+    ///      and reports no quest. Set ONLY by `vaultComp` or a VAULT donation; player-funded
+    ///      doors never set it.
     uint256 internal constant _CRAPS_FLAG_COMP = 0x10;
 
     /// @dev The five things the vault can comp, as the kind byte of a `vaultComp` code, and
@@ -3146,11 +3147,14 @@ contract CrapsBattle is LootboxCraps {
 
     /// @notice Add FLIP to a battle's seed, so its winner takes more than the entrants put in.
     /// @dev Permissionless, but accepted only while the battle remains joinable. The explicit
-    ///      ceiling protects the scoreboard's 31-bit seed field.
+    ///      ceiling protects the scoreboard's 31-bit seed field. VAULT donations charge the
+    ///      comp lane; all other callers burn their own FLIP. Neither consumes a boon or
+    ///      reports quest progress. Donations do not earn comp allowance at settlement.
     /// @param custom   True for a custom battle, false for one of today's bonus windows.
     /// @param index    The custom battle's number, or the window's period.
     /// @param granules What to add, in `_BATTLE_STAKE_UNIT` granules.
-    function donate(bool custom, uint256 index, uint24 granules) external {
+    /// @return amount The amount added, in FLIP wei, also charged to the donor or comp lane.
+    function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) {
         uint256 slot;
         unchecked {
             if (custom) {
@@ -3165,13 +3169,16 @@ contract CrapsBattle is LootboxCraps {
         uint256 g = _battles[w.key];
         if (granules == 0 || g == 0) revert SeedAboveMax();
         uint256 seed;
-        uint256 amount;
         unchecked {
             seed = ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK) + granules;
             amount = uint256(granules) * _BATTLE_STAKE_UNIT;
         }
         if (seed > _BG_SEED_MASK) revert SeedAboveMax();
-        _burnCoin(amount);
+        if (msg.sender == ContractAddresses.VAULT) {
+            _burnForCraps(msg.sender, _tag(amount, _CRAPS_FLAG_COMP));
+        } else {
+            _burnCoin(amount);
+        }
         _battles[w.key] = (g & ~(_BG_SEED_MASK << _BG_SEED_SHIFT)) | (seed << _BG_SEED_SHIFT);
         emit CrapsBonusDonated(w.key, msg.sender, amount, seed * _BATTLE_STAKE_UNIT);
     }
@@ -4052,10 +4059,10 @@ contract CrapsBattle is LootboxCraps {
             uint256 winnerWord = _bets[winnerId];
             // The boost: this table's own pick from the band the window advertised, plus anything
             // donated on top of it. Nothing about either was stored.
-            // DONATED GRANULES ARE NOT HOUSE MONEY. They were burned by a third party for this
-            // field, so they are neither rationed by the winner's standing — which would delete
-            // someone else's burn — nor run through the boost's rounding, which rounds to NEAREST
-            // and would hand out FLIP nobody burned. Only the protocol's own subsidy does either.
+            // DONATED GRANULES ARE COMMITTED TO THIS FIELD. A donor burned FLIP or the vault
+            // spent comp allowance, so they are neither rationed by the winner's standing nor
+            // run through the boost's rounding, which could pay more than was contributed.
+            // Only the scheduled protocol boost does either.
             uint256 donated = (g >> _BG_SEED_SHIFT) & _BG_SEED_MASK;
             // HOUSE MONEY IS RATIONED BY STANDING, on the protocol's own windows only. A custom
             // battle's boost is donated, not seeded — nobody's loyalty spend is at stake — and a
