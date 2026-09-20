@@ -111,6 +111,7 @@ CRANK-PINNED	IsDGNRS.poolBalance	_rewardTopAffiliate	modules/DegenerusGameAdvanc
 CRANK-PINNED	IsDGNRS.transferFromPool	_rewardTopAffiliate	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/PresaleBoxDrain.t.sol;test/fuzz/CoverageGap222.t.sol	1% top-affiliate DGNRS reward; sDGNRS authorizes the game; clamps to the pool and returns the decrement
 CRANK-SELF	delegatecall:IDegenerusGameJackpotModule.distributeYieldSurplus	_distributeYieldSurplus	modules/DegenerusGameAdvanceModule.sol	BARE		yield surplus split delegatecall -> GAME_JACKPOT_MODULE.distributeYieldSurplus; bubble intentional
 CRANK-SELF	delegatecall:IGameAfkingModule.processSubscriberStage	_runSubscriberStage	modules/DegenerusGameAdvanceModule.sol	BARE		afking process STAGE chunk -> GAME_AFKING_MODULE.processSubscriberStage; fail-loud by design (no valve)
+CRANK-SELF	delegatecall:IDegenerusGameWhaleModule.purchaseWhalePassForSdgnrs	processSubscriberStage	modules/GameAfkingModule.sol	BARE		sDGNRS once-per-level automatic whale purchase, nested from the afking STAGE into GAME_WHALE_MODULE; own storage, bubbled on purpose; the callee defers (returns 0) instead of reverting on every expected blocker
 CRANK-SELF	IDegenerusGame.runBafJackpot	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	BARE		self-call to the OnlySelf facade -> GAME_JACKPOT_MODULE.runBafJackpot; bubble intentional
 CRANK-PINNED	IDegenerusJackpots.markBafSkipped	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/BafConsolationClaim.t.sol	losing-flip x0 bracket marked skipped; JACKPOTS gate is msg.sender==GAME
 CRANK-PINNED	IWwxrpIncinerator.resolveIncinerator	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/WwxrpIncinerator.t.sol	century BAF-skip incinerator draw; WWXRP gate is the game; empty bracket returns address(0)
@@ -213,10 +214,10 @@ OFF-CRANK	IDegenerusAffiliate.payAffiliateCombined	_purchaseForWithCached	module
 OFF-CRANK	ICoinflip.creditFlipPair	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	BARE		Player purchase path; affiliate/buyer credit pair
 OFF-CRANK	delegatecall:IDegenerusGameBoonModule.consumePurchaseBoost	_callTicketPurchase	modules/DegenerusGameMintModule.sol	BARE		Reached from _redeemFlipFor/_purchaseForWithCached (player redeemFlip/purchase); own BOON module consumePurchaseBoost
 OFF-CRANK	IDegenerusCoin.burnCoin	_coinReceive	modules/DegenerusGameMintModule.sol	BARE		Reached from _callTicketPurchase on coin-paid player purchases
-OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseWhalePass entry (facade stub); affiliate leg
-OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseWhalePass entry (facade stub); affiliate leg
-OFF-CRANK	ICoinflip.creditFlip	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseWhalePass entry; kickback credit
-OFF-CRANK	ICrapsPassCredit.creditPasses	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseWhalePass entry; pass grant
+CRANK-PINNED	IDegenerusAffiliate.payAffiliate	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	Whale delivery shared by the player route and the sDGNRS automatic purchase (afking STAGE -> purchaseWhalePassForSdgnrs); fresh-ETH affiliate leg, unreachable on the crank (the automatic buy pays zero fresh ETH) — pinned with the recycle leg
+CRANK-PINNED	IDegenerusAffiliate.payAffiliate	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	Whale delivery shared by the player route and the sDGNRS automatic purchase (afking STAGE -> purchaseWhalePassForSdgnrs); fresh-ETH affiliate leg, unreachable on the crank (the automatic buy pays zero fresh ETH) — pinned with the recycle leg
+CRANK-PINNED	ICoinflip.creditFlip	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	Whale delivery shared with the sDGNRS automatic purchase; kickback credit, zero-skipped on the crank (blank code -> vault default, 0% kickback); callee OnlyGame credit, revert-free
+CRANK-PINNED	ICrapsPassCredit.creditPasses	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	Whale delivery shared with the sDGNRS automatic purchase; the credit-only door makes no external call and saturates at the lane cap instead of reverting (levels <= 10 only)
 OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseLazyPass entry (facade stub); affiliate leg
 OFF-CRANK	IDegenerusAffiliate.payAffiliate	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseLazyPass entry (facade stub); affiliate leg
 OFF-CRANK	ICoinflip.creditFlip	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseLazyPass entry; kickback credit
@@ -226,16 +227,16 @@ OFF-CRANK	IDegenerusAffiliate.getReferrer	purchaseDeityPass	modules/DegenerusGam
 OFF-CRANK	IDegenerusAffiliate.getReferrer	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry; upline lookup (view)
 OFF-CRANK	IDegenerusAffiliate.getReferrer	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry; second upline lookup (view)
 OFF-CRANK	ICrapsPassCredit.creditPasses	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	BARE		Player purchaseDeityPass entry; pass grant
-OFF-CRANK	IsDGNRS.poolBalance	_rewardWhalePassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseWhalePass (player)
-OFF-CRANK	IsDGNRS.transferFromPool	_rewardWhalePassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseWhalePass (player)
+CRANK-PINNED	IsDGNRS.poolBalance	_rewardWhalePassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	Whale minter reward, reached from the sDGNRS automatic purchase on the afking STAGE; view read of the Whale pool
+CRANK-PINNED	IsDGNRS.transferFromPool	_rewardWhalePassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	Whale minter reward, reached from the sDGNRS automatic purchase; onlyGame, clamps to the pool balance, self-award burns; the amount is <= the reserve just read
 OFF-CRANK	IsDGNRS.poolBalance	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
 OFF-CRANK	IsDGNRS.transferFromPool	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
 OFF-CRANK	IsDGNRS.poolBalance	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
 OFF-CRANK	IsDGNRS.transferFromPool	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
 OFF-CRANK	IsDGNRS.transferFromPool	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
 OFF-CRANK	IsDGNRS.transferFromPool	_rewardDeityPassDgnrs	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from purchaseDeityPass (player)
-OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.recordCoverBox	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from the three pass purchases (player); own LOOTBOX module recordCoverBox
-OFF-CRANK	IAFKingSeatMint.mintSeatFor	_grantSeatCoin	modules/DegenerusGameWhaleModule.sol	BARE		Reached only from the three pass purchases (player); claimWhalePass never calls it
+CRANK-SELF	delegatecall:IDegenerusGameLootboxModule.recordCoverBox	_recordLootboxEntry	modules/DegenerusGameWhaleModule.sol	BARE		Own LOOTBOX module recordCoverBox; reached from the sDGNRS automatic purchase on the afking STAGE, whose one refusing case (full entry, no custom) purchaseWhalePassForSdgnrs preflights and defers
+CRANK-PINNED	IAFKingSeatMint.mintSeatFor	_grantSeatCoin	modules/DegenerusGameWhaleModule.sol	BARE	test/fuzz/SdgnrsWhaleBuy.t.sol	On the sDGNRS automatic purchase path structurally skipped: initProtocolDeity latches both protocol wallets' SEAT_CLAIMED bit (construction seats), so the crank sees a bit test only; player passes still mint here
 OFF-CRANK	IDegenerusAffiliate.claim	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry (self-consent or operator approval); affiliate drain leg
 OFF-CRANK	ISeatToken.balanceOf	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry; seat balance view
 OFF-CRANK	IDegenerusQuests.beginAfking	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry; quest afking start

@@ -28,7 +28,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameLootboxModule, IDegenerusGameWhaleModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
@@ -309,6 +309,22 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      by true marginal cost makes the chunk gas composition-flat, so the budget binds on real
     ///      gas, not sub count.
     uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 21;
+
+    /// @dev Gas-weight of sDGNRS's once-per-level automatic whale purchase
+    ///      (`DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs`), charged against the chunk
+    ///      budget on the ONE call per level that buys, so that call's subscriber allowance is
+    ///      `SUB_STAGE_WEIGHT_BUDGET - SUB_STAGE_SDGNRS_WHALE_WEIGHT` and the chunk stays on the
+    ///      <10M target. Sized for the maximum purchase (100 paid passes = one 100-level aggregate
+    ///      award of 120 half-passes/level: 99 existing sDGNRS deity records updated
+    ///      nonzero-to-nonzero plus ONE fresh far-end registration, since the buy fires in the
+    ///      jackpot phase before the transition queues `level + 100`) plus the batched DGNRS
+    ///      reward, the bundled 100-box lootbox record, the affiliate recycle leg, the Craps
+    ///      credit and the pool split, all cold. Measured by test/gas/SdgnrsWhaleBuyStageGas.t.sol
+    ///      at ≈1.91M gas incremental for 100 passes (≈1.90M for 5: the 100-level walk, not the
+    ///      quantity, is the cost) → 700 units × ≈3.4k = 2.38M, a ≈25% margin the gas suite pins.
+    ///      Smaller buys charge the same; the no-buy probe (latched / too poor / deferred) charges
+    ///      nothing and costs a few thousand gas.
+    uint256 internal constant SUB_STAGE_SDGNRS_WHALE_WEIGHT = 700;
 
     /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
     ///      (a private constant not visible cross-contract). Each delivered afking buy accrues
@@ -1282,64 +1298,36 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             ? currentLevel
             : currentLevel + 1;
 
-        // sDGNRS level-start lootbox top-up, done ONCE here at the start of afking processing
+        uint256 weight; // accumulated gas-weight; the chunk ends at weightBudget
+
+        // sDGNRS level-start whale purchase, done ONCE here at the start of afking processing
         // (out of the per-sub loop, so it adds NO per-sub cost). On the first STAGE pass of each
-        // new level (the `_sdgnrsBonusLevel` latch), stamp sDGNRS's daily box at 5% of its
-        // claimable (capped 500 ETH, floored at the normal box) rather than the flat daily box.
-        // sDGNRS is the pinned `_subscribers[1]`; stamping its Sub box HERE makes the loop's
-        // no-orphan guard skip its own iteration, so it gets exactly ONE box (a normal day-keyed
-        // Sub-stamp box, just larger), resolved off `rngWordByDay[processDay]`. Sized off the live
-        // claimable read in this pre-RNG STAGE, so the box `amount` (and the seed it feeds) stays
-        // frozen vs the day's word — the RNG-freeze invariant. Funded purely from claimable
-        // (ethValue 0); 5% of claimable is inherently <= claimable-1 and the `cl > mp` guard keeps
-        // the floor fundable, so the buy is revert-free by construction. The guards mirror the
-        // loop preamble: skip if sDGNRS already bought today (no double box), a pending box would
-        // be orphaned, the game is swept, or claimable can't fund the floor — and the latch is
-        // stamped only when the buy actually fires (so a too-poor day retries the next day). The
-        // coverBuy=false delivery batches no pool credit, so route this box's spend inline.
-        if (currentLevel > _sdgnrsBonusLevel) {
-            Sub storage sd = _subOf[ContractAddresses.SDGNRS];
-            uint256 cl = swept ? 0 : _claimableOf(ContractAddresses.SDGNRS);
-            if (
-                sd.lastAutoBoughtDay != processDay &&
-                sd.lastOpenedDay >= sd.lastAutoBoughtDay &&
-                cl > mp
-            ) {
+        // new level (the `_sdgnrsBonusLevel` latch — level 0 excluded, latch starts at 0), the
+        // whale module sizes and delivers sDGNRS's aggregate whale-pass purchase: the largest
+        // whole group of five paid passes whose quote fits a quarter of its claimable, capped at
+        // the route's 100. The module re-checks the RNG timing contract live (unlocked AND the
+        // process day's word uncommitted — the same two halves the STAGE gate keys on), skips a
+        // terminal game and defers a full lootbox entry, returning 0 for all of them, so this
+        // block never reverts the crank. The latch stamps ONLY on a real purchase (non-zero
+        // return): a too-poor or deferred day retries on the next eligible STAGE this level, and
+        // once stamped no later chunk/day this level can buy again. sDGNRS's ordinary daily box
+        // is untouched — the per-sub loop still stamps it (no Sub field is written here, no
+        // pending-box count). The purchase's gas-weight is charged to this chunk, so the loop
+        // below starts with it consumed and the chunk stays on the <10M target.
+        if (!swept && currentLevel > _sdgnrsBonusLevel) {
+            (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameWhaleModule.purchaseWhalePassForSdgnrs.selector, processDay
+                )
+            );
+            if (!ok) _revertDelegate(data);
+            if (abi.decode(data, (uint256)) != 0) {
                 _sdgnrsBonusLevel = currentLevel;
-                uint256 box = cl / 20;
-                // 500 ETH ceiling: bounds the ticket-drain work one box can queue. At a
-                // large claimable the box resolves (40% ticket-roll) into entries the
-                // advance chain drains at a bounded per-call budget; an uncapped box could
-                // queue millions of entries and stall level commit past the liveness window.
-                // Well inside the uint24 milli-ETH Sub-stamp field (~16,777 ETH), so the
-                // stamp never truncates while debiting full claimable.
-                if (box > 500 ether) box = 500 ether;
-                if (box < mp) box = mp;
-                _deliverAfkingBuy(
-                    ContractAddresses.SDGNRS,
-                    sd,
-                    processDay,
-                    mp,
-                    currentLevel,
-                    ticketTargetLevel,
-                    ContractAddresses.SDGNRS,
-                    0,
-                    box,
-                    box,
-                    false,
-                    false
-                );
-                _routeAfkingPoolEth(box, 0);
-                // The bonus delivery is a coverBuy=false lootbox stamp — a pending box.
-                // Once-per-level site, so the inline counter RMW costs nothing amortized.
-                unchecked {
-                    ++_pendingBoxCount;
-                }
+                weight = SUB_STAGE_SDGNRS_WHALE_WEIGHT;
             }
         }
 
         uint256 cursor = _subCursor;
-        uint256 weight; // accumulated gas-weight; the chunk ends at weightBudget
         uint256 boxStamps; // pending boxes stamped this chunk — one batched counter add at chunk end
         // Batched prize-pool routing: each funded buy debits its full cost from the funding
         // source and accrues that spend here by mode; the pools are credited ONCE at chunk end

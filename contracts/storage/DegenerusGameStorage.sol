@@ -3561,12 +3561,15 @@ abstract contract DegenerusGameStorage {
     ///      presaleDrained once boxCursorIndex advances past it. Zero while presale never closes.
     uint48 internal presaleCloseIndex;
 
-    /// @dev Once-per-level latch for the sDGNRS lootbox top-up: the level whose first
-    ///      sDGNRS afking buy already took the 5%-of-claimable bonus. The process STAGE applies
-    ///      the bonus once at its start (before the per-sub loop) while `level > _sdgnrsBonusLevel`,
-    ///      then stamps the level here — so it fires once per level and never on a later chunk/tx.
-    ///      Packs into the cursor slot (loaded for `_subCursor` every STAGE), so its read/write is
-    ///      warm; a uint24 holds the full level range (matches `level`).
+    /// @dev Once-per-level latch for sDGNRS's automatic whale purchase: the level at which the
+    ///      process STAGE already bought (DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs,
+    ///      up to a quarter of sDGNRS's claimable in whole groups of five passes). The STAGE
+    ///      attempts the purchase once at its start (before the per-sub loop) while
+    ///      `level > _sdgnrsBonusLevel` and stamps the level here ONLY on a real purchase — a
+    ///      too-poor or deferred day retries on a later STAGE this level; once stamped it never
+    ///      fires again on a later chunk/tx this level. Level 0 is excluded (the latch starts at
+    ///      0). Packs into the cursor slot (loaded for `_subCursor` every STAGE), so its
+    ///      read/write is warm; a uint24 holds the full level range (matches `level`).
     uint24 internal _sdgnrsBonusLevel;
 
     /// @dev Count of stamped-but-unopened afking boxes (at most one per subscriber — the

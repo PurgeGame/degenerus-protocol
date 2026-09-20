@@ -280,7 +280,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      count, so EVERY composition (including a saturated all-evict swap-pop chunk) stays on
     ///      the <10M target with deep headroom to the 16.7M advance-chain ceiling. The budget
     ///      sizes the evict chunk at ≈312 finalizes so a saturated all-evict crank stays below 10M.
-    ///      A large set drains across several advanceGame calls.
+    ///      A large set drains across several advanceGame calls. On the one chunk per level that
+    ///      delivers sDGNRS's automatic whale purchase, the STAGE first charges
+    ///      `SUB_STAGE_SDGNRS_WHALE_WEIGHT` against this same budget, so that chunk's subscriber
+    ///      allowance shrinks by the purchase's weight and the composition stays on target.
     uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 2500;
 
     /// @dev Seat-tenure drawing prize rate: whole FLIP per funded tenure day of the

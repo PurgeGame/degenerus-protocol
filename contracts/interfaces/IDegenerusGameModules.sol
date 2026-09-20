@@ -224,6 +224,15 @@ interface IDegenerusGameWhaleModule {
     /// @notice Claim deferred whale pass rewards for a player.
     /// @param player Player address to claim for.
     function claimWhalePass(address player) external;
+
+    /// @notice sDGNRS's once-per-level automatic whale purchase (afking process STAGE only).
+    /// @dev Delegatecall-only, nested from GameAfkingModule.processSubscriberStage; no facade
+    ///      stub forwards it. Buys the largest whole group of five paid passes whose quote fits
+    ///      a quarter of sDGNRS's claimable, or nothing (RNG lock / committed word / terminal /
+    ///      full lootbox entry / below one group — all deferred, never reverted).
+    /// @param processDay The STAGE's boundary-pinned process day.
+    /// @return paidPasses Paid passes bought (a multiple of five); 0 when nothing was bought.
+    function purchaseWhalePassForSdgnrs(uint24 processDay) external returns (uint256 paidPasses);
 }
 
 /// @title IDegenerusGameMintModule

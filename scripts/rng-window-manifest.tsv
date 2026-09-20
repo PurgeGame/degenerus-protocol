@@ -132,11 +132,13 @@ GATE	lootboxRngWordByIndex	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol
 GATE	rngWordByDay	_afkingStreak	storage/DegenerusGameStorage.sol	READ
 GATE	rngWordByDay	_rngWordByDayOf	DegenerusGameLens.sol	READ	read-only periphery mirror of _afkingStreak's decay gate (existence test on the sealed word via extsload); the lens is never called by game logic and can move no value
 GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	purchaseWhalePassForSdgnrs	modules/DegenerusGameWhaleModule.sol	READ	existence gate only (word != 0 -> return 0, no purchase) on the afking STAGE path, re-checking the STAGE's own "unlocked AND word uncommitted" gate live before any award; delegatecall-only, no player entry; slot 10 is enumerated by RngWindowFreezeHandler
 GATE	rngWordCurrent	_foilDrainPending	storage/DegenerusGameStorage.sol	READ	existence check only, behind the latch test: keeps the terminal readiness gate in step with the walker so an unsealed bucket is not reported drained
 CURSOR	lootboxRngPacked	applyBoxOrderScore	modules/DegenerusGameLootboxModule.sol	READ
 CURSOR	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	READ
 CURSOR	lootboxRngPacked	quoteBoxOrder	modules/DegenerusGameLootboxModule.sol	READ
 CURSOR	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	READ
+CURSOR	lootboxRngPacked	_lootboxEntryRefusesPass	modules/DegenerusGameWhaleModule.sol	READ	same cursor read as recordCoverBox: the sDGNRS automatic purchase preflights the live index's order-entry fullness (a capacity check, no word consumed); slot 33 is enumerated by RngWindowFreezeHandler
 ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	READ
 ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	WRITE
 ACCESSOR	lootboxRngPacked	_lrRead	storage/DegenerusGameStorage.sol	READ

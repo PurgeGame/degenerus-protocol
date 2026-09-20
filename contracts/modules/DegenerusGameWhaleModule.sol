@@ -55,6 +55,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (msg.sender != ContractAddresses.CREATOR) revert E();
         _registerDeity(ContractAddresses.VAULT, VAULT_DEITY_SYMBOL);
         _registerDeity(ContractAddresses.SDGNRS, SDGNRS_DEITY_SYMBOL);
+        _latchConstructionSeat(ContractAddresses.VAULT);
+        _latchConstructionSeat(ContractAddresses.SDGNRS);
         emit EntriesQueuedRange(ContractAddresses.VAULT, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
         emit EntriesQueuedRange(ContractAddresses.SDGNRS, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
         uint24 currentLevel = level;
@@ -209,6 +211,15 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Whale pass lootbox share (10%).
     uint16 private constant WHALE_LOOTBOX_BPS = 1000;
 
+    /// @dev Paid passes one whale purchase may carry (player route and the sDGNRS automatic
+    ///      purchase alike). Bounds the bundled box count (`uint8`), the Craps credit and the
+    ///      local reward recurrence; the aggregate ticket award is one range walk regardless.
+    uint256 private constant WHALE_MAX_QUANTITY = 100;
+
+    /// @dev sDGNRS's automatic purchase spends at most this fraction of its game-side claimable
+    ///      (1/4): `budget = claimable / SDGNRS_WHALE_BUDGET_DIVISOR`.
+    uint256 private constant SDGNRS_WHALE_BUDGET_DIVISOR = 4;
+
     /// @dev Deity pass lootbox share (10%) from level 10 on.
     uint16 private constant DEITY_LOOTBOX_BPS = 1000;
 
@@ -272,21 +283,159 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (_livenessTriggered()) revert GameOver();
         uint24 passLevel = level + 1;
 
-        if (quantity == 0 || quantity > 100) revert InvalidQuantity();
+        if (quantity == 0 || quantity > WHALE_MAX_QUANTITY) revert InvalidQuantity();
 
-        // Check for valid whale boon (10/20/35% off standard price)
-        bool hasValidBoon = false;
-        BoonPacked storage bp = boonPacked[buyer];
-        uint256 s0 = bp.slot0;
+        (bool hasValidBoon, uint256 s0) = _whaleBoonState(buyer);
+        // x00 (century) levels: minimum 2 passes (8 ETH) to deter fresh-account century bonus
+        // farming. Standard-price path only; a boon purchase takes the discount branch.
+        if (!hasValidBoon && passLevel % 100 == 0 && quantity < 2) revert MinQuantityRequired();
+        (uint256 firstPrice, uint256 restPrice) = _whaleUnitPrices(passLevel, hasValidBoon, s0);
+        uint256 totalPrice = firstPrice + restPrice * (quantity - 1);
+
+        // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
+        uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
+        _creditAfkingValue(msg.sender, msg.value - freshPaid);
+        _deliverWhalePass(buyer, passLevel, quantity, totalPrice, freshPaid, hasValidBoon, s0, affiliateCode);
+    }
+
+    /**
+     * @notice sDGNRS's once-per-level automatic whale purchase, driven from the afking process
+     *         STAGE (GameAfkingModule.processSubscriberStage) — never a player entry.
+     * @dev Delegatecall-only inside the Game (the STAGE nests into this module from its own
+     *      delegatecall context); no facade stub forwards this selector, so nothing outside the
+     *      daily crank can trigger reserve spending. Sizes the buy at the largest whole group of
+     *      `WHALE_BULK_BONUS_DIVISOR` (five) paid passes whose ACTUAL quote — the same quote a
+     *      player pays, boon discount included — fits one quarter of sDGNRS's game-side claimable
+     *      (raw ledger, sentinel included: a quarter is inherently <= claimable - 1), capped at
+     *      the public route's `WHALE_MAX_QUANTITY`. Below one group nothing is bought and nothing
+     *      is consumed, so the caller's once-per-level latch stays open for a later, richer day.
+     *
+     *      RNG timing contract: the entries this queues must never land against a word that
+     *      already exists. The STAGE runs unlocked and pre-RNG, and this re-checks both halves
+     *      live — lock down AND the process day's word uncommitted (a VRF-gap replay is unlocked
+     *      yet holds a public word) — before any debit, boon consumption or award. Deferred
+     *      purchases retry on a later eligible STAGE; the caller latches only on a non-zero return.
+     *
+     *      Liveness: the delivery's one refusing path (a full lootbox entry with no custom box to
+     *      fold the bundled reward into) is preflighted here and deferred, so the crank never
+     *      stalls on the purchase; a terminal game buys nothing. Everything else the delivery
+     *      touches is revert-free for a claimable-funded protocol buyer: the quote is within
+     *      claimable, the affiliate code is blank (vault default, recycle-rate leg only), the
+     *      seat bit was latched at genesis, and the Craps door saturates instead of reverting.
+     *
+     *      Gas: one aggregate award (never per pass) — the STAGE charges
+     *      `SUB_STAGE_SDGNRS_WHALE_WEIGHT` against its chunk budget on a non-zero return.
+     * @param processDay The STAGE's boundary-pinned process day (the word key checked live).
+     * @return paidPasses Paid passes bought this call (a multiple of five), 0 when nothing was.
+     */
+    function purchaseWhalePassForSdgnrs(uint24 processDay) external returns (uint256 paidPasses) {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (rngLockedFlag || rngWordByDay[processDay] != 0) return 0;
+        if (_livenessTriggered()) return 0;
+
+        uint24 passLevel = level + 1;
+        (bool hasValidBoon, uint256 s0) = _whaleBoonState(ContractAddresses.SDGNRS);
+        (uint256 firstPrice, uint256 restPrice) = _whaleUnitPrices(passLevel, hasValidBoon, s0);
+        uint256 budget = _claimableOf(ContractAddresses.SDGNRS) / SDGNRS_WHALE_BUDGET_DIVISOR;
+        // quote(q) = firstPrice + restPrice * (q - 1) <= budget  <=>  q * restPrice <= budget + restPrice - firstPrice.
+        // firstPrice <= restPrice on every path (the boon only discounts), so the sum never underflows.
+        uint256 groups = (budget + restPrice - firstPrice) / (restPrice * WHALE_BULK_BONUS_DIVISOR);
+        if (groups > WHALE_MAX_QUANTITY / WHALE_BULK_BONUS_DIVISOR) {
+            groups = WHALE_MAX_QUANTITY / WHALE_BULK_BONUS_DIVISOR;
+        }
+        if (groups == 0) return 0;
+        if (_lootboxEntryRefusesPass(ContractAddresses.SDGNRS)) return 0;
+
+        paidPasses = groups * WHALE_BULK_BONUS_DIVISOR;
+        uint256 totalPrice = firstPrice + restPrice * (paidPasses - 1);
+        _deliverWhalePass(
+            ContractAddresses.SDGNRS, passLevel, paidPasses, totalPrice, 0, hasValidBoon, s0, bytes32(0)
+        );
+    }
+
+    /// @dev Whale boon lane read: whether `buyer` holds a live whale discount boon and the packed
+    ///      slot-0 word the consumer clears from. Deity-granted boons are valid only on the grant
+    ///      day; lootbox-rolled keep the 4-day window (mirrors the BoonModule/deity-pass siblings).
+    ///      A read only — nothing is consumed here, so a quote can be sized before committing.
+    function _whaleBoonState(address buyer) private view returns (bool valid, uint256 s0) {
+        s0 = boonPacked[buyer].slot0;
         uint24 boonDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         if (boonDay != 0) {
             uint24 currentDay = _simulatedDayIndex();
-            // Deity-granted boons are valid only on the grant day; lootbox-rolled
-            // keep the 4-day window (mirrors the BoonModule/deity-pass siblings).
             uint24 deityWhaleDay = uint24(s0 >> BP_DEITY_WHALE_DAY_SHIFT);
-            hasValidBoon = deityWhaleDay != 0
-                ? deityWhaleDay == currentDay
-                : currentDay <= boonDay + 4;
+            valid = deityWhaleDay != 0 ? deityWhaleDay == currentDay : currentDay <= boonDay + 4;
+        }
+    }
+
+    /// @dev The canonical whale quote's two unit prices: `first` for the first pass, `rest` for
+    ///      every further one (total = first + rest * (quantity - 1)). With a live boon the first
+    ///      pass takes the tier discount off the STANDARD price and the rest pay standard — the
+    ///      boon branch never sees the intro price; otherwise 2.4 ETH through passLevel 4 (stored
+    ///      levels 0-3) and 4 ETH after. `first <= rest` on every path.
+    function _whaleUnitPrices(
+        uint24 passLevel,
+        bool hasValidBoon,
+        uint256 s0
+    ) private pure returns (uint256 first, uint256 rest) {
+        if (hasValidBoon) {
+            uint16 discountBps = _whaleTierToBps(uint8(s0 >> BP_WHALE_TIER_SHIFT));
+            first = (WHALE_PASS_STANDARD_PRICE * (10_000 - discountBps)) / 10_000;
+            rest = WHALE_PASS_STANDARD_PRICE;
+        } else {
+            first = passLevel <= 4 ? WHALE_PASS_EARLY_PRICE : WHALE_PASS_STANDARD_PRICE;
+            rest = first;
+        }
+    }
+
+    /// @dev True when `recordCoverBox` would refuse a pass purchase for `player` at the live
+    ///      lootbox index: the entry already holds `MAX_BOXES_PER_ORDER` boxes and no custom box
+    ///      exists to fold the bundled reward into. Mirrors the recorder's own count exactly.
+    function _lootboxEntryRefusesPass(address player) private view returns (bool) {
+        uint48 idx = uint48((lootboxRngPacked >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
+        uint256 word = lootboxOrder[idx][player];
+        if (word == 0) return false;
+        if (_lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK) != 0) return false;
+        uint256 held = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK)
+            + _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK)
+            + _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK)
+            + (_lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) == 0 ? 0 : 1);
+        return held >= MAX_BOXES_PER_ORDER;
+    }
+
+    /// @dev The whale purchase past its quote: consumes the boon, debits the price (fresh ETH
+    ///      first, then claimable, then afking), extends the freeze/streak, queues the aggregate
+    ///      ticket award, pays the affiliate legs, the batched DGNRS minter reward, the pool split,
+    ///      the bundled lootbox, the early Craps credit and the one-time seat. Shared by the player
+    ///      route and the sDGNRS automatic purchase, so the two can never diverge.
+    /// @param buyer The address receiving the pass.
+    /// @param passLevel `level + 1`, cached by the caller (invariant across the call).
+    /// @param quantity Paid passes (1..WHALE_MAX_QUANTITY).
+    /// @param totalPrice The canonical quote for `quantity` at these boon terms.
+    /// @param freshPaid The msg.value applied to the price (0 for the automatic purchase).
+    /// @param hasValidBoon Whether the quote took the boon discount (consumed here).
+    /// @param s0 The buyer's packed boon slot-0 word, read with the boon state.
+    /// @param affiliateCode Affiliate/referral code (bytes32(0) = stored code / vault default).
+    function _deliverWhalePass(
+        address buyer,
+        uint24 passLevel,
+        uint256 quantity,
+        uint256 totalPrice,
+        uint256 freshPaid,
+        bool hasValidBoon,
+        uint256 s0,
+        bytes32 affiliateCode
+    ) private {
+        if (hasValidBoon) {
+            // Clear whale fields (consumed)
+            boonPacked[buyer].slot0 = s0 & BP_WHALE_CLEAR;
+        }
+        _settleShortfall(buyer, totalPrice - freshPaid, true);
+        // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
+        // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
+        emit WhalePassPurchased(buyer, quantity, totalPrice);
+        // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
+        if (!presaleOver) {
+            presaleBoxCredit[buyer] += totalPrice / 4;
         }
 
         uint256 prevData = mintPacked_[buyer];
@@ -315,41 +464,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint24 levelsToAdd = 100;
         if (levelsToAdd > deltaFreeze) {
             levelsToAdd = deltaFreeze;
-        }
-
-        // Price: boon discount applies to first pass only,
-        //        otherwise 2.4 ETH at levels 0-3, 4 ETH after
-        uint256 totalPrice;
-        if (hasValidBoon) {
-            uint8 wTier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
-            uint16 discountBps = _whaleTierToBps(wTier);
-            uint256 discountedPrice = (WHALE_PASS_STANDARD_PRICE *
-                (10_000 - discountBps)) / 10_000;
-            // Clear whale fields (consumed)
-            bp.slot0 = s0 & BP_WHALE_CLEAR;
-            totalPrice =
-                discountedPrice +
-                WHALE_PASS_STANDARD_PRICE *
-                (quantity - 1);
-        } else {
-            // x00 (century) levels: minimum 2 passes (8 ETH) to deter fresh-account century bonus farming
-            if (passLevel % 100 == 0 && quantity < 2) revert MinQuantityRequired();
-            uint256 unitPrice = passLevel <= 4
-                ? WHALE_PASS_EARLY_PRICE
-                : WHALE_PASS_STANDARD_PRICE;
-            totalPrice = unitPrice * quantity;
-        }
-
-        // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
-        uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
-        _creditAfkingValue(msg.sender, msg.value - freshPaid);
-        _settleShortfall(buyer, totalPrice - freshPaid, true);
-        // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
-        // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
-        emit WhalePassPurchased(buyer, quantity, totalPrice);
-        // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
-        if (!presaleOver) {
-            presaleBoxCredit[buyer] += totalPrice / 4;
         }
 
         uint24 newLevelCount = levelCount + levelsToAdd;
@@ -403,7 +517,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Queue entries for the paid passes plus one bonus pass per 5 bought: 20/lvl per pass
         // for bonus levels (passLevel to 9); the standard leg awards 2 half-passes per pass
-        // as whole-ticket chunks (strided when odd).
+        // as whole-ticket chunks (strided when odd). ONE aggregate award for the whole
+        // quantity — never per pass.
         uint256 awardQty = quantity + quantity / WHALE_BULK_BONUS_DIVISOR;
         uint32 bonusEntries = uint32(WHALE_BONUS_ENTRIES_PER_LEVEL * awardQty);
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
@@ -465,12 +580,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             if (kickback != 0) coinflip.creditFlip(buyer, kickback);
         }
 
-        for (uint256 i = 0; i < quantity; ) {
-            _rewardWhalePassDgnrs(buyer);
-            unchecked {
-                ++i;
-            }
-        }
+        _rewardWhalePassDgnrs(buyer, quantity);
 
         // Split payment: pre-game 70/30, post-game 95/5 (future/next). `level` is invariant
         // across this call (no reachable callee advances it), so the cached `passLevel`
@@ -967,23 +1077,31 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @dev Distribute the DGNRS minter reward for a whale pass purchase to the buyer.
+    /// @dev Distribute the DGNRS minter reward for a whale pass purchase to the buyer: 1% of the
+    ///      Whale pool per paid pass, each pass taking 1% of what the previous one left. The
+    ///      per-pass recurrence (`remaining -= floor(remaining / 100)`, integer rounding at every
+    ///      step) is computed locally from ONE reserve read and paid in ONE pool transfer, so the
+    ///      pool and supply land exactly where `quantity` separate 1% transfers would have put
+    ///      them, minus the repeated cross-contract calls and writes. A protocol self-award (the
+    ///      sDGNRS automatic purchase) burns at the token. Bounded by `WHALE_MAX_QUANTITY`.
     ///      Affiliates are compensated in FLIP by the purchase path (payAffiliate), not DGNRS.
-    /// @param buyer The pass purchaser receiving the minter reward (1% of the Whale pool).
-    function _rewardWhalePassDgnrs(address buyer) private {
-        uint256 whaleReserve = dgnrs.poolBalance(
-            IsDGNRS.Pool.Whale
-        );
-        if (whaleReserve != 0) {
-            uint256 minterShare = (whaleReserve * DGNRS_WHALE_MINTER_PPM) /
-                DGNRS_WHALE_REWARD_PPM_SCALE;
-            if (minterShare != 0) {
-                dgnrs.transferFromPool(
-                    IsDGNRS.Pool.Whale,
-                    buyer,
-                    minterShare
-                );
+    /// @param buyer The pass purchaser receiving the minter reward.
+    /// @param quantity Paid passes bought (1..WHALE_MAX_QUANTITY).
+    function _rewardWhalePassDgnrs(address buyer, uint256 quantity) private {
+        uint256 whaleReserve = dgnrs.poolBalance(IsDGNRS.Pool.Whale);
+        if (whaleReserve == 0) return;
+        uint256 remaining = whaleReserve;
+        for (uint256 i = 0; i < quantity; ) {
+            unchecked {
+                // Each step's share is <= remaining, and the product fits: the pool is a
+                // bps slice of the 1e30 supply, far below 2^256 / PPM_SCALE.
+                remaining -= (remaining * DGNRS_WHALE_MINTER_PPM) / DGNRS_WHALE_REWARD_PPM_SCALE;
+                ++i;
             }
+        }
+        uint256 reward = whaleReserve - remaining;
+        if (reward != 0) {
+            dgnrs.transferFromPool(IsDGNRS.Pool.Whale, buyer, reward);
         }
     }
 
@@ -1151,6 +1269,17 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      write to `mintPacked_[who]` can clobber it. Each address consumes its one
     ///      chance exactly once, and every pass purchase after the first pays only the
     ///      bit test — no external call on the repeat path.
+    /// @dev Genesis: both protocol wallets already hold the construction seats (serials 1 and 2,
+    ///      minted by the AFKing Subscription Token constructor), so latch their game-side
+    ///      SEAT_CLAIMED bit here. `_grantSeatCoin` is then a pure bit test for either — no second
+    ///      free-tranche seat, and no seat-token call on the sDGNRS automatic purchase's crank path.
+    ///      A bit-OR on the word `_registerDeity` just wrote (warm), mirrored to the indexer.
+    function _latchConstructionSeat(address who) private {
+        uint256 packed = mintPacked_[who] | (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT);
+        mintPacked_[who] = packed;
+        emit MintRecorded(who, packed);
+    }
+
     function _grantSeatCoin(address who) private {
         uint256 packed = mintPacked_[who];
         if ((packed >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 0) {

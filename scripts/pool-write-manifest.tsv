@@ -102,8 +102,8 @@ VALUE-IN	_setPendingPools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol
 VALUE-IN	_setPrizePools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
 VALUE-IN	_setPendingPools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
 VALUE-IN	_setPrizePools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
-VALUE-IN	_setPendingPools	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
-VALUE-IN	_setPrizePools	purchaseWhalePass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
+VALUE-IN	_setPendingPools	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze (player route and the sDGNRS automatic purchase share the delivery)
+VALUE-IN	_setPrizePools	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools (player route and the sDGNRS automatic purchase share the delivery)
 POOL-TO-POOL	claimablePool	_deliverAfkingBuy	modules/GameAfkingModule.sol	WRITE	afking/claimable funding spent on the daily buy (two sites); pools credited via _routeAfkingPoolEth
 POOL-TO-POOL	_setPendingPools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit, freeze path
 POOL-TO-POOL	_setPrizePools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit, live path
