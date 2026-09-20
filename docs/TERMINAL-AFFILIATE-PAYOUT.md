@@ -18,9 +18,10 @@ level in jackpot phase or an already-promoted last-purchase transition; otherwis
 the upcoming purchase level. The existing terminal cohort latch keeps that level
 stable across a multi-transaction drain.
 
-The cutoff is the terminal settlement transaction. Accrued AFKing affiliate rewards
-claimed before settlement count toward the leaderboard. Later claims can still
-change the leaderboard but cannot change or repeat the terminal payment. Ties
+The cutoff is the transaction that latches the terminal cohort, before the terminal word
+is requested. Accrued AFKing affiliate rewards claimed before that count toward the
+leaderboard. Later claims can still change the leaderboard but cannot change the credited
+winner, the pool the terminal draw receives, or repeat the terminal payment. Ties
 retain the existing leader, matching the affiliate contract's strict-greater rule.
 
 The award uses the game's existing claimable ledger and payout latch. The affiliate

@@ -242,10 +242,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         // remaining tracks unallocated funds.
         uint256 remaining = available;
 
-        // Claim-time affiliate scores can still change later. Fix and credit the
-        // winner here once, using the same level as the terminal ticket cohort.
+        // The winner was latched with the terminal cohort level before the terminal word
+        // existed (_handleGameOverPath); credit it here once.
         uint24 terminalLevel = _gameOverTicketLevel(lvl);
-        (address top,) = affiliate.affiliateTop(terminalLevel);
+        address top = terminalAffiliate;
         uint256 affiliateShare = remaining / 50;
         if (top != address(0) && affiliateShare != 0) {
             _creditClaimable(top, affiliateShare);

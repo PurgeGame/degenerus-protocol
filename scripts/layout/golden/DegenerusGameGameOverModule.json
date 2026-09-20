@@ -854,5 +854,13 @@
     "offset": 0,
     "slot": 68,
     "typeLabel": "uint256"
+  },
+  {
+    "bytes": "20",
+    "encoding": "inplace",
+    "label": "terminalAffiliate",
+    "offset": 0,
+    "slot": 69,
+    "typeLabel": "address"
   }
 ]

@@ -27,6 +27,10 @@ contract TerminalAffiliateSeeder is DegenerusGame, BucketSeed {
         for (uint8 q; q < 4; ++q) _seedBucket(terminalLevel, traits[q], address(0x715E7), 1000);
     }
 
+    function clearDayWord() external {
+        rngWordByDay[_simulatedDayIndex()] = 0;
+    }
+
     function paidPass(address owner, uint96 paid) external {
         deityPassOwners.push(owner);
         deityPassPricePaid[owner] = paid;
@@ -186,6 +190,35 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID);
         assertEq(game.claimableWinningsOf(TOP), 2 ether);
         assertEq(game.claimableWinningsOf(LATE), 0);
+    }
+
+    /// @dev Real two-step terminal path: the cohort latch and the request come first, the
+    ///      word lands, and only then does the payout run. A first-ever ranking at the terminal
+    ///      level placed after the latch must not reach the payout or shrink the draw's pool.
+    function testRankingAfterTheTerminalLatchCannotReachTheDraw() public {
+        _seed(10, 0, 100 ether, 0);
+        _fixture(abi.encodeCall(TerminalAffiliateSeeder.clearDayWord, ()));
+        game.advanceGame(); // latches the cohort and requests the terminal word
+        assertTrue(game.rngLocked(), "terminal word requested");
+        _rank(LATE, 11, 1000 ether, address(0xB002)); // leaderboard 0 -> ranked, after the latch
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.runTerminalJackpot.selector, 100 ether, uint24(11), WORD));
+        vm.recordLogs();
+        game.advanceGame();
+        assertTrue(game.gameOver(), "terminal payout ran");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID, "no affiliate award");
+        assertEq(game.claimableWinningsOf(LATE), 0, "late ranking not paid");
+    }
+
+    function testRankingBeforeTheTerminalLatchIsPaidAfterTheWord() public {
+        _seed(10, 0, 100 ether, 0);
+        _fixture(abi.encodeCall(TerminalAffiliateSeeder.clearDayWord, ()));
+        _rank(TOP, 11, 1000 ether, address(0xB001));
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "terminal word requested");
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
+        _assertSettlement(11, 98 ether, TOP, 2 ether);
     }
 
     function testRejectingAffiliateCannotBlockTerminalSettlement() public {

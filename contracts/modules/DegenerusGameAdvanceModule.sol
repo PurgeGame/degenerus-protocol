@@ -945,6 +945,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // transactions. Latched once, before any of those branches run.
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0) {
             _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, drainLevel == lvl ? 1 : 2);
+            // The terminal affiliate is fixed with the cohort, before any terminal word exists:
+            // a claim landing between the word and the payout could otherwise turn an empty
+            // leaderboard into a ranked one and move the pool the terminal draw is fed.
+            (address top, ) = affiliate.affiliateTop(drainLevel);
+            terminalAffiliate = top;
         }
 
         // Pre-gameover: acquire RNG, drain the committed cohort, then unlock.

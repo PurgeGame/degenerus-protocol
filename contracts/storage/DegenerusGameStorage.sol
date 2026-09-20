@@ -3863,6 +3863,11 @@ abstract contract DegenerusGameStorage {
     ///      long-lived seat can never pin the cursor. Cleared at queue release.
     uint256 internal ticketSeats;
 
+    /// @dev The terminal level's leading affiliate, latched with the terminal cohort level in
+    ///      _handleGameOverPath before any terminal word can exist, so no later claim can
+    ///      change the pool the terminal draw receives. Read once by handleGameOverDrain.
+    address internal terminalAffiliate;
+
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool
     ///      entry, so growth across a century boundary measures the game and not the

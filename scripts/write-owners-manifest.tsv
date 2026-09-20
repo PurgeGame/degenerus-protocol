@@ -130,7 +130,7 @@ OWNER	vrfRequestId	DegenerusGame.sol	rawFulfillRandomWords mid-day branch clears
 OWNER	vrfRequestId	modules/DegenerusGameAdvanceModule.sol	request paths set the outstanding id; _unlockRng clears
 OWNER	vrfRequestId	modules/DegenerusGameGameOverModule.sol	updateVrfCoordinatorAndSub re-issues an in-flight request on the new coordinator and stores the new id (the old fulfilment is rejected by mismatch)
 INIT	vrfSubscriptionId	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
-OWNER	whalePassClaims	modules/DegenerusGameBoonModule.sol	_activateWhalePass adds two half-passes if representable; otherwise drops the overflow award; the whale module drains
+OWNER	whalePassClaims	modules/DegenerusGameBoonModule.sol	_activateWhalePass adds two half-passes with a checked add (an overflow reverts rather than drops, unreachable at the 100-box cap); the whale module drains
 OWNER	whalePassClaims	modules/DegenerusGameDecimatorModule.sol	_awardDecimatorLootbox += deferred half-passes; accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameDegeneretteModule.sol	WWXRP jackpot += 1 per level/10 bracket (guarded by the bracket flag); accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameFoilPackModule.sol	_payFoilTier += 1 on tier 8; accrual-only
@@ -146,3 +146,4 @@ OWNER	ticketSeats	modules/DegenerusGameFoilPackModule.sol	drainRounds records th
 OWNER	ticketSeats	modules/DegenerusGameMintModule.sol	_drainSeatedSurvivors pops seats it drains by index below the seat floor; processFutureTicketBatch clears it on an empty queue
 OWNER	ticketSeats	storage/DegenerusGameStorage.sol	_releaseTicketQueue clears the seats with the drained queue
 OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimatorJackpot freezes winning subbuckets at the resolved level
+OWNER	terminalAffiliate	modules/DegenerusGameAdvanceModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; handleGameOverDrain reads it
