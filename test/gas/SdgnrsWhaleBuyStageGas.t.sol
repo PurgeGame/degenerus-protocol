@@ -75,7 +75,8 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         require(game.advanceDue(), "fixture: advance due");
-        uint24 latch0 = _sdgnrsBonusLevel();
+        require(_sdgnrsBonusLevel() == 0, "fixture: level 4's attempt not yet spent");
+        uint256 claimable0 = _claimableOf(ContractAddresses.SDGNRS);
 
         vm.cool(address(game));
         vm.cool(address(sdgnrs));
@@ -87,10 +88,13 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         game.advanceGame();
         used = before - gasleft();
 
+        // The attempt latches the level either way; the claimable debit tells buy from no-buy.
+        require(_sdgnrsBonusLevel() == 4, "fixture: the attempt ran in the measured call");
+        uint256 debit = claimable0 - _claimableOf(ContractAddresses.SDGNRS);
         if (expectBuy) {
-            require(_sdgnrsBonusLevel() == 4 && latch0 == 0, "fixture: the purchase fired in the measured call");
+            require(debit >= 5 * 4 ether, "fixture: the purchase fired in the measured call");
         } else {
-            require(_sdgnrsBonusLevel() == 0, "fixture: no purchase in the baseline");
+            require(debit < 1 ether, "fixture: no purchase in the baseline (daily box only)");
         }
     }
 
@@ -117,6 +121,10 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
             pool = pool >= dec ? pool - dec : 0;
         }
         vm.store(address(game), s1, bytes32((p1 & mask128) | (uint256(pool) << 128)));
+    }
+
+    function _claimableOf(address who) internal view returns (uint256) {
+        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
     }
 
     function _sdgnrsBonusLevel() internal view returns (uint24) {

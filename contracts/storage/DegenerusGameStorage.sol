@@ -3565,10 +3565,9 @@ abstract contract DegenerusGameStorage {
     ///      process STAGE already bought (DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs,
     ///      up to a quarter of sDGNRS's claimable in whole groups of five passes). The STAGE
     ///      attempts the purchase once at its start (before the per-sub loop) while
-    ///      `level > _sdgnrsBonusLevel` and stamps the level here ONLY on a real purchase — a
-    ///      too-poor or deferred day retries on a later STAGE this level; once stamped it never
-    ///      fires again on a later chunk/tx this level. Level 0 is excluded (the latch starts at
-    ///      0). Packs into the cursor slot (loaded for `_subCursor` every STAGE), so its
+    ///      `level > _sdgnrsBonusLevel` and stamps the level here on the ATTEMPT, bought or not —
+    ///      one probe per level, so a too-poor first day buys nothing that level and no later
+    ///      chunk/tx this level tries again. Level 0 is excluded (the latch starts at 0). Packs into the cursor slot (loaded for `_subCursor` every STAGE), so its
     ///      read/write is warm; a uint24 holds the full level range (matches `level`).
     uint24 internal _sdgnrsBonusLevel;
 

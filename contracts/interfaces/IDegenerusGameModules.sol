@@ -229,7 +229,8 @@ interface IDegenerusGameWhaleModule {
     /// @dev Delegatecall-only, nested from GameAfkingModule.processSubscriberStage; no facade
     ///      stub forwards it. Buys the largest whole group of five paid passes whose quote fits
     ///      a quarter of sDGNRS's claimable, or nothing (RNG lock / committed word / terminal /
-    ///      full lootbox entry / below one group — all deferred, never reverted).
+    ///      full lootbox entry / below one group — all a zero return, never a revert; the STAGE
+    ///      latches the level on the attempt either way).
     /// @param processDay The STAGE's boundary-pinned process day.
     /// @return paidPasses Paid passes bought (a multiple of five); 0 when nothing was bought.
     function purchaseWhalePassForSdgnrs(uint24 processDay) external returns (uint256 paidPasses);

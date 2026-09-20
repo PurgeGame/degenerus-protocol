@@ -308,16 +308,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      player pays, boon discount included — fits one quarter of sDGNRS's game-side claimable
      *      (raw ledger, sentinel included: a quarter is inherently <= claimable - 1), capped at
      *      the public route's `WHALE_MAX_QUANTITY`. Below one group nothing is bought and nothing
-     *      is consumed, so the caller's once-per-level latch stays open for a later, richer day.
+     *      is consumed; the caller latches the level on the attempt either way (one probe per
+     *      level, no later retry).
      *
      *      RNG timing contract: the entries this queues must never land against a word that
      *      already exists. The STAGE runs unlocked and pre-RNG, and this re-checks both halves
      *      live — lock down AND the process day's word uncommitted (a VRF-gap replay is unlocked
-     *      yet holds a public word) — before any debit, boon consumption or award. Deferred
-     *      purchases retry on a later eligible STAGE; the caller latches only on a non-zero return.
+     *      yet holds a public word) — before any debit, boon consumption or award. A zero return
+     *      costs the level its purchase, never the crank its day; the caller charges the STAGE
+     *      weight only on a non-zero return.
      *
      *      Liveness: the delivery's one refusing path (a full lootbox entry with no custom box to
-     *      fold the bundled reward into) is preflighted here and deferred, so the crank never
+     *      fold the bundled reward into) is preflighted here and skipped, so the crank never
      *      stalls on the purchase; a terminal game buys nothing. Everything else the delivery
      *      touches is revert-free for a claimable-funded protocol buyer: the quote is within
      *      claimable, the affiliate code is blank (vault default, recycle-rate leg only), the

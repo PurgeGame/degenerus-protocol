@@ -322,8 +322,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      credit and the pool split, all cold. Measured by test/gas/SdgnrsWhaleBuyStageGas.t.sol
     ///      at ≈1.91M gas incremental for 100 passes (≈1.90M for 5: the 100-level walk, not the
     ///      quantity, is the cost) → 700 units × ≈3.4k = 2.38M, a ≈25% margin the gas suite pins.
-    ///      Smaller buys charge the same; the no-buy probe (latched / too poor / deferred) charges
-    ///      nothing and costs a few thousand gas.
+    ///      Smaller buys charge the same; the once-per-level no-buy probe (too poor / deferred)
+    ///      charges nothing and costs a few thousand gas.
     uint256 internal constant SUB_STAGE_SDGNRS_WHALE_WEIGHT = 700;
 
     /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
@@ -1300,21 +1300,25 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         uint256 weight; // accumulated gas-weight; the chunk ends at weightBudget
 
-        // sDGNRS level-start whale purchase, done ONCE here at the start of afking processing
-        // (out of the per-sub loop, so it adds NO per-sub cost). On the first STAGE pass of each
-        // new level (the `_sdgnrsBonusLevel` latch — level 0 excluded, latch starts at 0), the
-        // whale module sizes and delivers sDGNRS's aggregate whale-pass purchase: the largest
-        // whole group of five paid passes whose quote fits a quarter of its claimable, capped at
-        // the route's 100. The module re-checks the RNG timing contract live (unlocked AND the
-        // process day's word uncommitted — the same two halves the STAGE gate keys on), skips a
-        // terminal game and defers a full lootbox entry, returning 0 for all of them, so this
-        // block never reverts the crank. The latch stamps ONLY on a real purchase (non-zero
-        // return): a too-poor or deferred day retries on the next eligible STAGE this level, and
-        // once stamped no later chunk/day this level can buy again. sDGNRS's ordinary daily box
-        // is untouched — the per-sub loop still stamps it (no Sub field is written here, no
-        // pending-box count). The purchase's gas-weight is charged to this chunk, so the loop
-        // below starts with it consumed and the chunk stays on the <10M target.
+        // sDGNRS level-start whale purchase, attempted ONCE per level here at the start of
+        // afking processing (out of the per-sub loop, so it adds NO per-sub cost). On the first
+        // STAGE pass of each new level (the `_sdgnrsBonusLevel` latch — level 0 excluded, latch
+        // starts at 0), the whale module sizes and delivers sDGNRS's aggregate whale-pass
+        // purchase: the largest whole group of five paid passes whose quote fits a quarter of
+        // its claimable, capped at the route's 100. The latch stamps on the ATTEMPT, whatever
+        // its outcome: a level whose first STAGE pass finds sDGNRS too poor for one group buys
+        // nothing that level, and no later chunk/day this level tries again — one probe per
+        // level, never a per-day poll of the claimable. The module re-checks the RNG timing
+        // contract live (unlocked AND the process day's word uncommitted — the same two halves
+        // the STAGE gate keys on), skips a terminal game and defers a full lootbox entry,
+        // returning 0 for all of them, so this block never reverts the crank; those returns
+        // latch too (they are unreachable through this gate and cost the level its buy, not
+        // the crank its day). sDGNRS's ordinary daily box is untouched — the per-sub loop still
+        // stamps it (no Sub field is written here, no pending-box count). A real purchase's
+        // gas-weight is charged to this chunk, so the loop below starts with it consumed and
+        // the chunk stays on the <10M target; a no-buy probe charges nothing.
         if (!swept && currentLevel > _sdgnrsBonusLevel) {
+            _sdgnrsBonusLevel = currentLevel;
             (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameWhaleModule.purchaseWhalePassForSdgnrs.selector, processDay
@@ -1322,7 +1326,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             );
             if (!ok) _revertDelegate(data);
             if (abi.decode(data, (uint256)) != 0) {
-                _sdgnrsBonusLevel = currentLevel;
                 weight = SUB_STAGE_SDGNRS_WHALE_WEIGHT;
             }
         }

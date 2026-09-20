@@ -94,7 +94,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         _runLevelStage(1, 48 ether - 1, 0x5D70001);
         (bool bought,,) = _lastWhalePurchase();
         assertFalse(bought, "47.999.. ETH: no purchase");
-        assertEq(_sdgnrsBonusLevel(), 0, "no purchase => latch stays open");
+        assertEq(_sdgnrsBonusLevel(), 1, "the attempt latches the level even without a purchase");
         vm.revertToState(snap);
 
         _runLevelStage(1, 48 ether, 0x5D70002);
@@ -116,7 +116,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
             (bool bought, uint256 qty, uint256 price) = _lastWhalePurchase();
             if (want[i] == 0) {
                 assertFalse(bought, "table: no purchase below 80 ETH");
-                assertEq(_sdgnrsBonusLevel(), 0, "table: latch open");
+                assertEq(_sdgnrsBonusLevel(), 4, "table: the attempt latches anyway");
             } else {
                 assertTrue(bought, "table: bought");
                 assertEq(qty, want[i], "table: paid passes");
@@ -149,7 +149,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         if (groups > 20) groups = 20;
         if (groups == 0) {
             assertFalse(bought, "below one group: nothing");
-            assertEq(_sdgnrsBonusLevel(), 0, "no latch");
+            assertEq(_sdgnrsBonusLevel(), lvl, "the attempt latches anyway");
         } else {
             assertTrue(bought, "bought");
             assertEq(qty, groups * 5, "largest whole group");
@@ -160,7 +160,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     // =====================================================================================
-    // Latch: once per level, no latch on a zero buy, retry later in the level
+    // Latch: one attempt per level, stamped on the attempt whatever its outcome
     // =====================================================================================
 
     function test_OncePerLevel_ThenAgainNextLevel() public {
@@ -185,18 +185,26 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         assertEq(_sdgnrsBonusLevel(), 5, "latched at 5");
     }
 
-    function test_ZeroBudget_DoesNotLatch_RetriesLater() public {
+    function test_ZeroBudget_LatchesOnTheAttempt_NoRetryThatLevel() public {
         _runLevelStage(4, 10 ether, 0x5D70400);
         (bool b1,,) = _lastWhalePurchase();
         assertFalse(b1, "too poor: nothing");
-        assertEq(_sdgnrsBonusLevel(), 0, "latch open");
+        assertEq(_sdgnrsBonusLevel(), 4, "the attempt latched the level");
 
-        _setClaimable(ContractAddresses.SDGNRS, 80 ether);
+        // Richer the next day, same level: no second attempt.
+        _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
         _nextDay(0x5D70401);
-        (bool b2, uint256 qty,) = _lastWhalePurchase();
-        assertTrue(b2, "richer later the same level: buys");
-        assertEq(qty, 5, "one group");
-        assertEq(_sdgnrsBonusLevel(), 4, "latched now");
+        (bool b2,,) = _lastWhalePurchase();
+        assertFalse(b2, "same level: one probe only, no retry");
+        assertEq(_sdgnrsBonusLevel(), 4, "latch unchanged");
+
+        // The next level gets its own single attempt.
+        _setLevel(5);
+        _nextDay(0x5D70402);
+        (bool b3, uint256 qty,) = _lastWhalePurchase();
+        assertTrue(b3, "level 5: its one attempt buys");
+        assertEq(qty, 100, "1,000 ETH -> 25 groups -> capped at 100 paid passes");
+        assertEq(_sdgnrsBonusLevel(), 5, "latched at 5");
     }
 
     // =====================================================================================
@@ -260,9 +268,9 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     /// @notice A full lootbox entry with no custom box (the one case recordCoverBox refuses a pass)
-    ///         defers the purchase: no debit, no latch, the STAGE and the day complete; once the
-    ///         entry is clear the next eligible STAGE buys.
-    function test_FullLootboxEntry_DefersWithoutStallingAdvance() public {
+    ///         skips the purchase without reverting: no debit, the STAGE and the day complete, and
+    ///         the level's one attempt is spent (the latch stamps on the attempt).
+    function test_FullLootboxEntry_SkipsWithoutStallingAdvance() public {
         _setLevel(4);
         _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
         uint48 idx = uint48(uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) & type(uint48).max);
@@ -272,16 +280,15 @@ contract SdgnrsWhaleBuy is DeployProtocol {
 
         _nextDay(0x5D70800);
         (bool bought,,) = _lastWhalePurchase();
-        assertFalse(bought, "full entry: deferred");
-        assertEq(_sdgnrsBonusLevel(), 0, "deferred => latch open");
+        assertFalse(bought, "full entry: skipped");
+        assertEq(_sdgnrsBonusLevel(), 4, "the attempt latched the level");
         assertGe(_claimableOf(ContractAddresses.SDGNRS) + 1 ether, before, "no whale debit (daily box only)");
         assertTrue(game.rngLocked() || !game.advanceDue(), "the day still progressed past the STAGE");
 
-        // The live index moves on with the day's word; the entry at the OLD index no longer binds.
         _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
         _nextDay(0x5D70801);
         (bool bought2,,) = _lastWhalePurchase();
-        assertTrue(bought2, "clear entry: buys on the next eligible STAGE");
+        assertFalse(bought2, "same level: no second attempt");
     }
 
     // =====================================================================================

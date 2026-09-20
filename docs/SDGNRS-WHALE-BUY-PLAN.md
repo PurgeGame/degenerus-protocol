@@ -82,9 +82,9 @@ The 25% ceiling applies to the whale purchase, separately from the daily box.
    RNG timing contract below. Read claimable once, size the purchase, then
    delegate to the whale module. Reuse the
    `_sdgnrsBonusLevel` storage slot as the successful-purchase latch; update its
-   documentation without moving any packed fields. A successful purchase closes
-   the gate for all later chunks/days at that level. Zero affordable packs do
-   not spend or latch, preserving the existing ability to retry later that level.
+   documentation without moving any packed fields. **USER ruling (build day):** the
+   latch stamps on the ATTEMPT, bought or not — one probe per level, no later
+   retry that level; zero affordable packs spend nothing and still close the gate.
 
 3. **Separate pass delivery from the daily box stamp.** The pass purchase must
    not write `Sub.lastAutoBoughtDay`, replace an unopened AFKing box, or increment
@@ -101,8 +101,8 @@ The 25% ceiling applies to the whale purchase, separately from the daily box.
 4. **Keep advancement live.** Preflight expected purchase blockers before any
    debit or latch update, including terminal state and a full lootbox entry
    with no custom box available to absorb the bundled reward. Defer that
-   purchase and let subscribers/RNG processing continue; retry on a later
-   eligible stage. Keep accounting invariant failures visible. Test every
+   purchase and let subscribers/RNG processing continue (USER ruling: the level's
+   one attempt is spent; no later retry). Keep accounting invariant failures visible. Test every
    external side effect newly reachable from advancement and update its call
    classification. Do not assume the public purchase path is revert-free merely
    because claimable covers the price.
@@ -290,7 +290,7 @@ unbounded repeated 100-pass purchases inside `advanceGame`.
 - Exact thresholds and +/-1 wei boundaries, five-pack rounding, early/standard
   prices, and boon quote/debit agreement; total pass spend never exceeds 25%.
 - Successful once-per-level purchase across repeated calls, subscriber chunks,
-  days and level changes; zero-budget retry; level-zero and terminal skips.
+  days and level changes; a zero-budget attempt latches with no retry; level-zero and terminal skips.
 - Funded automatic purchases succeed through both ticket-range legs while
   unlocked with an uncommitted day word. Pending VRF, buffered fulfillment,
   and unlocked gap replay with a known word perform no automatic purchase,
@@ -336,8 +336,9 @@ and hard-ceiling headroom. This draft contains no gas result.
   `purchaseWhalePassForSdgnrs(processDay)`; `_rewardWhalePassDgnrs(buyer, quantity)`
   batches the per-pass 1% recurrence into one `transferFromPool`; `initProtocolDeity`
   latches both protocol wallets' seat bit. `GameAfkingModule.processSubscriberStage`:
-  the 5% top-up block is replaced by the whale delegatecall, latch on non-zero return,
-  `SUB_STAGE_SDGNRS_WHALE_WEIGHT` charged to the chunk. Interface entry added; the
+  the 5% top-up block is replaced by the whale delegatecall, latch on the attempt
+  (USER: one try per level, no retry), `SUB_STAGE_SDGNRS_WHALE_WEIGHT` charged to
+  the chunk only on a real purchase. Interface entry added; the
   `_sdgnrsBonusLevel` and stage-budget comments updated. No storage layout change.
 - **Selected maximum quantity.** 100 paid passes (20 groups), the public route's cap.
 - **Boons.** Kept: the automatic quote uses the same first/rest prices as a player,
@@ -353,8 +354,8 @@ and hard-ceiling headroom. This draft contains no gas result.
   inside the existing <10M proof (V56AfkingGasMarginal / AdvanceStageWorstCaseGas);
   the 16.7M hard ceiling is asserted on the measured call as well.
 - **Tests.** `test/fuzz/SdgnrsWhaleBuy.t.sol` (16 tests: genesis seat bits, 48/80 ETH
-  thresholds, the table, the 100 cap, fuzzed 25% bound, once-per-level, zero-budget
-  retry, aggregate ticket shape incl. the fresh level-101 record, exact reward
+  thresholds, the table, the 100 cap, fuzzed 25% bound, one attempt per level (a
+  zero-budget attempt latches, no retry), aggregate ticket shape incl. the fresh level-101 record, exact reward
   recurrence and self-burn, no second seat, full-entry deferral, direct-entry RNG
   lock / committed word / unlocked buy, boon quote+consume, player bulk route) and
   `test/gas/SdgnrsWhaleBuyStageGas.t.sol`. `test/fuzz/SdgnrsLevelLootbox.t.sol`
