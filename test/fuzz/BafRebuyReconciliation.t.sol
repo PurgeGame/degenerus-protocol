@@ -42,6 +42,9 @@ contract BafRebuyReconciliationTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        // This fixture measures the level clock in days; keep sDGNRS's automatic whale
+        // purchase (a per-level pool contribution) out of it.
+        _pinSdgnrsWhaleBuyShut();
         vm.warp(block.timestamp + 1 days);
 
         // Create and fund buyer
@@ -114,6 +117,16 @@ contract BafRebuyReconciliationTest is DeployProtocol {
                     abi.encodeWithSignature("advanceGame()")
                 );
                 if (!ok) break;
+                // The level-10 jackpot phase can open and close within one day's advance
+                // calls, so arm the pre-BAF conditions as soon as it is observed here too.
+                if (game.level() == 10 && game.jackpotPhase() && !capturedPreBaf) {
+                    _injectBafTopAndAutoRebuy(buyer, 10);
+                    _seedFuturePrizePool(100 ether);
+                    preFuture = _readFuturePrizePool();
+                    emit log_named_uint("Pre-BAF futurePrizePool (seeded, in-day)", preFuture);
+                    assertEq(preFuture, 100 ether, "Seeded futurePrizePool should be 100 ether");
+                    capturedPreBaf = true;
+                }
             }
         }
 

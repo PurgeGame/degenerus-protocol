@@ -238,6 +238,20 @@ abstract contract DeployProtocol is Test {
         }
     }
 
+    /// @dev Pin sDGNRS's once-per-level automatic whale purchase shut for fixtures that
+    ///      measure the level clock (bonus / turbo / forced-quest days): the protocol buy
+    ///      routes a quarter of sDGNRS's claimable into the prize pools each level and would
+    ///      move the day a target is met. `_sdgnrsBonusLevel` (uint24 @ slot 56, byte 25) set
+    ///      to its maximum makes the STAGE gate `level > _sdgnrsBonusLevel` never hold.
+    ///      Self-validating: reverts if the slot layout drifted.
+    function _pinSdgnrsWhaleBuyShut() internal {
+        bytes32 slot = bytes32(uint256(56));
+        uint256 word = uint256(vm.load(address(game), slot));
+        uint256 mask = uint256(0xFFFFFF) << 200;
+        require(word & mask == 0, "pinSdgnrsWhaleBuyShut: latch already set");
+        vm.store(address(game), slot, bytes32(word | mask));
+    }
+
     /// @dev Set the SEAT_CLAIMED lifetime eligibility latch (bit 154 of
     ///      `mintPacked_`, storage slot 9) as the whale module's
     ///      pass-acquisition hook would. Self-validating via the game's

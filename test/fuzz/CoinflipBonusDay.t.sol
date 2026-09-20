@@ -103,6 +103,9 @@ contract CoinflipBonusDayTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        // This fixture measures the level clock in days; keep sDGNRS's automatic whale
+        // purchase (a per-level pool contribution) out of it.
+        _pinSdgnrsWhaleBuyShut();
         vm.warp(vm.getBlockTimestamp() + 1 days);
 
         buyer = makeAddr("bonusday_buyer");
