@@ -137,8 +137,8 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         // buffered RNGREUSE arm first seals reqDay with the raw word (a live day — no
         // purchase-clock credit); the following advance issues a fresh same-day request
         // whose word backfills the remaining [reqDay+1, resumeDay) as gap days. The
-        // purchase clock must move by exactly that backfill count once, while dailyIdx
-        // stays at reqDay because STAGE_GAP_BACKFILLED exits before _unlockRng.
+        // purchase clock must move by exactly that backfill count once, and dailyIdx
+        // jumps past the gap to resumeDay - 1: the skipped days get no draw and no seal.
         uint24 resumeDay = game.currentDayView();
         uint24 expectedGap = resumeDay - idxBeforeStall - 2;
         bool backfilled;
@@ -153,32 +153,22 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
 
         uint24 psdAfterBackfill = _purchaseStartDay();
         assertEq(psdAfterBackfill, psdBeforeStall + expectedGap, "purchaseStartDay bumped by exact gap once");
-        assertEq(_dailyIdx(), idxBeforeStall + 1, "request day sealed before the backfill deferred");
+        assertEq(_dailyIdx(), resumeDay - 1, "gap days skipped: index parked at the wall day minus one");
+        assertTrue(game.rngLocked(), "the wall day's jackpot is still owed under the lock");
         assertEq(game.rngWordForDay(idxBeforeStall + 1), 0xCAFEBABE, "request day kept its own raw word");
-        assertTrue(game.rngWordForDay(idxBeforeStall + 2) != 0, "first replay day received a backfill word");
-
-        // Make the target met only AFTER the backfill. Every replay day now sees targetMet=true,
-        // so this catches the subtler failure: latching on a cached replay word would let the next
-        // cached word bypass _finalizeRngRequest and enter jackpot without promoting level.
+        assertTrue(game.rngWordForDay(idxBeforeStall + 2) != 0, "first gap day received a backfill word");
+        // Make the target met only AFTER the backfill. The wall day is the only day left to
+        // seal, and it seals under the lock its own request holds.
         _setLevelTarget(0, 0);
-
-        bool sealedReplayBelowPsd;
         for (uint256 i; i < 80 && _dailyIdx() < resumeDay; ++i) {
             _advanceAndFulfill(100 + i);
-            uint24 idx = _dailyIdx();
-            if (idx > idxBeforeStall && idx < psdAfterBackfill) {
-                sealedReplayBelowPsd = true;
-            }
-            if (idx < resumeDay) {
-                (, bool inJackpot, bool lastPurchase, , ) = game.purchaseInfo();
-                assertFalse(inJackpot, "cached replay must not enter jackpot");
-                assertFalse(lastPurchase, "cached replay must not latch lastPurchaseDay");
-                assertEq(game.level(), 0, "cached replay must not skip level promotion");
+            if (_dailyIdx() < resumeDay) {
+                (, bool inJackpot, , , ) = game.purchaseInfo();
+                assertFalse(inJackpot, "the owed wall-day jackpot must not enter jackpot phase");
+                assertEq(game.level(), 0, "no level promotion before the wall day seals");
             }
         }
-
-        assertTrue(sealedReplayBelowPsd, "dailyIdx sealed through the day<psd replay interval");
-        assertEq(_dailyIdx(), resumeDay, "replay walk caught up to the real wall day");
+        assertEq(_dailyIdx(), resumeDay, "the wall day sealed");
         assertEq(_purchaseStartDay(), psdAfterBackfill, "purchaseStartDay bump remained exactly-once");
         assertFalse(game.gameOver(), "backfill recovery remains live");
 

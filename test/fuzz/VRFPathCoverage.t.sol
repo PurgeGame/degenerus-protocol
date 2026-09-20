@@ -179,10 +179,11 @@ contract VRFPathCoverage is DeployProtocol {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // TEST-03c: Maximum Gap (120 days) with Gas Ceiling
+    // TEST-03c: Maximum Gap (just under the VRF deadman) with Gas Ceiling
     // ══════════════════════════════════════════════════════════════════════
 
-    /// @notice Fuzz: 120-day gap backfill fits within 25M gas ceiling (STALL-03).
+    /// @notice Fuzz: the widest survivable gap backfill fits within 25M gas (STALL-03).
+    ///         One more day without a seal trips the deadman and the game ends instead.
     ///         Day 1 uses fixed setup word; recovery word is fuzzed.
     function test_gapBackfillMaxGap_fuzz(uint256 vrfWord) public {
         vrfWord = bound(vrfWord, 1, type(uint256).max);
@@ -195,8 +196,8 @@ contract VRFPathCoverage is DeployProtocol {
         game.advanceGame();
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Stall: warp to day 123 (120-day gap = death clock maximum)
-        vm.warp(123 * 86400);
+        // Stall: warp to day 122 (119-day gap; day 123 would trip the 120-day deadman)
+        vm.warp(122 * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
         // Measure gas for the resume cycle (includes gap backfill)
@@ -205,13 +206,13 @@ contract VRFPathCoverage is DeployProtocol {
         uint256 gasUsed = gasBefore - gasleft();
 
         // Gas ceiling: 25M (from STALL-03)
-        assertTrue(gasUsed < 25_000_000, "120-day gap backfill must use < 25M gas");
+        assertTrue(gasUsed < 25_000_000, "widest survivable gap backfill must use < 25M gas");
 
-        // Verify all 120 gap days (3..122) have nonzero words
-        for (uint32 d = 3; d <= 122; d++) {
+        // Verify every gap day (3..121) has a nonzero word
+        for (uint32 d = 3; d <= 121; d++) {
             assertTrue(
                 game.rngWordForDay(uint24(d)) != 0,
-                "120-day gap: all gap days must have nonzero words"
+                "widest survivable gap: all gap days must have nonzero words"
             );
         }
     }

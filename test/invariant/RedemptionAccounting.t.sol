@@ -628,7 +628,10 @@ contract RedemptionAccounting is DeployProtocol {
             i < 6 && (game.rngLocked() || sdgnrs.pendingResolveDay() != 0);
             i++
         ) {
-            handler.action_advanceDay(uint256(keccak256(abi.encode("settle", i))));
+            handler.action_settle(uint256(keccak256(abi.encode("settle", i))));
+            if (sdgnrs.pendingResolveDay() != 0 && !game.rngLocked()) {
+                handler.action_advanceDay(uint256(keccak256(abi.encode("settle-day", i))));
+            }
         }
         assertFalse(game.rngLocked(), "lever: day must be settled before the fail-closed phase");
         assertEq(

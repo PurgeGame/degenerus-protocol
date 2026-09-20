@@ -41,7 +41,9 @@ contract CoinflipClaimableRebet is DeployProtocol {
         player = makeAddr("rebet_player");
         gifter = makeAddr("rebet_gifter");
         operator = makeAddr("rebet_operator");
-        // Wall clock at day 2 so deposits target day 3 (clear of the day-1/2 emission seeds).
+        // Day 1 resolved as a live game would have it, then the wall clock at day 2 so
+        // deposits target day 3 (clear of the day-1/2 emission seeds).
+        _resolveDay(1, false);
         _warpToDay(2);
         vm.prank(player);
         game.setOperatorApproval(operator, true);

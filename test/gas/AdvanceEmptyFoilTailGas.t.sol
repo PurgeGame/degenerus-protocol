@@ -86,15 +86,10 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
     }
 }
 
+/// @dev The widest backlog the VRF deadman lets a live game carry: one more unsealed day and
+///      the game ends instead of walking.
 contract AdvanceEmptyFoilGapTail is EmptyFoilTailFixture {
     function _days() internal pure override returns (uint24) {
-        return 120;
-    }
-}
-
-/// @dev Conservative metering-envelope test; no claim that a 650-day sealed backlog is reachable.
-contract AdvanceEmptyFoilFullBudgetTail is EmptyFoilTailFixture {
-    function _days() internal pure override returns (uint24) {
-        return 650;
+        return 119;
     }
 }

@@ -559,22 +559,43 @@ contract RedemptionHandler is Test {
 
         uint256 supplyBefore = sdgnrs.totalSupply();
 
-        vm.warp(block.timestamp + 90 days);
+        // A dead coordinator: the daily request never lands, so the liveness clock runs out.
+        // Only the terminal-entropy request is answered, once liveness has triggered.
+        vm.warp(block.timestamp + 130 days);
 
         try game.advanceGame() {} catch {}
 
-        uint256 reqId = vrf.lastRequestId();
-        if (reqId != 0) {
-            (, , bool fulfilled) = vrf.pendingRequests(reqId);
-            if (!fulfilled) {
-                try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp)))) {} catch {}
+        if (game.livenessTriggered()) {
+            uint256 reqId = vrf.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = vrf.pendingRequests(reqId);
+                if (!fulfilled) {
+                    try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp)))) {} catch {}
+                }
             }
+            try game.advanceGame() {} catch {}
         }
-
-        try game.advanceGame() {} catch {}
 
         _trackSupplyDelta(supplyBefore);
 
+        _checkResolvedPeriods();
+    }
+
+    /// @notice Settle the in-flight day without moving the clock: answer the pending request
+    ///         and crank until the lock clears.
+    function action_settle(uint256 randomWord) external {
+        uint256 supplyBefore = sdgnrs.totalSupply();
+        for (uint256 i; i < 8 && game.rngLocked(); i++) {
+            uint256 reqId = vrf.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = vrf.pendingRequests(reqId);
+                if (!fulfilled) {
+                    try vrf.fulfillRandomWords(reqId, randomWord | 1) {} catch {}
+                }
+            }
+            try game.advanceGame() {} catch {}
+        }
+        _trackSupplyDelta(supplyBefore);
         _checkResolvedPeriods();
     }
 

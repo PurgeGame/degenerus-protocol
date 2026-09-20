@@ -202,15 +202,16 @@ contract AdvanceLoopMarginalsGas is DeployProtocol {
         assertLt(perOrphan, 40_000, "per-orphan marginal above the plausible band");
     }
 
-    /// @notice Composed worst case: the capped 120-day gap backfill AND a 240-orphan walk in
+    /// @notice Composed worst case: the widest survivable gap backfill (119 days; one more
+    ///         day without a seal trips the VRF deadman) AND a 240-orphan walk in
     ///         the SAME resume tx (they share the rngGate gap branch), asserted strictly
     ///         under the 16.7M never-exceed ceiling. 240 orphans is two orders above the
     ///         reachable accumulation rate (see the growth model in the contract natspec).
     function testGapBackfillPlusOrphanWalkComposedUnderCeiling() public {
-        _stallFixture(123, 0xAA123001); // >121 days: the gap-day loop hits its 120 cap
+        _stallFixture(118, 0xAA123001); // 119-day gap: the widest the deadman lets through
         uint256 gasUsed = _measureResumeAdvance(ORPHANS_WORST);
 
-        emit log_named_uint("composed_gap120_plus_240_orphans_gas", gasUsed);
+        emit log_named_uint("composed_gap119_plus_240_orphans_gas", gasUsed);
         emit log_named_uint(
             "headroom_to_16p7M_gas",
             EFFECTIVE_GAS_CEILING > gasUsed ? EFFECTIVE_GAS_CEILING - gasUsed : 0
@@ -219,7 +220,7 @@ contract AdvanceLoopMarginalsGas is DeployProtocol {
         assertLt(
             gasUsed,
             EFFECTIVE_GAS_CEILING,
-            "composed 120-day backfill + 240-orphan walk must stay under the 16.7M ceiling"
+            "composed 119-day backfill + 240-orphan walk must stay under the 16.7M ceiling"
         );
 
         // The gap range actually backfilled (non-vacuity for the gap leg).

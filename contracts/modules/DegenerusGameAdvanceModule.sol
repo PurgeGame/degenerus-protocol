@@ -168,9 +168,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev A multi-day VRF-stall gap backfill ran this advance; the day's jackpot
     ///      distribution is deferred to the next advance so the backfill + jackpot never
     ///      share one tx (each stays under the per-tx gas ceiling). rngGate is idempotent on
-    ///      re-entry (gapDays == 0 next call), dailyIdx is not yet advanced, so advanceDue()
-    ///      stays true and the next advance pays the jackpot with the same frozen word.
+    ///      re-entry (gapDays == 0 next call) and dailyIdx sits at the wall day minus one, so
+    ///      advanceDue() stays true and the next advance pays the jackpot with the same frozen word.
     uint8 private constant STAGE_GAP_BACKFILLED = 12;
+    /// @dev Gas bound on the gap backfill; equals _VRF_DEADMAN_DAYS, past which the game ends.
+    uint24 private constant GAP_BACKFILL_MAX_DAYS = 120;
     /// @dev The carryover ticket leg of a jackpot-phase daily, paid on the advance after
     ///      STAGE_JACKPOT_COIN_TICKETS / STAGE_JACKPOT_PHASE_ENDED priced it, so the two
     ///      96-winner ticket legs never share a tx. Seals the day on a non-final daily.
@@ -303,8 +305,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         uint48 ts = uint48(block.timestamp);
         uint24 wallDay = _simulatedDayIndexAt(ts);
         uint24 day = wallDay;
-        // dailyIdx is stable across every read below: its only writer (_unlockRng)
-        // executes after the last use, or on paths that return before reaching it.
+        // dailyIdx is stable across every read below: its writers (_unlockRng, and the
+        // gap skip inside rngGate) execute after the last use, or on paths that return
+        // before reaching it.
         // locked is deliberately the ENTRY snapshot: rngGate's retry re-fires the
         // request mid-flow (_finalizeRngRequest), and the sentinel branch below keys
         // its swap decision off the pre-request lock state.
@@ -645,8 +648,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // phase transition + the up-to-305-winner daily jackpot) to the next advance so the
             // backfill and the jackpot never execute in one tx (each stays under the per-tx gas
             // ceiling). rngGate is idempotent (rngWordByDay[day] is now set -> gapDays == 0 next
-            // call) and dailyIdx is not yet advanced (no _unlockRng reached), so advanceDue() stays
-            // true and the next advance pays the jackpot with the same frozen word. The break
+            // call) and dailyIdx sits at the wall day minus one (no _unlockRng reached), so
+            // advanceDue() stays true and the next advance pays the jackpot with the same frozen
+            // word. The break
             // returns mult so the keeper is paid for the backfill work (mirrors the partial drains).
             if (gapDays != 0) {
                 stage = STAGE_GAP_BACKFILLED;
@@ -1593,14 +1597,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Have a fresh VRF word ready
         if (currentWord != 0 && rngRequestTime != 0) {
             // Backfill gap days from VRF stall before processing current day.
-            // Gated on rngWordByDay[idx + 1] == 0 so the backfill runs at
-            // most once per lock window: dailyIdx is only updated by
-            // _unlockRng, so a multi-day drain would otherwise re-enter
-            // this branch on each new wall-clock day and re-process the
-            // same gap range, doubling purchaseStartDay and re-running
-            // coinflip payouts for already-resolved days.
-            // dIdx == dailyIdx here (caller cached it; _unlockRng, the sole writer, runs after
-            // rngGate returns), so reuse it instead of re-SLOADing the slot-0 field.
+            // Gated on rngWordByDay[idx + 1] == 0 so the backfill runs at most once per
+            // lock window; the branch also moves dailyIdx past the gap, so a later
+            // wall-clock day cannot re-enter it and re-process the same range.
+            // dIdx == dailyIdx here (caller cached it; nothing writes it before this
+            // branch), so reuse it instead of re-SLOADing the slot-0 field.
             uint24 idx = dIdx;
             if (day > idx + 1 && rngWordByDay[idx + 1] == 0) {
                 uint24 gapCount = day - idx - 1;
@@ -1614,6 +1615,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // the 120-day inactivity timeout since the game was stalled, not abandoned.
                 purchaseStartDay += gapCount;
                 gapDays = gapCount;
+                // The stalled days are over. Their coinflips settled above and anything
+                // bought for them resolves against the derived words; they get no daily
+                // draw and no seal. Processing resumes at the wall day, under the lock
+                // this request still holds.
+                dailyIdx = day - 1;
             }
 
             // Normal daily RNG processing (request from current day)
@@ -2418,9 +2424,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @param startDay First gap day (dailyIdx + 1).
     /// @param endDay Current day (exclusive — not backfilled, handled by normal path).
     function _backfillGapDays(uint256 vrfWord, uint24 startDay, uint24 endDay) private {
-        // Cap at 120 gap days to stay within block gas limit (~9M gas).
-        // Backfills oldest days first (most likely to have active coinflips).
-        if (endDay - startDay > 120) endDay = startDay + 120;
+        // Bounded for gas (~9M). A wider gap is unreachable: the VRF deadman ends the game
+        // at _VRF_DEADMAN_DAYS without a sealed day, before any backfill would run.
+        if (endDay - startDay > GAP_BACKFILL_MAX_DAYS) endDay = startDay + GAP_BACKFILL_MAX_DAYS;
         for (uint24 gapDay = startDay; gapDay < endDay;) {
             uint256 derivedWord = uint256(keccak256(abi.encodePacked(vrfWord, gapDay)));
             if (derivedWord == 0) derivedWord = 1;

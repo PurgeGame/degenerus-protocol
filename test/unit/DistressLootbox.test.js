@@ -92,9 +92,24 @@ describe("Distress-Mode Lootboxes", function () {
    * Since the contract uses day-based granularity (days reset at 22:57 UTC),
    * we need a full-day buffer to ensure we land on the day before distress.
    */
-  async function advanceToPreDistress() {
+  /**
+   * A live game seals a day per day, so its day index tracks the clock. The warps below skip
+   * that, and the VRF deadman ends any game with no sealed day for 120 days, so re-stamp the
+   * index (slot 0, bytes 3..5) to yesterday after each warp.
+   */
+  async function syncDailyIdx(game) {
+    const addr = await game.getAddress();
+    const day = BigInt(await game.currentDayView());
+    const word = BigInt(await hre.ethers.provider.getStorage(addr, 0));
+    const mask = 0xffffffn << 24n;
+    const next = (word & ~mask) | ((day - 1n) << 24n);
+    await hre.network.provider.send("hardhat_setStorageAt", [addr, "0x0", hre.ethers.toBeHex(next, 32)]);
+  }
+
+  async function advanceToPreDistress(game) {
     // Advance to 2 days before the 365-day timeout to ensure day index is below threshold
     await advanceTime(DEPLOY_TIMEOUT_SECONDS - 2 * 86400);
+    await syncDailyIdx(game);
   }
 
   /**
@@ -106,10 +121,11 @@ describe("Distress-Mode Lootboxes", function () {
    * this lands squarely on the single distress day (psd+365) — 12h from either daily boundary, and
    * short of the day-366 (> 365) liveness/game-over trigger — regardless of deploy time.
    */
-  async function advanceToDistress() {
+  async function advanceToDistress(game) {
     const ts = await getBlockTimestamp();
     const intoDay = (ts - DAY_RESET_SECONDS) % 86400;
     await advanceTime(365 * 86400 - intoDay + 43200);
+    await syncDailyIdx(game);
   }
 
   // ---------------------------------------------------------------------------
@@ -145,7 +161,7 @@ describe("Distress-Mode Lootboxes", function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
       // Warp to distress mode
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       const futureBefore = await game.futurePrizePoolView();
       const nextBefore = await game.nextPrizePoolView();
@@ -169,7 +185,7 @@ describe("Distress-Mode Lootboxes", function () {
       // Verify presale is active
       expect(await game.lootboxPresaleActiveFlag()).to.be.true;
 
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       const futureBefore = await game.futurePrizePoolView();
       const nextBefore = await game.nextPrizePoolView();
@@ -196,7 +212,7 @@ describe("Distress-Mode Lootboxes", function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
       // Day psd+363 — comfortably before the psd+365 distress threshold.
-      await advanceToPreDistress();
+      await advanceToPreDistress(game);
 
       const futureBefore = await game.futurePrizePoolView();
       const nextBefore = await game.nextPrizePoolView();
@@ -215,7 +231,7 @@ describe("Distress-Mode Lootboxes", function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
       // Day psd+365 — the first (and only) distress day before the liveness trigger.
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       const futureBefore = await game.futurePrizePoolView();
       const nextBefore = await game.nextPrizePoolView();
@@ -259,7 +275,7 @@ describe("Distress-Mode Lootboxes", function () {
       expect(await game.futurePrizePoolView()).to.be.gt(futureBefore1);
 
       // Bob buys in distress mode (different player = fresh lootbox slot, no day conflict)
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       const futureBefore2 = await game.futurePrizePoolView();
       const nextBefore2 = await game.nextPrizePoolView();
@@ -287,7 +303,7 @@ describe("Distress-Mode Lootboxes", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
       // Warp to distress mode
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       // Buy a lootbox in distress mode
       await purchaseLootbox(game, alice, eth("2"));
@@ -310,7 +326,7 @@ describe("Distress-Mode Lootboxes", function () {
       expect(nominalAlice).to.be.gt(0n);
 
       // Warp to distress
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       // Bob buys in distress mode
       const nextBefore = await game.nextPrizePoolView();
@@ -332,7 +348,7 @@ describe("Distress-Mode Lootboxes", function () {
   describe("Edge cases", function () {
     it("zero-amount distress lootbox still reverts (min 0.01 ETH)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       await expect(
         purchaseLootbox(game, alice, eth("0"))
@@ -341,7 +357,7 @@ describe("Distress-Mode Lootboxes", function () {
 
     it("minimum lootbox (0.01 ETH) works in distress mode", async function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       const futureBefore = await game.futurePrizePoolView();
       const nextBefore = await game.nextPrizePoolView();
@@ -360,7 +376,7 @@ describe("Distress-Mode Lootboxes", function () {
 
     it("large lootbox (100 ETH) in distress routes all to next pool", async function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
-      await advanceToDistress();
+      await advanceToDistress(game);
 
       const futureBefore = await game.futurePrizePoolView();
       const nextBefore = await game.nextPrizePoolView();

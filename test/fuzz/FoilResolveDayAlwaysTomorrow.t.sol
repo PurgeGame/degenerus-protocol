@@ -27,8 +27,8 @@ contract FoilResolveDayAlwaysTomorrow is DeployProtocol {
     }
 
     /// @dev Multi-day VRF stall: the fulfil crank records every gap day's word and the wall
-    ///      day's, then the re-walk seals one day per advance with the lock down. A buy at any
-    ///      point of that walk resolves against a day whose word is still unset.
+    ///      day's and skips the gap. A buy before or after the wall day seals resolves
+    ///      against a day whose word is still unset.
     function test_BuyDuringRewalkResolvesAgainstUnsetWord() public {
         _runStageNewDay(WORD_NORMAL);
         _runStageNewDay(WORD_NORMAL ^ 1);
@@ -51,26 +51,20 @@ contract FoilResolveDayAlwaysTomorrow is DeployProtocol {
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
         game.advanceGame();
         assertTrue(game.rngWordForDay(W) != 0, "W's word recorded by the fulfil crank");
-        _advanceUntilUnlocked();
-        assertEq(_dailyIdx(), R + 1, "sealed R+1");
+        assertEq(_dailyIdx(), W - 1, "gap days skipped");
+        assertTrue(game.rngLocked(), "W's jackpot still owed under the lock");
 
-        // Two days behind the wall, lock down, every word through W public.
+        // Every word through W is public and the lock is up: a buy resolves against W+1.
         address early = makeAddr("foil_early");
         _buy(early);
         _assertResolvesTomorrow(early, W);
 
-        game.advanceGame();
-        assertEq(_dailyIdx(), R + 2, "sealed R+2");
-        assertFalse(game.rngLocked(), "lock down during the re-walk");
-
-        // One day behind the wall: the state that used to resolve against W itself.
+        // W seals; caught up and unlocked, a buy still resolves against W+1.
+        _advanceUntilUnlocked();
+        assertEq(_dailyIdx(), W, "sealed W");
         address late = makeAddr("foil_late");
         _buy(late);
         _assertResolvesTomorrow(late, W);
-
-        // The walk finishes W, and the next real day requests W+1's word fresh.
-        game.advanceGame();
-        assertEq(_dailyIdx(), W, "sealed W");
         _t += 1 days;
         vm.warp(_t);
         assertEq(game.rngWordForDay(W + 1), 0, "W+1 unrequested before its own day");

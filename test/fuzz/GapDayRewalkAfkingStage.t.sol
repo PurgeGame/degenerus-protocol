@@ -39,6 +39,8 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     uint256 private constant WORD_LATE = 0xBEEF_0001;
     uint256 private constant WORD_FRESH = 0xC0FFEE_0002;
 
+    error RngLocked();
+
     uint256 private _t;
     uint256 private _lastFulfilledReqId;
 
@@ -104,51 +106,27 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         assertTrue(game.rngWordForDay(R + 1) != 0, "#3 backfilled R+1");
         assertEq(game.rngWordForDay(R + 2), predictedG2, "#3 backfilled R+2 = keccak(vrfWord, R+2)");
         assertTrue(game.rngWordForDay(W) != 0, "#3 recorded W's word");
-        assertEq(_dailyIdx(), R, "#3 did not seal anything");
+        assertEq(_dailyIdx(), W - 1, "#3 skipped the gap days: index parked at W-1");
 
-        // ---- #4: G1 = R+1 re-walk, entered locked -> STAGE skipped; seals R+1, lock released. ----
-        _advanceUntilUnlocked();
-        assertEq(_dailyIdx(), R + 1, "#4 sealed R+1");
-        assertEq(_lastBought(atk), R, "#4 (locked entry) ran no STAGE");
-        assertFalse(game.rngLocked(), "lock down before the G2 re-walk");
-        uint256 wordG2 = game.rngWordForDay(R + 2);
-        uint256 wordW = game.rngWordForDay(W);
-        assertEq(wordG2, predictedG2, "G2 word public before the re-walk");
+        // The gap words are public but the lock is up, so nothing player-side can move
+        // against them: the subscription upsert is refused outright.
+        vm.prank(atk);
+        vm.expectRevert(RngLocked.selector);
+        game.subscribe(address(0), false, false, 2, address(0));
 
-        // ---- Control: G2 re-walk with the R box pending — no STAGE, no drawing. ----
-        {
-            uint256 snapControl = vm.snapshotState();
-            vm.recordLogs();
-            game.advanceGame(); // #5 (control)
-            (uint256 deliveries, uint256 draws) = _countAfkingLogs(vm.getRecordedLogs());
-            assertEq(_dailyIdx(), R + 2, "#5 control sealed R+2");
-            assertEq(_afkingResetDay(), W, "#5 control: no STAGE reset on the gap day");
-            assertEq(_lastBought(atk), R, "#5 control: attacker not stamped on the gap day");
-            assertEq(_lastBought(bystander), R, "#5 control: bystander not stamped on the gap day");
-            assertEq(deliveries, 0, "#5 control: no AfkingDelivered on the gap-day crank");
-            assertEq(draws, 0, "#5 control: no SubDrawWon at the unlocked gap seal");
-            vm.revertToState(snapControl);
-        }
-
-        // ---- Attack: choose q, open the R box through the valve, crank G2 — nothing binds. ----
-        for (uint8 q = 1; q <= 3; q++) {
-            uint256 snapQ = vm.snapshotState();
-            _runAttack(atk, q, R, W, wordG2);
-            vm.revertToState(snapQ);
-        }
-
-        // ---- #6 after the attack: the wall day W seals on its public word; STAGE(W) does not re-fire. ----
-        _runAttack(atk, 2, R, W, wordG2);
-        assertEq(game.rngWordForDay(W), wordW, "W word unchanged and public");
+        // The remaining advances pay W's jackpot under the lock and seal W. STAGE(W) ran
+        // once, at #2, before the request; no gap day ever ran a STAGE or a seat draw.
         vm.recordLogs();
-        game.advanceGame(); // #6: wall-day W entered unlocked with a committed word
-        (uint256 delivW, uint256 drawsW) = _countAfkingLogs(vm.getRecordedLogs());
-        assertEq(_dailyIdx(), W, "#6 sealed W");
-        assertEq(_afkingResetDay(), W, "#6: STAGE(W) ran exactly once (at #2)");
-        assertEq(_lastBought(atk), R, "#6: attacker not stamped against W's public word");
-        assertEq(delivW, 0, "#6: no AfkingDelivered against W's public word");
-        assertEq(drawsW, 0, "#6: no SubDrawWon at the unlocked W seal");
-        assertFalse(game.rngLocked(), "#6 sealed without a request");
+        _advanceUntilUnlocked();
+        (uint256 delivW,) = _countAfkingLogs(vm.getRecordedLogs());
+        assertEq(_dailyIdx(), W, "#4 sealed W");
+        assertEq(_afkingResetDay(), W, "#4: STAGE(W) ran exactly once (at #2)");
+        assertEq(_lastBought(atk), R, "#4: attacker not stamped on any gap day");
+        assertEq(_lastBought(bystander), R, "#4: bystander not stamped on any gap day");
+        assertEq(delivW, 0, "#4: no AfkingDelivered while sealing W");
+        assertEq(game.rngWordForDay(W + 1), 0, "#4: unlocked with no word ahead");
+        _drainOpens();
+        assertEq(_lastOpened(atk), R, "R box opened through the valve");
 
         // ---- Positive control: the next day runs the STAGE (uncommitted word) and the drawing. ----
         _t += 1 days;
@@ -173,30 +151,6 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         assertEq(_dailyIdx(), N, "N sealed");
         assertEq(game.rngWordForDay(N), wordN, "N recorded the fulfil word unnudged");
         assertEq(drawsN, 1, "N: SubDrawWon at the lock-releasing seal");
-    }
-
-    /// @dev One attack replay from the post-#4 state: upsert q, open the pending R box via the valve,
-    ///      crank the G2 re-walk. The re-walk enters unlocked with G2's word public, so the STAGE and
-    ///      the seat drawing both stay off: no stamp, no delivery, no G2 box to open.
-    function _runAttack(address atk, uint8 q, uint24 R, uint24 W, uint256 wordG2) internal {
-        vm.prank(atk);
-        game.subscribe(address(0), false, false, q, address(0));
-        assertEq(_dailyQty(atk), q, "upsert wrote dailyQuantity");
-        assertEq(_lastBought(atk), R, "upsert did no cover-buy (box pending)");
-        game.openBoxes(64);
-        assertEq(_lastOpened(atk), R, "R box opened through the valve");
-        assertEq(game.rngWordForDay(R + 2), wordG2, "G2 word unchanged");
-
-        vm.recordLogs();
-        game.advanceGame(); // #5: G2 re-walk with the lock down
-        (uint256 deliveries, uint256 draws) = _countAfkingLogs(vm.getRecordedLogs());
-        assertEq(_dailyIdx(), R + 2, "#5 sealed R+2");
-        assertEq(_afkingResetDay(), W, "#5: no STAGE reset on the gap day");
-        assertEq(_lastBought(atk), R, "#5: attacker not stamped on the gap day");
-        assertEq(deliveries, 0, "#5: no AfkingDelivered on the gap-day crank");
-        assertEq(draws, 0, "#5: no SubDrawWon at the unlocked gap seal");
-        _drainOpens();
-        assertEq(_lastOpened(atk), R, "no G2 box exists to open");
     }
 
     /// @dev Counts game-emitted AfkingDelivered and SubDrawWon logs.

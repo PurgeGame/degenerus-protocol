@@ -292,8 +292,9 @@ abstract contract DegenerusGameStorage {
     uint48 internal constant _VRF_GRACE_PERIOD = 14 days;
 
     /// @dev RNG-stall length (in sealed days) past which the VRF-death deadman fires regardless
-    ///      of phase. dailyIdx only advances on a successful day-seal, so currentDay - dailyIdx
-    ///      counts days since the last good word; it freezes during ANY stall (dead coordinator,
+    ///      of phase. dailyIdx advances on a successful day-seal or when a stalled word lands
+    ///      and its gap is skipped, so currentDay - dailyIdx counts days since the last good
+    ///      word; it freezes during ANY stall (dead coordinator,
     ///      unfilled LINK, request-from-zero revert) and clears only after game-over latches.
     ///      Far above the in-phase clocks, so it never fires on a healthy game.
     uint24 internal constant _VRF_DEADMAN_DAYS = 120;
@@ -2522,11 +2523,12 @@ abstract contract DegenerusGameStorage {
     ///      to players via the terminal jackpot. Suppression is bounded by the window,
     ///      so terminal release is always reachable.
     function _livenessTriggered() internal view returns (bool) {
+        // No sealed day for _VRF_DEADMAN_DAYS ends the game in every phase: a stall that long
+        // is terminal, and the fair outcome is the game-over payout, not a recovery walk.
+        if (_vrfDeadmanFired()) return true;
         // Jackpot / last-purchase suppress the in-phase clocks (they would false-fire in the
-        // productive window between target-met and phase-transition close), but the
-        // phase-independent VRF-death deadman still fires here so a permanently-stalled game in
-        // these phases reaches terminal fund release instead of bricking.
-        if (lastPurchaseDay || jackpotPhaseFlag) return _vrfDeadmanFired();
+        // productive window between target-met and phase-transition close).
+        if (lastPurchaseDay || jackpotPhaseFlag) return false;
         uint24 deadlineDay = purchaseStartDay +
             uint24(level == 0 ? _DEPLOY_IDLE_TIMEOUT_DAYS : 120);
         if (_simulatedDayIndex() <= deadlineDay) return false;
@@ -2543,13 +2545,14 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev VRF-death deadman: true once no day has sealed for _VRF_DEADMAN_DAYS. dailyIdx
-    ///      advances only in _unlockRng (a completed day), so currentDay - dailyIdx counts days
-    ///      since real progress and freezes during any stall — and stays frozen until game-over
+    ///      advances in _unlockRng (a completed day) and past a stall's gap when its word
+    ///      lands (rngGate's backfill), so currentDay - dailyIdx counts days since real
+    ///      progress and freezes during any stall — and stays frozen until game-over
     ///      latches (the terminal _unlockRng runs after gameOver is set), so it never evaporates
     ///      mid-drain. Phase-independent, unlike _livenessTriggered: advanceGame consults it to
     ///      reach terminal fund release even while jackpotPhaseFlag / lastPurchaseDay are set.
     function _vrfDeadmanFired() internal view returns (bool) {
-        return _simulatedDayIndex() - dailyIdx > _VRF_DEADMAN_DAYS;
+        return _simulatedDayIndex() > uint24(dailyIdx) + _VRF_DEADMAN_DAYS;
     }
 
     /// @dev Returns the day index for a specific timestamp.

@@ -539,8 +539,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // D-07 invariants on advance N+1 (the gap backfill, decoupled from BOTH the STAGE and the jackpot):
         //  - the gap range is now backfilled (so rngGate is idempotent next call: rngWordByDay[idx+1] != 0).
         assertTrue(rngWordByDay(idxBeforeStall + 1) != 0, "D-07: advance N+1 backfilled the gap (idempotent re-entry next call)");
-        //  - dailyIdx still NOT advanced (no _unlockRng on the gap break) -> advanceDue stays true.
-        assertEq(_dailyIdx(), idxBeforeStall, "D-07: advance N+1 did NOT advance dailyIdx (no _unlockRng on the gap break)");
+        //  - dailyIdx parked at resumeDay - 1 (the gap is skipped, not walked) -> advanceDue stays true.
+        assertEq(_dailyIdx(), resumeDay - 1, "D-07: advance N+1 parked dailyIdx at resumeDay - 1 (gap skipped, no _unlockRng)");
         assertTrue(game.advanceDue(), "D-07: advanceDue() stays true between advance N+1 and advance N+2 (jackpot deferred)");
         //  - purchaseStartDay bumped EXACTLY ONCE by the gap count (the death-clock extension, the single bump).
         //    rngGate computes gapCount = day - idx - 1 = resumeDay - idxBeforeStall - 1 (uncapped at the psd

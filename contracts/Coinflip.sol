@@ -1316,11 +1316,13 @@ contract Coinflip {
     }
 
     /// @dev Internal auto-rebuy configuration.
-    ///      The freeze applies only to a position ALREADY on auto-rebuy: that is the only state
-    ///      holding a carry, and the carry is the pending day's stake, so toggling off would
-    ///      extract it before a known loss and re-setting the stop would bank a known win whole.
-    ///      A player not on auto-rebuy holds no carry — arming it moves nothing the pending word
-    ///      prices — so the arm stays open.
+    ///      A position already on auto-rebuy is frozen while a day is unresolved: it holds a
+    ///      carry that the pending word prices, so toggling off would extract it before a known
+    ///      loss and re-setting the stop would bank a known win whole. Arming stays open while
+    ///      only today is unresolved (a known result can only roll into an unknown day) but is
+    ///      frozen once two or more days are unresolved: after a stall every such day's result
+    ///      derives from one delivered word, and arming then would compound a stake through a
+    ///      run of results that are already readable.
     function _setCoinflipAutoRebuy(
         address player,
         bool enabled,
@@ -1329,7 +1331,9 @@ contract Coinflip {
     ) private {
         PlayerCoinflipState storage state = playerState[player];
         uint256 mintable;
-        if (state.autoRebuyEnabled && _flipFrozen()) revert RngLocked();
+        if (_flipFrozen() && (state.autoRebuyEnabled || flipsClaimableDay + 1 < GameTimeLib.currentDayIndex())) {
+            revert RngLocked();
+        }
 
         if (enabled) {
             mintable = _claimCoinflipsInternal(player, state, false);

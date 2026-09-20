@@ -1806,8 +1806,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Replaces the winning quadrant's trait with a hero-symbol override sampled by
     ///      `_rollHeroSymbol` from the prior day's settled wager pool. Applied to all jackpot
     ///      paths (purchase phase + jackpot phase). Reads `dailyHeroWagers[dailyIdx]`:
-    ///      `dailyIdx` is written only at `_unlockRng` (AdvanceModule), so during jackpot
-    ///      processing it is frozen at the previous day's index — every consumer in a single
+    ///      `dailyIdx` moves only at `_unlockRng` and at rngGate's gap skip (AdvanceModule),
+    ///      both outside jackpot processing, so here it is frozen at the previous day's
+    ///      index — every consumer in a single
     ///      jackpot resolution therefore reads the same wager pool. Bets placed on day D
     ///      write to `dailyHeroWagers[D]`; day D+1's jackpot reads slot[D] via
     ///      `dailyIdx == D` (set by day D's `_unlockRng`).
