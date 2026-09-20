@@ -42,7 +42,10 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
     ///         HIGH_ROLLER_DAY_PASS_VALUE)` high passes, rounded down, read off the same
     ///         `PoolsSettled` the consolidation emits — summed over every level the run closes,
     ///         against the `CrapsPassesCredited` the table logged at each close. Nothing lands in
-    ///         the normal lane: the fraction under a whole high pass is dropped.
+    ///         the normal lane from the cut: the fraction under a whole high pass is dropped; the
+    ///         normal lane moves only by sDGNRS's own whale-pass purchases (one per pass, <10).
+    bytes32 private constant WHALE_PURCHASED_SIG = keccak256("WhalePassPurchased(address,uint256,uint256)");
+
     function test_LevelCloseBanksHighPassesToSdgnrs() public {
         (uint256 normalBefore, uint256 highBefore) = crapsBattle.passCreditsOf(ContractAddresses.SDGNRS);
         assertEq(highBefore, 0, "fixture: no high passes banked at deploy");
@@ -55,8 +58,20 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         uint256 expectedHigh;
         uint256 creditedHigh;
         uint256 creditedNormal;
+        // sDGNRS's once-per-level automatic whale purchase banks one NORMAL craps pass per pass
+        // bought below level 10, exactly as any whale buyer's does: the only door through which
+        // the seed normals can rise.
+        uint256 whaleNormals;
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
+            if (
+                l.emitter == address(game) && l.topics[0] == WHALE_PURCHASED_SIG
+                    && address(uint160(uint256(l.topics[1]))) == ContractAddresses.SDGNRS
+            ) {
+                (uint256 qty,) = abi.decode(l.data, (uint256, uint256));
+                whaleNormals += qty;
+                continue;
+            }
             if (l.emitter != address(game) || l.topics[0] != POOLS_SETTLED_SIG) continue;
             uint24 lvl = uint24(uint256(l.topics[1]));
             (, , , , uint256 currentPool, , , ) =
@@ -87,7 +102,11 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         // pass per opened day, and the bank can only move through those two doors.
         (uint256 normalAfter, uint256 highAfter) = crapsBattle.passCreditsOf(ContractAddresses.SDGNRS);
         assertLe(highAfter, creditedHigh, "the bank holds no more than was credited");
-        assertLe(normalAfter, normalBefore, "the seed normals only ever go down");
+        assertLe(
+            normalAfter,
+            normalBefore + whaleNormals,
+            "the normal lane rises only by the passes sDGNRS's own whale purchases banked"
+        );
     }
 
     /// @notice A banked high pass is spent by the house's own daily seat, at the day's high
