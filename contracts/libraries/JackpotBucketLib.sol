@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {EntropyLib} from "./EntropyLib.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -31,6 +33,7 @@ pragma solidity 0.8.34;
  *      with no runtime call boundary. Extracted from DegenerusGameJackpotModule to reduce bytecode.
  */
 library JackpotBucketLib {
+    bytes32 internal constant TRAIT_BOARD_TAG = keccak256("degenerus.jackpot.trait-board");
     // -------------------------------------------------------------------------
     // Constants — Jackpot Bucket Scaling
     // -------------------------------------------------------------------------
@@ -223,6 +226,8 @@ library JackpotBucketLib {
     /// @dev Derives 4 random trait IDs from entropy. Each quadrant uses 6 bits (0-63 range).
     ///      Quadrant offsets: 0, 64, 128, 192.
     function getRandomTraits(uint256 rw) internal pure returns (uint8[4] memory w) {
+        // Keep the shared board independent of the raw daily flip and redemption bits.
+        rw = EntropyLib.hash2(rw, uint256(TRAIT_BOARD_TAG));
         w[0] = uint8(rw & 0x3F); // Quadrant 0: 0-63
         w[1] = 64 + uint8((rw >> 6) & 0x3F); // Quadrant 1: 64-127
         w[2] = 128 + uint8((rw >> 12) & 0x3F); // Quadrant 2: 128-191

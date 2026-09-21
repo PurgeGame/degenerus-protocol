@@ -56,10 +56,10 @@ contract CoinflipWinClassificationFloor is DeployProtocol {
         );
     }
 
-    /// @dev The reward roll inside processCoinflipPayouts: seedWord = keccak(rngWord, epoch),
+    /// @dev The reward roll inside processCoinflipPayouts: seedWord = keccak(REWARD_PERCENT_TAG, rngWord, epoch),
     ///      roll = seedWord % 20. Mirrored so the test can target a specific branch.
     function _roll(uint256 rngWord, uint24 epoch) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(rngWord, epoch))) % 20;
+        return uint256(keccak256(abi.encodePacked(keccak256("degenerus.coinflip.reward-percent"), rngWord, epoch))) % 20;
     }
 
     /// @dev Find a WINNING word (low bit set, so `rngWord & 1 == 1`) whose reward roll

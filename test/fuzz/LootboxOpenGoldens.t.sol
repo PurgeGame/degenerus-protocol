@@ -159,11 +159,8 @@ contract LootboxOpenGoldens is DeployProtocol {
 
     struct Opened { uint256 amount; uint24 level; uint32 tickets; bool up; }
 
-    /// @dev Word `golden_word_1`, level 0, price 0.01 ETH: an order of 6 / 3 / 2 smalls, mediums
-    ///      and larges plus a 1 ETH custom, and a 0.5 ETH presale box. Eight of the twelve boxes
-    ///      draw a spin and report through the spin contracts; the four that open plainly, the
-    ///      one lane the flush queues, the two DGNRS batches and the presale roll are pinned to
-    ///      the figure. A different figure means the reward formulas changed.
+    /// @dev Fixed word under BOX_OPEN_TAG: eight plain boxes, three queued levels,
+    ///      one DGNRS batch and the presale DGNRS branch. Values are pinned below.
     function test_goldensUnderOneWord() public {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
@@ -233,36 +230,34 @@ contract LootboxOpenGoldens is DeployProtocol {
             }
         }
 
-        // Four plain boxes: three smalls (9016 = 0.01 ETH at a fresh wallet's 90.16% EV) and one
-        // medium; their target levels and ticket variance rolls are the word's.
-        assertEq(nOpened, 4, "four boxes opened plainly on this word");
-        uint24[4] memory levels = [uint24(34), 37, 2, 3];
-        uint32[4] memory tickets = [uint32(44), 0, 0, 490];
-        for (uint256 k; k < 4; k++) {
-            assertEq(opened[k].amount, k == 3 ? 45_080_000_000_000_000 : 9_016_000_000_000_000, "box amount");
+        assertEq(nOpened, 8, "eight boxes opened plainly on this word");
+        uint24[8] memory levels = [uint24(3), 3, 4, 5, 1, 8, 4, 7];
+        uint32[8] memory tickets = [uint32(130), 109, 113, 0, 421, 0, 4671, 0];
+        uint256[8] memory amounts = [uint256(9016e12), 9016e12, 9016e12, 45080e12, 45080e12, 225400e12, 225400e12, 901600e12];
+        for (uint256 k; k < 8; k++) {
+            assertEq(opened[k].amount, amounts[k], "box amount");
             assertEq(opened[k].level, levels[k], "target level");
             assertEq(opened[k].tickets, tickets[k], "ticket variance roll");
-            assertEq(opened[k].up, k == 3, "Bernoulli round-up");
+            assertEq(opened[k].up, k == 4 || k == 6, "Bernoulli round-up");
         }
-        // Only the medium's 4.90 scaled tickets round up to five whole ones: twenty entries at level 3.
-        assertEq(nQueued, 1, "one lane queued");
-        assertEq(qLevel[0], 3, "queued at the medium's target");
-        assertEq(qEntries[0], 20, "five whole tickets, four entries each");
-        // Two DGNRS batches split by ETH-spin boundaries, each the small-tier pool share.
-        assertEq(nDgnrs, 2, "two DGNRS batches");
-        for (uint256 k; k < 2; k++) {
-            assertEq(dReq[k], 16_200 ether, "DGNRS requested");
-            assertEq(dPaid[k], 16_200 ether, "DGNRS paid in full from the pool");
+        assertEq(nQueued, 3, "three lanes queued");
+        uint24[3] memory expectedLevels = [uint24(1), 3, 4];
+        uint32[3] memory expectedEntries = [uint32(20), 8, 192];
+        for (uint256 k; k < 3; ++k) {
+            assertEq(qLevel[k], expectedLevels[k], "queued target");
+            assertEq(qEntries[k], expectedEntries[k], "whole-ticket entries");
         }
+        assertEq(nDgnrs, 1, "one DGNRS batch");
+        assertEq(dReq[0], 5_185_000 ether, "DGNRS requested");
+        assertEq(dPaid[0], 5_185_000 ether, "DGNRS paid in full");
         assertEq(nPresale, 1, "the presale box opened");
-        assertEq(presaleFlip, 82_100 ether, "presale FLIP roll");
-        assertEq(presaleDgnrs, 0, "presale DGNRS branch not drawn");
+        assertEq(presaleFlip, 0, "presale FLIP branch not drawn");
+        assertEq(presaleDgnrs, 3_750_000_000 ether, "presale DGNRS roll");
         assertEq(nPasses, 0, "no craps passes rolled on this word");
     }
 
-    /// @dev Word `("golden_word", 3)`, same fixture: eight plain boxes (three smalls, three mediums,
-    ///      two larges — one medium rolls the 1,800 FLIP branch), five flushed lanes, two normal
-    ///      craps passes placed on day 4, and the presale box's DGNRS branch.
+    /// @dev Second fixed word: eight plain parent boxes plus one nested box,
+    ///      three flushed levels, and seven presale normal passes.
     function test_goldensUnderWordThree() public {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
@@ -287,13 +282,13 @@ contract LootboxOpenGoldens is DeployProtocol {
         assertGt(game.openBoxes(100), 0, "opened");
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        uint256[8] memory amount = [uint256(9016e12), 9016e12, 9016e12, 45080e12, 45080e12, 45080e12, 225400e12, 225400e12];
-        uint24[8] memory level = [uint24(4), 2, 24, 2, 3, 3, 3, 5];
-        uint32[8] memory tickets = [uint32(86), 74, 47, 0, 574, 0, 0, 1085];
-        uint256[8] memory flip = [uint256(0), 0, 0, 1800 ether, 0, 0, 0, 0];
-        bool[8] memory up = [true, true, true, false, true, false, false, true];
-        uint24[5] memory qLevel = [uint24(2), 3, 4, 5, 24];
-        uint32[5] memory qEntries = [uint32(4), 24, 4, 44, 4];
+        uint256[9] memory amount = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 999348635149103863, 225400e12, 901600e12];
+        uint24[9] memory level = [uint24(5), 1, 3, 5, 4, 5, 9, 5, 22];
+        uint32[9] memory tickets = [uint32(0), 0, 205, 84, 0, 0, 0, 653, 5356];
+        uint256[9] memory flip;
+        bool[9] memory up = [false, false, false, false, false, false, false, false, true];
+        uint24[3] memory qLevel = [uint24(3), 5, 22];
+        uint32[3] memory qEntries = [uint32(8), 24, 216];
         uint256 nO; uint256 nQ; uint256 nP; uint256 nPre;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game)) continue;
@@ -301,7 +296,7 @@ contract LootboxOpenGoldens is DeployProtocol {
             address who = address(uint160(uint256(logs[i].topics[1])));
             if (t == OPENED) {
                 assertEq(who, whale, "order's box");
-                assertLt(nO, 8, "eight plain boxes");
+                assertLt(nO, 9, "eight parent boxes plus one nested box");
                 (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 assertEq(a, amount[nO], "box amount");
                 assertEq(lvl, level[nO], "target level");
@@ -310,7 +305,7 @@ contract LootboxOpenGoldens is DeployProtocol {
                 assertEq(u, up[nO], "Bernoulli round-up");
                 nO++;
             } else if (t == QUEUED && who == whale) {
-                assertLt(nQ, 5, "five lanes");
+                assertLt(nQ, 3, "three lanes");
                 (uint24 lvl, uint32 e) = abi.decode(logs[i].data, (uint24, uint32));
                 assertEq(lvl, qLevel[nQ], "flushed lane level");
                 assertEq(e, qEntries[nQ], "flushed lane entries");
@@ -327,16 +322,17 @@ contract LootboxOpenGoldens is DeployProtocol {
                 (uint256 a, uint256 fl, uint256 dg, uint256 ww, bool cl, uint32 pn, uint32 ph) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
                 assertEq(a, 0.5 ether, "presale amount");
                 assertEq(fl, 0, "presale FLIP branch not drawn");
-                assertEq(dg, 3_750_000_000 ether, "presale DGNRS roll");
+                assertEq(dg, 0, "presale DGNRS branch not drawn");
                 assertEq(ww, 0, "presale WWXRP branch not drawn");
                 assertFalse(cl, "not the closing box");
-                assertEq(pn + ph, 0, "no presale passes");
+                assertEq(pn, 7, "seven presale normal passes");
+                assertEq(ph, 0, "no presale high passes");
                 nPre++;
             }
         }
-        assertEq(nO, 8, "eight boxes opened plainly");
-        assertEq(nQ, 5, "five lanes flushed");
-        assertEq(nP, 1, "one pass delivery");
+        assertEq(nO, 9, "eight plain parent boxes plus nested box");
+        assertEq(nQ, 3, "three lanes flushed");
+        assertEq(nP, 0, "no ordinary pass delivery");
         assertEq(nPre, 1, "the presale box opened");
     }
 
@@ -385,14 +381,14 @@ contract LootboxOpenGoldens is DeployProtocol {
         assertEq(uint256(pn) + ph, 0, "no passes");
     }
 
-    /// @dev Word `("golden_word", 17)`: the presale box takes the craps-pass branch — four normal
+    /// @dev Word `("golden_word", 3)`: the presale box takes the craps-pass branch — seven normal
     ///      day passes, nothing else.
     function test_presaleGoldenPassBranch() public {
-        (uint256 fl, uint256 dg, uint256 ww, uint32 pn, uint32 ph) = _presaleUnder(17);
+        (uint256 fl, uint256 dg, uint256 ww, uint32 pn, uint32 ph) = _presaleUnder(3);
         assertEq(fl, 0, "no FLIP");
         assertEq(dg, 0, "no DGNRS");
         assertEq(ww, 0, "no WWXRP");
-        assertEq(pn, 4, "four normal passes");
+        assertEq(pn, 7, "seven normal passes");
         assertEq(ph, 0, "no high passes");
     }
 }

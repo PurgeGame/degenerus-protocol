@@ -1024,15 +1024,15 @@ contract DegenerusGameDegeneretteModule is
 
         // FLIP survival flip: every FLIP payout must survive one fair coinflip before
         // it mints — the bet's whole payout double-or-nothings on a single bet-keyed flip
-        // (EV-neutral: x2 at 50/50). The seed is the per-bet lootbox seed, which FLIP
-        // bets never otherwise consume (lootbox-share is ETH-only). Both rngWord and betId
-        // are committed before the VRF word lands, so the outcome is fixed at fulfillment;
+        // (EV-neutral: x2 at 50/50). A dedicated domain binds owner and bet nonce.
+        // Both identities are committed before the VRF word lands, so the outcome
+        // is fixed at fulfillment;
         // a losing bet pays zero whether resolved or abandoned, so selective resolution
         // earns nothing. The accumulator holds exactly this bet's payout once (added per
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
         // reads off DegeneretteResolved: totalPayout vs the per-spin DegeneretteResult sums.
         if (currency == CURRENCY_FLIP && totalPayout != 0) {
-            if (EntropyLib.hash2(rngWord, betId) & 1 == 1) {
+            if (EntropyLib.hash4(rngWord, uint160(player), betId, BET_SURVIVAL_TAG) & 1 == 1) {
                 acc.flipMint += totalPayout;
                 totalPayout *= 2;
             } else {
@@ -1056,7 +1056,7 @@ contract DegenerusGameDegeneretteModule is
             uint256 rounded = totalPayout > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(
                     totalPayout,
-                    EntropyLib.hash2(rngWord, uint256(betId) ^ FLIP_ROUND_TAG)
+                    EntropyLib.hash4(rngWord, uint160(player), betId, FLIP_ROUND_TAG)
                 )
                 : FlipRoundLib.floorWholeFlip(totalPayout);
             if (rounded > totalPayout) {
@@ -1109,7 +1109,7 @@ contract DegenerusGameDegeneretteModule is
                 player,
                 recordBounty * LR_FLIP_SCALE,
                 activityScore,
-                EntropyLib.hash2(rngWord, uint256(betId) ^ RECORD_SPIN_TAG),
+                EntropyLib.hash4(rngWord, uint160(player), betId, RECORD_SPIN_TAG),
                 customTraits,
                 BOX_SPIN_TYPE_RECORD
             );
@@ -1794,6 +1794,7 @@ contract DegenerusGameDegeneretteModule is
     ///      per-award key (the betId, the box seed) so the roll is fixed at VRF fulfillment
     ///      and cannot be steered by how a settle batch is composed.
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
+    uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
 
     // Box-spin BoxSpin.betId header. Bit 63 is a box-origin sentinel (real bet nonces increment
     // from 1, so they never reach it); bits 62-60 carry the spin type; bits 59-0 are seed entropy

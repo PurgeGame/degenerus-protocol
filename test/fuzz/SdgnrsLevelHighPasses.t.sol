@@ -43,7 +43,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
     ///         `PoolsSettled` the consolidation emits — summed over every level the run closes,
     ///         against the `CrapsPassesCredited` the table logged at each close. Nothing lands in
     ///         the normal lane from the cut: the fraction under a whole high pass is dropped; the
-    ///         normal lane moves only by sDGNRS's own whale-pass purchases (one per pass, <10).
+    ///         normal lane can also receive whale-purchase and lootbox pass awards.
     bytes32 private constant WHALE_PURCHASED_SIG = keccak256("WhalePassPurchased(address,uint256,uint256)");
 
     function test_LevelCloseBanksHighPassesToSdgnrs() public {
@@ -58,12 +58,18 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         uint256 expectedHigh;
         uint256 creditedHigh;
         uint256 creditedNormal;
+        uint256 allNormalCredits;
         // sDGNRS's once-per-level automatic whale purchase banks one NORMAL craps pass per pass
-        // bought below level 10, exactly as any whale buyer's does: the only door through which
-        // the seed normals can rise.
+        // bought below level 10, exactly as any whale buyer's does. Lootbox rewards may also
+        // bank normal passes, independently of the high-only level cut.
         uint256 whaleNormals;
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
+            if (l.emitter == address(crapsBattle) && l.topics[0] == PASSES_CREDITED_SIG
+                && address(uint160(uint256(l.topics[1]))) == ContractAddresses.SDGNRS) {
+                (bool high, uint256 count) = abi.decode(l.data, (bool, uint256));
+                if (!high) allNormalCredits += count;
+            }
             if (
                 l.emitter == address(game) && l.topics[0] == WHALE_PURCHASED_SIG
                     && address(uint160(uint256(l.topics[1]))) == ContractAddresses.SDGNRS
@@ -97,15 +103,16 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         assertGt(expectedHigh, 0, "fixture: the pool was large enough for a whole high pass");
         assertEq(creditedHigh, expectedHigh, "high passes credited == the level cut in whole high passes");
         assertEq(creditedNormal, 0, "the level cut never lands in the normal lane");
+        assertGe(allNormalCredits, whaleNormals, "whale purchases still bank their normal passes");
 
         // What the run banked minus what the daily seat already spent: the seat takes one high
-        // pass per opened day, and the bank can only move through those two doors.
+        // pass per opened day; independent reward credits are included in the normal bank.
         (uint256 normalAfter, uint256 highAfter) = crapsBattle.passCreditsOf(ContractAddresses.SDGNRS);
         assertLe(highAfter, creditedHigh, "the bank holds no more than was credited");
         assertLe(
             normalAfter,
-            normalBefore + whaleNormals,
-            "the normal lane rises only by the passes sDGNRS's own whale purchases banked"
+            normalBefore + allNormalCredits,
+            "the normal lane cannot exceed all emitted whale-purchase and lootbox credits"
         );
     }
 

@@ -148,6 +148,8 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @dev Basis points denominator (10000 = 100%).
     uint16 private constant BPS_DENOMINATOR = 10_000;
 
+    bytes32 private constant DECIMATOR_BOX_TAG = keccak256("degenerus.decimator.box");
+
     /// @dev Multiplier cap for Decimator burns (200 mints worth).
     uint256 private constant DECIMATOR_MULTIPLIER_CAP = 200 * PRICE_COIN_UNIT;
 
@@ -354,8 +356,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         round.poolWei = uint96(poolWei);
         round.totalBurn = uint128(totalBurn);
         // Winners were already selected from the full VRF word above (decSeed) and packed
-        // into decBucketOffsetPacked; only the claim-time lootbox seed is stored, narrowed.
-        round.rngWord = uint32(rngWord);
+        // into decBucketOffsetPacked; the stored seed serves the claim-time box draw only,
+        // on its own tagged stream so no other consumer of the day word shares its bits.
+        round.rngWord = uint32(uint256(keccak256(abi.encode(rngWord, DECIMATOR_BOX_TAG))));
 
         return 0; // All funds held for claims
     }
@@ -517,7 +520,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 lootboxPortion = _creditDecJackpotClaimCore(
             player,
             amountWei,
-            rngWord,
+            uint256(keccak256(abi.encode(uint256(rngWord), DECIMATOR_BOX_TAG, lvl))),
             _minScoreForBucket(winBucket),
             deferWhalePass
         );

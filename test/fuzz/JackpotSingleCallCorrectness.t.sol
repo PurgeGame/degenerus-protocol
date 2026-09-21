@@ -542,7 +542,14 @@ contract JackpotSingleCallCorrectness is Test {
     ///      gold-free quadrant set (so _pickSoloQuadrant takes the entropy-rotation branch and no
     ///      deity virtual entries appear -- deityBySymbol is empty in the harness anyway).
     function _word() internal pure returns (uint256) {
-        return uint256(keccak256("jgas03-single-call-fixed-word"));
+        uint256 word = uint256(keccak256("jgas03-single-call-fixed-word"));
+        while (true) {
+            uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+            bool gold;
+            for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) gold = true;
+            if (!gold) return word;
+            ++word;
+        }
     }
 
     /// @dev Reproduces runTerminalJackpot's trait + effective-entropy derivation (the harness has
@@ -554,7 +561,7 @@ contract JackpotSingleCallCorrectness is Test {
         returns (uint8[4] memory traitIds, uint256 effectiveEntropy)
     {
         traitIds = JackpotBucketLib.getRandomTraits(word);
-        uint256 entropy = EntropyLib.hash2(word, TARGET_LVL + 1);
+        uint256 entropy = EntropyLib.hash2(word, TARGET_LVL);
         uint8 soloQuadrant = _pickSoloQuadrantLocal(traitIds, entropy);
         effectiveEntropy = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
     }

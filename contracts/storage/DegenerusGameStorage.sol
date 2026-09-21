@@ -2910,12 +2910,14 @@ abstract contract DegenerusGameStorage {
         ///         DECIMATOR_MULTIPLIER_CAP, beyond which burns count 1x. Supply-capped
         ///         at uint128; realistic per-level totals sit ~1e8x under it.
         uint128 totalBurn;
-        /// @notice Stored seed for the claim-time lootbox draw only. The winning subbuckets
-        ///         are selected from the FULL VRF word at snapshot and stored separately in
-        ///         decBucketOffsetPacked, so this never gates winner selection. Its sole
-        ///         consumer (resolveLootboxDirect) combines it via keccak with frozen inputs
-        ///         (winner address, sealed amount/evScore) — no player-controlled input — so
-        ///         32 bits of post-fulfillment-revealed entropy cannot be ground or predicted.
+        /// @notice Stored seed for the claim-time lootbox draw only: the low 32 bits of
+        ///         keccak(word, DECIMATOR_BOX_TAG), so no other consumer of the day word
+        ///         shares these bits. The winning subbuckets are selected from the FULL VRF
+        ///         word at snapshot and stored separately in decBucketOffsetPacked, so this
+        ///         never gates winner selection. Its sole consumer (resolveLootboxDirect)
+        ///         re-hashes it with the round level and the winner address — no
+        ///         player-controlled input — so 32 bits of post-fulfillment-revealed entropy
+        ///         cannot be ground or predicted.
         uint32 rngWord;
     }
 

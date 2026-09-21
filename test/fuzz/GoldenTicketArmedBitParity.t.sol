@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {JackpotBoardFixtures} from "./helpers/JackpotBoardFixtures.sol";
+import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -34,17 +36,14 @@ contract GoldenTicketArmedBitParity is Test {
     }
 
     function _word(uint8[4] memory colors, uint8[4] memory syms, uint256 salt) internal pure returns (uint256 w) {
-        for (uint256 i; i < 4; ++i) {
-            w |= (uint256(colors[i]) << 3 | uint256(syms[i])) << (i * 6);
-        }
-        w |= salt << 24;
+        return JackpotBoardFixtures.wordFor(colors, syms, salt == 0xBEEF || salt == 0xFEED);
     }
 
     /// @dev One holder per winning bucket; `seedBucket` pushes `base + 1`, so an odd base seats
     ///      an even address.
     function _seedSingles(uint256 word, uint160 base) internal {
         for (uint8 i; i < 4; ++i) {
-            uint8 trait = uint8(uint256(i) * 64 + ((word >> (uint256(i) * 6)) & 0x3F));
+            uint8 trait = JackpotBucketLib.getRandomTraits(word)[i];
             h.seedBucket(LVL, trait, 1, base + uint160(i) * 100);
         }
     }

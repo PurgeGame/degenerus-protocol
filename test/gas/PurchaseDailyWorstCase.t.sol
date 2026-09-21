@@ -262,7 +262,14 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
     }
 
     function _word(bytes32 tag) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(tag))) | 1;
+        uint256 word = uint256(keccak256(abi.encodePacked(tag))) | 1;
+        while (true) {
+            uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+            bool gold;
+            for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) gold = true;
+            if (!gold) return word;
+            word += 2;
+        }
     }
 
     /// @dev Day 400 puts every seeded slot far past the deploy program — the cold, worst-case shape.

@@ -50,7 +50,9 @@ After existing claim liabilities and applicable paid-deity refunds are reserved,
 distributable terminal pool is credited to the top affiliate for the terminal ticket level;
 the remainder goes to that level's terminal ticket jackpot. With no ranked affiliate, the
 ticket jackpot receives the entire distributable pool. Affiliate score must be claimed
-before the terminal cohort is latched, ahead of the terminal word, to affect this award.
+before the terminal cohort is latched to affect this award. A newly requested terminal word
+follows the latch; an already delivered ordinary word can precede it (see `KNOWN-ISSUES.md`).
+Changing the allocation does not reroll jackpot recipients.
 Later affiliate claims cannot change the credited winner or the terminal pool. The terminal decimator has been removed.
 Read `DegenerusGameGameOverModule` and the reserve-token terminal paths for the exact
 claim/forfeiture rules. Owner authority is enumerated in [Security](SECURITY.md).

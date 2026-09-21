@@ -53,8 +53,9 @@ contract DecimatorClaimDeliveryParity is DeployProtocol {
 
     function _setClaimRound(uint256 amountWei) internal {
         bytes32 slot = keccak256(abi.encode(uint256(LVL), SLOT_DEC_CLAIM_ROUNDS));
-        uint256 packed = amountWei | (amountWei << 96) | (uint256(ROUND_WORD) << 224);
+        uint256 packed = amountWei | (amountWei << 96);
         vm.store(address(game), slot, bytes32(packed));
+        vm.store(address(game), bytes32(uint256(slot) + 1), bytes32(uint256(ROUND_WORD)));
     }
 
     function _setWinningBet(uint256 burnWei) internal {

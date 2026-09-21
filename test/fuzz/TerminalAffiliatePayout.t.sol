@@ -221,6 +221,20 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         _assertSettlement(11, 98 ether, TOP, 2 ether);
     }
 
+    function testOvertakenBetweenLatchAndWordKeepsTheLatchedLeader() public {
+        _seed(10, 0, 100 ether, 0);
+        _fixture(abi.encodeCall(TerminalAffiliateSeeder.clearDayWord, ()));
+        _rank(TOP, 11, 1000 ether, address(0xB001));
+        game.advanceGame(); // latch + request
+        assertEq(address(uint160(uint256(vm.load(address(game), bytes32(uint256(69)))))), TOP, "slot 69 holds the latched leader");
+        _rank(LATE, 11, 10_000 ether, address(0xB002)); // overtakes on the live leaderboard, after the latch
+        (address liveTop,) = affiliate.affiliateTop(11);
+        assertEq(liveTop, LATE, "live leaderboard moved");
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
+        _assertSettlement(11, 98 ether, TOP, 2 ether);
+        assertEq(game.claimableWinningsOf(LATE), 0, "overtaker not paid");
+    }
+
     function testRejectingAffiliateCannotBlockTerminalSettlement() public {
         _seed(10, 0, 100 ether, 0);
         address winner = address(new RejectingTerminalAffiliate());

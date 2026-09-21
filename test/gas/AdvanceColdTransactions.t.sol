@@ -52,7 +52,8 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
 
         uint8 mode = _mode();
         uint256 n = mode == 0 ? 320 : mode == 1 ? 125 : mode == 2 ? 260 : 1300;
-        if (_complete()) n = mode == 1 ? 119 : 250;
+        // The per-level sDGNRS whale purchase takes 700 of the 2,500-unit budget on this day.
+        if (_complete()) n = mode == 1 ? 85 : 180;
         address[] memory players = new address[](n);
         for (uint256 i; i < n; ++i) {
             address player = address(uint160(0xA5700000 + i));
@@ -187,7 +188,7 @@ contract AdvanceColdSplitLootboxSubscriptions is ColdSubscriberFixture {
     }
 
     function test_ColdSplitLootboxesAndRngRequest() public {
-        _check(DELIVERED_EVENT, 251, 251);
+        _check(DELIVERED_EVENT, 181, 181);
     }
 }
 
@@ -205,7 +206,7 @@ contract AdvanceColdSplitTicketSubscriptions is ColdSubscriberFixture {
     }
 
     function test_ColdSplitTicketsAndRngRequest() public {
-        _check(DELIVERED_EVENT, 120, 120);
+        _check(DELIVERED_EVENT, 86, 86);
     }
 }
 

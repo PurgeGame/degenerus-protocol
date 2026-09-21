@@ -269,6 +269,7 @@ contract Coinflip {
     uint256 private constant BIGGEST_DICE_RUN_MIN = 1_000_000;
     /// @dev Domain tag for the BAF weighted-draw winner roll.
     bytes32 private constant BAF_DRAW_TAG = "COINFLIP_BAF_DRAW_WINNER";
+    bytes32 private constant REWARD_PERCENT_TAG = keccak256("degenerus.coinflip.reward-percent");
     uint16 private constant COIN_CLAIM_DAYS = 365;
     uint16 private constant COIN_CLAIM_FIRST_DAYS = 180;
     uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1460;
@@ -1445,8 +1446,8 @@ contract Coinflip {
         uint256 rngWord,
         uint24 epoch
     ) external onlyDegenerusGameContract {
-        // Mix entropy with epoch for unique per-day randomness
-        uint256 seedWord = uint256(keccak256(abi.encodePacked(rngWord, epoch)));
+        // Separate reward size from every other draw using the daily word.
+        uint256 seedWord = uint256(keccak256(abi.encodePacked(REWARD_PERCENT_TAG, rngWord, epoch)));
 
         // Determine payout bonus percent:
         // ~5% each for extreme bonus outcomes (50% or 150%), rest is [78%, 115%]

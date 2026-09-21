@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
@@ -50,14 +51,17 @@ contract DailyEthTicketLegEntries is Test {
     /// @dev A mixed-colour board (no golden quadrant) with its four trait buckets seeded deep
     ///      enough that every winner slot finds a distinct holder.
     function _board() internal returns (uint256 word) {
-        uint8[4] memory colors = [1, 2, 3, 4];
-        uint8[4] memory syms = [1, 2, 3, 4];
-        for (uint256 i; i < 4; ++i) {
-            word |= (uint256(colors[i]) << 3 | uint256(syms[i])) << (i * 6);
+        word = 0xB0A7D;
+        uint8[4] memory traits;
+        while (true) {
+            traits = JackpotBucketLib.getRandomTraits(word);
+            bool hasGold;
+            for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) hasGold = true;
+            if (!hasGold) break;
+            ++word;
         }
-        word |= uint256(0xB0A7D) << 24;
         for (uint8 i; i < 4; ++i) {
-            uint8 trait = uint8(uint256(i) * 64 + ((word >> (uint256(i) * 6)) & 0x3F));
+            uint8 trait = traits[i];
             h.seedBucket(LVL, trait, 80, uint160(0x2000) + uint160(i) * 1000);
         }
     }

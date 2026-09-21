@@ -26,7 +26,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @notice Leg 3 (RNG-freeze determinism). The subscribe min-buy STAMPS a box for-later-open and NEVER
 ///   inline-resolves pre-RNG (no LootBoxOpened at subscribe time). The single-roll open seed is
-///   `keccak256(abi.encode(rngWordByDay[stampDay], player, stampDay, amount))` — it carries NO block.*
+///   `keccak256(abi.encode(rngWordByDay[stampDay], player, AFKING_BOX_TAG, stampDay))` — it carries NO block.*
 ///   entropy, so two opens of the SAME stamp at DIFFERENT blocks (vm.roll/warp + perturbed
 ///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached via mineFlip() (the
 ///   autoOpen selector was dropped — not re-exposed on the Game).
@@ -77,6 +77,7 @@ contract V56FreezeSolvency is DeployProtocol {
     /// @dev A decoded LootBoxOpened payload — every non-indexed field of the materialized box.
     struct Box {
         bool present;
+        bytes32 resultsDigest;
         uint48 lootboxIndex;
         uint256 amount;
         uint24 futureLevel;
@@ -317,14 +318,14 @@ contract V56FreezeSolvency is DeployProtocol {
 
         Box memory box1 = _openAfkingBoxAt(afk, 1_000, 11 minutes, 0xAA11AA11, makeAddr("coinbase_1"));
         assertEq(_lastOpenedDayOf(afk), stampDay, "open#1 materialized the box");
-        assertTrue(box1.present, "open#1 emitted LootBoxOpened (non-vacuous)");
+        assertTrue(box1.present, "open#1 emitted a box result (non-vacuous)");
 
         vm.revertToState(snap);
         assertEq(_lastBoughtDayOf(afk), stampDay, "revert restored the stamp day");
         assertTrue(_lastOpenedDayOf(afk) < stampDay, "revert restored the pending box");
         Box memory box2 = _openAfkingBoxAt(afk, 999_999, 47 minutes, 0xBB22BB22, makeAddr("coinbase_2"));
         assertEq(_lastOpenedDayOf(afk), stampDay, "open#2 materialized the box");
-        assertTrue(box2.present, "open#2 emitted LootBoxOpened (non-vacuous)");
+        assertTrue(box2.present, "open#2 emitted a box result (non-vacuous)");
 
         // FREEZE: byte-identical across the two block contexts (the seed froze on the stamped day; no block.*).
         _assertBoxByteIdentical(box1, box2, "RNG-freeze two-block determinism");
@@ -398,21 +399,21 @@ contract V56FreezeSolvency is DeployProtocol {
         return _decodeLootBoxOpenedFor(afk);
     }
 
-    /// @dev Decode the (single) LootBoxOpened event whose indexed player == `who` from the recorded logs.
+    /// @dev Include plain boxes, spins and their nested results in the byte-identity digest.
     function _decodeLootBoxOpenedFor(address who) internal returns (Box memory b) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
-            if (
-                logs[i].emitter == address(game) &&
-                logs[i].topics.length >= 3 &&
-                logs[i].topics[0] == LOOTBOX_OPENED_SIG &&
-                logs[i].topics[1] == bytes32(uint256(uint160(who)))
-            ) {
-                b.present = true;
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2
+                || logs[i].topics[1] != bytes32(uint256(uint160(who)))) continue;
+            bytes32 topic = logs[i].topics[0];
+            if (topic != LOOTBOX_OPENED_SIG
+                && topic != keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)")) continue;
+            b.present = true;
+            b.resultsDigest = keccak256(abi.encode(b.resultsDigest, logs[i].topics, logs[i].data));
+            if (topic == LOOTBOX_OPENED_SIG) {
                 b.lootboxIndex = uint48(uint256(logs[i].topics[2]));
                 (b.amount, b.futureLevel, b.futureTickets, b.flip, b.roundedUp) =
                     abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
-                return b;
             }
         }
     }
@@ -423,7 +424,8 @@ contract V56FreezeSolvency is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
-            if (logs[i].topics[0] != LOOTBOX_OPENED_SIG) continue;
+            if (logs[i].topics[0] != LOOTBOX_OPENED_SIG &&
+                logs[i].topics[0] != keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)")) continue;
             if (logs[i].topics[1] == bytes32(uint256(uint160(who)))) count++;
         }
     }
@@ -432,6 +434,7 @@ contract V56FreezeSolvency is DeployProtocol {
     ///      lootboxIndex is a storage tag (NOT a resolved trait) — excluded (both opens replay the SAME stamp,
     ///      so it is identical anyway).
     function _assertBoxByteIdentical(Box memory a, Box memory b, string memory tag) internal {
+        assertEq(a.resultsDigest, b.resultsDigest, string(abi.encodePacked(tag, ": all box results")));
         assertEq(a.amount, b.amount, string(abi.encodePacked(tag, ": amount")));
         assertEq(a.futureLevel, b.futureLevel, string(abi.encodePacked(tag, ": futureLevel")));
         assertEq(a.futureTickets, b.futureTickets, string(abi.encodePacked(tag, ": futureTickets")));

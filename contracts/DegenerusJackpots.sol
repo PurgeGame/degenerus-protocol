@@ -186,6 +186,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @dev Fixed number of scatter rounds to keep BAF gas bounded.
     uint8 private constant BAF_SCATTER_ROUNDS = 50;
+    bytes32 private constant BAF_WINNERS_TAG = keccak256("degenerus.baf.winners");
 
     /// @dev Skipped-bracket consolation rate: 1 WWXRP per 1000 FLIP of frozen
     ///      bracket score (both 18 decimals). WWXRP emission is economically
@@ -338,7 +339,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
         uint256 n;
         uint256 toReturn;
 
-        uint256 entropy = rngWord;
+        // Winner categories share this BAF stream, never the craps schedule's (word, ordinal) stream.
+        uint256 entropy = EntropyLib.hash2(rngWord, uint256(BAF_WINNERS_TAG));
         uint256 salt;
         // The bracket epoch is fixed for the whole resolution: read it once and
         // thread it through every per-candidate score read.

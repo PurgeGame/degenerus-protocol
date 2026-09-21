@@ -135,9 +135,9 @@ contract FuturepoolSkimTest is DeployProtocol {
         assertEq(_calcSurcharge(12500), 0, "R=1.25 no surcharge");
     }
 
-    /// @notice Additive component is rngWord % 1001, so it is in [0, 1000] bps.
+    /// @notice Additive component is the tagged word % 1001, so it is in [0, 1000] bps.
     function testFuzz_additiveRandom_bounded(uint256 rngWord) public pure {
-        uint256 additive = rngWord % (ADDITIVE_RANDOM_BPS + 1);
+        uint256 additive = uint256(keccak256(abi.encode(rngWord, keccak256("degenerus.skim.bps")))) % (ADDITIVE_RANDOM_BPS + 1);
         assertTrue(additive <= ADDITIVE_RANDOM_BPS, "additive must be <= 1000 bps");
     }
 

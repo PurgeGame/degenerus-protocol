@@ -270,6 +270,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Domain separator for coin jackpot entropy derivation.
     bytes32 private constant FLIP_JACKPOT_TAG = keccak256("coin-jackpot");
+    uint256 private constant BAF_TICKET_TAG = 0x4261665469636b6574; // "BafTicket"
+    bytes32 private constant HERO_SYMBOL_TAG = keccak256("degenerus.jackpot.hero-symbol");
 
     /// @dev Domain separator for per-pull level sampling in the daily coin jackpot.
     ///      Distinct from FLIP_JACKPOT_TAG so (randomWord, FLIP_JACKPOT_TAG, ·) and
@@ -1117,15 +1119,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) private {
         for (uint8 traitIdx; traitIdx < 4; ) {
             if (counts[traitIdx] != 0) {
-                entropy = uint256(
-                    keccak256(abi.encode(entropy, traitIdx, entriesEach))
-                );
+                // Award size prices the result; only the draw and bucket identify its seed.
+                // Derive each bucket independently so skipping another bucket cannot reroll it.
+                uint256 bucketEntropy = EntropyLib.hash2(entropy, traitIdx);
                 _distributeTicketsToBucket(
                     sourceLvl,
                     queueLvl,
                     traitIds[traitIdx],
                     counts[traitIdx],
-                    entropy,
+                    bucketEntropy,
                     uint8(saltBase + traitIdx),
                     entriesEach,
                     lens[traitIdx],
@@ -1490,7 +1492,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bucketCounts
         );
 
-        uint256 entropyState = entropy;
         uint256 liabilityDelta;
 
         for (uint8 j; j < 4; ) {
@@ -1505,19 +1506,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 continue;
             }
 
-            entropyState = uint256(
-                keccak256(abi.encode(entropyState, traitIdx, share))
-            );
+            // Keep winner selection independent of the pool and other buckets' payouts.
+            uint256 bucketEntropy = EntropyLib.hash2(entropy, traitIdx);
 
             uint256 paidDelta;
             uint256 claimDelta;
-            (paidDelta, claimDelta, entropyState) = _processBucket(
+            (paidDelta, claimDelta,) = _processBucket(
                 lvl,
                 traitIds[traitIdx],
                 traitIdx,
                 count,
                 share,
-                entropyState,
+                bucketEntropy,
                 isJackpotPhase && traitIdx == remainderIdx,
                 armGold
             );
@@ -1816,7 +1816,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      `heroEntropy` is the raw VRF entropy word for the day. This applies the main draw's
     ///      hero; the bonus draw rolls a SEPARATE hero (main slot excluded) in
     ///      `_rollWinningTraitsPair`, so the two heroes never coincide. The symbol roll
-    ///      consumes `keccak256(abi.encode(heroEntropy, day))`; colors are untouched by
+    ///      consumes `keccak256(abi.encode(heroEntropy, HERO_SYMBOL_TAG, day))`; colors are untouched by
     ///      the hero — each quadrant keeps its base-rolled color.
     function _applyHeroOverride(
         uint8[4] memory w,
@@ -1856,7 +1856,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      quadrants once, decodes 32 uint32 amounts, accumulates the total, and tracks
     ///      the largest-amount slot (first-seen on ties to match the scan order).
     ///      Pass 2 walks the cached weights with a cumulative cursor against
-    ///      `pick = uint64(uint256(keccak256(abi.encode(entropy, day))) % effectiveTotal)`
+    ///      `pick = uint64(uint256(keccak256(abi.encode(entropy, HERO_SYMBOL_TAG, day))) % effectiveTotal)`
     ///      and applies a `leaderBonus = maxAmount / 2` add at the largest-amount slot —
     ///      effective ×1.5 weight on the leader, no min-wager floor on any other slot.
     ///      Returns `(false, 0, 0)` when no slot has any wagers.
@@ -1925,7 +1925,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint64 leaderBonus = uint64(maxAmount) / 2;
         uint64 effectiveTotal = total + leaderBonus;
         uint64 pick = uint64(
-            uint256(keccak256(abi.encode(entropy, day))) % effectiveTotal
+            uint256(keccak256(abi.encode(entropy, HERO_SYMBOL_TAG, day))) % effectiveTotal
         );
 
         uint64 cumulative;
@@ -2669,11 +2669,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll
                     // with the real targetLevel and scaled ticketCount.
                     uint256 cd;
-                    (rngWord, cd) = _awardJackpotTickets(
+                    (, cd) = _awardJackpotTickets(
                         winner,
                         lootboxPortion,
                         ticketFloorLvl,
-                        rngWord
+                        EntropyLib.hash4(rngWord, lvl, BAF_TICKET_TAG, i)
                     );
                     claimableDelta += cd;
                 } else {
@@ -2700,11 +2700,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 // whale-pass fallback (amount > LOOTBOX_CLAIM_THRESHOLD) emits
                 // JackpotWhalePassWin inside _awardJackpotTickets.
                 uint256 cd;
-                (rngWord, cd) = _awardJackpotTickets(
+                (, cd) = _awardJackpotTickets(
                     winner,
                     amount,
                     ticketFloorLvl,
-                    rngWord
+                    EntropyLib.hash4(rngWord, lvl, BAF_TICKET_TAG, i)
                 );
                 claimableDelta += cd;
             }

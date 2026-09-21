@@ -14,7 +14,7 @@
 | Parimutuel | Growth bets; Game seals each outcome through `recordGrowth` |
 | DeityPass, AFKingSubscriptionToken, RecordBounty, WWXRP | Pass/seat/record rights and auxiliary token rewards |
 | Admin | VRF/feed recovery governance and bounded liquidity operations |
-| `libraries/*`, `DegenerusTraitUtils` | Internal libraries inlined at compile time (ActivityCurve, BitPacking, Entropy, FlipRound, GameTime, JackpotBucket, PriceLookup, SigFig, TraitUtils); in scope, not deployments |
+| `libraries/*`, `DegenerusTraitUtils` | Internal libraries inlined at compile time (ActivityCurve, BitPacking, Entropy, FlipRound, GameTime, JackpotBucket, PackedTicketSample, PriceLookup, SigFig, TraitUtils); in scope, not deployments |
 
 `ContractAddresses.sol` pins every protocol contract plus the external endpoints: the VRF
 coordinator and key hash, the LINK token, the LINK/ETH feed, stETH, the ENS reverse registrar
@@ -35,7 +35,9 @@ claim/recipient checks. Permissionless processing is not authority to redirect p
 Game-over processing reserves existing claims and applicable deity refunds, credits 2% of
 the remaining pool to the terminal level's top affiliate, and sends the rest to the main
 terminal ticket jackpot. If no affiliate is ranked, the jackpot receives the entire pool.
-The affiliate winner is fixed at settlement; later score claims do not reopen the award.
+The affiliate winner is fixed when the terminal cohort is latched; later score claims
+do not reopen the award. A delivered daily word may be reused; see the allocation
+timing exception in `KNOWN-ISSUES.md` and the seed rules in `audit/RNG-DOMAINS.md`.
 The later final sweep handles unclaimed balances.
 Read the terminal paths separately from live-game withdrawal paths.
 
@@ -82,6 +84,30 @@ the round drain batches seats. Queue release clears the length in constant time.
 index-plus-one into eight lanes; zero is an empty lane. Storage bucket indices themselves
 are zero-based. Event consumers must not confuse those encodings.
 
+## Recent settlement boundaries
+
+Purchase-phase ticket awards, early-bird tickets and carryover tickets are separate
+bounded stages. The packed queue holds eight owner indices per word and must use
+its codec helpers; Solidity array operations do not express its logical length.
+`PackedTicketSampleLib` samples eight lanes from one selected word, with explicit
+handling of a padded final word. These groups intentionally share a word draw.
+
+Protocol deity grants occur after the deployment sequence. Their perpetual entries
+and protocol boon cohorts have their own pre-request scheduling and closure rules.
+Foil packs resolve tomorrow's committed draw. A VRF stall skips missed days on
+recovery, freezes auto-rebuy arming, and can enter the existing deadman path;
+`VRF-STALL-AND-DEADMAN-PLAN.md` describes a further design that is not implemented.
+
+At the first AFKing stage of each level, sDGNRS attempts a whale-pass purchase of
+the largest group of five paid passes affordable from a quarter of its claimable,
+capped at 100 paid passes. The attempt latch advances even if it buys nothing;
+later chunks and days cannot retry the same level. A purchase consumes the stage's
+shared work budget. Its ordinary daily box is separate from this level-start action.
+
+At century transitions the BAF/Decimator draws precede the tagged 5d4 future-pool
+keep roll. The keep range is 50–80%, with mean 65%. Consult the Advance module for
+the exact pool snapshots and ordering; altering a pool size must not reroll winners.
+
 ## Invariants to preserve
 
 - Game/module layouts agree; pinned delegatecall targets match their interfaces.
@@ -90,3 +116,11 @@ are zero-based. Event consumers must not confuse those encodings.
 - No double settlement, recipient substitution, duplicate ticket materialization or lost resume state.
 - Entropy-dependent processing has the documented freeze boundaries; caller gas cannot choose work.
 - Pool writes, unchecked arithmetic and advance-chain external calls remain covered by the source manifests.
+
+### Decimator claim entropy
+
+A decimator round packs its pool, total qualifying burn and a 32-bit claim seed into one
+mapping-value slot. The seed is the low 32 bits of `keccak(word, DECIMATOR_BOX_TAG)`, so
+no other consumer of the day word shares its bits; the claim-box root re-hashes it with
+the tag and the fixed round level, and the box resolver then mixes the winning owner.
+Winner selection still uses the full word before the snapshot. The layout is unchanged.

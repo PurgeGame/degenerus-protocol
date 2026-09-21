@@ -46,8 +46,8 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         sdgnrs.transferFromPool(sDGNRS.Pool.PresaleBox, address(0xDEAD), cur - target);
     }
 
-    function _outcome(uint256 rngWord, address player, uint256 amount) internal pure returns (uint256) {
-        return uint16(uint256(keccak256(abi.encodePacked(rngWord, keccak256("PRESALE_BOX"), player, amount)))) % 100;
+    function _outcome(uint256 rngWord, address player, uint48 index) internal pure returns (uint256) {
+        return uint16(uint256(keccak256(abi.encodePacked(rngWord, keccak256("PRESALE_BOX"), player, index)))) % 100;
     }
 
     function _buyBox(address buyer, uint256 amount) internal returns (uint48 index) {
@@ -80,7 +80,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         for (word = 1; word < 100_000; ++word) {
             bool all = true;
             for (uint256 i; i < 3; ++i) {
-                uint256 o = _outcome(word, v[i], amount);
+                uint256 o = _outcome(word, v[i], index);
                 if (o < 50 || o >= 90) { all = false; break; }
             }
             if (all) break;

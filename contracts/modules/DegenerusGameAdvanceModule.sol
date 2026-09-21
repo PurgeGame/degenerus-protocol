@@ -258,6 +258,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint16 private constant NEXT_TO_FUTURE_BPS_MAX = 8000; // 80% total skim hard cap
     uint16 private constant ADDITIVE_RANDOM_BPS = 1000; // 0–10% additive random on bps
     bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
+    bytes32 private constant SKIM_BPS_TAG = keccak256("degenerus.skim.bps");
+    bytes32 private constant SKIM_VARIANCE_TAG = keccak256("degenerus.skim.variance");
     bytes32 private constant BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS");
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
     /// @dev The same floor for the craps table, set to the reserve the never-gated daily word
@@ -1170,7 +1172,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             }
 
             // Additive random 0–10%
-            bps += rngWord % (ADDITIVE_RANDOM_BPS + 1);
+            bps += EntropyLib.hash2(rngWord, uint256(SKIM_BPS_TAG)) % (ADDITIVE_RANDOM_BPS + 1);
 
             // Compute take
             uint256 take = (memNext * bps) / 10_000;
@@ -1185,8 +1187,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 if (halfWidth > take) halfWidth = take;
 
                 uint256 range = halfWidth * 2 + 1;
-                uint256 roll1 = (rngWord >> 64) % range;
-                uint256 roll2 = (rngWord >> 192) % range;
+                uint256 varianceWord = EntropyLib.hash2(rngWord, uint256(SKIM_VARIANCE_TAG));
+                uint256 roll1 = varianceWord % range;
+                uint256 roll2 = EntropyLib.hash1(varianceWord) % range;
                 uint256 combined = (roll1 + roll2) / 2;
 
                 if (combined >= halfWidth) {
@@ -1567,27 +1570,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngRequestTime = uint48(block.timestamp);
     }
 
-    // BIT ALLOCATION MAP for VRF random word (currentWord after _applyDailyRng):
-    //
-    // Bit(s)   Consumer                    Operation                         Location
-    // ------   --------                    ---------                         --------
-    // 0        Coinflip win/loss           rngWord & 1                       Coinflip.processCoinflipPayouts
-    // 0        BAF fire gate               rngWord & 1                       AdvanceModule._consolidatePoolsAndRewardJackpots
-    // 8+       Redemption roll             (currentWord >> 8) % 151 + 25     AdvanceModule.rngGate
-    // full     Coinflip reward percent     keccak256(rngWord, epoch) % 20    Coinflip.processCoinflipPayouts
-    // full     Jackpot winner selection    via delegatecall (full word)      JackpotModule (payDailyJackpot)
-    // full     Coin jackpot                via delegatecall (full word)      AdvanceModule._payDailyCoinJackpot -> payDailyFlipJackpot
-    // 64+/192+ Future take variance        (rngWord>>64/>>192) % range       _consolidatePoolsAndRewardJackpots
-    // low      Additive skim random        rngWord % (ADDITIVE_RANDOM_BPS+1) _consolidatePoolsAndRewardJackpots
-    // full     Prize pool consolidation    in-module memory batch            _consolidatePoolsAndRewardJackpots
-    // full     Reward jackpots (BAF/Dec)   self-call (BAF/Decimator)         _consolidatePoolsAndRewardJackpots
-    // full     Incinerator winner           domain-hashed in WWXRP            _consolidatePoolsAndRewardJackpots -> WWXRP.resolveIncinerator
-    // full     Lootbox RNG                 stored as lootboxRngWordByIndex   _finalizeLootboxRng
-    //
-    // NOTE: Direct bit-level consumers are bit 0, bits 8+, and the future-take
-    //       variance rolls (rngWord>>64, rngWord>>192). All other 'full' consumers
-    //       use modular arithmetic or keccak mixing, so bit overlap is not a
-    //       collision concern.
+    // Daily VRF consumers: only Coinflip win/loss and the BAF fire gate intentionally
+    // share bit 0. Redemption uses bits 8+; other games derive tagged substreams.
+    // Coinflip reward %, trait boards, daily/level quests, skim bps and skim
+    // variance have separate named domains. The two variance draws hash-chain
+    // within their domain. Lootbox storage carries the root, not an outcome.
+    // See docs/audit/RNG-DOMAINS.md for shared-board rules and retained exceptions.
 
     /// @dev Daily RNG processing gate called during advanceGame. Applies VRF word,
     ///      processes coinflip payouts, rolls daily quest, resolves pending gambling

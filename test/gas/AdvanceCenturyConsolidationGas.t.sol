@@ -43,7 +43,7 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
 
         // The selected word has 50 different (level, trait) buckets. All four
         // candidates are different wallets; their winning BAF scores are seeded later.
-        uint256 entropy = word;
+        uint256 entropy = EntropyLib.hash2(word, uint256(keccak256("degenerus.baf.winners")));
         for (uint256 salt = 1; salt <= 53; ++salt) {
             entropy = EntropyLib.hash2(entropy, salt);
             if (salt <= 3) {
@@ -128,7 +128,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(game.rngWordForDay(400), 0, "measured transaction must apply fresh RNG");
         assertFalse(game.decWindow(), "real century request closes the burn window");
 
-        uint256 entropy = word;
+        uint256 entropy = EntropyLib.hash2(word, uint256(keccak256("degenerus.baf.winners")));
         for (uint256 salt = 1; salt <= 53; ++salt) {
             entropy = EntropyLib.hash2(entropy, salt);
             if (salt == 1) continue;
@@ -318,6 +318,11 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         emit log_named_uint("house_high_passes", highPasses);
         emit log_named_uint("distinct_ticket_recipient_level_pairs", distinctTicketPairs);
         emit log_named_uint("far_future_ticket_rolls", farRolls);
+        if (_rngWord() != WORD) {
+            // Destination-heavy variants retain at least the prior fixture's pressure.
+            assertGe(distinctTicketPairs, 104, "distinct cold destination pressure");
+            assertGe(farRolls, 13, "far-future destination pressure");
+        }
         uint8 historyMode = _vaultHistoryMode();
         if (historyMode != 0) {
             bytes32 stateSlot = keccak256(abi.encode(ContractAddresses.VAULT, uint256(2)));
@@ -344,55 +349,55 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
 
 contract AdvanceCenturyConsolidationGas is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(5000 ether, 100 ether, 138_152_736_104_780_279_615, 108, 1, true);
+        return Shape(3500 ether, 100 ether, 144_126_247_524_580_441_470, 108, 1, true);
     }
 }
 
 contract AdvanceCenturyAtHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 479_014_751_954_706_392_492, 100 ether, 85, 0, false);
+        return Shape(100 ether, 477_525_457_570_838_821_329, 100 ether, 85, 0, false);
     }
 }
 
 contract AdvanceCenturyAboveHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 479_014_751_954_706_393_503, 100 ether + 200, 108, 1, false);
+        return Shape(100 ether, 477_525_457_570_838_822_340, 100 ether + 200, 108, 1, false);
     }
 }
 
 contract AdvanceCenturyFarDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 884_327_883_267_837_705_624, 180 ether, 104, 3, false);
+        return Shape(100 ether, 882_858_790_904_172_154_664, 180 ether, 104, 3, false);
     }
 }
 
 contract AdvanceCenturyLargeDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 1_490_388_489_328_443_766_230, 300 ether, 100, 5, false);
+        return Shape(100 ether, 1_488_919_396_964_778_215_270, 300 ether, 100, 5, false);
     }
 }
 
 contract AdvanceCenturyFirstScatterDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 3_005_540_004_479_958_917_745, 600 ether, 50, 30, false);
+        return Shape(100 ether, 3_004_070_912_116_293_366_785, 600 ether, 50, 30, false);
     }
 }
 
 contract AdvanceCenturyAllTicketsDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 5_530_792_529_732_484_170_270, 1100 ether, 0, 55, false);
+        return Shape(100 ether, 5_529_323_437_368_818_619_310, 1100 ether, 0, 55, false);
     }
 }
 
-/// @dev One bounded search of 250,000 candidate words found this destination-heavy
-///      shape: 104 distinct recipient/level pairs and 13 far-future ticket rolls.
+/// @dev Bounded search under the current award domain: 106 distinct recipient/level
+///      pairs and 14 far-future rolls, exceeding the prior fixture's 104 and 13.
 contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
     function _rngWord() internal pure override returns (uint256) {
-        return 0x38fa87cd98ee84fb4218d60a465d05e2b96fd809df17e9aead02f6d23fc09939;
+        return 15395;
     }
 
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(5000 ether, 100 ether, 161_620_598_041_450_373_113, 108, 1, true);
+        return Shape(3000 ether, 100 ether, 157_001_039_980_229_350_166, 108, 1, true);
     }
 }
 

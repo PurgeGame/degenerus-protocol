@@ -729,7 +729,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint32 d = anchor - uint32(i);
             _pokeLastBoughtDay(subs[i], d);
             _pokeLastOpenedDay(subs[i], d - 1);
-            // The box seed = keccak256(rngWord, player, day, rawAmountWei); brute-force the (injected)
+            // The box seed = keccak256(rngWord, player, AFKING_BOX_TAG, day); brute-force the (injected)
             // rngWord so its roll value (bits[40..55] % 20) is 19 = the ETH-spin path.
             uint256 amtWei = _subField(subs[i], OFF_AMOUNT, 24) * MILLI_ETH_SCALE;
             _injectRngWordByDay(d, _findEthSpinWord(subs[i], d, amtWei, i));
@@ -765,7 +765,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     {
         for (uint256 k; k < 8000; ++k) {
             w = uint256(keccak256(abi.encodePacked("r3ethspin", salt, k))) | 1;
-            uint256 seed = uint256(keccak256(abi.encode(w, player, uint256(day), amountWei)));
+            uint256 seed = uint256(keccak256(abi.encode(w, player, uint256(0x41666b696e67426f78), uint256(day))));
             if (uint16(seed >> 40) % 20 == 19) return w;
         }
         revert("no eth-spin word found");

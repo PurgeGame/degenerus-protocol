@@ -214,19 +214,20 @@ contract CrapsPassAwards is DeployProtocol {
         );
     }
 
-    function _seedOf(uint256 word, address who, uint256 amount) private pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(word, keccak256("PRESALE_BOX"), who, amount)));
+    function _seedOf(uint256 word, address who) private view returns (uint256) {
+        uint48 index = uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED))));
+        return uint256(keccak256(abi.encodePacked(word, keccak256("PRESALE_BOX"), who, index)));
     }
 
     /// @dev A word landing the FLIP branch (outcome < 50) on the requested variance band and
     ///      side of the FLIP-or-passes toss.
-    function _flipWord(address who, uint256 amount, bool highVariance, bool passSide)
+    function _flipWord(address who, bool highVariance, bool passSide)
         private
-        pure
+        view
         returns (uint256 w)
     {
         for (w = 1; w < 200_000; ++w) {
-            uint256 seed = _seedOf(w, who, amount);
+            uint256 seed = _seedOf(w, who);
             if (uint16(seed) % 100 >= 50) continue;
             if ((uint16(seed >> 80) % 20 >= 16) != highVariance) continue;
             if ((EntropyLib.hash2(seed, PASS_SIDE_TAG) & 1 == 1) != passSide) continue;
@@ -238,10 +239,10 @@ contract CrapsPassAwards is DeployProtocol {
     /// @dev Mirrors the presale FLIP branch through the 100-FLIP collapse (level-0 price).
     function _mirrorFlipOut(uint256 word, address who, uint256 amount)
         private
-        pure
+        view
         returns (uint256 flipOut)
     {
-        uint256 seed = _seedOf(word, who, amount);
+        uint256 seed = _seedOf(word, who);
         uint256 vr = uint16(seed >> 80) % 20;
         uint256 bps = vr < 16 ? 14_098 + vr * 1_158 : 74_534 + (vr - 16) * 22_890;
         flipOut = (((amount * bps) / 10_000) * 1000 ether) / 0.01 ether;
@@ -274,7 +275,7 @@ contract CrapsPassAwards is DeployProtocol {
         address p = makeAddr("presale_flip_side");
         uint256 amount = 1 ether;
         uint48 index = _buyPresaleBox(p, amount);
-        uint256 word = _flipWord(p, amount, false, false);
+        uint256 word = _flipWord(p, false, false);
         _setWord(index, word);
 
         uint256 flipOut = _mirrorFlipOut(word, p, amount);
@@ -290,11 +291,11 @@ contract CrapsPassAwards is DeployProtocol {
         address p = makeAddr("presale_normal");
         uint256 amount = 1 ether;
         uint48 index = _buyPresaleBox(p, amount);
-        uint256 word = _flipWord(p, amount, false, true);
+        uint256 word = _flipWord(p, false, true);
         _setWord(index, word);
 
         uint256 flipOut = _mirrorFlipOut(word, p, amount);
-        (uint32 n, uint32 h, uint256 flipLeft) = _expectedPasses(_seedOf(word, p, amount), flipOut);
+        (uint32 n, uint32 h, uint256 flipLeft) = _expectedPasses(_seedOf(word, p), flipOut);
         assertGt(n, 0, "scenario shape: at least one normal pass");
         assertEq(h, 0, "scenario shape: below the high switch");
         assertEq(flipLeft, 0, "scenario shape: uncapped side pays no FLIP");
@@ -314,11 +315,11 @@ contract CrapsPassAwards is DeployProtocol {
         address p = makeAddr("presale_high");
         uint256 amount = 10 ether;
         uint48 index = _buyPresaleBox(p, amount);
-        uint256 word = _flipWord(p, amount, false, true);
+        uint256 word = _flipWord(p, false, true);
         _setWord(index, word);
 
         uint256 flipOut = _mirrorFlipOut(word, p, amount);
-        (uint32 n, uint32 h,) = _expectedPasses(_seedOf(word, p, amount), flipOut);
+        (uint32 n, uint32 h,) = _expectedPasses(_seedOf(word, p), flipOut);
         assertEq(n, 0, "scenario shape: the lane switch is exclusive");
         assertGt(h, 0, "scenario shape: at least one high pass");
         assertLt(h, HIGH_CAP, "scenario shape: under the cap");
@@ -338,12 +339,12 @@ contract CrapsPassAwards is DeployProtocol {
         address p = makeAddr("presale_whale");
         uint256 amount = 30 ether;
         uint48 index = _buyPresaleBox(p, amount);
-        uint256 word = _flipWord(p, amount, true, true);
+        uint256 word = _flipWord(p, true, true);
         _setWord(index, word);
 
         uint256 flipOut = _mirrorFlipOut(word, p, amount);
         assertGt(flipOut / HIGH_UNIT, HIGH_CAP, "scenario shape: the cap must bind");
-        (, uint32 h, uint256 flipLeft) = _expectedPasses(_seedOf(word, p, amount), flipOut);
+        (, uint32 h, uint256 flipLeft) = _expectedPasses(_seedOf(word, p), flipOut);
         assertEq(h, HIGH_CAP, "capped at twelve high passes");
         assertGt(flipLeft, 0, "the rest of the roll stays FLIP");
 
@@ -360,9 +361,9 @@ contract CrapsPassAwards is DeployProtocol {
 
     /// @dev A word putting a sub-pass roll on the pass side with the fraction's Bernoulli
     ///      landing as requested.
-    function _subPassWord(address who, uint256 amount, bool win) private pure returns (uint256 w) {
+    function _subPassWord(address who, uint256 amount, bool win) private view returns (uint256 w) {
         for (w = 1; w < 500_000; ++w) {
-            uint256 seed = _seedOf(w, who, amount);
+            uint256 seed = _seedOf(w, who);
             if (uint16(seed) % 100 >= 50) continue;
             if (uint16(seed >> 80) % 20 >= 16) continue; // low band keeps the roll sub-pass
             if (EntropyLib.hash2(seed, PASS_SIDE_TAG) & 1 != 1) continue;

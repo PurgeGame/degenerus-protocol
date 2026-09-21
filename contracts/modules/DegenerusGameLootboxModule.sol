@@ -270,6 +270,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint256 private constant BOX_WWXRP_SPIN_TAG = 0x57777872705370696e; // "WwxrpSpin"
     uint256 private constant BOX_FLIP_SPIN_TAG = 0x4275726e69655370696e; // "BurnieSpin"
     uint256 private constant BOX_ETH_SPIN_TAG = 0x4574685370696e; // "EthSpin"
+    // Draw identities, never financial inputs. Separate entry, boon, redemption and AFKing
+    // streams explicitly instead of relying on a box amount to make their preimages differ.
+    uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e; // "BoxOpen"
+    uint256 private constant BOX_BOON_TAG = 0x426f78426f6f6e; // "BoxBoon"
+    uint256 private constant REDEMPTION_BOX_TAG = 0x526564656d7074696f6e426f78; // "RedemptionBox"
+    uint256 private constant AFKING_BOX_TAG = 0x41666b696e67426f78; // "AfkingBox"
+    bytes32 private constant PRESALE_BOX_TAG = keccak256("PRESALE_BOX");
     /// @dev Domain-separation tag for the 100-FLIP award collapse. Keyed off the box/roll
     ///      seed rather than a spare bit-slice, so the bit budgets documented above stay
     ///      accurate and the roll is fixed at VRF fulfillment.
@@ -984,7 +991,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // The boon seed MUST mix the player: the raw index word is shared by every entry at
         // this index, and an unmixed seed would hand every player the same per-box roll
         // values — correlated boon outcomes across the whole index.
-        c.boonSeed = EntropyLib.hash2(rngWord, uint256(uint160(player)));
+        c.boonSeed = EntropyLib.hash4(rngWord, uint256(uint160(player)), BOX_BOON_TAG, index);
         c.currentLevel = currentLevel;
         c.score = uint16(_lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK));
         // The EV multiplier stays FROZEN at buy (`score`) — that is the anti-gaming knob. The
@@ -1199,9 +1206,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
             for (uint256 i; i < count; ++i) {
                 // Seed = the per-index VRF anchor (fixed at the index's advance, unknowable at
-                // buy) + player + size + this box's position. No day term: the box binds to the
-                // index word, and a day keyed to the OPEN day would be re-rollable by timing.
-                uint256 seed = EntropyLib.hash4(c.rngWord, uint256(uint160(c.player)), size, ++c.nonce);
+                // buy) + player + domain + this box's position across all tiers. Size only
+                // prices the award; the nonce already distinguishes every box in the order.
+                uint256 seed = EntropyLib.hash4(c.rngWord, uint256(uint160(c.player)), BOX_OPEN_TAG, ++c.nonce);
                 _resolveLootboxCommon(
                     c.player,
                     c.index,
@@ -1486,9 +1493,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 soldBefore = (stored >> PRESALE_BOX_SOLD_SHIFT) & PRESALE_BOX_AMOUNT_MASK;
         bool closing = (stored & PRESALE_BOX_CLOSING_FLAG) != 0;
 
-        // Domain-separated draw off the committed word + the box's immutable buy data
-        // (player + amount). No new mutable SLOAD enters the roll (RNG freeze).
-        uint256 seed = uint256(keccak256(abi.encodePacked(rngWord, keccak256("PRESALE_BOX"), player, amount)));
+        // One presale record per player/index: its identity, not its value, keys the draw.
+        uint256 seed = uint256(keccak256(abi.encodePacked(rngWord, PRESALE_BOX_TAG, player, index)));
 
         uint256 outcome = uint16(seed) % 100;
         uint256 flipOut;
@@ -1732,7 +1738,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Freeze-safe seed with NO live day: claim timing must not re-roll the outcome (rngWord,
         // frozen at submission, already domain-separates). No live day is read here — boon expiry
         // uses the boon path's own currentDay, and the event day is unused for this claim.
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, amount)));
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, REDEMPTION_BOX_TAG)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
@@ -1899,10 +1905,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (amount == 0) return;
 
         // Seed = the CALLER-PASSED frozen-day word `rngWordByDay[day]` + player + the FROZEN
-        // stamped `day` (prevents seed-grinding by open-timing) + amount. The human box open
-        // hashes (rngWord, player, size, nonce) and resolveLootboxDirect hash2(rngWord, player);
-        // all three preimages differ, so no two paths can share a draw.
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)));
+        // stamped `day` (prevents seed-grinding by open-timing) + this route's domain.
+        // The amount sizes the award and never selects the outcome.
+        uint256 seed = EntropyLib.hash4(rngWord, uint256(uint160(player)), AFKING_BOX_TAG, day);
 
         // LIVE level, exactly like resolveLootboxDirect: auto-open removes the
         // player's ability to time the level, so the box rolls from the live level with
@@ -1988,10 +1993,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        target-level roll's base and the FLIP legs' price basis.
     /// @param seed Per-resolution 256-bit keccak seed (single-source-of-entropy threaded through all sub-rolls and bit-sliced per-consumer)
     /// @dev One keccak seed per box, derived by the caller from the committed word and the
-    ///      box's immutable identity — entry sweep: hash4(rngWord, player, size, nonce);
+    ///      box's immutable identity — entry sweep: hash4(rngWord, player, BOX_OPEN_TAG, nonce);
     ///      direct auto-resolve: hash2(rngWord, player); redemption chunk:
-    ///      keccak(abi.encode(rngWord, player, amount)); afking: keccak(abi.encode(rngWord,
-    ///      player, frozenDay, amount)) — and bit-sliced per consumer:
+    ///      keccak(abi.encode(rngWord, player, REDEMPTION_BOX_TAG)); afking:
+    ///      hash4(rngWord, player, AFKING_BOX_TAG, frozenDay) — and bit-sliced per consumer:
     ///        bits[0..15]    rangeRoll % 100         (_rollTargetLevel)
     ///        bits[16..23]   near-offset % 5         (_rollTargetLevel)
     ///        bits[24..39]   far-offset % 46         (_rollTargetLevel)
@@ -2003,7 +2008,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        uint32 window, bias ~2e-8)
     ///      One box, one roll: no split and no second chunk. The boon draw is not sliced from
     ///      this seed — the Boon module rolls it from hash2(boonSeed, nonce) >> 120 (entry
-    ///      sweep: boonSeed = hash2(rngWord, player); single-box resolvers pass the box seed
+    ///      sweep: boonSeed = hash4(rngWord, player, BOX_BOON_TAG, index); single-box resolvers pass the box seed
     ///      at nonce 0). The Degenerette-spin rolls (WWXRP / FLIP-spins / ETH-spin) derive
     ///      their sub-seeds via hash2(seed, BOX_*_SPIN_TAG) and consume no primary bits.
     /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays the

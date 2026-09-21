@@ -552,7 +552,7 @@ contract CrapsBattleTest is CrapsPins {
     /// @dev The coin the fold reaches for on a dead-level score: the larger tag leads. Restated
     ///      from the rule rather than read off the contract, so the suite grades the rule.
     function _tag(uint256 word, uint256 betId) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(word, uint64(betId))));
+        return uint256(keccak256(abi.encode(word, uint256(0x4372617073546965), betId)));
     }
 
     function _beatsFully(bool gA, uint256 pA, uint256 wA, bool gB, uint256 pB, uint256 wB)
@@ -640,6 +640,15 @@ contract CrapsBattleTest is CrapsPins {
 
         uint64[3] memory seats = [uint64(1), uint64(2), uint64(3)];
         uint256[2] memory words = [uint256(keccak256("coin-a")), uint256(keccak256("coin-b"))];
+        // Find two different tie priorities under the current domain, preserving non-vacuity.
+        uint64 firstWant = 1;
+        for (uint64 k = 2; k <= 3; ++k) if (_tag(words[0], k) > _tag(words[0], firstWant)) firstWant = k;
+        while (true) {
+            uint64 nextWant = 1;
+            for (uint64 k = 2; k <= 3; ++k) if (_tag(words[1], k) > _tag(words[1], nextWant)) nextWant = k;
+            if (nextWant != firstWant) break;
+            ++words[1];
+        }
         uint64[2] memory landed;
 
         for (uint256 p = 0; p < 2; ++p) {
@@ -1723,6 +1732,11 @@ contract CrapsBattleTest is CrapsPins {
     /// @dev And settlement actually applies it: a bonus window's winner is paid its bounties and
     ///      busted crumbs WHOLE, plus only its rationed slice of the boost.
     function test_aWindowsClaimPaysTheRationedBoost() public {
+        // A busy prior week funds a window whose upper boost rungs cross rounding.
+        vm.warp(vm.getBlockTimestamp() + 10 days);
+        uint24 today = craps.currentDayIndex();
+        for (uint24 back = 1; back <= 7; ++back) craps.bookDay(today - back, 3_600_000 ether);
+        _setDailyWord(today, PLAIN_WORD);
         _openDay();
         _enter(alice, PER);
         _enter(bob, PER);
@@ -1741,7 +1755,7 @@ contract CrapsBattleTest is CrapsPins {
         // so a fixture that lands there cannot tell a pot that rounded from one that never did —
         // and a boost already on a whole thousand cannot either.
         uint256 boost;
-        for (uint256 i = 0; i < 512 && !(boost > 40 && boost % 10 != 0); ++i) {
+        for (uint256 i = 0; i < 8192 && !(boost > 40 && boost % 10 != 0); ++i) {
             _setWord(index, uint256(keccak256(abi.encode("rationed", i))));
             boost = craps.boostUnitsAt(slot);
         }

@@ -102,13 +102,7 @@ coverage-check:
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
 test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
-	@echo "Patching ContractAddresses.sol for Foundry..."
-	@node scripts/lib/patchForFoundry.js
-	@echo "Running Foundry tests..."
-	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge test $(ARGS) 2>&1; TEST_EXIT=$$?; \
-		echo "Restoring ContractAddresses.sol..."; \
-		git checkout -- contracts/ContractAddresses.sol; \
-		exit $$TEST_EXIT
+	@python3 scripts/test-foundry-groups.py $(ARGS)
 
 # Run Hardhat tests. The Hardhat fixture also rewrites contracts/ContractAddresses.sol
 # with its predicted addresses and does not restore it; treat the checkout as disposable

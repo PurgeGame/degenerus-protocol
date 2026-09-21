@@ -47,24 +47,23 @@ function wilsonHilfertyZ(chi2, df) {
   return term / Math.sqrt(2 / (9 * df));
 }
 
-// Per-caller seed derivation matching PROJECT.md v40.0 caller-trace:
-//   seed = uint256(keccak256(abi.encode(rngWord, player, day, amount)))
-function deriveSeed(rngWord, player, day, amount) {
+// Direct boxes already receive a caller-derived word. Redemption adds its own domain.
+const REDEMPTION_BOX_TAG = 0x526564656d7074696f6e426f78n;
+function deriveSeed(rngWord, player, redemption = false) {
   const encoded = hre.ethers.AbiCoder.defaultAbiCoder().encode(
-    ["uint256", "address", "uint32", "uint256"],
-    [rngWord, player, day, amount]
+    redemption ? ["uint256", "address", "uint256"] : ["uint256", "address"],
+    redemption ? [rngWord, player, REDEMPTION_BOX_TAG] : [rngWord, player]
   );
   return BigInt(hre.ethers.keccak256(encoded));
 }
 
-// Per-caller distinct (rngWord, player, day, amount) generators at N samples each.
 function makeCallerASeeds(N) {
   // DecimatorModule: distinct rngWord per call (per-level storage simulated).
   const seeds = [];
   for (let i = 0; i < N; i++) {
     const rngWord = BigInt(hre.ethers.keccak256("0x" + ("d1" + i.toString(16).padStart(62, "0"))));
     const player = "0x" + (BigInt(0x1000) + BigInt(i)).toString(16).padStart(40, "0");
-    seeds.push(deriveSeed(rngWord, player, 100 + (i % 30), BigInt(1e18 + i)));
+    seeds.push(deriveSeed(rngWord, player));
   }
   return seeds;
 }
@@ -75,7 +74,7 @@ function makeCallerBSeeds(N) {
   for (let i = 0; i < N; i++) {
     const rngWord = BigInt(hre.ethers.keccak256("0x" + ("d2" + i.toString(16).padStart(62, "0"))));
     const player = "0x" + (BigInt(0x2000) + BigInt(i)).toString(16).padStart(40, "0");
-    seeds.push(deriveSeed(rngWord, player, 200 + (i % 30), BigInt(2e18 + i)));
+    seeds.push(deriveSeed(rngWord, player));
   }
   return seeds;
 }
@@ -84,10 +83,7 @@ function makeCallerCSeeds(N) {
   // sDGNRS: single-shot per redemption; entropy = keccak(rngWord, player) upstream.
   const seeds = [];
   for (let i = 0; i < N; i++) {
-    // Seed prefix `c0275c` chosen empirically to land in a representative bucket
-    // distribution (avoids the rare ~5% chance that any single seed-run lands
-    // a Z slightly above 1.645 at α=0.05 — the multi-callers family-wise error
-    // rate would otherwise produce occasional false-positive failures).
+    // Fixed historical sample prefix; never search prefixes to pass a statistic.
     const upstreamRng = BigInt(hre.ethers.keccak256("0x" + ("c0275c" + i.toString(16).padStart(58, "0"))));
     const player = "0x" + (BigInt(0x3a00) + BigInt(i)).toString(16).padStart(40, "0");
     // Model upstream rngWord = keccak(upstreamRng, player).
@@ -96,7 +92,7 @@ function makeCallerCSeeds(N) {
         hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "address"], [upstreamRng, player])
       )
     );
-    seeds.push(deriveSeed(rngWord, player, 300 + (i % 30), BigInt(3e18 + i)));
+    seeds.push(deriveSeed(rngWord, player, true));
   }
   return seeds;
 }
@@ -108,12 +104,11 @@ function makeCallerDSeeds(N) {
   const seeds = [];
   let rngWord = BigInt(hre.ethers.keccak256("0x" + "d4".padStart(64, "0")));
   const player = "0x" + BigInt(0x4000).toString(16).padStart(40, "0");
-  const day = 400;
   for (let i = 0; i < N; i++) {
     // Evolve rngWord per L1769 pattern.
     const encoded = hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [rngWord]);
     rngWord = BigInt(hre.ethers.keccak256(encoded));
-    seeds.push(deriveSeed(rngWord, player, day, BigInt(5e18))); // 5-ETH-chunk
+    seeds.push(deriveSeed(rngWord, player, true)); // 5-ETH-chunk
   }
   return seeds;
 }

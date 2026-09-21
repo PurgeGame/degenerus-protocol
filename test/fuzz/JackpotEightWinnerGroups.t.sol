@@ -32,6 +32,30 @@ contract EightWinnerHarness is DegenerusGameJackpotModule, BucketSeed {
 contract JackpotEightWinnerGroupsTest is Test {
     bytes32 private constant WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
 
+    function _winnerFingerprint(uint256 word, uint256 tickets, uint8 kind) private returns (bytes32 result) {
+        EightWinnerHarness h = new EightWinnerHarness();
+        h.seed(word, tickets, 15, kind);
+        vm.recordLogs();
+        if (kind == 0) h.payEarlyBirdTickets(word);
+        else if (kind == 1) h.payDailyJackpotCoinAndTickets(word);
+        else h.payCarryoverTickets(word);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 count;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != WIN) continue;
+            (, uint24 source, uint256 index,) = abi.decode(logs[i].data, (uint32, uint24, uint256, bool));
+            result = keccak256(abi.encode(result, logs[i].topics[1], logs[i].topics[3], source, index));
+            ++count;
+        }
+        assertEq(count, kind == 0 ? 128 : 96, "both budgets fund the complete draw");
+    }
+
+    function testFuzz_AwardSizeCannotChangeTicketWinners(uint256 word, uint8 kindSeed) public {
+        uint8 kind = kindSeed % 3;
+        assertEq(_winnerFingerprint(word, 1024, kind), _winnerFingerprint(word, 2048, kind),
+            "changing each prize's size must preserve the selected ticket occurrences");
+    }
+
     function _draw(uint256 word, uint256 tickets, uint8 mask, uint8 kind)
         private returns (uint256[4] memory counts)
     {

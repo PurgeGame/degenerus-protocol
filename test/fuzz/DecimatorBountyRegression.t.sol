@@ -54,18 +54,18 @@ contract DecimatorBountyRegression is DeployProtocol {
     //                       storage-slot writers
     // ----------------------------------------------------------------------
 
-    /// @dev decClaimRounds[lvl] = {uint96 poolWei | uint128 totalBurn | uint32 rngWord} (one slot).
+    /// @dev decClaimRounds[lvl] = {uint96 poolWei | uint128 totalBurn}, then full uint256 rngWord.
     function _setClaimRound(
         uint24 lvl,
         uint96 poolWei,
         uint128 totalBurn,
-        uint32 rngWord
+        uint256 rngWord
     ) internal {
         bytes32 slot = keccak256(abi.encode(uint256(lvl), SLOT_DEC_CLAIM_ROUNDS));
         uint256 packed = uint256(poolWei) |
-            (uint256(totalBurn) << 96) |
-            (uint256(rngWord) << 224);
+            (uint256(totalBurn) << 96);
         vm.store(address(game), slot, bytes32(packed));
+        vm.store(address(game), bytes32(uint256(slot) + 1), bytes32(rngWord));
     }
 
     /// @dev decBucketOffsetPacked[lvl] winning subbucket for `denom` (4 bits at (denom-2)*4).

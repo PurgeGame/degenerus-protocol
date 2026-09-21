@@ -485,7 +485,10 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _BSTAKE_MAX = 0x3FFFF;
 
     /// @dev Separates the per-bet rounding roll from everything else on the same committed word.
-    uint256 internal constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
+    uint256 internal constant CRAPS_ROUND_TAG = 0x4372617073526f756e64; // "CrapsRound"
+    uint256 internal constant SCATTER_TAG = 0x437261707353636174746572; // "CrapsScatter"
+    uint256 internal constant SCHEDULE_TAG = 0x43726170735363686564756c65; // "CrapsSchedule"
+    uint256 internal constant TIE_TAG = 0x4372617073546965; // "CrapsTie"
     /// @dev Domain tag for a battle's match key.
     uint256 internal constant BATTLE_TAG = 0x4372617073426174746c65; // "CrapsBattle"
     /// @dev Domain tag for the boost multiplier roll, so it cannot collide with any other draw off
@@ -2272,7 +2275,7 @@ contract CrapsBattle is LootboxCraps {
         SlipResult memory sr = ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlip(
             packed,
             chipFlip,
-            _hash2(word, uint160(header)),
+            _hash3(word, SCATTER_TAG, uint160(header)),
             _BONUS_CHIPS - placed,
             seed,
             w.bankroll,
@@ -2297,7 +2300,7 @@ contract CrapsBattle is LootboxCraps {
         // 100-FLIP granule only once it is a small slice of the award, the whole-FLIP floor below.
         if (paid != 0) {
             paid = paid > FlipRoundLib.FLIP_ROUND_THRESHOLD
-                ? FlipRoundLib.roundFlipToHundreds(paid, _hash2(word, uint256(betId) ^ FLIP_ROUND_TAG))
+                ? FlipRoundLib.roundFlipToHundreds(paid, _hash3(word, CRAPS_ROUND_TAG, betId))
                 : FlipRoundLib.floorWholeFlip(paid);
         }
         // A BUST PAYS NOTHING, and what it was still holding is DELETED. The FLIP was burned at
@@ -3352,7 +3355,7 @@ contract CrapsBattle is LootboxCraps {
     ///      window rides the bare word. Pure in two published inputs.
     function _bonusRoll(uint256 word, uint256 period) private pure returns (uint256) {
         unchecked {
-            return _hash2(word, period + 1);
+            return _hash3(word, SCHEDULE_TAG, period);
         }
     }
 
@@ -3615,8 +3618,9 @@ contract CrapsBattle is LootboxCraps {
     ///      takes the lead. A random total order rather than a running coin, so a field of any
     ///      size picks uniformly among its tied runs instead of favouring the last one to settle,
     ///      and arrival order carries no advantage at all. Replayable off-chain from the word.
-    function _tieBreak(uint256 word, uint64 challenger, uint64 leader) private pure returns (bool) {
-        return _hash2(word, challenger) > _hash2(word, leader);
+    function _tieBreak(uint256 word, uint48 bound, uint64 challenger, uint64 leader) private pure returns (bool) {
+        uint256 field = uint256(bound) << 64;
+        return _hash3(word, TIE_TAG, field | challenger) > _hash3(word, TIE_TAG, field | leader);
     }
 
     function _scoreBattle(Window memory w, uint256 score, uint64 betId, uint256 word)
@@ -3632,7 +3636,7 @@ contract CrapsBattle is LootboxCraps {
             // order. `leader == 0` is the first entrant to score, who leads unopposed.
             uint64 leader = uint64(uint32(g >> _BG_WINNER_SHIFT));
             uint256 standing = (g >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
-            if (score > standing || leader == 0 || (score == standing && _tieBreak(word, betId, leader))) {
+            if (score > standing || leader == 0 || (score == standing && _tieBreak(word, w.bound, betId, leader))) {
                 // ONE CLEAR-AND-REPLACE over the composite and the seat holding it. Everything a
                 // finalization reports about the winner — its stop, its high point, its ending
                 // bankroll — is inside the composite, so a displaced leader leaves nothing behind
@@ -3685,7 +3689,7 @@ contract CrapsBattle is LootboxCraps {
     ///      source of randomness and cannot be timed apart from the main one.
     function _highBoostUnits(Window memory w, uint256 word) internal view returns (uint256) {
         unchecked {
-            return (_highBase(w) * _boostMult(word, w.key)) / (4 * _BATTLE_STAKE_UNIT);
+            return (_highBase(w) * _boostMult(word, w.bound)) / (4 * _BATTLE_STAKE_UNIT);
         }
     }
 
@@ -3744,7 +3748,7 @@ contract CrapsBattle is LootboxCraps {
             // The SAME comparator the main scoreboard runs, on the SAME unscaled composite: a
             // high roller buys copies of a run, never a better one, so the money it staked must
             // not reach either ranking.
-            if (sc > best || lead == 0 || (sc == best && _tieBreak(word, seat, lead))) {
+            if (sc > best || lead == 0 || (sc == best && _tieBreak(word, w.bound, seat, lead))) {
                 f = (f & ~((_SC_BEST_MASK << _HF_SCORE_SHIFT) | (uint256(_MASK32) << _HF_WINNER_SHIFT)))
                     | (sc << _HF_SCORE_SHIFT) | (uint256(seat) << _HF_WINNER_SHIFT);
             }
@@ -3777,7 +3781,7 @@ contract CrapsBattle is LootboxCraps {
             // Multiplied in WEI and only then cut to granules. Flooring the base first would
             // round a small window's whole boost away — a thin day funds well under one granule
             // per window, and it is the top rungs that make such a window pay at all.
-            return (_boostBase(w) * _boostMult(word, w.key)) / (4 * _BATTLE_STAKE_UNIT);
+            return (_boostBase(w) * _boostMult(word, w.bound)) / (4 * _BATTLE_STAKE_UNIT);
         }
     }
 
@@ -3963,9 +3967,11 @@ contract CrapsBattle is LootboxCraps {
         }
     }
 
-    function _boostMult(uint256 word, bytes32 key) internal pure returns (uint256) {
+    /// @dev The scheduled window's immutable slot identifies its boost draw. Its monetary
+    ///      terms and match key price/locate the battle but cannot select another multiplier.
+    function _boostMult(uint256 word, uint48 bound) internal pure returns (uint256) {
         unchecked {
-            uint256 roll = _hash3(word, uint256(key), BOOST_TAG) % 1000;
+            uint256 roll = _hash3(word, bound, BOOST_TAG) % 1000;
             if (roll < 768) return 1;
             if (roll < 976) return 4;
             if (roll < 996) return 40;

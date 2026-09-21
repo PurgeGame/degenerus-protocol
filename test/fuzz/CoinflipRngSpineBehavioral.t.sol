@@ -12,7 +12,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         SOURCE-STRING occurrence count (`vm.readFile` + count of
 ///         `"bool win = (rngWord & 1) == 1;"`). It is blind to: a callsite arg swap
 ///         (e.g. `(seedWord & 1)` instead of `(rngWord & 1)`); a perturbation of the
-///         reward path `seedWord = keccak(rngWord, epoch)` / `roll = seedWord % 20`; and
+///         reward path `seedWord = keccak(REWARD_PERCENT_TAG, rngWord, epoch)` / `roll = seedWord % 20`; and
 ///         the `_storeDayResult` / `_dayResult` `>= 50` win-packing threshold.
 ///
 ///         This suite is the BEHAVIORAL complement: it drives the live
@@ -21,7 +21,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         reconstructed by an in-test mirror of the contract's exact arithmetic:
 ///
 ///           win        = (rngWord & 1) == 1                       (50/50 roll, bit 0)
-///           seedWord   = keccak256(abi.encodePacked(rngWord, epoch))
+///           seedWord   = keccak256(abi.encodePacked(keccak256("degenerus.coinflip.reward-percent"), rngWord, epoch))
 ///           roll       = seedWord % 20
 ///           reward     = roll==0 ? 50 : roll==1 ? 150 : (seedWord % 38) + 78
 ///           reward    += bonus                                    (unchecked add)
@@ -62,7 +62,7 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
         pure
         returns (uint16 reward)
     {
-        uint256 seedWord = uint256(keccak256(abi.encodePacked(rngWord, epoch)));
+        uint256 seedWord = uint256(keccak256(abi.encodePacked(keccak256("degenerus.coinflip.reward-percent"), rngWord, epoch)));
         uint256 roll = seedWord % 20;
         if (roll == 0) {
             reward = FIXED_UNLUCKY;
@@ -108,7 +108,7 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
     /// @notice Behavioral: across every reward-roll branch and every day-bonus the advance
     ///         module emits ({0, 2, 6}), the live stored/reconstructed result equals the
     ///         pure-function mirror EXACTLY — both the win bit (= rngWord & 1) and the
-    ///         reward byte (= keccak(rngWord, epoch)-derived). A callsite arg swap, a
+    ///         reward byte (= keccak(REWARD_PERCENT_TAG, rngWord, epoch)-derived). A callsite arg swap, a
     ///         seedWord/epoch mix change, or a roll-threshold shift diverges from the
     ///         mirror and fails here.
     function testDayResultIsPureFunctionOfWord() public {
@@ -150,9 +150,9 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
         assertEq(rB, 1, "loss banks the sentinel byte 1");
     }
 
-    /// @notice The reward byte is keyed to `keccak(rngWord, epoch)`: the SAME rngWord at
+    /// @notice The reward byte is keyed to `keccak(REWARD_PERCENT_TAG, rngWord, epoch)`: the SAME rngWord at
     ///         DIFFERENT epochs yields DIFFERENT reward rolls (epoch is mixed into the
-    ///         seed). Pins the seedWord = keccak(rngWord, epoch) path against a mutant
+    ///         seed). Pins the seedWord = keccak(REWARD_PERCENT_TAG, rngWord, epoch) path against a mutant
     ///         that drops or alters the epoch term. Each resolved byte still equals its
     ///         own pure-function mirror.
     function testRewardDependsOnEpochThroughSeedMix() public {
@@ -166,7 +166,7 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
             assertEq(
                 r,
                 _expectedStoredByte(0, word, epochs[i]),
-                "reward byte == keccak(rngWord, epoch) mirror at this epoch"
+                "reward byte == keccak(REWARD_PERCENT_TAG, rngWord, epoch) mirror at this epoch"
             );
             live[i] = r;
         }
@@ -248,9 +248,9 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
         }
     }
 
-    /// @dev The reward roll the contract computes: roll = keccak(rngWord, epoch) % 20.
+    /// @dev The reward roll the contract computes: roll = keccak(REWARD_PERCENT_TAG, rngWord, epoch) % 20.
     function _rollOf(uint256 rngWord, uint24 epoch) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(rngWord, epoch))) % 20;
+        return uint256(keccak256(abi.encodePacked(keccak256("degenerus.coinflip.reward-percent"), rngWord, epoch))) % 20;
     }
 
     /// @dev Find a word at `epoch` whose reward roll equals `targetRoll`, with the win bit
@@ -298,7 +298,7 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
     {
         for (uint256 i = 0; i < 200_000; i++) {
             uint256 candidate = (i << 1) | (rawWins ? 1 : 0);
-            uint256 seedLow = uint256(keccak256(abi.encodePacked(candidate, epoch))) & 1;
+            uint256 seedLow = uint256(keccak256(abi.encodePacked(keccak256("degenerus.coinflip.reward-percent"), candidate, epoch))) & 1;
             // raw low bit is (rawWins ? 1 : 0); require seed low bit to be the OPPOSITE.
             if (seedLow == (rawWins ? 0 : 1)) {
                 return candidate;

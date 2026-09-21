@@ -17,7 +17,8 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     uint48 private constant GENESIS_INDEX = 1;
     uint256 private constant CUSTOM_SIZE = 10 ether;
     uint256 private constant BOX_ORDER = (uint256(3) << 24) | ((CUSTOM_SIZE / 1e12) << 32);
-    uint256 private constant RNG_WORD = 0x9b1ce;
+    // Verified DGNRS / ETH-spin-with-DGNRS-recirc / DGNRS under BOX_OPEN_TAG.
+    uint256 private constant RNG_WORD = 1844449;
 
     bytes32 private constant DGNRS_BATCH_SIG = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
     bytes32 private constant LOOTBOX_OPENED_SIG =
@@ -81,7 +82,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
         // Box three is the later parent DGNRS roll. It must price from the balance after the
         // pre-recursion parent batch and the nested child batch, not the entry's old snapshot.
-        uint256 seed3 = EntropyLib.hash4(RNG_WORD, uint256(uint160(PLAYER)), CUSTOM_SIZE, 3);
+        uint256 seed3 = EntropyLib.hash4(RNG_WORD, uint256(uint160(PLAYER)), 0x426f784f70656e, 3);
         uint256 boonBudget = parentAmount / 10;
         if (boonBudget > 1 ether) boonBudget = 1 ether;
         uint256 rollAmount = parentAmount - boonBudget;

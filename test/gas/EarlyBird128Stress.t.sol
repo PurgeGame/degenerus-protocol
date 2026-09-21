@@ -6,8 +6,8 @@ import {DayOneFixture, DayOneSeeder} from "./JackpotDayOneWorstCase.t.sol";
 
 contract HeroStressSeeder is DayOneSeeder {
     function seedTailBuckets() external {
-        uint8[4] memory traits = [uint8(17), 67, 156, 214];
-        uint256[4] memory lengths = [uint256(433), 377, 1369, 12241];
+        uint8[4] memory traits = [uint8(61), 66, 161, 222];
+        uint256[4] memory lengths = [uint256(513), 761, 1761, 561];
         for (uint8 q; q < 4; ++q) {
             _seedBucketDistinct(level + 1, traits[q], lengths[q], uint160(0x1000000000 + 0x800000 + uint256(q) * 0x100000));
             deityBySymbol[q * 8 + (traits[q] & 7)] = address(0);
@@ -37,7 +37,7 @@ abstract contract EarlyBird128StressFixture is DayOneFixture {
     // Searched deterministically using the exact production hashing and weighted-roll rules:
     // main hero index 31 and bonus hero index 30 force long weighted scans. Four
     // one-entry tails force 28 padding redraws, and all 128 recipients are distinct.
-    uint256 internal constant WORD = 0xfee105d573dc25850079766a4962b8443fbe5ecf5a2e28d58026f7621ce78e78;
+    uint256 internal constant WORD = 1790035;
 
     function prefix() internal pure virtual returns (uint256) { return 0; }
     function late() internal pure virtual returns (bool) { return false; }
@@ -47,8 +47,8 @@ abstract contract EarlyBird128StressFixture is DayOneFixture {
         _warpToDay(400, 3 hours);
         bytes memory realCode = address(game).code;
         vm.etch(address(game), type(HeroStressSeeder).runtimeCode);
-        uint8[4] memory mainTraits = [uint8(56), 121, 184, 255];
-        uint8[4] memory bonusTraits = [uint8(17), 67, 156, 214];
+        uint8[4] memory mainTraits = [uint8(59), 121, 189, 255];
+        uint8[4] memory bonusTraits = [uint8(61), 66, 161, 222];
         HeroStressSeeder(payable(address(game))).seedDayOne(
             LVL, WORD, mainTraits, bonusTraits, BASE, ETH_HOLDERS, 0, false
         );

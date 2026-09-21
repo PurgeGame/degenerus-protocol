@@ -62,6 +62,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @dev Mirrors `DegenerusGameDegeneretteModule.FLIP_ROUND_TAG` (private there), the
     ///      domain separator the 100-FLIP award collapse is keyed under.
+    uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
 
     // --- DGAS-05 same-results constants ---
@@ -366,16 +367,60 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             : FlipRoundLib.floorWholeFlip(amount);
     }
 
+    /// @notice ETH and FLIP players share the result board for the same RNG period.
+    /// Different owners, bet nonces, stakes and settlement order cannot reroll it.
+    function test_SharedBoardAcrossPlayersCurrenciesAndBets() public {
+        uint256 word = uint256(keccak256("shared-period-board"));
+        uint32 pick = _winningTicketFor(1, word);
+        address firstPlayer = player;
+        uint64 first = _placeBet(CURRENCY_ETH, 0.01 ether, 3, pick);
+        address secondPlayer = makeAddr("second_board_player");
+        player = secondPlayer;
+        _fundFlip(player, 10_000 ether);
+        _placeBet(CURRENCY_FLIP, 100 ether, 1, pick); // consume a different nonce
+        uint64 second = _placeBet(CURRENCY_FLIP, 200 ether, 3, pick);
+        _injectLootboxRngWord(1, word);
+        uint64[] memory ids = new uint64[](1);
+        vm.recordLogs();
+        ids[0] = second;
+        game.resolveDegeneretteBets(secondPlayer, ids);
+        ids[0] = first;
+        game.resolveDegeneretteBets(firstPlayer, ids);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 resolved = keccak256("DegeneretteResolved(address,uint64,uint8,uint256,uint32)");
+        uint256 found;
+        uint8[3] memory scores;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 3) continue;
+            address owner = address(uint160(uint256(logs[i].topics[1])));
+            uint64 id = uint64(uint256(logs[i].topics[2]));
+            if (!((owner == firstPlayer && id == first) || (owner == secondPlayer && id == second))) continue;
+            if (logs[i].topics[0] == resolved) {
+                (, , uint32 board) = abi.decode(logs[i].data, (uint8, uint256, uint32));
+                assertEq(board, pick, "same-period spin-0 board is shared");
+                ++found;
+            } else if (logs[i].topics[0] == FULL_TICKET_RESULT_SIG) {
+                (uint8 spin, , uint8 score, ) = abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
+                if (owner == secondPlayer) scores[spin] = score;
+                else assertEq(score, scores[spin], "every spin uses the shared board");
+                ++found;
+            }
+        }
+        assertEq(found, 8, "both bets resolved all three spins");
+        player = firstPlayer;
+    }
+
     function testBatchedPayoutEqualsPerSpinExpectation_Tier1() public {
         // Large unfrozen pool so the ETH 10% cap never binds (cap is Tier-2's job).
         _seedFuturePrizePool(1_000_000 ether);
 
         // Three bets sharing the seeded lootbox index 1 (placement requires word==0).
         // Word chosen so the FLIP bet (betId 2) WINS its bet-keyed survival flip
-        // (keccak(word, betId) & 1 == 1) — the doubled-mint path is exercised
+        // (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 1) — the doubled-mint path is exercised
         // non-vacuously below.
         uint48 index = 1;
         uint256 word = uint256(keccak256("tier1_mixed_batch_word_v3"));
+        while (EntropyLib.hash4(word, uint160(player), 2, BET_SURVIVAL_TAG) & 1 == 0) ++word;
 
         // ETH bet: 4 spins, winning ticket; FLIP bet: 3 spins; WWXRP bet: 2 spins.
         // Use the spin-0 winning combo as the custom ticket for each (>= 2 matches
@@ -432,17 +477,17 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // the raw mint is 2x the per-spin sum on a winning flip, 0 on a losing one. The
         // chosen word wins the flip for this bet, so the doubled path is live.
         uint256 rawFlipMint = (uint256(
-            keccak256(abi.encode(word, flipBet))
+            keccak256(abi.encode(word, player, flipBet, BET_SURVIVAL_TAG))
         ) & 1 == 1) ? expectedFlip * 2 : 0;
         assertGt(rawFlipMint, 0, "Tier-1: word must win the FLIP survival flip");
 
         // The award granule then collapses the SURVIVED total onto a whole 100-FLIP
         // multiple. Replicated here from the same inputs the module uses, so this stays a
         // byte-identical amount assertion rather than a tolerance: the collapse is keyed on
-        // hash2(rngWord, betId ^ FLIP_ROUND_TAG), both operands fixed at fulfillment.
+        // hash4(rngWord, player, betId, FLIP_ROUND_TAG), all fixed at fulfillment.
         uint256 expectedFlipMint = _gateFlipAward(
             rawFlipMint,
-            EntropyLib.hash2(word, uint256(flipBet) ^ FLIP_ROUND_TAG)
+            EntropyLib.hash4(word, uint160(player), flipBet, FLIP_ROUND_TAG)
         );
         // Non-vacuity for the collapse itself: this batch must actually cross the
         // threshold, or the assertion below degrades to the pre-granule behaviour.
@@ -483,7 +528,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @notice FLIP survival-flip LOSS path: a bet whose bet-keyed flip
-    ///         (keccak(word, betId) & 1 == 0) loses mints NOTHING, even though its
+    ///         (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 0) loses mints NOTHING, even though its
     ///         raw spins paid (per-spin DegeneretteResult events sum > 0).
     function testFlipSurvivalFlipLossZeroesMint() public {
         _seedFuturePrizePool(1_000_000 ether);
@@ -492,12 +537,13 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // ticket guarantees the raw per-spin payouts are nonzero.
         uint48 index = 1;
         uint256 word = uint256(keccak256("survival_flip_loss_word_v3"));
+        while (EntropyLib.hash4(word, uint160(player), 1, BET_SURVIVAL_TAG) & 1 == 1) ++word;
         uint32 ticket = _winningTicketFor(index, word);
 
         _fundFlip(player, 1_000 ether);
         uint64 betId = _placeBet(CURRENCY_FLIP, 200 ether, 3, ticket);
         assertEq(
-            uint256(keccak256(abi.encode(word, betId))) & 1,
+            uint256(keccak256(abi.encode(word, player, betId, BET_SURVIVAL_TAG))) & 1,
             0,
             "precondition: the chosen word loses the survival flip for this bet"
         );
@@ -996,6 +1042,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
                 } else {
                     wwxrpSum += payout;
                 }
+            } else if (t0 == keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)")) {
+                (uint64 boxBetId,, uint256 payout,) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
+                // ETH winnings may recurse into a WWXRP box spin before the next bet.
+                // Box spins emit this record instead of DegeneretteResult.
+                if (((boxBetId >> 60) & 7) == 0) wwxrpSum += payout;
             } else if (t0 == PAYOUT_CAPPED_SIG) {
                 ++payoutCappedCount;
             } else if (t0 == FULL_TICKET_RESOLVED_SIG) {

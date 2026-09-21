@@ -31,6 +31,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
+import {EntropyLib} from "./libraries/EntropyLib.sol";
 
 /**
  * @title DegenerusQuests
@@ -203,6 +204,8 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Price unit for reward calculations (1000 FLIP).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    bytes32 private constant DAILY_QUEST_TAG = keccak256("degenerus.quest.daily");
+    bytes32 private constant LEVEL_QUEST_TAG = keccak256("degenerus.quest.level");
 
     // -------------------------------------------------------------------------
     // Quest Type Constants
@@ -580,7 +583,7 @@ contract DegenerusQuests is IDegenerusQuests {
         } else if (forceMintFlip) {
             bonusType = QUEST_TYPE_MINT_FLIP;
         } else {
-            uint256 bonusEntropy = (entropy >> 128) | (entropy << 128);
+            uint256 bonusEntropy = EntropyLib.hash2(entropy, uint256(DAILY_QUEST_TAG));
             bonusType = _bonusQuestType(
                 bonusEntropy,
                 QUEST_TYPE_MINT_ETH,
@@ -2578,7 +2581,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param entropy VRF-derived entropy for quest type selection.
     function rollLevelQuest(uint256 entropy) external override onlyGame {
         bool decAllowed = _canRollDecimatorQuest();
-        uint8 rolled = _bonusQuestType(entropy, type(uint8).max, decAllowed, QUEST_TYPE_CRAPS_DAY_PASS);
+        uint8 rolled = _bonusQuestType(
+            EntropyLib.hash2(entropy, uint256(LEVEL_QUEST_TAG)),
+            type(uint8).max, decAllowed, QUEST_TYPE_CRAPS_DAY_PASS
+        );
         levelQuestType = rolled;
         uint24 questLevel;
         unchecked {

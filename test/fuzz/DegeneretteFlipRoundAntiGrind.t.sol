@@ -19,7 +19,7 @@ import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 ///           worth up to ~100 FLIP per bet, available to anyone, on bets they do not even own.
 ///
 ///         The defence is that the collapse runs PER BET on a `betId`-keyed word
-///         (`EntropyLib.hash2(rngWord, betId ^ FLIP_ROUND_TAG)`), so the outcome of every bet is
+///         (`EntropyLib.hash4(rngWord, player, betId, FLIP_ROUND_TAG)`), so the outcome of every bet is
 ///         determined the moment the VRF word lands and batching is a pure no-op on value.
 ///
 /// @notice This file proves that BEHAVIOURALLY, not structurally: the same set of bets, against

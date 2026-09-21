@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {JackpotBoardFixtures} from "../fuzz/helpers/JackpotBoardFixtures.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -52,7 +53,7 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
         uint128 nextPool = uint128(previousPool + 1 ether);
         PurchaseDailySeeder.Shape memory shape = _shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, nextPool, previousPool);
         if (_extras()) {
-            shape.word |= (uint256(0x38)) | (uint256(0x38) << 6) | (uint256(0x38) << 12) | (uint256(0x38) << 18);
+            shape.word = JackpotBoardFixtures.wordFor([7, 7, 7, 7], [1, 2, 3, 4], false);
         }
         _seedFresh(shape);
         _armFreshWord(shape.word, 400);

@@ -44,7 +44,7 @@ contract PresaleBoxDrain is DeployProtocol {
     uint256 constant PRESALE_BOX_ETH_CAP = 50 ether;
     uint256 constant PRESALE_BOX_MIN = 0.01 ether;
 
-    // Outcome bands off the seed: outcome = uint16(keccak(rngWord,"PRESALE_BOX",player,amount)) % 100.
+    // Outcome bands off the seed: outcome = uint16(keccak(rngWord,PRESALE_BOX_TAG,player,index)) % 100.
     // FLIP < 50, DGNRS in [50,90), WWXRP >= 90.
 
     function setUp() public {
@@ -98,18 +98,18 @@ contract PresaleBoxDrain is DeployProtocol {
         assertEq(_poolBal(), target, "pool seeded to target");
     }
 
-    /// @dev The on-chain outcome for (rngWord, player, amount): mirrors _resolvePresaleBox EXACTLY.
-    function _outcome(uint256 rngWord, address player, uint256 amount) internal pure returns (uint256) {
+    /// @dev The on-chain outcome for (rngWord, player, index): mirrors _resolvePresaleBox EXACTLY.
+    function _outcome(uint256 rngWord, address player, uint48 index) internal pure returns (uint256) {
         uint256 seed = uint256(
-            keccak256(abi.encodePacked(rngWord, keccak256("PRESALE_BOX"), player, amount))
+            keccak256(abi.encodePacked(rngWord, keccak256("PRESALE_BOX"), player, index))
         );
         return uint16(seed) % 100;
     }
 
-    /// @dev Brute-force a rngWord (>0) so (player, amount) lands the DGNRS branch [50,90).
-    function _wordForDgnrs(address player, uint256 amount) internal pure returns (uint256 w) {
+    /// @dev Brute-force a rngWord (>0) so (player, index) lands the DGNRS branch [50,90).
+    function _wordForDgnrs(address player, uint48 index) internal pure returns (uint256 w) {
         for (w = 1; w < 5000; ++w) {
-            uint256 o = _outcome(w, player, amount);
+            uint256 o = _outcome(w, player, index);
             if (o >= 50 && o < 90) return w;
         }
         revert("no DGNRS word found");
@@ -167,9 +167,9 @@ contract PresaleBoxDrain is DeployProtocol {
         uint256 poolStart = _poolBal();
 
         // Force the DGNRS branch for each (control the per-index word + per-player seed).
-        uint256 word1 = _wordForDgnrs(tier1Buyer, amount);
-        assertGe(_outcome(word1, tier1Buyer, amount), 50, "tier1 outcome >= 50");
-        assertLt(_outcome(word1, tier1Buyer, amount), 90, "tier1 outcome < 90");
+        uint256 word1 = _wordForDgnrs(tier1Buyer, index);
+        assertGe(_outcome(word1, tier1Buyer, index), 50, "tier1 outcome >= 50");
+        assertLt(_outcome(word1, tier1Buyer, index), 90, "tier1 outcome < 90");
 
         // Resolve tier-1 box; the pool delta is the on-chain DGNRS reward.
         _setRngWord(index, word1);
@@ -180,7 +180,7 @@ contract PresaleBoxDrain is DeployProtocol {
         assertGt(reward1, 0, "tier1 drew DGNRS");
 
         // Resolve tier-5 box (re-seed the word for the tier-5 player so it also hits DGNRS).
-        uint256 word5 = _wordForDgnrs(tier5Buyer, amount);
+        uint256 word5 = _wordForDgnrs(tier5Buyer, index);
         _setRngWord(index, word5);
         uint256 before5 = _poolBal();
         vm.prank(tier5Buyer);
@@ -253,7 +253,7 @@ contract PresaleBoxDrain is DeployProtocol {
         uint256 opened;
         for (uint256 i = 0; i < nNonClosing; ++i) {
             if (_poolBal() == 0) break; // pool already empty -> stop opening
-            uint256 word = _wordForDgnrs(buyers[i], amount);
+            uint256 word = _wordForDgnrs(buyers[i], index);
             _setRngWord(index, word);
             uint256 poolBefore = _poolBal();
             vm.prank(buyers[i]);
@@ -269,7 +269,7 @@ contract PresaleBoxDrain is DeployProtocol {
 
         // Open the CLOSING box. Force its own roll to the DGNRS branch too (worst case: the
         // closer also tries to draw a per-box reward AND sweep). It must not revert.
-        uint256 closerWord = _wordForDgnrs(closer, amount);
+        uint256 closerWord = _wordForDgnrs(closer, index);
         _setRngWord(index, closerWord);
         uint256 poolBeforeClose = _poolBal();
         vm.prank(closer);
@@ -287,11 +287,11 @@ contract PresaleBoxDrain is DeployProtocol {
     //  Task 2 -- PFIX-02 realistic 50-ETH run: closing sweep is variance DUST
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @dev Brute-force a rngWord (>0) so (player, amount) lands a chosen outcome BAND.
+    /// @dev Brute-force a rngWord (>0) so (player, index) lands a chosen outcome BAND.
     ///      band: 0 = FLIP [0,50), 1 = DGNRS [50,90), 2 = WWXRP [90,100).
-    function _wordForBand(address player, uint256 amount, uint8 band) internal pure returns (uint256 w) {
+    function _wordForBand(address player, uint48 index, uint8 band) internal pure returns (uint256 w) {
         for (w = 1; w < 20000; ++w) {
-            uint256 o = _outcome(w, player, amount);
+            uint256 o = _outcome(w, player, index);
             if (band == 0 && o < 50) return w;
             if (band == 1 && o >= 50 && o < 90) return w;
             if (band == 2 && o >= 90) return w;
@@ -352,12 +352,12 @@ contract PresaleBoxDrain is DeployProtocol {
             if (_poolBal() == 0) {
                 // Pool already empty: remaining DGNRS-branch opens draw 0 (clamp). Still open
                 // them so the run is complete and the closer is reached.
-                _setRngWord(index, _wordForBand(buyers[i], boxAmount, bands[i]));
+                _setRngWord(index, _wordForBand(buyers[i], index, bands[i]));
                 vm.prank(buyers[i]);
                 game.openBox(buyers[i], index);
                 continue;
             }
-            _setRngWord(index, _wordForBand(buyers[i], boxAmount, bands[i]));
+            _setRngWord(index, _wordForBand(buyers[i], index, bands[i]));
             uint256 poolBefore = _poolBal();
             vm.prank(buyers[i]);
             game.openBox(buyers[i], index);
@@ -373,7 +373,7 @@ contract PresaleBoxDrain is DeployProtocol {
         // --- The closing box: its sweep mops up only the residual remainder. ---
         // Force the closer's own roll to WWXRP (1-token dud, draws NOTHING from the pool) so the
         // measured pool delta across the closing open is the closing SWEEP alone.
-        _setRngWord(index, _wordForBand(closer, boxAmount, 2));
+        _setRngWord(index, _wordForBand(closer, index, 2));
         uint256 poolBeforeClose = _poolBal();
         vm.prank(closer);
         game.openBox(closer, index);

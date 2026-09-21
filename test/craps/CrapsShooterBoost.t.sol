@@ -87,7 +87,7 @@ contract BoostHarness is CrapsViews {
         board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(word, address(uint160(header))))),
+            uint256(keccak256(abi.encode(word, SCATTER_TAG, address(uint160(header))))),
             chipFlip,
             _BONUS_CHIPS - placed
         );

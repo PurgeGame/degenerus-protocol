@@ -338,6 +338,7 @@ contract DegeneretteHeroScoreTest is DeployProtocol {
 
         uint48 index = 1;
         uint256 word = uint256(keccak256("hero06_dgas_word"));
+        while (uint256(keccak256(abi.encode(word, player, uint256(2), uint256(0x446567656e537572766976616c)))) & 1 == 0) ++word;
         uint32 ticket = _resultTicketForSpin(index, word, 0); // 8/8 self-match on spin 0
 
         // Mixed-currency batch: ETH(4 spins) + FLIP(3) + WWXRP(2), same ticket.

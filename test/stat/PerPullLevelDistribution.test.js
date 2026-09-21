@@ -156,7 +156,9 @@ function jsBonusEntropy(randomWord) {
 //   w[2] = 128 + uint8((rw >> 12) & 0x3F)// 128..191
 //   w[3] = 192 + uint8((rw >> 18) & 0x3F)// 192..255
 function jsGetRandomTraits(rw) {
-  const r = BigInt(rw);
+  const r = BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
+    ["uint256", "bytes32"], [rw, hre.ethers.id("degenerus.jackpot.trait-board")]
+  )));
   return [
     Number(r & 0x3Fn),
     64 + Number((r >> 6n) & 0x3Fn),

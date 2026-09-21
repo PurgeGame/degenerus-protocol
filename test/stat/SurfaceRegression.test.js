@@ -1021,15 +1021,13 @@ describe("v38.0 SURF-01..02 — protected surfaces vs v37.0 baseline 2654fcc2", 
     // v34.0 / v33.0 blocks above. The Phase 272 audit-tree files
     // expected on disk at v38 close are cited here so renames trip the
     // gate (D-IMPL-11 carry-forward).
-    const phase272AuditFiles = [
-      "audit/FINDINGS-v37.0.md",
-      // audit/FINDINGS-v38.0.md is authored at Wave 3 (Task 3.1+); not
-      // asserted here because Wave 2 runs before Wave 3 in CI ordering.
-    ];
-    for (const f of phase272AuditFiles) {
+    // The external audit checkout contains the public handoff, not the ignored
+    // internal milestone archive. Pin the artifacts reviewers actually receive.
+    const publicAuditFiles = ["docs/AUDIT.md", "docs/audit/snapshot.json", "scope.txt"];
+    for (const f of publicAuditFiles) {
       expect(
         fs.existsSync(f),
-        `[v38.0 SURF] expected audit-tree file ${f} to exist on disk; ` +
+        `[v38.0 SURF] expected public audit file ${f} to exist on disk; ` +
         `anchor-discipline drift detection.`,
       ).to.equal(true);
     }

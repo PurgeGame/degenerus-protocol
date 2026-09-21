@@ -11,7 +11,7 @@
 // function is `private view` so an inheritance harness cannot reach it).
 //
 // Algorithm lock (D-42N-DETERMINISM-01, locked at Phase 292):
-//   - Pass-2 keccak input is `abi.encode(uint256 entropy, uint32 day)` —
+//   - Pass-2 keccak input is `abi.encode(uint256 entropy, bytes32 HERO_SYMBOL_TAG, uint32 day)` —
 //     each value left-padded to a 32-byte word (uint256 + uint32 → 64 bytes).
 //   - Pass-2 cursor walks flat idx ascending `0..31`; `leaderBonus` is added
 //     at `idx == leaderIdx` (NOT a separate `idx == 32` bucket).
@@ -23,7 +23,7 @@
 //     once and unrolls 32 fields into the flat cache. Mirror via `Uint32Array(32)`.
 //
 // Entropy domain (D-42N-COLOR-ENTROPY-01, locked at Phase 292 §3.e):
-//   - Symbol-roll path consumes `keccak256(abi.encode(randomWord, day))`.
+//   - Symbol-roll path consumes `keccak256(abi.encode(randomWord, HERO_SYMBOL_TAG, day))`.
 //   - Color path (separate, lives in `_applyHeroOverride` L1620) consumes
 //     bits of the post-keccak word `r` and is orthogonal to this helper.
 //
@@ -40,11 +40,12 @@
 //     audit subject; this file is a NEW sibling for the HRROLL audit subject
 //     per the Phase 282/291 file-separation pattern. Do NOT merge.
 
-import { AbiCoder, keccak256 } from "ethers";
+import { AbiCoder, keccak256, id } from "ethers";
 
 const U64_MASK = (1n << 64n) - 1n;
 const U32_MASK = (1n << 32n) - 1n;
 const U256_MASK = (1n << 256n) - 1n;
+const HERO_SYMBOL_TAG = id("degenerus.jackpot.hero-symbol");
 const abiCoder = AbiCoder.defaultAbiCoder();
 
 /// @notice JS bit-mirror of `_rollHeroSymbol` (contracts/modules/DegenerusGameJackpotModule.sol L1639-L1700).
@@ -60,7 +61,7 @@ const abiCoder = AbiCoder.defaultAbiCoder();
 ///   L1681     uint64 leaderBonus = uint64(maxAmount) / 2
 ///                                            → BigInt(maxAmount) >> 1n
 ///   L1682     uint64 effectiveTotal = total + leaderBonus
-///   L1683-L1685 uint64 pick = uint64(uint256(keccak256(abi.encode(entropy, day))) % effectiveTotal)
+///   L1683-L1685 uint64 pick = uint64(uint256(keccak256(abi.encode(entropy, HERO_SYMBOL_TAG, day))) % effectiveTotal)
 ///   L1687-L1699 pass-2 cursor walk; leaderBonus add at idx == leaderIdx;
 ///             return (true, idx >> 3, idx & 7) on first cumulative > pick.
 ///   L1700     implicit fall-through returns named-return defaults (false, 0, 0)
@@ -130,12 +131,12 @@ export function rollHeroSymbolRef({ day, entropy, dailyHeroWagers, excludeIdx = 
   const leaderBonus = BigInt(maxAmount) >> 1n; // uint64(maxAmount) / 2
   const effectiveTotal = (total + leaderBonus) & U64_MASK;
 
-  // Solidity `abi.encode(uint256 entropy, uint32 day)` packs each value into a
+  // Solidity `abi.encode(uint256 entropy, bytes32 HERO_SYMBOL_TAG, uint32 day)` packs each value into a
   // 32-byte word; ethers AbiCoder produces the identical byte layout (verified
   // at the v41 mint-batch oracle via Phase 282 W2 invariant pass).
   const encoded = abiCoder.encode(
-    ["uint256", "uint32"],
-    [entropyBn, dayBn]
+    ["uint256", "bytes32", "uint32"],
+    [entropyBn, HERO_SYMBOL_TAG, dayBn]
   );
   const pick = BigInt(keccak256(encoded)) % effectiveTotal;
 

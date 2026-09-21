@@ -13,8 +13,8 @@ sha256sum -c docs/audit/source-sha256.txt
 ```
 
 Any source change requires a new manifest and appropriately scoped verification. The
-test and static-analysis results recorded in [Verification](VERIFICATION.md) apply to the
-manifest's base revision only. The audit snapshot does not identify or certify any
+test and static-analysis results recorded in [Verification](VERIFICATION.md) identify
+the source version actually checked; historical rows do not verify the latest snapshot. The audit snapshot does not identify or certify any
 deployed instance.
 
 ## Read in this order
@@ -22,7 +22,9 @@ deployed instance.
 1. [Architecture](ARCHITECTURE.md): modules, funding and settlement boundaries.
 2. [Security](../SECURITY.md): who can do what and which dependencies are trusted.
 3. [Known issues](../KNOWN-ISSUES.md) and [economic disclosures](../ECONOMIC_DISCLOSURES.md).
-4. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
+4. [RNG domains](audit/RNG-DOMAINS.md): seeds, intentional shared outcomes and retained exceptions.
+5. [Current readiness review](audit/AUDIT-READINESS-2026-09-21.md): changes, evidence and remaining limits.
+6. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
 
 ## Review priorities
 

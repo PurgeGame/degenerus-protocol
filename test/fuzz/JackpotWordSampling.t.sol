@@ -93,7 +93,7 @@ contract JackpotWordSamplingTest is Test {
         if (cap >= 8) cap = (cap / 8) * 8;
         expected.entriesEach = cap == 0 ? 0 : (awards / cap) * 4;
         expected.entropy = uint256(keccak256(abi.encode(
-            uint256(keccak256(abi.encode(word, uint24(42)))), uint8(0), expected.entriesEach
+            uint256(keccak256(abi.encode(word, uint24(42)))), uint8(0)
         )));
         h.seed(expected.trait, len, expected.deity, awards);
         vm.recordLogs();

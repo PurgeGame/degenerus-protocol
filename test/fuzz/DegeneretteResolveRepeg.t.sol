@@ -482,9 +482,10 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         _seedFuturePrizePool(1_000_000 ether);
 
         // Word chosen so the FLIP bet b1 (betId 2) WINS its bet-keyed survival flip
-        // (keccak(word, betId) & 1 == 1) — keeps the FLIP non-vacuity assert live.
+        // (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 1) — keeps the FLIP non-vacuity assert live.
         uint48 index = 1;
         uint256 word = uint256(keccak256("gate_independence_word_v3"));
+        while (uint256(keccak256(abi.encode(word, player, uint256(2), uint256(0x446567656e537572766976616c)))) & 1 == 0) ++word;
         uint32 ticket = _winningTicketFor(index, word);
 
         _fundFlip(player, 1_000 ether);

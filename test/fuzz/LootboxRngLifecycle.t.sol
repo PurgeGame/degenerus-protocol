@@ -466,7 +466,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Two different players purchasing at the same index produce different entropy.
-    ///         Entropy = keccak256(abi.encode(rngWord, player, day, amount)).
+    ///         First-roll entropy = H(rngWord, player, BOX_OPEN_TAG, 1).
     ///         Different player addresses -> different preimage -> different entropy.
     function test_entropyUniqueDifferentPlayers(uint256 vrfWord) public {
         vm.assume(vrfWord != 0);
@@ -495,20 +495,16 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertTrue(amount1 != 0, "Buyer1 should have lootbox amount");
         assertTrue(amount2 != 0, "Buyer2 should have lootbox amount");
 
-        // Compute entropy for each buyer using the contract's formula:
-        // entropy = keccak256(abi.encode(rngWord, player, day, amount))
-        // Day is 2 (setUp warps to day 2, so purchases happen on day 2)
-        uint48 day = 2;
-        uint256 entropy1 = uint256(keccak256(abi.encode(storedWord, buyer1, day, amount1)));
-        uint256 entropy2 = uint256(keccak256(abi.encode(storedWord, buyer2, day, amount2)));
+        uint256 entropy1 = uint256(keccak256(abi.encode(storedWord, buyer1, uint256(0x426f784f70656e), uint256(1))));
+        uint256 entropy2 = uint256(keccak256(abi.encode(storedWord, buyer2, uint256(0x426f784f70656e), uint256(1))));
 
         // Different player addresses in preimage -> different entropy
         assertTrue(entropy1 != entropy2, "Different players must produce different entropy");
     }
 
     /// @notice Same player with different amounts at different indices produces different entropy.
-    ///         Different VRF words + different amounts -> different preimage -> different entropy.
-    function test_entropyUniqueDifferentAmounts(uint256 vrfWord) public {
+    ///         Different committed words select different streams; amount does not select the seed.
+    function test_entropyUniqueDifferentCommittedWords(uint256 vrfWord) public {
         vm.assume(vrfWord != 0);
 
         address buyer = makeAddr("amountBuyer");
@@ -533,16 +529,16 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 amount2 = _lootboxAmount(index2, buyer);
 
         // Compute entropy for each
-        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(2), amount1)));
-        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint48(3), amount2)));
+        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint256(0x426f784f70656e), uint256(1))));
+        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint256(0x426f784f70656e), uint256(1))));
 
-        // Different amounts AND different VRF words -> different entropy
-        assertTrue(entropy1 != entropy2, "Different amounts must produce different entropy");
+        // Different VRF words -> different entropy
+        assertTrue(entropy1 != entropy2, "Different committed words must produce different entropy");
     }
 
     /// @notice Same player purchasing on different days produces different entropy.
-    ///         Even if VRF words were identical, the day parameter in keccak256 differs.
-    function test_entropyUniqueDifferentDays(uint256 vrfWord) public {
+    ///         Even if words repeat, the boon domain binds the recorded index.
+    function test_boonEntropyUniqueDifferentIndices(uint256 vrfWord) public {
         vm.assume(vrfWord != 0);
 
         address buyer = makeAddr("dayBuyer");
@@ -565,17 +561,17 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 word2 = _readLootboxWord(index2);
         uint256 amount2 = _lootboxAmount(index2, buyer);
 
-        // Compute entropy using the recorded day for each purchase
-        // First purchase is day=2, second purchase is day=3
-        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint48(2), amount1)));
-        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint48(3), amount2)));
+        // The boon root binds each stored order index.
+        assertNotEq(index1, index2, "fixture must advance the order index");
+        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint256(0x426f78426f6f6e), index1)));
+        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint256(0x426f78426f6f6e), index2)));
 
-        // Different day values in preimage -> different entropy
-        assertTrue(entropy1 != entropy2, "Different days must produce different entropy");
+        // Different recorded indices -> different boon entropy
+        assertTrue(entropy1 != entropy2, "Different indices must produce different boon entropy");
     }
 
     /// @notice Same player purchasing twice at the same index accumulates amounts.
-    ///         The total amount changes the keccak preimage for entropy.
+    ///         The total amount sizes awards without entering their seed.
     function test_entropyAccumulationSamePlayer() public {
         address buyer = makeAddr("accumBuyer");
         uint48 purchaseIndex = _readLootboxRngIndex();

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {JackpotBoardFixtures} from "../fuzz/helpers/JackpotBoardFixtures.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -146,21 +148,20 @@ abstract contract DayOneFixture is DeployProtocol {
     uint256 internal constant GOLD_MASK = (uint256(0x38) << 0) | (uint256(0x38) << 6) | (uint256(0x38) << 12)
         | (uint256(0x38) << 18);
 
-    /// @dev Bits 0-2 of each quadrant trait are the symbol. Symbols 0 and 6 are the genesis
-    ///      deities, whose virtual entries would turn an empty gold board into deity wins, so a
-    ///      quadrant that hashes to one of them is nudged to a neighbouring symbol; every other
-    ///      quadrant keeps its hashed symbol so the seeded draws are unchanged.
+    /// @dev Exact all-gold board with symbols 1,2,3,4, excluding genesis deities 0/6.
     function _allGoldWord(bytes32 tag) internal pure returns (uint256 word) {
-        word = uint256(keccak256(abi.encodePacked(tag))) | GOLD_MASK;
-        for (uint256 q; q < 4; ++q) {
-            uint256 sym = (word >> (q * 6)) & 7;
-            if (sym == 0 || sym == 6) word ^= uint256(1) << (q * 6); // 0 -> 1, 6 -> 7
-        }
+        word = JackpotBoardFixtures.wordFor([7, 7, 7, 7], [1, 2, 3, 4], tag == bytes32(0));
     }
 
     function _plainWord(bytes32 tag) internal pure returns (uint256) {
-        // Clear one color bit per quadrant so no quadrant is gold (the typical branch).
-        return (uint256(keccak256(abi.encodePacked(tag))) & ~GOLD_MASK) | 1;
+        uint256 word = uint256(keccak256(abi.encodePacked(tag))) | 1;
+        while (true) {
+            uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+            bool gold;
+            for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) gold = true;
+            if (!gold) return word;
+            word += 2;
+        }
     }
 
     /// @dev Day 400 puts every seeded slot far past the deploy program — the cold, worst-case shape.

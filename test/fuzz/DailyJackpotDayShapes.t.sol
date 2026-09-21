@@ -75,14 +75,17 @@ contract DailyJackpotDayShapes is Test {
 
     /// @dev A mixed-colour board with deep buckets at both the purchase level and the next.
     function _board(uint256 salt) internal returns (uint256 word) {
-        uint8[4] memory colors = [1, 2, 3, 4];
-        uint8[4] memory syms = [3, 4, 5, 6];
-        for (uint256 i; i < 4; ++i) {
-            word |= (uint256(colors[i]) << 3 | uint256(syms[i])) << (i * 6);
+        word = salt;
+        uint8[4] memory traits;
+        while (true) {
+            traits = JackpotBucketLib.getRandomTraits(word);
+            bool hasGold;
+            for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) hasGold = true;
+            if (!hasGold) break;
+            ++word;
         }
-        word |= salt << 24;
         for (uint8 i; i < 4; ++i) {
-            uint8 trait = uint8(uint256(i) * 64 + ((word >> (uint256(i) * 6)) & 0x3F));
+            uint8 trait = traits[i];
             h.seedBucket(LVL, trait, 60, uint160(0x4000) + uint160(i) * 1000);
             h.seedBucket(LVL + 1, trait, 60, uint160(0x8000) + uint160(i) * 1000);
         }

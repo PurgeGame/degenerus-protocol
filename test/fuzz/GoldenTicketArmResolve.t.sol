@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {JackpotBoardFixtures} from "./helpers/JackpotBoardFixtures.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
@@ -200,18 +201,14 @@ contract GoldenTicketArmResolve is Test {
 
     // -- board crafting -------------------------------------------------------
 
-    /// @dev Builds a VRF word whose base board has the given per-quadrant colors and
-    ///      symbols (bits [6i+5:6i+3] = color, [6i+2:6i] = symbol). `salt` fills the
-    ///      unrelated high bits.
+    /// @dev A verified tagged-word preimage for the exact board; later salts choose
+    ///      a second preimage so repeat boards can have distinct draw roots.
     function wordFor(
         uint8[4] memory colors,
         uint8[4] memory syms,
         uint256 salt
     ) internal pure returns (uint256 w) {
-        for (uint256 i; i < 4; ++i) {
-            w |= (uint256(colors[i]) << 3 | uint256(syms[i])) << (i * 6);
-        }
-        w |= salt << 24;
+        return JackpotBoardFixtures.wordFor(colors, syms, salt == 0xBEEF || salt == 0xFEED);
     }
 
     function allGoldWord(uint8[4] memory syms, uint256 salt) internal pure returns (uint256) {
@@ -220,7 +217,7 @@ contract GoldenTicketArmResolve is Test {
 
     /// @dev Trait byte for quadrant i on a board word: 64*i + 6-bit group.
     function traitOf(uint256 word, uint8 i) internal pure returns (uint8) {
-        return uint8(uint256(i) * 64 + ((word >> (uint256(i) * 6)) & 0x3F));
+        return JackpotBucketLib.getRandomTraits(word)[i];
     }
 
     function seedBoardBuckets(uint256 word, uint160 base) internal {
@@ -483,7 +480,8 @@ contract GoldenTicketArmResolve is Test {
         assertEq(passes, passValue / HALF_PASS, "75% of remainder in half-passes");
         uint256 expFlip = ((remainder - passValue) * COIN_UNIT) /
             PriceLookupLib.priceForLevel(LVL + 1);
-        assertEq(flip, expFlip, "25% of remainder as flip credit");
+        expFlip = (expFlip / 100 ether) * 100 ether;
+        assertEq(flip, expFlip, "25% of remainder, truncated to whole 100-FLIP credit");
         assertEq(wwxrp, 0);
         assertEq(h.claimableOf(winner) - claimBefore, expEth, "only ETH leg hits claimable");
         (, uint128 futAfterRaw) = h.poolsView();

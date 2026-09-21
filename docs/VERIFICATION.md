@@ -3,7 +3,7 @@
 ## Reproduce in a clean checkout
 
 Use the lockfiles, pinned compiler configuration and submodules. CI pins Node 20
-(`.github/workflows/ci.yml`); the recorded evidence ran on Node 24.18.0. Record
+(`.github/workflows/ci.yml`); local recorded evidence ran on Node 24.18.0. Record
 `node --version`, `forge --version` and `git rev-parse HEAD` with results. Verify the
 snapshot hashes first, before anything patches addresses. The submodule step fetches
 `lib/forge-std` from GitHub at the revision pinned in `foundry.lock`.
@@ -14,45 +14,31 @@ npm ci
 git submodule update --init --recursive
 ```
 
-Both test fixtures rewrite `contracts/ContractAddresses.sol`: `scripts/lib/patchForFoundry.js`
-before Foundry, and the Hardhat deployment fixture during `hardhat test`. Only `make test-foundry`
-restores the file. Run in a disposable checkout, and restore with
-`git checkout -- contracts/ContractAddresses.sol` before switching between the two runners
-or reading a size table.
+Both test fixtures rewrite `contracts/ContractAddresses.sol`. The grouped Foundry
+runner saves the exact original bytes and restores them in `finally`, including on
+failure or Ctrl-C. Hardhat still requires a disposable checkout. Do not run both
+runners against the same source directory or overwrite another runner's pins.
 
 ### Foundry
 
-The whole `test/` tree is one compile unit for a bare `forge test`; that unit does not
-finish compiling on a 64 GB machine. Run the tree as seven compile units instead: give
-Foundry its own cache with `FOUNDRY_CACHE_PATH` (the Hardhat and Foundry caches otherwise
-collide in `cache/`), and for each unit pass `--skip <path>` for every `test/**/*.sol` file
-outside that unit, never skipping `test/fuzz/helpers/` or `test/fuzz/handlers/`. The seven
-keep-sets used for the evidence row:
-
-1. `test/craps`, `test/differential`, `test/economics`, `test/gas`, `test/helpers`, `test/mutation`, `test/invariant`
-2. `test/repro`, `test/halmos`
-3-6. `test/fuzz/*.t.sol` (top level only) split into four roughly equal file lists
-7. `test/fuzz/invariant`
+The full test tree exceeds the practical memory budget of a single compilation.
+The committed runner discovers all Solidity tests, rejects unassigned test files,
+and runs seven bounded compile units with a separate Foundry cache. Helper sources
+remain available to every group. It preserves the configured 1,000 fuzz runs and
+256 invariant runs at depth 128; splitting compilation does not lower those limits.
 
 ```sh
-export FOUNDRY_CACHE_PATH="$PWD/.fcache"
-node scripts/lib/patchForFoundry.js
-ALL=$(find test -name '*.sol' | grep -v '/fuzz/handlers/\|/fuzz/helpers/' | sort)
-# unit 1 (the craps, gas, economics and mutation slice in the evidence table)
-KEEP=$(find test/craps test/differential test/economics test/gas test/helpers test/mutation test/invariant -name '*.sol' | sort)
-SKIP=(); for f in $ALL; do grep -qxF "$f" <<< "$KEEP" || SKIP+=(--skip "$f"); done
-forge test "${SKIP[@]}"
-# repeat with the keep-set of each remaining unit
-git checkout -- contracts/ContractAddresses.sol
+make test-foundry
+# Inspect or select compile groups:
+python3 scripts/test-foundry-groups.py --list
+python3 scripts/test-foundry-groups.py --group integration-gas
+# A focused compile rather than just a post-compilation test filter:
+python3 scripts/test-foundry-groups.py --file test/repro/TerminalAffiliateKnownWord.t.sol
 ```
 
-For a quick targeted pass without the unit split:
-
-```sh
-forge test --match-path 'test/craps/*.t.sol'
-forge test --match-path 'test/fuzz/*Comp*.t.sol'
-forge test --match-path 'test/fuzz/invariant/Craps*.t.sol'
-```
+Raw logs and exact file lists default to `.audit-test-logs/foundry`; `summary.json`
+records each exit code and result. `--log-dir` changes the evidence directory.
+Unknown options are forwarded to `forge test`. CI uses the same grouped runner.
 
 ### Hardhat
 
@@ -83,6 +69,10 @@ cargo install aderyn   # or: npm install -g @cyfrin/aderyn
 aderyn . -o aderyn-report.md
 ```
 
+The current local Slither run explicitly selected `--compile-force-framework hardhat
+--ignore-compile` after compilation; this avoids auto-selecting Foundry without its
+required build-info output.
+
 CI runs Slither through `crytic/slither-action` with `--exclude-informational
 --exclude-optimization` and Aderyn with the same `aderyn . -o aderyn-report.md`; the evidence
 row counts come from `npm run slither` with the flags above.
@@ -90,15 +80,16 @@ row counts come from `npm run slither` with the flags above.
 ### Size table
 
 ```sh
-forge build --sizes
+forge build --skip test
+node scripts/check-deployment-sizes.js
 ```
 
-The command exits non-zero on this tree: test helpers that are not `.t.sol` files
-(`CrapsViews`, `GameSeeder`) exceed 24,576 bytes and `--skip test` does not exclude them.
-Deployable code is the `DEPLOY_ORDER` name map in `scripts/lib/predictAddresses.js`
-(what `scripts/deploy.js` deploys) plus the Vault's two share tokens; read only those rows.
-CI parses `forge build --sizes --json` and skips names ending in `Harness`, `Tester` or
-`Seeder` or starting with `Mock`.
+The size gate reads the exact `DEPLOY_ORDER` name map plus `DegenerusVaultShare`,
+rejects missing/unlinked bytecode and stale source hashes, and requires every
+runtime to fit 24,576 bytes. It does not classify deployments by test-helper name
+suffixes. Build failures are fatal. `FOUNDRY_OUT` or a positional artifact directory
+selects a nondefault output. Address pins affect optimizer output; check the actual
+deployment pins as well as each test fixture.
 
 ## Structural and gas checks
 
@@ -119,8 +110,55 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Evidence status
+## Current evidence — 2026-09-21
 
+The source is the working-tree snapshot based on `1a4d06d08aa1c5e2a15575039dd66e9c8cc1e0b3`.
+See [the readiness review](audit/AUDIT-READINESS-2026-09-21.md) and
+[the evidence archive](audit/evidence-2026-09-21.tar.gz). Exact test identities and
+which rerun supplies each result are in `foundry-reconciliation.json` inside the archive.
+
+| Check | Result |
+| --- | --- |
+| Foundry full seven-group sweep | 2,608 passes, 45 initial failures, 103 skips; every initial failure resolved by the affected-suite reruns |
+| Reconciled Foundry identities, including new regressions | 2,550 unique passing tests, 0 unresolved failures, 103 skipped; duplicate imported test executions counted once |
+| Final decimator/claim/freeze/golden/gas rerun | 58 passed, 0 failed, 7 skipped; includes 1,000 full-width entropy fuzz cases and the century stress variants |
+| Final Hardhat full suite | 1,658 passed, 0 failed, 23 pending |
+| Final statistical suite | 191 passed, 20 pending, 2 previously disclosed failures: obsolete v36 protected-source baseline and STAT-03 empty-bucket expectation |
+| Eleven source/interface gates | All pass; 245 RNG taint sites, 91 registered RNG storage accesses and 223 advance external-call sites |
+| Storage layout oracle | All 27 top-level goldens and delegatecall slot alignment pass; the packed one-slot decimator snapshot and its tagged claim seed are separately checked by `DecimatorEntropy.t.sol` |
+| Runtime size | All 32 deployment entries fit EIP-170 with checked-in and test pins; smallest measured headroom is 16 bytes under Hardhat fixture pins |
+| Static analysis | Current counts and triage context in the readiness review; analyzer output is not a clean-bill-of-health assertion |
+
+Fuzz tests retain the configured 1,000 cases (some existing tests request 10,000);
+invariants retain 256 runs at depth 128. The full sweep ran during fixture repairs.
+The final decimator full-word storage change followed that sweep and was checked
+with the 58-test affected suite, a fresh production build, layout/source gates,
+full Hardhat rerun and refreshed analyzers. The archive preserves the earlier
+contract hashes and initial failed logs; it does not present this as a single
+uninterrupted green Foundry invocation. Current discovery splits 193 top-level
+fuzz sources into 49/49/49/46 groups; the earlier sweep had 48 in each group.
+
+Cold full-transaction gas measurements (including intrinsic gas where named):
+
+| Path | Gas |
+| --- | ---: |
+| Century consolidation + failed/rolled-back 365-day vault settlement, final decimator storage | 13,339,416 |
+| Same century case, successful vault settlement | 13,302,484 |
+| Terminal fresh-word settlement + deity refunds | 10,418,873 |
+| Terminal recorded-word settlement + deity refunds | 10,330,161 |
+| Early-bird 128-recipient, hero and partial-source-word pressure (call gas, excluding intrinsic) | 7,895,877 |
+| Genesis initialization, both protocol deities | 16,378,197 |
+
+The largest measured cold advance has 1,660,584 gas below the 15M review target
+and 3,437,800 below the 16,777,216 transaction cap. Genesis is a separate
+initialization transaction with only 399,019 gas spare. Stress fixtures retain
+explicit capped calls and their non-vacuity assertions. These measurements are
+not a mathematical maximum over all reachable states. Summing two separate
+advance stages does not describe a single transaction.
+
+## Historical evidence — 2026-09-18
+
+These results precede the current source snapshot and are retained as a baseline.
 Recorded on 2026-09-18 (Node 24.18.0, Foundry 1.6.0-nightly, solc 0.8.34) at the manifest's
 base revision `2d350e4f9`. The whole-tree Foundry rows were measured on that revision's
 sources before they were committed; the far-future suites were re-run after the last
