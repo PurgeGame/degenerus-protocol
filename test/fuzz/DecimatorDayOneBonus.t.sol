@@ -29,7 +29,7 @@ contract DecimatorDayOneBonus is DeployProtocol {
     uint256 internal constant BPS = 10_000;
     uint256 internal constant DAY_ONE_BONUS_BPS = 12_000; // mirror of the module constant
     uint256 internal constant MULT_MAX_BPS = 17_833; // ActivityCurveLib.MULT_MAX_BPS
-    uint256 internal constant MULTIPLIER_CAP = 200_000 ether; // DECIMATOR_MULTIPLIER_CAP
+    uint256 internal constant MULTIPLIER_CAP = 500_000 ether; // DECIMATOR_MULTIPLIER_CAP, on BASE burn
 
     uint24 internal constant LVL = 5;
     uint8 internal constant BUCKET = 5;
@@ -92,17 +92,25 @@ contract DecimatorDayOneBonus is DeployProtocol {
         assertEq(_recordedBurn(), expected, "stacked weight mismatch");
     }
 
-    /// @notice The 200k multiplied-accrual cap bounds the boosted weight: beyond the
-    ///         cap allowance, the remainder of the burn counts at face value.
+    /// @notice The 500k BASE cap bounds the boosted weight: the first 500k FLIP of base
+    ///         carries the multiplier, the remainder of the burn counts at face value.
     function test_bonusBoundedByMultiplierCap() public {
         _setDayOneLatch(true);
-        uint256 base = 300_000 ether;
+        uint256 base = 600_000 ether;
         _burnAsCoin(base, BPS);
-        // Mirror of _decEffectiveAmount with multBps = 12_000, prevBurn = 0:
-        uint256 boosted = (base * DAY_ONE_BONUS_BPS) / BPS; // 360k > 200k cap
-        assertGt(boosted, MULTIPLIER_CAP, "test premise: burn must exceed cap");
-        uint256 maxMultBase = (MULTIPLIER_CAP * BPS) / DAY_ONE_BONUS_BPS;
-        uint256 expected = (maxMultBase * DAY_ONE_BONUS_BPS) / BPS + (base - maxMultBase);
+        // Mirror of _decEffectiveAmount with multBps = 12_000, prevBase = 0:
+        assertGt(base, MULTIPLIER_CAP, "test premise: base must exceed the cap");
+        uint256 expected = (MULTIPLIER_CAP * DAY_ONE_BONUS_BPS) / BPS + (base - MULTIPLIER_CAP);
         assertEq(_recordedBurn(), expected, "cap-bounded weight mismatch");
+    }
+
+    /// @notice The cap is measured on base across burns, not on the multiplied weight: two
+    ///         burns of 300k each get the multiplier on 500k of base in total.
+    function test_capMeasuredOnBaseAcrossBurns() public {
+        _setDayOneLatch(true);
+        _burnAsCoin(300_000 ether, BPS);
+        _burnAsCoin(300_000 ether, BPS);
+        uint256 expected = (MULTIPLIER_CAP * DAY_ONE_BONUS_BPS) / BPS + (600_000 ether - MULTIPLIER_CAP);
+        assertEq(_recordedBurn(), expected, "base-measured cap mismatch");
     }
 }

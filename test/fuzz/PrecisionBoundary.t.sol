@@ -225,29 +225,20 @@ contract PrecisionBoundaryTest is Test {
 
     /// @notice At the cap boundary, effectiveAmount is non-zero
     function test_decimator_atCapBoundary_effectiveAmountNonZero() public pure {
-        uint256 DECIMATOR_MULTIPLIER_CAP = 200 * PRICE_COIN_UNIT;
+        uint256 DECIMATOR_MULTIPLIER_CAP = 500 * PRICE_COIN_UNIT;
 
-        // Scenario: prevBurn just below cap, baseAmount = 1 FLIP, multBps = 15000 (1.5x)
-        uint256 prevBurn = DECIMATOR_MULTIPLIER_CAP - 1;
+        // Scenario: base burned so far just below the cap, baseAmount = 1 FLIP, multBps = 15000 (1.5x)
+        uint256 prevBase = DECIMATOR_MULTIPLIER_CAP - 1;
         uint256 baseAmount = PRICE_COIN_UNIT; // 1 full FLIP
         uint256 multBps = 15_000;
 
-        // Replicate _decEffectiveAmount logic
-        uint256 remaining = DECIMATOR_MULTIPLIER_CAP - prevBurn; // = 1
-        uint256 fullEffective = (baseAmount * multBps) / BPS_DENOMINATOR;
-
-        if (fullEffective <= remaining) {
-            // fullEffective fits within remaining -- use it
-            assertTrue(fullEffective > 0, "fullEffective must be > 0");
-        } else {
-            // Cap boundary: split between multiplied and 1x portions
-            uint256 maxMultBase = (remaining * BPS_DENOMINATOR) / multBps;
-            uint256 multiplied = (maxMultBase * multBps) / BPS_DENOMINATOR;
-            uint256 effectiveAmount = multiplied + (baseAmount - maxMultBase);
-            assertTrue(effectiveAmount > 0, "effectiveAmount must be > 0 at cap boundary");
-            // effectiveAmount should be <= fullEffective (cap reduces it)
-            assertLe(effectiveAmount, fullEffective, "capped effective <= uncapped");
-        }
+        // Replicate _decEffectiveAmount: only the base that fits under the cap is multiplied
+        uint256 remaining = DECIMATOR_MULTIPLIER_CAP - prevBase; // = 1 wei
+        uint256 multiplied = baseAmount <= remaining ? baseAmount : remaining;
+        uint256 effectiveAmount = (multiplied * multBps) / BPS_DENOMINATOR + (baseAmount - multiplied);
+        assertTrue(effectiveAmount > 0, "effectiveAmount must be > 0 at cap boundary");
+        assertTrue(effectiveAmount >= baseAmount, "the 1x remainder never falls below base");
+        assertTrue(effectiveAmount <= (baseAmount * multBps) / BPS_DENOMINATOR, "cap only reduces the multiplied share");
     }
 
     // =========================================================================

@@ -150,8 +150,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     bytes32 private constant DECIMATOR_BOX_TAG = keccak256("degenerus.decimator.box");
 
-    /// @dev Multiplier cap for Decimator burns (200 mints worth).
-    uint256 private constant DECIMATOR_MULTIPLIER_CAP = 200 * PRICE_COIN_UNIT;
+    /// @dev Multiplier cap for Decimator burns: the activity multiplier applies to a
+    ///      player's first 500 mints' worth (500k FLIP) of BASE burn at a level; base
+    ///      beyond it counts 1x. Measured on base, not on the multiplied weight.
+    uint256 private constant DECIMATOR_MULTIPLIER_CAP = 500 * PRICE_COIN_UNIT;
+    /// @dev Unit of DecBet.baseMilli: a thousandth of a FLIP.
+    uint256 private constant DEC_BASE_UNIT = 1e15;
 
     /// @dev Maximum denominator for Decimator buckets (2-12 inclusive).
     uint8 private constant DECIMATOR_MAX_DENOM = 12;
@@ -259,10 +263,15 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         }
 
         uint256 effectiveAmount = _decEffectiveAmount(
-            uint256(prevBurn),
+            uint256(m.baseMilli) * DEC_BASE_UNIT,
             baseAmount,
             multBps
         );
+        // Track the base burned (floored to the unit, saturating) so the cap keeps
+        // measuring base rather than weight across every later burn this level.
+        uint256 baseUnits = uint256(m.baseMilli) + baseAmount / DEC_BASE_UNIT;
+        if (baseUnits > type(uint40).max) baseUnits = type(uint40).max;
+        e.baseMilli = uint40(baseUnits);
 
         // Accumulate burn with uint192 saturation
         uint256 updated = uint256(prevBurn) + effectiveAmount;
@@ -576,30 +585,24 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @dev Apply multiplier until the cap is reached; extra amount is counted at 1x.
+    /// @dev Apply the multiplier to the part of this burn's base that still fits under the
+    ///      cap (measured on base burned so far, not on weight); the rest counts 1x.
     ///      Every branch returns 0 for a zero baseAmount, so no zero early-return is needed.
-    /// @param prevBurn Previous accumulated burn amount.
+    /// @param prevBase Base FLIP burned so far this level (wei).
     /// @param baseAmount New burn amount before multiplier.
     /// @param multBps Multiplier in basis points.
-    /// @return effectiveAmount The effective burn amount after applying capped multiplier.
+    /// @return effectiveAmount The effective burn amount after applying the capped multiplier.
     function _decEffectiveAmount(
-        uint256 prevBurn,
+        uint256 prevBase,
         uint256 baseAmount,
         uint256 multBps
     ) private pure returns (uint256 effectiveAmount) {
-        if (
-            multBps <= BPS_DENOMINATOR || prevBurn >= DECIMATOR_MULTIPLIER_CAP
-        ) {
+        if (multBps <= BPS_DENOMINATOR || prevBase >= DECIMATOR_MULTIPLIER_CAP) {
             return baseAmount;
         }
-
-        uint256 remaining = DECIMATOR_MULTIPLIER_CAP - prevBurn;
-        uint256 fullEffective = (baseAmount * multBps) / BPS_DENOMINATOR;
-        if (fullEffective <= remaining) return fullEffective;
-
-        uint256 maxMultBase = (remaining * BPS_DENOMINATOR) / multBps;
-        uint256 multiplied = (maxMultBase * multBps) / BPS_DENOMINATOR;
-        effectiveAmount = multiplied + (baseAmount - maxMultBase);
+        uint256 remaining = DECIMATOR_MULTIPLIER_CAP - prevBase;
+        uint256 multiplied = baseAmount <= remaining ? baseAmount : remaining;
+        effectiveAmount = (multiplied * multBps) / BPS_DENOMINATOR + (baseAmount - multiplied);
     }
 
     /// @dev Deterministically select winning subbucket for a denominator.
