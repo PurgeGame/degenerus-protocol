@@ -112,7 +112,7 @@ advance calls. Test gas caps must not be raised simply to make a regression pass
 
 ## Current evidence — 2026-09-22, single-symbol degenerette and century-recycle revision
 
-The source is the committed revision `c374bfae8afe235f34ba57bc5ae04fb5deb7afba`. Commits after it
+The source is the committed revision `c7287f6eb764274c73a2adb8519c359b953669c6`. Commits after it
 touch only `docs/`, so every hash and every run below describes this tree. It carries six
 changes on top of the reveal and incinerator revision below.
 
