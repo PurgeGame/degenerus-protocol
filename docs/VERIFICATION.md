@@ -158,21 +158,20 @@ entry point `recycleCentury(uint24,uint256)` and the `CenturyRecycled` event cha
 each carries a new selector and topic0 rather than changing meaning silently. The same work adds
 the two view-only ticket-lens search helpers.
 
-An intermediate chain was also run at `d3ddb0c0` (the registry and cap merges, before the
-Degenerette commit); both archives are supplied.
+No separate intermediate chain is supplied for `d3ddb0c0`; see the last row of the table.
 
 | Check | Result |
 | --- | --- |
-| Foundry full seven-group sweep at this revision | FOUNDRY4_ROW |
-| Per-test gas, reveal/incinerator revision vs this revision, same fixture pins | GAS4_ROW |
-| Hardhat `make test-hardhat` | HARDHAT4_ROW |
-| Hardhat `npm run test:stat` | STAT4_ROW |
+| Foundry full seven-group sweep at this revision | 2,711 passed, 0 failed, 104 skipped, run in a detached worktree at this exact revision with its own Foundry cache; all seven groups exit 0. Up 50 tests on the revision below (the single-symbol Degenerette, ticket-lens, entry-reveal, trusted-minter, century-recycle and random-refill suites). The one added skip is `LootboxNestedDgnrsOrdering`, which is LOST COVERAGE rather than a retirement — see KNOWN-ISSUES.md |
+| Per-test gas, reveal/incinerator revision vs this revision, same fixture pins | 918 entries changed and 757 fixed-gas tests moved against the revision below, dominated by the Degenerette rewrite. The largest single line is the newly skipped nested-DGNRS ordering fixture (3,714,661 -> 0, i.e. not run). Among tests that still execute, the largest are `KeeperFaucetResistance:testReResolveResolvedBetRevertsNoSecondReward` +57.3% (196,806 -> 309,533, whose harness changed in this delta) and `DegeneretteFreezeResolutionTest:testResolveBatchTrailingAlreadyResolvedSkipped` -52.7% (636,018 -> 300,847) (`gas-delta-per-test.txt`) |
+| Hardhat `make test-hardhat` | 1,659 passing, 22 pending, 0 failing — identical to the revision below |
+| Hardhat `npm run test:stat` | 157 passing, 19 pending, 2 failing: the same two pre-disclosed reds, the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`. Nothing new is red. The passing count falls from 191 because the rewrite collapsed thirteen payout tables (eight honest (N, heroIsGold) plus five rigged WWXRP) into one shared table, so the per-N loops in `DegenerettePerNEvExactness`, `DegeneretteProducerChi2`, `DegeneretteBonusEv` and `DegeneretteV73Invariants` no longer parameterize; no stat file was deleted and declared `it()` blocks fall 24 -> 13 across those four |
 | Eleven `make check-*` gates and the storage layout oracle | all pass; judged by exit code, including `check-rng-taint` after the `_rollSingleBoxBoons` manifest row was corrected back to `nonceBase = 0`. The oracle matches every golden and reports delegatecall shared-slot consistency between the modules and the Game |
-| EIP-170 runtime size, checked-in pins | SIZEC4_ROW |
-| EIP-170 runtime size, Hardhat-style fixture pins | SIZEH4_ROW |
-| Slither 0.11.5, same flags as below | SLITHER4_ROW |
-| Aderyn 0.6.8 | ADERYN4_ROW |
-| Intermediate chain at `d3ddb0c0` | INTERMEDIATE_ROW |
+| EIP-170 runtime size, checked-in pins | `DegenerusGameMintModule` 24,538 (38 spare), `DegenerusGameAdvanceModule` 24,518 (58 spare), `CrapsBattle` 24,331 (245 spare), `DegenerusGame` 24,192 (384 spare); all 32 entries fit. The advance module spent 120 bytes of headroom in this revision (was 24,398 / 178 spare) on the century-recycle hook and the refill word |
+| EIP-170 runtime size, Hardhat-style fixture pins | `DegenerusGameMintModule` 24,543 (33 spare), `DegenerusGameAdvanceModule` 24,535 (41 spare), `CrapsBattle` 24,399 (177 spare), `DegenerusGame` 24,197 (379 spare); all 32 entries fit |
+| Slither 0.11.5, same flags as below | 3,752 results over 185 contracts with 95 detectors: 202 High, 520 Medium, 556 Low, 2,418 Informational, 56 Optimization (exit 255 is Slither's normal found-issues status). High composition is unchanged except `uninitialized-state` 153 -> 155; both new rows (`DegenerusGameStorage.prizePoolFrozen`, `ticketQueue`) are the standing delegatecall-storage false-positive class — the Game writes them, the modules read them through the shared layout. 18 new entries, 167 gone; the Informational fall of 156 tracks the Degenerette module shrinking by roughly a third (`slither-delta-vs-reveal-incinerator-run.txt`) |
+| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,414 instances (41 fewer than the revision below, tracking the removed payout tables); no new category |
+| Intermediate chain at `d3ddb0c0` | Not produced, and no such archive exists. The revision has advanced four commits past `d3ddb0c0` (single-symbol Degenerette, the incinerator armed-day guard, the century recycle and the random refill), so a chain at that midpoint would describe no shipped state; this revision's chain covers the whole tree instead. The 2026-09-21 and 2026-09-22 archives below remain supplied |
 
 ## Evidence — 2026-09-22, reveal and incinerator revision (base of the revision above)
 
