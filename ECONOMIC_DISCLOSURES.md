@@ -12,6 +12,20 @@ price tables and reward curves.
   released initially; **5B per level** vests to the current vault owner, capped at **200B**.
 - Other initial sDGNRS allocations: affiliate 30%, lootbox 20%, whale 10%, reward 10%,
   presale box 10%. See `sDGNRS` and `DGNRS` for pool movements and redemption conditions.
+- At the final transition close after levels **100, 200, 300, etc.**, half of all
+  sDGNRS burned since the previous such close is minted back into the ongoing
+  pools, split **Whale : Affiliate : Lootbox : Reward = 1 : 3 : 2 : 1**. The first
+  interval starts at deployment. This includes live player redemptions, wrapped
+  redemptions' underlying sDGNRS burn, and automatic self-award burns. Each half
+  rounds down in raw token units; allocation dust goes to Lootbox. Creator and
+  PresaleBox allocations receive no refill.
+- Recycling adds no ETH/stETH/FLIP backing and reduces existing tokens' share of
+  that backing at the refill. Existing submitted redemption claims retain their
+  recorded amounts. Supply remains below the initial ceiling and at or below the
+  previous post-refill supply; it can increase at the refill itself. Permissionless
+  reward settlement retains live-pool pricing, so an unresolved win may pay more
+  tokens after replenishment. Game over permanently ends recycling, with no final
+  catch-up mint for an unfinished century.
 - Presale-box proceeds are capped at **50 ETH** and split **80% Vault / 20% sDGNRS**.
   Ordinary ticket/lootbox prize-pool funding is distinct from this presale allocation.
 - The vault receives prescribed surplus/yield, default-referrer rewards and protocol-owned

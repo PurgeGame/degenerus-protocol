@@ -31,6 +31,38 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         _deployProtocol();
     }
 
+    /// @notice Accepted century behavior: any keeper can settle the known winner before the
+    ///         refill; if it remains unresolved, its nested awards use the replenished live pool.
+    function testPermissionlessKnownWinnerBeforeAndAfterCenturyRefill() public {
+        vm.deal(PLAYER, 31 ether);
+        vm.prank(PLAYER);
+        game.purchase{value: 30 ether}(PLAYER, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
+        _landWord(RNG_WORD);
+        vm.prank(address(game));
+        IsDGNRS(address(sdgnrs)).transferFromPool(IsDGNRS.Pool.Whale, address(sdgnrs), 100_000_000_000 ether);
+
+        uint256 snapshot = vm.snapshotState();
+        uint256 balanceBefore = sdgnrs.balanceOf(PLAYER);
+        vm.prank(address(0xCA11));
+        game.openBox(PLAYER, GENESIS_INDEX);
+        uint256 beforeRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
+        assertGt(beforeRefillAward, 0, "known winner was actually settled by another address");
+
+        assertTrue(vm.revertToState(snapshot));
+        vm.prank(address(game));
+        sdgnrs.recycleCentury(100);
+        uint256 poolBefore = _lootboxPool();
+        vm.prank(address(0xCA11));
+        game.openBox(PLAYER, GENESIS_INDEX);
+        uint256 afterRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
+        assertGt(afterRefillAward, beforeRefillAward, "unresolved award retains live-pool pricing");
+        assertEq(poolBefore - _lootboxPool(), afterRefillAward, "nested awards debit funded inventory");
+        uint256 balanceAfter = sdgnrs.balanceOf(PLAYER);
+        // Either the existing spent-box no-op or its revert is acceptable; no second payout.
+        try game.openBox(PLAYER, GENESIS_INDEX) {} catch {}
+        assertEq(sdgnrs.balanceOf(PLAYER), balanceAfter);
+    }
+
     function testParentDgnrsIsSettledAndSnapshotReloadedAcrossNestedEthSpin() public {
         vm.deal(PLAYER, 31 ether);
         vm.prank(PLAYER);

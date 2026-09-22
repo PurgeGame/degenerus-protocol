@@ -28,7 +28,7 @@ pragma solidity 0.8.34;
 /// @notice Interface for the sDGNRS token contract (contract-to-contract calls only)
 /// @dev sDGNRS is backed by ETH, stETH, and FLIP reserves with pool-based distribution
 interface IsDGNRS {
-    /// @notice sDGNRS reward pools (pre-minted supply buckets)
+    /// @notice sDGNRS reward pools (initial allocations plus ongoing-pool century refills)
     /// @dev Each pool has a dedicated balance for specific distribution purposes
     enum Pool {
         Whale,
@@ -56,7 +56,11 @@ interface IsDGNRS {
     /// @return transferred Amount actually transferred (may be less if pool has insufficient balance)
     function transferFromPool(Pool pool, address to, uint256 amount) external returns (uint256 transferred);
 
-    /// @notice Burn all undistributed pool tokens at game over
+    /// @notice Recycle half of the completed century's live burns into Whale/Affiliate/Lootbox/Reward.
+    /// @dev GAME-only; called at the transition close after levels 100, 200, etc. No backing moves.
+    function recycleCentury(uint24 completedLevel) external;
+
+    /// @notice Burn all undistributed pool tokens at game over and permanently close recycling
     function burnAtGameOver() external;
 
     /// @notice Burn sDGNRS. Post-gameOver: immediate proportional payout. During game: enters

@@ -709,12 +709,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _unlockRng(day);
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
-                // Century seed rides the transition close. `lvl` still names the x00 level —
+                // Century recycling and seed ride the transition close. `lvl` still names the x00 level —
                 // only a last-purchase request bumps `level`, and the next one is a whole
                 // purchase phase away. This branch is reached exactly once per boundary, and
                 // only once the far-future batch reports no work, so the arm never stacks on
                 // a chunked stage. Silent when nothing is due.
-                if (lvl % 100 == 0) coinflip.armCenturySeed(lvl);
+                if (lvl % 100 == 0) {
+                    dgnrs.recycleCentury(lvl);
+                    coinflip.armCenturySeed(lvl);
+                }
                 stage = STAGE_TRANSITION_DONE;
                 break;
             }

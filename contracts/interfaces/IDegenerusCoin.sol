@@ -61,7 +61,7 @@ interface IDegenerusCoin {
     /// @param amount The FLIP (wei) to destroy.
     function burnCoinForSalvage(address target, uint256 amount) external;
 
-    /// @notice GAME-only sDGNRS decimator entry, capped at 150,000 FLIP; the advance calls it at most once per opening (a stalled arming word skips it).
+    /// @notice GAME-only sDGNRS decimator entry, capped at 500,000 FLIP; the advance calls it at most once per opening (a stalled arming word skips it).
     /// @param lvl Resolution level for the opening window (current game level + 1).
     /// @return amount Settled backing consumed; zero for an underfunded attempt.
     function autoDecimatorBurn(uint24 lvl) external returns (uint256 amount);

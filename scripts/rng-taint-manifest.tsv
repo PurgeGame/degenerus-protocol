@@ -55,6 +55,9 @@ EXEMPT-ADVANCE	PARAM	entropy	sampleTraitEntriesAtLevel	DegenerusGame.sol	view sa
 EXEMPT-ADVANCE	PARAM	entropy	sampleFarFutureTickets	DegenerusGame.sol	view sampler over the far-future ticketQueue; consumed by runBafJackpot inside the locked advance; far-future pushes revert RngLocked across request->unlock
 NOT-RNG	PARAM	subWord	_effectiveQuestStreakMirror	DegenerusGameLens.sol	subWord is the afking Sub struct's packed storage word read via extsload, not a VRF value; read-only lens
 NOT-RNG	PARAM	subWord	_afkingStreakMirror	DegenerusGameLens.sol	subWord = packed Sub record (covered day, start day, latch); the sealed-word presence test inside is the window gate's _rngWordByDayOf row; lens only
+NOT-RNG	PARAM	maxWords	findTraitEntry	DegenerusGameLens.sol	read-only packed-entry pagination budget, not an entropy word; forwarded to _findPackedIndex
+NOT-RNG	PARAM	maxWords	findQueueEntry	DegenerusGameLens.sol	read-only queue pagination budget, not an entropy word; forwarded to _findPackedIndex
+NOT-RNG	PARAM	maxWords	_findPackedIndex	DegenerusGameLens.sol	bounded count (1..2048) of packed storage words to scan; not a VRF value
 EXEMPT-ADVANCE	PARAM	rngWord	runBafJackpot	DegenerusJackpots.sol	onlyGame; reached from the transition advance's BAF dispatch with the rngGate word; every slice keccak-chains it; epoch read once, resolving-bracket flips RngLocked
 EXEMPT-ADVANCE	ARG	coin.bafDrawWinner	runBafJackpot	DegenerusJackpots.sol	forwards the same transition word to Coinflip's domain-separated depositor draw; the armed day's book closed at the day boundary before the request
 PURE-DERIVE	ARG	EntropyLib.hash2	runBafJackpot	DegenerusJackpots.sol	per-slice keccak chain hash2(entropy, ++salt) off the frozen word; no actor input

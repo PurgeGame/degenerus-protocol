@@ -175,6 +175,9 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
             _driveDay();
         }
         assertEq(game.level(), 101, "game must continue past the century");
+        assertEq(sdgnrs.lastRecycledCentury(), 1, "first century recycled through real progression");
+        assertLe(sdgnrs.totalSupply(), sdgnrs.centurySupplyCheckpoint());
+        assertLt(sdgnrs.centurySupplyCheckpoint(), 1e30, "actual first-century burns keep supply below genesis");
         assertTrue(
             _levelPrizePool(100) != achieved,
             "endPhase must reset levelPrizePool[100] to the x01 restart base"
@@ -226,6 +229,9 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
             "snapshot must advance to level 200's achieved pool, above its floor"
         );
         assertFalse(game.gameOver(), "game must be alive after the second century");
+        for (uint256 i; i < 20 && sdgnrs.lastRecycledCentury() < 2; ++i) _driveDay();
+        assertEq(sdgnrs.lastRecycledCentury(), 2, "second refill occurs only when level 200 finishes");
+        assertLe(sdgnrs.totalSupply(), sdgnrs.centurySupplyCheckpoint());
     }
 
     /// @dev Drive organically (target seeded just-met each purchase day) until `lvl`'s

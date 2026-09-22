@@ -1,7 +1,7 @@
 {
   "date": "2026-09-22",
   "status": "committed revision audit handoff; not an audited deployment",
-  "base_commit": "72325bd6404565308ed0adf1c90c214dcff7d930",
+  "base_commit": "a5d4d2cdcfb9eb1febfaa99e84c75954a9fe74de",
   "source_file_count": 59,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -85,7 +85,7 @@
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "docs/VERIFICATION.md: current evidence for the 2026-09-22 reveal/incinerator revision, with the earlier 2026-09-21 and 2026-09-22 evidence retained beneath it; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
+  "verification": "docs/VERIFICATION.md: current evidence for the 2026-09-22 single-symbol degenerette revision (with the WWXRP registry and decimator cap merged beneath it), earlier evidence retained; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
   "verification_inputs_hashes_file": "verification-sha256.txt",
   "evidence_archive": "evidence-2026-09-21.tar.gz",
   "evidence_archive_sha256": "651a9e9da46db10565535cc7d949134905b7bd772022e5539c98025e1b6c0855",
@@ -94,5 +94,7 @@
   "supplement_archive_2": "evidence-2026-09-22-craps-extsload.tar.gz",
   "supplement_archive_2_sha256": "1b6cf701fbbb10d3aac84d1ad544e8838dc77cfaf2f1d4dbd2965c1fc3ed90b5",
   "supplement_archive_3": "evidence-2026-09-22-reveal-incinerator.tar.gz",
-  "supplement_archive_3_sha256": "e12d5b1bd4ae591a715701b1ae31bb58d5b64e14db04f7ec1763d5e2b7fc01ec"
+  "supplement_archive_3_sha256": "e12d5b1bd4ae591a715701b1ae31bb58d5b64e14db04f7ec1763d5e2b7fc01ec",
+  "supplement_archive_4": "evidence-2026-09-22-degenerette-wwxrp-decimator.tar.gz",
+  "supplement_archive_4_sha256": "SUPPLEMENT4_SHA_PLACEHOLDER"
 }

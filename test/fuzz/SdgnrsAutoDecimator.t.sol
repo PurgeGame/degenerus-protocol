@@ -56,7 +56,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
 
 contract SdgnrsAutoDecimatorTest is DeployProtocol {
     address private constant HOUSE = ContractAddresses.SDGNRS;
-    uint256 private constant CAP = 150_000 ether;
+    uint256 private constant CAP = 500_000 ether;
     bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(address,uint256,uint8)");
     bytes32 private constant SETTLED_EVENT = keccak256("CoinflipDayResolved(uint24,bool,uint16,uint128)");
     bytes32 private constant QUEST_EVENT = keccak256("QuestSlotRolled(uint24,uint8,uint8,uint8,uint24)");
@@ -260,7 +260,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         uint256 reserve = coinflip.previewSalvageFlipBacking(HOUSE);
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(reserve - 50_000 ether);
-        _fund(100_000 ether);
+        _fund(400_000 ether);
         _prepare(21, 4, 3, true);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, 3, 21);
@@ -276,8 +276,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function testFuzz_BankrollCapAndMinimum(uint256 bankroll) public {
-        bankroll = bound(bankroll, 0, 300_000 ether);
-        _fund(400_000 ether);
+        bankroll = bound(bankroll, 0, 2 * CAP);
+        _fund(2 * CAP);
         _prepare(21, 4, 3, true);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, 3, 21);

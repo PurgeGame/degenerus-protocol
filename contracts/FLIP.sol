@@ -174,7 +174,7 @@ contract FLIP {
     uint256 private constant DECIMATOR_MIN = 1000 ether;
 
     /// @dev Maximum sDGNRS backing spent once per decimator opening.
-    uint256 private constant SDGNRS_DECIMATOR_CAP = 150_000 ether;
+    uint256 private constant SDGNRS_DECIMATOR_CAP = 500_000 ether;
 
     /// @dev Minimum bucket for normal and level-100 decimators.
     uint8 private constant DECIMATOR_MIN_BUCKET_NORMAL = 5;
@@ -785,7 +785,7 @@ contract FLIP {
       |  participation for the decimator jackpot.                            |
       +======================================================================+*/
 
-    /// @notice Enter sDGNRS once per decimator window with up to 150,000 FLIP of backing.
+    /// @notice Enter sDGNRS once per decimator window with up to 500,000 FLIP of backing.
     /// @dev GAME calls this on the opening day's advance, after coinflip settlement and
     ///      before the craps seat. Uses the existing claimable -> carry consume path;
     ///      the caller has settled the backing even while the game RNG lock is up.

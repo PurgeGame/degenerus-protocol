@@ -103,7 +103,7 @@ interface IDGNRS {
 /**
  * @title sDGNRS (sDGNRS)
  * @notice Soulbound token backed by ETH, stETH, and FLIP reserves
- * @dev Receives ETH/stETH from game distributions; rewards are distributed from pre-minted pools.
+ * @dev Receives ETH/stETH from game distributions; reward pools recycle half of live burns each century.
  *      Creator allocation is minted to the DGNRS wrapper contract; all other holders receive
  *      sDGNRS directly from reward pools (soulbound — no transfer function).
  *
@@ -113,6 +113,7 @@ interface IDGNRS {
  * - Accrues FLIP backing via manual transfers and coinflip claimables (withdrawn on burn)
  * - Pre-minted supply split into DGNRS wrapper allocation + reward pools
  * - Game distributes sDGNRS to players by drawing down pools
+ * - Completed centuries recycle half of their supply burns into the four ongoing pools
  * - Users burn sDGNRS to claim proportional ETH + stETH + FLIP
  */
 contract sDGNRS {
@@ -197,6 +198,18 @@ contract sDGNRS {
     /// @param amount Amount transferred
     event PoolTransfer(Pool indexed pool, address indexed to, uint256 amount);
 
+    /// @notice Half of the completed century's live burns were returned to ongoing reward pools.
+    /// @dev Amounts are raw sDGNRS units. Lootbox receives allocation division dust.
+    event CenturyRecycled(
+        uint24 indexed completedLevel,
+        uint256 burned,
+        uint256 minted,
+        uint256 whale,
+        uint256 affiliate,
+        uint256 lootbox,
+        uint256 reward
+    );
+
     /// @notice Emitted when a player submits a gambling burn redemption
     /// @param player The player submitting the redemption.
     /// @param sdgnrsAmount sDGNRS burned into the redemption.
@@ -240,8 +253,8 @@ contract sDGNRS {
     // =====================================================================
 
     /// @notice Total supply of sDGNRS tokens.
-    /// @dev Narrowed to uint128 (<= INITIAL_SUPPLY 1e30 << uint128 max 3.4e38, monotonically
-    ///      non-increasing after construction) and co-located with the two redemption-reservation
+    /// @dev Narrowed to uint128 (<= INITIAL_SUPPLY 1e30 << uint128 max 3.4e38; century refills
+    ///      never exceed the previous post-refill supply) and co-located with the two redemption-reservation
     ///      scalars so the compiler packs all three into slot 0 (128+96+24 = 248/256 bits). Each
     ///      access is an independent masked SLOAD/SSTORE — read-fresh/write-fresh, identical to
     ///      separate slots (no manual cached word survives across a call). The public `totalSupply()`
@@ -327,6 +340,17 @@ contract sDGNRS {
     mapping(uint24 => uint16) public redemptionPeriods;
 
     mapping(uint24 => DayPending) internal pendingByDay;
+
+    /// @notice Supply immediately after the last century refill (initial supply before the first).
+    /// @dev All intervening supply reductions are burns. Appended with the century/closure markers
+    ///      in one slot, preserving the existing redemption layout and adding no per-burn writes.
+    uint128 public centurySupplyCheckpoint;
+
+    /// @notice Last completed century recycled, starting at 1 for the level-100 transition close.
+    uint24 public lastRecycledCentury;
+
+    /// @notice Permanently disables recycling once terminal pool destruction begins.
+    bool public recyclingClosed;
 
     // =====================================================================
     //                          CONSTANTS
@@ -442,6 +466,7 @@ contract sDGNRS {
 
         _mint(ContractAddresses.DGNRS, creatorAmount);
         _mint(address(this), poolTotal);
+        centurySupplyCheckpoint = _totalSupply;
 
         // Pool amounts are BPS slices of INITIAL_SUPPLY (1e30) << uint128 max — narrowing is safe.
         poolBalances[uint8(Pool.Whale)] = uint128(whaleAmount);
@@ -616,9 +641,43 @@ contract sDGNRS {
         return amount;
     }
 
-    /// @notice Burn all undistributed pool tokens at game over
+    /// @notice Recycle half of all burns since the previous completed century into ongoing pools.
+    /// @dev GAME calls once as an x00 transition closes. No external calls or backing movements.
+    ///      The post-mint checkpoint counts each supply reduction once, including self-awards and
+    ///      wrapped redemptions. Each century floors its half independently; odd burn dust expires.
+    ///      Stale/non-boundary calls are no-ops. A later boundary consumes the checkpoint delta
+    ///      once; it never loops over or fabricates separate missed-century budgets.
+    function recycleCentury(uint24 completedLevel) external onlyGame {
+        if (recyclingClosed || completedLevel == 0 || completedLevel % 100 != 0) return;
+        uint24 century = completedLevel / 100;
+        if (century <= lastRecycledCentury) return;
+
+        uint256 burned = uint256(centurySupplyCheckpoint) - _totalSupply;
+        uint256 minted = burned / 2;
+        uint256 whale = minted / 7;
+        uint256 affiliate = (minted * 3) / 7;
+        uint256 reward = whale;
+        uint256 lootbox = minted - whale - affiliate - reward;
+
+        if (minted != 0) {
+            _mint(address(this), minted);
+            // Every pool plus its credit is <= the new total supply, so each share
+            // fits uint128. Checked additions preserve pool inventory; PresaleBox receives zero.
+            poolBalances[uint8(Pool.Whale)] += uint128(whale);
+            poolBalances[uint8(Pool.Affiliate)] += uint128(affiliate);
+            poolBalances[uint8(Pool.Lootbox)] += uint128(lootbox);
+            poolBalances[uint8(Pool.Reward)] += uint128(reward);
+        }
+        // Stamp even a zero mint. This MUST be post-mint supply: S' = checkpoint - ceil(burned/2).
+        centurySupplyCheckpoint = _totalSupply;
+        lastRecycledCentury = century;
+        emit CenturyRecycled(completedLevel, burned, minted, whale, affiliate, lootbox, reward);
+    }
+
+    /// @notice Burn all undistributed pool tokens at game over and permanently close recycling.
     /// @dev Only callable by game contract. Burns this contract's own balance.
     function burnAtGameOver() external onlyGame {
+        recyclingClosed = true;
         uint256 bal = balanceOf[address(this)];
         if (bal == 0) return;
         unchecked {
@@ -1244,11 +1303,12 @@ contract sDGNRS {
     /// @param amount Amount to mint
     function _mint(address to, uint256 amount) private {
         if (to == address(0)) revert ZeroAddress();
-        unchecked {
-            // Only reached in the constructor (totals <= INITIAL_SUPPLY 1e30 << uint128 max).
-            _totalSupply = uint128(_totalSupply + amount);
-            balanceOf[to] += amount;
-        }
+        uint256 supplyAfter = uint256(_totalSupply) + amount;
+        // Only genesis allocations and century refills mint. Genesis totals INITIAL_SUPPLY;
+        // a refill adds floor((checkpoint - supply)/2), so its result <= checkpoint <= 1e30.
+        // This inductive bound makes narrowing safe without an extra crank-halting cap check.
+        _totalSupply = uint128(supplyAfter);
+        balanceOf[to] += amount;
         emit Transfer(address(0), to, amount);
     }
 

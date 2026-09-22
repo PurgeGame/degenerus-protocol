@@ -110,7 +110,35 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-22, reveal and incinerator revision
+## Current evidence — 2026-09-22, single-symbol degenerette revision
+
+The source is the committed revision `a5d4d2cdcfb9eb1febfaa99e84c75954a9fe74de`. It carries three changes on top of
+the reveal and incinerator revision below. `WWXRP.setTrustedMinter(address, bool)` lets the vault
+owner (more than 50.1% of DGVE) register or revoke any address as a WWXRP minter and burner
+alongside the pinned game contracts, with no cap, by design and as disclosed; one mapping is
+appended at WWXRP slot 9. The decimator's activity multiplier now covers a player's first
+500,000 FLIP of base burn at a level (was: until 200,000 FLIP of multiplied weight), tracked in
+the free bits of the existing per-level record. And Degenerette moves to single-symbol tickets:
+the player picks one hero symbol, everything else is generated fresh from committed
+domain-separated draws, colors score independently, gold-on-gold matches add 25% each, and one
+shared payout table (0.5x to 100,000x) replaces the eight per-gold-count tables and the separate
+WWXRP rig family; the module shrinks by roughly a third. An intermediate chain was also run at
+`d3ddb0c0` (the registry and cap merges, before the Degenerette commit); both archives are supplied.
+
+| Check | Result |
+| --- | --- |
+| Foundry full seven-group sweep at this revision | FOUNDRY4_ROW |
+| Per-test gas, reveal/incinerator revision vs this revision, same fixture pins | GAS4_ROW |
+| Hardhat `make test-hardhat` | HARDHAT4_ROW |
+| Hardhat `npm run test:stat` | STAT4_ROW |
+| Eleven `make check-*` gates and the storage layout oracle | GATES4_ROW |
+| EIP-170 runtime size, checked-in pins | SIZEC4_ROW |
+| EIP-170 runtime size, Hardhat-style fixture pins | SIZEH4_ROW |
+| Slither 0.11.5, same flags as below | SLITHER4_ROW |
+| Aderyn 0.6.8 | ADERYN4_ROW |
+| Intermediate chain at `d3ddb0c0` | INTERMEDIATE_ROW |
+
+## Evidence — 2026-09-22, reveal and incinerator revision (base of the revision above)
 
 The source is the committed revision `72325bd6404565308ed0adf1c90c214dcff7d930`, the merge of two changes on top
 of the craps extsload revision below. First, the ticket drain's `RoundTraitsGenerated` is

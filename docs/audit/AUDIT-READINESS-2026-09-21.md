@@ -193,3 +193,45 @@ renamed `poolWei` to `flipAward` with the same type; `resolveIncinerator` takes 
 arguments. Moving the lookup and credit into WWXRP and dropping the crank's unused return
 decode shrank `DegenerusGameAdvanceModule` by 160 bytes; a first attempt that kept them in
 the advance module went 216 bytes over EIP-170 and was discarded.
+
+## Addendum — WWXRP registry and decimator cap revision `d3ddb0c07`
+
+`WWXRP.setTrustedMinter(address, bool)` is callable only by the vault owner, the DGVE-majority
+check the record bounty and seat token already use, and emits `TrustedMinterSet`. A registered
+address may mint any amount to any address through `mintPrize` and burn any balance from any
+address through `burnForGame`, exactly as the pinned game contracts can; revocation removes both.
+There is no cap, rate limit or timelock. This is intentional and total: WWXRP is the protocol's
+inflationary side coin, future games are meant to pay and take it, and the vault is its
+sovereign. `ECONOMIC_DISCLOSURES.md` now says WWXRP supply is at the vault owner's discretion.
+The mapping is appended at slot 9 and the WWXRP layout golden re-captured.
+
+The decimator's activity multiplier cap moves from 200,000 to 500,000 FLIP and is measured on
+base burned at the level rather than on multiplied weight: a player's first 500,000 FLIP of
+base carries the multiplier, base beyond it counts 1x. The per-level record gains a 40-bit
+tracker in thousandths of a FLIP (each burn floored to the unit, saturating) in the free bits
+of its existing slot, so the storage layout is unchanged. The weight the multiplier can add is
+correspondingly larger than under the old weight-measured cap, which is the intended effect.
+
+## Addendum — single-symbol Degenerette revision `a5d4d2cdc`
+
+Degenerette's ticket input becomes one hero symbol (0..31; its quadrant is the hero quadrant).
+The other three symbols and all four colors are generated fresh per spin from committed,
+domain-separated draws, so every pick has identical expected value and no full-ticket
+selection remains. Colors score independently of symbols (hero symbol 2 points, other symbols
+1, each color 1; maximum 9); each gold-on-gold color match adds 25% to the payout (1x to 2x).
+One shared table serves every currency: scores 2 to 9 pay 0.5x, 3x, 10x, 25x, 125x, 625x,
+23,470.36x and 100,000x, a neutral return of 99.99999794% before the shared 90 to 99.9%
+activity curve; ETH keeps its five extra points through four recalibrated high-tier factors;
+WWXRP keeps a 5% help gate that forces one unmatched non-hero axis when 2 to 6 axes match, and
+keeps its own return curve: its rigged, gold-adjusted base is normalised to exactly 70% at zero
+activity, and the activity premium (to 124%, 127.6% and 130% at the shared knees) is allocated
+10/30/30/30 to scores 6 to 9 through four WWXRP-specific factors, so its scheduled return runs
+70% to 130%. The nine-point jackpot is 1 in 16,777,216 for every hero. Foil awards carry one seed-selected symbol of the matched line as the hero and
+reroll everything else, so a boosted foil color mix cannot move the spin EV. The eight
+per-gold-count tables and the separate WWXRP rig tables are gone; the module shrinks by about a
+third. The exact-arithmetic model (`scripts/data/degenerette_single_symbol_math.py`), a
+harness and a reference implementation test the table, the gold boost and the rig against full
+enumeration. The table, the gold boost, the rig lift, both factor tables, the WWXRP floor constant and the
+70% and 130% endpoints were re-derived independently by full enumeration and match the committed
+constants exactly. Reviewers should note one consequence: the sDGNRS high-score award rates fire
+about 1.9x as often under the new score distribution unless recalibrated.

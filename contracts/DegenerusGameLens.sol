@@ -522,6 +522,58 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return _sload(game, bytes32(arrBase + uint256(denom) * 13 + subBucket));
     }
 
+    /// @notice Find the first matching owner index in a bounded page of a trait bucket.
+    /// @dev View-only periphery: no Game write or hot-path cost. `ownerIndices` must
+    ///      be sorted ascending. A result is a discovery hint; claimBingo checks
+    ///      actual ownership itself. Limit both calldata and the cold-read budget.
+    function findTraitEntry(
+        address game, uint24 lvl, uint8 trait, uint32[] calldata ownerIndices,
+        uint32 offset, uint16 maxWords
+    ) external view returns (bool found, uint32 position, uint32 nextOffset, uint32 total) {
+        require(ownerIndices.length > 0 && ownerIndices.length <= 1024, "indices");
+        uint256 base;
+        assembly { base := lvlTraitEntry.slot }
+        bytes32 slot = bytes32(uint256(_mapSlot(uint256(lvl), base)) + trait);
+        return _findPackedIndex(game, slot, ownerIndices, offset, maxWords);
+    }
+
+    /// @notice Find a registry position in a bounded page of a packed ticket queue.
+    /// @dev Queue lanes store position+1; trait lanes store zero-based indices.
+    function findQueueEntry(
+        address game, uint24 key, uint32 ownerPosition, uint32 offset, uint16 maxWords
+    ) external view returns (bool found, uint32 position, uint32 nextOffset, uint32 total) {
+        uint256 base;
+        assembly { base := ticketQueue.slot }
+        uint32[] memory targets = new uint32[](1);
+        targets[0] = ownerPosition;
+        return _findPackedIndex(game, _mapSlot(uint256(key), base), targets, offset, maxWords);
+    }
+
+    function _findPackedIndex(
+        address game, bytes32 slot, uint32[] memory targets, uint32 offset, uint16 maxWords
+    ) private view returns (bool found, uint32 position, uint32 nextOffset, uint32 total) {
+        require(maxWords > 0 && maxWords <= 2048, "page");
+        total = uint32(_sload(game, slot));
+        if (offset >= total) return (false, 0, total, total);
+        uint256 end = ((uint256(offset) >> 3) + maxWords) << 3;
+        if (end > total) end = total;
+        uint256 data = uint256(keccak256(abi.encode(slot)));
+        uint256 packed;
+        for (uint256 i = offset; i < end; ++i) {
+            if (i == offset || (i & 7) == 0) packed = _sload(game, bytes32(data + (i >> 3)));
+            uint32 value = uint32(packed >> ((i & 7) * 32));
+            uint256 lo;
+            uint256 hi = targets.length;
+            while (lo < hi) {
+                uint256 mid = (lo + hi) >> 1;
+                if (targets[mid] < value) lo = mid + 1;
+                else hi = mid;
+            }
+            if (lo < targets.length && targets[lo] == value) return (true, uint32(i), uint32(i + 1), total);
+        }
+        return (false, 0, uint32(end), total);
+    }
+
     /*+======================================================================+
       |                          FOIL PACKS                                  |
       +======================================================================+*/
