@@ -191,7 +191,7 @@ NOT-RNG	PARAM	word	_openLootBoxLegWith	modules/DegenerusGameLootboxModule.sol	`w
 CONSUMER-SEALED	ARG	EntropyLib.hash4	_openLootBoxLegWith	modules/DegenerusGameLootboxModule.sol	boonSeed = hash4(rngWord, player, BOX_BOON_TAG, index): immutable owner/index and dedicated domain
 NOT-RNG	ARG	PriceLookupLib.priceForLevel	_openLootBoxLegWith	modules/DegenerusGameLootboxModule.sol	price of the order's frozen level lane from the packed order word
 CONSUMER-SEALED	PARAM	seed	_rollSingleBoxBoons	modules/DegenerusGameLootboxModule.sol	single-box boon draw with the resolver's own seed (afking/decimator/degenerette/recirc/redemption), each rooted at a committed word + frozen box data
-CONSUMER-SEALED	ARG	ContractAddresses.GAME_BOON_MODULE.delegatecall	_rollSingleBoxBoons	modules/DegenerusGameLootboxModule.sol	delegatecall rollBoxBoons(player, budget, 1, amount, level, seed, 32); roll hash2(seed, 32)>>120
+CONSUMER-SEALED	ARG	ContractAddresses.GAME_BOON_MODULE.delegatecall	_rollSingleBoxBoons	modules/DegenerusGameLootboxModule.sol	delegatecall rollBoxBoons(player, budget, 1, amount, level, seed, 0); roll hash2(seed, 0)>>120
 NOT-RNG	PARAM	word	_boxOrderIsMixed	modules/DegenerusGameLootboxModule.sol	packed box-order word lane test
 CONSUMER-SEALED	ARG	EntropyLib.hash4	_rollTier	modules/DegenerusGameLootboxModule.sol	per-box seed hash4(c.rngWord, player, BOX_OPEN_TAG, ++nonce): index word landed at fulfilment; owner and ordinal fixed; no size or live day
 NOT-RNG	PARAM	word	_rollBatchedTiers	modules/DegenerusGameLootboxModule.sol	packed box-order word: tier counts / custom size lanes

@@ -2808,18 +2808,19 @@ abstract contract DegenerusGameStorage {
     mapping(address => uint24) internal deityBoonRecipientDay;
 
     // =========================================================================
-    // Degenerette (Roulette) Bets
+    // Degenerette Bets
     // =========================================================================
 
     /// @dev Bets keyed by player and bet id.
     /// Packed layout (LSB → MSB):
-    /// - [0..31]    customTraits (packed 4×8-bit quadrants)
+    /// - [0..4]     symbol (chosen hero symbol 0..31; hero quadrant = symbol >> 3)
+    /// - [5..31]    reserved (always zero)
     /// - [32..39]   spinCount (uint8)
     /// - [40..41]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
     /// - [42..169]  amountPerSpin (uint128)
     /// - [170..201] RNG index (uint32)
     /// - [202..217] activity score in whole points (uint16)
-    /// - [218..219] heroQuadrant (always-on hero quadrant, 0..3)
+    /// - [218..219] reserved (always zero; the hero quadrant derives from symbol)
     /// - [220..255] biggest-spin record bounty in WHOLE FLIP (0 = none), staked as its
     ///              own FLIP spin chain when the bet resolves
     mapping(address => mapping(uint64 => uint256)) internal degeneretteBets;
@@ -3892,6 +3893,11 @@ abstract contract DegenerusGameStorage {
     ///      A uint256 key lets the request add five to uint24(level) without narrowing
     ///      or assembly; abi.encode(level) has the same 32-byte key for every level.
     ///      Read via extsload(keccak256(abi.encode(uint256(lvl), this mapping's slot))).
+    ///      Off-chain metadata only — nothing on-chain reads this mapping, so it gates
+    ///      nothing. An unreached level reads 0, which means "window not open", NOT
+    ///      "scan from genesis". The bound covers TRAIT GENERATION only; it does not
+    ///      bound EntryOwnerRegistered, which far-future queueing can emit up to 99
+    ///      levels ahead of the level whose window this stamps.
     mapping(uint256 => uint256) internal ticketGenerationStartBlock;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
