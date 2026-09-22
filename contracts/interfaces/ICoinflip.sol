@@ -286,6 +286,10 @@ interface ICoinflip {
     ///      record amount-weighted draw intervals.
     function armBafDraw(uint24 day) external;
 
+    /// @notice The armed BAF draw day and its book totals: the whole-FLIP sum of every direct
+    ///         self-funded deposit that staked the armed day, and the entry count.
+    function bafDrawInfo() external view returns (uint24 day, uint96 totalWeight, uint32 entryCount);
+
     /// @notice Get the result of a coinflip day.
     /// @param day The day to query.
     /// @return rewardPercent The reward percentage for that day.

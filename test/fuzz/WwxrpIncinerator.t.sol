@@ -10,9 +10,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @notice A daily-draw enter() burn made during a level x99 also arms the
 ///         upcoming x00 bracket: if that century's BAF skips (daily flip
-///         lost), the advance path pays 25% of the would-be BAF pool to one
-///         burn-weighted winner drawn over the bracket's cumulative
-///         intervals. Incinerator scores are full 18-decimal wei (the daily
+///         lost), WWXRP credits one burn-weighted winner, drawn over the
+///         bracket's cumulative intervals, with 10% of the FLIP that day's
+///         direct depositors burned and lost (flip credit, never ETH). Incinerator scores are full 18-decimal wei (the daily
 ///         draw truncates to whole tokens) and saturate at uint192 instead
 ///         of reverting.
 ///
@@ -43,7 +43,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
     event IncineratorResolved(
         uint24 indexed bracket,
         address indexed winner,
-        uint256 poolWei,
+        uint256 flipAward,
         uint256 roll,
         uint256 totalScore
     );
@@ -51,6 +51,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
     address private alice;
     address private bob;
     address private buyer;
+    address private depositor;
 
     function setUp() public {
         _deployProtocol();
@@ -59,6 +60,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         alice = makeAddr("incin_alice");
         bob = makeAddr("incin_bob");
         buyer = makeAddr("incin_buyer");
+        depositor = makeAddr("incin_depositor");
         vm.deal(buyer, 100_000 ether);
         vm.deal(address(game), 2_000 ether);
     }
@@ -194,7 +196,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
         // Any roll lands in alice's interval; bob can never win.
         vm.prank(address(game));
-        address winner = wwxrp.resolveIncinerator(100, uint256(keccak256("sat_word")), 1 ether);
+        address winner = wwxrp.resolveIncinerator(100, uint256(keccak256("sat_word")));
         assertEq(winner, alice, "zero-width entry cannot win");
     }
 
@@ -203,12 +205,12 @@ contract WwxrpIncineratorTest is DeployProtocol {
     function testResolveOnlyGame() public {
         vm.expectRevert(abi.encodeWithSignature("OnlyMinter()"));
         vm.prank(alice);
-        wwxrp.resolveIncinerator(100, 1, 1 ether);
+        wwxrp.resolveIncinerator(100, 1);
     }
 
     function testResolveEmptyBracketReturnsZero() public {
         vm.prank(address(game));
-        address winner = wwxrp.resolveIncinerator(100, uint256(keccak256("w")), 1 ether);
+        address winner = wwxrp.resolveIncinerator(100, uint256(keccak256("w")));
         assertEq(winner, address(0), "empty bracket resolves to zero");
     }
 
@@ -222,9 +224,9 @@ contract WwxrpIncineratorTest is DeployProtocol {
         address expected = roll < 100 ether ? alice : bob;
 
         vm.expectEmit(true, true, false, true, address(wwxrp));
-        emit IncineratorResolved(100, expected, 5 ether, roll, 400 ether);
+        emit IncineratorResolved(100, expected, 0, roll, 400 ether); // no armed-day book -> zero award, winner still drawn
         vm.prank(address(game));
-        address winner = wwxrp.resolveIncinerator(100, word, 5 ether);
+        address winner = wwxrp.resolveIncinerator(100, word);
         assertEq(winner, expected, "winner matches mirrored interval roll");
     }
 
@@ -246,9 +248,9 @@ contract WwxrpIncineratorTest is DeployProtocol {
         }
 
         vm.prank(address(game));
-        assertEq(wwxrp.resolveIncinerator(100, wordAlice, 1 ether), alice, "alice side");
+        assertEq(wwxrp.resolveIncinerator(100, wordAlice), alice, "alice side");
         vm.prank(address(game));
-        assertEq(wwxrp.resolveIncinerator(100, wordBob, 1 ether), bob, "bob side");
+        assertEq(wwxrp.resolveIncinerator(100, wordBob), bob, "bob side");
     }
 
     // ==================== Driven e2e across the century transition ====================
@@ -300,6 +302,10 @@ contract WwxrpIncineratorTest is DeployProtocol {
                 _enterAs(bob, 300 ether);
                 entered = true;
             }
+            // A third party burns wallet FLIP into the coinflip every day from level 99
+            // on, so the armed x00 day's draw book is non-empty and its loss funds the
+            // incinerator award. Neither entrant deposits.
+            if (currentLevel >= 99) _selfDeposit(depositor, 1_000 ether);
 
             simTime += 1 days + 1;
             vm.warp(simTime);
@@ -334,24 +340,39 @@ contract WwxrpIncineratorTest is DeployProtocol {
         );
         uint256 found;
         address winner;
-        uint256 poolWei;
+        uint256 flipAward;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].emitter != address(wwxrp)) continue;
             if (logs[i].topics[0] != topic) continue;
             assertEq(uint256(logs[i].topics[1]), 100, "bracket 100");
             winner = address(uint160(uint256(logs[i].topics[2])));
-            (poolWei, , ) = abi.decode(logs[i].data, (uint256, uint256, uint256));
+            (flipAward, , ) = abi.decode(logs[i].data, (uint256, uint256, uint256));
             found++;
         }
         assertEq(found, 1, "exactly one incinerator resolution");
         assertTrue(winner == alice || winner == bob, "winner is an entrant");
-        assertGt(poolWei, 0, "non-zero pool");
+        assertGt(flipAward, 0, "non-zero award");
 
-        // The winner's ETH landed claimable-side; the loser got nothing
-        // (neither address plays any other ETH-earning surface here).
+        // The award is 10% of the armed day's lost direct deposits (whole FLIP), paid as
+        // flip credit: exactly one CoinflipStakeUpdated for the winner carries it, the
+        // loser is never credited, and no ETH moved claimable-side for either.
+        (, uint96 bookTotal, ) = coinflip.bafDrawInfo();
+        assertEq(flipAward, (uint256(bookTotal) * 1 ether) / 10, "award is 10% of the lost book");
+        bytes32 stakeTopic = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
         address loser = winner == alice ? bob : alice;
-        assertEq(game.claimableWinningsOf(winner), poolWei, "winner credited poolWei");
-        assertEq(game.claimableWinningsOf(loser), 0, "loser uncredited");
+        uint256 credits;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter != address(coinflip) || logs[i].topics[0] != stakeTopic) continue;
+            address who = address(uint160(uint256(logs[i].topics[1])));
+            assertTrue(who != loser, "loser never credited");
+            if (who != winner) continue;
+            (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
+            assertEq(amount, flipAward, "winner credited the award");
+            credits++;
+        }
+        assertEq(credits, 1, "exactly one flip credit for the winner");
+        assertEq(game.claimableWinningsOf(winner), 0, "no ETH for the winner");
+        assertEq(game.claimableWinningsOf(loser), 0, "no ETH for the loser");
     }
 
     function testDrivenCenturyFireLeavesIncineratorUnresolved() public {
@@ -371,7 +392,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
             }
         }
 
-        // Entries remain recorded (dead), and no ETH was credited.
+        // Entries remain recorded (dead), and nothing was credited.
         (uint256 total, uint32 count) = wwxrp.incineratorInfo(100);
         assertEq(total, 400 ether, "entries persist unresolved");
         assertEq(count, 2, "both entries persist");
@@ -380,6 +401,15 @@ contract WwxrpIncineratorTest is DeployProtocol {
     }
 
     // ==================== Driven-loop internals ====================
+
+    /// @dev Mint wallet FLIP and self-deposit it (direct: burns from the wallet and
+    ///      carries BAF draw weight on an armed day).
+    function _selfDeposit(address who, uint256 amount) internal {
+        vm.prank(address(game));
+        coin.mintForGame(who, amount);
+        vm.prank(who);
+        coinflip.depositCoinflip(address(0), amount);
+    }
 
     function _seedNextPrizePool(uint256 targetNext) internal {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_PACKED_SLOT))));

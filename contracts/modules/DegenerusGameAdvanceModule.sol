@@ -80,8 +80,10 @@ interface IVaultOwnerCheck {
 /// @dev WWXRP surface for the century BAF-incinerator draw: level-x99 burn
 ///      entries resolve to one winner when the x00 BAF skips.
 interface IWwxrpIncinerator {
-    /// @notice WWXRP's incinerator draw, resolving `bracket`'s pool to one winner.
-    function resolveIncinerator(uint24 bracket, uint256 rngWord, uint256 poolWei) external returns (address winner);
+    /// @notice WWXRP's incinerator draw: resolves `bracket` to one winner and credits its FLIP award.
+    ///         WWXRP returns the winner; the crank has no use for it, so the surface omits the
+    ///         decode (the selector is unchanged).
+    function resolveIncinerator(uint24 bracket, uint256 rngWord) external;
 }
 
 /// @notice Delegate-called module for advanceGame and VRF lifecycle handling.
@@ -1228,7 +1230,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // BAF Jackpot (every 10 levels) — only if the daily flip won (bit 0 of
         // rngWord = 1). On a losing flip the bracket is marked skipped, the pool
-        // stays in futurePool (less the century incinerator payout at x00), and
+        // stays whole in futurePool (the x00 incinerator pays FLIP, not ETH), and
         // pre-skip winning-flip credit is filtered out of future claims via the
         // lastBafResolvedDay bump.
         if (prevMod10 == 0) {
@@ -1243,20 +1245,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 jackpots.markBafSkipped(lvl);
 
                 // Century BAF incinerator: level-x99 WWXRP burners bet on this
-                // exact skip. 25% of the would-be BAF pool pays one
-                // burn-weighted winner; the rest rolls forward in futurePool
-                // as on any skip. An empty bracket leaves the full pool.
-                if (prevMod100 == 0) {
-                    uint256 incinPoolWei = ((baseMemFuture * 20) / 100) / 4;
-                    if (incinPoolWei != 0) {
-                        address incinWinner = wwxrpIncinerator.resolveIncinerator(lvl, rngWord, incinPoolWei);
-                        if (incinWinner != address(0)) {
-                            _creditClaimable(incinWinner, incinPoolWei);
-                            memFuture -= incinPoolWei;
-                            claimableDelta += incinPoolWei;
-                        }
-                    }
-                }
+                // exact skip. WWXRP draws one burn-weighted winner and credits
+                // it a share of the FLIP the armed BAF day's direct depositors
+                // burned and just lost on tails (flip credit, from the
+                // coinflip's draw book). The would-be BAF pool rolls forward
+                // whole in futurePool, as on any skip.
+                if (prevMod100 == 0) wwxrpIncinerator.resolveIncinerator(lvl, rngWord);
             }
         }
 
