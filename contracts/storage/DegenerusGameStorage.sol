@@ -2895,7 +2895,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Player's decimator burn entry per level.
     struct DecBet {
-        /// @notice Total FLIP burned by player this level (capped at uint192.max).
+        /// @notice Total effective (multiplied) burn weight by player this level (capped at uint192.max).
         uint192 burn;
         /// @notice Player's denominator choice (2-12), may improve to lower denom during level.
         uint8 bucket;
@@ -2903,6 +2903,11 @@ abstract contract DegenerusGameStorage {
         uint8 subBucket;
         /// @notice Claim flag (0 = unclaimed, 1 = claimed).
         uint8 claimed;
+        /// @notice Base FLIP burned this level before any multiplier, in thousandths of a FLIP
+        ///         (each burn floored to the unit; saturating). The activity multiplier applies
+        ///         to the first DECIMATOR_MULTIPLIER_CAP of THIS figure, not of the weight above.
+        ///         Fills the slot's last 40 bits, so the record still packs into one word.
+        uint40 baseMilli;
     }
 
     /// @dev Snapshot of a decimator jackpot for claim processing. All three fields pack
@@ -2914,8 +2919,9 @@ abstract contract DegenerusGameStorage {
         /// @notice Total qualifying burn across winning subbuckets (denominator for
         ///         pro-rata). Sum of per-burn effective amounts: the base is the FLIP
         ///         burned plus a boon of up to 50% on at most 50k FLIP of it, then the
-        ///         activity multiplier (up to 1.7833x, x1.2 on day one) applies until
-        ///         DECIMATOR_MULTIPLIER_CAP, beyond which burns count 1x. Supply-capped
+        ///         activity multiplier (up to 1.7833x, x1.2 on day one) applies to the
+        ///         player's first DECIMATOR_MULTIPLIER_CAP of BASE burn at the level;
+        ///         base beyond the cap counts 1x. Supply-capped
         ///         at uint128; realistic per-level totals sit ~1e8x under it.
         uint128 totalBurn;
         /// @notice Stored seed for the claim-time lootbox draw only: the low 32 bits of

@@ -16,7 +16,7 @@ contract DecimatorEntropySeeder is DegenerusGame {
             burn: 1 ether,
             bucket: 2,
             subBucket: uint8(uint256(keccak256(abi.encodePacked(word, uint8(2)))) % 2),
-            claimed: 0
+            claimed: 0, baseMilli: 0
         });
     }
 }

@@ -138,9 +138,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // Day-one burns are exempt from the last-purchase-day debuff, so the opening
         // bonus lands whole.
         uint256 multiplier = ActivityCurveLib.decMultBps(game.playerActivityScore(HOUSE)) * 12_000 / 10_000;
-        uint256 maxBase = 200_000 ether * 10_000 / multiplier;
-        uint256 expected = base * multiplier / 10_000;
-        if (expected > 200_000 ether) expected = maxBase * multiplier / 10_000 + base - maxBase;
+        // The multiplier covers the first 500k FLIP of base; base beyond it counts 1x.
+        uint256 multipliedBase = base <= 500_000 ether ? base : 500_000 ether;
+        uint256 expected = multipliedBase * multiplier / 10_000 + (base - multipliedBase);
         (uint192 weight, uint8 bucket) = harness.entry(5);
         assertEq(weight, expected, "quest reward and opening bonus enter normal weight math");
         assertEq(bucket, ActivityCurveLib.decBucket(game.playerActivityScore(HOUSE), 5));
