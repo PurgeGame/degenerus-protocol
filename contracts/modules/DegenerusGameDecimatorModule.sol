@@ -50,7 +50,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @param lvl Current game level.
     /// @param bucket The denominator bucket used (2-12).
     /// @param subBucket The deterministic subbucket assigned (0 to bucket-1).
-    /// @param effectiveAmount Burn amount after multiplier (capped).
+    /// @param effectiveAmount Burn weight after the multiplier. The multiplier applies to
+    ///        the first DECIMATOR_MULTIPLIER_CAP of BASE burned at this level; the weight
+    ///        it produces is itself uncapped.
     /// @param newTotalBurn Player's new total burn for this level.
     event DecBurnRecorded(
         address indexed player,
@@ -247,8 +249,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         bucketUsed = m.bucket;
 
         // Day-one bonus: burns while the window-open latch is armed carry 1.2x
-        // weight. Rides multBps so DECIMATOR_MULTIPLIER_CAP bounds the boosted
-        // accrual.
+        // weight. Rides multBps, which DECIMATOR_MULTIPLIER_CAP does NOT bound:
+        // the cap limits the BASE that is multiplied, not the weight it produces,
+        // so boosted weight reaches DECIMATOR_MULTIPLIER_CAP x multBps (2.14x the
+        // cap at max activity on day one).
         if (decDayOneActive) {
             multBps = (multBps * DEC_DAY_ONE_BONUS_BPS) / BPS_DENOMINATOR;
         } else if (lastPurchaseDay) {

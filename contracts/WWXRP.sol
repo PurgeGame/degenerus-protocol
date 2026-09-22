@@ -973,8 +973,9 @@ contract WWXRP {
       |  A hedge on the century BAF's 50/50 fire gate: daily-draw burns made |
       |  during a level x99 (via enter()) also arm the next x00 bracket and  |
       |  pay one burn-weighted winner iff that level's BAF skips (daily flip |
-      |  lost). The ETH pool is game-side — 25% of the would-be BAF pool,    |
-      |  credited claimable by the advance path.                             |
+      |  lost). The award is FLIP, not ETH: INCINERATOR_FLIP_BPS of the      |
+      |  armed day's BAF draw book, credited as coinflip stake by this       |
+      |  contract. The would-be BAF pool rolls forward whole in futurePool.  |
       +======================================================================+*/
 
     /// @dev Record an incinerator entry riding a daily-draw burn during a

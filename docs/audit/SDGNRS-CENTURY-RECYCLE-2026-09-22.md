@@ -147,7 +147,13 @@ SHA-256 of the final core implementation and intentional storage baseline:
 eb66d14dd8383e47de136a42d39c78f0d0c12d00ed5d9fdd37fb98338be5ca49  contracts/interfaces/IsDGNRS.sol
 f0a1969fec2672652bd677d1f1218dde76999dfa43a62de2b568a06655c4d8a0  contracts/modules/DegenerusGameAdvanceModule.sol
 2b182c3fd96324fda275156bfadc43483318d447611a12c0a77e52102133444a  scripts/layout/golden/sDGNRS.json
+e41115c53f44c415fdb10879a560892d71730ce9cef79eb708f22583bbb1ea92  contracts/FLIP.sol
 ```
+
+`contracts/FLIP.sol` is listed because the same commit also raised
+`SDGNRS_DECIMATOR_CAP` from 150,000 to 500,000 FLIP - an unrelated economic
+change that rides this one. It triples the sDGNRS FLIP backing spent per
+decimator opening, and it is not covered by the recycling analysis above.
 
 This is supplemental verification for the recycling change. It does not replace
 the repository's earlier audit snapshot or claim those older source hashes still

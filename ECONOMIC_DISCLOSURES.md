@@ -20,9 +20,13 @@ price tables and reward curves.
   rounds down in raw token units; allocation dust goes to Lootbox. Creator and
   PresaleBox allocations receive no refill.
 - Recycling adds no ETH/stETH/FLIP backing and reduces existing tokens' share of
-  that backing at the refill. Existing submitted redemption claims retain their
-  recorded amounts. Supply remains below the initial ceiling and at or below the
-  previous post-refill supply; it can increase at the refill itself. Permissionless
+  that backing at the refill. If a fraction `b` of the supply standing at the
+  previous checkpoint was burned during the century, each surviving token loses
+  `b / (2 - b)` of its backing at that close - 5% burned costs 2.6%, 20% costs
+  11.1%, 50% costs 33.3%. The loss is superlinear in `b` and is not capped.
+  Existing submitted redemption claims retain their recorded amounts. Supply
+  remains below the initial ceiling and at or below the previous post-refill
+  supply; it can increase at the refill itself. Permissionless
   reward settlement retains live-pool pricing, so an unresolved win may pay more
   tokens after replenishment. Game over permanently ends recycling, with no final
   catch-up mint for an unfinished century.
