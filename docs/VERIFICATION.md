@@ -110,7 +110,34 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-22, craps extsload revision
+## Current evidence — 2026-09-22, reveal and incinerator revision
+
+The source is the committed revision `72325bd6404565308ed0adf1c90c214dcff7d930`, the merge of two changes on top
+of the craps extsload revision below. First, the ticket drain's `RoundTraitsGenerated` is
+replaced by the anonymous four-topic `EntryTraitsRevealed` (each topic `(level << 160) |
+player`, one data word of sixteen trait bytes and their presence bits, two logs per
+eight-seat round), and `ticketGenerationStartBlock[level]` is appended at slot 70 so an
+indexer can bound the block range it scans per level; the round's work charge rises from
+37 to 38 units. Second, the x00 century incinerator pays 10% of the FLIP the armed BAF
+day's direct depositors burned and lost, as flip credit through WWXRP, instead of 25% of
+the would-be BAF pool in ETH; the advance module shrinks by 160 bytes because the credit
+moved into WWXRP and the crank no longer decodes a return value. The duplicate mint-layout
+comment in the game facade is removed. Raw runs are in
+[the supplementary archive](audit/evidence-2026-09-22-reveal-incinerator.tar.gz).
+
+| Check | Result |
+| --- | --- |
+| Foundry full seven-group sweep at this revision | 2,661 passed, 0 failed, 103 skipped, run in a detached worktree at this exact revision (7 new tests: the entry-reveal gas/parity suite and the generation-window cases) |
+| Per-test gas, craps extsload revision vs this revision, same fixture pins | 389 fixed-gas tests moved, the largest by 5.5% on the driven century incinerator test (its armed day now carries a funded book) and otherwise within ±2.1%; drain-heavy tests fell up to 1.7% from the removed owner loop, purchase-heavy tests rose from the round's extra unit (`gas-delta-per-test.txt`) |
+| Hardhat `make test-hardhat` | 1,659 passing, 22 pending, 0 failing |
+| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`, both pre-disclosed reds |
+| Eleven `make check-*` gates and the storage layout oracle | all pass |
+| EIP-170 runtime size, checked-in pins | `DegenerusGameMintModule` 24,538 (38 spare), `DegenerusGameAdvanceModule` 24,398 (178 spare), `CrapsBattle` 24,331 (245 spare), `DegenerusGame` 24,220 (356 spare); all 32 entries fit |
+| EIP-170 runtime size, Hardhat-style fixture pins | `DegenerusGameMintModule` 24,543 (33 spare), `DegenerusGameAdvanceModule` 24,415 (161 spare), `CrapsBattle` 24,399 (177 spare), `DegenerusGame` 24,225 (351 spare); all 32 entries fit |
+| Slither 0.11.5, same flags as below | 3,901 results over 183 contracts: 200 High, 517 Medium, 554 Low, 2,574 Informational, 56 Optimization; High composition identical to the extsload run. Attributable new entries: Medium `unused-return` (the advance crank deliberately omits the incinerator's return decode), Medium `uninitialized-local` in the foil round worker, Low `reentrancy-events` on `WWXRP.resolveIncinerator` (event after the flip credit), and 14 Informational `unused-state` rows for `ticketGenerationStartBlock` (written by the game, read only via `extsload`); the remainder are re-keyed counterparts (`slither-delta-vs-event-index-run.txt`) |
+| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,455 instances (+6 in the literal categories from the new constants, one fewer uninitialized-local); no new category |
+
+## Evidence — 2026-09-22, craps extsload revision (base of the revision above)
 
 The source is the committed revision `6d02e4bfa25157987159eee225e7c3673a384fd1`. It differs from the
 event-index revision below by one view function: `CrapsBattle.extsload(bytes32)`, the

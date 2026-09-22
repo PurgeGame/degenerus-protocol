@@ -164,3 +164,32 @@ headroom rail in `test/craps/CrapsGas.t.sol` was raised from 24,300 to 24,400; i
 project margin, not the EIP-170 limit, and had been set against a build 45 bytes smaller
 than the shipped table. The full suites, gates, oracle, sizes and analyzers were re-run at
 this revision; see `../VERIFICATION.md`.
+
+## Addendum — reveal and incinerator revision `72325bd64`
+
+Two changes merged on top of the craps extsload revision.
+
+`EntryTraitsRevealed` replaces `RoundTraitsGenerated`. Each of the four indexed topics is
+`(level << 160) | player`, so a wallet's entries at a level are four topic-position
+filters against one anonymous event; the data word carries sixteen trait bytes and sixteen
+presence bits, and an eight-seat round emits two logs. The event is anonymous so that all
+four topics can name players; consumers must decode by explicit ABI, never by signature
+discovery, and the repository's decoder check exercises the shipped browser bundle for
+exactly that. `ticketGenerationStartBlock[level]` (slot 70, appended, read via
+`extsload`) is stamped at deploy for levels 0 to 5 and at each fresh level-promoting RNG
+request for level+5, an inclusive lower block bound for the level's first generation
+window. The round's charged work rises from 37 to 38 units with the reveal emitter bounded
+at 10,000 gas and no credit taken for the removed owner loop; a pinned pre-reveal FoilPack
+runtime compares storage writes and decoded inventory old against new.
+
+The x00 century incinerator no longer pays ETH. When the century flip loses, WWXRP draws
+its burn-weighted winner as before and credits 10% of the FLIP that the armed BAF day's
+direct depositors burned from their wallets and forfeited on that flip, as flip credit
+through the coinflip's creditor lane. The basis is the coinflip's existing draw book for
+the armed day (whole FLIP per deposit; bonuses, recycled stake, auto-rebuy carry and the
+protocol seeds carry no weight), so no new accounting was added, and the would-be BAF pool
+rolls forward whole in `futurePool` on a skip. `IncineratorResolved`'s third field is
+renamed `poolWei` to `flipAward` with the same type; `resolveIncinerator` takes two
+arguments. Moving the lookup and credit into WWXRP and dropping the crank's unused return
+decode shrank `DegenerusGameAdvanceModule` by 160 bytes; a first attempt that kept them in
+the advance module went 216 bytes over EIP-170 and was discarded.

@@ -1,7 +1,7 @@
 {
-  "date": "2026-09-21",
+  "date": "2026-09-22",
   "status": "committed revision audit handoff; not an audited deployment",
-  "base_commit": "6d02e4bfa25157987159eee225e7c3673a384fd1",
+  "base_commit": "72325bd6404565308ed0adf1c90c214dcff7d930",
   "source_file_count": 59,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -85,12 +85,14 @@
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "docs/VERIFICATION.md: current evidence for the craps extsload revision, with the event-index and seed-domain evidence retained beneath it; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
+  "verification": "docs/VERIFICATION.md: current evidence for the 2026-09-22 reveal/incinerator revision, with the earlier 2026-09-21 and 2026-09-22 evidence retained beneath it; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
   "verification_inputs_hashes_file": "verification-sha256.txt",
   "evidence_archive": "evidence-2026-09-21.tar.gz",
   "evidence_archive_sha256": "651a9e9da46db10565535cc7d949134905b7bd772022e5539c98025e1b6c0855",
   "supplement_archive": "evidence-2026-09-21-event-index.tar.gz",
   "supplement_archive_sha256": "d9ab7b47806a5258a71cffe230090a24ed1adc8e1686cd3aa6ee7629ef314339",
   "supplement_archive_2": "evidence-2026-09-22-craps-extsload.tar.gz",
-  "supplement_archive_2_sha256": "1b6cf701fbbb10d3aac84d1ad544e8838dc77cfaf2f1d4dbd2965c1fc3ed90b5"
+  "supplement_archive_2_sha256": "1b6cf701fbbb10d3aac84d1ad544e8838dc77cfaf2f1d4dbd2965c1fc3ed90b5",
+  "supplement_archive_3": "evidence-2026-09-22-reveal-incinerator.tar.gz",
+  "supplement_archive_3_sha256": "e12d5b1bd4ae591a715701b1ae31bb58d5b64e14db04f7ec1763d5e2b7fc01ec"
 }
