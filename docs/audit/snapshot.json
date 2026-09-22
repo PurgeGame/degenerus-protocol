@@ -1,7 +1,7 @@
 {
   "date": "2026-09-21",
-  "status": "working-tree audit handoff; not an audited deployment",
-  "base_commit": "1a4d06d08aa1c5e2a15575039dd66e9c8cc1e0b3",
+  "status": "committed revision audit handoff; not an audited deployment",
+  "base_commit": "91cc40e39bb97ae1ab50e011ff54db92021033d2",
   "source_file_count": 59,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -85,8 +85,10 @@
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "docs/VERIFICATION.md: current 2026-09-21 evidence and docs/audit/AUDIT-READINESS-2026-09-21.md; see evidence archive for full runs and affected-suite reruns.",
+  "verification": "docs/VERIFICATION.md: current 2026-09-21 evidence for the event-index revision, with the seed-domain evidence retained beneath it; docs/audit/AUDIT-READINESS-2026-09-21.md addendum; see both evidence archives.",
   "verification_inputs_hashes_file": "verification-sha256.txt",
   "evidence_archive": "evidence-2026-09-21.tar.gz",
-  "evidence_archive_sha256": "651a9e9da46db10565535cc7d949134905b7bd772022e5539c98025e1b6c0855"
+  "evidence_archive_sha256": "651a9e9da46db10565535cc7d949134905b7bd772022e5539c98025e1b6c0855",
+  "supplement_archive": "evidence-2026-09-21-event-index.tar.gz",
+  "supplement_archive_sha256": "d9ab7b47806a5258a71cffe230090a24ed1adc8e1686cd3aa6ee7629ef314339"
 }

@@ -110,7 +110,30 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-21
+## Current evidence — 2026-09-21, event-index revision
+
+The source is the committed revision `91cc40e39bb97ae1ab50e011ff54db92021033d2`. It differs from the
+seed-domain snapshot below by one line: `EntryOwnerRegistered.owner` is now an indexed
+topic (`contracts/storage/DegenerusGameStorage.sol`), so a wallet's registry positions
+resolve from one `eth_getLogs` filter without an off-chain ticket index. The event
+signature, and therefore `topic0`, is unchanged; `owner` moves from the second data word
+to the third topic. No emit site, storage slot or other event changed. The addendum in
+[the readiness review](audit/AUDIT-READINESS-2026-09-21.md) prices the change; raw runs
+are in [the supplementary archive](audit/evidence-2026-09-21-event-index.tar.gz).
+
+| Check | Result |
+| --- | --- |
+| Foundry full seven-group sweep at this revision | 2,652 passed, 0 unresolved failures, 103 skipped; one invariant (`CrapsRealWiringConservation`) tripped its own non-vacuity guard under the runner's default seed on both the base and this revision and passes with seeds `0xdeadbeef` and `0x1` (logs in `invariant-reruns/`) |
+| Per-test gas, base revision vs this revision, same fixture pins | +95 gas per owner registration on the canonical path, +104 on the foil-buy path; largest single-test change +0.31%; 14 tests fell by at most 1,600 gas (module deploy size); no test moved for any other reason (`gas-delta-per-test.txt`) |
+| Hardhat `make test-hardhat` | 1,659 passing, 22 pending, 0 failing |
+| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`, both pre-disclosed reds |
+| Eleven `make check-*` gates and the storage layout oracle | all pass |
+| EIP-170 runtime size, checked-in pins | `DegenerusGameAdvanceModule` 24,543 (33 spare), `DegenerusGameMintModule` 24,538 (38 spare), `CrapsBattle` 24,289 (287 spare), `DegenerusGame` 24,220 (356 spare); `DegenerusGameWhaleModule` −90 bytes, `DegenerusGameFoilPackModule` +6, every other registry sink −8; all 32 entries fit |
+| EIP-170 runtime size, Hardhat-style fixture pins | `DegenerusGameAdvanceModule` 24,560 (16 spare), `DegenerusGameMintModule` 24,543 (33 spare), `CrapsBattle` 24,357 (219 spare), `DegenerusGame` 24,225 (351 spare); all 32 entries fit; pins reproduced outside the fixture from the default Hardhat signer and mock nonces (`ContractAddresses-hardhat-style.sol` in the supplementary archive) |
+| Slither 0.11.5, same flags as below | 3,888 results over 183 contracts: 200 High, 517 Medium, 555 Low, 2,560 Informational, 56 Optimization, identical totals and identical High composition to the seed-domain run; keyed line-insensitively, 8 Low/Informational entries re-keyed with 8 cancelling counterparts in the same functions (`slither-delta-vs-2026-09-21-baseline.txt`) |
+| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,449 instances; every category and per-category instance count identical to the seed-domain report |
+
+## Evidence — 2026-09-21, seed-domain snapshot (base of the revision above)
 
 The source is the working-tree snapshot based on `1a4d06d08aa1c5e2a15575039dd66e9c8cc1e0b3`.
 See [the readiness review](audit/AUDIT-READINESS-2026-09-21.md) and

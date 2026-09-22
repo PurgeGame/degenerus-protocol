@@ -80,7 +80,8 @@ The level owner registry is append-only. Trait buckets pack eight uint32 owner i
 per storage word. The individual drain aggregates trait occurrences before writing runs;
 the round drain batches seats. Queue release clears the length in constant time.
 
-`EntryOwnerRegistered` maps level/index to owner. `RoundTraitsGenerated.seatOwners` packs
+`EntryOwnerRegistered` maps level/index to owner; both `lvl` and `owner` are indexed, so a
+wallet's positions at a level are one log filter. `RoundTraitsGenerated.seatOwners` packs
 index-plus-one into eight lanes; zero is an empty lane. Storage bucket indices themselves
 are zero-based. Event consumers must not confuse those encodings.
 

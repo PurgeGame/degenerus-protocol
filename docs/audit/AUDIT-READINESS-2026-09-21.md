@@ -111,3 +111,34 @@ obsolete v36 protected-source byte-identity baseline and STAT-03's empty-bucket
 skip-rate expectation. The ordinary suites do not execute independent Halmos
 proofs or the separate deep invariant profile. Existing accepted scheduling,
 terminal fallback and settlement-order assumptions remain in `KNOWN-ISSUES.md`.
+
+## Addendum — event-index revision `91cc40e39`
+
+One line changed after the review above: `EntryOwnerRegistered(uint24 indexed lvl,
+uint32 idx, address indexed owner)`. The game keeps the full ticket registry on chain
+but no event let a wallet ask which registry positions are its own; both registry
+events were indexed by level only, so a per-wallet question meant walking a whole
+level. Indexing `owner` makes that lookup chain-native before the ABI freezes at
+deployment. The signature and `topic0` do not change; decoders must read `owner`
+from the third topic and `idx` as the only data word.
+
+Cost was measured, not estimated, by snapshotting every Foundry test at the base
+revision and again at this one under the same fixture pins: +95 gas per registration
+on the canonical `_registerEntryOwner` path and +104 on the foil-buy path (a LOG topic
+costs 375, the removed 32 data bytes save 256, and encoding one word instead of two
+saves the rest). The largest single-test change is +0.31%. `DegenerusGameWhaleModule`
+shrank by 90 bytes and `DegenerusGameFoilPackModule` grew by 6 under via-IR; every
+other registry sink lost 8 bytes; `DegenerusGame` is unchanged. The full sweep,
+Hardhat, the statistical suite, the eleven gates, the storage oracle and both
+analyzers were re-run at this revision; the results are in `../VERIFICATION.md` and
+the supplementary evidence archive. Slither and Aderyn cannot see event indexing;
+their outputs are compared to the seed-domain run to show nothing else moved.
+
+Two related events were evaluated and left alone. Emitting per-trait bucket start
+offsets in `RoundTraitsGenerated` would add three to four data words (+768 to
++1,024 gas) to every seated round and still leave a wallet scanning every round of
+the level, because seat owners are packed in the data and cannot be a topic.
+Indexing `sender` on `DegenerusAffiliate.Affiliate` would close the same class of
+gap for per-player referral history at about +119 gas per affiliated purchase; it is
+a product decision and is not part of this revision. `GNRUS.LevelResolved` and the
+admin proposal events are low-volume and already filterable.
