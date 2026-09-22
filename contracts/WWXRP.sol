@@ -42,8 +42,9 @@ pragma solidity 0.8.34;
  *        burns (WWXRP bets) spend from that allowance (FLIP model)
  *      - enter()/claim(): daily burn draw for a fixed FLIP prize
  *      - Century BAF incinerator: a level-x99 enter() burn also bets on the
- *        upcoming x00 BAF skipping — one burn-weighted winner is paid 25% of
- *        the would-be BAF pool game-side when the century flip loses
+ *        upcoming x00 BAF skipping — when the century flip loses, one
+ *        burn-weighted winner is credited game-side with a share of the FLIP
+ *        that day's direct depositors burned and lost (flip credit, not ETH)
  *
  * @dev DAILY DRAW (per participation day d):
  *      - A player burns at least 25 WWXRP via enter(); the burn and the
@@ -121,6 +122,9 @@ interface IDrawGame {
 interface IDrawCoinflip {
     /// @notice Coinflip's credit of `amount` FLIP stake to `player`.
     function creditFlip(address player, uint256 amount) external;
+    /// @notice The armed BAF draw day and its book: the whole-FLIP sum of every direct
+    ///         self-funded deposit that staked the armed day, and the entry count.
+    function bafDrawInfo() external view returns (uint24 day, uint96 totalWeight, uint32 entryCount);
 }
 
 contract WWXRP {
@@ -222,13 +226,13 @@ contract WWXRP {
     /// @notice Emitted when a skipped century BAF resolves its incinerator draw
     /// @param bracket Century bracket whose BAF skipped (level x00)
     /// @param winner Player recorded in the winning entry (paid game-side)
-    /// @param poolWei ETH pool credited to the winner by the game
+    /// @param flipAward FLIP credited to the winner by the game as flip credit
     /// @param roll Winner roll in [0, totalScore)
     /// @param totalScore Bracket total effective score (wei units)
     event IncineratorResolved(
         uint24 indexed bracket,
         address indexed winner,
-        uint256 poolWei,
+        uint256 flipAward,
         uint256 roll,
         uint256 totalScore
     );
@@ -377,6 +381,11 @@ contract WWXRP {
     bytes32 private constant DOM_WIN_BUCKET = "WWXRP_DRAW_WIN_BUCKET";
     bytes32 private constant DOM_WINNER = "WWXRP_DRAW_WINNER";
 
+    /// @dev Incinerator award, in basis points of the FLIP the armed BAF day's direct
+    ///      depositors burned and then lost when that day's flip came up tails. The
+    ///      coinflip's draw book already sums those deposits (whole FLIP), so the award
+    ///      needs no new accounting; it is paid as flip credit, never ETH.
+    uint256 private constant INCINERATOR_FLIP_BPS = 1_000;
     /// @dev Domain tag for the BAF-incinerator winner roll
     bytes32 private constant DOM_INCIN_WINNER = "WWXRP_INCIN_WINNER";
 
@@ -976,23 +985,24 @@ contract WWXRP {
         );
     }
 
-    /// @notice Resolve a skipped century BAF's incinerator draw to one winner.
+    /// @notice Resolve a skipped century BAF's incinerator draw to one winner and
+    ///         credit the prize: INCINERATOR_FLIP_BPS of the FLIP the armed BAF day's
+    ///         direct depositors burned and lost on that tails flip, as flip credit.
     /// @dev Called by the game's advance path exactly once per skipped x00
-    ///      bracket, in the same call that processes the skip — the caller
-    ///      credits poolWei to the returned winner claimable-side. Returns
-    ///      address(0) when the bracket has no entries (caller then leaves
-    ///      the full pool in futurePool). Winner selection is a
-    ///      domain-separated roll over the burn-weighted cumulative
-    ///      intervals, located by binary search.
+    ///      bracket, in the same call that processes the skip. The lost total is
+    ///      the coinflip's draw book for the armed day (whole FLIP); the book closed
+    ///      at the day boundary, before the transition word was requested. Returns
+    ///      address(0) when the bracket has no entries. A winner with an empty book
+    ///      is still drawn and logged, with a zero award. Winner selection is a
+    ///      domain-separated roll over the burn-weighted cumulative intervals,
+    ///      located by binary search.
     /// @param bracket Skipped century bracket (level x00).
     /// @param rngWord VRF word of the transition that skipped the BAF.
-    /// @param poolWei ETH the caller pays the winner (event data only here).
     /// @return winner Recorded winner, or address(0) for an empty bracket.
     /// @custom:reverts OnlyMinter When caller is not the game contract.
     function resolveIncinerator(
         uint24 bracket,
-        uint256 rngWord,
-        uint256 poolWei
+        uint256 rngWord
     ) external returns (address winner) {
         if (msg.sender != MINTER_GAME) revert OnlyMinter();
 
@@ -1024,7 +1034,11 @@ contract WWXRP {
         }
         winner = _incinEntry[_incinEntryKey(bracket, lo)].player;
 
-        emit IncineratorResolved(bracket, winner, poolWei, roll, total);
+        (, uint96 lostFlip, ) = coinflip.bafDrawInfo();
+        uint256 flipAward = (uint256(lostFlip) * 1 ether * INCINERATOR_FLIP_BPS) / 10_000;
+        if (flipAward != 0) coinflip.creditFlip(winner, flipAward);
+
+        emit IncineratorResolved(bracket, winner, flipAward, roll, total);
     }
 
     /// @notice Incinerator bracket totals.

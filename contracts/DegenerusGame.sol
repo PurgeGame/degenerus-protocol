@@ -188,31 +188,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
 
     /*+======================================================================+
-      |                    MINT PACKED BIT LAYOUT                            |
-      +======================================================================+
-      |  Player mint history is packed into a single uint256 for gas         |
-      |  efficiency. Layout (LSB first):                                     |
-      |                                                                      |
-      |  [0-23]   lastEthLevel     - Last level where player minted with ETH |
-      |  [24-47]  ethLevelCount    - Total levels with ETH mints             |
-      |  [48-71]  ethLevelStreak   - Consecutive levels with ETH mints       |
-      |  [72-103] lastEthDay       - Day index of last ETH mint              |
-      |  [104-127] unitsLevel      - Level index for unitsAtLevel tracking   |
-      |  [128-151] frozenUntilLevel - Whale pass freeze level (0 = none)     |
-      |  [152-153] whalePassType  - Pass type (0=none,1=10,3=100)            |
-      |  [154]    seatClaimed      - AFKing seat mint latch (1b)            |
-      |  [155]    seatEncumbered   - AFKing seat encumbrance latch (1b)      |
-      |  [156-159] (reserved)      - 4 unused bits                           |
-      |  [160-183] mintStreakLast  - Mint streak last completed level (24b)  |
-      |  [184]    hasDeityPass     - Deity pass holder flag (1b)             |
-      |  [185-208] affBonusLevel   - Cached affiliate bonus level (24b)      |
-      |  [209-214] affBonusPoints  - Cached affiliate bonus points (6b)      |
-      |  [215-222] curseCount      - Cashout/smite curse counter (8b)        |
-      |  [223-227] (reserved)      - 5 unused bits                           |
-      |  [228-243] unitsAtLevel    - Mints at current level                  |
-      +======================================================================+*/
-
-    /*+======================================================================+
       |                          CONSTRUCTOR                                 |
       +======================================================================+
       |  Initialize storage wiring and set up initial approvals.             |
@@ -1978,8 +1953,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • Daily jackpot - Paid each day to the level's trait-entry holders (day 5 = full pool)       |
       |  • BAF (Big Ass Flip) - At every x10 level, and only if that day's flip won: 10% of the       |
       |    future pool, raised to 20% at level 50 and at every x00. A losing flip marks the           |
-      |    bracket skipped and leaves the pool in place — except at x00, where 25% of the             |
-      |    would-be pool pays one WWXRP burner drawn from the level-x99 incinerator entries.            |
+      |    bracket skipped and leaves the pool in place; at x00 a share of the FLIP that day's         |
+      |    depositors lost is credited to one WWXRP burner drawn from the level-x99 incinerator entries. |
       |  • Decimator - 10% of the future pool at x5 levels (excluding x95), 30% at every x00.         |
       +===============================================================================================+*/
 
@@ -2639,7 +2614,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                   VIEW: PLAYER MINT STATISTICS                       |
       +======================================================================+
       |  Unpack player mint history from the bit-packed mintPacked_ storage. |
-      |  See MINT PACKED BIT LAYOUT above for field positions.               |
+      |  Field positions: the layout header and shift constants in          |
+      |  libraries/BitPackingLib.sol, the single source of truth.            |
       +======================================================================+*/
 
     /// @notice Get combined mint statistics for a player.
