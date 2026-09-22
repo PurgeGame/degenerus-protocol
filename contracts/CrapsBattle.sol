@@ -1907,6 +1907,18 @@ contract CrapsBattle is LootboxCraps {
         return _progressive;
     }
 
+    /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer contracts, the
+    ///         same read surface `DegenerusGame.extsload` gives the game: packed-state decodes
+    ///         and client replay live off-contract where EIP-170 headroom is free, and new read
+    ///         surfaces deploy without touching this contract. Read-only — storage is already
+    ///         public to off-chain readers via eth_getStorageAt; this mirrors that visibility to
+    ///         eth_call/staticcall consumers.
+    function extsload(bytes32 slot) external view returns (bytes32 value) {
+        assembly {
+            value := sload(slot)
+        }
+    }
+
     /// @dev Whether a bet has settled. No slip carries a settled bit — its slot's cursor marks the
     ///      whole field at once, and an id's low half is its place in that field.
     function _settledOf(uint256 betId) internal view returns (bool) {
