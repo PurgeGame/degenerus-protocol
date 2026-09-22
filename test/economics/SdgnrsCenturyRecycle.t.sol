@@ -7,6 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract SdgnrsCenturyRecycleTest is DeployProtocol {
     uint256 private constant INITIAL = 1e30;
+    uint256 private constant RNG_WORD = 53; // 50% at level 100; other centuries use separate draws.
     address private constant ALICE = address(0xA11CE);
     address private constant BOB = address(0xB0B);
 
@@ -21,8 +22,18 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
     }
 
     function _recycle(uint24 lvl) private {
+        _recycle(lvl, RNG_WORD);
+    }
+
+    function _recycle(uint24 lvl, uint256 rngWord) private {
         vm.prank(address(game));
-        sdgnrs.recycleCentury(lvl);
+        sdgnrs.recycleCentury(lvl, rngWord);
+    }
+
+    function _refillPercent(uint24 lvl, uint256 rngWord) private pure returns (uint256) {
+        return 25 + uint256(keccak256(abi.encode(
+            rngWord, uint256(keccak256("sdgnrs.century.refill")) ^ uint256(lvl)
+        ))) % 51;
     }
 
     function _award(sDGNRS.Pool pool, address recipient, uint256 amount) private returns (uint256) {
@@ -39,6 +50,10 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
     }
 
     function _assertRefill(uint24 lvl, uint256 burned) private {
+        _assertRefill(lvl, burned, RNG_WORD);
+    }
+
+    function _assertRefill(uint24 lvl, uint256 burned, uint256 rngWord) private {
         uint256 supply = sdgnrs.totalSupply();
         uint256 checkpoint = sdgnrs.centurySupplyCheckpoint();
         uint256 inventory = sdgnrs.balanceOf(address(sdgnrs));
@@ -46,14 +61,17 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         uint256 wrapperSupply = dgnrs.totalSupply();
         uint256 voting = sdgnrs.votingSupply();
         uint256[5] memory beforePools = _pools();
-        uint256 mint = burned / 2;
+        uint256 percent = _refillPercent(lvl, rngWord);
+        uint256 mint = burned * percent / 100;
+        assertGe(mint, burned * 25 / 100);
+        assertLe(mint, burned * 75 / 100);
         uint256 whale = mint / 7;
         uint256 affiliateShare = mint * 3 / 7;
         uint256 lootbox = mint - 2 * whale - affiliateShare;
 
         vm.expectEmit(true, false, false, true, address(sdgnrs));
-        emit sDGNRS.CenturyRecycled(lvl, burned, mint, whale, affiliateShare, lootbox, whale);
-        _recycle(lvl);
+        emit sDGNRS.CenturyRecycled(lvl, percent, burned, mint, whale, affiliateShare, lootbox, whale);
+        _recycle(lvl, rngWord);
 
         uint256[5] memory afterPools = _pools();
         assertEq(afterPools[0] - beforePools[0], whale);
@@ -79,7 +97,7 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         assertEq(sdgnrs.lastRecycledCentury(), 0);
         assertFalse(sdgnrs.recyclingClosed());
         vm.expectRevert(sDGNRS.Unauthorized.selector);
-        sdgnrs.recycleCentury(100);
+        sdgnrs.recycleCentury(100, RNG_WORD);
     }
 
     function testNonBoundariesAndDuplicateCallsDoNothing() public {
@@ -113,7 +131,7 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         _assertRefill(500, 2 ether + 1);
     }
 
-    function testZeroBurnAndOddDustStillAdvanceCheckpoint() public {
+    function testZeroBurnAndFractionalDustStillAdvanceCheckpoint() public {
         _assertRefill(100, 0);
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 1);
         _recycle(100);
@@ -121,13 +139,41 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         _assertRefill(200, 1);
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 1);
         _assertRefill(300, 1);
-        assertEq(sdgnrs.totalSupply(), INITIAL - 2, "odd dust never rolls into the next budget");
+        assertEq(sdgnrs.totalSupply(), INITIAL - 2, "fractional dust never rolls into the next budget");
     }
 
-    function testFuzzAllocationAndRounding(uint256 requested) public {
+    function testFuzzAllocationAndRounding(uint256 requested, uint256 rngWord) public {
         uint256 amount = bound(requested, 0, INITIAL / 10);
         _award(sDGNRS.Pool.Whale, address(sdgnrs), amount);
-        _assertRefill(100, amount);
+        _assertRefill(100, amount, rngWord);
+    }
+
+    function testMinimumRollMints25Percent() public {
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
+        _assertRefill(100, 100 ether, 8);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 75 ether);
+    }
+
+    function testMaximumRollMints75PercentAndCannotReroll() public {
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
+        _assertRefill(100, 100 ether, 119);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 25 ether);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
+        vm.warp(block.timestamp + 3 days);
+        vm.recordLogs();
+        _recycle(100, 8);
+        _recycle(100, type(uint256).max);
+        assertEq(vm.getRecordedLogs().length, 0, "replays emit no new roll or mint");
+        assertEq(sdgnrs.totalSupply(), INITIAL - 125 ether);
+        assertEq(sdgnrs.centurySupplyCheckpoint(), INITIAL - 25 ether);
+    }
+
+    function testSameWordSeparatesCenturies() public {
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
+        _assertRefill(100, 100 ether, 8);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
+        _assertRefill(200, 100 ether, 8);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 114 ether, "25% then 61% for the same word");
     }
 
     function testTinyRawUnitSplits() public {
@@ -194,10 +240,10 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
                 burned += _award(sDGNRS.Pool(p), address(sdgnrs), amount);
             }
             allBurned += burned;
-            allMinted += burned / 2;
-            _assertRefill(century * 100, burned);
+            allMinted += burned * _refillPercent(century * 100, seed) / 100;
+            _assertRefill(century * 100, burned, seed);
             assertEq(sdgnrs.totalSupply(), INITIAL + allMinted - allBurned);
-            assertLe(allMinted * 2, allBurned);
+            assertLe(allMinted * 100, allBurned * 75);
         }
     }
 

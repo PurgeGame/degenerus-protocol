@@ -3,6 +3,10 @@
 Date: 2026-09-22. Base commit: `a5d4d2cdcfb9eb1febfaa99e84c75954a9fe74de` plus
 the existing working-tree changes. Implementation remains local; no deployment.
 
+This report records the original **fixed-50%** implementation. The later random
+25–75% amendment and its fresh test evidence are recorded separately in
+[SDGNRS-CENTURY-RANDOM-2026-09-22.md](SDGNRS-CENTURY-RANDOM-2026-09-22.md).
+
 ## Implemented behavior
 
 At the final transition close after levels 100, 200, etc., the Game calls

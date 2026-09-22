@@ -129,10 +129,12 @@ At century transitions the BAF/Decimator draws precede the tagged 5d4 future-poo
 keep roll. The keep range is 50–80%, with mean 65%. Consult the Advance module for
 the exact pool snapshots and ordering; altering a pool size must not reroll winners.
 
-At the final transition close after each x00 level, sDGNRS recycles half of all
+At the final transition close after each x00 level, sDGNRS recycles a random 25–75% of all
 live burns since the previous century close, immediately before the Coinflip
-century seed. Its post-refill supply checkpoint captures both redemption burns
-and automatic self-award burns without per-burn accounting writes. New inventory
+century seed. A tagged hash of the committed transition word and completed level
+selects one of the 51 whole percentages; the event records it, and retries cannot
+reroll a completed century. Its post-refill supply checkpoint captures both
+redemption burns and automatic self-award burns without per-burn accounting writes. New inventory
 is split Whale/Affiliate/Lootbox/Reward in a 1:3:2:1 ratio, with allocation dust to
 Lootbox; PresaleBox and the wrapper receive no allocation. A processed-century
 marker prevents replay, and terminal pool destruction permanently closes the

@@ -6,6 +6,10 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
+    uint256 private constant RNG_WORD = uint256(keccak256("century-recycle-cold-close")) | 1;
+    uint256 private constant REFILL_PERCENT = 25 + uint256(keccak256(abi.encode(
+        RNG_WORD, uint256(keccak256("sdgnrs.century.refill")) ^ uint256(100)
+    ))) % 51;
     uint256 internal expectedBurns;
     uint256 internal expectedSupply;
 
@@ -21,11 +25,11 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
             expectedBurns = sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), 7_000 ether + 1);
         }
         vm.stopPrank();
-        expectedSupply = sdgnrs.totalSupply() + expectedBurns / 2;
+        expectedSupply = sdgnrs.totalSupply() + expectedBurns * REFILL_PERCENT / 100;
 
         bytes memory realCode = address(game).code;
         PhaseEndSeeder seeder = _etchSeedRestore();
-        seeder.seedTransitionDone(LVL, uint256(keccak256("century-recycle-cold-close")) | 1);
+        seeder.seedTransitionDone(LVL, RNG_WORD);
         _restore(realCode);
     }
 
@@ -46,9 +50,10 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
                 assertFalse(recycled, "one event per boundary");
                 recycled = true;
                 assertEq(uint256(logs[i].topics[1]), 100);
-                (uint256 burned, uint256 minted,,,,) = abi.decode(logs[i].data, (uint256,uint256,uint256,uint256,uint256,uint256));
+                (uint256 percent, uint256 burned, uint256 minted,,,,) = abi.decode(logs[i].data, (uint256,uint256,uint256,uint256,uint256,uint256,uint256));
+                assertEq(percent, REFILL_PERCENT);
                 assertEq(burned, expectedBurns);
-                assertEq(minted, expectedBurns / 2);
+                assertEq(minted, expectedBurns * REFILL_PERCENT / 100);
             }
             if (logs[i].topics[0] == SEED_ARMED_SIG) seeded = true;
         }
@@ -63,7 +68,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
         assertGt(wwxrp.vaultAllowance(), wwxrpBefore);
 
         vm.prank(address(game));
-        sdgnrs.recycleCentury(100);
+        sdgnrs.recycleCentury(100, RNG_WORD + 1);
         assertEq(sdgnrs.totalSupply(), expectedSupply, "repeat is inert");
     }
 }

@@ -103,7 +103,7 @@ interface IDGNRS {
 /**
  * @title sDGNRS (sDGNRS)
  * @notice Soulbound token backed by ETH, stETH, and FLIP reserves
- * @dev Receives ETH/stETH from game distributions; reward pools recycle half of live burns each century.
+ * @dev Receives ETH/stETH from game distributions; reward pools recycle 25-75% of live burns each century.
  *      Creator allocation is minted to the DGNRS wrapper contract; all other holders receive
  *      sDGNRS directly from reward pools (soulbound — no transfer function).
  *
@@ -113,7 +113,7 @@ interface IDGNRS {
  * - Accrues FLIP backing via manual transfers and coinflip claimables (withdrawn on burn)
  * - Pre-minted supply split into DGNRS wrapper allocation + reward pools
  * - Game distributes sDGNRS to players by drawing down pools
- * - Completed centuries recycle half of their supply burns into the four ongoing pools
+ * - Completed centuries recycle a random 25-75% of their supply burns into the four ongoing pools
  * - Users burn sDGNRS to claim proportional ETH + stETH + FLIP
  */
 contract sDGNRS {
@@ -198,10 +198,11 @@ contract sDGNRS {
     /// @param amount Amount transferred
     event PoolTransfer(Pool indexed pool, address indexed to, uint256 amount);
 
-    /// @notice Half of the completed century's live burns were returned to ongoing reward pools.
-    /// @dev Amounts are raw sDGNRS units. Lootbox receives allocation division dust.
+    /// @notice A random 25-75% of the completed century's live burns returned to ongoing pools.
+    /// @dev refillPercent is a whole percentage; amounts are raw units. Lootbox receives allocation dust.
     event CenturyRecycled(
         uint24 indexed completedLevel,
+        uint256 refillPercent,
         uint256 burned,
         uint256 minted,
         uint256 whale,
@@ -355,6 +356,9 @@ contract sDGNRS {
     // =====================================================================
     //                          CONSTANTS
     // =====================================================================
+
+    /// @dev Domain for the per-century refill percentage; the completed level keys each draw.
+    bytes32 private constant CENTURY_REFILL_TAG = keccak256("sdgnrs.century.refill");
 
     /// @notice Initial supply (1 trillion tokens)
     uint256 private constant INITIAL_SUPPLY = 1_000_000_000_000 * 1e18;
@@ -641,19 +645,21 @@ contract sDGNRS {
         return amount;
     }
 
-    /// @notice Recycle half of all burns since the previous completed century into ongoing pools.
+    /// @notice Recycle a random 25-75% of burns since the previous completed century into ongoing pools.
     /// @dev GAME calls once as an x00 transition closes. No external calls or backing movements.
     ///      The post-mint checkpoint counts each supply reduction once, including self-awards and
-    ///      wrapped redemptions. Each century floors its half independently; odd burn dust expires.
+    ///      wrapped redemptions. The committed transition word selects one of 51 whole percentages;
+    ///      caller, timing and burn amount cannot change the roll. Fractional raw-unit dust expires.
     ///      Stale/non-boundary calls are no-ops. A later boundary consumes the checkpoint delta
     ///      once; it never loops over or fabricates separate missed-century budgets.
-    function recycleCentury(uint24 completedLevel) external onlyGame {
+    function recycleCentury(uint24 completedLevel, uint256 rngWord) external onlyGame {
         if (recyclingClosed || completedLevel == 0 || completedLevel % 100 != 0) return;
         uint24 century = completedLevel / 100;
         if (century <= lastRecycledCentury) return;
 
         uint256 burned = uint256(centurySupplyCheckpoint) - _totalSupply;
-        uint256 minted = burned / 2;
+        uint256 refillPercent = 25 + EntropyLib.hash2(rngWord, uint256(CENTURY_REFILL_TAG) ^ completedLevel) % 51;
+        uint256 minted = burned * refillPercent / 100;
         uint256 whale = minted / 7;
         uint256 affiliate = (minted * 3) / 7;
         uint256 reward = whale;
@@ -668,10 +674,10 @@ contract sDGNRS {
             poolBalances[uint8(Pool.Lootbox)] += uint128(lootbox);
             poolBalances[uint8(Pool.Reward)] += uint128(reward);
         }
-        // Stamp even a zero mint. This MUST be post-mint supply: S' = checkpoint - ceil(burned/2).
+        // Stamp even a zero mint. Post-mint supply stays <= checkpoint: at least 25% stays burned.
         centurySupplyCheckpoint = _totalSupply;
         lastRecycledCentury = century;
-        emit CenturyRecycled(completedLevel, burned, minted, whale, affiliate, lootbox, reward);
+        emit CenturyRecycled(completedLevel, refillPercent, burned, minted, whale, affiliate, lootbox, reward);
     }
 
     /// @notice Burn all undistributed pool tokens at game over and permanently close recycling.
@@ -1305,7 +1311,7 @@ contract sDGNRS {
         if (to == address(0)) revert ZeroAddress();
         uint256 supplyAfter = uint256(_totalSupply) + amount;
         // Only genesis allocations and century refills mint. Genesis totals INITIAL_SUPPLY;
-        // a refill adds floor((checkpoint - supply)/2), so its result <= checkpoint <= 1e30.
+        // a refill adds at most 75% of (checkpoint - supply), so its result <= checkpoint <= 1e30.
         // This inductive bound makes narrowing safe without an extra crank-halting cap check.
         _totalSupply = uint128(supplyAfter);
         balanceOf[to] += amount;

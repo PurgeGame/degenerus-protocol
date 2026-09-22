@@ -12,18 +12,20 @@ price tables and reward curves.
   released initially; **5B per level** vests to the current vault owner, capped at **200B**.
 - Other initial sDGNRS allocations: affiliate 30%, lootbox 20%, whale 10%, reward 10%,
   presale box 10%. See `sDGNRS` and `DGNRS` for pool movements and redemption conditions.
-- At the final transition close after levels **100, 200, 300, etc.**, half of all
+- At the final transition close after levels **100, 200, 300, etc.**, a random **25–75%** of all
   sDGNRS burned since the previous such close is minted back into the ongoing
   pools, split **Whale : Affiliate : Lootbox : Reward = 1 : 3 : 2 : 1**. The first
   interval starts at deployment. This includes live player redemptions, wrapped
-  redemptions' underlying sDGNRS burn, and automatic self-award burns. Each half
+  redemptions' underlying sDGNRS burn, and automatic self-award burns. The committed
+  transition RNG word selects a whole percentage (25 through 75; mean 50%). Each mint
   rounds down in raw token units; allocation dust goes to Lootbox. Creator and
   PresaleBox allocations receive no refill.
 - Recycling adds no ETH/stETH/FLIP backing and reduces existing tokens' share of
   that backing at the refill. If a fraction `b` of the supply standing at the
-  previous checkpoint was burned during the century, each surviving token loses
-  `b / (2 - b)` of its backing at that close - 5% burned costs 2.6%, 20% costs
-  11.1%, 50% costs 33.3%. The loss is superlinear in `b` and is not capped.
+  previous checkpoint was burned during the century and the refill fraction is
+  `r` (0.25–0.75), each surviving token loses `r*b / (1-b+r*b)` of its backing
+  at that close, ignoring raw-unit rounding. With 50% burned, a 25%, 50%, or 75%
+  refill reduces backing per surviving token by 20%, 33.3%, or 42.9%, respectively.
   Existing submitted redemption claims retain their recorded amounts. Supply
   remains below the initial ceiling and at or below the previous post-refill
   supply; it can increase at the refill itself. Permissionless
