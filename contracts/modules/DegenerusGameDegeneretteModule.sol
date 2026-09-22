@@ -123,8 +123,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param betId The bet ID.
     /// @param spinIndex Index of this spin (0 to count-1).
     /// @param playerTraits The player's spin traits.
-    /// @param matches Composite score S (0-9; color gated behind symbol,
-    ///        hero symbol +2). Field name retained for the off-chain indexer.
+    /// @param matches Composite score S (0-9; independent colors, hero symbol +2). Field name retained for the off-chain indexer.
     /// @param payout Payout for this spin.
     event DegeneretteResult(
         address indexed player,
@@ -160,7 +159,8 @@ contract DegenerusGameDegeneretteModule is
     ///        (0=WWXRP, 1=FLIP, 2=ETH, 3=record bounty), bits 59-0 = seed entropy (unique per spin).
     /// @param packedSpins Per-spin reels packed low→high, each spin = [playerTraits:32 |
     ///        resultTraits:32 | score:8] (72 bits, spin 0 lowest); bits 216-223 = spin count;
-    ///        bit 224 = FLIP survival flag (1 = the survival flip won; unused for WWXRP/ETH).
+    ///        bit 224 = FLIP survival flag (1 = the survival flip won; unused for WWXRP/ETH);
+    ///        bits 225-230 = 2-bit hero quadrants for spins 0/1/2.
     /// @param payout Total reward: WWXRP minted, FLIP (returned to the box caller and credited
     ///        through coinflip at flush; only the record-bounty chain mints here), or the ETH
     ///        gross (= ethShare + the recirc).
@@ -217,22 +217,6 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev Bonus ROI for ETH bets in basis points (+5%), redistributed to high buckets.
     uint16 private constant ETH_ROI_BONUS_BPS = 500;
-
-    /// @dev WWXRP rigged floor ROI (flat 70%): the guaranteed multiplier applied to
-    ///      every WWXRP roll's base payout (all score tiers). The surplus
-    ///      `_wwxrpRoi(score) - WWXRP_FLOOR_BPS` is redistributed into the top score
-    ///      buckets (S=6-9). 70% is the score-0 RTP, and `_wwxrpRoi >= 7000` at every
-    ///      score, so the floor is flat and never binds above the curve.
-    uint16 private constant WWXRP_FLOOR_BPS = 7_000;
-
-    /// @dev WWXRP total-RTP curve (the rigged WWXRP payout RTP equals this / 10000).
-    ///      Steep ramp 70%->115% (score 0 to K=305), shallow leg to 118% (seg-B knee),
-    ///      near-flat crawl to 120% at the effective cap. MIN equals the flat floor, so
-    ///      the bonus redistribution is zero at score 0 and grows with activity.
-    uint16 private constant WWXRP_ROI_MIN_BPS = 7_000;
-    uint16 private constant WWXRP_ROI_VA_BPS = 11_500;
-    uint16 private constant WWXRP_ROI_VB_BPS = 11_800;
-    uint16 private constant WWXRP_ROI_MAX_BPS = 12_000;
 
     /// @dev Maximum ETH payout as percentage of futurePool in basis points (10%).
     uint16 private constant ETH_WIN_CAP_BPS = 1_000;
@@ -303,164 +287,58 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Salt for quick play ticket generation.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
 
-    // -------------------------------------------------------------------------
-    // Per-(N, hero-is-gold) Base Payout Tables (Full Ticket — honest lane)
-    // -------------------------------------------------------------------------
-    //
-    // Indexed by N = _countGoldQuadrants(playerTraits) ∈ {0..4} AND, on the honest
-    // lane, by whether the hero quadrant is gold (color is gated behind symbol, so
-    // hero-goldness shifts P(S)). Each table is calibrated against THAT sub-case's
-    // score distribution P_(N,heroGold)(S) (color gated behind symbol, hero symbol +2;
-    // S ∈ {0..9}) so that basePayoutEV ≈ 100 centi-x (integer-rounded) per sub-case —
-    // exact EV-equality across hero placement. EV-equality
-    // across picks is enforced by the table calibration; runtime payout =
-    // bet × basePayout_(N,heroGold)(S) × roiBps / 1_000_000.
-    // Player RTP at activity tier r equals exactly r/10000 (90.00% min, 99.90% max).
-    //
-    // Bit layout (S=0..7 packed): 32 bits per score index, [S*32 .. S*32+31].
-    // S=8 and S=9 exceed the packed jackpot range and are held as separate per-N
-    // uint256 constants below (S=9 is the jackpot tier).
-    //
-    // The S∈{0..9} payout constants are calibrated to basePayoutEV =
-    // 100 centi-x per (N, hero-is-gold) sub-case.
-    // The S=0..7 values are packed below; S=8 and S=9 are held as separate
-    // per-N uint256 constants (S=9 is the jackpot tier). Because color is gated
-    // behind symbol, the
-    // hero quadrant's gold-ness shifts P(S), so the HONEST family is split per
-    // (N, hero-is-gold): N0 (always hero-common) and N4 (always hero-gold)
-    // collapse to one table each; N∈{1,2,3} carry a _HEROGOLD / _HEROCOMMON
-    // infix. _getBasePayoutBps consults heroIsGold only on the honest lane.
-    uint256 private constant QUICK_PLAY_PAYOUTS_N0_PACKED = 0x0001905a00004e1400001103000005fe000001e7000000c30000000000000000;  // N0/heroCOMMON EV=99.9997
-    uint256 private constant QUICK_PLAY_PAYOUTS_N1_HEROGOLD_PACKED = 0x0001c57f0000587000001346000006ca00000227000000dd0000000000000000;  // N1/heroGOLD EV=99.9999
-    uint256 private constant QUICK_PLAY_PAYOUTS_N1_HEROCOMMON_PACKED = 0x0001b880000055e6000012b80000069d00000218000000d60000000000000000;  // N1/heroCOMMON EV=99.9999
-    uint256 private constant QUICK_PLAY_PAYOUTS_N2_HEROGOLD_PACKED = 0x0001ef28000060910000150a0000076c0000025a000000f10000000000000000;  // N2/heroGOLD EV=100.0000
-    uint256 private constant QUICK_PLAY_PAYOUTS_N2_HEROCOMMON_PACKED = 0x0001e0c700005dc10000146f0000073300000249000000ea0000000000000000;  // N2/heroCOMMON EV=99.9999
-    uint256 private constant QUICK_PLAY_PAYOUTS_N3_HEROGOLD_PACKED = 0x0002185400006898000016c80000080b0000028c000001050000000000000000;  // N3/heroGOLD EV=100.0000
-    uint256 private constant QUICK_PLAY_PAYOUTS_N3_HEROCOMMON_PACKED = 0x00020899000065880000161e000007d200000279000000fd0000000000000000;  // N3/heroCOMMON EV=100.0000
-    uint256 private constant QUICK_PLAY_PAYOUTS_N4_PACKED = 0x000241430000708c0000188c000008a5000002be000001190000000000000000;  // N4/heroGOLD EV=99.9999
+    // Shared score table: neutral EV includes the matched-gold multiplier.
+    // Derived and checked by scripts/data/degenerette_single_symbol_math.py.
+    // Scores 0..7 are packed in 32-bit centi-x lanes; 8/9 are separate.
+    uint256 private constant QUICK_PLAY_PAYOUTS_PACKED = 0x0000f424000030d4000009c4000003e80000012c000000320000000000000000;
+    uint256 private constant QUICK_PLAY_PAYOUT_S8 = 2_347_036;
+    uint256 private constant QUICK_PLAY_PAYOUT_S9 = 10_000_000;
+    // ETH's +5 percentage points, 10/30/30/30 EV allocation to scores 6/7/8/9.
+    uint256 private constant ETH_BONUS_FACTORS_PACKED = 0x0000000002aaaaaa00000000003c513900000000006cdd2100000000000f7734;
+    uint256 private constant BONUS_FACTOR_SCALE = 1_000_000;
+    // WWXRP keeps the shared score table. Normalize its rigged/gold base to 70%,
+    // then allocate activity's extra 0..60 percentage points to scores 6..9.
+    uint256 private constant WWXRP_FLOOR_SCALED = 5_839_907_998;
+    uint256 private constant WWXRP_BONUS_FACTORS_PACKED = 0x0000000002aaaaaa00000000001d6c4d000000000046626100000000000bb73b;
+    uint16 private constant WWXRP_ROI_MIN_BPS = 7_000;
+    uint16 private constant WWXRP_ROI_VA_BPS = 12_400;
+    uint16 private constant WWXRP_ROI_VB_BPS = 12_760;
+    uint16 private constant WWXRP_ROI_MAX_BPS = 13_000;
+    uint256 private constant WWXRP_RIG_DENOMINATOR = 20;
 
-    /// @dev Per-N S=9 jackpot tier. Each pin fits uint32; it is held apart because the
-    ///      packed word is full at eight 32-bit lanes (S=0..7).
-    ///      Values are strictly monotonic in N.
-    uint256 private constant QUICK_PLAY_PAYOUT_N0_S9 = 10_756_411; // 107,564.11x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N1_S9 = 12_583_037; // 125,830.37x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N2_S9 = 14_792_939; // 147,929.39x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N3_S9 = 17_512_324; // 175,123.24x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N4_S9 = 20_916_435; // 209,164.35x bet
-
-    /// @dev Per-(N, hero-is-gold) S=8 tier, held apart for the same reason as S=9 (the
-    ///      packed word has no ninth lane).
-    ///      Calibrated to basePayoutEV = 100 centi-x per honest sub-case.
-    ///      N0/N4 collapse to one table each; N∈{1,2,3} split _HEROGOLD / _HEROCOMMON.
-    uint256 private constant QUICK_PLAY_PAYOUT_N0_S8 =     5124517;  // N0/heroCOMMON    51,245.17x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N1_HEROGOLD_S8 =     5804753;  // N1/heroGOLD    58,047.53x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N1_HEROCOMMON_S8 =     5638394;  // N1/heroCOMMON    56,383.94x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N2_HEROGOLD_S8 =     6337987;  // N2/heroGOLD    63,379.87x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N2_HEROCOMMON_S8 =     6153960;  // N2/heroCOMMON    61,539.60x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N3_HEROGOLD_S8 =     6865005;  // N3/heroGOLD    68,650.05x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N3_HEROCOMMON_S8 =     6663665;  // N3/heroCOMMON    66,636.65x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_N4_S8 =     7388959;  // N4/heroGOLD    73,889.59x bet
-
-    // -------------------------------------------------------------------------
-    // WWXRP Bonus EV Redistribution (Full Ticket — 8 honest (N, heroIsGold) factor tables)
-    // -------------------------------------------------------------------------
-    //
-    // Per-N factors derived from each N's basePayout schedule + binomial-
-    // convolution P_N(S) + 10/30/30/30 split across the top buckets S=6/7/8/9. Total
-    // ETH bonus EV = exactly 5.000% per N. These honest factors serve ETH bets
-    // (ETH_ROI_BONUS_BPS = 500); WWXRP uses the separate rigged factors below
-    // (WWXRP_FACTORS_RIG_*) against its rigged distribution.
-    //
-    // Bit layout (B=6..9 packed): 64 bits per bucket index, [B=6 | B=7 | B=8 | B=9],
-    // with B=6 in the low 64 bits. Read via `(packed >> ((bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF`.
-    //
-    // The factor constants below are calibrated for the S∈{0..9} distribution so that
-    // total ETH bonus EV ≈ 5.000% per N (integer-rounded).
-    uint256 private constant WWXRP_BONUS_FACTOR_SCALE = 1_000_000;
-    uint256 private constant WWXRP_FACTORS_N0_PACKED = 0x0000000002278add00000000002c86d300000000008cd6ca0000000000176ea0;
-    uint256 private constant WWXRP_FACTORS_N1_HEROGOLD_PACKED = 0x0000000003aef46a00000000003d043e0000000000b767d900000000001b448b;
-    uint256 private constant WWXRP_FACTORS_N1_HEROCOMMON_PACKED = 0x0000000003aef46a00000000003ed11d0000000000ac8f35000000000019c09e;
-    uint256 private constant WWXRP_FACTORS_N2_HEROGOLD_PACKED = 0x0000000006442ce700000000005b52330000000000e67b0800000000001f15da;
-    uint256 private constant WWXRP_FACTORS_N2_HEROCOMMON_PACKED = 0x0000000006442ce700000000005e0d4c0000000000def66500000000001d41de;
-    uint256 private constant WWXRP_FACTORS_N3_HEROGOLD_PACKED = 0x000000000a96251f00000000008e8baa000000000133ace4000000000024a679;
-    uint256 private constant WWXRP_FACTORS_N3_HEROCOMMON_PACKED = 0x000000000a96251f000000000092da3f00000000012ed253000000000022cef8;
-    uint256 private constant WWXRP_FACTORS_N4_PACKED = 0x0000000011ba25db0000000000e5669e0000000001aeccdd00000000002d2c05;
-
-    // -------------------------------------------------------------------------
-    // WWXRP RIG FAMILY — rigged base tables + factors (WWXRP currency only)
-    // -------------------------------------------------------------------------
-    //
-    // WWXRP reels are rigged (color-gating aware): when the reel sits in the
-    // 2 <= M <= 6 band, one *score-bearing* cell is forced to a real match with
-    // probability 3/5 — an unmatched non-hero symbol (+1, or +2 when the color already
-    // matched: the unlock), or an unmatched color on a symbol-matched quad (+1, incl.
-    // the hero color). The hero symbol and no-op colors are excluded; an empty pool is
-    // a no-op. Caps at M=7 so the rig can never make S=9 (P(S=9) invariant), and floors
-    // at M=2 so it never manufactures the S=2 dribble tier out of a near-empty reel —
-    // P(S>=4) and P(S>=6) match an ungated rig exactly, P(S=2) stays near honest.
-    // The rig still shifts the WWXRP score distribution upward, so WWXRP uses its OWN
-    // per-N base tables — calibrated to basePayoutEV = 100 centi-x against the RIGGED
-    // distribution P_N^rig(S) — and its OWN per-N redistribution factors (the rigged
-    // family stays AVERAGED at 5 by-N tables; WWXRP hero-placement drift accepted
-    // by-design). It also uses its OWN payout SHAPE (SHAPE_RIG in the generator), which
-    // lifts the low tiers so the smallest WWXRP win is a money-back push at S=2 rather
-    // than a sub-stake dribble; the EV that funds it comes off S=6..8. S=8 differs;
-    // S=9 reuses the honest QUICK_PLAY_PAYOUT_N{N}_S9 pin (the jackpot event and odds
-    // are unchanged by the rig).
-    // ETH/FLIP keep the per-(N,hero-gold) honest tables above. The byte-reproduce gate
-    // regenerates these from derive_5_tables.py — never hand-typed.
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N0_PACKED = 0x0000363700000a920000044c000001f4000001040000008f0000000000000000;  // EV=99.9995
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N1_PACKED = 0x00003d8800000bfe000004df0000023900000127000000a20000000000000000;  // EV=99.9994
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N2_PACKED = 0x0000457900000d8c00000581000002820000014d000000b70000000000000000;  // EV=99.9991
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N3_PACKED = 0x00004df900000f340000062d000002ce00000176000000ce0000000000000000;  // EV=99.9994
-    uint256 private constant QUICK_PLAY_PAYOUTS_RIG_N4_PACKED = 0x00005707000010f8000006e400000322000001a1000000e60000000000000000;  // EV=99.9991
-
-    /// @dev Per-N rigged S=8 tier (separate uint256; calibrated to EV=100 under the rigged dist).
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N0_S8 =      693937;  //     6,939.37x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N1_S8 =      787558;  //     7,875.58x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N2_S8 =      889235;  //     8,892.35x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N3_S8 =      998014;  //     9,980.14x bet
-    uint256 private constant QUICK_PLAY_PAYOUT_RIG_N4_S8 =     1113925;  //    11,139.25x bet
-
-    /// @dev Per-N rigged WWXRP factors (B=6..9 packed, B=6 low). 10/30/30/30 split over
-    ///      the rigged dist + rigged tables → bonus uplift = bonusBps/10000 of RTP exactly.
-    uint256 private constant WWXRP_FACTORS_RIG_N0_PACKED = 0x0000000002278add0000000000165499000000000071fdf200000000001babb3;
-    uint256 private constant WWXRP_FACTORS_RIG_N1_PACKED = 0x0000000003aef46a00000000001c0c0f000000000081573600000000001ca9d1;
-    uint256 private constant WWXRP_FACTORS_RIG_N2_PACKED = 0x0000000006442ce7000000000024cc22000000000097159200000000001e5429;
-    uint256 private constant WWXRP_FACTORS_RIG_N3_PACKED = 0x000000000a96251f00000000003237030000000000b6887b000000000020f5f2;
-    uint256 private constant WWXRP_FACTORS_RIG_N4_PACKED = 0x0000000011ba25db000000000046dba90000000000e45210000000000024e95a;
-
-    /// @dev Reel-independent seed tag for the WWXRP rig draw (gate + cell pick).
-    uint256 private constant WWXRP_RIG_SALT = 0x52494721; // "RIG!"
+    uint256 private constant PLAYER_TICKET_TAG = 0x446567656e506c61796572; // DegenPlayer
+    uint256 private constant HERO_PICK_TAG = 0x446567656e4865726f; // DegenHero
+    uint256 private constant RESULT_TICKET_TAG = 0x446567656e526573756c74; // DegenResult
+    uint256 private constant WWXRP_DRAW_TAG = 0x575758525044726177; // WWXRPDraw
+    uint256 private constant WWXRP_RIG_SALT = 0x52494721; // RIG!
+    uint8 private constant RANDOM_HERO = 32; // internal award spins only
 
     // -------------------------------------------------------------------------
     // Packed Bet Layout
     // -------------------------------------------------------------------------
     //
-    // A bet packs into one uint256 (4 traits, match-based payouts):
-    // [0..31]    customTraits (32 bits): packed 4×8-bit quadrants
+    // A bet packs into one uint256 (one symbol, score-based payouts):
+    // [0..4]     symbol (5 bits): selected hero symbol (0..31); [5..31] reserved
     // [32..39]   spinCount (8 bits): per-currency cap (ETH 25 / FLIP 15 / WWXRP 5)
     // [40..41]   currency (2 bits)
     // [42..169]  amountPerSpin (128 bits)
     // [170..201] index (32 bits): lootbox RNG index
     // [202..217] activityScore (16 bits)
-    // [218..219] heroQuadrant (2 bits): always-on hero quadrant (0..3)
+    // [218..219] reserved; hero quadrant is derived from symbol
     //
-    /// EV-equality across picks: each pick maps to exactly one base table — eight
-    /// (N, heroIsGold) cases on the honest ETH/FLIP lane, five by-N cases on the rigged
-    /// WWXRP lane; basePayoutEV is calibrated to 100 centi-x per table; runtime payout =
-    /// bet × basePayout_N(M) × roiBps / 1_000_000. No per-outcome correction needed.
+    /// Every symbol choice has the same distribution. Fresh uniform colors,
+    /// independent color scoring, and matched-gold boosts share one payout table.
+    /// WWXRP adds a 5% help gate and a 70–130% activity target, with surplus on scores 6–9.
     //
     // -------------------------------------------------------------------------
 
     // Degenerette packed-bet bit positions
-    uint256 private constant DEGEN_TRAITS_SHIFT = 0;
+    uint256 private constant DEGEN_SYMBOL_SHIFT = 0;
     uint256 private constant DEGEN_COUNT_SHIFT = 32;
     uint256 private constant DEGEN_CURRENCY_SHIFT = 40;
     uint256 private constant DEGEN_AMOUNT_SHIFT = 42;
     uint256 private constant DEGEN_INDEX_SHIFT = 170;
     uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
-    uint256 private constant DEGEN_HERO_SHIFT = 218; // 2 bits: hero quadrant (0..3)
     /// @dev A biggest-spin record claim riding this bet, in WHOLE FLIP, at bits
     ///      [220..255] — the word's free tail (every other field ends at bit 219), so
     ///      carrying the claim costs no slot and no extra write. Saturating at the
@@ -481,7 +359,7 @@ contract DegenerusGameDegeneretteModule is
     // Public API
     // -------------------------------------------------------------------------
 
-    /// @notice Places a Degenerette bet (4 traits, match-based payouts).
+    /// @notice Places a Degenerette bet with one chosen symbol and a generated ticket.
     /// @dev Single chosen-attribute pick.
     ///      spinCount is treated as "spin count": each spin resolves independently but shares
     ///      the same lootbox RNG index/word (derived per spin).
@@ -493,15 +371,13 @@ contract DegenerusGameDegeneretteModule is
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
     /// @param amountPerSpin Bet amount per ticket.
     /// @param spinCount Number of spins (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5).
-    /// @param customTraits Custom packed traits. Format: [D:24-31][C:16-23][B:8-15][A:0-7].
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost. Required; inputs >= 4 (including 0xFF) revert with `InvalidBet`.
+    /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
-        uint32 customTraits,
-        uint8 heroQuadrant
+        uint8 symbol
     ) external payable {
         // Closed from the liveness trigger on, matching the settlement side: resolution
         // already reverts there, so a bet placed after it can never pay out. The stake is
@@ -526,8 +402,7 @@ contract DegenerusGameDegeneretteModule is
             currency,
             amountPerSpin,
             spinCount,
-            customTraits,
-            heroQuadrant
+            symbol
         );
     }
 
@@ -616,8 +491,7 @@ contract DegenerusGameDegeneretteModule is
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
-        uint32 customTraits,
-        uint8 heroQuadrant
+        uint8 symbol
     ) private {
         uint24 lvl = level;
         uint256 totalBet = _placeDegeneretteBetCore(
@@ -625,13 +499,12 @@ contract DegenerusGameDegeneretteModule is
             currency,
             amountPerSpin,
             spinCount,
-            customTraits,
-            heroQuadrant,
+            symbol,
             lvl,
             funder == player
         );
 
-        _collectBetFunds(funder, currency, totalBet, msg.value);
+        _collectBetFunds(funder, currency, totalBet);
 
         // Quest progress for Degenerette bets (slot 1 only) — credited to the funder (the
         // spender earns the quest, e.g. a gifter advancing their own streak).
@@ -652,8 +525,7 @@ contract DegenerusGameDegeneretteModule is
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
-        uint32 customTraits,
-        uint8 heroQuadrant,
+        uint8 symbol,
         uint24 lvl,
         bool selfFunded
     ) private returns (uint256 totalBet) {
@@ -676,7 +548,8 @@ contract DegenerusGameDegeneretteModule is
         }
         if (spinCount == 0 || spinCount > maxSpins) revert InvalidBet();
         if (uint256(amountPerSpin) < minBet) revert InvalidBet();
-        if (heroQuadrant >= 4) revert InvalidBet();
+        if (symbol >= 32) revert InvalidBet();
+        uint8 heroQuadrant = symbol >> 3;
 
         uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
         if (index == 0) revert NotStarted();
@@ -722,7 +595,7 @@ contract DegenerusGameDegeneretteModule is
             }
 
             // Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
-            uint8 heroSymbol = uint8(customTraits >> (heroQuadrant * 8)) & 7;
+            uint8 heroSymbol = symbol & 7;
             uint256 wagerUnit = totalBet / 1e14;
             if (wagerUnit > 0) {
                 uint256 wPacked = dailyHeroWagers[day][heroQuadrant];
@@ -773,17 +646,15 @@ contract DegenerusGameDegeneretteModule is
             stakePerSpin = uint128(uint256(amountPerSpin) + bonusPerSpin);
         }
 
-        // Pack the bet
-        uint256 packed = _packDegeneretteBet(
-            customTraits,
-            spinCount,
-            currency,
-            stakePerSpin,
-            uint32(index),
-            activityScore,
-            heroQuadrant,
-            recordBounty
-        );
+        // The symbol already encodes its quadrant; store it once.
+        uint256 packed =
+            (uint256(symbol) << DEGEN_SYMBOL_SHIFT) |
+            (uint256(spinCount) << DEGEN_COUNT_SHIFT) |
+            (uint256(currency) << DEGEN_CURRENCY_SHIFT) |
+            (uint256(stakePerSpin) << DEGEN_AMOUNT_SHIFT) |
+            (uint256(uint32(index)) << DEGEN_INDEX_SHIFT) |
+            (uint256(activityScore) << DEGEN_ACTIVITY_SHIFT) |
+            (recordBounty << DEGEN_RECORD_SHIFT);
 
         uint64 nonce = degeneretteBetNonce[player];
         unchecked {
@@ -799,15 +670,14 @@ contract DegenerusGameDegeneretteModule is
     function _collectBetFunds(
         address player,
         uint8 currency,
-        uint256 totalBet,
-        uint256 ethPaid
+        uint256 totalBet
     ) private {
         if (currency == CURRENCY_ETH) {
             // ETH covers the bet first; any shortfall draws claimable (to the 1-wei
             // sentinel) then afking via the canonical single-sink waterfall.
-            if (ethPaid > totalBet) revert InvalidBet();
-            if (ethPaid < totalBet) {
-                _settleShortfall(player, totalBet - ethPaid, true);
+            if (msg.value > totalBet) revert InvalidBet();
+            if (msg.value < totalBet) {
+                _settleShortfall(player, totalBet - msg.value, true);
             }
 
             // Update pool and pending
@@ -827,10 +697,10 @@ contract DegenerusGameDegeneretteModule is
             // A token bet consumes no ETH; any ETH sent alongside it is absorbed to the funder's
             // withdrawable afking balance (solvency-preserving) rather than stranded in the pool.
             // Zero-value is a no-op, so a normal token bet pays no extra gas.
-            _creditAfkingValue(player, ethPaid);
+            _creditAfkingValue(player, msg.value);
         } else if (currency == CURRENCY_WWXRP) {
             wwxrp.burnForGame(player, totalBet);
-            _creditAfkingValue(player, ethPaid);
+            _creditAfkingValue(player, msg.value);
         }
     }
 
@@ -854,7 +724,7 @@ contract DegenerusGameDegeneretteModule is
         }
 
         // Decode packed bet
-        uint32 customTraits = uint32((packed >> DEGEN_TRAITS_SHIFT) & MASK_32);
+        uint8 symbol = uint8(packed >> DEGEN_SYMBOL_SHIFT);
         uint8 spinCount = uint8((packed >> DEGEN_COUNT_SHIFT) & MASK_8);
         uint8 currency = uint8((packed >> DEGEN_CURRENCY_SHIFT) & MASK_2);
         uint128 amountPerSpin = uint128(
@@ -862,7 +732,6 @@ contract DegenerusGameDegeneretteModule is
         );
         uint32 index = uint32((packed >> DEGEN_INDEX_SHIFT) & MASK_32);
         uint16 activityScore = uint16((packed >> DEGEN_ACTIVITY_SHIFT) & MASK_16);
-        uint8 heroQuadrant = uint8((packed >> DEGEN_HERO_SHIFT) & MASK_2);
         uint256 recordBounty = (packed >> DEGEN_RECORD_SHIFT) &
             DEGEN_RECORD_MASK;
 
@@ -877,22 +746,7 @@ contract DegenerusGameDegeneretteModule is
 
         delete degeneretteBets[player][betId];
 
-        // WWXRP uses a flat 70% floor (the rigged path); ETH/FLIP use the shared base ROI curve.
-        uint256 roiBps = (currency == CURRENCY_WWXRP)
-            ? WWXRP_FLOOR_BPS
-            : _roiBpsFromScore(activityScore);
-        // WWXRP total-RTP target for bonus redistribution (0 if not WWXRP).
-        uint256 wwxrpHighRoi = (currency == CURRENCY_WWXRP)
-            ? _wwxrpRoi(activityScore)
-            : 0;
-
-        uint32 playerTraits = customTraits;
-        // Gold-quadrant count is a pure function of the player's pick — identical
-        // for every spin of this bet, so it is computed once here.
-        uint8 goldCount = _countGoldQuadrants(playerTraits);
-        // Honest-lane payout selector: is the hero quadrant's color gold (bits 5-3 == 7)?
-        // Constant for the bet (same pick + hero), so computed once with goldCount.
-        bool heroIsGold = ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7;
+        uint256 drawWord = currency == CURRENCY_WWXRP ? EntropyLib.hash2(rngWord, WWXRP_DRAW_TAG) : rngWord;
 
         uint256 totalPayout;
         uint32 firstResultTraits;
@@ -912,52 +766,27 @@ contract DegenerusGameDegeneretteModule is
             uint256 resultSeed;
             if (spinIdx == 0) {
                 assembly ("memory-safe") {
-                    mstore(0x00, rngWord)
+                    mstore(0x00, drawWord)
                     mstore(0x20, shl(224, index))
                     mstore8(0x24, byte(0, QUICK_PLAY_SALT))
                     resultSeed := keccak256(0x00, 37)
                 }
             } else {
                 assembly ("memory-safe") {
-                    mstore(0x00, rngWord)
+                    mstore(0x00, drawWord)
                     mstore(0x20, shl(224, index))
                     mstore8(0x24, spinIdx)
                     mstore8(0x25, byte(0, QUICK_PLAY_SALT))
                     resultSeed := keccak256(0x00, 38)
                 }
             }
-            uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
-                resultSeed
-            );
-            // WWXRP-only reel rig (R2): lift one unmatched score-bearing cell to a real
-            // match (60%) when the reel sits in the 2 <= M <= 6 band, so the displayed reel
-            // and the scored result agree. A no-op for ETH/FLIP (and for WWXRP reels that
-            // are full / 1-off, or near-empty).
-            if (currency == CURRENCY_WWXRP) {
-                resultTraits = _rigWwxrpResult(
-                    playerTraits,
-                    resultTraits,
-                    heroQuadrant,
-                    EntropyLib.hash2(resultSeed, WWXRP_RIG_SALT)
-                );
-            }
-            if (spinIdx == 0) {
-                firstResultTraits = resultTraits;
-            }
-
-            // Score this spin: color gated behind symbol, hero +2; S ∈ {0..9}
-            uint8 s = _score(playerTraits, resultTraits, heroQuadrant);
-
-            // Calculate payout (dispatches on the per-N score table)
-            uint256 payout = _degenerettePayout(
-                goldCount,
-                s,
-                currency,
-                amountPerSpin,
-                roiBps,
-                wwxrpHighRoi,
-                heroIsGold
-            );
+            // All bettors choosing this symbol share the same prefix of player tickets.
+            // The house sequence above is shared across symbols; WWXRP has its own draw domain.
+            uint256 spinSeed = EntropyLib.hash4(drawWord, index, symbol, spinIdx);
+            SpinResult memory spin = _rollSpin(spinSeed, resultSeed, symbol, currency);
+            if (spinIdx == 0) firstResultTraits = spin.resultTraits;
+            uint8 s = spin.score;
+            uint256 payout = _degenerettePayout(spin, currency, amountPerSpin, activityScore);
 
             // The emit here holds the log order PayoutCapped is read against: it
             // fires inside _distributePayout, immediately after the spin it caps.
@@ -965,7 +794,7 @@ contract DegenerusGameDegeneretteModule is
                 player,
                 betId,
                 spinIdx,
-                playerTraits,
+                spin.playerTraits,
                 s,
                 payout
             );
@@ -1102,15 +931,15 @@ contract DegenerusGameDegeneretteModule is
         // record buys a spin. Mint-only (no pool / ETH / claimable touch), so it is
         // solvency-neutral and independent of everything settled above. The seed binds
         // the bet's committed word and its immutable betId, so the outcome was fixed at
-        // fulfillment and no batch composition can steer it. The player's own picked
-        // traits carry over — the record spin uses the reel that set the record.
+        // fulfillment and no batch composition can steer it. The chosen hero symbol
+        // carries over; the remaining ticket is freshly generated per bounty spin.
         if (recordBounty != 0) {
             _flipSpinChain(
                 player,
                 recordBounty * LR_FLIP_SCALE,
                 activityScore,
                 EntropyLib.hash4(rngWord, uint160(player), betId, RECORD_SPIN_TAG),
-                customTraits,
+                symbol,
                 BOX_SPIN_TYPE_RECORD
             );
         }
@@ -1276,471 +1105,177 @@ contract DegenerusGameDegeneretteModule is
     }
 
     // -------------------------------------------------------------------------
-    // Packed Bet Helpers
+    // Shared spin generation and scoring
     // -------------------------------------------------------------------------
 
-    /// @dev Packs a Degenerette bet for storage. Hero quadrant is always-on.
-    ///      Expects `heroQuadrant` in {0..3}; entry-point validation in
-    ///      `_placeDegeneretteBetCore` reverts on `>= 4` with `InvalidBet`,
-    ///      so the packed bet and the dailyHeroWagers ledger share the same
-    ///      validated input. `spinCount` is validated `>= 1`, so a live bet
-    ///      is always non-zero (the `packed == 0` resolved-sentinel holds).
-    function _packDegeneretteBet(
-        uint32 customTraits,
-        uint8 spinCount,
-        uint8 currency,
-        uint128 amountPerSpin,
-        uint32 index,
-        uint16 activityScore,
-        uint8 heroQuadrant,
-        uint256 recordBounty
-    ) private pure returns (uint256 packed) {
-        packed =
-            (uint256(customTraits) << DEGEN_TRAITS_SHIFT) |
-            (uint256(spinCount) << DEGEN_COUNT_SHIFT) |
-            (uint256(currency) << DEGEN_CURRENCY_SHIFT) |
-            (uint256(amountPerSpin) << DEGEN_AMOUNT_SHIFT) |
-            (uint256(index) << DEGEN_INDEX_SHIFT) |
-            (uint256(activityScore) << DEGEN_ACTIVITY_SHIFT) |
-            (uint256(heroQuadrant) << DEGEN_HERO_SHIFT) |
-            (recordBounty << DEGEN_RECORD_SHIFT);
+    struct SpinResult {
+        uint32 playerTraits;
+        uint32 resultTraits;
+        uint8 heroQuadrant;
+        uint8 score;
+        uint8 goldMatches;
     }
 
-    // -------------------------------------------------------------------------
-    // Bet Math + Outcome
-    // -------------------------------------------------------------------------
-
-    /// @dev Counts gold (color == 7) quadrants in a packed ticket.
-    ///      Color tier occupies bits 5-3 of each per-quadrant byte; gold is the
-    ///      strict equality `color == 7` (not `>= 7`). Returns N ∈ {0..4} —
-    ///      the index for per-N payout / hero / WWXRP factor table dispatch.
-    /// @param traits The packed player traits (uint32, [QQ][CCC][SSS] per byte).
-    /// @return count Number of gold quadrants (0..4).
-    function _countGoldQuadrants(uint32 traits) private pure returns (uint8 count) {
-        // Unrolled fixed-4: color bits are (q*8+3) => shifts 3, 11, 19, 27 for q=0..3.
-        unchecked {
-            if (uint8((traits >> 3) & 7) == 7) ++count;
-            if (uint8((traits >> 11) & 7) == 7) ++count;
-            if (uint8((traits >> 19) & 7) == 7) ++count;
-            if (uint8((traits >> 27) & 7) == 7) ++count;
+    /// @dev Every manual, box, foil and record spin uses this same reel/scoring path.
+    /// The caller supplies its committed house seed; activity never enters the draw.
+    function _rollSpin(uint256 seed, uint256 houseSeed, uint8 symbol, uint8 currency)
+        internal pure returns (SpinResult memory spin)
+    {
+        symbol = _spinSymbol(seed, symbol);
+        spin.heroQuadrant = symbol >> 3;
+        spin.playerTraits = _playerTicket(seed, symbol);
+        spin.resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(houseSeed);
+        if (currency == CURRENCY_WWXRP) {
+            spin.resultTraits = _rigWwxrpResult(
+                spin.playerTraits, spin.resultTraits, spin.heroQuadrant,
+                EntropyLib.hash2(seed, WWXRP_RIG_SALT)
+            );
         }
+        (spin.score, spin.goldMatches) = _score(spin.playerTraits, spin.resultTraits, spin.heroQuadrant);
     }
 
-    /// @dev Scores a player ticket against a result ticket (color gated by symbol). Per quadrant a SYMBOL match scores +1 (the hero
-    ///      quadrant's symbol scores +2), and that quadrant's COLOR scores +1 ONLY IF
-    ///      that quadrant's symbol ALSO matched — color is not an independent axis.
-    ///      Net per quadrant:
-    ///        ordinary: 0 (symbol miss) | +1 (symbol only) | +2 (symbol + color double)
-    ///        hero:     0 (symbol miss) | +2 (hero symbol only) | +3 (hero maxed)
-    ///      Max S = 9 (hero quad 3 + three ordinary quads ×2). S=9 is exactly the
-    ///      all-8-axes event. The pay floor S>=2 is NOT enforced here; it lives in the
-    ///      payout SHAPE (S=0,1 pay 0 in the constants) — `_score` returns the raw 0..9 score.
-    /// @param playerTraits The player's ticket (packed traits).
-    /// @param resultTraits The result ticket (packed traits).
-    /// @param heroQuadrant The always-on hero quadrant (0..3) whose symbol scores +2.
-    /// @return s Composite score (0-9).
-    function _score(
-        uint32 playerTraits,
-        uint32 resultTraits,
-        uint8 heroQuadrant
-    ) private pure returns (uint8 s) {
-        // Unrolled fixed-4 (q = 0,1,2,3 => byte shifts 0,8,16,24). Symbol = bits 2-0: a
-        // symbol match scores +1 (the hero quadrant +2); that quadrant's COLOR (bits 5-3)
-        // scores +1 ONLY IF the symbol also matched (Variant-2: color gated behind symbol).
-        unchecked {
-            uint8 pQuad = uint8(playerTraits);
-            uint8 rQuad = uint8(resultTraits);
-            if ((pQuad & 7) == (rQuad & 7)) {
-                s += (heroQuadrant == 0) ? 2 : 1;
-                if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
-            }
-            pQuad = uint8(playerTraits >> 8);
-            rQuad = uint8(resultTraits >> 8);
-            if ((pQuad & 7) == (rQuad & 7)) {
-                s += (heroQuadrant == 1) ? 2 : 1;
-                if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
-            }
-            pQuad = uint8(playerTraits >> 16);
-            rQuad = uint8(resultTraits >> 16);
-            if ((pQuad & 7) == (rQuad & 7)) {
-                s += (heroQuadrant == 2) ? 2 : 1;
-                if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
-            }
-            pQuad = uint8(playerTraits >> 24);
-            rQuad = uint8(resultTraits >> 24);
-            if ((pQuad & 7) == (rQuad & 7)) {
-                s += (heroQuadrant == 3) ? 2 : 1;
-                if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
+    /// @dev The only fixed ticket component is the selected symbol (0..31).
+    ///      Separate domains keep all colors independent of hero selection/results.
+    function _playerTicket(uint256 seed, uint8 symbol) internal pure returns (uint32 traits) {
+        if (symbol >= 32) revert InvalidBet();
+        traits = DegenerusTraitUtils.packedTraitsDegenerette(EntropyLib.hash2(seed, PLAYER_TICKET_TAG));
+        uint32 shift = uint32(symbol >> 3) * 8;
+        traits = (traits & ~(uint32(7) << shift)) | (uint32(symbol & 7) << shift);
+    }
+
+    /// @dev Award spins may request a random hero with the internal sentinel 32.
+    function _spinSymbol(uint256 seed, uint8 symbol) internal pure returns (uint8) {
+        if (symbol > RANDOM_HERO) revert InvalidBet();
+        return symbol == RANDOM_HERO ? uint8(EntropyLib.hash2(seed, HERO_PICK_TAG)) & 31 : symbol;
+    }
+
+    /// @dev Score and matched gold in one pass: hero symbol +2, other symbols +1,
+    /// each matching color +1. Only gold-to-gold matches add the 25% payout boost.
+    function _score(uint32 playerTraits, uint32 resultTraits, uint8 heroQuadrant)
+        internal pure returns (uint8 score, uint8 goldMatches)
+    {
+        uint32 diff = playerTraits ^ resultTraits;
+        for (uint8 q; q < 4; ++q) {
+            uint8 d = uint8(diff >> (q * 8));
+            if ((d & 7) == 0) score += q == heroQuadrant ? 2 : 1;
+            if ((d & 0x38) == 0) {
+                ++score;
+                if (((playerTraits >> (q * 8)) & 0x38) == 0x38) ++goldMatches;
             }
         }
     }
 
-    /// @dev Maps a score S to a WWXRP bonus bucket.
-    /// @return bucket 0=none, 6/7/8/9 for the top score tiers.
-    function _wwxrpBonusBucket(
-        uint8 s
-    ) private pure returns (uint8 bucket) {
-        if (s < 6) return 0;
-        return s; // 6,7,8,9
-    }
-
-    /// @dev Returns the per-N WWXRP factor for a bucket B ∈ {6, 7, 8, 9}.
-    ///      Precondition: bucket ∈ {6..9} — `_wwxrpBonusBucket` returns 0 or 6..9
-    ///      (S is arithmetically capped at 9) and the sole call site is gated on
-    ///      `bucket != 0`. Per-N factors are derived from each N's basePayout
-    ///      schedule + binomial-convolution P_N(S) + 10/30/30/30 split so total
-    ///      ETH bonus EV = exactly 5.000% per N.
-    /// @param N Gold-quadrant count of the player ticket (0..4).
-    /// @param bucket WWXRP bonus bucket from `_wwxrpBonusBucket(s)` (6..9).
-    /// @param isWwxrp True selects the rigged WWXRP factor family (by N only, averaged
-    ///        by-design); false the honest (ETH/FLIP) family.
-    /// @param heroIsGold Whether the player's hero quadrant is gold. Consulted ONLY on the
-    ///        honest lane (!isWwxrp) — the honest factors are split per (N, heroIsGold)
-    ///        (N0/N4 collapse). Ignored on the rigged WWXRP lane.
-    /// @return factor 64-bit factor; multiply with `baseBonus` and divide by `WWXRP_BONUS_FACTOR_SCALE`.
-    function _wwxrpFactor(uint8 N, uint8 bucket, bool isWwxrp, bool heroIsGold) private pure returns (uint256 factor) {
-        uint256 packed;
-        if (isWwxrp) {
-            // Rigged WWXRP lane: by N only (averaged over hero placement by-design).
-            if (N == 0) packed = WWXRP_FACTORS_RIG_N0_PACKED;
-            else if (N == 1) packed = WWXRP_FACTORS_RIG_N1_PACKED;
-            else if (N == 2) packed = WWXRP_FACTORS_RIG_N2_PACKED;
-            else if (N == 3) packed = WWXRP_FACTORS_RIG_N3_PACKED;
-            else packed = WWXRP_FACTORS_RIG_N4_PACKED;
-        } else if (N == 0) {
-            // Honest lane, (N, heroIsGold): N0 always hero-common -> one table.
-            packed = WWXRP_FACTORS_N0_PACKED;
-        } else if (N == 4) {
-            // N4 always hero-gold -> one table.
-            packed = WWXRP_FACTORS_N4_PACKED;
-        } else if (heroIsGold) {
-            // N in {1,2,3}, hero gold.
-            if (N == 1) packed = WWXRP_FACTORS_N1_HEROGOLD_PACKED;
-            else if (N == 2) packed = WWXRP_FACTORS_N2_HEROGOLD_PACKED;
-            else packed = WWXRP_FACTORS_N3_HEROGOLD_PACKED;
-        } else {
-            // N in {1,2,3}, hero common.
-            if (N == 1) packed = WWXRP_FACTORS_N1_HEROCOMMON_PACKED;
-            else if (N == 2) packed = WWXRP_FACTORS_N2_HEROCOMMON_PACKED;
-            else packed = WWXRP_FACTORS_N3_HEROCOMMON_PACKED;
-        }
-        factor = (packed >> (uint256(bucket - 6) * 64)) & 0xFFFFFFFFFFFFFFFF;
-    }
-
-    /// @dev Calculates Full Ticket payout based on the score S and activity score ROI.
-    ///      On the honest (ETH/FLIP) lane it dispatches per (N, heroIsGold) — the
-    ///      gold-quadrant count plus whether the hero quadrant is gold (exact EV-equality
-    ///      across hero placement). The rigged WWXRP
-    ///      lane dispatches by N only (heroIsGold ignored — averaged by-design). Each
-    ///      sub-case table is calibrated so basePayoutEV = exactly 100 centi-x against its
-    ///      own P(S) — equal EV across picks within rounding. The hero is scored directly
-    ///      into S, so there is no separate hero multiplier.
-    /// @param N Gold-quadrant count of the player ticket (0..4).
-    /// @param s The composite score (0-9).
-    /// @param currency Currency type (0=ETH, 1=FLIP, 3=WWXRP).
-    /// @param betAmount The bet amount per ticket.
-    /// @param roiBps The ROI in basis points (from activity score).
-    /// @param wwxrpHighRoi The WWXRP total-RTP target (0 if not WWXRP).
-    /// @param heroIsGold Whether the player's hero quadrant is gold (honest-lane selector).
-    /// @return payout The payout amount.
+    /// @dev One table and matched-gold rule, with currency bonuses on scores 6–9.
+    ///      WWXRP normalizes its rigged base to 70% and adds the activity surplus;
+    ///      ETH adds five percentage points to its ordinary activity return.
+    ///      Keep full precision through the final division. At uint128 max stake,
+    ///      the bounded score/ROI/gold factors keep the numerator below 2^212.
     function _degenerettePayout(
-        uint8 N,
-        uint8 s,
+        SpinResult memory spin,
         uint8 currency,
         uint128 betAmount,
-        uint256 roiBps,
-        uint256 wwxrpHighRoi,
-        bool heroIsGold
-    ) private pure returns (uint256 payout) {
-        bool isWwxrp = currency == CURRENCY_WWXRP;
-        uint256 basePayoutBps = _getBasePayoutBps(N, s, isWwxrp, heroIsGold);
-
-        // Bonus ROI is redistributed into the top score buckets via per-N factor lookup.
-        uint256 effectiveRoi = roiBps;
-        uint8 bucket = _wwxrpBonusBucket(s);
-        if (bucket != 0) {
-            uint256 baseBonus;
-            if (isWwxrp && wwxrpHighRoi > roiBps) {
-                baseBonus = wwxrpHighRoi - roiBps;
-            } else if (currency == CURRENCY_ETH) {
-                baseBonus = ETH_ROI_BONUS_BPS;
+        uint16 activityScore
+    ) internal pure returns (uint256) {
+        uint8 s = spin.score;
+        uint256 base = _basePayoutCentiX(s);
+        if (base == 0) return 0;
+        uint256 scaledRoi;
+        uint256 bonusBps;
+        uint256 bonusFactors;
+        if (currency == CURRENCY_WWXRP) {
+            scaledRoi = WWXRP_FLOOR_SCALED;
+            if (s >= 6) {
+                bonusBps = _roiBpsFromScore(activityScore, true) - WWXRP_ROI_MIN_BPS;
+                bonusFactors = WWXRP_BONUS_FACTORS_PACKED;
             }
-            if (baseBonus != 0) {
-                uint256 factor = _wwxrpFactor(N, bucket, isWwxrp, heroIsGold);
-                effectiveRoi = roiBps + (baseBonus * factor) / WWXRP_BONUS_FACTOR_SCALE;
+        } else {
+            scaledRoi = _roiBpsFromScore(activityScore, false) * BONUS_FACTOR_SCALE;
+            if (currency == CURRENCY_ETH && s >= 6) {
+                bonusBps = ETH_ROI_BONUS_BPS;
+                bonusFactors = ETH_BONUS_FACTORS_PACKED;
             }
         }
-
-        // Apply ROI scaling: payout = betAmount × basePayout × roiBps / 1_000_000
-        // basePayout is in "centi-x" (190 = 1.90x), roiBps is in bps (9000 = 90%).
-        payout =
-            (uint256(betAmount) * basePayoutBps * effectiveRoi) /
-            1_000_000;
+        if (bonusBps != 0) {
+            uint256 factor = (bonusFactors >> (uint256(s - 6) * 64)) & type(uint64).max;
+            scaledRoi += bonusBps * factor;
+        }
+        return uint256(betAmount) * base * (4 + uint256(spin.goldMatches)) * scaledRoi / 4_000_000_000_000;
     }
 
-    /// @dev Dispatches to the base payout table for the given score S.
-    ///      S = 0..7 are packed 32 bits each into the table's _PACKED constant, which fills
-    ///      the whole 256-bit word at eight lanes — so S = 8 and S = 9 have nowhere left to
-    ///      sit and each table carries separate _S8 / _S9 constants (every pin itself fits
-    ///      uint32; it is the word that is full, not the lane that overflows). S=9 is the
-    ///      jackpot tier. On the honest (ETH/FLIP) lane the table
-    ///      is indexed by (N, heroIsGold) (exact EV-equality); the rigged
-    ///      WWXRP lane is indexed by N only (heroIsGold ignored — averaged by-design). The
-    ///      S=9 pin is by N only (P(S=9) is placement-independent, shared across lanes).
-    /// @param N Gold-quadrant count of the player ticket (0..4).
-    /// @param s Composite score (0..9).
-    /// @param isWwxrp True selects the rigged WWXRP base table (S=0..8); false the honest
-    ///        (ETH/FLIP) table. S=9 is shared — the rig leaves the jackpot pin unchanged.
-    /// @param heroIsGold Whether the player's hero quadrant is gold — honest-lane selector
-    ///        (N0/N4 collapse to one table each; consulted only for N in {1,2,3}).
-    /// @return Base payout in centi-x (e.g. 204 = 2.04x at 100% ROI).
-    function _getBasePayoutBps(uint8 N, uint8 s, bool isWwxrp, bool heroIsGold) private pure returns (uint256) {
-        if (s >= 9) {
-            // S=9 jackpot pin: by N only (P(S=9) placement-independent; shared by both lanes).
-            if (N == 0) return QUICK_PLAY_PAYOUT_N0_S9;
-            if (N == 1) return QUICK_PLAY_PAYOUT_N1_S9;
-            if (N == 2) return QUICK_PLAY_PAYOUT_N2_S9;
-            if (N == 3) return QUICK_PLAY_PAYOUT_N3_S9;
-            return QUICK_PLAY_PAYOUT_N4_S9;
-        }
-        if (s == 8) {
-            if (isWwxrp) {
-                // Rigged WWXRP lane: by N only.
-                if (N == 0) return QUICK_PLAY_PAYOUT_RIG_N0_S8;
-                if (N == 1) return QUICK_PLAY_PAYOUT_RIG_N1_S8;
-                if (N == 2) return QUICK_PLAY_PAYOUT_RIG_N2_S8;
-                if (N == 3) return QUICK_PLAY_PAYOUT_RIG_N3_S8;
-                return QUICK_PLAY_PAYOUT_RIG_N4_S8;
-            }
-            // Honest lane: by (N, heroIsGold). N0/N4 collapse to one table each.
-            if (N == 0) return QUICK_PLAY_PAYOUT_N0_S8;
-            if (N == 4) return QUICK_PLAY_PAYOUT_N4_S8;
-            if (heroIsGold) {
-                if (N == 1) return QUICK_PLAY_PAYOUT_N1_HEROGOLD_S8;
-                if (N == 2) return QUICK_PLAY_PAYOUT_N2_HEROGOLD_S8;
-                return QUICK_PLAY_PAYOUT_N3_HEROGOLD_S8;
-            }
-            if (N == 1) return QUICK_PLAY_PAYOUT_N1_HEROCOMMON_S8;
-            if (N == 2) return QUICK_PLAY_PAYOUT_N2_HEROCOMMON_S8;
-            return QUICK_PLAY_PAYOUT_N3_HEROCOMMON_S8;
-        }
-        uint256 packed;
-        if (isWwxrp) {
-            // Rigged WWXRP lane: by N only.
-            if (N == 0) packed = QUICK_PLAY_PAYOUTS_RIG_N0_PACKED;
-            else if (N == 1) packed = QUICK_PLAY_PAYOUTS_RIG_N1_PACKED;
-            else if (N == 2) packed = QUICK_PLAY_PAYOUTS_RIG_N2_PACKED;
-            else if (N == 3) packed = QUICK_PLAY_PAYOUTS_RIG_N3_PACKED;
-            else packed = QUICK_PLAY_PAYOUTS_RIG_N4_PACKED;
-        } else if (N == 0) {
-            // Honest lane, (N, heroIsGold): N0 always hero-common -> one table.
-            packed = QUICK_PLAY_PAYOUTS_N0_PACKED;
-        } else if (N == 4) {
-            // N4 always hero-gold -> one table.
-            packed = QUICK_PLAY_PAYOUTS_N4_PACKED;
-        } else if (heroIsGold) {
-            // N in {1,2,3}, hero gold.
-            if (N == 1) packed = QUICK_PLAY_PAYOUTS_N1_HEROGOLD_PACKED;
-            else if (N == 2) packed = QUICK_PLAY_PAYOUTS_N2_HEROGOLD_PACKED;
-            else packed = QUICK_PLAY_PAYOUTS_N3_HEROGOLD_PACKED;
-        } else {
-            // N in {1,2,3}, hero common.
-            if (N == 1) packed = QUICK_PLAY_PAYOUTS_N1_HEROCOMMON_PACKED;
-            else if (N == 2) packed = QUICK_PLAY_PAYOUTS_N2_HEROCOMMON_PACKED;
-            else packed = QUICK_PLAY_PAYOUTS_N3_HEROCOMMON_PACKED;
-        }
-        return (packed >> (uint256(s) * 32)) & 0xFFFFFFFF;
+    function _basePayoutCentiX(uint8 s) internal pure returns (uint256) {
+        if (s == 9) return QUICK_PLAY_PAYOUT_S9;
+        if (s == 8) return QUICK_PLAY_PAYOUT_S8;
+        return (QUICK_PLAY_PAYOUTS_PACKED >> (uint256(s) * 32)) & type(uint32).max;
     }
 
     // -------------------------------------------------------------------------
     // Payout Math
     // -------------------------------------------------------------------------
 
-    /// @dev Computes ROI in basis points based on activity score.
-    ///      Steep ramp 90%→98.91% (0 to K=305 points), shallow leg 98.91%→99.7%
-    ///      (305 to the seg-B knee), then a near-flat crawl to 99.9% at the effective cap.
-    ///      Stays strictly below 100% at every score.
-    /// @param score The activity score in whole points.
-    /// @return roiBps The ROI in basis points.
-    function _roiBpsFromScore(
-        uint256 score
-    ) private pure returns (uint256 roiBps) {
-        if (score >= ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) {
-            return ROI_MAX_BPS;
-        }
+    /// @dev Scheduled return target at the shared activity knees (305, 500, 30,000).
+    /// Ordinary: 90 / 98.91 / 99.7 / 99.9%. WWXRP: 70 / 124 / 127.6 / 130%.
+    /// WWXRP distributes the gain above 70% only to winning scores 6..9.
+    function _roiBpsFromScore(uint256 score, bool isWwxrp) internal pure returns (uint256) {
+        uint256 minBps = isWwxrp ? WWXRP_ROI_MIN_BPS : ROI_MIN_BPS;
+        uint256 kneeABps = isWwxrp ? WWXRP_ROI_VA_BPS : ROI_VA_BPS;
+        uint256 kneeBBps = isWwxrp ? WWXRP_ROI_VB_BPS : ROI_VB_BPS;
+        uint256 maxBps = isWwxrp ? WWXRP_ROI_MAX_BPS : ROI_MAX_BPS;
+        if (score >= ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) return maxBps;
         if (score <= ACTIVITY_SCORE_MAX_POINTS) {
-            return
-                ROI_MIN_BPS +
-                (score * (ROI_VA_BPS - ROI_MIN_BPS)) /
-                ACTIVITY_SCORE_MAX_POINTS;
+            return minBps + score * (kneeABps - minBps) / ACTIVITY_SCORE_MAX_POINTS;
         }
         if (score <= ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) {
-            return
-                ROI_VA_BPS +
-                ((score - ACTIVITY_SCORE_MAX_POINTS) * (ROI_VB_BPS - ROI_VA_BPS)) /
-                (ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS -
-                    ACTIVITY_SCORE_MAX_POINTS);
+            return kneeABps + (score - ACTIVITY_SCORE_MAX_POINTS) * (kneeBBps - kneeABps) /
+                (ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS - ACTIVITY_SCORE_MAX_POINTS);
         }
-        return
-            ROI_VB_BPS +
-            ((score - ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) *
-                (ROI_MAX_BPS - ROI_VB_BPS)) /
-            (ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS -
-                ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
+        return kneeBBps + (score - ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) * (maxBps - kneeBBps) /
+            (ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS - ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
-    /// @dev WWXRP total-RTP curve E(score): the rigged WWXRP payout RTP equals this
-    ///      value / 10000. Steep ramp 70%→115% (0 to K=305), shallow leg to 118%
-    ///      (seg-B knee), near-flat crawl to 120% at the effective cap, flat beyond.
-    ///      Used as the bonus-redistribution target above the flat WWXRP_FLOOR_BPS;
-    ///      MIN equals the floor, so redistribution is zero at score 0 and grows with activity.
-    /// @param score The activity score in whole points.
-    /// @return roiBps The WWXRP total-RTP target in basis points.
-    function _wwxrpRoi(
-        uint256 score
-    ) private pure returns (uint256 roiBps) {
-        if (score >= ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) {
-            return WWXRP_ROI_MAX_BPS;
-        }
-        if (score <= ACTIVITY_SCORE_MAX_POINTS) {
-            return
-                WWXRP_ROI_MIN_BPS +
-                (score * (WWXRP_ROI_VA_BPS - WWXRP_ROI_MIN_BPS)) /
-                ACTIVITY_SCORE_MAX_POINTS;
-        }
-        if (score <= ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) {
-            return
-                WWXRP_ROI_VA_BPS +
-                ((score - ACTIVITY_SCORE_MAX_POINTS) *
-                    (WWXRP_ROI_VB_BPS - WWXRP_ROI_VA_BPS)) /
-                (ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS -
-                    ACTIVITY_SCORE_MAX_POINTS);
-        }
-        return
-            WWXRP_ROI_VB_BPS +
-            ((score - ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS) *
-                (WWXRP_ROI_MAX_BPS - WWXRP_ROI_VB_BPS)) /
-            (ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS -
-                ActivityCurveLib.ACTIVITY_SEG_B_KNEE_POINTS);
-    }
-
-    /// @dev WWXRP-only reel rig — SCORE-BEARING pool (color-gating aware).
-    ///      When the reel sits in the 2 <= M <= 6 band, force ONE *score-bearing* cell to
-    ///      a real match with probability 3/5. Only these unmatched cells
-    ///      RAISE S, so the eligible pool is narrowed to:
-    ///        (a) an unmatched NON-HERO symbol (any color state) — forcing the symbol
-    ///            lifts S by +1, or by +2 when that quadrant's color already matched (the
-    ///            forced symbol UNLOCKS the gated color; the +2 unlock is ALLOWED); and
-    ///        (b) an unmatched COLOR on a quadrant whose symbol ALREADY matched
-    ///            (symMatch && !colorMatch) — forcing the color lifts S by +1. This
-    ///            INCLUDES the hero quadrant's color (an ordinary axis); only the hero
-    ///            SYMBOL is excluded from the pool.
-    ///      EXCLUDED: the hero symbol cell, and *no-op* colors (an unmatched color on a
-    ///      quadrant whose symbol is still unmatched — buys nothing while color is gated).
-    ///      EMPTY-POOL no-op: if 2 <= M <= 6 but every unmatched cell is excluded (only the
-    ///      hero symbol and/or no-op colors), the eligible count u == 0 — no lift this
-    ///      round (and the `% u` pick is guarded against div-by-zero). Floors at M=2, so a
-    ///      near-empty reel is never pushed — the rig cannot manufacture the S=2 dribble
-    ///      tier, and nothing above it is affected, because reaching S >= 4 post-force
-    ///      always started at M >= 2. Caps at M=7, so a
-    ///      fired roll has 2 <= M <= 6 -> post-force M <= 7 -> S <= 8: the rig can NEVER make
-    ///      S=9 (P(S=9) invariant). Rewrites `resultTraits` so the displayed reel honestly
-    ///      shows the forced match; `_score` then reads the lifted score. `rigSeed` is a
-    ///      frozen, reel-independent hash of the spin seed. Lifts the score by the
-    ///      per-pick +1/+2 rigged distribution.
-    /// @param playerTraits The player's (or box-spin's) ticket.
-    /// @param resultTraits The drawn result reel.
-    /// @param heroQuadrant The hero quadrant (0..3) whose SYMBOL is excluded from the rig pool.
-    /// @param rigSeed Reel-independent rig entropy (gate + cell pick).
-    /// @return rigged The (possibly modified) result ticket.
+    /// @dev WWXRP has a 5% chance to improve one unmatched non-hero axis when
+    ///      2..6 of the eight axes already match. Independent colors are eligible
+    ///      even when their symbols miss. Never forces the hero symbol or a jackpot.
     function _rigWwxrpResult(
         uint32 playerTraits,
         uint32 resultTraits,
         uint8 heroQuadrant,
         uint256 rigSeed
-    ) private pure returns (uint32 rigged) {
+    ) internal pure returns (uint32 rigged) {
         rigged = resultTraits;
-        // Pass 1: count matched axes (M, all 8) and SCORE-BEARING eligible cells (u).
-        uint8 m;
-        uint8 u;
-        for (uint8 q; q < 4; ) {
-            uint8 pq = uint8(playerTraits >> (q * 8));
-            uint8 rq = uint8(resultTraits >> (q * 8));
-            bool colorMatch = ((pq >> 3) & 7) == ((rq >> 3) & 7);
-            bool symMatch = (pq & 7) == (rq & 7);
-            if (colorMatch) ++m;
-            if (symMatch) ++m;
-            // (b) unmatched color on a symbol-matched quad (incl. the hero quad's color):
-            //     forcing the color unlocks +1 (color counts only when its
-            //     own symbol matched). A no-op color (symbol still unmatched) is excluded.
-            if (symMatch && !colorMatch) ++u;
-            // (a) unmatched non-hero symbol: forcing the symbol scores +1 (or +2 if the
-            //     color already matched — the +2 unlock). The hero symbol is excluded.
-            if (q != heroQuadrant && !symMatch) ++u;
-            unchecked {
-                ++q;
-            }
+        if (rigSeed % WWXRP_RIG_DENOMINATOR != 0) return rigged;
+        uint32 diff = playerTraits ^ resultTraits;
+        uint8 matches;
+        uint8 eligible;
+        for (uint8 q; q < 4; ++q) {
+            uint8 d = uint8(diff >> (q * 8));
+            if ((d & 0x38) == 0) ++matches;
+            else ++eligible;
+            if ((d & 7) == 0) ++matches;
+            else if (q != heroQuadrant) ++eligible;
         }
-        // Rig only inside the 2 <= M <= 6 band. The upper cap leaves a full match /
-        // 1-off alone, which is what keeps P(S=9) invariant. The lower floor leaves a
-        // near-empty reel (0 or 1 matched axes) alone, so the rig never manufactures the
-        // S=2 dribble tier out of nothing. The floor costs nothing above it: reaching
-        // S >= 4 post-force always started at M >= 2, so P(S>=4) and P(S>=6) match an
-        // ungated rig exactly while P(S=2) stays near its honest value.
-        if (m >= 7 || m < 2) return rigged;
-        // 60% gate (3 of 5); 40% no-op.
-        if (rigSeed % 5 >= 3) return rigged;
-        // Empty score-bearing pool (every unmatched cell is excluded): no lift, guard the
-        // uniform pick against a division-by-zero on `% u`.
-        if (u == 0) return rigged;
-        // Pick one score-bearing cell uniformly (u >= 1 here).
-        uint8 pick = uint8((rigSeed >> 8) % u);
-        // Pass 2: walk the SAME fixed order with the SAME pass-1 eligibility predicates so
-        // the pick index lines up; force the pick-th score-bearing cell.
-        for (uint8 q; q < 4; ) {
-            uint8 pq = uint8(playerTraits >> (q * 8));
-            uint8 rq = uint8(resultTraits >> (q * 8));
-            bool colorMatch = ((pq >> 3) & 7) == ((rq >> 3) & 7);
-            bool symMatch = (pq & 7) == (rq & 7);
-            // (b) eligible color: symbol already matched, color unmatched (incl. hero color).
-            if (symMatch && !colorMatch) {
+        if (matches < 2 || matches >= 7 || eligible == 0) return rigged;
+        uint256 pick = EntropyLib.hash2(rigSeed, 1) % eligible;
+        for (uint8 q; q < 4; ++q) {
+            uint32 shift = uint32(q) * 8;
+            uint8 d = uint8(diff >> shift);
+            if ((d & 0x38) != 0) {
                 if (pick == 0) {
-                    // Force the result color to the player's color (bits 5-3 of the byte).
-                    return
-                        (rigged & ~(uint32(0x38) << (q * 8))) |
-                        (uint32((pq >> 3) & 7) << (q * 8 + 3));
+                    uint32 mask = uint32(0x38) << shift;
+                    return (rigged & ~mask) | (playerTraits & mask);
                 }
-                unchecked {
-                    --pick;
-                }
+                --pick;
             }
-            // (a) eligible symbol: non-hero quadrant, symbol unmatched.
-            if (q != heroQuadrant && !symMatch) {
+            if (q != heroQuadrant && (d & 7) != 0) {
                 if (pick == 0) {
-                    // Force the result symbol to the player's symbol (bits 2-0). The +2
-                    // unlock (when this quad's color already matched) happens naturally.
-                    return
-                        (rigged & ~(uint32(0x07) << (q * 8))) |
-                        (uint32(pq & 7) << (q * 8));
+                    uint32 mask = uint32(7) << shift;
+                    return (rigged & ~mask) | (playerTraits & mask);
                 }
-                unchecked {
-                    --pick;
-                }
-            }
-            unchecked {
-                ++q;
+                --pick;
             }
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Claimable ETH Credit
-    // -------------------------------------------------------------------------
-
-    /// @dev Adds ETH to a player's claimable winnings balance. Both call sites
-    ///      (resolveDegeneretteBets, resolveEthSpinFromBox) gate on a nonzero amount.
-    /// @param beneficiary The address to credit.
-    /// @param weiAmount The amount in wei to credit (nonzero).
+    /// @dev Credit a nonzero ETH payout through the shared accounting helper.
     function _addClaimableEth(address beneficiary, uint256 weiAmount) private {
         claimablePool += uint128(weiAmount);
         _creditClaimable(beneficiary, weiAmount);
@@ -1825,24 +1360,16 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev Pack one spin's reel into `packedSpins` at slot `i` (72 bits): player ticket,
     ///      result ticket, score. OR the returned word into the accumulator.
-    function _packSpin(
-        uint256 i,
-        uint32 playerTraits,
-        uint32 resultTraits,
-        uint8 score
-    ) private pure returns (uint256) {
-        // i in {0,1,2} (BOX_FLIP_SPINS = 3) -> i*72 <= 144, nowhere near uint256 overflow.
-        unchecked {
-            return
-                (uint256(playerTraits) |
-                    (uint256(resultTraits) << 32) |
-                    (uint256(score) << 64)) << (i * 72);
-        }
+    function _packSpin(uint256 i, SpinResult memory spin) private pure returns (uint256) {
+        return
+            (uint256(spin.playerTraits) |
+                (uint256(spin.resultTraits) << 32) |
+                (uint256(spin.score) << 64)) << (i * 72) |
+            (uint256(spin.heroQuadrant) << (225 + i * 2));
     }
 
     /// @notice One WWXRP Degenerette spin staking a lootbox WWXRP roll (replaces the flat mint).
-    /// @dev Mirrors a regular WWXRP bet spin: the same reel rig, the rigged tables + total-RTP
-    ///      bonus redistribution, and the S==9 bracket whale-halfpass award (deduped
+    /// @dev Mirrors a regular WWXRP bet spin: the same 5% reel rig, shared table and 70–130% activity target, and the S==9 bracket whale-halfpass award (deduped
     ///      one-per-10-level-bracket, shared with ordinary WWXRP jackpots). No pool / ETH touch —
     ///      the payout is returned and the calling box entry mints its WWXRP lane once.
     function resolveWwxrpSpinFromBox(
@@ -1850,41 +1377,17 @@ contract DegenerusGameDegeneretteModule is
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTraits
+        uint8 symbol
     ) external payable returns (uint256 wwxrpOut) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return 0;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_WWXRP);
+        seed = EntropyLib.hash2(seed, WWXRP_DRAW_TAG);
         uint128 betAmount = uint128(stake);
-        uint256 roiBps = WWXRP_FLOOR_BPS;
-        uint256 wwxrpHighRoi = _wwxrpRoi(activityScore);
 
-        uint8 heroQuadrant = uint8(seed & MASK_2);
-        uint32 playerTraits = customTraits != 0
-            ? customTraits
-            : DegenerusTraitUtils.packedTraitsDegenerette(seed);
-        uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
-            EntropyLib.hash2(seed, 1)
-        );
-        // WWXRP reel rig (identical to a regular WWXRP bet spin, R2): lift one unmatched
-        // score-bearing cell to a real match (60%) inside the 2 <= M <= 6 band. The emitted
-        // BoxSpin packs the rigged reel, so the displayed result and the score agree.
-        resultTraits = _rigWwxrpResult(
-            playerTraits,
-            resultTraits,
-            heroQuadrant,
-            EntropyLib.hash2(seed, WWXRP_RIG_SALT)
-        );
-        uint8 s = _score(playerTraits, resultTraits, heroQuadrant);
-        uint256 payout = _degenerettePayout(
-            _countGoldQuadrants(playerTraits),
-            s,
-            CURRENCY_WWXRP,
-            betAmount,
-            roiBps,
-            wwxrpHighRoi,
-            ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7
-        );
+        SpinResult memory spin = _rollSpin(seed, EntropyLib.hash2(seed, RESULT_TICKET_TAG), symbol, CURRENCY_WWXRP);
+        uint8 s = spin.score;
+        uint256 payout = _degenerettePayout(spin, CURRENCY_WWXRP, betAmount, activityScore);
 
         // Returned, not minted: the caller sums every WWXRP lane in the entry and mints once.
         wwxrpOut = payout;
@@ -1904,7 +1407,7 @@ contract DegenerusGameDegeneretteModule is
         emit BoxSpin(
             player,
             betId,
-            _packSpin(0, playerTraits, resultTraits, s) |
+            _packSpin(0, spin) |
                 (uint256(1) << BOX_SPIN_COUNT_SHIFT),
             payout,
             0
@@ -1922,7 +1425,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTraits
+        uint8 symbol
     ) external payable returns (uint256 flipOut) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         // Returned, not minted: the caller sums every FLIP lane in the entry and credits once.
@@ -1932,56 +1435,34 @@ contract DegenerusGameDegeneretteModule is
                 totalStake,
                 activityScore,
                 seed,
-                customTraits,
+                symbol,
                 BOX_SPIN_TYPE_FLIP
             );
     }
 
-    /// @dev The FLIP spin chain itself, shared by the lootbox FLIP roll and the
-    ///      biggest-spin record bounty. `spinType` tags the emitted betId so the indexer
-    ///      can tell the two apart, and routes the trait source: a record bounty always
-    ///      spins the winning bet's own picked traits — the all-zero pick included, which
-    ///      is valid on ordinary bets — while the box roll treats customTraits == 0 as
-    ///      "generate per spin". The mechanics are otherwise identical.
+    /// @dev Shared automatic/record FLIP chain. Record and foil awards retain
+    ///      a chosen symbol; random box awards pass 32. Every spin rerolls colors.
     function _flipSpinChain(
         address player,
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTraits,
+        uint8 symbol,
         uint8 spinType
     ) private returns (uint256 minted) {
         if (totalStake == 0) return 0;
-        uint128 perSpin = uint128(totalStake / BOX_FLIP_SPINS);
-        if (perSpin == 0) return 0;
+        uint256 perSpinAmount = totalStake / BOX_FLIP_SPINS;
+        if (perSpinAmount == 0 || perSpinAmount > type(uint128).max) return 0;
+        uint128 perSpin = uint128(perSpinAmount);
         uint64 betId = _boxBetId(seed, spinType);
-        uint256 roiBps = _roiBpsFromScore(activityScore);
 
         uint256 total;
         uint256 packedSpins;
-        bool pickedTraits = spinType == BOX_SPIN_TYPE_RECORD;
         for (uint256 i; i < BOX_FLIP_SPINS; ) {
             uint256 ss = EntropyLib.hash2(seed, i);
-            uint32 playerTraits = (pickedTraits || customTraits != 0)
-                ? customTraits
-                : DegenerusTraitUtils.packedTraitsDegenerette(ss);
-            uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
-                EntropyLib.hash2(ss, 1)
-            );
-            // Hoist the hero quadrant to a named local so _score and the heroIsGold
-            // derivation read the same value.
-            uint8 heroQuadrant = uint8(ss & MASK_2);
-            uint8 s = _score(playerTraits, resultTraits, heroQuadrant);
-            total += _degenerettePayout(
-                _countGoldQuadrants(playerTraits),
-                s,
-                CURRENCY_FLIP,
-                perSpin,
-                roiBps,
-                0,
-                ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7
-            );
-            packedSpins |= _packSpin(i, playerTraits, resultTraits, s);
+            SpinResult memory spin = _rollSpin(ss, EntropyLib.hash2(ss, RESULT_TICKET_TAG), symbol, CURRENCY_FLIP);
+            total += _degenerettePayout(spin, CURRENCY_FLIP, perSpin, activityScore);
+            packedSpins |= _packSpin(i, spin);
             unchecked {
                 ++i;
             }
@@ -2027,35 +1508,18 @@ contract DegenerusGameDegeneretteModule is
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTraits
+        uint8 symbol
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_ETH);
         uint128 betAmount = uint128(stake);
-        uint256 roiBps = _roiBpsFromScore(activityScore);
 
-        uint32 playerTraits = customTraits != 0
-            ? customTraits
-            : DegenerusTraitUtils.packedTraitsDegenerette(seed);
-        uint32 resultTraits = DegenerusTraitUtils.packedTraitsDegenerette(
-            EntropyLib.hash2(seed, 1)
-        );
-        // Hoist the hero quadrant to a named local so _score and the heroIsGold
-        // derivation read the same value.
-        uint8 heroQuadrant = uint8(seed & MASK_2);
-        uint8 s = _score(playerTraits, resultTraits, heroQuadrant);
-        uint256 payout = _degenerettePayout(
-            _countGoldQuadrants(playerTraits),
-            s,
-            CURRENCY_ETH,
-            betAmount,
-            roiBps,
-            0,
-            ((playerTraits >> (heroQuadrant * 8 + 3)) & 7) == 7
-        );
+        SpinResult memory spin = _rollSpin(seed, EntropyLib.hash2(seed, RESULT_TICKET_TAG), symbol, CURRENCY_ETH);
+        uint8 s = spin.score;
+        uint256 payout = _degenerettePayout(spin, CURRENCY_ETH, betAmount, activityScore);
 
-        uint256 packed = _packSpin(0, playerTraits, resultTraits, s) |
+        uint256 packed = _packSpin(0, spin) |
             (uint256(1) << BOX_SPIN_COUNT_SHIFT);
         if (payout == 0) {
             emit BoxSpin(player, betId, packed, 0, 0);

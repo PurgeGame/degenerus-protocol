@@ -258,7 +258,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: amt}(address(0), 0, amt, 1, ticketSeed, 0) {} catch {}
+        try game.placeDegeneretteBet{value: amt}(address(0), 0, amt, 1, uint8(ticketSeed & 7)) {} catch {}
         _checkFrozenAfterIsolatedAction();
     }
 
@@ -446,7 +446,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: amt}(address(0), 0, amt, 1, ticketSeed, 0) {} catch {}
+        try game.placeDegeneretteBet{value: amt}(address(0), 0, amt, 1, uint8(ticketSeed & 7)) {} catch {}
         _checkMidDayFrozenAfterIsolatedAction();
     }
 

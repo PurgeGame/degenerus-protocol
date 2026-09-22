@@ -797,14 +797,12 @@ contract DegenerusGameFoilPackModule is
     /// @dev Pay one matched tier as a single Degenerette box-spin. The tier's
     ///      magnitude (faces) is the stake; the currency is rolled 40/40/20
     ///      (ETH/FLIP/WWXRP) and the spin is seeded — both off the retained daily
-    ///      word. The per-N-calibrated box-spins are EV-neutral (RTP scales with the
-    ///      buyer's activity score frozen at buy), so the foil's boosted traits cannot
-    ///      tilt EV and the ~2.633-faces/pack/30d calibration holds. FLIP stakes split into
+    ///      word. Spins use the buyer's activity score frozen at buy, and regenerate
+    ///      all colors, so the foil's boosted gold mix does not tilt spin EV. FLIP stakes split into
     ///      thirds across three spins under one survival flip; ETH and WWXRP are single
     ///      spins. The T=8 tier (all four full doubles) also grants a half whale pass. All effects run after
     ///      the double-claim marker is set (CEI). The matched signature `sel` is the
-    ///      spin's player ticket, so the win plays the exact four-quadrant line that
-    ///      matched (its boosted gold count is EV-neutral under the per-N tables).
+    ///      source of one seed-selected hero symbol; the remaining ticket is generated.
     ///
     ///      Snap valve: NO foil payout carries the exponent. The buy still pays 2^s
     ///      (the price tracks the ticket path), so on a thanos level the pack is simply
@@ -845,9 +843,11 @@ contract DegenerusGameFoilPackModule is
 
         // activityScore is the buyer's score frozen at buy (passed in), not a live read:
         // the spin RTP is fixed at buy, so neither the claim timing nor who triggers it
-        // can move the payout. The per-N tables hold EV flat across the foil's boosted
-        // trait mix.
+        // can move the payout. Only a symbol carries into the award spin; all colors are rerolled,
+        // so the foil's boosted color mix cannot change the spin EV.
 
+        uint8 quadrant = uint8(seed) & 3;
+        uint8 symbol = uint8((sel >> (quadrant * 8)) & 7) | (quadrant << 3);
         if (c < 40) {
             // ETH (40%): one pool-capped spin; over-cap recircs to the lootbox.
             _foilSpin(
@@ -856,7 +856,7 @@ contract DegenerusGameFoilPackModule is
                 faces * PriceLookupLib.priceForLevel(L),
                 activityScore,
                 seed,
-                sel
+                symbol
             );
         } else if (c < 80) {
             // FLIP (40%): the magnitude splits into thirds across three spins under
@@ -867,7 +867,7 @@ contract DegenerusGameFoilPackModule is
                 faces * FLIP_FACE_AMOUNT,
                 activityScore,
                 seed,
-                sel
+                symbol
             );
         } else {
             // WWXRP (20%): one spin; free mint, no solvency impact.
@@ -877,23 +877,22 @@ contract DegenerusGameFoilPackModule is
                 faces * WWXRP_FACE_AMOUNT,
                 activityScore,
                 seed,
-                sel
+                symbol
             );
         }
     }
 
     /// @dev Delegatecall one of the Degenerette box-spin resolvers in the Game's
     ///      storage context. The three resolvers share a single (player, stake,
-    ///      activityScore, seed, customTraits) shape, so one helper covers every
-    ///      currency. `customTraits` is the matched foil line, so the spin plays the
-    ///      exact ticket that won (a non-zero value bypasses seed-derived generation).
+    ///      activityScore, seed, symbol) shape, so one helper covers every
+    ///      currency. Only the chosen hero symbol reaches the spin resolver.
     function _foilSpin(
         bytes4 selector,
         address player,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTraits
+        uint8 symbol
     ) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
             abi.encodeWithSelector(
@@ -902,7 +901,7 @@ contract DegenerusGameFoilPackModule is
                 stake,
                 activityScore,
                 seed,
-                customTraits
+                symbol
             )
         );
         if (!ok) revert EmptyRevert();

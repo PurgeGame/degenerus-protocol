@@ -60,14 +60,13 @@ interface IDegenerusGamePlayerActions {
     function claimWinnings(address player) external;
     /// @notice Claim winnings preferring stETH over ETH.
     function claimWinningsStethFirst() external;
-    /// @notice Place full-ticket bets on degenerette.
+    /// @notice Place single-symbol bets on degenerette.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
-        uint32 customTraits,
-        uint8 heroQuadrant
+        uint8 symbol
     ) external payable;
     /// @notice Resolve degenerette bets for a player.
     function resolveDegeneretteBets(address player, uint64[] calldata betIds) external;
@@ -699,8 +698,7 @@ contract DegenerusVault {
     /// @param currency Bet currency (0 = ETH, 1 = FLIP, 3 = WWXRP)
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of tickets (must satisfy game rules)
-    /// @param customTraits Custom packed traits
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost; values >= 4 revert.
+    /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value); ETH bets only
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If msg.value + ethValue exceeds vault balance
@@ -708,8 +706,7 @@ contract DegenerusVault {
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
-        uint32 customTraits,
-        uint8 heroQuadrant,
+        uint8 symbol,
         uint256 ethValue
     ) external payable onlyVaultOwner {
         uint256 value;
@@ -719,7 +716,7 @@ contract DegenerusVault {
             value = _combinedValue(ethValue);
         }
         gamePlayer.placeDegeneretteBet{value: value}(
-            address(this), currency, amountPerSpin, spinCount, customTraits, heroQuadrant
+            address(this), currency, amountPerSpin, spinCount, symbol
         );
     }
 

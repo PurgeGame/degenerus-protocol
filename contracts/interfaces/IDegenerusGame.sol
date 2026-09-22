@@ -338,20 +338,18 @@ interface IDegenerusGame {
     /// @return remaining ETH still buyable in boxes (0 once presaleOver / sold out).
     function presaleBoxEthRemaining() external view returns (uint256 remaining);
 
-    /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
+    /// @notice Place single-symbol Degenerette bets.
     /// @param player The betting player (address(0) = msg.sender).
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
     /// @param amountPerSpin Bet amount per ticket.
     /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP, 1..5 WWXRP). Each spin resolves independently.
-    /// @param customTraits Four packed quadrant bytes; all-zero is a valid fixed selection, not random.
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost; values >= 4 revert.
+    /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
-        uint32 customTraits,
-        uint8 heroQuadrant
+        uint8 symbol
     ) external payable;
 
     /// @notice Resolve Degenerette bets once RNG is available.

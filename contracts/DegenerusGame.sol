@@ -1098,12 +1098,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Place Full Ticket Degenerette bets (4 traits, match-based payouts).
+    /// @notice Place single-symbol Degenerette bets.
     /// @dev The bet belongs to `player`; the player or an approved operator spends the player's
     ///      funds, any other caller funds the bet itself (a permissionless gift — WWXRP excluded).
     ///      The module resolves the player/funder split, so `player` forwards raw. Signature:
     ///      placeDegeneretteBet(address player, uint8 currency, uint128 amountPerSpin,
-    ///      uint8 spinCount, uint32 customTraits, uint8 heroQuadrant). The signature matches the
+    ///      uint8 spinCount, uint8 symbol). The signature matches the
     ///      module function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding here would cost contract-size headroom for no behavior change.
     function placeDegeneretteBet(
@@ -1111,7 +1111,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint8,
         uint128,
         uint8,
-        uint32,
         uint8
     ) external payable {
         (bool ok, bytes memory data) = ContractAddresses

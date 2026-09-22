@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
@@ -214,14 +215,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // RngNotReady() is the placement guard revert (DegeneretteModule:49 / :452).
         vm.prank(player);
         vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0),
-            0,
-            betAmount,
-            1,
-            customTraits,
-            0
-        );
+        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
     }
 
 
@@ -241,14 +235,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // Re-seed FIXED behavior: use the engineered winning word at INDEX.
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0),
-            0,
-            betAmount,
-            1,
-            winTicket,
-            0
-        );
+        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(winTicket & 7));
         uint64 betId = _betNonce(player);
 
         // Seed the live future prize pool so the winning ETH payout is solvent.
@@ -888,14 +875,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether;
         vm.prank(better);
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0),
-            0,
-            betAmount,
-            1,
-            customTraits,
-            0
-        );
+        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
         betId = _betNonce(better);
     }
 
@@ -1009,14 +989,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         (uint32 winTicket, uint256 word) = _findWinningCombo(atIndex);
         uint128 betAmount = 0.01 ether;
         vm.prank(who);
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0),
-            0,
-            betAmount,
-            1,
-            winTicket,
-            0
-        );
+        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(winTicket & 7));
         uint64 betId = _betNonce(who);
 
         _seedFuturePrizePool(10_000 ether);
@@ -1082,8 +1055,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
                 keccak256(abi.encode("freeze_removal_win", attempt))
             );
             winTicket = _resultTicketFor(index, rngWord);
-            if (_countMatchesLocal(winTicket, winTicket) >= 2)
-                return (winTicket, rngWord);
+            uint8 symbol = uint8(winTicket) & 7;
+            (uint8 score, uint8 gold) = Ref.score(Ref.player(rngWord, uint32(index), symbol, 0, false), winTicket, 0);
+            if (score == 2 && gold == 0) return (winTicket, rngWord);
         }
         revert("no winning combo in 100 attempts");
     }

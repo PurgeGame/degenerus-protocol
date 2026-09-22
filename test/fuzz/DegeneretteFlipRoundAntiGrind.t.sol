@@ -266,14 +266,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         uint32 ticket
     ) internal returns (uint64 betId) {
         vm.prank(player);
-        game.placeDegeneretteBet(
-            address(0),
-            currency,
-            perTicket,
-            spins,
-            ticket,
-            0
-        );
+        game.placeDegeneretteBet(address(0), currency, perTicket, spins, uint8(ticket & 7));
         betId = _betNonce(player);
     }
 

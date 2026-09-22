@@ -38,7 +38,7 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
         uint256 stray = 5 ether;
 
         vm.prank(player);
-        game.placeDegeneretteBet{value: stray}(address(0), CURRENCY_FLIP, perTicket, 1, TICKET, 0);
+        game.placeDegeneretteBet{value: stray}(address(0), CURRENCY_FLIP, perTicket, 1, uint8(TICKET & 7));
 
         assertEq(game.afkingFundingOf(player), afkingBefore + stray, "stray ETH not credited to afking");
         assertEq(
@@ -58,7 +58,7 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
         uint256 stray = 3 ether;
 
         vm.prank(player);
-        game.placeDegeneretteBet{value: stray}(address(0), CURRENCY_WWXRP, perTicket, 1, TICKET, 0);
+        game.placeDegeneretteBet{value: stray}(address(0), CURRENCY_WWXRP, perTicket, 1, uint8(TICKET & 7));
 
         assertEq(game.afkingFundingOf(player), afkingBefore + stray, "WWXRP stray ETH not credited to afking");
         assertEq(game.claimablePoolView(), poolBefore + stray, "claimablePool must rise by the credited afking");
@@ -73,7 +73,7 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
         uint256 poolBefore = game.claimablePoolView();
 
         vm.prank(player);
-        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, perTicket, 1, TICKET, 0);
+        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, perTicket, 1, uint8(TICKET & 7));
 
         assertEq(game.afkingFundingOf(player), afkingBefore, "no-ETH token bet must not touch afking");
         assertEq(game.claimablePoolView(), poolBefore, "no-ETH token bet must not touch claimablePool");

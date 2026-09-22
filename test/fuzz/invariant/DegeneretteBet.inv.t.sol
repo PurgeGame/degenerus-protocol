@@ -29,6 +29,13 @@ contract DegeneretteBetInvariant is DeployProtocol {
         vrfHandler = new VRFHandler(mockVRF, game);
         degHandler = new DegeneretteHandler(game, mockVRF, 8);
 
+        // Start every sequence with a real bet and resolution. Random time warps can
+        // otherwise reach the liveness timeout before the first betting action.
+        degHandler.placeEthBet(0, 0.01 ether, 1, 0);
+        assertEq(degHandler.ghost_betsPlaced(), 1, "fixture must place a real bet");
+        degHandler.resolveBets(0);
+        assertEq(degHandler.ghost_betsResolved(), 1, "fixture must resolve a real bet");
+
         targetContract(address(gameHandler));
         targetContract(address(vrfHandler));
         targetContract(address(degHandler));

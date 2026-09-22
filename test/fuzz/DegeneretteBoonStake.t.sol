@@ -141,14 +141,7 @@ contract DegeneretteBoonStake is DeployProtocol {
             : 0;
         vm.recordLogs();
         vm.prank(player);
-        game.placeDegeneretteBet{value: ethValue}(
-            address(0),
-            currency,
-            perSpin,
-            spins,
-            0x01020304,
-            1
-        );
+        game.placeDegeneretteBet{value: ethValue}(address(0), currency, perSpin, spins, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
         return _lastPackedStake();
     }
 
@@ -162,14 +155,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     ) internal returns (uint256 stakePerSpin) {
         vm.recordLogs();
         vm.prank(caller);
-        game.placeDegeneretteBet{value: perSpin}(
-            forPlayer,
-            CURRENCY_ETH,
-            perSpin,
-            1,
-            0x01020304,
-            1
-        );
+        game.placeDegeneretteBet{value: perSpin}(forPlayer, CURRENCY_ETH, perSpin, 1, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
         return _lastPackedStake();
     }
 

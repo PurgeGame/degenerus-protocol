@@ -1,268 +1,275 @@
 # Degenerette: single-symbol payout math
 
-Status: planning proposal, 2026-09-22. No game contracts changed.
+Implemented in the working tree, 2026-09-22. Score 2 pays **0.5×**, before
+activity scaling and matched-gold bonuses. One score table serves all currencies.
+Gold is as common as every other color. Base return, including gold, remains
+approximately **90–99.9%**; ETH keeps its extra **5 percentage points**.
+WWXRP keeps its **5% help gate**, but its rigged/gold-adjusted base is calibrated
+to **70% EV at activity 0**, rising to **130% at maximum activity**. Activity's
+extra return is paid only on winning scores **6–9**, in a 10/30/30/30 budget split.
+WWXRP is negative EV through activity **169**, before separate rewards and boons.
 
-The proposed shared table returns **99.9999995083% before activity scaling**,
-including the matched-gold bonus. Applying the existing ordinary 90–99.9%
-activity curve therefore preserves approximately **90–99.9% base return**.
-The existing ETH +5 percentage points brings its gross scheduled return to
-approximately **95–104.9%**, before additional rewards and settlement effects.
+## Ticket generation and shared draws
 
-WWXRP uses the same score table and gold formula. Its rig adds return by improving
-the result; it receives no compensating reduction in its score payouts. A proposed
-**5% help gate** produces approximately **107.25–119.04%** return when WWXRP also
-uses the ordinary activity curve. Retaining the current 60% help gate instead
-produces approximately **296.96–329.63%**. Changing the gate is a recommendation,
-not an already accepted or implemented change.
+The only ticket input is a hero symbol `0..31`: `quadrant = symbol >> 3`,
+`icon = symbol & 7`. Generate the other three symbols and all four colors afresh.
+Each random symbol and color is uniform among eight possibilities, including gold.
+There is no full-ticket selection or separate hero-quadrant parameter.
 
-## Agreed game rules and modeling assumptions
+For ordinary bets:
 
-- The player selects one of 32 symbols. Its quadrant is the hero quadrant.
-- Generate the other three symbols and all four player-ticket colors afresh per
-  spin, after commitment. Generate an independent result board.
-- Each symbol and color is uniform among its eight possibilities. Gold is 1/8,
-  exactly like each other color. The player's chosen hero symbol still has a 1/8
-  chance of matching its result symbol.
-- Hero symbol match: 2 points. Other symbol matches: 1 point each. Each color
-  match: 1 point independently of its symbol. Maximum score: 9.
-- Let G be the number of quadrants where player color and final result color
-  are both gold. The payout multiplier is **1 + G/4**, applied additively across
-  gold matches: 1x, 1.25x, 1.5x, 1.75x, or 2x. Count after WWXRP result adjustment.
-- Retain the current payout floor: scores 0 and 1 pay zero. A single gold color
-  match without another point therefore earns a point but no payout.
-- Proposed WWXRP rig adaptation: if the unweighted count of matching axes is
-  2–6, a successful help draw forces one uniformly selected unmatched axis to
-  match. Exclude the hero symbol; all unmatched colors are eligible now that
-  color points are independent. It adds one score point and may add a gold match.
-  Seven or eight raw matches are left alone, so the rig never creates score 9.
+- Same RNG round, hero and spin index means the same player ticket, regardless
+  of wallet, bet nonce, stake or requested spin count. Five spins are exactly the
+  first five of ten spins. Each bet starts at spin zero.
+- Different hero symbols independently regenerate the other symbols and colors.
+  Independent draws can coincidentally match; they are not forced apart.
+- ETH and FLIP share the player and house streams. The house stream is also
+  shared across different hero selections, so ETH and Bitcoin heroes face the
+  same house board on a given spin.
+- WWXRP hashes the RNG word into a separate domain. It shares draws among its
+  own users under the same rules. Its natural house board is shared across hero
+  choices; the subsequent rig can adjust that board differently for each hero.
+- Placement rejects an already revealed RNG index. Draws cannot be rerolled by
+  changing settlement order or batching.
 
-The numerical WWXRP recommendation below uses the common 90–99.9% activity curve
-and the rig as its bonus. That would replace the legacy WWXRP 70% payout floor
-plus its separate redistribution to a 70–120% target. This is an explicit proposal
-for simplifying WWXRP; the existing 70–120% curve is not preserved by these numbers.
-Its old redistribution factors must not also be stacked onto this model.
-
-## Exact score and gold probabilities
-
-Let H be a Bernoulli(1/8) hero-symbol match. Let K be the number of matches among
-the remaining seven axes (three symbols and four colors), so K is Binomial(7,1/8).
-They are independent, and:
+Using `H` for keccak256 over 32-byte ABI words and `packedH` for packed ABI:
 
 ```text
-S = 2H + K
-P(S=s) = [C(7,s) 7^(8-s) + C(7,s-2) 7^(9-s)] / 8^8
+drawWord = currency == WWXRP ? H(rngWord, WWXRP_DRAW_TAG) : rngWord
+spinSeed = H(drawWord, uint256(index), uint256(symbol), uint256(spinIndex))
+player   = uniformTraits(H(spinSeed, PLAYER_TICKET_TAG)), overwrite hero icon
+house0   = uniformTraits(packedH(drawWord, uint32(index), bytes1(0x51)))
+houseN   = uniformTraits(packedH(drawWord, uint32(index), uint8(spinIndex), bytes1(0x51)))
+rigSeed  = H(spinSeed, WWXRP_RIG_SALT)
 ```
 
-Terms with invalid binomial indices are zero. Equivalently the score probability
-generating polynomial is `(7 + x^2)(7 + x)^7 / 8^8`.
+FLIP survival and award rounding retain their separate owner/bet-nonce domains.
+Thus shared reels do not imply identical final FLIP awards. Activity, stake boons,
+ETH caps and downstream reward draws also affect settlement independently.
 
-For a color axis, the mutually exclusive states are:
+## Scoring and matched gold
 
-| Outcome | Probability | Score | Gold count |
+- Hero symbol match: **2 points**.
+- Each of the other three symbol matches: **1 point**.
+- Each color match: **1 point**, even when its symbol misses.
+- Maximum score: **9**. Scores 0 and 1 pay zero.
+- Count `G` quadrants whose player and final house colors are **both gold**.
+  The payout boost is additive: **1 + G/4**, from 1× through 2×.
+  Count gold after WWXRP rigging; merely rolling unmatched gold gives no boost.
+
+Let `H ~ Bernoulli(1/8)` be the hero match and `K ~ Binomial(7,1/8)` be the
+other seven matching axes. These are independent, and `S = 2H + K`.
+The score probability generating polynomial is `(7+x²)(7+x)^7 / 8^8`.
+The joint score/gold polynomial is:
+
+```text
+F(x,y) = ((7+x²)/8) ((7+x)/8)^3 ((56+7x+xy)/64)^4
+P(S=s,G=g) = coefficient of x^s y^g
+W_s = sum_g P(S=s,G=g) (1+g/4)
+E0 = sum_s B_s W_s
+```
+
+A matching non-gold color has probability 7/64, a gold-to-gold match 1/64,
+and a color miss 56/64. Conditional on `K=k`, the mean gold multiplier is
+`1+k/56`, providing an independent cross-check of `W_s`. Applying an
+unconditional average gold boost to score-only EV would be incorrect.
+
+At least one gold match occurs on **6.1050355434%** of ordinary spins.
+The table's gold bonus contributes **4.7859431207 percentage points** of neutral
+EV; this contribution is already included in the calibration.
+
+## Shared payout table
+
+Multipliers are gross scheduled payouts per effective stake, including returned
+stake, before activity scaling, matched gold and the ETH high-tier bonus.
+For ETH/FLIP, score 2 pays **45–49.95% of effective stake** after ordinary
+activity scaling, before gold. It is not a profitable result by itself.
+
+| Score | Ordinary chance | Shared base | Neutral EV contribution, gold included |
 |---|---:|---:|---:|
-| Color misses | 56/64 | 0 | 0 |
-| Matching non-gold colors | 7/64 | 1 | 0 |
-| Gold matches gold | 1/64 | 1 | 1 |
+| 0 | 34.3608915806% | 0.00× | 0.00000000% |
+| 1 | 34.3608915806% | 0.00× | 0.00000000% |
+| 2 | 19.6347951889% | 0.50× | 10.08036360% |
+| 3 | 8.4149122238% | 3.00× | 26.07120126% |
+| 4 | 2.6046156883% | 10.00× | 27.15526521% |
+| 5 | 0.5438208580% | 25.00× | 14.36218619% |
+| 6 | 0.0735998154% | 125.00× | 9.86624509% |
+| 7 | 0.0061750412% | 625.00× | 4.20492142% |
+| 8 | 0.0002920628% | 23,470.36× | 7.58926290% |
+| 9 | 0.0000059605% | 100,000.00× | 0.67055225% |
 
-The joint probability-generating polynomial for score and matched gold is:
-
-```text
-F(x,y) = ((7+x^2)/8) ((7+x)/8)^3 ((56+7x+xy)/64)^4
-P(S=s,G=g) = coefficient of x^s y^g in F
-```
-
-Define `W_s = sum_g P(S=s,G=g) (1+g/4)`. A table with multipliers B_s has
-expected return `E0 = sum_s B_s W_s`. This accounts for the correlation between
-gold matches and high scores. Multiplying a score-only EV by the unconditional
-average gold multiplier is incorrect.
-
-As a separate derivation, conditional on K=k, four sevenths of the matching
-ordinary axes are colors on average, and one eighth of those matches are gold.
-Thus `E[G|K=k] = k/14`, and the conditional mean multiplier is `1+k/56`.
-This gives the same W_s as the full joint enumeration.
-
-At least one gold match occurs on **6.1050355434% of ordinary spins**, including
-some nonpaying score-1 spins. The unconditional mean multiplier is 65/64, but the
-proposed table's actual gold uplift contributes **4.6963836402 percentage points**
-of its neutral base EV. That contribution is already included in calibration.
-
-## Proposed shared score table
-
-Multipliers below are gross scheduled payouts per effective spin stake, including
-any returned stake, before activity scaling, the matched-gold multiplier, and the
-ETH-specific +5-point bonus. A 1x entry is not a guaranteed break-even payout after
-activity scaling. The current comparison is the ordinary all-non-gold table; the
-existing contract has eight ordinary tables, so there is no single current table.
-
-| Score | Ordinary chance | Current N0 base | Proposed shared base | Neutral EV contribution, gold included |
-|---|---:|---:|---:|---:|
-| 0 | 34.36089158% | 0x | 0x | 0% |
-| 1 | 34.36089158% | 0x | 0x | 0% |
-| 2 | 19.63479519% | 1.95x | **1x** | 20.16072720% |
-| 3 | 8.41491222% | 4.87x | **2.5x** | 21.72600105% |
-| 4 | 2.60461569% | 15.34x | **8x** | 21.72421217% |
-| 5 | 0.54382086% | 43.55x | **24x** | 13.78769875% |
-| 6 | 0.07359982% | 199.88x | **120x** | 9.47159529% |
-| 7 | 0.00617504% | 1,024.90x | **625x** | 4.20492142% |
-| 8 | 0.0002920628% | 51,245.17x | **25,527.01x** | 8.25429137% |
-| 9 | 0.0000059605% | 107,564.11x | **100,000x** | 0.67055225% |
-
-Scores 2–7 are deliberately simple numbers chosen to retain an increasing prize
-ladder. Score 9 is pinned at 100,000x, close to the current 107,564.11x non-gold
-jackpot. Four matched golds produce 200,000x before activity/other bonuses, close
-to the current 209,164.35x all-gold jackpot. These are design choices, not a claim
-of a unique optimal table. Score 8 uses the remaining EV budget:
+Scores 2–7 use simple values. Score 9 is 100,000× (200,000× with four matched
+golds), close to the previous non-gold/all-gold base jackpots. Score 8 absorbs
+the remaining EV budget:
 
 ```text
 B8_exact = (1 - sum_{s != 8} B_s W_s) / W_8
-         = 11078723 / 434
-         = 25,527.011520737327...x
-B8_used  = floor(100 * B8_exact) / 100 = 25,527.01x
-E0       = 6710886367 / 6710886400 = 0.9999999950826168...
+         = 10186139 / 434 = 23,470.366359447005...×
+B8_used  = 23,470.36×
+E0       = 3355443131 / 3355443200 = 0.9999999794363975...
 ```
 
-Only the near-jackpot entry needs a less rounded value; the shortfall is below
-0.0000005 percentage points of neutral return. This is close enough that ordinary
-activity scaling meets the requested target to much finer precision than a basis
-point, before per-payout integer flooring.
+A paying score occurs on **31.2782168388%** of ordinary spins. This counts
+partial-stake payouts and precedes FLIP survival. The nine-point jackpot is
+**1 in 16,777,216**, independent of the chosen hero.
 
-The chance of a paying score rises from **19.609375%** for the current N0 ticket
-to **31.2782168388%**, about 1 in 3.20 spins. This is a chance of a scheduled payout,
-not a profit probability or the final FLIP payout probability after survival.
-The nine-point jackpot is **1 in 16,777,216** under the proposed uniform model.
-Both facts are independent of the chosen symbol.
+Keeping the previous N0 table under the new scoring rules would return
+**188.274357833%** before activity scaling, which is why intermediate prizes
+were recalibrated. The comparison model retains those historical N0 constants
+explicitly; they are no longer production payout tables.
 
-Keeping the current N0 score multipliers under these new rules would return
-**188.274357833%** before activity scaling. Smaller intermediate prizes are needed
-to preserve overall EV. Other current ordinary tables, if reused as the universal
-table, would give even higher returns (207–272%).
+## Activity and ETH bonus
 
-## Activity scaling and the existing ETH bonus
+With activity return fraction `r`, non-ETH unrigged payout is
+`effectiveStake * B_S * (1+G/4) * r`. ETH/FLIP use the existing
+activity targets: 90% at 0, 98.91% at 305, 99.7% at 500 and 99.9% at 30,000+.
+WWXRP uses the same activity knees with its own 70/124/127.6/130% targets.
+This preserves the previous curve shape: 90% of its activity gain by score 305,
+96% by 500, and the remaining 4% by 30,000. The concentration at the top end
+refers to **winning score tiers**, not a delayed activity ramp.
 
-Let r(a) be the existing ordinary activity return fraction. For a non-ETH,
-unrigged spin the formula is:
+ETH adds five percentage points of expected return, retaining the bonus budget
+allocation of 10% to score 6 and 30% each to scores 7, 8 and 9. For those scores,
+`f_s = bonusBudgetShare_s / (B_s W_s)`. ETH payout uses
+`effectiveStake * B_S * (1+G/4) * (r + 0.05*f_s)`.
 
-```text
-payout = effectiveStake * B_S * (1 + G/4) * r(activity)
-EV     = r(activity) * E0
-```
-
-Keep the ETH bonus at **+5 percentage points**, preserving the current split of
-its EV budget: 10% to score 6, and 30% each to scores 7, 8, and 9. One set of four
-factors is enough; none depend on ticket gold count or hero color.
-
-For those scores let `f_s = bonusBudgetShare_s / (B_s W_s)` and use zero for other
-scores. Then the ETH multiplier is `B_s (1+G/4) (r + 0.05 f_s)`.
-
-The proposed factors, floored to a 1,000,000 fixed-point scale, are:
-
-| Score | Scaled ETH bonus factor |
+| Score | ETH factor, scaled by 1,000,000 |
 |---|---:|
-| 6 | 1,055,788 |
+| 6 | 1,013,556 |
 | 7 | 7,134,497 |
-| 8 | 3,634,473 |
+| 8 | 3,952,953 |
 | 9 | 44,739,242 |
 
-Their EV contribution is **4.9999997303 percentage points** if fractional precision
-is retained until the final payout division. Keeping the current additional
-intermediate floor to whole ROI basis points instead gives **4.9988116221 points**.
-Recommendation: combine factors before the final integer division, then round
-the payout once. The return table below uses that approach, before token-unit
-flooring. The bonus makes actual ETH high-tier multipliers larger than the base
-score table; e.g. score 9 at max activity and zero matched gold is about 323,596.21x
-gross, before the ETH/lootbox split and pool cap.
+Precision is retained until the final integer payout division. These factors
+contribute **4.9999995155 percentage points**, before token-unit flooring.
 
-| Activity score | Ordinary / FLIP before settlement rounding | ETH including +5-point bonus | WWXRP with proposed 5% help gate |
+| Activity score | Ordinary / FLIP | ETH with bonus | WWXRP, rig and bonus included |
 |---|---:|---:|---:|
-| 0 | 90.00% | 95.00% | 107.24675331% |
-| 305 | 98.91% | 103.91% | 117.86418189% |
-| 500 | 99.70% | 104.70% | 118.80557006% |
-| 30,000+ | 99.90% | 104.90% | 119.04389618% |
+| 0 | 89.999998% | 94.999998% | 70.000000% |
+| 100 | 92.919998% | 97.919998% | 87.699997% |
+| 169 | 94.929998% | 99.929998% | 99.919994% |
+| 170 | 94.959998% | 99.959998% | 100.089994% |
+| 305 | 98.909998% | 103.909997% | 123.999990% |
+| 500 | 99.699998% | 104.699997% | 127.599989% |
+| 30,000 | 99.899998% | 104.899997% | 129.999989% |
 
-## WWXRP: improve results, use the same table
+## WWXRP rig and high-tier bonus
 
-Let E1 be the shared-table EV when every eligible result gets one helped match.
-For this table, `E1 - E0 = 3.832611945569514...` stake units. If q is the help
-probability on eligible results, linearity gives:
+Use the same score table and gold boost. On `rigSeed % 20 == 0`, count raw
+matching axes without the hero's extra point. If 2–6 axes match, force one
+uniformly selected unmatched axis to match. Eligible axes are all four colors
+and the three non-hero symbols. The hero symbol is never forced. Seven or eight
+raw matches are unchanged, so the rig cannot manufacture the nine-point jackpot.
+
+The rig adds exactly one score point when it applies, and can create a gold
+match. The exact model includes that score/gold correlation. It improves high
+scores without changing the probability of any payout, since low results are
+ineligible. Score ≥3 rises from 11.64342165% to 12.37972647%; score ≥6 rises
+from 0.08007288% to 0.10726392%. Jackpot probability and jackpot gold mix stay fixed.
+
+The shared table evaluated against the rigged score/gold distribution has
+neutral return `Ew = 80439974071 / 67108864000 ≈ 1.19864902006`. Applying the
+ordinary 90% activity multiplier would therefore pay 107.8784% at activity 0.
+Instead, one currency-wide factor sets the base to 70%, and the activity surplus
+is allocated to winning scores 6–9:
 
 ```text
-E_WWXRP_before_activity(q) = E0 + q * (E1 - E0)
-E_WWXRP_after_activity(q)  = r(activity) * E_WWXRP_before_activity(q)
+a0 = floor(7000 * 1,000,000 / Ew) / 10,000,000,000
+   = 0.5839907998
+Ww_s = sum_g P_rigged(S=s,G=g) * (1+g/4)
+f_s = floor(1,000,000 * share_s / (B_s * Ww_s)) / 1,000,000
+WWXRP payout = effectiveStake * B_S * (1+G/4) * [a0 + (R(activity)-0.70)*f_S]
 ```
 
-The joint enumeration includes gold matches manufactured by a helped color.
-It does not pretend the gold multiplier is independent of the improved score.
+`f_S` is zero for scores 0–5. `R` is the target return fraction, from 0.70 to
+1.30. The shared score table remains the same; the currency-wide base factor
+and four high-tier bonus factors account for the different rigged distribution.
 
-| Help gate on eligible results | Neutral table return | Return at activity 0 | Return at max activity |
-|---|---:|---:|---:|
-| 0% (ordinary random results) | 100.000000% | 90.000000% | 99.900000% |
-| **5% (recommended simple gate)** | **119.163059%** | **107.246753%** | **119.043896%** |
-| 60% (current gate retained) | 329.956716% | 296.961045% | 329.626760% |
+| Winning score | WWXRP bonus factor, scaled by 1,000,000 | Share of added EV |
+|---|---:|---:|
+| 6 | 767,803 | 10% |
+| 7 | 4,612,705 | 30% |
+| 8 | 1,928,269 | 30% |
+| 9 | 44,739,242 | 30% |
 
-A gate of approximately **5.2497150501%** would give exactly 120% at the maximum
-activity score in the ideal model. Prefer 5% for simplicity unless that exact cap
-is wanted. This is an occasional upgrade: it fires only within the eligible band,
-not on 5% of all spins.
+At maximum activity, those tiers receive approximately **6 / 18 / 18 / 18 extra
+percentage points** of EV, respectively. Scores 2–5 stay flat across activity.
+Score 2 pays 0.2919953999× before matched gold in WWXRP; the common base table
+still lists 0.5× before currency scaling. Hero points and gold boosts are identical.
 
-With a 5% gate, score >=3 becomes 12.37972647% instead of 11.64342165%, and score
->=6 becomes 0.10726392% instead of 0.08007288%. The chance of any paying score
-stays 31.27821684% because results below two raw matches are not helped. WWXRP gets
-larger wins, and more high-tier results, rather than newly created low-tier wins.
-The nine-point jackpot and its gold-count distribution are unchanged by the rig.
+Scheduled WWXRP return is **69.9999999905%** at activity 0 and
+**129.9999888532%** at 30,000+. Fixed-point flooring causes less than 0.00002
+percentage points of shortfall across the entire uint16 activity range. Activity
+169 pays approximately 99.92%; activity 170 pays approximately 100.09%.
+Gold and the rig are included in these returns. Activity never affects the
+tickets, rig eligibility or rig choice, preserving identical shared draws for
+players with different activity scores.
 
-## Additional bonuses and integration limits
+## Other rewards, automatic spins and compatibility
 
-These are scheduled spin returns per effective stake, not a valuation of every
-reward in the protocol:
+- Stake boons raise effective stake versus paid stake under their existing caps.
+- FLIP retains its 50/50 double-or-nothing survival flip, EV-neutral before
+  whole-token flooring and stochastic hundred-FLIP rounding.
+- ETH retains its payout split, pool caps and downstream boxes. Scheduled
+  return is not all immediately withdrawable ETH.
+- sDGNRS, quests, records and WWXRP whale-halfpass rewards are extra. At the
+  existing sDGNRS rates, the new score distribution increases instantaneous
+  expected Reward-pool outflow per one-ETH spin to 0.0000027126073837280272 of
+  the pool, approximately **1.883×** the historical N0 rate. Those reward rates
+  are unchanged; their EV is outside the requested base-return target.
+- Box spins request a random hero using internal sentinel `32`; all symbols
+  `0..31`, including zero, are real hero selections. Record awards retain the
+  selected hero. Foil awards select one hero from the matched line using the
+  sealed seed, then regenerate the rest, including every color. Full foil
+  tickets cannot carry their unusual gold distribution into Degenerette payouts.
+- Automatic player, hero, result and rig draws use separate tagged domains.
+  `BoxSpin.packedSpins` now includes each spin's 2-bit hero quadrant at bits
+  225–230; the earlier reel, count and survival fields keep their positions.
+- The public bet ABI is now
+  `placeDegeneretteBet(address,uint8,uint128,uint8,uint8)`.
+  The vault wrapper and module callers use the new symbol argument. Packed bet
+  bits 0–4 contain the symbol; bits 5–31 and 218–219 are reserved. The redundant
+  hero-quadrant copy has been removed; the quadrant is always `symbol >> 3`.
+  Storage slots do not move.
+  This is a new ABI/packed-data format, not a migration for outstanding old bets.
 
-- Stake boons increase effective stake relative to paid stake, subject to their
-  existing currency caps and rounding. Multiply these scheduled returns by the
-  actual effective-stake/paid-stake ratio when presenting an individual bet.
-- FLIP's survival flip remains EV-neutral before rounding (50% double, 50% zero).
-  Whole-token and 100-FLIP rounding must be included in implementation checks.
-- ETH keeps its existing ETH/lootbox split and cap. Gross scheduled value is not
-  a promise of that much withdrawable ETH; valuing downstream boxes is separate.
-- sDGNRS awards, quests, record rewards, and WWXRP whale-halfpass jackpots are
-  additional rewards. Their value is not included in the 90–99.9% figure. At the
-  existing sDGNRS rates, a one-ETH spin has expected instantaneous pool outflow
-  `0.0000027126073837280272 * currentRewardPool`, versus
-  `0.0000014405864197530864 * currentRewardPool` for the old N0 ticket: approximately
-  **1.883x**. If those bonus budgets must also stay fixed, recalibrate their rates
-  separately; do not describe them as automatically unchanged in EV.
-- This calibration assumes fresh uniform player colors. Foil rewards currently
-  pass a preexisting full ticket; such tickets have a different gold mix and need
-  explicit modeling or a switch to the new ticket-generation flow. They cannot
-  silently inherit the standard-ticket EV claim. The same applies to any retained
-  full-ticket selection API.
-- Player ticket generation, result generation, and rig draws need separate random
-  domains committed before revelation. Chosen symbol, stake, and settlement order
-  must not allow selecting a favorable generated ticket after observing outcomes.
+## Reproducible verification
 
-## Verification and implementation handoff
+Run `python3 scripts/data/degenerette_single_symbol_math.py` (the old
+`derive_5_tables.py` entry point forwards to it). Exact `Fraction` arithmetic
+covers all 4,096 match/gold states and every eligible rig choice, cross-checked
+against the independent 16-state binomial derivation. The model verifies the
+actual production payout, ETH/WWXRP bonus factors, WWXRP rig rate, base
+normalization and target-curve constants. Every uint16 activity value is checked
+for monotonicity and deviation from the WWXRP target.
 
-Run the reproducible model:
+`DegeneretteSingleSymbol.t.sol` tests the public shared streams, prefix invariance,
+separate WWXRP draws, placement commitment, scoring, gold and payout bounds.
+The production math harness also supports exhaustive score/rig/trait tests and
+the four Degenerette statistical suites. Existing settlement, boon, record,
+freeze, gas and automatic-award suites cover integration with the rest of the game.
 
-```bash
-python3 scripts/data/degenerette_single_symbol_math.py
-```
+The shared `SpinResult` pipeline generates, optionally rigs, scores and counts
+gold for every manual, box, foil and record spin. Payouts consume that result
+and the frozen activity score directly. Foil callers pass a symbol instead of
+a full ticket. Automatic FLIP stake sizing now rejects values that would
+truncate when converted to uint128, consistently with the ETH/WWXRP paths.
 
-The script reads current payout constants from the contract, enumerates all 4,096
-match-mask/player-gold-mask combinations with exact `Fraction` arithmetic, and
-enumerates every eligible forced-match choice. It cross-checks score probabilities
-and gold-weighted EV against an independently derived 16-state binomial model.
-It also checks total probability, gold frequency, monotone score improvements,
-invariance of the jackpot and its gold distribution under rigging, current-table
-base EV, the proposed table's rounding residual, and the ETH bonus budget.
+Validation after the WWXRP calibration and cleanup:
 
-This is a mathematical model verification, not contract implementation testing.
-Implementation should subsequently reproduce the model from actual emitted
-tickets, including color-only scoring and gold matches introduced by the rig,
-then check currency settlement, bonus floors, caps, and automatic reward callers.
+- Exact probability/EV model passes against the production constants, including
+  all 65,536 activity values and the 169/170 negative-EV crossover.
+- Hardhat: **59 passing**, covering the four Degenerette statistical suites,
+  deployed payout integration, event surfaces and hero-override regressions.
+- Foundry: **132 distinct checks passing** across the focused integration run
+  and corrected invariant rerun; one existing sDGNRS-award test remains skipped.
+  The initial invariant run exposed a fixture that could reach game-over before
+  placing a bet. The fixture now places and resolves a real bet before fuzzing;
+  all five invariants pass at 256 runs and 128 calls per run.
+- All ten source gates and interface coverage pass. The storage-layout oracle
+  matches every golden, including shared delegatecall slots.
+- All 32 production runtime-size checks pass. The Degenerette module is
+  **17,582 bytes**, leaving 6,994 bytes below the EIP-170 limit.
 
-Source references:
-
-- `contracts/DegenerusTraitUtils.sol`: current near-uniform gold/color generator.
-- `contracts/modules/DegenerusGameDegeneretteModule.sol`: current tables, activity
-  curves, ETH bonus split, rig, stake boons, settlement, and automatic spins.
-- `scripts/data/derive_5_tables.py`: current table derivation and score-floor intent.
-- `scripts/data/degenerette_single_symbol_math.py`: proposed exact model.
+Foundry evidence is in `.audit-test-logs/degenerette-wwxrp-cleanup/` and
+`.audit-test-logs/degenerette-wwxrp-invariant/`.

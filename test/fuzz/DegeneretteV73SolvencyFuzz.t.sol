@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Vm} from "forge-std/Vm.sol";
 
-/// @title DegeneretteV73SolvencyFuzz — stateless property fuzz over the v73 Variant-2 surface.
+/// @title DegeneretteV73SolvencyFuzz — stateless property fuzz over single-symbol bets.
 ///
-/// @notice Sweeps random (customTicket, heroQuadrant, rngWord, currency) and resolves one live spin,
+/// @notice Sweeps random (hero symbol, rngWord, currency) and resolves one live spin,
 ///         asserting the protocol-pillar invariants hold for EVERY reachable input — the coverage the
 ///         analytical EV proof and the single-config 3000-spin parity test sampled only narrowly:
-///           SOLVENCY  — score S in {0..9}; the honest base payout never exceeds the per-N S=9 pin
+///           SOLVENCY  — score S in {0..9}; the honest base payout never exceeds the shared S=9 payout with four gold matches
 ///                       (the table's max entry → no dispatch reads an inflated/OOB value); the pay
 ///                       floor holds (S<2 → payout 0).
-///           RNG       — the WWXRP rig only LIFTS (rigged S in [honestS, honestS+2]) and can NEVER
+///           RNG       — the WWXRP rig only LIFTS (rigged S in [honestS, honestS+1]) and can NEVER
 ///                       fabricate the S=9 jackpot (rigged S==9 ⇒ the honest reel already had M==8).
 ///           LIVENESS  — every resolve succeeds (no revert/brick) for any ticket/hero/seed.
 ///
@@ -42,11 +43,6 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     uint256 private constant ROI_VB_BPS = 9_970;
     uint256 private constant ROI_MAX_BPS = 9_990;
 
-    // S=9 jackpot pins (the max table entry per N).
-    uint256[5] private S9_PIN = [
-        uint256(10_756_411), 12_583_037, 14_792_939, 17_512_324, 20_916_435
-    ];
-
     address private player;
 
     function setUp() public {
@@ -63,12 +59,12 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     }
 
     /// forge-config: default.fuzz.runs = 400
-    function testFuzz_v73_solvency_and_rig(uint32 ticketSeed, uint8 heroRaw, uint256 word, bool useWwxrp)
+    function testFuzz_v73_solvency_and_rig(uint8 symbol, uint256 word, bool useWwxrp)
         public
     {
         word = bound(word, 1, type(uint256).max); // rngWord must be nonzero
-        uint8 hero = heroRaw % 4;
-        uint32 ticket = ticketSeed; // any 32-bit value is a structurally valid ticket
+        symbol %= 32;
+        uint8 hero = symbol >> 3;
         uint8 currency = useWwxrp ? CURRENCY_WWXRP : CURRENCY_FLIP;
         uint128 perTicket = useWwxrp ? uint128(1 ether) : uint128(100 ether);
 
@@ -81,7 +77,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
             coin.mintForGame(player, uint256(perTicket) + 1 ether);
         }
         vm.prank(player);
-        game.placeDegeneretteBet(address(0), currency, perTicket, 1, ticket, hero);
+        game.placeDegeneretteBet(address(0), currency, perTicket, 1, symbol);
         uint64 betId = _betNonce(player);
         uint256 roiBps = _roiBpsOfBet(betId);
 
@@ -95,22 +91,22 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         // SOLVENCY: score in range.
         assertLe(s, 9, "score must be in {0..9}");
 
-        uint8 n = _goldCount(ticket);
+        uint32 ticket = Ref.player(word, 1, symbol, 0, useWwxrp);
 
         if (!useWwxrp) {
             // FLIP honest lane: payout = perTicket * base * roiBps / 1e6 exactly (no bonus/cap/DGNRS).
-            // SOLVENCY: the decoded base never exceeds the per-N S=9 pin (the table's max entry).
+            // SOLVENCY: the decoded base never exceeds the shared S=9 payout with four gold matches (the table's max entry).
             uint256 base = (payout * 1_000_000) / (uint256(perTicket) * roiBps);
-            assertLe(base, S9_PIN[n], "honest base payout exceeds the per-N S=9 pin (inflated/OOB table read)");
+            assertLe(base, 20_000_000, "honest base payout exceeds the shared S=9 payout with four gold matches (inflated/OOB table read)");
             // Pay floor S>=2.
             if (s < 2) assertEq(payout, 0, "pay floor: S<2 must pay 0");
         } else {
             // WWXRP: compare against the honest (pre-rig) reel.
-            uint32 honestReel = _resultTicketForSpin(1, word, 0);
+            uint32 honestReel = Ref.house(word, 1, 0, true);
             (uint8 honestS, uint8 honestM) = _scoreAndM(ticket, honestReel, hero);
-            // RNG: the rig only lifts (0..+2), never below honest.
+            // RNG: the rig only lifts (0..+1), never below honest.
             assertGe(s, honestS, "rig lowered the score below honest");
-            assertLe(s, honestS + 2, "rig lifted the score by more than +2");
+            assertLe(s, honestS + 1, "rig lifted the score by more than +1");
             // RNG: the rig can NEVER fabricate the S=9 jackpot.
             if (s == 9) {
                 assertEq(honestM, 8, "rig manufactured S=9 (honest reel was not a full 8-axis match)");
@@ -130,14 +126,8 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
             if (symMatch) ++m;
             if (symMatch) {
                 s += (q == hero) ? 2 : 1;
-                if (colorMatch) ++s;
             }
-        }
-    }
-
-    function _goldCount(uint32 ticket) internal pure returns (uint8 n) {
-        for (uint8 q; q < 4; ++q) {
-            if (((ticket >> (q * 8 + 3)) & 7) == 7) ++n;
+            if (colorMatch) ++s;
         }
     }
 

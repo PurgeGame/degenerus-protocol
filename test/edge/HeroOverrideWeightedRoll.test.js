@@ -357,15 +357,7 @@ function customTicketWithSymbol(quadrant, symbol) {
 // `(quadrant, symbol)` slot. Defaults to MIN_BET_ETH per spin, 1 spin total.
 async function placeEthBet(game, signer, quadrant, symbol) {
   const customTicket = customTicketWithSymbol(quadrant, symbol);
-  return game.connect(signer).placeDegeneretteBet(
-    hre.ethers.ZeroAddress,
-    CURRENCY_ETH,
-    MIN_BET_ETH_VALUE,
-    1,
-    customTicket,
-    quadrant,
-    { value: MIN_BET_ETH_VALUE }
-  );
+  return game.connect(signer).placeDegeneretteBet(hre.ethers.ZeroAddress, CURRENCY_ETH, MIN_BET_ETH_VALUE, 1, (Number((BigInt(customTicket) >> (BigInt(quadrant) * 8n)) & 7n) | (Number(quadrant) << 3)), { value: MIN_BET_ETH_VALUE });
 }
 
 // Phase 282 / 291 pattern: drive advanceGame() to issue a VRF request,

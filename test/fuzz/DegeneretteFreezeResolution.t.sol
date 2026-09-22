@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
@@ -169,14 +170,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint128 betAmount = 0.01 ether;
 
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0),     // player = msg.sender
-            0,              // currency = ETH
-            betAmount,      // amountPerSpin
-            1,              // ticketCount = 1
-            customTraits,   // custom traits (matched to RNG word)
-            0               // v47 always-on hero: heroQuadrant must be {0..3} (0xFF reverts InvalidBet)
-        );
+        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
 
         // Record post-bet state: pending future should have increased by betAmount
         uint256 postBetPendingFuture = _readPendingFuture();
@@ -252,9 +246,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTraits, 0 // v47 always-on hero: {0..3}
-        );
+        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
 
         // Zero pending future before resolution
         _seedPendingFuture(0);
@@ -299,9 +291,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Place bet (goes to live pools since not frozen)
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTraits, 0 // v47 always-on hero: {0..3}
-        );
+        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
 
         // Live pools should have increased (unfrozen path uses _setPrizePools)
         uint256 postBetLiveFuture = _readFuturePrizePool();
@@ -427,10 +417,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // on spin 0 guarantees the bet is non-vacuous; other spins vary).
         uint32 ethTicket = _winningTicketFor(index, word);
         uint32 flipTicket = ethTicket;
-        uint32 wwxrpTicket = ethTicket;
+        uint32 wwxrpTicket = Ref.house(word, uint32(index), 0, true);
 
         uint128 ethPerTicket = 0.01 ether;     // >= MIN_BET_ETH
-        uint128 flipPerTicket = 200 ether;   // >= MIN_BET_FLIP
+        uint128 flipPerTicket = 2_000 ether;   // >= MIN_BET_FLIP
         uint128 wwxrpPerTicket = 2 ether;      // >= MIN_BET_WWXRP
 
         // Fund the player for FLIP + WWXRP bets (game-gated mints).
@@ -716,7 +706,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint48 index = 1;
         uint256 word = uint256(keccak256("perbetid_word"));
         uint32 ticket = _winningTicketFor(index, word);
-        uint128 perTicket = 0.1 ether;       // big vs the small pool -> cap binds
+        uint128 perTicket = 1 ether;         // score 2 pays 0.45 ETH at minimum activity, above the cap
         uint256 smallPool = 0.5 ether;
 
         // Place TWO same-index single-spin ETH bets (two bet-txs, SAME lootbox index).
@@ -963,9 +953,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     {
         uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
         vm.prank(player);
-        game.placeDegeneretteBet{value: ethValue}(
-            address(0), currency, perTicket, spins, ticket, 0
-        );
+        game.placeDegeneretteBet{value: ethValue}(address(0), currency, perTicket, spins, uint8(ticket & 7));
         betId = _betNonce(player);
     }
 

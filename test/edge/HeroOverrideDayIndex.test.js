@@ -104,15 +104,7 @@ function customTicketWithSymbol(quadrant, symbol) {
 /// (quadrant, symbol). Defaults to MIN_BET_ETH per spin, 1 spin total.
 async function placeEthBet(game, signer, quadrant, symbol) {
   const customTicket = customTicketWithSymbol(quadrant, symbol);
-  return game.connect(signer).placeDegeneretteBet(
-    hre.ethers.ZeroAddress, // player = msg.sender via _resolvePlayer
-    CURRENCY_ETH,
-    MIN_BET_ETH_VALUE,
-    1, // ticketCount
-    customTicket,
-    quadrant,
-    { value: MIN_BET_ETH_VALUE }
-  );
+  return game.connect(signer).placeDegeneretteBet(hre.ethers.ZeroAddress, CURRENCY_ETH, MIN_BET_ETH_VALUE, 1, (Number((BigInt(customTicket) >> (BigInt(quadrant) * 8n)) & 7n) | (Number(quadrant) << 3)), { value: MIN_BET_ETH_VALUE });
 }
 
 /// Returns the (winQuadrant, winSymbol, winAmount) triple from the

@@ -2398,7 +2398,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     stake,
                     activityScore,
                     seed,
-                    uint32(0)
+                    uint8(32)
                 )
             );
         if (!ok) revert EmptyRevert();
@@ -2418,7 +2418,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     stake,
                     activityScore,
                     seed,
-                    uint32(0)
+                    uint8(32)
                 )
             );
         if (!ok) revert EmptyRevert();
@@ -2435,7 +2435,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     stake,
                     activityScore,
                     seed,
-                    uint32(0)
+                    uint8(32)
                 )
             );
         if (!ok) revert EmptyRevert();

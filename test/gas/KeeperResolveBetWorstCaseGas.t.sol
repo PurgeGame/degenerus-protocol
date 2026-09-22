@@ -3,48 +3,14 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 
-/// @title KeeperResolveBetWorstCaseGas -- GAS-01 (Phase 319) + DSPIN-02 (Phase 323-04) resolve-bet
-///        worst-case measurement.
-///
-/// @notice The biggest keeper-router cost center is a `degeneretteResolve` item resolving a degenerette bet
-///         where the spin loop runs to the per-currency cap and the winning spins each flip into the
-///         lootbox-conversion branch. The v47 per-currency caps raise the ETH spin ceiling from 10
-///         (old MAX_SPINS_PER_BET) to MAX_SPINS_ETH = 25 (DegeneretteModule:226) — 2.5x the roll work.
-///         The DGAS write-batching summing the lootbox-share PER betId means one box materializes per
-///         bet (not per spin), and a single end-of-call flush replaces N per-spin storage writes.
-///
-///         Per `feedback_gas_worst_case`, this harness DERIVES the worst case in writing FIRST (see
-///         each test's NatSpec) then MEASURES, asserting the constructed scenario IS the maximum
-///         (ticketCount at the cap, full spin loop, winning spins flip into the lootbox) BEFORE
-///         trusting the measurement, and that the measured gas is < the REAL mainnet 30M block gas
-///         limit (NOT foundry.toml's inflated 30e9). It MEASURES only; Phase 319 Plan 05 owned the
-///         `*_GAS_UNITS` calibration (out of scope here).
-///
-///         Tests:
-///           - Test A: the legacy 10-spin all-match worst case (Phase-319 GAS-01 reference).
-///           - Test B: the per-1-spin-item MARGINAL (the CRANK_RESOLVE_BET_GAS_UNITS calibration
-///             target; the contract pays a FLAT per-item reward — peg to the per-1-spin marginal, NOT
-///             the worst case, to keep the SAFE-01 self-crank faucet closed).
-///           - Test C: DSPIN-02 25-spin ETH worst case (derive-then-measure; absorbed under 30M).
-///           - Test D: DSPIN-02 max mixed-currency batch (ETH 25 + FLIP 15 + WWXRP 5 in one call).
-///
-/// @dev Live `DeployProtocol` fixture (the keeper-router writes Game storage). Clones the `KeeperFaucetResistance`
-///      resolve fixture (lootboxRngIndex seed + post-placement RNG-word inject + self-operator-approval)
-///      and the `RedemptionGas` gasleft-delta idiom.
-///
-///      Worst-case construction: each spin derives its own random result ticket, so a single
-///      `customTicket` cannot match all spins. For <= 15 spins the harness searches the RNG word space
-///      for a word where the per-quadrant-greedy ticket wins (matches >= 2 -> payout > 0) on EVERY
-///      spin; for 25 ETH spins an all-win single ticket is statistically unreachable, so it falls back
-///      to MAXIMIZING the winning-spin count (the 25-iteration loop is the structural gas driver
-///      regardless, and every winning spin drives the expensive cap-flip branch). A small
-///      `futurePrizePool` injection sizes the 10%-of-pool ETH win cap (ETH_WIN_CAP_BPS,
-///      DegeneretteModule:196) so each winning spin's excess flips into the lootbox branch -> a
-///      `PayoutCapped` emit. The on-chain `DegeneretteResult` (one per spin) and `PayoutCapped` (one
-///      per cap-flip) counts VERIFY the loop ran fully and the winning spins flipped (non-vacuity).
-///      Test-only: no contracts/*.sol mutated.
+/// @title Keeper resolve gas stress cases at the per-currency spin caps.
+/// @notice Searches 2,000 rounds for a high count of paying spins, then injects a
+/// small pool so every paying spin takes the cap-conversion path. Assertions check
+/// the actual generated-ticket score, cap count, settlement and 30M gas budget.
+/// The candidate search supplies a reproducible stress case, not an exhaustive
+/// upper bound over every possible ticket sequence.
 contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
@@ -88,7 +54,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     ///      injected pool's 10% ETH-win cap, flipping the excess into the lootbox branch.
     uint128 private constant AMOUNT_PER_TICKET = 1 ether;
     /// @dev Small futurePrizePool injected so the 10%-of-pool ETH win cap is tiny (0.05 ETH); any
-    ///      winning spin's payout (>= ~1.8x of a 1-ETH bet) far exceeds it -> lootbox materialization.
+    ///      winning spin's payout (>= 0.45x of a 1-ETH bet) far exceeds it -> lootbox materialization.
     uint128 private constant SMALL_POOL_WEI = 0.5 ether;
     /// @dev Word-search budget (single combined pass in _findWorstCase). Maximizes the Variant-2
     ///      winning-spin count for the gas worst case. Bounded so the keccak/memory work in setUp stays
@@ -446,9 +412,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     {
         uint256 totalBet = uint256(AMOUNT_PER_TICKET) * spins;
         vm.prank(better);
-        game.placeDegeneretteBet{value: totalBet}(
-            address(0), 0, AMOUNT_PER_TICKET, spins, ticket, 0
-        );
+        game.placeDegeneretteBet{value: totalBet}(address(0), 0, AMOUNT_PER_TICKET, spins, uint8(ticket & 7));
         betId = _betNonce(better);
     }
 
@@ -467,7 +431,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         uint32 ticket
     ) internal returns (uint64 betId) {
         vm.prank(better);
-        game.placeDegeneretteBet(address(0), currency, perTicket, spins, ticket, 0);
+        game.placeDegeneretteBet(address(0), currency, perTicket, spins, uint8(ticket & 7));
         betId = _betNonce(better);
     }
 
@@ -486,9 +450,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     /// @dev Place a single 1-spin winning bet (the typical item the marginal calibrates against).
     function _placeOneSpinBet(address better) internal returns (uint64 betId) {
         vm.prank(better);
-        game.placeDegeneretteBet{value: AMOUNT_PER_TICKET}(
-            address(0), 0, AMOUNT_PER_TICKET, 1, worstCaseTicket, 0
-        );
+        game.placeDegeneretteBet{value: AMOUNT_PER_TICKET}(address(0), 0, AMOUNT_PER_TICKET, 1, uint8(worstCaseTicket & 7));
         betId = _betNonce(better);
     }
 
@@ -513,109 +475,36 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         gasUsed = gasBefore - gasleft();
     }
 
-    /// @dev Search the RNG word space for a word whose per-quadrant-greedy ticket wins (matches >= 2,
-    ///      so payout > 0) on EVERY one of `spins` spins. Maximizes the MIN match across spins. The
-    ///      greedy ticket picks, per quadrant, the color and symbol that match the most of that
-    ///      quadrant's `spins` result values (color + symbol matched independently in _countMatches).
-    ///
-    ///      All-spins-win is achievable for small `spins` (10 / 15 / 5), but a SINGLE fixed ticket
-    ///      cannot win on all 25 ETH spins (25 independent random result tickets — P(min>=2 over 25) is
-    ///      vanishingly small). Under Variant-2 (color gated behind symbol) even the 10-spin all-win is
-    ///      out of reach, so this is a SINGLE combined pass: it early-returns if it ever finds an
-    ///      all-spins-win word (min Variant-2 S >= 2), otherwise returns the word MAXIMIZING the
-    ///      winning-spin count (still the gas worst case: the full spin loop runs regardless, and every
-    ///      WINNING spin drives the expensive _distributePayout + cap-flip branch). One pass keeps the
-    ///      keccak/memory work bounded — Solidity never frees per-iteration memory, so a doubled
-    ///      all-win-then-fallback search MemoryOOGs in setUp. The caller asserts the achieved win count.
+    /// @dev Search bounded candidate rounds for the most paying spins with a single
+    /// hero. The player ticket is generated afresh for each spin, exactly as in production.
+    /// This stresses the full loop plus the most cap conversions found in the search;
+    /// it is a sampled stress case, not proof of the absolute gas maximum.
     function _findWorstCase(uint48 index, uint8 spins) internal pure returns (uint256 word, uint32 ticket) {
         uint8 bestWins;
-        uint256 bestWinWord;
-        uint32 bestWinTicket;
         for (uint256 k; k < WORD_SEARCH_BUDGET; ++k) {
             uint256 candidate = uint256(keccak256(abi.encodePacked("crank_resolve_worst_case_word", k, spins)));
-            uint32 t = _greedyTicket(index, candidate, spins);
-            uint8 minScore = 9;
-            uint8 wins;
-            for (uint8 spinIdx; spinIdx < spins; ++spinIdx) {
-                uint8 s = _scoreV2(t, _resultTicketForSpin(index, candidate, spinIdx));
-                if (s < minScore) minScore = s;
-                if (s >= 2) ++wins;
-            }
-            if (minScore >= 2) return (candidate, t); // every spin wins (S>=2) — ideal worst case
+            uint32 t = Ref.house(candidate, uint32(index), 0, false);
+            uint8 wins = _countWinningSpins(index, candidate, t, spins);
             if (wins > bestWins) {
                 bestWins = wins;
-                bestWinWord = candidate;
-                bestWinTicket = t;
+                word = candidate;
+                ticket = t;
             }
+            if (wins == spins) break;
         }
-        require(bestWins > 0, "no winning word found, widen WORD_SEARCH_BUDGET");
-        return (bestWinWord, bestWinTicket);
+        require(bestWins > 0, "no winning word found");
     }
 
-    /// @dev Count how many of `spins` spins WIN (Variant-2 S >= 2) for (word, ticket).
     function _countWinningSpins(uint48 index, uint256 word, uint32 ticket, uint8 spins)
-        internal
-        pure
-        returns (uint8 wins)
+        internal pure returns (uint8 wins)
     {
+        uint8 symbol = uint8(ticket & 7);
         for (uint8 spinIdx; spinIdx < spins; ++spinIdx) {
-            if (_scoreV2(ticket, _resultTicketForSpin(index, word, spinIdx)) >= 2) ++wins;
-        }
-    }
-
-    /// @dev Per-quadrant greedy ticket: for each quadrant pick the (color, symbol) matching the most
-    ///      of the `spins` spins' result values in that quadrant.
-    function _greedyTicket(uint48 index, uint256 word, uint8 spins) internal pure returns (uint32 ticket) {
-        for (uint8 q; q < 4; ++q) {
-            uint16[8] memory colorHits;
-            uint16[8] memory symbolHits;
-            for (uint8 spinIdx; spinIdx < spins; ++spinIdx) {
-                uint32 result = _resultTicketForSpin(index, word, spinIdx);
-                uint8 rQuad = uint8(result >> (q * 8));
-                ++colorHits[(rQuad >> 3) & 7];
-                ++symbolHits[rQuad & 7];
-            }
-            uint8 bestColor;
-            uint8 bestSymbol;
-            for (uint8 c = 1; c < 8; ++c) {
-                if (colorHits[c] > colorHits[bestColor]) bestColor = c;
-            }
-            for (uint8 s = 1; s < 8; ++s) {
-                if (symbolHits[s] > symbolHits[bestSymbol]) bestSymbol = s;
-            }
-            uint8 quad = (bestColor << 3) | bestSymbol; // tag bits 7-6 ignored by _countMatches
-            ticket |= (uint32(quad) << (q * 8));
-        }
-    }
-
-    /// @dev Reproduce the on-chain per-spin result ticket derivation (_resolveBet):
-    ///      spin 0 uses the short preimage (no spinIdx), spins 1+ mix in spinIdx.
-    function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx)
-        internal
-        pure
-        returns (uint32)
-    {
-        uint256 resultSeed = spinIdx == 0
-            ? uint256(keccak256(abi.encodePacked(word, uint32(index), QUICK_PLAY_SALT)))
-            : uint256(keccak256(abi.encodePacked(word, uint32(index), spinIdx, QUICK_PLAY_SALT)));
-        return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
-    }
-
-    /// @dev Mirror of the on-chain Variant-2 `_score` (color bits 5-3, symbol bits 2-0,
-    ///      per quadrant): a symbol match scores +1 (the hero quadrant +2), and the
-    ///      quadrant's color scores +1 ONLY IF its symbol also matched (color gated
-    ///      behind symbol). The worst-case bets pass heroQuadrant = 0, so quad 0 is the
-    ///      hero. A spin WINS (payout > 0) iff S >= 2 (the DEC-03 floor) — the win
-    ///      predicate the word-search / win-count helpers below threshold on.
-    function _scoreV2(uint32 playerTicket, uint32 resultTicket) internal pure returns (uint8 s) {
-        for (uint8 q; q < 4; ++q) {
-            uint8 pQuad = uint8(playerTicket >> (q * 8));
-            uint8 rQuad = uint8(resultTicket >> (q * 8));
-            bool colorMatch = ((pQuad >> 3) & 7) == ((rQuad >> 3) & 7);
-            if ((pQuad & 7) == (rQuad & 7)) {
-                s += (q == 0) ? 2 : 1; // hero quadrant 0 scores +2
-                if (colorMatch) ++s; // Variant-2: color gated behind symbol
-            }
+            (uint8 score,) = Ref.score(
+                Ref.player(word, uint32(index), symbol, spinIdx, false),
+                Ref.house(word, uint32(index), spinIdx, false), 0
+            );
+            if (score >= 2) ++wins;
         }
     }
 

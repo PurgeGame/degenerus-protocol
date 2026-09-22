@@ -256,7 +256,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         assertEq(nPasses, 0, "no craps passes rolled on this word");
     }
 
-    /// @dev Second fixed word: eight plain parent boxes plus one nested box,
+    /// @dev Second fixed word: eight plain parent boxes; the redesigned ETH spin creates no nested box,
     ///      three flushed levels, and seven presale normal passes.
     function test_goldensUnderWordThree() public {
         _driveDailyCycleOnce();
@@ -282,11 +282,11 @@ contract LootboxOpenGoldens is DeployProtocol {
         assertGt(game.openBoxes(100), 0, "opened");
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        uint256[9] memory amount = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 999348635149103863, 225400e12, 901600e12];
-        uint24[9] memory level = [uint24(5), 1, 3, 5, 4, 5, 9, 5, 22];
-        uint32[9] memory tickets = [uint32(0), 0, 205, 84, 0, 0, 0, 653, 5356];
-        uint256[9] memory flip;
-        bool[9] memory up = [false, false, false, false, false, false, false, false, true];
+        uint256[8] memory amount = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 225400e12, 901600e12];
+        uint24[8] memory level = [uint24(5), 1, 3, 5, 4, 5, 5, 22];
+        uint32[8] memory tickets = [uint32(0), 0, 205, 84, 0, 0, 653, 5356];
+        uint256[8] memory flip;
+        bool[8] memory up = [false, false, false, false, false, false, false, true];
         uint24[3] memory qLevel = [uint24(3), 5, 22];
         uint32[3] memory qEntries = [uint32(8), 24, 216];
         uint256 nO; uint256 nQ; uint256 nP; uint256 nPre;
@@ -296,7 +296,7 @@ contract LootboxOpenGoldens is DeployProtocol {
             address who = address(uint160(uint256(logs[i].topics[1])));
             if (t == OPENED) {
                 assertEq(who, whale, "order's box");
-                assertLt(nO, 9, "eight parent boxes plus one nested box");
+                assertLt(nO, 8, "eight parent boxes");
                 (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 assertEq(a, amount[nO], "box amount");
                 assertEq(lvl, level[nO], "target level");
@@ -330,7 +330,7 @@ contract LootboxOpenGoldens is DeployProtocol {
                 nPre++;
             }
         }
-        assertEq(nO, 9, "eight plain parent boxes plus nested box");
+        assertEq(nO, 8, "eight plain parent boxes; spin produces no recirc");
         assertEq(nQ, 3, "three lanes flushed");
         assertEq(nP, 0, "no ordinary pass delivery");
         assertEq(nPre, 1, "the presale box opened");

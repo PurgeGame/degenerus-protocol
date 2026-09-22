@@ -559,22 +559,20 @@ interface IDegenerusGameBoonModule {
 }
 
 /// @title IDegenerusGameDegeneretteModule
-/// @notice Interface for Degenerette betting mechanics (full-ticket only)
+/// @notice Interface for Degenerette betting mechanics (single-symbol selection)
 interface IDegenerusGameDegeneretteModule {
-    /// @notice Places Full Ticket bets (4 traits, match-based payouts)
+    /// @notice Places single-symbol bets
     /// @param player The player address (use zero address for msg.sender)
     /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP)
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP, 1..5 WWXRP). Each spin resolves independently.
-    /// @param customTraits Custom packed traits
-    /// @param heroQuadrant Hero quadrant (0-3) for payout boost; values >= 4 revert.
+    /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
-        uint32 customTraits,
-        uint8 heroQuadrant
+        uint8 symbol
     ) external payable;
 
     /// @notice Resolves one or more pending bets for a player (permissionless: credits the owner)
@@ -590,7 +588,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @param stake The WWXRP bet amount staked for the one spin.
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
+    /// @param symbol Hero symbol 0..31, or 32 to generate a random hero.
     /// @return wwxrpOut The spin's WWXRP payout, returned for the box entry's WWXRP lane (the
     ///         caller mints once).
     function resolveWwxrpSpinFromBox(
@@ -598,7 +596,7 @@ interface IDegenerusGameDegeneretteModule {
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTraits
+        uint8 symbol
     )
         external
         payable
@@ -609,7 +607,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @param totalStake The total FLIP budget split across the three spins.
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
+    /// @param symbol Hero symbol 0..31, or 32 to generate a random hero.
     /// @return flipOut The summed payout after its survival flip, returned for the box entry's
     ///         FLIP lane (credited by the caller at flush).
     function resolveFlipSpinsFromBox(
@@ -617,7 +615,7 @@ interface IDegenerusGameDegeneretteModule {
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTraits
+        uint8 symbol
     )
         external
         payable
@@ -628,13 +626,13 @@ interface IDegenerusGameDegeneretteModule {
     /// @param stake The ETH bet amount for the one spin (the ticket budget it replaces).
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param customTraits Pre-chosen player ticket, or 0 to derive one from seed.
+    /// @param symbol Hero symbol 0..31, or 32 to generate a random hero.
     function resolveEthSpinFromBox(
         address player,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
-        uint32 customTraits
+        uint8 symbol
     ) external payable;
 }
 

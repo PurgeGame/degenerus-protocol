@@ -70,7 +70,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint64 nonceBefore = _betNonce(player);
 
         vm.prank(gifter); // gifter is NOT the player and NOT approved
-        game.placeDegeneretteBet(player, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0, 0);
+        game.placeDegeneretteBet(player, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
 
         assertEq(coin.balanceOf(player), playerBefore, "no drain: player FLIP untouched");
         assertLt(coin.balanceOf(gifter), gifterBefore, "funder paid the bet");
@@ -86,7 +86,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint64 nonceBefore = _betNonce(player);
 
         vm.prank(gifter);
-        game.placeDegeneretteBet{value: BET_ETH}(player, CURRENCY_ETH, BET_ETH, 1, 0, 0);
+        game.placeDegeneretteBet{value: BET_ETH}(player, CURRENCY_ETH, BET_ETH, 1, 0);
 
         assertEq(gifter.balance, gifterEthBefore - BET_ETH, "funder's ETH funded the bet");
         assertEq(player.balance, playerEthBefore, "no drain: player ETH untouched");
@@ -97,7 +97,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     function testWwxrpGiftReverts() public {
         vm.prank(gifter);
         vm.expectRevert(NotApproved.selector);
-        game.placeDegeneretteBet(player, CURRENCY_WWXRP, 1 ether, 1, 0, 0);
+        game.placeDegeneretteBet(player, CURRENCY_WWXRP, 1 ether, 1, 0);
     }
 
     /// @notice An approved operator spends the PLAYER's funds (the old funded-self path), not a gift.
@@ -110,7 +110,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint256 gifterBefore = coin.balanceOf(gifter); // 0
 
         vm.prank(gifter);
-        game.placeDegeneretteBet(player, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0, 0);
+        game.placeDegeneretteBet(player, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
 
         assertEq(coin.balanceOf(player), playerBefore - MIN_BET_FLIP, "approved op spends player's FLIP");
         assertEq(coin.balanceOf(gifter), gifterBefore, "approved operator is not charged");

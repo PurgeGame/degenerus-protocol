@@ -1094,11 +1094,10 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(vault).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "gameDegeneretteBet(uint8,uint128,uint8,uint32,uint8,uint256)",
+                "gameDegeneretteBet(uint8,uint128,uint8,uint8,uint256)",
                 uint8(0),
                 uint128(1),
                 uint8(1),
-                uint32(0),
                 uint8(0),
                 uint256(1 ether)
             )
@@ -1520,12 +1519,11 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(game).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "placeDegeneretteBet(address,uint8,uint128,uint8,uint32,uint8)",
+                "placeDegeneretteBet(address,uint8,uint128,uint8,uint8)",
                 buyer,
                 uint8(0),
                 uint128(1),
                 uint8(1),
-                uint32(0),
                 uint8(0)
             )
         );

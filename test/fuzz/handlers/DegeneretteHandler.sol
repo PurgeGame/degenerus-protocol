@@ -67,14 +67,12 @@ contract DegeneretteHandler is Test {
     /// @param actorSeed Seed for actor selection
     /// @param amountPerSpin Raw bet amount, bounded to [0.005 ether, 1 ether]
     /// @param ticketCount Raw ticket count, bounded to [1, 10]
-    /// @param customTraits Raw custom ticket packed traits
-    /// @param heroQuadrant Raw hero quadrant, bounded to [0, 3] (always-on hero; valid input required)
+    /// @param symbol Raw hero symbol, bounded to [0, 31]
     function placeEthBet(
         uint256 actorSeed,
         uint128 amountPerSpin,
         uint8 ticketCount,
-        uint32 customTraits,
-        uint8 heroQuadrant
+        uint8 symbol
     ) external useActor(actorSeed) {
         calls_placeBet++;
 
@@ -83,10 +81,7 @@ contract DegeneretteHandler is Test {
         // Bound inputs
         amountPerSpin = uint128(bound(uint256(amountPerSpin), 0.005 ether, 1 ether));
         ticketCount = uint8(bound(uint256(ticketCount), 1, 10));
-        // Ensure each quadrant byte has valid color (0-7) and symbol (0-7)
-        customTraits = _sanitizeTicket(customTraits);
-        // heroQuadrant: always-on hero — must be 0-3; the contract reverts on >= 4
-        heroQuadrant = uint8(bound(uint256(heroQuadrant), 0, 3));
+        symbol = uint8(bound(uint256(symbol), 0, 31));
 
         uint256 totalBet = uint256(amountPerSpin) * uint256(ticketCount);
         if (totalBet > currentActor.balance) return;
@@ -95,14 +90,7 @@ contract DegeneretteHandler is Test {
         _ensureLootboxIndexOpen();
 
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: totalBet}(
-            currentActor,
-            0, // currency = ETH
-            amountPerSpin,
-            ticketCount,
-            customTraits,
-            heroQuadrant
-        ) {
+        try game.placeDegeneretteBet{value: totalBet}(currentActor, 0, amountPerSpin, ticketCount, symbol) {
             ghost_totalEthWagered += totalBet;
             ghost_betsPlaced++;
             // Track bet nonce for this actor (nonce is sequential per player)
@@ -246,17 +234,4 @@ contract DegeneretteHandler is Test {
         }
     }
 
-    /// @dev Sanitize custom ticket to have valid traits per quadrant
-    ///      Each quadrant: bits [7:6] unused by matching, [5:3] color (0-7), [2:0] symbol (0-7)
-    function _sanitizeTicket(uint32 ticket) private pure returns (uint32) {
-        uint32 sanitized;
-        for (uint8 q = 0; q < 4; q++) {
-            uint8 quadByte = uint8(ticket >> (q * 8));
-            // Color is bits 5-3 (values 0-7), symbol is bits 2-0 (values 0-7)
-            uint8 color = (quadByte >> 3) & 7;
-            uint8 symbol = quadByte & 7;
-            sanitized |= uint32(uint32((color << 3) | symbol)) << (q * 8);
-        }
-        return sanitized;
-    }
 }

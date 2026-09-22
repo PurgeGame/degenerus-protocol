@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import "forge-std/Test.sol";
 
-/// @title Degenerette v73 Variant-2 symbolic proofs (pillar hardening — Halmos track).
+/// @title Degenerette v73 independent-color symbolic proofs (pillar hardening — Halmos track).
 /// @notice Proves for ALL 2^32 × 2^32 (player, reel) tickets and every hero quadrant the two
 ///         load-bearing arithmetic facts the audit argued informally — mirroring the FROZEN
 ///         `_score` (DegenerusGameDegeneretteModule.sol) exactly (same approach as
@@ -22,8 +22,8 @@ import "forge-std/Test.sol";
 ///
 /// @dev halmos --contract DegeneretteV73HalmosTest --solver-timeout-assertion 120000
 contract DegeneretteV73HalmosTest is Test {
-    /// @dev Exact mirror of the FROZEN Variant-2 `_score`: per quadrant a symbol match scores +1
-    ///      (hero +2); the quadrant's color scores +1 ONLY IF its symbol also matched.
+    /// @dev Exact mirror of the FROZEN independent-color `_score`: per quadrant a symbol match scores +1
+    ///      (hero +2); the quadrant's color independently scores +1.
     function _score(uint32 playerTicket, uint32 resultTicket, uint8 heroQuadrant)
         internal
         pure
@@ -35,11 +35,10 @@ contract DegeneretteV73HalmosTest is Test {
             if ((pQuad & 7) == (rQuad & 7)) {
                 unchecked {
                     s += (q == heroQuadrant) ? 2 : 1;
-                    if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) {
-                        ++s;
-                    }
+
                 }
             }
+            if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
             unchecked {
                 ++q;
             }

@@ -624,9 +624,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether; // >= MIN_BET_ETH (0.005 ether)
         vm.prank(better);
-        game.placeDegeneretteBet{value: betAmount}(
-            address(0), 0, betAmount, 1, customTraits, 0
-        );
+        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
         betId = _betNonce(better);
     }
 
@@ -652,9 +650,7 @@ contract KeeperFaucetResistance is DeployProtocol {
 
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         vm.prank(better);
-        game.placeDegeneretteBet(
-            address(0), 3, betAmount, 1, customTraits, 0
-        );
+        game.placeDegeneretteBet(address(0), 3, betAmount, 1, uint8(customTraits & 7));
         betId = _betNonce(better);
     }
 

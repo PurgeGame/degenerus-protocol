@@ -113,14 +113,7 @@ contract BigRecordArmingTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(player, 10_000 ether);
         vm.prank(player);
-        game.placeDegeneretteBet(
-            address(0),
-            CURRENCY_FLIP,
-            1_000 ether,
-            1,
-            0x00010203,
-            0
-        );
+        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, 1_000 ether, 1, 3);
         assertEq(coinflip.biggestSpinEver(), 0, "FLIP bets stay off the record");
     }
 
@@ -128,14 +121,7 @@ contract BigRecordArmingTest is DeployProtocol {
     ///         the bet owner.
     function testGiftedBetArms() public {
         vm.prank(rival);
-        game.placeDegeneretteBet{value: 2 ether}(
-            player,
-            CURRENCY_ETH,
-            2 ether,
-            1,
-            0x00010203,
-            0
-        );
+        game.placeDegeneretteBet{value: 2 ether}(player, CURRENCY_ETH, 2 ether, 1, 3);
         assertEq(coinflip.biggestSpinEver(), 2 ether, "gifted bets arm the record");
     }
 
@@ -408,14 +394,7 @@ contract BigRecordArmingTest is DeployProtocol {
 
     function _placeEth(address who, uint128 perSpin, uint8 spins) internal {
         vm.prank(who);
-        game.placeDegeneretteBet{value: uint256(perSpin) * spins}(
-            address(0),
-            CURRENCY_ETH,
-            perSpin,
-            spins,
-            0x00010203,
-            0
-        );
+        game.placeDegeneretteBet{value: uint256(perSpin) * spins}(address(0), CURRENCY_ETH, perSpin, spins, 3);
     }
 
     function _buyBox(address who, uint256 amount) internal {

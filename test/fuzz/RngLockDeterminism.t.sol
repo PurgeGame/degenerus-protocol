@@ -181,9 +181,7 @@ contract RngLockDeterminism is DeployProtocol {
             uint32 customTraits = 0;
             uint8 heroQuadrant = uint8((seed >> 16) % 4);
             vm.prank(actor);
-            try game.placeDegeneretteBet{value: uint256(amount) * ticketCount}(
-                actor, currency, amount, ticketCount, customTraits, heroQuadrant
-            ) {} catch { return; }
+            try game.placeDegeneretteBet{value: uint256(amount) * ticketCount}(actor, currency, amount, ticketCount, (uint8((uint32(customTraits) >> (uint256(heroQuadrant) * 8)) & 7) | (uint8(heroQuadrant) << 3))) {} catch { return; }
         } else if (cls == 1) {
             vm.deal(actor, 100 ether);
             uint256 numCoins = 400 + (seed >> 8) % 200;
@@ -362,7 +360,7 @@ contract RngLockDeterminism is DeployProtocol {
             vm.deal(address(vault), total);
             vm.prank(vaultOwner);
             try vault.gameDegeneretteBet{value: 0}(
-                0, amtPer, ticketCount, customTraits, hero, total
+                0, amtPer, ticketCount, uint8((customTraits >> (hero*8)) & 7) | (hero << 3), total
             ) {} catch { return; }
             return;
         }
