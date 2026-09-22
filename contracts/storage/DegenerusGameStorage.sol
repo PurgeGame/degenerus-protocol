@@ -740,7 +740,7 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted once per owner per level, the moment the owner takes a position in
     ///         that level's entry registry. Every later `RoundTraitsGenerated` names its
     ///         seats by these positions, so the log stream alone resolves them.
-    event EntryOwnerRegistered(uint24 indexed lvl, uint32 idx, address owner);
+    event EntryOwnerRegistered(uint24 indexed lvl, uint32 idx, address indexed owner);
 
     /// @notice Emitted for every seated round of the ticket drain: the traits each seat
     ///         received this round and the seat owners in queue order. Lane j of
