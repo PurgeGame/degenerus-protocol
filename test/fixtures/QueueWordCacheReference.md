@@ -6,6 +6,12 @@
 
 Compiler: Solidity 0.8.34, via IR, optimizer 1000, Osaka, Foundry address pins. The source is compiled at `contracts/modules/DegenerusGameFoilPackModule.sol` in an isolated copy of the queue-packing candidate. Reference compiler metadata and hash verification evidence are retained under `.planning/queue-packing/word-cache/`.
 
-Reference runtime Keccak-256: `0x2392545ce73d2150008289f7384976ab4a3fc35164df362dae578383fcb22917`.
+Reference runtime Keccak-256: `0x5a6a7e70f0c61accb0ac17b9d3698408b2a40be2dc2d09f7c7e197c25c6fd76f`.
+
+Run #53 refresh: changed only the independent reference's old round emit to the direct
+`EntryTraitsRevealed` emitter and its per-round compute charge from 3 to 4, then rebuilt
+against the appended generation-window slot and updated round reserve. The uncached
+queue-read implementation remains unchanged. This keeps the differential test about
+queue caching while comparing the same reveal format and budget on both sides.
 
 Keep this reference independent of the cached implementation; regenerating it from the candidate would invalidate the differential comparison.

@@ -116,6 +116,8 @@ OWNER	_subscribers	modules/GameAfkingModule.sol	_removeFromSet swap-and-pop (pus
 OWNER	subsFullyProcessed	modules/DegenerusGameAdvanceModule.sol	advanceGame clears on a new day and sets when the subscriber stage drains; sole writer
 OWNER	ticketCursor	modules/DegenerusGameAdvanceModule.sol	advanceGame zeroes the cursor when it hands the far-future drain to the mint module (ticketLevel = ffLevel|FF bit); the mint module owns the walk
 OWNER	ticketCursor	modules/DegenerusGameMintModule.sol	processTicketBatch/processFutureTicketBatch persist the mid-queue resume position and zero at queue release; the crank only zeroes at the FF hand-off
+INIT	ticketGenerationStartBlock	DegenerusGame.sol	constructor stamps deployment block for levels 0..5; one write per bootstrap level, outside all drain steps
+OWNER	ticketGenerationStartBlock	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest stamps level+5 only on a fresh level-promoting request, which returns before draining; retry requests preserve the first generation-window bound
 OWNER	ticketLevel	modules/DegenerusGameAdvanceModule.sol	advanceGame sets the FF resume marker at the phase transition and re-asserts it after a finished FF batch so housekeeping never re-runs
 OWNER	ticketLevel	modules/DegenerusGameMintModule.sol	ticket batch workers stamp the level being walked and clear to 0 at release; the crank's FF marker is the hand-off contract
 OWNER	ticketRedemptionOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest closes the FLIP window at the final jackpot request

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title QuestRetryDoubleRoll -- a cross-midnight daily RETRY must not re-force a quest
 /// @notice The foil daily is rolled at the final-jackpot RNG REQUEST — the boundary where
@@ -43,6 +44,47 @@ contract QuestRetryDoubleRoll is DeployProtocol {
     }
 
     // ==================== Tests ====================
+
+    function _generationStart(uint24 lvl) private view returns (uint256) {
+        // Append-only mapping slot, independently pinned by the layout oracle.
+        return uint256(game.extsload(keccak256(abi.encode(uint256(lvl), uint256(70)))));
+    }
+
+    function test_generationWindowBootstrapAndUnopenedLevel() public view {
+        for (uint24 lvl; lvl <= 5; ++lvl) assertEq(_generationStart(lvl), block.number, "bootstrap lower bound");
+        assertEq(_generationStart(6), 0, "level six has not entered its window");
+    }
+
+    function test_generationWindowWrittenAtRequestAndNeverRetry() public {
+        _driveToLastPurchaseDay();
+        uint24 oldLevel = game.level();
+        uint24 target = oldLevel + 6;
+        assertEq(_generationStart(target), 0);
+        uint256 bootstrapStart = _generationStart(0);
+        vm.roll(block.number + 100);
+        vm.warp(block.timestamp + 1 days + 1);
+        vm.recordLogs();
+        game.advanceGame();
+        assertEq(game.level(), oldLevel + 1, "fresh request advances the level");
+        assertTrue(game.rngLocked(), "request returns with word still pending");
+        // NUMBER is constant within a real transaction; via-IR may rematerialize it
+        // across vm.roll. Use the cheatcode getter for a genuinely frozen test value.
+        uint256 firstBlock = vm.getBlockNumber();
+        assertEq(_generationStart(target), firstBlock, "newly active window recorded before draining");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
+            assertTrue(logs[i].topics[0] != keccak256("TraitsGenerated(address,uint256,uint32)"), "request generated no entries");
+            if (logs[i].topics.length == 4) assertTrue(uint256(logs[i].topics[0]) >> 160 != target, "request emitted no seated reveal");
+        }
+        vm.roll(block.number + 17);
+        vm.warp(block.timestamp + 13 hours);
+        game.advanceGame();
+        assertEq(game.level(), oldLevel + 1, "retry did not advance level");
+        assertEq(_generationStart(target), firstBlock, "retry preserves earliest bound");
+        assertEq(_generationStart(0), bootstrapStart, "old levels retain their bounds");
+        assertEq(_generationStart(target + 1), 0, "future window remains unopened");
+    }
 
     /// @notice Non-vacuity control: the final-jackpot request really does force slot 1 to the
     ///         foil (or, on an arming day, the decimator) daily. Without this, a passing retry

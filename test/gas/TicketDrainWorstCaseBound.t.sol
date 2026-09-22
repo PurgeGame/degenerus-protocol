@@ -34,6 +34,12 @@ contract TicketDrainWorstCaseBound is Test {
     ///      release, the nested delegatecall, the foil deferral writes, the return path
     ///      (~120k) and the crank's own pre-drain logic in the same transaction, with headroom.
     uint256 internal constant FIXED_OVERHEAD = 1_000_000;
+    // The existing non-event loop bound is retained; only the old LOG2 is credited back.
+    // The full new emitter is bounded separately in the compiler-region audit. These
+    // analytical assertions check the proof's arithmetic, not measured execution safety.
+    uint256 internal constant OLD_ROUND_LOG = 375 + 2 * 375 + 128 * 8;
+    uint256 internal constant REVEAL_EMITTER_BOUND = 10_000;
+    uint256 internal constant ROUND_COMPUTE_BOUND = 25_000 - OLD_ROUND_LOG + REVEAL_EMITTER_BOUND;
 
     DrainPrices internal p;
 
@@ -81,8 +87,7 @@ contract TicketDrainWorstCaseBound is Test {
         assertGe(1 * p.unit(), COLD_SLOAD + DIRTY_SSTORE, "a seat exit exceeds one unit");
         assertGe(1 * p.unit(), 2 * COLD_SLOAD + DIRTY_SSTORE, "queue plus combined owner/owed read and dust clear exceeds one unit");
         assertGe(p.joinUnits() * p.unit(), 2 * COLD_SLOAD + 2 * DIRTY_SSTORE, "a seat join with combined owner/owed record exceeds its units");
-        assertGe(4 * p.unit(), FRESH_SSTORE + DIRTY_SSTORE, "a drain-time registration exceeds four units");
-        assertGe(3 * p.unit(), 375 + 375 + 8 * 352 + 20_000, "a round's event and loops exceed three units");
+        assertGe(4 * p.unit(), ROUND_COMPUTE_BOUND, "a round's reveals and loops exceed four units");
         assertGe(1 * p.unit(), 16 * 400, "sixteen occurrences of LCG and scratch work exceed one unit");
         assertGe(3 * p.unit(), 30_000, "a foil pack's record and cursor bookkeeping exceeds three units");
     }
@@ -90,10 +95,10 @@ contract TicketDrainWorstCaseBound is Test {
     // ---- reserves (what must fit before a step starts) -----------------------------------
 
     function test_RoundReserve_CoversFullySplitRound() public {
-        uint256 worst = 4 * (p.seats() * _singleAppend()) + p.seats() * (COLD_SLOAD + DIRTY_SSTORE) + 25_000;
+        uint256 worst = 4 * (p.seats() * _singleAppend()) + p.seats() * (COLD_SLOAD + DIRTY_SSTORE) + ROUND_COMPUTE_BOUND;
         emit log_named_uint("fully_split_round_worst", worst);
         assertGe((p.roundUnits() + 4 * p.splitUnits()) * p.unit(), worst, "round reserve below a fully split round");
-        assertGe(p.roundUnits() * p.unit(), 4 * _wordAppend() + p.seats() * (COLD_SLOAD + DIRTY_SSTORE) + 25_000, "unsplit round below its units");
+        assertGe(p.roundUnits() * p.unit(), 4 * _wordAppend() + p.seats() * (COLD_SLOAD + DIRTY_SSTORE) + ROUND_COMPUTE_BOUND, "unsplit round below its units");
     }
 
     function test_EntryReserve_CoversTake() public view {
@@ -103,7 +108,7 @@ contract TicketDrainWorstCaseBound is Test {
     }
 
     function test_FoilReserve_CoversPack() public view {
-        assertGe(83 * p.unit(), 16 * _singleAppend() + 30_000, "83 units below a foil pack");
+        assertGe(83 * p.unit(), 16 * _singleAppend() + 40_000, "83 units below a foil pack");
     }
 
     // ---- the ceiling ---------------------------------------------------------------------

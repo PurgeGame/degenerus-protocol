@@ -231,6 +231,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         purchaseStartDay = currentDay;
         dailyIdx = currentDay;
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
+        for (uint24 lvl; lvl <= 5; ++lvl) {
+            ticketGenerationStartBlock[lvl] = block.number;
+        }
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)

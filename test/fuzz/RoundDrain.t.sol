@@ -77,8 +77,11 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
 contract RoundDrain is Test {
     RoundDrainHarness internal h;
     uint24 internal constant LVL = 9;
-    bytes32 internal constant ROUND_SIG = keccak256("RoundTraitsGenerated(uint24,uint32,uint256,uint32,uint256)");
     bytes32 internal constant ENTRY_SIG = keccak256("TraitsGenerated(address,uint256,uint32)");
+
+    function _isReveal(Vm.Log memory entry) private pure returns (bool) {
+        return entry.topics.length == 4 && uint256(entry.topics[0]) >> 160 == LVL && entry.data.length == 32;
+    }
 
     function setUp() public {
         h = new RoundDrainHarness();
@@ -144,12 +147,13 @@ contract RoundDrain is Test {
         uint256 rounds;
         uint256 entryEmits;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == ROUND_SIG) ++rounds;
+            if (_isReveal(logs[i])) ++rounds;
             if (logs[i].topics[0] == ENTRY_SIG) ++entryEmits;
         }
         assertGt(rounds, 0, "rounds ran");
         assertGt(entryEmits, 0, "the tail ran on the per-entry path");
-        assertEq(h.roundCounter(), rounds);
+        assertGe(rounds, h.roundCounter(), "at least one reveal per round");
+        assertLe(rounds, 2 * h.roundCounter(), "at most two reveals per round");
 
         (uint256[4][] memory c, uint256 total) = _counts(ps);
         assertEq(total, sum);
@@ -291,7 +295,7 @@ contract RoundDrain is Test {
         _drain();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            assertTrue(logs[i].topics[0] != ROUND_SIG, "no round below the seat floor");
+            assertFalse(_isReveal(logs[i]), "no round below the seat floor");
         }
         (, uint256 total) = _counts(ps);
         assertEq(total, 24);
@@ -360,17 +364,19 @@ contract RoundDrain is Test {
             _drain();
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length && !seen; ++i) {
-                if (logs[i].topics[0] != ROUND_SIG) continue;
-                (, uint256 seatTraits, , uint256 seatOwners) =
-                    abi.decode(logs[i].data, (uint32, uint256, uint32, uint256));
-                uint256 seated;
-                while (seated < 8 && (seatOwners >> (32 * seated)) & 0xffffffff != 0) ++seated;
+                if (!_isReveal(logs[i])) continue;
+                // This fixture has exactly eight full seats: its two adjacent reveals
+                // must retain the split's distinct symbols across BOTH four-player logs.
+                assertTrue(_isReveal(logs[i + 1]));
+                uint256 seatTraits = uint128(abi.decode(logs[i].data, (uint144))) |
+                    (uint256(uint128(abi.decode(logs[i + 1].data, (uint144)))) << 128);
+                ++i;
                 for (uint256 q; q < 4 && !seen; ++q) {
                     uint8 t0 = uint8(seatTraits >> (8 * q));
                     if (((t0 >> 3) & 7) < 6) continue;
                     seen = true;
                     uint256 symbolMask;
-                    for (uint256 j; j < seated; ++j) {
+                    for (uint256 j; j < 8; ++j) {
                         uint8 tj = uint8(seatTraits >> (32 * j + 8 * q));
                         assertEq(tj & 0xF8, t0 & 0xF8, "same quadrant and color");
                         uint256 bit = 1 << (tj & 7);

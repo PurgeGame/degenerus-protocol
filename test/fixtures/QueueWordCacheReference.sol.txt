@@ -1126,7 +1126,7 @@ contract DegenerusGameFoilPackModule is
         uint256 seated = st.seated;
         uint256 seatTraits;
         uint32 seatMask;
-        used = 3; // event and seat loops; every write charges itself below
+        used = 4; // direct reveals and seat loops; every write charges itself below
 
         for (uint256 q; q < 4; ) {
             (uint32 u, uint256 traitBits, uint32 maskBits) = _runQuadrant(st, levelSlot, seed, q);
@@ -1138,16 +1138,8 @@ contract DegenerusGameFoilPackModule is
             }
         }
 
-        // Seats by registry position plus one, eight lanes, so the log carries one word
-        // rather than an address array and a zero lane reads as an empty seat.
-        uint256 seatOwners;
-        for (uint256 j; j < seated; ) {
-            unchecked {
-                seatOwners |= (st.ownerIdx[j] + 1) << (j << 5);
-                ++j;
-            }
-        }
-        emit RoundTraitsGenerated(lvl, round, seatTraits, seatMask, seatOwners);
+        _emitEntryTraits(st, lvl, seatTraits, seatMask, 0);
+        if (seated > 4) _emitEntryTraits(st, lvl, seatTraits >> 128, seatMask >> 16, 4);
 
         // Consume one ticket per seat; exhausted seats roll their remainder, then leave.
         uint256 k;
@@ -1187,6 +1179,23 @@ contract DegenerusGameFoilPackModule is
             }
         }
         st.seated = k;
+    }
+
+    /// @dev One ABI word carries sixteen trait bytes plus their sixteen presence bits.
+    ///      Unused trailing seats have zero topics even when compaction left stale memory.
+    function _emitEntryTraits(
+        RoundSeats memory st,
+        uint24 lvl,
+        uint256 traits,
+        uint32 mask,
+        uint256 offset
+    ) private {
+        uint256 prefix = uint256(lvl) << 160;
+        uint256 p0 = prefix | uint160(st.player[offset]);
+        uint256 p1 = offset + 1 < st.seated ? prefix | uint160(st.player[offset + 1]) : 0;
+        uint256 p2 = offset + 2 < st.seated ? prefix | uint160(st.player[offset + 2]) : 0;
+        uint256 p3 = offset + 3 < st.seated ? prefix | uint160(st.player[offset + 3]) : 0;
+        emit EntryTraitsRevealed(p0, p1, p2, p3, uint144(uint128(traits)) | (uint144(uint16(mask)) << 128));
     }
 
     /// @notice Drain the per-buy-day foil buckets on the leftover write budget.

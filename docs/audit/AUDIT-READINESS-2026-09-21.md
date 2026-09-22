@@ -143,6 +143,14 @@ gap for per-player referral history at about +119 gas per affiliated purchase; i
 a product decision and is not part of this revision. `GNRUS.LevelResolved` and the
 admin proposal events are low-volume and already filterable.
 
+Run #53 supersedes the round-event discussion above: `RoundTraitsGenerated` is replaced
+by anonymous four-player `EntryTraitsRevealed` logs with composite player/level topics.
+Wallet inventory now uses four topic-position filters per level and explicit anonymous
+ABI decoding. The old +768..1,024-gas offset estimate applied to the removed event; it
+does not price the new format. The new logs expose traits and presence, with no bucket
+offsets, registry positions or round ID; Bingo proof positions remain storage reads.
+`RUN53-FINAL-CONTRACTS.md` records the revised gas bounds and verification results.
+
 ## Addendum — craps extsload revision `6d02e4bfa`
 
 `CrapsBattle` gains `extsload(bytes32) external view returns (bytes32)`, the raw storage

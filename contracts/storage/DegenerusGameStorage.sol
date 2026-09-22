@@ -214,7 +214,7 @@ abstract contract DegenerusGameStorage {
     // remaining budget, and once done it charges what it did, priced per write at or above
     // the opcode cost in units of UNIT_GAS_BOUND: a fresh write (22,100 + its read) is 3 units,
     // a dirty write (5,000 + its read) is 1, a seat exit 1, per-entry compute 1 per 16
-    // occurrences, a round's event and loops 3. Every charged unit covers its cost and no step
+    // occurrences, a round's reveals and loops 4. Every charged unit covers its cost and no step
     // starts without room for its worst; a call's last step may charge above what it reserved
     // (charges over-price), but its gas never exceeds the reserve. Hence a call's gas
     // is at most WRITES_BUDGET_SAFE x UNIT_GAS_BOUND plus the fixed entry/exit overhead, which
@@ -223,8 +223,8 @@ abstract contract DegenerusGameStorage {
     // cold (2,100): a single-lane append is 2 reads + 2 fresh writes = 48,400.
     //
     //   step                         charge   worst gas
-    //   seated round (no split)      37       4 x (len 22,100 + tail 22,100 + next 22,100 + 2 reads)
-    //                                         = 282,000; + 8 exits x 7,100 + event/loops 25,000 = 364,000
+    //   seated round (no split)      38       4 x (len 22,100 + tail 22,100 + next 22,100 + 2 reads)
+    //                                         = 282,000; + 8 exits x 7,100 + reveals/loops 32,851 = 371,651
     //   split quadrant (extra)       32       8 x 48,400 - 70,500 = 316,700
     //   seat join                    2        queue + owner/owed reads + zeroing + write-back = 14,200
     //   dust skip                    1        queue + owner/owed reads + zeroing write = 9,200
@@ -232,6 +232,12 @@ abstract contract DegenerusGameStorage {
     //   per-entry occurrence, 1..256 6        fresh length + fresh word + 2 reads + lane share = 51,600
     //   per-entry occurrence, >256   1        fresh word per eight lanes + LCG = 3,200
     //   foil pack                    83       16 x 48,400 + record/cursor/golden 40,000 = 814,400
+    //
+    // Reveal allowance: retain the old 25,000 loop allowance, subtract only the removed
+    // LOG2's 2,149 gas (128 data bytes), and add 10,000 for the COMPLETE new emitter,
+    // including both LOG4s (2 x (375 + 4 x 375 + 32 x 8) = 4,262), topic packing,
+    // branches, ABI encoding and memory. No credit is taken for the removed owner loop.
+    // See docs/audit/RUN53-FINAL-CONTRACTS.md for the compiler-region cost derivation.
     uint256 internal constant UNIT_GAS_BOUND = 10_000;
 
     /// @dev Write budget per drain call, in units bounded by UNIT_GAS_BOUND (10k gas each at
@@ -248,8 +254,8 @@ abstract contract DegenerusGameStorage {
     uint8 internal constant ROUND_SPLIT_COLOR = 6;
     /// @dev Write units per round at UNIT_GAS_BOUND: four quadrant appends at their worst
     ///      (a fresh length, a fresh tail and a fresh next word each: 282k), eight seat exits
-    ///      (57k), the event and the seat loops (25k): 364k -> 37 units.
-    uint32 internal constant ROUND_UNITS = 37;
+    ///      (56.8k), direct reveals and the seat loops (32,851): 371,651 -> 38 units.
+    uint32 internal constant ROUND_UNITS = 38;
     /// @dev Extra units for a split quadrant: eight single-lane appends at their worst
     ///      (8 x 48,400) less the whole-word append they replace (70,500): 317k -> 32 units.
     uint32 internal constant ROUND_SPLIT_UNITS = 32;
@@ -737,26 +743,27 @@ abstract contract DegenerusGameStorage {
         uint32 take
     );
 
-    /// @notice Emitted once per owner per level, the moment the owner takes a position in
-    ///         that level's entry registry. Every later `RoundTraitsGenerated` names its
-    ///         seats by these positions, so the log stream alone resolves them.
+    /// @notice Emitted when an owner takes a position in a level's entry registry.
+    ///         Packed trait-bucket lanes name these positions; separate queue cohorts and
+    ///         foil purchases may register the same owner more than once at a level.
     event EntryOwnerRegistered(uint24 indexed lvl, uint32 idx, address indexed owner);
 
-    /// @notice Emitted for every seated round of the ticket drain: the traits each seat
-    ///         received this round and the seat owners in queue order. Lane j of
-    ///         `seatTraits` (bits 32j..32j+31) holds seat j's four trait bytes, quadrant q
-    ///         at byte q; bit 4j+q of `seatMask` is set when seat j received an entry in
-    ///         quadrant q (a seat with fewer than four entries left takes the leading
-    ///         quadrants only). Lane j of `seatOwners` holds seat j's registry position
-    ///         PLUS ONE (`EntryOwnerRegistered` at this level), so a zero lane is an empty
-    ///         seat.
-    event RoundTraitsGenerated(
-        uint24 indexed lvl,
-        uint32 round,
-        uint256 seatTraits,
-        uint32 seatMask,
-        uint256 seatOwners
-    );
+    /// @notice Direct entry reveals for up to four players, without a signature topic.
+    ///         Each nonzero topic is (uint256(level) << 160) | uint160(player). Query all
+    ///         four topic positions separately and deduplicate by transaction/log index.
+    ///         An unused player topic is zero. In `entries`, byte (4*j+q) is player j's
+    ///         trait in quadrant q; bit (128+4*j+q) marks that byte as present. Trait zero
+    ///         is valid, so the presence bits MUST be checked. The trait byte itself
+    ///         includes the quadrant in its top two bits. This is entry inventory only:
+    ///         no card identity, generation boundary or owner-registry lookup is needed.
+    ///         Decode with this explicit anonymous ABI, not topic0 signature discovery.
+    event EntryTraitsRevealed(
+        uint256 indexed player0,
+        uint256 indexed player1,
+        uint256 indexed player2,
+        uint256 indexed player3,
+        uint144 entries
+    ) anonymous;
 
     /// @notice Emitted when a future level is declared a thanos level.
     event ThanosLevelSet(uint24 targetLevel, uint8 shift);
@@ -1334,8 +1341,9 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Register a freshly queued entry's owner at its target level. Every sink calls
-    ///      this on the first push, so the drain never writes a registry slot and each owed
-    ///      word carries its position from the day it is queued. Returns the owner bits for
+    ///      this on the first push, so the drain never allocates a registry record (it only
+    ///      updates existing owed bits), and each owed word carries its position from queue
+    ///      time. Returns the owner bits for
     ///      the caller's owed word, or zero when the level's registry is full: positions are
     ///      stored plus one in 32-bit lanes, so a level holds at most 2^32 - 1 owners. The
     ///      sinks decide what a full registry means — a paid purchase reverts, an advance-chain
@@ -3869,6 +3877,16 @@ abstract contract DegenerusGameStorage {
     ///      _handleGameOverPath before any terminal word can exist, so no later claim can
     ///      change the pool the terminal draw receives. Read once by handleGameOverDrain.
     address internal terminalAffiliate;
+
+    /// @dev Inclusive lower block bound for a level's first generation window. Levels
+    ///      0..5 start at deployment; level L+5 starts when the RNG request advances the
+    ///      game to L, before any drain can execute for that window. Written once per
+    ///      level OUTSIDE charged drain steps. Permanent rather than a recycling ring:
+    ///      old levels remain claimable in Bingo and must retain their discovery bound.
+    ///      A uint256 key lets the request add five to uint24(level) without narrowing
+    ///      or assembly; abi.encode(level) has the same 32-byte key for every level.
+    ///      Read via extsload(keccak256(abi.encode(uint256(lvl), this mapping's slot))).
+    mapping(uint256 => uint256) internal ticketGenerationStartBlock;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

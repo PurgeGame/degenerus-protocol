@@ -54,7 +54,7 @@ contract QueueWordCacheTest is Test {
     function setUp() public {
         h = new QueueWordCacheHarness();
         referenceCode = vm.parseBytes(vm.readFile("contracts/mocks/QueueWordCacheReference.hex"));
-        assertEq(keccak256(referenceCode), 0x2392545ce73d2150008289f7384976ab4a3fc35164df362dae578383fcb22917, "pinned uncached reference runtime");
+        assertEq(keccak256(referenceCode), 0x5a6a7e70f0c61accb0ac17b9d3698408b2a40be2dc2d09f7c7e197c25c6fd76f, "pinned uncached reference runtime");
         candidateCode = address(new DegenerusGameFoilPackModule()).code;
     }
 

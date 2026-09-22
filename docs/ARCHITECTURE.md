@@ -72,18 +72,38 @@ operator and charge; the table's `CrapsBonusDonated` records the vault as donor.
 
 ## Ticket materialization
 
-Purchases queue owed entries; the drain assigns traits from committed entropy. Four
-entries make one whole ticket. Current/near queues use a double buffer; far-future queues
-have a separate key space. Resume cursors and seated round state persist across chunks.
+Purchases queue owed entries; the drain assigns traits from committed entropy. The round
+worker groups up to four entries per seat; cards are client presentation. Current/near
+queues use a double buffer; far-future queues have a separate key space. Resume cursors
+and seated round state persist across chunks.
 
 The level owner registry is append-only. Trait buckets pack eight uint32 owner indices
 per storage word. The individual drain aggregates trait occurrences before writing runs;
 the round drain batches seats. Queue release clears the length in constant time.
 
 `EntryOwnerRegistered` maps level/index to owner; both `lvl` and `owner` are indexed, so a
-wallet's positions at a level are one log filter. `RoundTraitsGenerated.seatOwners` packs
-index-plus-one into eight lanes; zero is an empty lane. Storage bucket indices themselves
-are zero-based. Event consumers must not confuse those encodings.
+wallet's registry positions at a level are one log filter. Storage bucket owner indices
+are zero-based; generated inventory is separate from the queue's remaining owed balance.
+
+`EntryTraitsRevealed` replaces `RoundTraitsGenerated`. Each anonymous log has four indexed
+player keys, `(uint256(level) << 160) | uint160(player)`, and one `uint144` data word:
+sixteen trait bytes followed by sixteen presence bits. Byte `4*j+q` is player position
+`j`'s trait in quadrant `q`; bit `128+4*j+q` marks it present, including valid trait zero.
+A full eight-seat round emits two logs, and unused trailing topics are zero. This is
+entry inventory: it carries no round number, owner-registry position or card identity.
+Consumers retain normal block/transaction/log order but cannot use the event as a round ID.
+
+Query the Game address at each of the four topic positions, union by transaction hash
+and log index, then explicitly decode the anonymous ABI and inspect every matching player
+position. Signature-based `parseLog` cannot identify this event. Cross-level wallet history
+requires enumerating level keys; there is no wallet-only wildcard inside a composite topic.
+Named `TraitsGenerated` still covers per-entry and foil generation paths.
+
+`ticketGenerationStartBlock[level]` at slot 70 is readable through `extsload` at
+`keccak256(abi.encode(uint256(level), uint256(70)))`. Deployment initializes levels 0..5;
+a fresh level-promoting RNG request stamps the newly opened level+5 window before any
+drain. This inclusive lower bound can precede actual generation; it is not a first-reveal
+timestamp. Retries preserve it, and older levels retain their bounds.
 
 ## Recent settlement boundaries
 

@@ -2274,6 +2274,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             _rewardTopAffiliate(lvl);
             level = lvl;
 
+            // The first near-future generation window for L+5 opens with level L.
+            // This fresh daily request returns before draining; retries do not enter
+            // this branch. One metadata write per level, never a charged drain step.
+            ticketGenerationStartBlock[uint256(lvl) + 5] = block.number;
+
             // Fold a reached thanos declaration into the active shift: from this
             // level onward every drain target resolves to the declared exponent via
             // snapShift, and the pending pair frees for the next declaration.

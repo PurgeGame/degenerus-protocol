@@ -862,5 +862,13 @@
     "offset": 0,
     "slot": 69,
     "typeLabel": "address"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "ticketGenerationStartBlock",
+    "offset": 0,
+    "slot": 70,
+    "typeLabel": "mapping(uint256 => uint256)"
   }
 ]
