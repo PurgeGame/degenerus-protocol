@@ -137,6 +137,8 @@ interface IDrawCoinflip {
     /// @notice The armed BAF draw day and its book: the whole-FLIP sum of every direct
     ///         self-funded deposit that staked the armed day, and the entry count.
     function bafDrawInfo() external view returns (uint24 day, uint96 totalWeight, uint32 entryCount);
+    /// @notice A flip day's stored result. An unresolved day reads (0, false).
+    function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win);
 }
 
 contract WWXRP {
@@ -1033,8 +1035,9 @@ contract WWXRP {
     ///      bracket, in the same call that processes the skip. The lost total is
     ///      the coinflip's draw book for the armed day (whole FLIP); the book closed
     ///      at the day boundary, before the transition word was requested. Returns
-    ///      address(0) when the bracket has no entries. A winner with an empty book
-    ///      is still drawn and logged, with a zero award. Winner selection is a
+    ///      address(0) when the bracket has no entries. A winner with an empty book —
+    ///      or one whose armed day won, or never resolved — is still drawn and logged,
+    ///      with a zero award. Winner selection is a
     ///      domain-separated roll over the burn-weighted cumulative intervals,
     ///      located by binary search.
     /// @param bracket Skipped century bracket (level x00).
@@ -1075,8 +1078,17 @@ contract WWXRP {
         }
         winner = _incinEntry[_incinEntryKey(bracket, lo)].player;
 
-        (, uint96 lostFlip, ) = coinflip.bafDrawInfo();
-        uint256 flipAward = (uint256(lostFlip) * 1 ether * INCINERATOR_FLIP_BPS) / 10_000;
+        // Pay only against a book that actually lost. The skip gate reads the low bit of the
+        // transition's own word, which is the armed day's word on every ordinary path — but a
+        // VRF stall can resolve the armed day from a backfilled derived word while the
+        // transition keeps a later day's, leaving the two independent. Reading the armed day's
+        // stored result instead of assuming the coupling keeps the award honest in both cases:
+        // a day that won, or one that never resolved, funds nothing.
+        (uint24 armedDay, uint96 lostFlip, ) = coinflip.bafDrawInfo();
+        (uint16 rewardPercent, bool armedWin) = coinflip.getCoinflipDayResult(armedDay);
+        uint256 flipAward = (!armedWin && rewardPercent != 0)
+            ? (uint256(lostFlip) * 1 ether * INCINERATOR_FLIP_BPS) / 10_000
+            : 0;
         if (flipAward != 0) coinflip.creditFlip(winner, flipAward);
 
         emit IncineratorResolved(bracket, winner, flipAward, roll, total);
