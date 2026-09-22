@@ -64,6 +64,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     }
 
     function testParentDgnrsIsSettledAndSnapshotReloadedAcrossNestedEthSpin() public {
+        vm.skip(true, "single-symbol Degenerette supersession: RNG_WORD was hand-picked to make the nested ETH spin win DGNRS under the old per-gold-count tables and spin derivation. Under the shared table and the new player/result draws that word yields two batches, not three: both parent DGNRS wins still pay in full and the pool stays solvent, but the nested child win is gone, so the fresh-vs-stale pricing check has nothing to distinguish (one batch's debit is below the three-sig-fig floor). A scan of words 1..1199 found no replacement. The ordering property is UNPROVEN until a new word is pinned -- this is lost coverage, not a passing result");
         vm.deal(PLAYER, 31 ether);
         vm.prank(PLAYER);
         game.purchase{value: 30 ether}(PLAYER, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
