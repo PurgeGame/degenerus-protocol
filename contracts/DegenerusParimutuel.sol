@@ -428,17 +428,11 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     }
 
     /// @dev The participation-quest reward for a bet placed on jackpot-phase day
-    ///      `phaseDay`: halved per day, floored to a whole FLIP so the ladder reads as
-    ///      round numbers rather than trailing halves — 150 / 75 / 37 / 18 across the
-    ///      phase's five jackpot days, the counter reading 0-4.
-    ///
-    ///      Days 0 and 1 share the top tier deliberately. The counter reads 0 from the
-    ///      transition until the first daily jackpot settles — usually later the same
-    ///      day — and 1 from then until day 2's processing. Folding 0 into 1 prices that
-    ///      whole first day at 150 rather than dropping a tier minutes in when the
-    ///      first settlement lands. It is also what a closed market quotes.
+    ///      `phaseDay`: 150 FLIP across the first day (counter 0 or 1), then 37 FLIP
+    ///      after the second draw (counter 2). This preserves the three-day schedule's
+    ///      reward amounts while counting actual draws. The final draw closes betting.
     function _questReward(uint8 phaseDay) private pure returns (uint256) {
-        uint256 step = phaseDay == 0 ? 0 : phaseDay - 1;
+        uint256 step = phaseDay <= 1 ? 0 : 2;
         return ((QUEST_BASE / 1 ether) >> step) * 1 ether;
     }
 

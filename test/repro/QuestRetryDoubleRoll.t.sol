@@ -159,8 +159,8 @@ contract QuestRetryDoubleRoll is DeployProtocol {
     /// @dev From a last-purchase-day window, drive forward until the FINAL-jackpot RNG
     ///      request fires and leave its word UNFULFILLED (lock held), which is the only state
     ///      the 12h retry branch can be reached from. Note a plain transition request is NOT
-    ///      final: `finalJackpotRequest` needs jackpotCounter + jpStep >= JACKPOT_LEVEL_CAP,
-    ///      true at a turbo single-day collapse or on the last of a phase's jackpot days.
+    ///      final unless turbo is active; a standard phase's final request comes after
+    ///      two completed jackpot draws.
     ///      Returns whether such a request rolled a forced slot-1 quest, plus its type/day.
     function _driveToFinalJackpotRequest()
         internal

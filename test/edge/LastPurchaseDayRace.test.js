@@ -559,8 +559,8 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       await advanceToNextDay();
       await game.connect(alice).advanceGame();
 
-      expect(await game.jackpotCompressionTier()).to.equal(
-        2n,
+      expect(await game.jackpotDuration()).to.equal(
+        1n,
         "Normal turbo (tier 2) must still activate when no VRF is in flight"
       );
       expect(await game.level()).to.equal(

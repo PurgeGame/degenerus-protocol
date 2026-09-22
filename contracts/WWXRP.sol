@@ -36,16 +36,13 @@ pragma solidity 0.8.34;
  * @dev FEATURES:
  *      - Standard ERC20 functionality (transfer, approve, etc.)
  *      - mintPrize(): Authorized minters can award WWXRP prizes
- *      - vaultMintTo(): Vault can mint from its uncirculating reserve
+ *      - vaultMintTo(): Vault or its current owner can mint any amount for free
  *      - Trusted minters: the vault owner (>50.1% of DGVE) may register or
  *        revoke any address as a minter/burner alongside the pinned game
  *        contracts, so future games can pay and take WWXRP. This is
  *        deliberate and total: WWXRP is the protocol's inflationary side coin
  *        and the vault is its sovereign; nothing here bounds what a trusted
  *        address may mint or burn.
- *      - Vault escrow: the vault holds no circulating WWXRP — transfers and
- *        mints targeting it de-circulate into its mint allowance, and its
- *        burns (WWXRP bets) spend from that allowance (FLIP model)
  *      - enter()/claim(): daily burn draw for a fixed FLIP prize
  *      - Century BAF incinerator: a level-x99 enter() burn also bets on the
  *        upcoming x00 BAF skipping — when the century flip loses, one
@@ -145,7 +142,7 @@ contract WWXRP {
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+
-      |  Standard ERC20 events plus vault allowance tracking                 |
+      |  Standard ERC20 events and draw settlement tracking                  |
       +======================================================================+*/
 
     /// @notice Emitted when tokens are transferred between addresses
@@ -163,25 +160,6 @@ contract WWXRP {
         address indexed spender,
         uint256 amount
     );
-
-    /// @notice Emitted when the vault spends from its uncirculating allowance
-    /// @param spender VAULT when spent via _burn's vault path (WWXRP bets),
-    ///        or the token contract (address(this)) when minted out via vaultMintTo
-    /// @param amount Amount spent from allowance
-    /// @dev Renamed off FLIP's `VaultAllowanceSpent` for the same reason as
-    ///      `WwxrpVaultEscrowRecorded` below: distinct name, distinct topic0, so the two tokens'
-    ///      vault ledgers never conflate in a signature-subscribed indexer.
-    event WwxrpVaultAllowanceSpent(address indexed spender, uint256 amount);
-
-    /// @notice Emitted when WWXRP bound for the vault is escrowed to its mint allowance
-    /// @dev Deliberately NOT named `VaultEscrowRecorded`: FLIP emits an event of that exact
-    ///      shape, and an identical name means an identical topic0 — an indexer subscribing by
-    ///      signature would conflate the two tokens' escrow streams unless it also filters by
-    ///      emitter. A distinct name keeps the streams distinct at the topic level.
-    /// @param sender The original transfer sender when routed via _transfer,
-    ///        or address(0) on a direct mint to the vault
-    /// @param amount Amount added to the vault's mint allowance (18 decimals)
-    event WwxrpVaultEscrowRecorded(address indexed sender, uint256 amount);
 
     /// @notice Emitted for every recorded daily-draw entry
     /// @param day Participation day (settles on rngWordForDay(day + 1))
@@ -274,14 +252,8 @@ contract WWXRP {
     /// @notice Thrown when caller is not an authorized minter
     error OnlyMinter();
 
-    /// @notice Thrown when caller is not the vault
-    error OnlyVault();
-
     /// @notice Thrown when the caller does not hold vault ownership (>50.1% of DGVE)
     error NotVaultOwner();
-
-    /// @notice Thrown when vault allowance is insufficient
-    error InsufficientVaultAllowance();
 
     /// @notice Thrown when a draw burn is below the 25 WWXRP minimum
     error BelowMinBurn();
@@ -324,15 +296,8 @@ contract WWXRP {
     /// @notice Number of decimals
     uint8 public constant decimals = 18;
 
-    /// @notice Total circulating supply of WWXRP (excludes vault allowance)
+    /// @notice Total minted WWXRP less burns, including tokens held by the vault.
     uint256 public totalSupply;
-
-    /// @notice Initial uncirculating reserve (1B WWXRP, 18 decimals)
-    uint256 public constant INITIAL_VAULT_ALLOWANCE = 1_000_000_000 ether;
-
-    /// @notice Remaining uncirculating reserve the vault can mint from.
-    ///         Grows when WWXRP is transferred or minted to the vault (escrow).
-    uint256 public vaultAllowance = INITIAL_VAULT_ALLOWANCE;
 
     /// @notice Mapping of address to WWXRP balance
     mapping(address => uint256) public balanceOf;
@@ -356,7 +321,7 @@ contract WWXRP {
     /// @dev Jackpots contract address authorized to mint WWXRP (skipped-BAF consolation)
     address internal constant MINTER_JACKPOTS = ContractAddresses.JACKPOTS;
 
-    /// @dev Vault contract address authorized to mint from uncirculating reserve
+    /// @dev Vault contract address authorized to mint without a reserve limit
     address internal constant MINTER_VAULT = ContractAddresses.VAULT;
 
     /// @dev Game views consumed by the draws: the day's RNG word, activity score
@@ -491,12 +456,6 @@ contract WWXRP {
         }
     }
 
-    /// @notice Total supply including uncirculating vault allowance
-    /// @dev Used by dashboards to show circulation + reserve.
-    function supplyIncUncirculated() external view returns (uint256) {
-        return totalSupply + vaultAllowance;
-    }
-
     /*+======================================================================+
       |                       ERC20 FUNCTIONS                                |
       +======================================================================+
@@ -547,79 +506,28 @@ contract WWXRP {
         return true;
     }
 
-    /// @dev Internal transfer helper - moves tokens between addresses.
-    ///      The vault holds no circulating WWXRP: an amount routed to it
-    ///      de-circulates into the vault's mint allowance instead (same
-    ///      escrow model as FLIP).
-    /// @param from The source address
-    /// @param to The destination address
-    /// @param amount The amount to transfer
+    /// @dev Moves tokens between ordinary ERC20 balances, including the vault's.
     function _transfer(address from, address to, uint256 amount) internal {
         if (from == address(0) || to == address(0)) revert ZeroAddress();
         if (balanceOf[from] < amount) revert InsufficientBalance();
-
         balanceOf[from] -= amount;
-
-        if (to == MINTER_VAULT) {
-            unchecked {
-                // amount <= sender balance <= totalSupply
-                totalSupply -= amount;
-                vaultAllowance += amount;
-            }
-            emit Transfer(from, address(0), amount);
-            emit WwxrpVaultEscrowRecorded(from, amount);
-            return;
-        }
-
         balanceOf[to] += amount;
-
         emit Transfer(from, to, amount);
     }
 
-    /// @dev Internal mint helper - creates new tokens.
-    ///      A mint targeting the vault escrows to its allowance (never a
-    ///      circulating balance), so prize channels that can pay the vault
-    ///      (coinflip loss rewards, lootbox faces, BAF consolation) feed the
-    ///      reserve instead of stranding tokens.
-    /// @param to The recipient of newly minted tokens
-    /// @param amount The amount to mint
+    /// @dev Creates tokens in the recipient's balance.
     function _mint(address to, uint256 amount) internal {
         if (to == address(0)) revert ZeroAddress();
-
-        if (to == MINTER_VAULT) {
-            vaultAllowance += amount;
-            emit WwxrpVaultEscrowRecorded(address(0), amount);
-            return;
-        }
-
         totalSupply += amount;
         balanceOf[to] += amount;
-
         emit Transfer(address(0), to, amount);
     }
 
-    /// @dev Internal burn helper - destroys tokens.
-    ///      The vault holds no circulating WWXRP: its burns (WWXRP Degenerette
-    ///      bets via burnForGame) spend the mint allowance instead, so the
-    ///      vault stays a full player on every WWXRP surface.
-    /// @param from The address to burn tokens from
-    /// @param amount The amount to burn
+    /// @dev Destroys tokens from an existing balance.
     function _burn(address from, uint256 amount) internal {
-        if (from == MINTER_VAULT) {
-            uint256 allowanceVault = vaultAllowance;
-            if (amount > allowanceVault) revert InsufficientVaultAllowance();
-            unchecked {
-                vaultAllowance = allowanceVault - amount;
-            }
-            emit WwxrpVaultAllowanceSpent(from, amount);
-            return;
-        }
-
         if (balanceOf[from] < amount) revert InsufficientBalance();
-
         balanceOf[from] -= amount;
         totalSupply -= amount;
-
         emit Transfer(from, address(0), amount);
     }
 
@@ -663,23 +571,12 @@ contract WWXRP {
         emit TrustedMinterSet(account, trusted);
     }
 
-    /// @notice Mint WWXRP to a recipient from the vault's uncirculating reserve
-    /// @dev Only callable by the vault contract. Reduces vault allowance and mints to recipient.
-    /// @param to Recipient address
-    /// @param amount Amount to mint (18 decimals)
-    /// @custom:reverts OnlyVault When caller is not the vault
-    /// @custom:reverts ZeroAddress When to is address(0)
-    /// @custom:reverts InsufficientVaultAllowance When amount exceeds remaining allowance
+    /// @notice Mint any amount of WWXRP for free to a nonzero recipient.
+    /// @dev Callable by the vault or its current owner (>50.1% of DGVE).
+    ///      No reserve, allocation, payment or per-call mint limit applies.
     function vaultMintTo(address to, uint256 amount) external {
-        if (msg.sender != MINTER_VAULT) revert OnlyVault();
-
-        uint256 allowanceVault = vaultAllowance;
-        if (amount > allowanceVault) revert InsufficientVaultAllowance();
-        unchecked {
-            vaultAllowance = allowanceVault - amount;
-        }
+        if (msg.sender != MINTER_VAULT && !vaultOwner.isVaultOwner(msg.sender)) revert NotVaultOwner();
         _mint(to, amount);
-        emit WwxrpVaultAllowanceSpent(address(this), amount);
     }
 
     /// @notice Burn WWXRP for game bets

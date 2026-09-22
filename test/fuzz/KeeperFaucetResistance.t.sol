@@ -64,7 +64,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
 
     /// @dev WWXRP balanceOf mapping root slot.
-    uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
+    uint256 private constant WWXRP_BALANCEOF_SLOT = 1;
 
     /// @dev WWXRP totalSupply slot.
     uint256 private constant WWXRP_TOTAL_SUPPLY_SLOT = 0;
@@ -654,7 +654,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         betId = _betNonce(better);
     }
 
-    /// @dev Seed a WWXRP balance for `who` (balanceOf slot 2) and bump totalSupply to match.
+    /// @dev Seed a WWXRP balance for `who` (balanceOf slot 1) and bump totalSupply to match.
     function _seedWwxrpBalance(address who, uint256 amount) internal {
         bytes32 balSlot = keccak256(abi.encode(who, uint256(WWXRP_BALANCEOF_SLOT)));
         uint256 prevBal = uint256(vm.load(address(wwxrp), balSlot));

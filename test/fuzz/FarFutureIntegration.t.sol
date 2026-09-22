@@ -87,7 +87,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         // Each level requires:
         //   1. nextPrizePool > levelPrizePool[level] (prize pool target met)
         //   2. advanceGame daily cycles: ticket processing -> VRF -> daily jackpot -> if target met,
-        //      transition to jackpot phase -> 5 jackpot days -> phase transition -> level++
+        //      transition to jackpot phase -> 1 or 3 jackpot days -> phase transition -> level++
         //
         // To fast-track: seed nextPrizePool to 49.9 ETH (just below 50 ETH target), buy a small
         // quantity to push it over, then drive the advance cycle. This avoids burning gas on

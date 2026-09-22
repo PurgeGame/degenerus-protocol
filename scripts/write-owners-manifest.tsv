@@ -28,7 +28,7 @@ OWNER	claimablePool	modules/DegenerusGameMintModule.sol	_purchaseForWithCached f
 OWNER	claimablePool	modules/DegenerusGamePayoutUtils.sol	_creditBoxProceeds bumps the pool by boxEth while crediting VAULT 80% / SDGNRS 20%; shared payout utility inherited by modules
 OWNER	claimablePool	modules/GameAfkingModule.sol	_deliverAfkingBuy debits the pool for the afking-funded + claimable-funded spend after the per-account debits (one checked RMW)
 HELPER	claimablePool	storage/DegenerusGameStorage.sol	_settleShortfall applies the aggregate pool draw for both tiers; _creditAfkingValue pairs pool += with the afking credit (the only afking credit primitive)
-OWNER	compressedJackpotFlag	modules/DegenerusGameAdvanceModule.sol	advanceGame arms turbo(2)/compressed(1)/chained(3), _endPhase clears <2, rngGate consumes the bonus latch; sole writer
+OWNER	jackpotFlags	modules/DegenerusGameAdvanceModule.sol	advanceGame arms the turbo bit; _endPhase replaces it with the bonus-pending bit; rngGate consumes that bonus; sole writer
 OWNER	currentPrizePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots stores the settled current pool directly (single SSTORE batch); the jackpot/gameover modules go through _setCurrentPrizePool
 HELPER	currentPrizePool	storage/DegenerusGameStorage.sol	_setCurrentPrizePool narrows and stores; called by jackpot and gameover modules
 OWNER	dailyFoilDraw	modules/DegenerusGameJackpotModule.sol	payDailyJackpot/emitDailyWinningTraits persist the day's winning trait sets for foil claims; one write per sealed day

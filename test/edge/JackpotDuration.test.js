@@ -18,42 +18,25 @@ const ZERO_ADDRESS = hre.ethers.ZeroAddress;
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
 /**
- * Jackpot Compression Tier Tests (Normal / Compressed / Turbo)
+ * Jackpot Duration Tests (Standard / Turbo)
  *
- * compressedJackpotFlag (uint8) determines how jackpot days are compressed:
+ * jackpotDuration() returns 3 by default and 1 while turbo is selected:
  *
- *   Tier 0 — Normal (5 physical days):
- *     Target met after 3+ daily advances (purchaseDays > 3).
- *     counterStep=1, jackpot counter 0→1→2→3→4→5 across 5 physical days.
- *     Jackpot→purchase housekeeping folds into the last jackpot day (no
- *     extra transition day — _endPhase does not unlock RNG).
+ *   Standard (3 physical days):
+ *     Every non-turbo level, regardless of how long the purchase target takes.
+ *     Counter 0→1→2→3: early-bird day, doubled middle day, final pool payout.
+ *     Jackpot→purchase housekeeping folds into the last jackpot day.
  *
- *   Tier 1 — Compressed (3 physical days):
- *     Target met within 3 daily advances (purchaseDays ≤ 3, but > 1).
- *     counterStep=2 for middle days: counter 0→2→4→5 across 3 physical days.
- *     Set in daily processing at AdvanceModule line ~255.
- *
- *   Tier 2 — Turbo (1 physical day):
+ *   Turbo (1 physical day):
  *     Target already met when purchaseDays ≤ 1 (checked at top of advanceGame).
- *     counterStep=JACKPOT_LEVEL_CAP (5): counter 0→5 in 1 physical day.
- *     Entire jackpot (transition + all draws + next-phase housekeeping)
- *     completes within a single physical day via same-day advance cycles.
- *     Set at AdvanceModule line ~133.
+ *     Counter 0→1 in one physical day.
+ *     Entire jackpot completes via same-day advance cycles. BAF levels arm
+ *     at purchase-day settlement to preserve their last-purchase window.
  *
- * Day counting:
- *   purchaseStartDay is initialized to currentDayIndex() = 1 at deploy.
- *   GameTimeLib.currentDayIndexAt returns 1 on deploy day.
- *   Turbo:      (day - purchaseStartDay ≤ 1)  → checked at top of advanceGame.
- *   Compressed: (day - purchaseStartDay ≤ 3)  → checked during daily processing.
- *   Normal:     (day - purchaseStartDay > 3)   → default.
- *
- *   advanceGame reverts on deploy day (dailyIdx initialized to currentDayIndex).
- *   After advanceToNextDay (day 2): 2 - 1 = 1 → turbo if target met.
- *   After 2x advanceToNextDay (day 3): 3 - 1 = 2 → compressed if target met.
- *   After 3x advanceToNextDay (day 4): 4 - 1 = 3 → compressed if target met.
- *   After 4x advanceToNextDay (day 5): 5 - 1 = 4 → normal.
+ * purchaseStartDay is initialized to day 1 at deploy. The first advance on
+ * day 2 can trigger turbo; later targets always select the three-day schedule.
  */
-describe("CompressedJackpot", function () {
+describe("JackpotDuration", function () {
   this.timeout(300_000);
 
   after(function () {
@@ -120,10 +103,10 @@ describe("CompressedJackpot", function () {
 
   /**
    * Warm-up: advance one day with a small purchase so purchaseDays > 1
-   * on the next cycle. This prevents turbo (tier=2) from firing when
+   * on the next cycle. This prevents turbo (1 day) from firing when
    * the target is met on the following day.
    * After warmUpDay: dailyIdx = day 2, purchaseStartDay = 1.
-   * Next advance will be day 3: purchaseDays = 3 - 1 = 2 → compressed.
+   * Next advance will be day 3: purchaseDays = 3 - 1 = 2 → standard.
    */
   async function warmUpDay(game, deployer, mockVRF, advanceModule, buyer) {
     await buyFullTickets(game, buyer, 10, 0.1);
@@ -154,7 +137,7 @@ describe("CompressedJackpot", function () {
    * that transitions (the advance module doesn't unlock RNG on
    * STAGE_ENTERED_JACKPOT, so processing continues to day-1 jackpot).
    *
-   * WARNING: This cannot detect turbo (tier=2) because turbo completes
+   * WARNING: This cannot detect turbo (1 day) because turbo completes
    * the entire jackpot phase within a single cycle, so jackpotPhase()
    * is already false by the time we check. Use driveTurboCompletion instead.
    */
@@ -197,14 +180,14 @@ describe("CompressedJackpot", function () {
   }
 
   /**
-   * Drive compressed completion: advance to next day then run cycles
-   * until level advances. purchaseDays=2 triggers compressed (flag=1).
+   * Drive standard completion: advance to next day then run cycles
+   * until level advances. purchaseDays=2 triggers standard (three-day schedule).
    */
   async function driveTurboCompletion(game, deployer, mockVRF, advanceModule) {
     const levelBefore = await game.level();
     // Advance to next day so advanceGame doesn't revert with NotTimeYet
     await advanceToNextDay();
-    // First cycle — triggers compressed (purchaseDays=2)
+    // First cycle — triggers standard (purchaseDays=2)
     await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
     // Drive additional cycles if needed for full jackpot processing
     for (let i = 0; i < 20; i++) {
@@ -220,9 +203,9 @@ describe("CompressedJackpot", function () {
   // ---------------------------------------------------------------------------
 
   describe("initial state", function () {
-    it("jackpotCompressionTier is 0 on deploy", async function () {
+    it("jackpotDuration is 3 on deploy", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.jackpotCompressionTier()).to.equal(0);
+      expect(await game.jackpotDuration()).to.equal(3);
     });
   });
 
@@ -231,7 +214,7 @@ describe("CompressedJackpot", function () {
   // ---------------------------------------------------------------------------
 
   describe("tier activation", function () {
-    it("tier=1 (compressed) when target met early (purchaseDays=2)", async function () {
+    it("3 days when target met early (purchaseDays=2)", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -243,7 +226,7 @@ describe("CompressedJackpot", function () {
       const buyers = [bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
-      // driveToJackpotPhase advances to day 3 → purchaseDays = 3 - 1 = 2 ≤ 3 → compressed
+      // driveToJackpotPhase advances to day 3 → purchaseDays = 3 - 1 = 2 ≤ 3 → standard
       const reached = await driveToJackpotPhase(
         game,
         deployer,
@@ -251,10 +234,10 @@ describe("CompressedJackpot", function () {
         advanceModule
       );
       expect(reached).to.equal(true, "Should reach jackpot phase");
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
     });
 
-    it("tier=1 (compressed) when target met after first advance + next day (purchaseDays=2)", async function () {
+    it("3 days when target met after first advance + next day (purchaseDays=2)", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -268,7 +251,7 @@ describe("CompressedJackpot", function () {
       const buyers = [bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
-      // driveToJackpotPhase → day 3: purchaseDays = 3 - 1 = 2 ≤ 3 → compressed
+      // driveToJackpotPhase → day 3: purchaseDays = 3 - 1 = 2 ≤ 3 → standard
       const reached = await driveToJackpotPhase(
         game,
         deployer,
@@ -276,10 +259,10 @@ describe("CompressedJackpot", function () {
         advanceModule
       );
       expect(reached).to.equal(true, "Should reach jackpot phase");
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
     });
 
-    it("tier=0 (normal) when target met after 4+ daily advances (purchaseDays > 3)", async function () {
+    it("3 days when target met after 4+ daily advances (purchaseDays > 3)", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -308,7 +291,7 @@ describe("CompressedJackpot", function () {
       const buyers = [dan, eve, ...others.slice(1, 15)];
       await heavyPurchases(game, buyers);
 
-      // Next advance: purchaseDays = day - 1 > 3 → normal
+      // Next advance: purchaseDays = day - 1 > 3 still selects three days
       const reached = await driveToJackpotPhase(
         game,
         deployer,
@@ -316,16 +299,16 @@ describe("CompressedJackpot", function () {
         advanceModule
       );
       expect(reached).to.equal(true, "Should reach jackpot phase");
-      expect(await game.jackpotCompressionTier()).to.equal(0);
+      expect(await game.jackpotDuration()).to.equal(3);
     });
   });
 
   // ---------------------------------------------------------------------------
-  // Turbo mode (tier=2)
+  // Turbo mode (1 day)
   // ---------------------------------------------------------------------------
 
-  describe("compressed mode via early target (tier=1)", function () {
-    it("compressed flag (1) is set when target met after warm-up (purchaseDays=2)", async function () {
+  describe("standard mode via early target (3 days)", function () {
+    it("standard schedule is used when target met after warm-up (purchaseDays=2)", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -336,15 +319,15 @@ describe("CompressedJackpot", function () {
       const buyers = [bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
-      // Drive a full cycle on day 3 — compressed flag is set during daily processing
-      // purchaseDays = day 3 - purchaseStartDay 1 = 2 → compressed
+      // Drive a full cycle on day 3 — standard flag is set during daily processing
+      // purchaseDays = day 3 - purchaseStartDay 1 = 2 → standard
       await advanceToNextDay();
       await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
-      expect(await game.jackpotCompressionTier()).to.equal(1,
-        "Compressed flag should be set after cycle on day 3");
+      expect(await game.jackpotDuration()).to.equal(3,
+        "Standard flag should be set after cycle on day 3");
     });
 
-    it("turbo flag (2) IS set when first advance is on day 2 (purchaseDays=1)", async function () {
+    it("one-day schedule IS set when first advance is on day 2 (purchaseDays=1)", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -355,12 +338,12 @@ describe("CompressedJackpot", function () {
       // Advance to day 2 before calling advanceGame → purchaseDays = 2 - 1 = 1
       await advanceToNextDay();
       await game.connect(deployer).advanceGame();
-      // purchaseDays=1 triggers turbo (flag=2)
-      const tier = await game.jackpotCompressionTier();
-      expect(tier).to.equal(2, "Turbo should activate on day 2 (purchaseDays=1)");
+      // purchaseDays=1 triggers turbo (one-day schedule)
+      const days = await game.jackpotDuration();
+      expect(days).to.equal(1, "Turbo should activate on day 2 (purchaseDays=1)");
     });
 
-    it("level advances after compressed jackpot completes", async function () {
+    it("level advances after standard jackpot completes", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -371,17 +354,17 @@ describe("CompressedJackpot", function () {
       await heavyPurchases(game, buyers);
 
       const levelBefore = await game.level();
-      // Drive compressed jackpot to completion
+      // Drive standard jackpot to completion
       const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
       expect(reached).to.equal(true, "Should reach jackpot phase");
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
       await countJackpotPhaseDays(game, deployer, mockVRF, advanceModule);
       const levelAfter = await game.level();
 
-      expect(levelAfter).to.be.gt(levelBefore, "Level should advance after compressed");
+      expect(levelAfter).to.be.gt(levelBefore, "Level should advance after standard");
     });
 
-    it("jackpotPhase() is false after compressed completion", async function () {
+    it("jackpotPhase() is false after standard completion", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -393,15 +376,15 @@ describe("CompressedJackpot", function () {
 
       const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
       expect(reached).to.equal(true);
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
 
-      // Drive through compressed jackpot phase to completion
+      // Drive through standard jackpot phase to completion
       await countJackpotPhaseDays(game, deployer, mockVRF, advanceModule);
       expect(await game.jackpotPhase()).to.equal(false,
-        "Jackpot phase should be over after compressed completion");
+        "Jackpot phase should be over after standard completion");
     });
 
-    it("flag resets to 0 after compressed completion", async function () {
+    it("duration returns to 3 days after standard completion", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -413,16 +396,16 @@ describe("CompressedJackpot", function () {
 
       const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
       expect(reached).to.equal(true);
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
 
-      // Drive through compressed jackpot phase to completion
+      // Drive through standard jackpot phase to completion
       await countJackpotPhaseDays(game, deployer, mockVRF, advanceModule);
 
-      expect(await game.jackpotCompressionTier()).to.equal(0,
-        "Flag should be reset to 0 after compressed completion");
+      expect(await game.jackpotDuration()).to.equal(3,
+        "Flag should be reset to 0 after standard completion");
     });
 
-    it("compressed drains currentPrizePool to zero", async function () {
+    it("standard drains currentPrizePool to zero", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -434,63 +417,29 @@ describe("CompressedJackpot", function () {
 
       const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
       expect(reached).to.equal(true);
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
 
-      // Drive through compressed jackpot phase to completion
+      // Drive through standard jackpot phase to completion
       await countJackpotPhaseDays(game, deployer, mockVRF, advanceModule);
 
       const poolAfter = await game.currentPrizePoolView();
-      expect(poolAfter).to.equal(0n, "Prize pool should drain to zero after compressed");
-    });
-
-    it("compressed completes faster than normal", async function () {
-      // Compressed: warm-up + heavy purchases + early target → 3 physical jackpot days
-      // Normal: spread purchases over 4+ days → 5 physical jackpot days
-      // This test verifies compressed needs fewer total cycles than normal.
-      const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
-
-      // Warm-up to avoid turbo
-      await warmUpDay(game, deployer, mockVRF, advanceModule, alice);
-
-      const buyers = [bob, carol, dan, eve, ...others.slice(0, 15)];
-      await heavyPurchases(game, buyers);
-
-      // Compressed: track total cycles to completion
-      const levelBefore = await game.level();
-      let compressedCycles = 0;
-      // First cycle on day 3 (purchaseDays = 3-1 = 2 → compressed)
-      await advanceToNextDay();
-      await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
-      compressedCycles++;
-      // Additional cycles if needed
-      for (let i = 0; i < 20; i++) {
-        if ((await game.level()) > levelBefore) break;
-        await driveOneCycle(game, deployer, mockVRF, advanceModule, BigInt(i * 1000 + 99));
-        compressedCycles++;
-      }
-      expect(await game.level()).to.be.gt(levelBefore, "Compressed should complete");
-
-      // Normal takes 5 physical jackpot days (1 transition + 4 remaining).
-      // Compressed should take fewer total cycles than normal's 5+ days.
-      expect(compressedCycles).to.be.lte(5,
-        "Compressed should complete in fewer cycles than normal's 5+ days");
+      expect(poolAfter).to.equal(0n, "Prize pool should drain to zero after standard");
     });
   });
 
   // ---------------------------------------------------------------------------
-  // Compressed mode (tier=1) — jackpot phase duration
+  // Standard mode (3 days) — jackpot phase duration
   // ---------------------------------------------------------------------------
 
-  describe("compressed mode (tier=1)", function () {
-    it("compressed jackpot takes 3 physical days (2 remaining after transition)", async function () {
+  describe("standard mode (3 days)", function () {
+    it("standard jackpot takes 3 physical days (2 remaining after transition)", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
       // Warm-up: consume day 2 so purchaseDays > 1 on next advance
       await warmUpDay(game, deployer, mockVRF, advanceModule, alice);
 
-      // Heavy purchases → driveToJackpotPhase → day 3 → compressed (tier=1)
+      // Heavy purchases → driveToJackpotPhase → day 3 → standard (3 days)
       const buyers = [bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
@@ -501,10 +450,10 @@ describe("CompressedJackpot", function () {
         advanceModule
       );
       expect(reached).to.equal(true);
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
 
-      // driveToJackpotPhase already consumed jackpot day 1 (counter 0→2).
-      // Remaining: day 2 (counter 2→4) + day 3 (counter 4→5, _endPhase folds
+      // driveToJackpotPhase already consumed jackpot day 1 (counter 0→1).
+      // Remaining: day 2 (counter 1→2) + day 3 (counter 2→3, _endPhase folds
       //           housekeeping into same day, jackpotPhase becomes false) = 2 cycles.
       const remainingDays = await countJackpotPhaseDays(
         game,
@@ -514,17 +463,17 @@ describe("CompressedJackpot", function () {
       );
 
       // Total physical jackpot days: 1 (in driveToJackpotPhase) + remainingDays = 3
-      expect(remainingDays).to.equal(2, "Compressed phase should have 2 remaining cycles after transition");
+      expect(remainingDays).to.equal(2, "Standard phase should have 2 remaining cycles after transition");
     });
 
-    it("compressed flag resets to 0 after jackpot phase ends", async function () {
+    it("standard duration returns to 3 days after jackpot phase ends", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
       // Warm-up to avoid turbo
       await warmUpDay(game, deployer, mockVRF, advanceModule, alice);
 
-      // Trigger compressed jackpot
+      // Trigger standard jackpot
       const buyers = [bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
@@ -535,17 +484,17 @@ describe("CompressedJackpot", function () {
         advanceModule
       );
       expect(reached).to.equal(true);
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
 
       // Drive through jackpot phase to completion
       await countJackpotPhaseDays(game, deployer, mockVRF, advanceModule);
 
-      // After phase ends, flag should be 0
+      // After phase ends, duration should be 3 days
       expect(await game.jackpotPhase()).to.equal(false);
-      expect(await game.jackpotCompressionTier()).to.equal(0);
+      expect(await game.jackpotDuration()).to.equal(3);
     });
 
-    it("compressed jackpot drains currentPrizePool to zero by final day", async function () {
+    it("standard jackpot drains currentPrizePool to zero by final day", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -562,13 +511,13 @@ describe("CompressedJackpot", function () {
         advanceModule
       );
       expect(reached).to.equal(true);
-      expect(await game.jackpotCompressionTier()).to.equal(1);
+      expect(await game.jackpotDuration()).to.equal(3);
 
       // Record pool before jackpot phase payouts
       const poolBefore = await game.currentPrizePoolView();
       expect(poolBefore).to.be.gt(0n, "Prize pool should be non-zero at jackpot phase start");
 
-      // Drive through compressed jackpot phase
+      // Drive through standard jackpot phase
       await countJackpotPhaseDays(game, deployer, mockVRF, advanceModule);
 
       // After phase ends, current prize pool should be drained
@@ -578,61 +527,49 @@ describe("CompressedJackpot", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // Normal mode (tier=0) — jackpot phase duration
+  // Purchase duration never selects a five-day jackpot
   // ---------------------------------------------------------------------------
 
-  describe("normal mode (tier=0)", function () {
-    it("normal jackpot takes 5 physical days (4 remaining after transition)", async function () {
-      const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
+  describe("three-day schedule across purchase durations", function () {
+    for (const purchaseDays of [3, 4, 30]) {
+      it(`target met on purchase day ${purchaseDays} still takes exactly 3 jackpot days`, async function () {
+        const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
+          await loadFixture(deployFullProtocol);
 
-      // Spread purchases over 4+ advances so purchaseDays > 3 when target met.
-      // purchaseStartDay = 1 at deploy.
-      // Advance 1 (day 2): purchaseDays = 2-1 = 1
-      await buyFullTickets(game, alice, 200, 2);
-      await advanceToNextDay();
-      await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 100n);
+        // Keep the pool below target through the requested purchase duration.
+        for (let day = 1; day < purchaseDays; day++) {
+          await buyFullTickets(game, alice, 10, 0.1);
+          await driveOneCycle(game, deployer, mockVRF, advanceModule, BigInt(day * 1000));
+          expect(await game.jackpotPhase()).to.equal(false);
+          expect(await game.level()).to.equal(0n);
+        }
+        await heavyPurchases(game, [bob, carol, dan, eve, ...others.slice(0, 15)]);
 
-      // Advance 2 (day 3): purchaseDays = 3-1 = 2
-      await buyFullTickets(game, bob, 200, 2);
-      await driveOneCycle(game, deployer, mockVRF, advanceModule, 200n);
+        // The target-met settlement must select tier 1 even after the old cutoff.
+        await driveOneCycle(game, deployer, mockVRF, advanceModule, 41n);
+        expect((await game.purchaseInfo()).lastPurchaseDay_).to.equal(true);
+        expect(await game.jackpotDuration()).to.equal(3);
 
-      // Advance 3 (day 4): purchaseDays = 4-1 = 3
-      await buyFullTickets(game, carol, 200, 2);
-      await driveOneCycle(game, deployer, mockVRF, advanceModule, 300n);
+        const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
+        expect(reached).to.equal(true);
+        expect(await game.jackpotDuration()).to.equal(3);
+        expect(await game.currentPrizePoolView()).to.be.gt(0n);
 
-      // Advance 4 (day 5): purchaseDays = 5-1 = 4 > 3 → normal
-      await buyFullTickets(game, others[0], 200, 2);
-      await driveOneCycle(game, deployer, mockVRF, advanceModule, 400n);
-
-      // Heavy purchases push past target
-      const buyers = [dan, eve, ...others.slice(1, 15)];
-      await heavyPurchases(game, buyers);
-
-      let reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
-      expect(reached).to.equal(true);
-      expect(await game.jackpotCompressionTier()).to.equal(0);
-
-      // driveToJackpotPhase consumed jackpot day 1 (counter 0→1).
-      // Remaining: days 2-5 (counter 1→2→3→4→5, _endPhase folds housekeeping
-      //           into same day, jackpotPhase becomes false) = 4 cycles.
-      const normalRemainingDays = await countJackpotPhaseDays(
-        game,
-        deployer,
-        mockVRF,
-        advanceModule
-      );
-
-      // Total physical jackpot days: 1 (in driveToJackpotPhase) + normalRemainingDays = 5
-      expect(normalRemainingDays).to.equal(4, "Normal phase should have 4 remaining cycles after transition");
-    });
+        // Entry already paid day one (counter 0→1); two days remain (1→2→3).
+        const remainingDays = await countJackpotPhaseDays(game, deployer, mockVRF, advanceModule);
+        expect(remainingDays).to.equal(2, "Exactly three physical jackpot days including entry");
+        expect(await game.currentPrizePoolView()).to.equal(0n);
+        expect(await game.jackpotPhase()).to.equal(false);
+        expect(await game.jackpotDuration()).to.equal(3);
+      });
+    }
   });
 
   // ---------------------------------------------------------------------------
-  // Turbo mode (tier=2) — 1 day per level
+  // Turbo mode (1 day) — 1 day per level
   // ---------------------------------------------------------------------------
 
-  describe("turbo mode (tier=2)", function () {
+  describe("turbo mode (1 day)", function () {
     /**
      * Run same-day advance cycles until the game exits jackpot phase or level
      * advances. Does NOT call advanceToNextDay between cycles — every call
@@ -670,7 +607,8 @@ describe("CompressedJackpot", function () {
       // the next level's first purchase day).
       expect(await game.level()).to.equal(levelBefore + 1n, "Level should advance by 1");
       expect(await game.jackpotPhase()).to.equal(false, "Should be back in purchase phase");
-      expect(await game.jackpotCompressionTier()).to.equal(2, "Turbo flag survives as the bonus-day latch");
+      expect(await game.jackpotDuration()).to.equal(3);
+      expect((BigInt(await game.extsload(ZERO_BYTES32)) >> 184n) & 2n).to.equal(2n, "Turbo bonus remains owed");
 
       // Drain completed without any day-boundary crossing (timestamp stayed within 24h window).
       expect(tsAfter - tsBefore).to.be.lessThan(86400,
@@ -679,7 +617,7 @@ describe("CompressedJackpot", function () {
       // The next (normal) purchase day's settlement consumes the latch.
       await advanceToNextDay();
       await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 4242n);
-      expect(await game.jackpotCompressionTier()).to.equal(0,
+      expect(await game.jackpotDuration()).to.equal(3,
         "Latch consumed by the next purchase day's settlement");
     });
 
@@ -698,7 +636,7 @@ describe("CompressedJackpot", function () {
       expect(await game.level()).to.equal(levelBefore + 1n);
       // Bonus-day latch armed; the next day is itself a last-purchase (turbo)
       // day, so the latch defers rather than consuming.
-      expect(await game.jackpotCompressionTier()).to.equal(2);
+      expect(await game.jackpotDuration()).to.equal(3);
 
       // Fund the next level's pool so the target is already met when the
       // next purchase phase's first advance runs.
@@ -713,11 +651,11 @@ describe("CompressedJackpot", function () {
       expect(await game.jackpotPhase()).to.equal(false);
       // Chain latch still armed after the second collapse; the first normal
       // purchase day settles and consumes it.
-      expect(await game.jackpotCompressionTier()).to.equal(2);
+      expect(await game.jackpotDuration()).to.equal(3);
 
       await advanceToNextDay();
       await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 7777n);
-      expect(await game.jackpotCompressionTier()).to.equal(0,
+      expect(await game.jackpotDuration()).to.equal(3,
         "Deferred chain latch consumed on the first normal purchase day");
     });
   });

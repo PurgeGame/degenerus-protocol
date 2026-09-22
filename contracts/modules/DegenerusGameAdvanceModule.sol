@@ -362,15 +362,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Turbo is therefore restricted to the real wall day with an unrequested word.
         // An x0 (BAF) purchase level never arms same-day: deposits on day D feed
         // board[D+1], so a same-day collapse would leave the BAF top-flipper board
-        // empty. Its turbo-speed latch lives on the evening path instead (flag 2
-        // there), keeping a real last-purchase window ahead of the one-day
-        // collapse.
+        // empty. Its turbo-speed latch lives on the evening path instead, keeping a real last-purchase
+        // window ahead of the one-day collapse.
         // Latched mid-day stall: the pre-gate promotion cannot swap while the
         // committed cohort occupies the read slot, and a collapsed turbo phase issues
         // no sentinel swap — so buys queued after the stalled request would drain (the
         // sweep's trailing window guarantees that) but only after the level retired:
         // safe yet drawless. Defer the arm; the evening target-met latch takes the
-        // compressed path instead, whose next-day request commits them in time to
+        // standard three-day path instead, whose next-day request commits them in time to
         // draw.
         if (
             !inJackpot && !lastPurchaseDay && !locked && day == wallDay && day >= psd && rngWordByDay[day] == 0
@@ -379,10 +378,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint32 purchaseDays = day - psd;
             if (purchaseDays <= 1 && lvl % 10 != 9 && _getNextPrizePool() > _prizePoolTarget(lvl + 1)) {
                 lastPurchaseDay = true;
-                // A surviving flag 2 here is the previous turbo's unpaid bonus latch
-                // (_endPhase preserved it): escalate to 3 = armed turbo whose
-                // predecessor's bonus is still owed today. A plain arm writes 2.
-                compressedJackpotFlag = compressedJackpotFlag == 2 ? 3 : 2;
+                // Arm turbo without discarding an unpaid bonus from the previous level.
+                jackpotFlags |= JACKPOT_TURBO;
             }
         }
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
@@ -621,18 +618,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // second day's settlement is the one that observes jackpotCounter == 1. Level-0 days
             // all carry +2. A turbo level's collapsed phase never spans a settlement, so its
             // bonus shifts to the next level's first purchase day, marked by the surviving
-            // flag-2 latch _endPhase preserves; rngGate consumes it at that settlement. When
-            // that same day arms the next turbo (back-to-back chain), the arm escalates the
-            // latch to 3 — armed + bonus owed — so every post-payout day of a chain still
-            // carries its own bonus; the settlement drops 3 back to 2 for tonight's
-            // collapse. A plain fresh arm's flag 2 on a last-purchase day is excluded, as a
-            // non-post-turbo day. The bonus keys the COLLAPSED level: lvl names it directly
-            // except on a flag-3 day once the arm request has pre-incremented (locked),
-            // where it is lvl - 1. Sized so a recycling (auto-rebuy) player nets ~99.9% /
-            // ~101.9% RTP once the 0.75% recycle bonus compounds in.
+            // TURBO_BONUS_PENDING bit set by _endPhase; rngGate clears it after payment.
+            // If this settlement also arms a new turbo, both bits are set. Its request
+            // has already promoted the level, so the owed bonus belongs to lvl - 1.
             bool bonusDay = (inJackpot && jackpotCounter == 1) || lvl == 0
-                || (!inJackpot && (compressedJackpotFlag == 3 || (!lastPurchase && compressedJackpotFlag == 2)));
-            uint24 bonusLvl = (compressedJackpotFlag == 3 && locked) ? lvl - 1 : lvl;
+                || (!inJackpot && (jackpotFlags & TURBO_BONUS_PENDING) != 0);
+            uint24 bonusLvl = (jackpotFlags == (JACKPOT_TURBO | TURBO_BONUS_PENDING) && locked) ? lvl - 1 : lvl;
             uint8 coinflipBonus = bonusDay ? (bonusLvl != 0 && bonusLvl % 10 == 0 ? 6 : 2) : 0;
             (uint256 rngWord, uint32 gapDays) = rngGate(ts, day, purchaseLevel, lastPurchase, coinflipBonus, dIdx);
             psd += uint24(gapDays);
@@ -821,7 +812,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Complete coin+ticket distribution
             if (dailyJackpotCoinTicketsPending) {
                 bool carryover = payDailyJackpotCoinAndTickets(rngWord);
-                if (jackpotCounter >= JACKPOT_LEVEL_CAP) {
+                if (jackpotCounter >= _jackpotDays()) {
                     _endPhase(lvl);
                     stage = STAGE_JACKPOT_PHASE_ENDED;
                     break;
@@ -1032,12 +1023,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             levelPrizePool[lvl] = (_getFuturePrizePool() * 40) / 100;
         }
         jackpotCounter = 0;
-        // Turbo (2) survives phase end as the coinflip bonus-day latch: a
-        // collapsed phase never spans a flip settlement, so the level's bonus
-        // day shifts to the next level's first purchase day, where rngGate
-        // consumes the latch. Compressed (1) keeps a real second jackpot day
-        // and clears here like a normal level.
-        if (compressedJackpotFlag < 2) compressedJackpotFlag = 0;
+        // A turbo has no second jackpot settlement. Its bonus is owed on the next
+        // purchase settlement; clearing the active bit keeps the two states distinct.
+        jackpotFlags = (jackpotFlags & JACKPOT_TURBO) != 0 ? TURBO_BONUS_PENDING : 0;
     }
 
     /*+================================================================================================================+
@@ -1375,13 +1363,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Seal a purchase-phase day: latch the level's last purchase day when the next-pool
-    ///      target is met, arm the x0 BAF draw and the compressed shapes, then unlock.
+    ///      target is met, arm the x0 BAF draw and select turbo when eligible, then unlock.
     ///      Do not latch on an RNGREUSE replay day. Its NEXT day may also have a cached
     ///      backfill word, which would let rngGate bypass the sole `level = lvl` writer in
     ///      _finalizeRngRequest and enter jackpot one level behind. Latch only after the
     ///      walk reaches the real wall day; the following calendar day then necessarily
     ///      takes the normal request path and promotes the level. `day >= psd` also makes
-    ///      the compressed-phase subtraction safe after the death-clock adjustment.
+    ///      the purchase-day subtraction safe after the death-clock adjustment.
     function _sealPurchaseDay(uint24 purchaseLevel, uint24 day, uint24 wallDay, uint24 psd) private {
         bool targetMet = _getNextPrizePool() > _prizePoolTarget(purchaseLevel);
         if (targetMet && day == wallDay && day >= psd) {
@@ -1393,16 +1381,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // latches here rather than at the morning arm, leaving
             // the rest of the sealed day as a real last-purchase
             // window ahead of the collapse; that transition request
-            // collapses all five logical jackpot days exactly as an
+            // pays the entire jackpot exactly as an
             // armed turbo does.
             bool bafLevel_ = purchaseLevel % 10 == 0;
             if (bafLevel_) {
                 coinflip.armBafDraw(day + 1);
             }
             if (bafLevel_ && day - psd <= 1) {
-                compressedJackpotFlag = 2;
-            } else if (day - psd <= 3) {
-                compressedJackpotFlag = 1;
+                jackpotFlags = JACKPOT_TURBO;
             }
         }
         _unlockRng(day);
@@ -1521,7 +1507,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // its chain drains BEFORE the final draw. The word still serves the
         // pending lootboxes.
         {
-            // A latched one-day collapse (lastPurchaseDay with flag >= 2 — an x0
+            // A latched one-day collapse (lastPurchaseDay with JACKPOT_TURBO set — an x0
             // evening latch, or an armed turbo whose advance chain broke on
             // ticket work before its request) is the same final-day shape: the
             // next daily request is the transition that collapses every draw
@@ -1529,14 +1515,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // post-request cohort write-side until the level retires — safe but
             // drawless. Refused, the whole day's cohort stays together on the
             // write side for that request's own commit.
-            bool lastSwapAhead = lastPurchaseDay && compressedJackpotFlag >= 2;
-            if (!lastSwapAhead && jackpotPhaseFlag) {
-                uint8 cnt = jackpotCounter;
-                uint8 comp = compressedJackpotFlag;
-                uint8 step =
-                    comp == 2 ? JACKPOT_LEVEL_CAP : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
-                lastSwapAhead = cnt + step >= JACKPOT_LEVEL_CAP;
-            }
+            bool lastSwapAhead = (lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) != 0)
+                || (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags));
             if (!lastSwapAhead) {
                 bool queuedWork;
                 uint24 t = level;
@@ -1618,31 +1598,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // Normal daily RNG processing (request from current day)
             currentWord = _applyDailyRng(day, currentWord);
             coinflip.processCoinflipPayouts(coinflipBonus, currentWord, day);
-            // Consume the turbo coinflip-bonus latch once the settlement it
-            // marks (the next level's first purchase day) has been paid. A
-            // chained day's flag 3 drops to 2 — the freshly-armed turbo for
-            // tonight's collapse; a plain fresh arm's 2 stays for the same
-            // reason; a spent latch (2 on a non-arm day) clears.
-            if (compressedJackpotFlag == 3) {
-                compressedJackpotFlag = 2;
-            } else if (compressedJackpotFlag == 2 && !jackpotPhaseFlag && !isTicketJackpotDay) {
-                compressedJackpotFlag = 0;
-            }
+            // Settlement paid any owed bonus. Preserve a newly armed turbo.
+            if ((jackpotFlags & TURBO_BONUS_PENDING) != 0) jackpotFlags &= JACKPOT_TURBO;
             // Force the MINT_FLIP daily on the first jackpot day (lastPurchaseDay still set here,
             // jackpot not yet entered) so the FLIP-mint quest only lands when the redeem window is
-            // live. Turbo (compressedJackpotFlag == 2) is skipped — its jackpot collapses at this
+            // live. Turbo is skipped — its jackpot collapses at this
             // request, leaving no full open day for that quest.
             // Force the buy-a-foil-pack daily on the day the purchase phase opens — the day
             // whose jackpot run is the level's last, since the transition drains and reopens
             // purchasing later in that same day. Whether this pass carries the final run is
-            // already decidable here, by the step arithmetic the redemption-close mirrors:
-            // turbo collapses all five logical days at the transition request (jackpotPhaseFlag
-            // is not yet set, so isTicketJackpotDay stands in for it), compressed advances two
-            // at a time mid-phase, everything else one. (phaseTransitionActive cannot serve
-            // here: it is raised after the day's word is recorded and dropped before
-            // _unlockRng, so every roll while it is set takes the recorded-word early return
-            // above.) Never collides with the MINT_FLIP force below: that fires on a level's
-            // first jackpot day, which is final only for turbo — where its own flag-2 exclusion
+            // already decidable from the physical day counter and turbo bit. At a turbo
+            // transition, isTicketJackpotDay stands in for jackpotPhaseFlag, which has not
+            // yet been set. phaseTransitionActive is too late: it is raised after the word
+            // is recorded, so later rolls take the recorded-word early return
+            // above. Never collides with the MINT_FLIP force below: that fires on a level's
+            // first jackpot day, which is final only for turbo — where its own turbo exclusion
             // already stands it down. Gated on gapDays == 0 so a VRF-stall backfill (which
             // defers the whole transition to the next advance, line 412) does not roll the
             // foil quest early. The final-jackpot REQUEST already rolls this quest at the
@@ -1661,20 +1631,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // a roll now would create a retroactive quest that immediately counts as a rolled
             // miss against every streak. The day stays unrolled — forgiven, matching
             // gap-backfill days.
-            uint8 foilJpStep = 1;
-            if (compressedJackpotFlag == 2 && jackpotCounter == 0) {
-                foilJpStep = JACKPOT_LEVEL_CAP;
-            } else if (compressedJackpotFlag == 1 && jackpotCounter > 0 && jackpotCounter < JACKPOT_LEVEL_CAP - 1) {
-                foilJpStep = 2;
-            }
             bool finalJackpotRun =
-                (jackpotPhaseFlag || isTicketJackpotDay) && jackpotCounter + foilJpStep >= JACKPOT_LEVEL_CAP;
+                (jackpotPhaseFlag || isTicketJackpotDay) && _isFinalJackpotDay(jackpotCounter, jackpotFlags);
             if (day == _simulatedDayIndexAt(ts)) {
                 bool decDayOne = decDayOneActive;
                 quests.rollDailyQuest(
                     day,
                     currentWord,
-                    lastPurchaseDay && compressedJackpotFlag < 2,
+                    lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) == 0,
                     finalJackpotRun && gapDays == 0,
                     decDayOne && gapDays == 0
                 );
@@ -2246,20 +2210,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // The redemption latch is opened lazily by the first FLIP redeem of a phase, so it
         // cannot gate the test itself: finalJackpotRequest must be decided on a cycle where
         // nobody redeemed. Only the clearing write stays behind the latch.
-        bool finalJackpotRequest;
-        if (jackpotPhaseFlag || isTicketJackpotDay) {
-            uint8 jpStep = 1;
-            // >= 2 covers the chained-arm request, whose flag is 3 (turbo + owed latch).
-            if (compressedJackpotFlag >= 2 && jackpotCounter == 0) {
-                jpStep = JACKPOT_LEVEL_CAP;
-            } else if (compressedJackpotFlag == 1 && jackpotCounter > 0 && jackpotCounter < JACKPOT_LEVEL_CAP - 1) {
-                jpStep = 2;
-            }
-            if (jackpotCounter + jpStep >= JACKPOT_LEVEL_CAP) {
-                finalJackpotRequest = true;
-                if (ticketRedemptionOpen) ticketRedemptionOpen = false;
-            }
-        }
+        bool finalJackpotRequest =
+            (jackpotPhaseFlag || isTicketJackpotDay) && _isFinalJackpotDay(jackpotCounter, jackpotFlags);
+        if (finalJackpotRequest && ticketRedemptionOpen) ticketRedemptionOpen = false;
 
         // Increment level at RNG request time when lastPurchaseDay = true.
         // lvl is already purchaseLevel (= level + 1), so set directly.

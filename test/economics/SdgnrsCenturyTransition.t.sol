@@ -25,7 +25,7 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage {
         phaseTransitionActive = false;
         jackpotPhaseFlag = false;
         lastPurchaseDay = true;
-        compressedJackpotFlag = compression;
+        jackpotFlags = compression;
         jackpotCounter = 0;
         rngLockedFlag = false;
         rngWordCurrent = 0;
@@ -123,15 +123,15 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         _driveToClose();
     }
 
-    function testCompressedCenturyRefillsOnlyOnCompletion() public {
-        _prepareRequest(1);
+    function testThreeDayCenturyRefillsOnlyOnCompletion() public {
+        _prepareRequest(0);
         game.advanceGame();
         assertEq(sdgnrs.lastRecycledCentury(), 0);
         _driveToClose();
     }
 
     function testTurboCenturyRefillsOnlyOnCompletion() public {
-        _prepareRequest(2);
+        _prepareRequest(1);
         game.advanceGame();
         assertEq(sdgnrs.lastRecycledCentury(), 0);
         _driveToClose();

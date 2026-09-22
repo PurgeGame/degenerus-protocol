@@ -61,7 +61,7 @@ contract BafDrawArming is DeployProtocol {
 
         // Run the turbo collapse out: the transition resolves the level-10 BAF.
         _runFullDay();
-        assertGe(_compressedFlag(), 2, "harness: level 10 must have collapsed under turbo");
+        assertGe(_jackpotFlags(), 2, "harness: level 10 must have collapsed under turbo");
         assertEq(_bafEpoch(10), 1, "harness: the level-10 BAF must have resolved, not skipped");
 
         // The deciding word selects the minnow — the book's only interval.
@@ -88,7 +88,7 @@ contract BafDrawArming is DeployProtocol {
             require(!game.gameOver(), "harness: gameOver before the level-10 latch");
             (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
             if (lastPurchaseDay_ && lvl == 9) {
-                require(_compressedFlag() == 2, "harness: the x0 latch must be tier 2");
+                require(_jackpotFlags() == 1, "harness: the x0 latch must be tier 2");
                 return;
             }
             (uint24 armedDay, , ) = coinflip.bafDrawInfo();
@@ -179,8 +179,8 @@ contract BafDrawArming is DeployProtocol {
         return uint24(s0 >> 96);
     }
 
-    /// @dev compressedJackpotFlag — slot 0, byte 23.
-    function _compressedFlag() internal view returns (uint8) {
+    /// @dev jackpotFlags — slot 0, byte 23.
+    function _jackpotFlags() internal view returns (uint8) {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         return uint8(s0 >> 184);
     }

@@ -64,7 +64,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         dailyIdx = day - 1;
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
-        compressedJackpotFlag = 0;
+        jackpotFlags = 0;
         ticketsFullyProcessed = true;
         prizePoolFrozen = true;
         rngLockedFlag = true;

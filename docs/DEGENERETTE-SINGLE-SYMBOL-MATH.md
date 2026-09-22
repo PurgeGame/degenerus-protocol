@@ -47,6 +47,16 @@ FLIP survival and award rounding retain their separate owner/bet-nonce domains.
 Thus shared reels do not imply identical final FLIP awards. Activity, stake boons,
 ETH caps and downstream reward draws also affect settlement independently.
 
+## Protocol deity boon entries
+
+Ordinary ETH bets on hero symbol 0 (Vault/WWXRP deity) or 6 (sDGNRS/ETH deity)
+also enter that deity's next-day three-boon draw. Weight uses paid ETH in 0.0001-ETH
+units and the existing canonical activity multiplier (1x/2x/3x at 0/400/1200).
+The bet recipient owns the entry. Stake-boon additions and generated award spins
+do not add weight, and neither a spin win nor a jackpot hero win is required.
+These entries share the existing daily RNG settlement; ordinary ETH hero tracking
+continues unchanged. See [the boon draw mechanics](DEITY-PERPETUAL-AND-BOON-DRAW-PLAN.md).
+
 ## Scoring and matched gold
 
 - Hero symbol match: **2 points**.

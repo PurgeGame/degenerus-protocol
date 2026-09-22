@@ -126,7 +126,7 @@ interface IDegenerusGameJackpotModule {
     /// @param bonusTargetLevel Target level for the primary bonus coin distribution.
     function emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external;
 
-    /// @notice Game-over terminal jackpot: Day-5-style bucket distribution to the final ticket cohort.
+    /// @notice Game-over terminal jackpot: Final-day bucket distribution to the final ticket cohort.
     /// @param poolWei Total ETH to distribute.
     /// @param targetLvl Level to sample winners from.
     /// @param rngWord VRF entropy seed.
@@ -517,8 +517,6 @@ interface IDegenerusGameBoonModule {
     /// @notice Issues a deity boon from a deity to a recipient
     function issueDeityBoon(address deity, address recipient, uint8 slot) external;
 
-    /// @notice Stake the donor's FLIP and enter the calling protocol owner's boon draw.
-    function enterProtocolBoonDraw(address donor, uint256 amount) external;
 
     /// @notice Automatically award both protocol owners' three closed daily draws. Advance-only delegate target.
     function resolveProtocolBoonDraws(uint24 awardDay) external;

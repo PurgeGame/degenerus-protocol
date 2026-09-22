@@ -46,8 +46,9 @@ price tables and reward curves.
   (`WWXRP.setTrustedMinter`), with no cap on what a trusted address may mint or burn. This is
   deliberate: WWXRP is the inflationary side coin, future games are meant to pay and take it, and
   the vault is its sovereign. Treat WWXRP's supply as fully at the vault owner's discretion.
-- WWXRP starts with a **1B** uncirculated vault mint allowance, with further century
-  allocations.
+- The vault owner can mint **unlimited WWXRP for free** to any nonzero recipient through
+  `WWXRP.vaultMintTo` or `DegenerusVault.wwxrpMint`. There is no mint reserve or century
+  allocation. Vault-held WWXRP uses ordinary token balances and counts in total supply.
 - The vault holds one permanent AFKing subscription seat and controls a **998-seat**
   tranche it can mint to chosen recipients once all **1,000** free-tranche seats have
   been minted. sDGNRS holds the other permanent seat, for **2,000** seats total.

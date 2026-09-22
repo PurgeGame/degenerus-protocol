@@ -119,15 +119,13 @@ contract BafConsolationClaimTest is DeployProtocol {
 
         assertEq(jackpots.bafConsolationOf(ContractAddresses.VAULT, 10), 5 ether, "vault claimable");
 
-        uint256 allowanceBefore = wwxrp.vaultAllowance();
+        uint256 balanceBefore = wwxrp.balanceOf(ContractAddresses.VAULT);
         uint256 supplyBefore = wwxrp.totalSupply();
         vm.prank(keeper);
         jackpots.claimBafConsolation(ContractAddresses.VAULT, 10);
 
-        // Vault mints escrow: allowance grows, no circulating balance appears.
-        assertEq(wwxrp.vaultAllowance(), allowanceBefore + 5 ether, "escrowed to allowance");
-        assertEq(wwxrp.balanceOf(ContractAddresses.VAULT), 0, "no circulating vault balance");
-        assertEq(wwxrp.totalSupply(), supplyBefore, "totalSupply excludes escrow");
+        assertEq(wwxrp.balanceOf(ContractAddresses.VAULT), balanceBefore + 5 ether, "vault prize balance");
+        assertEq(wwxrp.totalSupply(), supplyBefore + 5 ether, "vault rewards circulate");
 
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(ContractAddresses.VAULT, 10);

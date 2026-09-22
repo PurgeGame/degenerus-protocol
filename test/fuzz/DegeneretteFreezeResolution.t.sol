@@ -77,7 +77,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev FLIP.balanceOf mapping root slot.
     uint256 private constant FLIP_BALANCEOF_SLOT = 1;
     /// @dev WWXRP.balanceOf / totalSupply slots.
-    uint256 private constant WWXRP_BALANCEOF_SLOT = 2;
+    uint256 private constant WWXRP_BALANCEOF_SLOT = 1;
     uint256 private constant WWXRP_TOTAL_SUPPLY_SLOT = 0;
 
     /// @dev Degenerette bet currencies (DegeneretteModule:208-214).

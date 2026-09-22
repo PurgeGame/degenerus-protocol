@@ -87,7 +87,7 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * | [20:21] phaseTransitionActive    bool     Level transition in progress          |
  * | [21:22] gameOver                 bool     Terminal state flag                   |
  * | [22:23] dailyJackpotCoinTicketsPending bool Split jackpot pending flag          |
- * | [23:24] compressedJackpotFlag    uint8    0=norm 1=comp 2=turbo 3=turbo+owed    |
+ * | [23:24] jackpotFlags    uint8    bit0=turbo bit1=bonus owed          |
  * | [24:25] ticketsFullyProcessed    bool     Read slot fully drained flag          |
  * | [25:26] ticketWriteSlot          bool     Double-buffer write toggle            |
  * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag         |
@@ -273,8 +273,8 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant BOOTSTRAP_PRIZE_POOL = 50 ether;
 
     /// @dev Current-pool daily jackpot percentage is rolled in JackpotModule.
-    ///      Days 1-4 use a random 6%-14% slice of remaining currentPrizePool.
-    ///      Day 5 pays 100% of the remaining currentPrizePool.
+    ///      Three-day phases pay 6%-14% on day one, 12%-28% on day two, then the remainder.
+    ///      Turbo pays 100% of the currentPrizePool in its sole physical day.
 
     /// @dev Bit mask for ticket queue double-buffer key encoding.
     ///      Set bit 23 of the uint24 level key to distinguish write/read slots.
@@ -409,11 +409,10 @@ abstract contract DegenerusGameStorage {
     // EVM SLOT 0 (continued): Counters and Flags
     // =========================================================================
 
-    /// @dev Count of jackpots processed within the current level.
-    ///      Capped at 5 (JACKPOT_LEVEL_CAP in JackpotModule); triggers level
-    ///      advancement when reached. Reset at level start.
+    /// @dev Physical jackpot days completed within the current level.
+    ///      Ends at 1 for turbo or 3 otherwise. Reset at level start.
     ///
-    ///      SECURITY: uint8 is sufficient (max 255, only need 0-5).
+    ///      SECURITY: uint8 is sufficient (max 255, only need 0-3).
     uint8 internal jackpotCounter;
 
     /// @dev True once the prize target is met for current level.
@@ -443,19 +442,12 @@ abstract contract DegenerusGameStorage {
     ///      stay under the ~10M per-tx internal budget. Cleared after coin+ticket distribution.
     bool internal dailyJackpotCoinTicketsPending;
 
-    /// @dev Jackpot compression tier: 0=normal (5d), 1=compressed (3d), 2=turbo (1d).
-    ///      Set when purchase-phase target is met quickly, signaling high player interest.
-    ///      Turbo (2): target met within 1 day — entire jackpot in 1 physical day. On a
-    ///      non-x0 level the morning arm collapses the phase that same day; an x0 (BAF)
-    ///      level latches 2 on the evening path instead, keeping a real last purchase
-    ///      day (the BAF top-flipper board's feed day) before the one-day collapse.
-    ///      Compressed (1): target met within 3 days — 5 logical days in 3 physical.
-    ///      0/1 clear at phase end; 2 survives as the coinflip bonus-day latch and is
-    ///      consumed by the next level's first purchase-day settlement in rngGate. When
-    ///      that day itself arms the next turbo (back-to-back chain), the arm escalates
-    ///      the latch to 3 = armed turbo + predecessor's bonus still owed; the day's
-    ///      settlement pays the bonus and drops 3 back to 2.
-    uint8 internal compressedJackpotFlag;
+    /// @dev Packed jackpot state: bit 0 selects turbo (one day instead of three);
+    ///      bit 1 records a turbo coinflip bonus owed on the next purchase settlement.
+    ///      The bits are independent: a new turbo may arm while the prior bonus is owed.
+    uint8 internal constant JACKPOT_TURBO = 1;
+    uint8 internal constant TURBO_BONUS_PENDING = 2;
+    uint8 internal jackpotFlags;
 
     /// @dev True when the read slot has been fully drained (all tickets processed).
     ///      Gate for RNG requests and jackpot logic in advanceGame daily path.
@@ -583,7 +575,7 @@ abstract contract DegenerusGameStorage {
     uint48 internal lastVrfProcessedTimestamp;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
-    ///      Layout: [counterStep (8 bits @ 0)] [dailyEntries (64 bits @ 8)]
+    ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)]
     ///              [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
     ///              [earlyBirdEntries (64 bits @ 144)] [purchaseEntries (48 bits @ 208)]
     ///      Jackpot phase: set by the ETH stage; on the early-bird day the early-bird stage
@@ -2022,9 +2014,17 @@ abstract contract DegenerusGameStorage {
     ///      player wanting more exposure buys a larger custom, not more boxes.
     uint256 internal constant MAX_BOXES_PER_ORDER = 100;
 
-    /// @dev Daily jackpots a level runs before it seals. Shared here because the active
-    ///      ticket level below keys off it.
-    uint8 internal constant JACKPOT_LEVEL_CAP = 5;
+    uint8 internal constant JACKPOT_DAYS = 3;
+
+    /// @dev The selected schedule. A pending bonus alone does not select turbo.
+    function _jackpotDays() internal view returns (uint8) {
+        return (jackpotFlags & JACKPOT_TURBO) != 0 ? 1 : JACKPOT_DAYS;
+    }
+
+    /// @dev True when the next draw ends this phase. Shared by routing, quests and payouts.
+    function _isFinalJackpotDay(uint8 counter, uint8 flags) internal pure returns (bool) {
+        return (flags & JACKPOT_TURBO) != 0 || counter >= JACKPOT_DAYS - 1;
+    }
 
     /// @dev The level a ticket bought RIGHT NOW routes to — the single source of truth for the
     ///      purchase quote/charge, the ticket + foil delivery, participation/streak recording, and
@@ -2042,14 +2042,7 @@ abstract contract DegenerusGameStorage {
         // counter test below can no longer key off the sealed level. phaseTransitionActive is the
         // standalone signal that this level's draws have ended, so buys route to the next level.
         if (phaseTransitionActive) return level + 1;
-        if (rngLockedFlag) {
-            uint8 cnt = jackpotCounter;
-            uint8 comp = compressedJackpotFlag;
-            uint8 step = comp == 2
-                ? JACKPOT_LEVEL_CAP
-                : (comp == 1 && cnt > 0 && cnt < JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
-            if (cnt + step >= JACKPOT_LEVEL_CAP) return level + 1;
-        }
+        if (rngLockedFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags)) return level + 1;
         return level;
     }
 
@@ -3007,21 +3000,20 @@ abstract contract DegenerusGameStorage {
     /// @dev Paid deity purchases only: the two genesis grants never advance pricing.
     uint8 internal deityPassSales;
 
-    /// @dev 216 bits. Principal stays in wei; weight uses 100-FLIP units times
-    ///      the score multiplier scaled by 800. Three award bits, one per boon.
+    /// @dev 216 bits. Paid ETH stays in wei; weight uses 0.0001-ETH units times
+    ///      the activity multiplier scaled by 800. Three award bits, one per boon.
     struct ProtocolBoonPool {
-        uint112 totalDonatedWei;
+        uint112 totalWageredWei;
         uint64 totalWeight;
         uint32 entryCount;
         uint8 awardedMask;
     }
 
-    /// @dev 248 bits, one slot. At most uint32.max entries of weight <=600,000
-    ///      puts cumulative weight below 2^52. Raw principal per pool is <2^107 wei.
+    /// @dev 240 bits, one slot. Checked uint64 cumulative weight bounds the pool's
+    ///      paid ETH below uint112 capacity, including each entry's sub-unit dust.
     struct ProtocolBoonEntry {
-        address donor;
+        address player;
         uint64 cumulativeWeight;
-        uint8 amountUnits;
         uint16 scoreSnapshot;
     }
 

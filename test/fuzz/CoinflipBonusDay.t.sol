@@ -10,7 +10,7 @@ interface IGameSnapshot {
 
     function jackpotPhase() external view returns (bool);
 
-    function jackpotCompressionTier() external view returns (uint8);
+    function extsload(bytes32 slot) external view returns (bytes32);
 }
 
 /// @dev Recorder proxy etched at the COINFLIP address. For every
@@ -43,7 +43,7 @@ contract CoinflipBonusRecorder {
             // bit 40: jackpotPhase at settlement
             uint256 stamped = (uint256(bonus) + 1) |
                 (uint256(g.level()) << 8) |
-                (uint256(g.jackpotCompressionTier()) << 32) |
+                (((uint256(g.extsload(bytes32(0))) >> 184) & 3) << 32) |
                 (g.jackpotPhase() ? (uint256(1) << 40) : 0);
             bytes32 slot = keccak256(abi.encode("cf.bonus.recorder", epoch));
             assembly {
@@ -68,13 +68,13 @@ contract CoinflipBonusRecorder {
 ///
 /// @notice Spec (USER-locked 2026-07-20):
 ///         - level 0 (genesis): +2 every settled day.
-///         - normal/compressed level N: +2 (or +6 when N % 10 == 0) exactly on
+///         - three-day level N: +2 (or +6 when N % 10 == 0) exactly on
 ///           the SECOND day of N's jackpot phase — the first settled epoch that
 ///           observes jackpotPhase == true (phase entry and jackpot day 1 both
 ///           happen on the prior, last-purchase day).
 ///         - turbo level N (1-day jackpot collapse): same bonus exactly on the
 ///           first purchase day of the next level, whether or not that day
-///           itself arms the next turbo. The compressedJackpotFlag == 2 latch
+///           itself arms the next turbo. The jackpotFlags == 2 latch
 ///           survives _endPhase to mark it and is consumed by that settlement;
 ///           a same-day arm escalates it to 3 (armed + bonus owed) so the
 ///           bonus still pays, keyed to the COLLAPSED level.
@@ -226,7 +226,7 @@ contract CoinflipBonusDayTest is DeployProtocol {
     ///      the normal cadence: a sub-target baseline so levels take a few
     ///      organic purchase days, plus a target rescue when a ratcheted
     ///      (post-turbo) target outgrows the baseline — applied from purchase
-    ///      day 4 so the level still gets a full-length jackpot phase.
+    ///      day 4 so the level gets a three-day jackpot phase.
     ///      A nonzero seed (turbo tests) overshoots immediately.
     function _runDay(uint256 nextPoolSeed) private {
         simTime += 1 days + 1;
@@ -443,11 +443,13 @@ contract CoinflipBonusDayTest is DeployProtocol {
             "turbo bonus lands the day after the collapse"
         );
 
-        // Latch fully consumed by the end of the drive.
+        // The turbo bonus latch is consumed; the drive stops inside the next
+        // three-day jackpot, whose selected schedule is tier 1.
+        assertTrue(game.jackpotPhase(), "drive ends inside a three-day jackpot");
         assertEq(
-            game.jackpotCompressionTier(),
-            0,
-            "turbo latch consumed after its bonus day"
+            game.jackpotDuration(),
+            3,
+            "three-day schedule replaces the consumed turbo bonus latch"
         );
     }
 
@@ -511,6 +513,7 @@ contract CoinflipBonusDayTest is DeployProtocol {
             "chained bonus settles before the plain latch bonus"
         );
         assertGe(bonusEpochs, 2, "audit saw both chain bonuses");
-        assertEq(game.jackpotCompressionTier(), 0, "latch clear at end");
+        assertTrue(game.jackpotPhase(), "drive ends inside a three-day jackpot");
+        assertEq(game.jackpotDuration(), 3, "three-day schedule replaces the consumed chain latch");
     }
 }

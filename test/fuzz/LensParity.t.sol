@@ -91,7 +91,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         phaseTransitionActive = phaseTransition;
         rngLockedFlag = rngLocked;
         jackpotCounter = jackpotCounter_;
-        compressedJackpotFlag = compressedJackpot;
+        jackpotFlags = compressedJackpot;
     }
 
     function setRngWordByDay(uint24 day, uint256 w) external {
@@ -299,8 +299,8 @@ contract LensParityTest is Test {
         uint8 comp
     ) public {
         level_ = uint24(bound(level_, 0, 1_000_000));
-        comp = uint8(bound(comp, 0, 2));
-        cnt = uint8(bound(cnt, 0, 5));
+        comp = uint8(bound(comp, 0, 3));
+        cnt = uint8(bound(cnt, 0, 3));
         harness.setSlot0(0, level_, jackpotPhase, phaseTransition, rngLocked, cnt, comp);
         assertEq(lens.activeTicketLevelOf(game), harness.nativeActiveTicketLevel(), "routed level parity");
     }

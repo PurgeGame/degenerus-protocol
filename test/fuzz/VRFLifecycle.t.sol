@@ -126,7 +126,7 @@ contract VRFLifecycle is DeployProtocol {
 
         // Warm-up: drain pending work on the CURRENT day to establish dailyIdx.
         // Without this, the first loop iteration creates a multi-day gap that
-        // triggers turbo mode (compressedJackpotFlag=2) at level 0, causing a
+        // triggers turbo mode (jackpotFlags=2) at level 0, causing a
         // purchaseLevel=0 underflow in _consolidatePoolsAndRewardJackpots.
         {
             (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));

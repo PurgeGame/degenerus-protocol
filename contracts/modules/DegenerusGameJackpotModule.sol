@@ -251,7 +251,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Constants — Share Distribution (Basis Points)
     // -------------------------------------------------------------------------
 
-    /// @dev Day-5 trait bucket shares packed into 64 bits: [6000, 1333, 1333, 1334] = 10000 bps.
+    /// @dev Final-day trait bucket shares packed into 64 bits: [6000, 1333, 1333, 1334] = 10000 bps.
     ///      With rotation, the 60% share is assigned to the solo (1-winner) bucket.
     uint64 private constant FINAL_DAY_SHARES_PACKED =
         (uint64(6000)) |
@@ -305,7 +305,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Max forward offset for carryover source selection (lvl+1..lvl+4).
     uint8 private constant DAILY_CARRYOVER_MAX_OFFSET = 4;
 
-    /// @dev Current-pool daily jackpot percentage bounds for days 1-4 (6%-14%).
+    /// @dev Base current-pool jackpot percentage bounds (6%-14%); doubled on the middle day.
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
     uint16 private constant DAILY_CURRENT_BPS_MAX = 1400;
 
@@ -375,7 +375,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // External Entry Points (delegatecall targets)
     // =========================================================================
 
-    /// @notice Terminal (game-over) jackpot: Day-5-style bucket distribution.
+    /// @notice Terminal (game-over) jackpot: Final-day bucket distribution.
     /// @dev Called via IDegenerusGame(address(this)) from GameOverModule.
     ///      Uses FINAL_DAY_SHARES_PACKED (60/13/13/13) with trait-based bucket distribution.
     ///      Updates claimablePool internally — callers must NOT double-count.
@@ -426,11 +426,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Called by the parent game contract via delegatecall. Two distinct paths:
     ///
     ///      JACKPOT PHASE PATH (isJackpotPhase=true):
-    ///      - Day 1-4: Distributes a random 6%-14% slice of remaining currentPrizePool.
-    ///      - Day 5: Distributes 100% of remaining currentPrizePool.
+    ///      - Three-day schedule: 6%-14% of remaining currentPrizePool on day 1, 12%-28% on day 2.
+    ///      - Final physical day (day 3, or day 1 for turbo): distributes the remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird ticket jackpot (from futurePrizePool).
-    ///      - On every non-early-bird day (2-5), takes 0.5% of futurePrizePool and buys current-level tickets
-    ///        for winners from a random source level in [lvl+1, lvl+4], deposited into nextPool.
+    ///      - On every non-early-bird day, takes 0.5% of futurePrizePool and buys tickets
+    ///        at the current level (next level on the final day) for winners from [lvl+1, lvl+4], credited to nextPool.
     ///      - Increments jackpotCounter on completion.
     ///
     ///      PURCHASE PHASE PATH (isJackpotPhase=false):
@@ -479,25 +479,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (isJackpotPhase) {
             uint256 dailyEthBudget;
             uint256 dailyUnit; // ticket unit from _budgetToEntries, threaded into _processDailyEth
-            uint8 counterStep = 1;
             bool isFinalPhysicalDay;
             uint256 curPool;
             {
                 uint8 counter = jackpotCounter;
-                uint8 compressedFlag = compressedJackpotFlag;
-                // Turbo (flag=2): all 5 logical days in 1 physical day.
-                // Compressed (flag=1): 5 logical days in 3 physical days.
-                if (compressedFlag == 2 && counter == 0) {
-                    counterStep = JACKPOT_LEVEL_CAP;
-                } else if (
-                    compressedFlag == 1 &&
-                    counter > 0 &&
-                    counter < JACKPOT_LEVEL_CAP - 1
-                ) {
-                    counterStep = 2;
-                }
-                isFinalPhysicalDay = (counter + counterStep >=
-                    JACKPOT_LEVEL_CAP);
+                isFinalPhysicalDay = _isFinalJackpotDay(counter, jackpotFlags);
                 bool isEarlyBirdDay = (counter == 0);
                 curPool = _getCurrentPrizePool();
                 uint16 dailyBps;
@@ -505,8 +491,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     dailyBps = 10_000; // Final physical day: 100% of remaining pool
                 } else {
                     dailyBps = _dailyCurrentPoolBps(counter, randWord);
-                    // Double BPS on compressed days to combine two days' payouts.
-                    if (counterStep == 2) {
+                    // The standard schedule pays a doubled slice on its middle day.
+                    if (counter != 0) {
                         dailyBps *= 2;
                     }
                 }
@@ -579,10 +565,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
 
                 // Store ticket units for Phase 2 distribution
-                // Packing: [counterStep (8 bits)] [dailyEntries (64 bits @ 8)]
+                // Packing: [reserved (8 bits)] [dailyEntries (64 bits @ 8)]
                 // [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
                 dailyTicketBudgetsPacked = _packDailyTicketBudgets(
-                    counterStep,
                     dailyEntries,
                     carryoverEntries,
                     sourceLevelOffset
@@ -804,7 +789,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      Traits are derived inline from randWord (main via isBonus=false, bonus via isBonus=true).
     ///      Uses stored values from Phase 1:
     ///      - rngWordCurrent: VRF entropy for deterministic winner selection
-    ///      - dailyTicketBudgetsPacked: Packed ticket units, counter step, and carryover source offset
+    ///      - dailyTicketBudgetsPacked: Packed ticket units and carryover source offset
     ///
     /// @param randWord VRF entropy (must match rngWordCurrent from Phase 1).
     /// @return carryoverPending True when a carryover leg was priced and waits for the next advance.
@@ -813,7 +798,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         // Unpack stored values
         (
-            uint8 counterStep,
             uint256 dailyEntries,
             uint256 carryoverEntries,
 
@@ -852,9 +836,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // next level for one advance.
         uint8 counterCached = jackpotCounter;
         carryoverPending = carryoverEntries != 0;
-        if (!carryoverPending || counterCached + counterStep >= JACKPOT_LEVEL_CAP) {
+        if (!carryoverPending || _isFinalJackpotDay(counterCached, jackpotFlags)) {
             unchecked {
-                jackpotCounter = counterCached + counterStep;
+                jackpotCounter = counterCached + 1;
             }
         }
 
@@ -873,7 +857,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      input frozen until the day seals after this leg.
     /// @param randWord VRF entropy (the day's recorded word).
     function payCarryoverTickets(uint256 randWord) external {
-        (uint8 counterStep, , uint256 carryoverEntries, uint8 carryoverSourceOffset) = _unpackDailyTicketBudgets(
+        (, uint256 carryoverEntries, uint8 carryoverSourceOffset) = _unpackDailyTicketBudgets(
             dailyTicketBudgetsPacked
         );
         uint24 lvl = level;
@@ -894,7 +878,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // it in the coin+tickets stage so _endPhase could fire there (which then zeroed it).
         if (!phaseTransitionActive) {
             unchecked {
-                jackpotCounter = jackpotCounter + counterStep;
+                ++jackpotCounter;
             }
         }
     }
@@ -2558,13 +2542,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev The day-1 early-bird entries ride bits 144..207 of the same word; payDailyJackpot
     ///      ORs them in after this pack and payEarlyBirdTickets reads and clears them.
     function _packDailyTicketBudgets(
-        uint8 counterStep,
         uint256 dailyEntries,
         uint256 carryoverEntries,
         uint8 carryoverSourceOffset
     ) private pure returns (uint256) {
         return
-            uint256(counterStep) |
             (dailyEntries << 8) |
             (carryoverEntries << 72) |
             (uint256(carryoverSourceOffset) << 136);
@@ -2576,13 +2558,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         private
         pure
         returns (
-            uint8 counterStep,
             uint256 dailyEntries,
             uint256 carryoverEntries,
             uint8 carryoverSourceOffset
         )
     {
-        counterStep = uint8(packed);
         dailyEntries = uint64(packed >> 8);
         carryoverEntries = uint64(packed >> 72);
         carryoverSourceOffset = uint8(packed >> 136);
@@ -2646,7 +2626,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // a floor-lvl award would be committed and materialized only after lvl's draws ended
         // (the trailing sweep reaches it, but drawless). Route the floor one level out so the
         // awards land where they still draw.
-        uint24 ticketFloorLvl = compressedJackpotFlag >= 2 ? lvl + 1 : lvl;
+        uint24 ticketFloorLvl = (jackpotFlags & JACKPOT_TURBO) != 0 ? lvl + 1 : lvl;
 
         uint256 winnersLen = winnersArr.length;
         for (uint256 i; i < winnersLen; ) {

@@ -1,7 +1,8 @@
 # Deity perpetual tickets and protocol boon draws
 
-Implementation of the September 19 decisions. Players donate, and normal daily
-advance automatically issues the rewards. No player claim is required.
+Protocol deities grant boons to players who wager ETH on their hero symbols in
+Degenerette. Normal daily advance automatically issues the rewards. No separate
+entry payment or player claim is required.
 
 ## Genesis and paid passes
 
@@ -99,50 +100,51 @@ follow the advance path's skip/saturate policy rather than reverting.
 | Gold (7) | 1 |
 | No deity owns the symbol | 0 |
 
-## FLIP donations
+## ETH hero wagers
 
-Both contracts expose:
+An ordinary ETH Degenerette bet on **symbol 0 (WWXRP)** enters the Vault deity's
+pool; a bet on **symbol 6 (ETH)** enters sDGNRS's pool. The corresponding genesis
+pass must be initialized. Other symbols, FLIP bets, WWXRP bets, generated lootbox
+spins and record bounty spins never create entries.
 
-```solidity
-function donateFlipForBoons(uint256 amount) external;
-```
+The entry belongs to the bet recipient, including gifted bets and approved
+operator placements. Its paid amount is `amountPerSpin * spinCount`, before any
+Degenerette stake boon. ETH from the wallet, claimable winnings or afking funding
+all qualifies. The ordinary bet receives its ordinary payout; entry neither
+charges extra ETH nor credits the deity's coinflip balance. The standalone
+`donateFlipForBoons` wrappers and GAME's donation relay have been removed.
 
-The caller is always the payer and entrant. Each donation must be **100–25,000
-FLIP**, inclusive. Donations open as soon as the protocol passes are initialized,
-including deployment day, for next-day awards. Entry does not require a daily RNG
-word and remains open while VRF is pending or fulfilled. There is no per-address
-daily donation limit. The complete
-amount is debited through GAME's existing FLIP burn permission and credited,
-without bonuses, to the chosen issuer's **next-day coinflip stake**. It does not
-increase the issuer's wallet or reserve balance.
+Eligibility follows ordinary bet placement: at least **0.005 ETH per spin**, an
+unrevealed nonzero lootbox RNG index, valid spin count, and no game-over/liveness
+trigger. A funding failure rolls back the bet, hero ledger and boon entry together.
+Participation is earned at placement regardless of the eventual spin result or
+whether the deity's symbol wins the jackpot hero draw.
 
-Donation entry does not check game-over or the liveness deadline. Donations can
-still burn FLIP and credit the issuer after death; the game-over draw resolver
-issues no boons. This keeps terminal-state checks off ordinary donations.
-
-Only draw weight truncates: `amountUnits = floor(amount / (100 * 1e18))`, stored as
-`uint8` in the range 1–250. For example, 199 FLIP funds 199 FLIP of stake and gets
-one 100-FLIP weight unit. No token allowance is needed: the authenticated issuer
-wrapper passes its actual caller to the GAME-only burn route. Paid deity holders
-and arbitrary callers cannot use that relay to debit another address.
-
-Each donation snapshots canonical `playerActivityScore(donor)`. The multiplier
-uses scale 800 to retain intermediate-score precision:
+Boon entries reuse the hero ledger's stake granularity:
 
 ```text
+wagerUnits = floor(paidEthWei / 1e14)  // 0.0001 ETH
 score <= 400:  multiplierUnits = 800 + 2 * score
 score < 1200:  multiplierUnits = 1600 + (score - 400)
 score >= 1200: multiplierUnits = 2400
-weight = uint256(amountUnits) * multiplierUnits
+weight = wagerUnits * multiplierUnits
 ```
 
-This gives 1× at score 0, 2× at 400, and 3× at 1200 and above. The multiplier affects
-only winning weight; it does not mint or multiply the transferred FLIP. Later
-score changes do not alter earlier donations.
+Each entry snapshots canonical `playerActivityScore(recipient)` before this bet's
+quest credit. The already-read effective quest streak is reused; canonical score
+uses the routed ticket level, which can differ from Degenerette's payout-score
+level during jackpot phases. The multiplier is 1x at score 0, 2x at 400, and 3x at
+1200 and above. Later score changes do not alter earlier entries.
+
+Exact paid ETH is retained in the pool total and entry event. Only weight truncates;
+for example, 0.00995 ETH counts as 99 wager units. Splitting the same total stake
+at the same score cannot gain weight. The existing jackpot hero ledger still
+records raw ETH units with its own saturation rule; boon weights accumulate
+separately with checked arithmetic.
 
 ## Automatic next-day awards
 
-Each issuer has a separate pool for participation day `D`. Each funded pool awards
+Each issuer has a separate pool for participation day `D`. Each nonempty pool awards
 its three normal deity boon slots on `D+1`, independently and **with replacement**.
 A single address can win all three, win from both issuers, and keep winning on
 later days. These awards do not read or write the ordinary manual-gift recipient
@@ -155,15 +157,15 @@ caps. The three-slot daily supply per issuer remains the source of the rewards.
 - Each winner uses `rngWordByDay[D+1]`, with a domain-separated hash including
   issuer, participation day, and slot. Participation closes before that word is
   requested. There are no empty-bucket draws or prize-pool qualification gates.
-- Every donation appends a cumulative-weight interval. Winner lookup is a binary
+- Every qualifying bet appends a cumulative-weight interval. Winner lookup is a binary
   search with at most 32 reads because the entry count is `uint32`.
-- Funded days issue all six awards inside the existing daily RNG settlement,
+- Days with both pools populated issue all six awards inside the existing daily RNG settlement,
   after the word is recorded, flips settle, and the daily quest and craps window
   are opened. There is no extra advance call. The normal recorded-word shortcut
   prevents repeated processing; gas witnesses include six maximum-depth searches
   in the full fresh-word jackpot and consolidation transactions.
 - Each pool's three-bit `awardedMask` seals its awards before delivery, making
-  repeated processing harmless. Nothing loops over all donors.
+  repeated processing harmless. Nothing loops over all participants.
 
 Duplicate or weaker packed boons are ignored; stronger active lanes remain.
 Expired lanes are cleared before applying a fresh award. Different boon categories
@@ -191,75 +193,48 @@ migration of existing contract state.
 
 | Record | Fields | Bits |
 |---|---|---:|
-| Pool | `uint112 totalDonatedWei`, `uint64 totalWeight`, `uint32 entryCount`, `uint8 awardedMask` | 216 |
-| Entry | `address donor`, `uint64 cumulativeWeight`, `uint8 amountUnits`, `uint16 scoreSnapshot` | 248 |
+| Pool | `uint112 totalWageredWei`, `uint64 totalWeight`, `uint32 entryCount`, `uint8 awardedMask` | 216 |
+| Entry | `address player`, `uint64 cumulativeWeight`, `uint16 scoreSnapshot` | 240 |
 
-Each record fits one slot. At most `uint32.max` donations of 25,000 FLIP keep pool
-principal below `2^107` wei and cumulative weight below `2^52`. The entry-count
-limit is enforced by the checked `uint32` increment before any storage writes or
-funding calls. The canonical score already fits `uint16`, and Coinflip's checked
-tomorrow-day arithmetic makes a separate maximum-day guard unnecessary. The
-wrappers supply the donor, so duplicate zero/self-donor guards are omitted.
-A donation writes its packed pool
-header once and its packed entry once. Draws cache the issuer/day entry mapping
-before searching the three winner intervals.
+Each record fits one slot. Entry count and cumulative weight use checked
+arithmetic, and an individual weight must fit `uint64` before casting. With a
+minimum multiplier of 800, the cumulative weight bound also bounds paid ETH below
+`uint112`, even including less than `1e14` wei of dust per entry and up to
+`uint32.max` entries. Qualifying bets add one packed pool write and one packed
+entry write to the ordinary placement path. Entry needs no separate transaction
+or module delegatecall. Draws cache the issuer/day entry mapping before searching
+the three winner intervals.
 
 `DegenerusGameLens` exposes `deityOwnerAt`, `deityPassSalesCount`,
 `protocolBoonPool`, `protocolBoonEntryAt`, `protocolBoonQuote`, and
-`findProtocolBoonWinners`. Quotes and historical winner lookup stay outside the
+`findProtocolBoonWinners`. Quotes return
+`(wagerUnits, score, multiplierUnits, weight)` for an ETH amount and the recipient's
+current canonical score; they do not promise bet eligibility
+or remaining pool capacity. Quotes and historical winner lookup stay outside the
 size-constrained GAME facade. `ProtocolBoonDrawEntered` and
-`ProtocolBoonDrawAwarded` provide entry and issuance logs. Automatic draws update
-used-slot views and emit only the draw award event; `DeityBoonIssued` remains the
-manual-gift event. The draw event's `day` identifies the contribution pool, and
+`ProtocolBoonDrawAwarded` provide entry and issuance logs. Entry events are emitted
+by the Degenerette module through GAME and include issuer, player, day, paid ETH,
+score, weight and entry index. Automatic draws update used-slot views and emit only the draw award event; `DeityBoonIssued` remains the
+manual-gift event. The draw event's `day` identifies the wager pool, and
 the award day is `day + 1`.
 
 ## Verification
 
-Focused tests cover genesis ownership; all thirty paid prices; every initial
-coverage level; existing buyer and affiliate queue collisions; later-level
-purchases; packed-tail append and resume; exact principal; score snapshots;
-100-FLIP truncation; unauthorized issuer attempts; repeated six-slot wins;
-automatic daily progression; full active-boon collisions; maximum-depth cold
-winner searches; and relevant full-transaction advance gas paths.
+The focused Foundry suites cover currency and symbol eligibility, exact paid ETH,
+activity snapshots and quote parity (including jackpot-phase routing), weight
+rounding, multi-spin bets, boon-bonus exclusion, gift and operator attribution,
+claimable-ETH funding, failed-payment rollback, closed-day isolation, launch-day
+and ordinary automatic awards, collision handling, recipient callback resistance,
+entry-count and weight bounds, and game-over/liveness gating.
 
-Validation completed September 19, 2026:
+The existing six maximum-depth searches remain covered by the daily advance gas
+witness. Degenerette scoring, stake boons and RNG freeze regression suites run
+alongside the entry tests. Source gates cover delegatecall routing, removed
+selectors, RNG closure, pool writes and advance-chain calls.
 
-- Foundry: **144 passed** in the regression matrix; **35 focused checks passed**
-  after the final deployment-day guard, including two additional launch tests.
-  Collision and packed-queue fuzz tests each run 1,000 cases.
-- The pre-review implementation passed **314 focused Hardhat tests** across the
-  main run and corrected-fixture reruns, plus **10 statistical/boundary tests**.
-  The subsequent gas optimizations and deployment guard were checked with Foundry.
-- Shared storage layouts match all updated snapshots; interface, delegatecall,
-  RNG, advance-call, unchecked-math, storage-writer, pool-accounting, queue-delete,
-  and gas-dependent-drain checks pass.
-- All 31 deployment contracts fit the 24,576-byte runtime limit. In the Hardhat
-  deployment build, GAME is 24,500 bytes and Advance is 24,009 bytes.
-- Measured cold transactions include six maximum-depth winner searches within
-  existing daily settlement. The largest tested combined daily transaction uses
-  **14,293,957 gas including intrinsic**, below the 16,777,216 transaction cap.
-  After removing the duplicate award log, the standalone daily-settlement fixture
-  uses 1,794,266 gas; a fresh paid deity
-  purchase with a fresh affiliate uses 10,409,301 gas. Renewal for all 32 deities
-  alongside a full far-future drain chunk uses 5,622,974 gas; retrying the drain
-  does not grant duplicate tickets.
-- Terminal tests issue **600 ETH in total refunds for 30 paid passes**, with no
-  refund basis for either genesis pass. Jackpot winnings are accounted separately.
-- The final combined genesis initializer passes **51 Foundry tests** and uses
-  **16,372,064 gas including intrinsic** in the cold fixture, below the 16,777,216
-  transaction cap. It writes each level's packed queue and owner-registry length
-  once while preserving existing tickets and fractional entries.
-- The final deployment/deity/whale/game-over Hardhat run passes **128 tests**,
-  including the standalone genesis transaction and unchanged predicted addresses.
-- After removing donation-entry RNG readiness, **35 focused Foundry tests pass**.
-  Launch-day and delayed-deployment donations receive six awards through real
-  advance, donations stay open throughout the VRF lock, fallback menus match
-  normal equal-seed menus, and winner views report launch-day outcomes. Manual
-  deity gifts retain their preceding-day menu rules. Source-based gates pass;
-  cold settlement with six maximum-depth searches uses **1,794,575 gas** including
-  intrinsic in this build.
-
-These are measured fixture bounds, not an exhaustive proof over every game state.
-
-The [focused safety and gas review](audit/DEITY-PERPETUAL-BOON-REVIEW.md) records
-the deployment-day fix, measured optimizations, and remaining constraints.
+Validated September 22, 2026: **106 Foundry tests passed**, zero failed, with one
+existing skipped per-spin DGNRS test. Fuzz properties run 1,000 cases each. The
+cold daily settlement with six maximum-depth boon searches used **1,800,678 gas**,
+including intrinsic gas. Interface coverage, all ten source gates, storage-layout
+consistency and all 32 checked deployment runtime-size limits pass. Logs are under
+`.audit-test-logs/eth-hero-boons-final/`.

@@ -107,6 +107,21 @@ timestamp. Retries preserve it, and older levels retain their bounds.
 
 ## Recent settlement boundaries
 
+Jackpot phases use either one physical day (turbo) or three physical days. Every
+non-turbo level uses the three-day schedule, even when reaching the purchase target
+takes more than three days. `jackpotDuration()` returns 1 or 3. The counter tracks
+completed physical draws: standard phases step 0 → 1 → 2 → 3, turbo phases 0 → 1.
+The final draw pays the remaining current pool. One packed bit selects turbo;
+an independent bit carries its coinflip bonus to the next purchase settlement.
+The existing turbo trigger and BAF last-purchase window remain in place.
+
+WWXRP has no vault mint allowance, escrow reserve or automatic century top-ups.
+The vault or its current DGVE-majority owner can mint any amount for free through
+`vaultMintTo`; the owner can also use `DegenerusVault.wwxrpMint`. Vault-held WWXRP
+uses ordinary balances and burns. Standard ERC20 approvals and the trusted
+minter registry remain available.
+
+
 Purchase-phase ticket awards, early-bird tickets and carryover tickets are separate
 bounded stages. The packed queue holds eight owner indices per word and must use
 its codec helpers; Solidity array operations do not express its logical length.

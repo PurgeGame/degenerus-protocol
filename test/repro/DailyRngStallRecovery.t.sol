@@ -340,7 +340,7 @@ contract DailyRngStallRecovery is DeployProtocol {
                 simTime += 1 days + 1;
                 vm.warp(simTime);
                 // Cross the target only after 4+ purchase days so the phase latches
-                // UNCOMPRESSED (day - psd <= 3 would set compressedJackpotFlag = 1)
+                // UNCOMPRESSED (day - psd <= 3 would set jackpotFlags = 1)
                 // and the jackpot runs its full multi-day span.
                 unchecked {
                     ++stalledDays;

@@ -50,7 +50,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
 
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
     uint24 private constant TICKET_FAR_FUTURE_BIT = uint24(1) << 22;
-    uint8 private constant JACKPOT_LEVEL_CAP = 5;
+    uint8 private constant FIRST_DAY_COUNTER = 1;
+    uint8 private constant PENULTIMATE_DAY_COUNTER = 2;
     uint8 private constant MIDDAY_NEVER = 255;
 
     // Day-runner modes for the day after the mid-day request.
@@ -133,7 +134,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function testSingleMiddayRequestOnThePenultimateJackpotDayStrandsTheCohort() public {
         vm.pauseGasMetering();
         (uint24 L, uint256 priceWei, ) = _runJackpotPhase(
-            JACKPOT_LEVEL_CAP - 1,
+            PENULTIMATE_DAY_COUNTER,
             MODE_DRAIN_SAME_DAY,
             true
         );
@@ -192,7 +193,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function testNothingLingersAFurtherFullLevel() public {
         vm.pauseGasMetering();
         (uint24 L, , ) = _runJackpotPhase(
-            JACKPOT_LEVEL_CAP - 1,
+            PENULTIMATE_DAY_COUNTER,
             MODE_DRAIN_SAME_DAY,
             true
         );
@@ -263,7 +264,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function testPenultimateStalledWordPromotionStrandsNothing() public {
         vm.pauseGasMetering();
         (uint24 L, uint256 priceWei, ) = _runJackpotPhase(
-            JACKPOT_LEVEL_CAP - 1,
+            PENULTIMATE_DAY_COUNTER,
             MODE_CROSS_PROMOTED,
             true
         );
@@ -296,7 +297,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function testMiddayBatchCrossingTheDayBoundaryStrandsNothing() public {
         vm.pauseGasMetering();
         (uint24 L, uint256 priceWei, bool swapped) = _runJackpotPhase(
-            JACKPOT_LEVEL_CAP - 2,
+            FIRST_DAY_COUNTER,
             MODE_CROSS_FULFILLED,
             true
         );
@@ -329,7 +330,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function testAwardsOnlyMiddayRequestStrandsNothing() public {
         vm.pauseGasMetering();
         (uint24 L, , bool swapped) = _runJackpotPhase(
-            JACKPOT_LEVEL_CAP - 2,
+            FIRST_DAY_COUNTER,
             MODE_DRAIN_SAME_DAY,
             false
         );
@@ -359,7 +360,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         // Reach a day with two swaps still ahead, buying daily so every day has a cohort.
         for (
             uint256 d = 0;
-            d < 12 && _jackpotCounter() != JACKPOT_LEVEL_CAP - 2;
+            d < 12 && _jackpotCounter() != FIRST_DAY_COUNTER;
             d++
         ) {
             _buyTickets();
@@ -414,7 +415,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
 
         for (
             uint256 d = 0;
-            d < 12 && _jackpotCounter() != JACKPOT_LEVEL_CAP - 1;
+            d < 12 && _jackpotCounter() != PENULTIMATE_DAY_COUNTER;
             d++
         ) {
             _buyTickets();
@@ -468,7 +469,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         // Cross without fulfilling: the promotion resolves the stalled request.
         _runPromotedCrossingDay();
 
-        // Run the building level's phase out however it resolves (compressed or not).
+        // Run the building level's phase out on its selected one- or three-day schedule.
         for (uint256 d = 0; d < 15 && !(_level() >= building && !game.jackpotPhase()); d++) {
             _buyTickets();
             _runFullDay();
@@ -738,6 +739,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         L = _level();
         (, , , , priceWei) = game.purchaseInfo();
 
+        bool requested;
         for (uint256 d = 0; d < 12 && game.jackpotPhase(); d++) {
             uint8 counter = _jackpotCounter();
             bool middayDay = counter == middayAtCounter;
@@ -745,6 +747,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
                 _buyTickets();
             }
             if (middayDay) {
+                requested = true;
                 swapped = _middayRequest();
                 if (mode == MODE_DRAIN_SAME_DAY) {
                     _drainMidday();
@@ -759,6 +762,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             }
             _runFullDay();
         }
+        require(middayAtCounter == MIDDAY_NEVER || requested, "harness: mid-day request must run");
         require(!game.jackpotPhase(), "harness: the phase must have transitioned");
         // Settle the transition tail.
         _runFullDay();
@@ -879,9 +883,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             if (!ok) {
                 simTime += 1 days + 1;
                 vm.warp(simTime);
-                // Cross the target only after 4+ purchase days so the phase latches
-                // UNCOMPRESSED (day - psd <= 3 would set compressedJackpotFlag = 1)
-                // and the jackpot runs its full multi-day span.
+                // Cross the target after 4+ purchase days: even slow targets must
+                // select the three-day schedule (counter 0 -> 1 -> 2 -> 3).
                 unchecked {
                     ++stalledDays;
                 }

@@ -21,8 +21,9 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
   interfaces; set operator approvals and the salvage-purchase reserve policy.
 - Grant comps and set delegate limits. Create custom battles, authorize creators, choose
   the vault's default craps board or disable future automatic seating, and amend its open slips.
-- Distribute WWXRP from its vault allowance and AFKing seats within the token's tranche/lock
-  rules; manage eligible vault seats and recover foreign tokens/NFTs. The foreign-token
+- Mint unlimited WWXRP for free to any nonzero recipient; register or revoke trusted
+  WWXRP minters/burners. Distribute AFKing seats within the token's tranche/lock rules;
+  manage eligible vault seats and recover foreign tokens/NFTs. The foreign-token
   sweep excludes stETH backing. Share redemption still burns the relevant shares.
 - The owner wallet is always bounty-eligible in the Game (`_bountyEligible`), regardless of
   activity or time of day.

@@ -77,20 +77,20 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return uint8(_sload(game, bytes32(base)) >> (offset * 8));
     }
 
-    /// @notice Exact FLIP principal, scaled weight, entry count and award mask for a draw.
+    /// @notice Exact paid ETH, scaled weight, entry count and award mask for a draw.
     function protocolBoonPool(address game, address issuer, uint24 day)
         public view returns (ProtocolBoonPool memory pool)
     {
         uint256 base;
         assembly { base := protocolBoonPools.slot }
         uint256 word = _sload(game, _mapSlot(uint256(day), uint256(_mapSlot(issuer, base))));
-        pool.totalDonatedWei = uint112(word);
+        pool.totalWageredWei = uint112(word);
         pool.totalWeight = uint64(word >> 112);
         pool.entryCount = uint32(word >> 176);
         pool.awardedMask = uint8(word >> 208);
     }
 
-    /// @notice Immutable donor, cumulative weight, 100-FLIP amount units and score snapshot.
+    /// @notice Immutable player, cumulative weight and activity score snapshot.
     /// @dev An absent index returns zero fields, matching a mapping read.
     function protocolBoonEntryAt(address game, address issuer, uint24 day, uint32 index)
         public view returns (ProtocolBoonEntry memory entry)
@@ -99,27 +99,29 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         assembly { base := protocolBoonEntries.slot }
         bytes32 daySlot = _mapSlot(uint256(day), uint256(_mapSlot(issuer, base)));
         uint256 word = _sload(game, _mapSlot(uint256(index), uint256(daySlot)));
-        entry.donor = address(uint160(word));
+        entry.player = address(uint160(word));
         entry.cumulativeWeight = uint64(word >> 160);
-        entry.amountUnits = uint8(word >> 224);
-        entry.scoreSnapshot = uint16(word >> 232);
+        entry.scoreSnapshot = uint16(word >> 224);
     }
 
-    /// @notice Preview a donor's 100-FLIP weight units and current score multiplier.
-    /// @dev Full `amount` funds coinflip; scaled weight keeps the common factor of 800.
-    function protocolBoonQuote(address game, address donor, uint256 amount)
-        external view returns (uint8 amountUnits, uint16 score, uint16 multiplierUnits, uint64 weight)
+    /// @notice Preview paid ETH weight using the player's canonical pre-bet activity score.
+    /// @dev Uses the hero ledger's 0.0001-ETH units; the common multiplier scale is 800.
+    ///      This quotes a valid stake, not eligibility or remaining pool capacity.
+    function protocolBoonQuote(address game, address player, uint256 amount)
+        external view returns (uint256 wagerUnits, uint16 score, uint16 multiplierUnits, uint64 weight)
     {
-        if (amount < 100 ether || amount > 25_000 ether) revert E();
-        amountUnits = uint8(amount / 100 ether);
-        uint256 rawScore = IDegenerusGameLensSource(game).playerActivityScore(donor);
+        if (amount < 0.005 ether) revert E();
+        wagerUnits = amount / 1e14;
+        uint256 rawScore = IDegenerusGameLensSource(game).playerActivityScore(player);
         if (rawScore > type(uint16).max) revert E();
         score = uint16(rawScore);
         multiplierUnits = uint16(ActivityCurveLib.boonDrawMultUnits(rawScore));
-        weight = uint64(uint256(amountUnits) * multiplierUnits);
+        // Bound units before multiplication so even an arbitrary uint256 quote cannot wrap.
+        if (wagerUnits > type(uint64).max / uint256(multiplierUnits)) revert E();
+        weight = uint64(wagerUnits * multiplierUnits);
     }
 
-    /// @notice Locate all three winning intervals without an on-chain donor sweep.
+    /// @notice Locate all three winning intervals without an on-chain participant sweep.
     /// @dev Historical outcomes stay inspectable after automatic next-day issuance.
     function findProtocolBoonWinners(address game, address issuer, uint24 day)
         external view returns (bool ready, address[3] memory winners, uint32[3] memory indices, uint64[3] memory rolls)
@@ -143,13 +145,11 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             }
             indices[slot] = lo;
             rolls[slot] = roll;
-            winners[slot] = protocolBoonEntryAt(game, issuer, day, lo).donor;
+            winners[slot] = protocolBoonEntryAt(game, issuer, day, lo).player;
         }
         ready = true;
     }
 
-    /// @dev Mirrors DegenerusGameMintStreakUtils.JACKPOT_LEVEL_CAP (private there).
-    uint8 private constant LENS_JACKPOT_LEVEL_CAP = 5;
 
     /*+======================================================================+
       |                          RETURN STRUCTS                              |
@@ -332,7 +332,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         bool phaseTransition;
         bool rngLocked;
         uint8 cnt;
-        uint8 comp;
+        uint8 flags;
         {
             uint256 o;
             assembly {
@@ -356,18 +356,13 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             }
             cnt = uint8(w >> (o << 3));
             assembly {
-                o := compressedJackpotFlag.offset
+                o := jackpotFlags.offset
             }
-            comp = uint8(w >> (o << 3));
+            flags = uint8(w >> (o << 3));
         }
         if (!jackpotPhase) return lvl + 1;
         if (phaseTransition) return lvl + 1;
-        if (rngLocked) {
-            uint8 step = comp == 2
-                ? LENS_JACKPOT_LEVEL_CAP
-                : (comp == 1 && cnt > 0 && cnt < LENS_JACKPOT_LEVEL_CAP - 1 ? 2 : 1);
-            if (cnt + step >= LENS_JACKPOT_LEVEL_CAP) return lvl + 1;
-        }
+        if (rngLocked && _isFinalJackpotDay(cnt, flags)) return lvl + 1;
         return lvl;
     }
 

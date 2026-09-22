@@ -36,8 +36,6 @@ interface IDegenerusGamePlayer {
     function advanceGame() external;
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
     function mineFlip() external;
-    /// @notice Enter the caller's protocol boon draw for the actual donating player.
-    function enterProtocolBoonDraw(address donor, uint256 amount) external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
     /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes
     ///      (player == address(this) == msg.sender) so the GAME's self-consent path passes
@@ -436,13 +434,6 @@ contract sDGNRS {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
         _;
     }
-    /// @notice Donate 100..25,000 FLIP to this contract's next-day coinflip stake,
-    ///         entering its three next-day boon draws with score-adjusted weight.
-    /// @dev The actual caller is the payer and entrant; only weight truncates to 100 FLIP.
-    function donateFlipForBoons(uint256 amount) external {
-        game.enterProtocolBoonDraw(msg.sender, amount);
-    }
-
     // =====================================================================
     //                          CONSTRUCTOR
     // =====================================================================

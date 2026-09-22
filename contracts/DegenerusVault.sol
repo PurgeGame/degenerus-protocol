@@ -33,8 +33,6 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 interface IDegenerusGamePlayerActions {
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
     function mineFlip() external;
-    /// @notice Enter the caller's protocol boon draw for the actual donating player.
-    function enterProtocolBoonDraw(address donor, uint256 amount) external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
     /// @dev The afking subscription surface is GAME-resident. The vault self-subscribes
     ///      (player == address(this) == msg.sender) so the GAME's self-consent path passes
@@ -155,7 +153,7 @@ interface IsDGNRSBurn {
 
 /// @notice Interface for WWXRP vault-minting used by DegenerusVault.
 interface IWWXRPMint {
-    /// @notice Mint WWXRP to a recipient from vault's uncirculating reserve.
+    /// @notice Mint any amount of WWXRP to a recipient without payment or a reserve limit.
     function vaultMintTo(address to, uint256 amount) external;
 }
 
@@ -579,13 +577,6 @@ contract DegenerusVault {
     // CONSTRUCTOR
     // ---------------------------------------------------------------------
 
-    /// @notice Donate 100..25,000 FLIP to this contract's next-day coinflip stake,
-    ///         entering its three next-day boon draws with score-adjusted weight.
-    /// @dev The actual caller is the payer and entrant; only weight truncates to 100 FLIP.
-    function donateFlipForBoons(uint256 amount) external {
-        gamePlayer.enterProtocolBoonDraw(msg.sender, amount);
-    }
-
     /// @notice Deploy the vault and create all share class tokens
     /// @dev Deploys DGVF and DGVE tokens. Creator receives initial 1T supply of each.
     constructor() {
@@ -909,7 +900,7 @@ contract DegenerusVault {
         coinflipPlayer.setCoinflipAutoRebuyTakeProfit(address(this), takeProfit);
     }
 
-    /// @notice Mint WWXRP from the vault's uncirculating reserve to a recipient
+    /// @notice Mint any amount of WWXRP for free to a recipient
     /// @param to Recipient address
     /// @param amount Amount of WWXRP to mint
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE

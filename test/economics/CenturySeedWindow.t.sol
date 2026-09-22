@@ -22,8 +22,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///           auto-rebuy by level 100, so a replace would destroy a stake already rolled forward.
 ///         - SEED-05 a later century re-opens it.
 ///         - SEED-06 catch-up: arriving a century late claims the SKIPPED one first.
-///         - SEED-07 the vault's WWXRP reserve doubles per century and lands in the
-///           uncirculated allowance, never a balance.
+///         - SEED-07 century arming never mints WWXRP; its owner mint is uncapped.
 ///         - SEED-08 only GAME may call it.
 contract CenturySeedWindow is DeployProtocol {
     uint256 internal constant SEED_FLIP_DAILY = 200_000 ether;
@@ -58,23 +57,23 @@ contract CenturySeedWindow is DeployProtocol {
 
     function testBelowFirstCenturyIsASilentNoOp() public {
         uint256 v = _stakeAtOffset(ContractAddresses.VAULT, 0);
-        uint256 w = wwxrp.vaultAllowance();
+        uint256 w = wwxrp.totalSupply();
         _arm(99);
         assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), v, "no stake written below level 100");
-        assertEq(wwxrp.vaultAllowance(), w, "no WWXRP paid below level 100");
+        assertEq(wwxrp.totalSupply(), w, "no WWXRP paid below level 100");
     }
 
     function testOneArmPerCentury() public {
         _arm(100);
         uint256 v = _stakeAtOffset(ContractAddresses.VAULT, 0);
-        uint256 w = wwxrp.vaultAllowance();
+        uint256 w = wwxrp.totalSupply();
 
         // Every later phase-end inside the same century calls this again; all must be no-ops.
         _arm(100);
         _arm(150);
         _arm(199);
         assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), v, "century 1 armed exactly once");
-        assertEq(wwxrp.vaultAllowance(), w, "century 1 paid WWXRP exactly once");
+        assertEq(wwxrp.totalSupply(), w, "century arming never mints WWXRP");
     }
 
     function testNextCenturyReopens() public {
@@ -97,30 +96,15 @@ contract CenturySeedWindow is DeployProtocol {
     // SEED-06 — catch-up across a skipped century
     // ------------------------------------------------------------------
 
-    /// @dev Arriving a century late must claim the SKIPPED century first, not jump to the
-    ///      current one — a jump would forfeit century 1's window and its 2B WWXRP leg.
+    /// @dev Catch-up grants each missed FLIP window once, starting with century one.
     function testLateArmClaimsTheSkippedCenturyFirst() public {
-        uint256 deployAllowance = wwxrp.INITIAL_VAULT_ALLOWANCE();
-        uint256 before = wwxrp.vaultAllowance();
-
+        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
         _arm(250);
-        assertEq(
-            wwxrp.vaultAllowance() - before,
-            2 * deployAllowance,
-            "claims century 1 and pays century 1's figure, not century 2's"
-        );
-
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + SEED_FLIP_DAILY);
         _arm(250);
-        assertEq(
-            wwxrp.vaultAllowance() - before,
-            6 * deployAllowance,
-            "the next call picks up century 2 (2B + 4B cumulative)"
-        );
-
-        // Century 3 is not due at level 250: silent, and nothing moves.
-        uint256 held = wwxrp.vaultAllowance();
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + 2 * SEED_FLIP_DAILY);
         _arm(250);
-        assertEq(wwxrp.vaultAllowance(), held, "century 3 is not due at level 250");
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + 2 * SEED_FLIP_DAILY);
     }
 
     // ------------------------------------------------------------------
@@ -181,45 +165,16 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     // ------------------------------------------------------------------
-    // SEED-07 — the vault WWXRP reserve
+    // SEED-07 — owner minting replaces automatic WWXRP allocations
     // ------------------------------------------------------------------
 
-    /// @dev The doubling is stated against WWXRP's deploy allowance, which Coinflip mirrors as
-    ///      a local constant. Pin the equality so the two cannot drift apart silently.
-    function testWwxrpSeedConstantMatchesDeployAllowance() public view {
-        assertEq(
-            wwxrp.INITIAL_VAULT_ALLOWANCE(),
-            1_000_000_000 ether,
-            "Coinflip's mirrored WWXRP_VAULT_SEED must equal WWXRP.INITIAL_VAULT_ALLOWANCE"
-        );
-    }
-
-    function testVaultWwxrpDoublesEachCentury() public {
-        uint256 deployAllowance = wwxrp.INITIAL_VAULT_ALLOWANCE();
-        assertEq(wwxrp.vaultAllowance(), deployAllowance, "starts at the deploy reserve");
-
+    function testCenturiesDoNotMintWwxrp() public {
+        uint256 supply = wwxrp.totalSupply();
+        uint256 balance = wwxrp.balanceOf(ContractAddresses.VAULT);
         _arm(100);
-        assertEq(
-            wwxrp.vaultAllowance() - deployAllowance,
-            2 * deployAllowance,
-            "century 1 pays double the deploy reserve"
-        );
-
-        uint256 afterFirst = wwxrp.vaultAllowance();
         _arm(200);
-        assertEq(wwxrp.vaultAllowance() - afterFirst, 4 * deployAllowance, "century 2 pays double again");
-    }
-
-    /// @dev It lands in the uncirculated allowance, not a balance: WWXRP._mint intercepts
-    ///      VAULT-destined mints. A balance credit would put it straight into circulation.
-    function testVaultWwxrpLandsInAllowanceNotBalance() public {
-        uint256 balBefore = wwxrp.balanceOf(ContractAddresses.VAULT);
-        uint256 supplyBefore = wwxrp.totalSupply();
-
-        _arm(100);
-
-        assertEq(wwxrp.balanceOf(ContractAddresses.VAULT), balBefore, "no balance credited");
-        assertEq(wwxrp.totalSupply(), supplyBefore, "totalSupply untouched: allowance is uncirculated");
+        assertEq(wwxrp.totalSupply(), supply);
+        assertEq(wwxrp.balanceOf(ContractAddresses.VAULT), balance);
     }
 
     // ------------------------------------------------------------------
@@ -246,34 +201,15 @@ contract CenturySeedWindow is DeployProtocol {
     // the game cannot leave the jackpot phase. These pin the two arithmetic sites that could
     // ever throw, plus the whole schedule end to end.
 
-    /// @dev The load-bearing guard. `vaultAllowance += amount` is a CHECKED add, and the
-    ///      century payment doubles, so the cap is what bounds it: 60 doublings terminate at
-    ///      1e27 * (2^61 - 1) ~= 2.3e45, about 32 orders of magnitude below uint256. Without
-    ///      the cap the cumulative add overflows at century 166 — level 16,600, which `level`
-    ///      (uint24, max 16,777,215) can reach. Walking every century to the cap and past it
-    ///      proves the arm never throws and the payment stops exactly where it should.
-    function testEveryCenturyToTheCapAndBeyondNeverReverts() public {
-        uint256 deployAllowance = wwxrp.INITIAL_VAULT_ALLOWANCE();
-        uint256 expected = deployAllowance;
-
-        // 70 > WWXRP_MAX_DOUBLINGS (60), so this walks the paying range AND the silent tail.
+    /// @dev Repeated century arming remains bounded and only seeds FLIP.
+    function testRepeatedCenturiesNeverRevertOrMintWwxrp() public {
+        uint256 supply = wwxrp.totalSupply();
+        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
         for (uint24 century = 1; century <= 70; ++century) {
             _arm(century * 100);
-            if (century <= 60) expected += deployAllowance << uint256(century);
-            assertEq(
-                wwxrp.vaultAllowance(),
-                expected,
-                "every century pays its own doubling, and nothing past the cap"
-            );
+            assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + century * SEED_FLIP_DAILY);
+            assertEq(wwxrp.totalSupply(), supply);
         }
-
-        assertEq(
-            wwxrp.vaultAllowance(),
-            deployAllowance * ((uint256(1) << 61) - 1),
-            "terminal reserve is the closed form 1e27 * (2^61 - 1)"
-        );
-        // The tail still arms its FLIP window; only the WWXRP leg stops.
-        assertGt(_stakeAtOffset(ContractAddresses.VAULT, 0), 0, "post-cap centuries still seed FLIP");
     }
 
     /// @dev The other arithmetic site. Stakes ADD into a 128-bit lane, so a long-lived lane
@@ -313,12 +249,9 @@ contract CenturySeedWindow is DeployProtocol {
         // The highest century any reachable level can claim.
         uint24 maxCentury = maxLevel / 100;
         assertLt(maxCentury, type(uint24).max, "the counter's ceiling is unreachable by construction");
-        // Arming at the maximum level claims century 1 (the lowest unarmed), never jumps.
+        // Even the maximum level claims exactly one FLIP window per call.
+        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
         _arm(maxLevel);
-        assertEq(
-            wwxrp.vaultAllowance(),
-            wwxrp.INITIAL_VAULT_ALLOWANCE() * 3,
-            "even the maximum level claims exactly one century per call"
-        );
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + SEED_FLIP_DAILY);
     }
 }

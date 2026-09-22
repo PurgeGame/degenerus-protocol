@@ -43,7 +43,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         uint24 day = _simulatedDayIndex();
 
         _seedJackpotDay(lvl, day);
-        jackpotCounter = 4; // + counterStep 1 == JACKPOT_LEVEL_CAP -> _endPhase fires
+        jackpotCounter = 2; // the third draw ends the standard phase
         phaseTransitionActive = false;
         subsFullyProcessed = true;
         _afkingResetDay = day;
@@ -51,7 +51,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         rngWordByDay[day] = word;
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
-        // _packDailyTicketBudgets(counterStep=1, dailyEntries=4000, carryoverEntries=4000, offset=0).
+        // _packDailyTicketBudgets(dailyEntries=4000, carryoverEntries=4000, offset=0).
         // 4000 entries = 1000 whole tickets, so both ticket legs saturate the 96-winner cap.
         dailyTicketBudgetsPacked =
             uint256(1) |
@@ -128,7 +128,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         dailyIdx = day - 1;
         jackpotPhaseFlag = true;
         lastPurchaseDay = false;
-        compressedJackpotFlag = 0;
+        jackpotFlags = 0;
         ticketsFullyProcessed = true;
         prizePoolFrozen = true;
         rngLockedFlag = true;
@@ -190,7 +190,7 @@ abstract contract BoundaryGasFixture is DeployProtocol {
     function _restore(bytes memory realCode) internal {
         vm.etch(address(game), realCode);
         vm.deal(address(game), 1000 ether);
-        wwxrpBefore = wwxrp.vaultAllowance();
+        wwxrpBefore = wwxrp.totalSupply();
     }
 
     function _measure()
@@ -292,19 +292,15 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
 
         emit log_named_uint("LVL100_TRANSITION_DONE_ADVANCE_GAS", used);
         emit log_named_uint(
-            "wwxrp_vault_allowance_delta",
-            wwxrp.vaultAllowance() - wwxrpBefore
+            "wwxrp_supply_delta",
+            wwxrp.totalSupply() - wwxrpBefore
         );
 
         // Non-vacuity: the purchase phase reopened AND the century window armed, in this one tx.
         (, bool jackpotPhase_, , , ) = game.purchaseInfo();
         assertFalse(jackpotPhase_, "the transition completed and the purchase phase reopened");
         assertTrue(seedArmed, "the century seed window armed on the transition close");
-        assertGt(
-            wwxrp.vaultAllowance(),
-            wwxrpBefore,
-            "the century arm raised the vault's uncirculated WWXRP reserve"
-        );
+        assertEq(wwxrp.totalSupply(), wwxrpBefore, "century arming no longer mints WWXRP");
 
         assertLt(used, EIP7825_TX_GAS_CAP, "the transition-close tx clears EIP-7825");
     }

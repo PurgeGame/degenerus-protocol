@@ -12,9 +12,8 @@ import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} fr
 /// @dev The golden-ticket harness plus a read of the packed daily ticket budgets Phase 1 leaves
 ///      for Phase 2.
 contract DayShapeHarness is GoldenTicketHarness {
-    function ticketBudgets() external view returns (uint8 step, uint256 dailyEntries, uint256 carryoverEntries, uint8 offset) {
+    function ticketBudgets() external view returns (uint256 dailyEntries, uint256 carryoverEntries, uint8 offset) {
         uint256 p = dailyTicketBudgetsPacked;
-        step = uint8(p);
         dailyEntries = uint64(p >> 8);
         carryoverEntries = uint64(p >> 72);
         offset = uint8(p >> 136);
@@ -27,11 +26,11 @@ contract DayShapeHarness is GoldenTicketHarness {
     function earlyBirdPending() external view returns (bool) { return _earlyBirdLegPending(); }
     function earlyBirdEntries() external view returns (uint256) { return uint64(dailyTicketBudgetsPacked >> 144); }
     function coinTicketsPending() external view returns (bool) { return dailyJackpotCoinTicketsPending; }
-    function setCompressedFlag(uint8 v) external { compressedJackpotFlag = v; }
+    function setJackpotFlags(uint8 v) external { jackpotFlags = v; }
 }
 
 /// @title DailyJackpotDayShapes -- the early-bird day and the final physical day move the pools as documented
-/// @notice A jackpot phase runs five daily draws. Day one (counter 0) is the EARLY-BIRD day: a
+/// @notice A jackpot phase runs one or three physical daily draws. Day one (counter 0) is the EARLY-BIRD day: a
 ///         3% slice of the future pool is priced as a bonus-board ticket jackpot and moved to
 ///         next by the ETH stage, which latches the entries for the early-bird stage that runs
 ///         them on the next advance (payEarlyBirdTickets) ahead of the coin+tickets stage; the
@@ -58,6 +57,7 @@ contract DailyJackpotDayShapes is Test {
         vm.etch(ContractAddresses.JACKPOTS, address(sink).code);
         h.setLevel(LVL);
         h.setDailyIdx(10);
+        h.setJackpotFlags(0);
         h.setCurrentPool(CUR_POOL);
         h.setPools(NEXT_POOL, FUT_POOL);
     }
@@ -105,11 +105,10 @@ contract DailyJackpotDayShapes is Test {
         h.payDailyJackpot(true, LVL, word);
         uint256 passEth = _whalePassEth(vm.getRecordedLogs());
         (uint128 next1, uint128 fut1) = h.poolsView();
-        (uint8 step, uint256 dailyEntries, uint256 carryoverEntries, uint8 offset) = h.ticketBudgets();
+        (uint256 dailyEntries, uint256 carryoverEntries, uint8 offset) = h.ticketBudgets();
 
         uint256 earlyBird = (uint256(fut0) * 300) / 10_000;
         assertEq(uint256(fut0) + passEth - uint256(fut1), earlyBird, "the early-bird day takes exactly 3% of the future pool, and no carryover reserve");
-        assertEq(step, 1, "an uncompressed phase steps one day");
         assertEq(carryoverEntries, 0, "no carryover is priced on the early-bird day");
         assertEq(offset, 0, "and no carryover source is drawn");
         assertGt(dailyEntries, 0, "the day's own ticket budget was priced");
@@ -132,8 +131,7 @@ contract DailyJackpotDayShapes is Test {
         uint256 ticketWins = _ticketWins(vm.getRecordedLogs(), LVL + 1);
         assertGt(ticketWins, 0, "the early-bird stage drew ticket winners at the next level");
         assertFalse(h.earlyBirdPending(), "the early-bird stage cleared its latch");
-        (uint8 step2, uint256 daily2, uint256 carry2, uint8 offset2) = h.ticketBudgets();
-        assertEq(step2, step, "the counter step survives the early-bird stage");
+        (uint256 daily2, uint256 carry2, uint8 offset2) = h.ticketBudgets();
         assertEq(daily2, dailyEntries, "the day's own ticket budget survives for the coin+tickets stage");
         assertEq(carry2, 0);
         assertEq(offset2, 0);
@@ -144,13 +142,13 @@ contract DailyJackpotDayShapes is Test {
         assertEq(h.counter(), 0, "the counter waits for the day's seal");
     }
 
-    /// @dev Turbo (flag 2, counter 0) collapses all five logical days into the one physical day-1
-    ///      daily: the ETH stage is also the final physical day and steps the counter by the cap.
+    /// @dev Turbo (flag bit 0, counter 0) has one draw: its ETH stage pays the final
+    ///      physical day, and completion increments the counter once.
     ///      The early-bird leg still runs exactly once from its own stage, before the coin+tickets
     ///      stage that then reaches the cap and ends the level.
     function test_turboDayOneRunsTheEarlyBirdLegOnceFromItsOwnStageBeforeTheCounterReachesTheCap() public {
         h.setJackpotCounter(0);
-        h.setCompressedFlag(2);
+        h.setJackpotFlags(1);
         h.setJackpotPhase(true);
         h.setLocked(true);
         uint256 word = _board(0x7B0);
@@ -160,8 +158,7 @@ contract DailyJackpotDayShapes is Test {
         Vm.Log[] memory logs1 = vm.getRecordedLogs();
         assertEq(_ticketWins(logs1, LVL + 1), 0, "the ETH stage drew no early-bird winner");
         assertEq(h.currentPoolView(), 0, "turbo day 1 is the final physical day: the whole current pool is spent");
-        (uint8 step, , uint256 carryoverEntries,) = h.ticketBudgets();
-        assertEq(step, 5, "turbo steps the counter by the cap");
+        (, uint256 carryoverEntries,) = h.ticketBudgets();
         assertEq(carryoverEntries, 0, "no carryover on the early-bird day, turbo or not");
         assertTrue(h.earlyBirdPending());
         uint256 earlyBird = (uint256(fut0) * 300) / 10_000;
@@ -176,7 +173,7 @@ contract DailyJackpotDayShapes is Test {
 
         bool pending = h.payDailyJackpotCoinAndTickets(word);
         assertFalse(pending, "no carryover leg follows");
-        assertEq(h.counter(), 5, "the coin+tickets stage steps to the cap; the advance then ends the level");
+        assertEq(h.counter(), 1, "the coin+tickets stage completes the single turbo day");
         assertFalse(h.earlyBirdPending());
         assertFalse(h.carryoverPending());
         assertFalse(h.coinTicketsPending());
@@ -192,14 +189,13 @@ contract DailyJackpotDayShapes is Test {
     }
 
     function test_finalPhysicalDayPaysTheWholeCurrentPoolAndPricesCarryoverAtTheNextLevel() public {
-        h.setJackpotCounter(4); // 4 + 1 reaches the cap of five
+        h.setJackpotCounter(2); // third physical day is final
         uint256 word = _board(0xF1A1);
         (uint128 next0, uint128 fut0) = h.poolsView();
         h.payDailyJackpot(true, LVL, word);
         (uint128 next1, uint128 fut1) = h.poolsView();
-        (uint8 step, , uint256 carryoverEntries, uint8 offset) = h.ticketBudgets();
+        (, uint256 carryoverEntries, uint8 offset) = h.ticketBudgets();
 
-        assertEq(step, 1, "an uncompressed phase steps one day");
         assertEq(h.currentPoolView(), 0, "the final physical day spends the whole current pool");
         uint256 reserveSlice = uint256(fut0) / 200;
         assertEq(uint256(next1) - uint256(next0), CUR_POOL / 5 + reserveSlice, "next gains a fifth of the pool as tickets plus the carryover reserve");
@@ -213,7 +209,7 @@ contract DailyJackpotDayShapes is Test {
     ///      counter must not have advanced yet, or the routing predicate would read the next
     ///      daily as final and send buys to the next level for one advance.
     function test_carryoverDayAdvancesTheCounterOnlyAtItsSeal() public {
-        h.setJackpotCounter(3);
+        h.setJackpotCounter(1);
         h.setJackpotPhase(true);
         h.setLocked(true);
         uint256 word = _board(0x0DD1);
@@ -222,11 +218,11 @@ contract DailyJackpotDayShapes is Test {
         bool pending = h.payDailyJackpotCoinAndTickets(word);
         assertTrue(pending, "an ordinary day priced a carryover");
         assertTrue(h.carryoverPending());
-        assertEq(h.counter(), 3, "the counter waits for the seal");
+        assertEq(h.counter(), 1, "the counter waits for the seal");
         assertEq(h.routedLevel(), LVL, "buys still route to this level under the held lock");
         h.payCarryoverTickets(word);
         assertFalse(h.carryoverPending());
-        assertEq(h.counter(), 4, "the carryover stage advanced it with the seal");
+        assertEq(h.counter(), 2, "the carryover stage advanced it with the seal");
         h.setLocked(false);
         assertEq(h.routedLevel(), LVL);
         h.setLocked(true);
@@ -234,14 +230,14 @@ contract DailyJackpotDayShapes is Test {
     }
 
     function test_ordinaryDayIsNeitherShape() public {
-        h.setJackpotCounter(2);
+        h.setJackpotCounter(1);
         uint256 word = _board(0x0DD1);
         (, uint128 fut0) = h.poolsView();
         vm.recordLogs();
         h.payDailyJackpot(true, LVL, word);
         uint256 passEth = _whalePassEth(vm.getRecordedLogs());
         (, uint128 fut1) = h.poolsView();
-        (, , uint256 carryoverEntries,) = h.ticketBudgets();
+        (, uint256 carryoverEntries,) = h.ticketBudgets();
         assertGt(h.currentPoolView(), 0, "an ordinary day leaves current pool behind");
         assertEq(uint256(fut0) + passEth - uint256(fut1), uint256(fut0) / 200, "an ordinary day moves only the carryover reserve out of future");
         assertEq(carryoverEntries, ((uint256(fut0) / 200) << 2) / PriceLookupLib.priceForLevel(LVL), "and prices it at this level");

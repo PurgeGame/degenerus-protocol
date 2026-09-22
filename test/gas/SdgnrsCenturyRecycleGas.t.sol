@@ -65,7 +65,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
         (, bool inJackpot,,,) = game.purchaseInfo();
         assertFalse(inJackpot, "next purchase phase opened");
         assertFalse(game.rngLocked());
-        assertGt(wwxrp.vaultAllowance(), wwxrpBefore);
+        assertEq(wwxrp.totalSupply(), wwxrpBefore);
 
         vm.prank(address(game));
         sdgnrs.recycleCentury(100, RNG_WORD + 1);

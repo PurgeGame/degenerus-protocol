@@ -255,9 +255,5 @@ OFF-CRANK	IDegenerusDeityPassOwner.ownerOf	smite	modules/GameAfkingModule.sol	BA
 OFF-CRANK	IDegenerusCoin.burnCoin	smite	modules/GameAfkingModule.sol	BARE		Player smite entry (facade stub); coin burn
 CRANK-SELF	delegatecall:IDegenerusGameFoilPackModule.drainRounds	_drainRounds	modules/DegenerusGameMintModule.sol	BARE		Delegatecall into own FOILPACK module drainRounds on processTicketBatch / processFutureTicketBatch (advance ticket stage seated rounds); bubbles the revert
 OFF-CRANK	lowlevel:delegatecall	initProtocolDeity	DegenerusGame.sol	BARE		Post-deployment batch registration and perpetual-ticket seeding for both protocol deities; creator only
-OFF-CRANK	lowlevel:delegatecall	enterProtocolBoonDraw	DegenerusGame.sol	BARE		VAULT/SDGNRS donation relay; the Boon module authenticates the wrapper
-OFF-CRANK	IDegenerusGame.playerActivityScore	enterProtocolBoonDraw	modules/DegenerusGameBoonModule.sol	BARE		Donation-only canonical score snapshot; self staticcall
-OFF-CRANK	IDegenerusCoin.burnCoin	enterProtocolBoonDraw	modules/DegenerusGameBoonModule.sol	BARE		Donation-only authorized payer debit; atomic with issuer stake
-OFF-CRANK	ICoinflip.creditFlip	enterProtocolBoonDraw	modules/DegenerusGameBoonModule.sol	BARE		Donation-only exact principal credited to issuer's next-day coinflip
 CRANK-SELF	delegatecall:IDegenerusGameBoonModule.resolveProtocolBoonDraws	rngGate	modules/DegenerusGameAdvanceModule.sol	BARE	test/gas/ProtocolBoonAdvanceGas.t.sol;test/fuzz/ProtocolBoonDraw.t.sol	Daily RNG settlement; six <=32-read searches, collisions retain/upgrade, empty/resolved/expired work skips
 CRANK-PINNED	IDegenerusAffiliate.affiliateTop	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	BARE	test/fuzz/TerminalAffiliatePayout.t.sol	One view read of the terminal level leaderboard at the cohort latch, before any terminal word; pinned AFFILIATE reads stored address/score and cannot invoke recipient code

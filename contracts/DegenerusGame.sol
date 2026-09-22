@@ -230,15 +230,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Enter the calling protocol owner's next-day boon draw for its donor.
-    /// @dev VAULT/SDGNRS-only, enforced in the module. Wrappers supply their actual caller.
-    function enterProtocolBoonDraw(address, uint256) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-
-
     /*+======================================================================+
       |                           MODIFIERS                                  |
       +======================================================================+*/
@@ -257,9 +248,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • Purchase mode (false): new tickets target level+1; jackpots use the future-pool drip formula.  |
       |    When nextPrizePool exceeds the prior level's target, the transition latch is set.              |
       |  • On fresh randomness the level advances: staged tickets activate, pools consolidate, the level  |
-      |    quest rolls, and up to 5 logical daily draws begin (compressible via compressedJackpotFlag).   |
+      |    quest rolls, and jackpot draws begin on a 1-day or 3-day schedule.                              |
       |  • Jackpot mode (true): draws pay out; purchases target the current level, and the final draw     |
-      |    routes new purchases to the next level. After the 5th draw, housekeeping clears the payout     |
+      |    routes new purchases to the next level. After the final draw, housekeeping clears the payout   |
       |    mode and resets the level-start day.                                                           |
       |                                                                                                   |
       |  Keeper-bounty tiers (reward only, never an advance gate): minted today/yesterday, deity pass,    |
@@ -1351,7 +1342,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    /// @notice Game-over terminal jackpot: Day-5-style bucket distribution to the final ticket cohort.
+    /// @notice Game-over terminal jackpot: Final-day bucket distribution to the final ticket cohort.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
     ///      Updates claimablePool internally — callers must NOT double-count.
     ///      Signature: runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord) —
@@ -1952,7 +1943,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  lives in the ContractAddresses.GAME_JACKPOT_MODULE (via delegatecall).                       |
       |                                                                                               |
       |  Jackpot Types:                                                                               |
-      |  • Daily jackpot - Paid each day to the level's trait-entry holders (day 5 = full pool)       |
+      |  • Daily jackpot - Paid each day to the level's trait-entry holders (final day = full pool)       |
       |  • BAF (Big Ass Flip) - At every x10 level, and only if that day's flip won: 10% of the       |
       |    future pool, raised to 20% at level 50 and at every x00. A losing flip marks the           |
       |    bracket skipped and leaves the pool in place; at x00 a share of the FLIP that day's         |
@@ -2474,13 +2465,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return decWindowOpen;
     }
 
-    /// @notice Jackpot compression tier: 0=normal, 1=compressed (3d), 2=turbo (1d). A turbo's
-    ///         2 lingers through the next level's first purchase-day settlement, where it is
-    ///         consumed as the coinflip bonus-day latch. 3 = that settlement day armed the
-    ///         next turbo before settling (back-to-back chain): armed + bonus owed, dropping
-    ///         back to 2 at the settlement.
-    function jackpotCompressionTier() external view returns (uint8) {
-        return compressedJackpotFlag;
+    /// @notice Selected jackpot duration: one day for turbo, otherwise three days.
+    function jackpotDuration() external view returns (uint8) {
+        return _jackpotDays();
     }
 
     /// @notice Returns true when jackpot phase is active.
@@ -2535,26 +2522,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         "this level's draws have ended" signal, read the same way by
     ///         _activeTicketLevel.
     ///
-    ///         compressedJackpotFlag < 2 — a turbo phase (2, or 3 before its predecessor's
-    ///         bonus is paid down to 2) takes all five logical days in one physical day,
-    ///         so its market would open and shut inside a single advance cycle: minutes,
-    ///         not days. A window that short is not a market — nobody outside the mempool
-    ///         could act on it — so a turbo level simply has none. The threshold matches
-    ///         _endPhase's own turbo test. Compressed (1) keeps three physical days and
-    ///         stays open.
+    ///         A turbo phase pays its entire jackpot in one advance cycle, so it has
+    ///         no betting window. Standard three-day phases keep a real open market.
     ///
     ///         Game over has no leg of its own: GameOver latches `gameOver = true` without
     ///         touching `jackpotPhaseFlag` or `phaseTransitionActive`, so a deadman-triggered
     ///         game over inside a jackpot phase leaves the phase flags exactly as they stood —
     ///         `bettingOpen` can still read true, and the market can keep taking bets on a
     ///         round that will never settle.
-    /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
-    ///         phase runs five logical jackpot days; the counter reads k once logical day k's
-    ///         processing completes, and completing day 5 ends the phase in the same advance,
-    ///         so an open market reads 0-4. A compressed phase settles them over three
-    ///         physical days (counter 0, 1, 3, then end); turbo settles all five in one. 0 is
-    ///         only the sliver between the transition and the same day's first processing.
-    ///         The counter is also zeroed at _endPhase, but bettingOpen is already false by then.
+    /// @return phaseDay Physical jackpot draws completed: 0 before the first draw,
+    ///         then 1 or 2 while a standard phase remains open. The third draw closes
+    ///         betting; turbo's only draw closes its phase without opening a market.
     function growthState(
         uint24 round
     )
@@ -2578,7 +2556,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         bettingOpen =
             jackpotPhaseFlag &&
             !phaseTransitionActive &&
-            compressedJackpotFlag < 2;
+            (jackpotFlags & JACKPOT_TURBO) == 0;
         phaseDay = jackpotCounter;
     }
 

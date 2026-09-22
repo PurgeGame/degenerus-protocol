@@ -11,20 +11,20 @@ contract ProtocolBoonDrawSeeder is DegenerusGameStorage {
         for (uint256 i; i < 2; ++i) {
             address issuer = i == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
             uint32 count = type(uint32).max;
-            uint64 total = uint64(count) * 800;
-            protocolBoonPools[issuer][day - 1] = ProtocolBoonPool(uint112(uint256(count) * 100 ether), total, count, 0);
+            uint64 total = uint64(count) * 40_000;
+            protocolBoonPools[issuer][day - 1] = ProtocolBoonPool(uint112(uint256(count) * 0.005 ether), total, count, 0);
             // Sparse materialization of the exact nodes a uniform 2^32-1-entry
             // pool searches. All three walks have 32 nodes and genuine distinct
-            // final donors; no shortcut or warm setup reads in the measured tx.
+            // final players; no shortcut or warm setup reads in the measured tx.
             for (uint8 slot; slot < 3; ++slot) {
                 uint256 roll = uint256(keccak256(abi.encode(PROTOCOL_BOON_WINNER_TAG, issuer, day - 1, slot, winnerWord))) % total;
                 uint32 lo;
                 uint32 hi = count;
                 while (lo < hi) {
                     uint32 mid = lo + (hi - lo) / 2;
-                    uint64 cumulative = (uint64(mid) + 1) * 800;
+                    uint64 cumulative = (uint64(mid) + 1) * 40_000;
                     protocolBoonEntries[issuer][day - 1][mid] = ProtocolBoonEntry(
-                        address(uint160(0xB000000000 + i * 0x100000000 + mid)), cumulative, 1, 0
+                        address(uint160(0xB000000000 + i * 0x100000000 + mid)), cumulative, 0
                     );
                     if (cumulative <= roll) lo = mid + 1;
                     else hi = mid;

@@ -1077,7 +1077,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
   //   Payment split at level 0: 30% -> nextPool, 70% -> futurePool.
   //   At jackpot transition (x00): nextPool merges into currentPool, plus
   //   35-70% of futurePool flows into currentPool via the keep roll.
-  //   Level 0 triggers turbo mode (compressedJackpotFlag=2) on day 1-2 when
+  //   Level 0 triggers turbo mode (jackpotFlags=2) on day 1-2 when
   //   nextPool >= levelPrizePool[0] (= 0), so jackpot phase completes in
   //   a single physical day with 100% pool distribution.
   // =========================================================================
@@ -1391,7 +1391,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       await fundPoolHeavy(game, players.slice(0, 5), 20);
 
       // Drive manually, capturing all jackpot stages.
-      // At turbo, counterStep = JACKPOT_LEVEL_CAP (5), so isFinalPhysicalDay = true.
+      // Turbo's only draw is also its final day.
       // This means max winners at max scale, 100% pool distribution.
       const stageReceipts = new Map();
 

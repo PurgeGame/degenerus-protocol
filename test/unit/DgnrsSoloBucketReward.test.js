@@ -125,7 +125,7 @@ describe("DgnrsSoloBucketReward", function () {
       others,
     } = await loadFixture(deployFullProtocol);
 
-    // Small purchases over multiple days so we get normal (5-day) jackpot
+    // Small purchases over multiple days so we get three-day jackpot
     await buyFullTickets(game, alice, 200, 2);
     await advanceToNextDay();
     await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 100n);
@@ -136,7 +136,7 @@ describe("DgnrsSoloBucketReward", function () {
     await buyFullTickets(game, carol, 200, 2);
     await driveOneCycle(game, deployer, mockVRF, advanceModule, 300n);
 
-    // Heavy purchases push past target on day 4+ (normal tier)
+    // Heavy purchases push past target on day 4+ (three-day tier)
     const buyers = [dan, eve, ...others.slice(0, 15)];
     for (const buyer of buyers) {
       try {

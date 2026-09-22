@@ -1951,24 +1951,9 @@ contract DegenerusGameMintModule is
         if (quantity == 0) revert E();
         // Liveness is gated by both callers (_purchaseForWithCached / _redeemFlipFor)
         // before any state is touched, so it is not re-evaluated here.
-        // compressedJackpotFlag / jackpotCounter are consumed only on jackpot-phase
-        // buys (every use below is short-circuit-gated on cachedJpFlag), so the
-        // slot-0 reads are skipped during the purchase phase. nextStep mirrors the
-        // JackpotModule step size for the level's remaining daily jackpots.
-        uint8 cachedComp;
-        uint8 cachedCnt;
-        uint8 nextStep = 1;
-        if (cachedJpFlag) {
-            cachedComp = compressedJackpotFlag;
-            cachedCnt = jackpotCounter;
-            if (
-                cachedComp == 1 &&
-                cachedCnt > 0 &&
-                cachedCnt < JACKPOT_LEVEL_CAP - 1
-            ) {
-                nextStep = 2;
-            }
-        }
+        // Only the day before a standard phase's final draw earns the affiliate bonus.
+        bool affiliateBonusDay = cachedJpFlag && (jackpotFlags & JACKPOT_TURBO) == 0
+            && jackpotCounter >= JACKPOT_DAYS - 1;
         // Single source of truth shared with the purchase quote (so charge == award) and the
         // foil delivery. Routes to level+1 on the final jackpot day's RNG request to prevent
         // tickets stranded in a level whose draws have ended (_endPhase breaks before _unlockRng).
@@ -2062,12 +2047,8 @@ contract DegenerusGameMintModule is
             uint256 freshFlip = freshEth != 0
                 ? _ethToFlipValue(freshEth, priceWei)
                 : 0;
-            if (freshFlip != 0 && cachedJpFlag && cachedComp != 2) {
-                if (cachedCnt + nextStep >= JACKPOT_LEVEL_CAP) {
-                    freshFlip = targetLevel <= 3
-                        ? (freshFlip * 7) / 5
-                        : (freshFlip * 3) / 2;
-                }
+            if (freshFlip != 0 && affiliateBonusDay) {
+                freshFlip = targetLevel <= 3 ? (freshFlip * 7) / 5 : (freshFlip * 3) / 2;
             }
 
             // Affiliate is settled ONCE for the whole buy by the caller (payAffiliateCombined),

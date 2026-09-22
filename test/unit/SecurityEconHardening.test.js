@@ -666,33 +666,12 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // ECON-04: Compressed jackpot (target met in <=2 days -> counter advances 2/day)
+  // ECON-04: Jackpot duration defaults to three days
   // =========================================================================
-  describe("ECON-04: Compressed jackpot mechanism", function () {
-    it("compressedJackpotFlag is exposed and starts false", async function () {
+  describe("ECON-04: Jackpot duration", function () {
+    it("starts with the standard three-day schedule", async function () {
       const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.jackpotCompressionTier()).to.equal(0);
-    });
-
-    it("compressed jackpot design: counter steps by 2 when flag is set", async function () {
-      // When compressedJackpotFlag is true AND counter < JACKPOT_LEVEL_CAP - 1 (4),
-      // counterStep = 2 instead of 1. This means:
-      //   Day 1: counter 0 -> 2 (processes days 1-2)
-      //   Day 2: counter 2 -> 4 (processes days 3-4)
-      //   Day 3: counter 4 -> 5 (final day, step=1 since counter=4=CAP-1)
-      // Result: 5 logical days complete in 3 physical days.
-      //
-      // The flag is set when: (day - purchaseStartDay) <= 2
-      // i.e., when the purchase target is met within 2 days of the phase starting.
-      //
-      // This is verified structurally: the code in JackpotModule.payDailyJackpot
-      // checks compressedJackpotFlag and applies counterStep=2.
-      // The BPS is also doubled on compressed days.
-      //
-      // Full integration test requires advancing through a complete level
-      // cycle with sufficient purchases to trigger target met within 2 days.
-      const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.level()).to.equal(0n);
+      expect(await game.jackpotDuration()).to.equal(3);
     });
   });
 

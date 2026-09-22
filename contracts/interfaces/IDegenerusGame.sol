@@ -66,16 +66,8 @@ interface IDegenerusGame {
     /// @return True if decimator entries are allowed.
     function decWindow() external view returns (bool);
 
-    /// @notice Raw jackpot compression flag.
-    /// @dev Latched at target-met: 1 (compressed: the five logical jackpot days settle over three
-    ///      physical days, the day counter stepping 0, 1, 3, end) when the target is met
-    ///      within 3 days of the purchase start; 2 (turbo, 1 day) when the target is met within
-    ///      1 day of the purchase start on any level (a BAF level latches it at the sealed day's
-    ///      settlement, every other level at the morning arm). A turbo's 2 lingers through the
-    ///      next level's first purchase-day settlement as the coinflip bonus latch; 3 marks a
-    ///      back-to-back turbo armed on that day.
-    /// @return Raw flag: 0=normal, 1=compressed, 2=turbo or lingering bonus latch, 3=chained turbo.
-    function jackpotCompressionTier() external view returns (uint8);
+    /// @notice Selected jackpot duration: one day for turbo, otherwise three days.
+    function jackpotDuration() external view returns (uint8);
 
     /// @notice Get comprehensive purchase information in a single call.
     /// @dev Gas-optimized batch query: lvl is the ACTUAL game level (on-chain consumers key on
@@ -112,16 +104,13 @@ interface IDegenerusGame {
     /// @return currentLevel The current game level — the round a bet placed now joins.
     /// @return bettingOpen True while the jackpot phase is live, its draws have not ended
     ///         (phaseTransitionActive clear) and the level is not turbo
-    ///         (compressedJackpotFlag < 2). The RNG lock is not consulted: the market
+    ///         ((jackpotFlags & JACKPOT_TURBO) == 0). The RNG lock is not consulted: the market
     ///         consumes no randomness and its terms are write-once. `bettingOpen` has no
     ///         gameOver leg: a deadman-triggered game over inside a jackpot phase leaves
     ///         jackpotPhaseFlag set, so the market can still read open after game over.
-    /// @return phaseDay Jackpot-phase day counter, which decays the quest reward. The
-    ///         phase runs five logical jackpot days; the counter reads k once logical day k's
-    ///         processing completes, and completing day 5 ends the phase in the same advance,
-    ///         so an open market reads 0-4. A compressed phase settles them over three
-    ///         physical days (counter 0, 1, 3, then end); turbo settles all five in one. 0 is
-    ///         only the sliver between the transition and the same day's first processing.
+    /// @return phaseDay Physical jackpot draws completed: 0 before the first draw,
+    ///         then 1 or 2 while a standard phase remains open. The third draw closes
+    ///         betting; turbo's only draw closes its phase without opening a market.
     function growthState(uint24 round)
         external
         view
@@ -174,8 +163,6 @@ interface IDegenerusGame {
     /// @notice Initialize both protocol deities in one post-deployment batch (creator only, once).
     function initProtocolDeity() external;
 
-    /// @notice Enter the caller's protocol boon draw, staking donor FLIP for tomorrow.
-    function enterProtocolBoonDraw(address donor, uint256 amount) external;
 
 
     /// @notice Get the future prize pool (single pool).
@@ -229,7 +216,7 @@ interface IDegenerusGame {
         uint256 rngWord
     ) external returns (uint256 claimableDelta);
 
-    /// @notice Game-over terminal jackpot: Day-5-style bucket distribution to the final ticket cohort.
+    /// @notice Game-over terminal jackpot: Final-day bucket distribution to the final ticket cohort.
     /// @param poolWei Total ETH to distribute.
     /// @param targetLvl Level to sample winners from.
     /// @param rngWord VRF entropy seed.

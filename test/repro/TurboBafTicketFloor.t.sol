@@ -13,7 +13,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         >= the passed floor, and the roll's 30% leg can land ON the floor exactly. In a
 ///         NORMAL x10 jackpot phase the floor `lvl` is safe: the entries queue into the write
 ///         slot, jackpot day 2's swap commits them, and the jackpot-phase drain names lvl. A
-///         TURBO phase (compressedJackpotFlag >= 2) collapses all draws inside one RNG lock —
+///         TURBO phase (jackpotFlags >= 2) collapses all draws inside one RNG lock —
 ///         no further swap ever fires for the level (mid-day requests are locked out), and the
 ///         transition moves every later drain to lvl + 1 and beyond — so a floor-level award
 ///         queued during the collapse would sit at a key no drain ever names again.
@@ -57,7 +57,7 @@ contract TurboBafTicketFloor is DeployProtocol {
 
         // Reachability: the level-10 phase collapsed under turbo and its BAF resolved.
         assertGe(
-            _compressedFlag(),
+            _jackpotFlags(),
             2,
             "harness: level 10 must have collapsed under turbo (flag preserved as bonus latch)"
         );
@@ -174,7 +174,7 @@ contract TurboBafTicketFloor is DeployProtocol {
             (uint24 lvl, , bool lastPurchaseDay_, , ) = game.purchaseInfo();
             if (lastPurchaseDay_ && lvl == 9) {
                 require(
-                    _compressedFlag() == 2,
+                    _jackpotFlags() == 1,
                     "harness: the x0 latch must be tier 2"
                 );
                 return;
@@ -341,8 +341,8 @@ contract TurboBafTicketFloor is DeployProtocol {
         return uint8(s0 >> 128);
     }
 
-    /// @dev compressedJackpotFlag — slot 0, byte 23.
-    function _compressedFlag() internal view returns (uint8) {
+    /// @dev jackpotFlags — slot 0, byte 23.
+    function _jackpotFlags() internal view returns (uint8) {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         return uint8(s0 >> 184);
     }

@@ -17,20 +17,19 @@ const ZERO_ADDRESS = hre.ethers.ZeroAddress;
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
 /**
- * Affiliate Bonus in Compressed Jackpot Mode
+ * Affiliate Bonus in Standard Jackpot Mode
  *
  * The MintModule inflates freshFlip by 7/5 (level 0-3) or 3/2 (level 4+)
  * on the physical day before the final jackpot draw. This bonus must fire
- * correctly in all three compression tiers:
+ * correctly for both jackpot schedules:
  *
- *   Normal (flag=0):     counter=4, nextStep=1, 4+1≥5 → bonus
- *   Compressed (flag=1): counter=4, nextStep=1, 4+1≥5 → bonus
- *   Turbo (flag=2):      excluded by outer guard → no bonus
+ *   Standard: counter=2, the third draw is next → bonus
+ *   Turbo:      excluded by outer guard → no bonus
  *
  * Tests use separate buyers for baseline vs bonus day so each measurement is
  * an independent single-purchase basis.
  */
-describe("CompressedAffiliateBonus", function () {
+describe("JackpotAffiliateBonus", function () {
   this.timeout(300_000);
 
   after(function () {
@@ -90,7 +89,7 @@ describe("CompressedAffiliateBonus", function () {
 
   /**
    * Warm-up: advance one day with a small purchase so purchaseDays > 1
-   * on the next cycle. Prevents turbo (tier=2) from firing.
+   * on the next cycle. Prevents turbo (1 day) from firing.
    */
   async function warmUpDay(game, deployer, mockVRF, advanceModule, buyer) {
     await buyFullTickets(game, buyer, 10, 0.1);
@@ -123,7 +122,7 @@ describe("CompressedAffiliateBonus", function () {
   // Fixtures
   // ---------------------------------------------------------------------------
 
-  async function deployCompressedWithAffiliate() {
+  async function deployStandardWithAffiliate() {
     const protocol = await deployFullProtocol();
     const { affiliate, game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } = protocol;
 
@@ -139,7 +138,7 @@ describe("CompressedAffiliateBonus", function () {
     // Warm-up: consume day 2 so purchaseDays > 1 on next advance (avoids turbo)
     await warmUpDay(game, deployer, mockVRF, advanceModule, bob);
 
-    // Heavy purchases → target met quickly → compressed on next driveToJackpotPhase
+    // Heavy purchases → target met quickly → standard on next driveToJackpotPhase
     // Use others[0..11] (not 12-13 which are reserved for test purchases)
     const buyers = [carol, dan, eve, ...others.slice(0, 12)];
     await heavyPurchases(game, buyers);
@@ -147,7 +146,7 @@ describe("CompressedAffiliateBonus", function () {
     return { ...protocol, aliceCode, buyerBaseline, buyerBonus };
   }
 
-  async function deployNormalWithAffiliate() {
+  async function deploySlowTargetWithAffiliate() {
     const protocol = await deployFullProtocol();
     const { affiliate, game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } = protocol;
 
@@ -174,11 +173,11 @@ describe("CompressedAffiliateBonus", function () {
     await buyFullTickets(game, carol, 200, 2);
     await driveOneCycle(game, deployer, mockVRF, advanceModule, 300n);
 
-    // Advance 4 (day 5): purchaseDays = 5-1 = 4 > 3 → normal
+    // Advance 4 (day 5): purchaseDays = 5-1 = 4 > 3 → still standard
     await buyFullTickets(game, others[0], 200, 2);
     await driveOneCycle(game, deployer, mockVRF, advanceModule, 400n);
 
-    // Heavy purchases on day 5+ → normal (purchaseDays > 3)
+    // Heavy purchases on day 5+ → still standard (purchaseDays > 3)
     const buyers = [dan, eve, ...others.slice(1, 12)];
     await heavyPurchases(game, buyers);
 
@@ -186,17 +185,17 @@ describe("CompressedAffiliateBonus", function () {
   }
 
   // ---------------------------------------------------------------------------
-  // Compressed mode (tier=1): bonus fires on penultimate day
+  // Standard mode (3 days): bonus fires on penultimate day
   // ---------------------------------------------------------------------------
 
-  describe("compressed mode (tier=1)", function () {
+  describe("standard mode (3 days)", function () {
     it("affiliate bonus inflates earnings by 7/5 on penultimate physical day", async function () {
       const { game, deployer, mockVRF, advanceModule, affiliate, buyerBaseline, buyerBonus, aliceCode } =
-        await loadFixture(deployCompressedWithAffiliate);
+        await loadFixture(deployStandardWithAffiliate);
 
       const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
       expect(reached).to.equal(true, "Should reach jackpot phase");
-      expect(await game.jackpotCompressionTier()).to.equal(1, "Should be compressed");
+      expect(await game.jackpotDuration()).to.equal(3, "Should be standard");
 
       // Remaining day 1 (no bonus): buyerBaseline purchases
       const tx1 = await buyFullTickets(game, buyerBaseline, 10, 0.1, aliceCode);
@@ -218,23 +217,23 @@ describe("CompressedAffiliateBonus", function () {
 
       // Bonus day freshFlip should be 7/5 of baseline (same ETH → same base FLIP, inflated)
       const ratio = (bonus * 10000n) / baseline;
-      expect(ratio).to.be.gte(13900n, "Compressed bonus should inflate by ~7/5");
-      expect(ratio).to.be.lte(14100n, "Compressed bonus should inflate by ~7/5");
+      expect(ratio).to.be.gte(13900n, "Standard bonus should inflate by ~7/5");
+      expect(ratio).to.be.lte(14100n, "Standard bonus should inflate by ~7/5");
     });
   });
 
   // ---------------------------------------------------------------------------
-  // Normal mode (tier=0): bonus fires on counter=4 (regression check)
+  // Slow purchase target: bonus still fires on counter=2 (regression check)
   // ---------------------------------------------------------------------------
 
-  describe("normal mode (tier=0)", function () {
+  describe("slow purchase target (3 days)", function () {
     it("affiliate bonus inflates earnings by 7/5 on penultimate physical day", async function () {
       const { game, deployer, mockVRF, advanceModule, affiliate, buyerBaseline, buyerBonus, aliceCode } =
-        await loadFixture(deployNormalWithAffiliate);
+        await loadFixture(deploySlowTargetWithAffiliate);
 
       const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
       expect(reached).to.equal(true, "Should reach jackpot phase");
-      expect(await game.jackpotCompressionTier()).to.equal(0, "Should be normal mode");
+      expect(await game.jackpotDuration()).to.equal(3, "Slow targets also use the three-day schedule");
 
       // Day 1 (no bonus): buyerBaseline purchases
       const tx1 = await buyFullTickets(game, buyerBaseline, 10, 0.1, aliceCode);
@@ -243,9 +242,7 @@ describe("CompressedAffiliateBonus", function () {
       const baseline = total1;
       expect(baseline).to.be.gt(0n);
 
-      // Advance to penultimate day (counter=4, bonus expected)
-      await driveOneCycle(game, deployer, mockVRF, advanceModule, 3000n);
-      await driveOneCycle(game, deployer, mockVRF, advanceModule, 4000n);
+      // Advance to penultimate day (counter=2, bonus expected)
       await driveOneCycle(game, deployer, mockVRF, advanceModule, 5000n);
       expect(await game.jackpotPhase()).to.equal(true, "Should still be in jackpot phase");
 
@@ -258,17 +255,17 @@ describe("CompressedAffiliateBonus", function () {
 
       // Bonus should be ~7/5 of baseline
       const ratio = (bonus * 10000n) / baseline;
-      expect(ratio).to.be.gte(13900n, "Normal mode bonus should inflate by ~7/5");
-      expect(ratio).to.be.lte(14100n, "Normal mode bonus should inflate by ~7/5");
+      expect(ratio).to.be.gte(13900n, "Slow-target bonus should inflate by ~7/5");
+      expect(ratio).to.be.lte(14100n, "Slow-target bonus should inflate by ~7/5");
     });
   });
 
   // ---------------------------------------------------------------------------
-  // Turbo mode (tier=2): bonus never fires
+  // Turbo mode (1 day): bonus never fires
   // ---------------------------------------------------------------------------
 
-  describe("compressed early target (tier=1)", function () {
-    it("affiliate bonus does NOT fire on first compressed day", async function () {
+  describe("standard early target (3 days)", function () {
+    it("affiliate bonus does NOT fire on first standard day", async function () {
       const protocol = await loadFixture(deployFullProtocol);
       const { affiliate, game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } = protocol;
 
@@ -276,41 +273,41 @@ describe("CompressedAffiliateBonus", function () {
       await affiliate.connect(alice).createAffiliateCode(aliceCode, 0);
 
       const buyerPre = others[12];
-      const buyerCompressed = others[13];
+      const buyerStandard = others[13];
       await affiliate.connect(buyerPre).referPlayer(aliceCode);
-      await affiliate.connect(buyerCompressed).referPlayer(aliceCode);
+      await affiliate.connect(buyerStandard).referPlayer(aliceCode);
 
       // Warm-up: consume day 2 so purchaseDays > 1 on next advance (avoids turbo)
       await warmUpDay(game, deployer, mockVRF, advanceModule, bob);
 
-      // Heavy purchases → compressed on next advance
+      // Heavy purchases → standard on next advance
       const buyers = [carol, dan, eve, ...others.slice(0, 12)];
       await heavyPurchases(game, buyers);
 
-      // Pre-compressed baseline: buy with affiliate before advancing
+      // Pre-standard baseline: buy with affiliate before advancing
       const txBaseline = await buyFullTickets(game, buyerPre, 10, 0.1, aliceCode);
       const totalBaseline = await getAffiliateRunningTotal(txBaseline, affiliate);
       expect(totalBaseline).to.not.be.null;
       const baseline = totalBaseline;
-      expect(baseline).to.be.gt(0n, "Should have baseline freshFlip pre-compressed");
+      expect(baseline).to.be.gt(0n, "Should have baseline freshFlip pre-standard");
 
-      // Trigger compressed via full cycle (day 3, purchaseDays=2)
-      // Compressed tier is set during daily processing, not at advanceGame entry
+      // Trigger standard via full cycle (day 3, purchaseDays=2)
+      // Standard tier is set during daily processing, not at advanceGame entry
       await advanceToNextDay();
       await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
-      expect(await game.jackpotCompressionTier()).to.equal(1, "Should be compressed");
+      expect(await game.jackpotDuration()).to.equal(3, "Should be standard");
 
-      // Buy during compressed jackpot phase — first day should NOT inflate
+      // Buy during standard jackpot phase — first day should NOT inflate
       if (await game.jackpotPhase()) {
-        const txCompressed = await buyFullTickets(game, buyerCompressed, 10, 0.1, aliceCode);
-        const totalCompressed = await getAffiliateRunningTotal(txCompressed, affiliate);
-        const compressedAmount =
-          totalCompressed === null ? null : totalCompressed - totalBaseline;
+        const txStandard = await buyFullTickets(game, buyerStandard, 10, 0.1, aliceCode);
+        const totalStandard = await getAffiliateRunningTotal(txStandard, affiliate);
+        const standardAmount =
+          totalStandard === null ? null : totalStandard - totalBaseline;
 
-        if (compressedAmount !== null && compressedAmount > 0n) {
-          // First compressed day freshFlip should NOT be inflated — ratio should be ~1:1
-          const ratio = (compressedAmount * 10000n) / baseline;
-          expect(ratio).to.be.lte(10100n, "First compressed day should NOT inflate affiliate freshFlip");
+        if (standardAmount !== null && standardAmount > 0n) {
+          // First standard day freshFlip should NOT be inflated — ratio should be ~1:1
+          const ratio = (standardAmount * 10000n) / baseline;
+          expect(ratio).to.be.lte(10100n, "First standard day should NOT inflate affiliate freshFlip");
         }
       }
     });

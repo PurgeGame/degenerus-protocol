@@ -256,27 +256,27 @@ describe("Paper Parity (Phase 46)", function () {
   });
 
   // =========================================================================
-  // PAR-04: Jackpot day structure (5 days, 6-14% days 1-4, 100% day 5)
+  // PAR-04: Jackpot day structure (physical cap 3, settled over 1 or 3 days)
   // =========================================================================
 
-  // JACKPOT_LEVEL_CAP and DAILY_CURRENT_BPS_MIN/MAX are private constants in
+  // JACKPOT_DAYS and DAILY_CURRENT_BPS_MIN/MAX are private constants in
   // JackpotModule/AdvanceModule. Values verified through source code inspection at
   // contracts/modules/DegenerusGameAdvanceModule.sol:92 and
   // contracts/modules/DegenerusGameJackpotModule.sol:143-144.
   describe("PAR-04: Jackpot day structure", function () {
-    it("JACKPOT_LEVEL_CAP = 5 (5 daily jackpots per level)", async function () {
-      // The constant JACKPOT_LEVEL_CAP is private (=5) in JackpotModule and MintModule.
-      // We verify it through the documented game behavior: levels have 5 jackpot days.
-      // The constant is 5 as confirmed by source inspection.
+    it("JACKPOT_DAYS = 3 (standard physical duration)", async function () {
+      // The constant JACKPOT_DAYS is internal (=3) in JackpotModule and MintModule.
+      // We verify it through the documented game behavior: levels settle their jackpot in 1 or 3 physical days.
+      // The constant is 3 as confirmed by source inspection.
       // This is a static assertion based on contract source.
-      expect(5).to.equal(5, "JACKPOT_LEVEL_CAP should be 5");
+      expect(3).to.equal(3, "JACKPOT_DAYS should be 3");
     });
 
-    it("daily jackpot BPS range: min=600 (6%), max=1400 (14%) for days 1-4", async function () {
+    it("base daily jackpot BPS range: min=600 (6%), max=1400 (14%)", async function () {
       // DAILY_CURRENT_BPS_MIN = 600
       // DAILY_CURRENT_BPS_MAX = 1400
       // Source: JackpotModule lines 143-144
-      // These define the random range for days 1-4 current pool percentage
+      // These define the base random percentage; the middle physical day doubles it
       expect(600).to.be.gte(600);
       expect(1400).to.be.lte(1400);
       // Percentage range: 6% to 14%
@@ -284,9 +284,9 @@ describe("Paper Parity (Phase 46)", function () {
       expect(1400 / 100).to.equal(14, "Max daily jackpot should be 14%");
     });
 
-    it("day 5 pays 100% of remaining current pool", async function () {
-      // On day 5 (final day), the entire remaining current pool is distributed.
-      // This is implicit in the code: day 5 uses FINAL_DAY_SHARES_PACKED
+    it("final physical day pays 100% of remaining current pool", async function () {
+      // On the final physical day, the entire remaining current pool is distributed.
+      // This is implicit in the code: the final draw uses FINAL_DAY_SHARES_PACKED
       // and distributes 100% of whatever remains.
       // Verified by code path: payDailyJackpot final day branch.
       expect(true).to.be.true;
@@ -1077,7 +1077,7 @@ describe("Paper Parity (Phase 46)", function () {
 //   PAR-17: Pool delta verification after whale bundle purchase
 //
 // STATIC + SOURCE VERIFICATION (private constants):
-//   PAR-04: JACKPOT_LEVEL_CAP, DAILY_CURRENT_BPS_MIN/MAX (private)
+//   PAR-04: JACKPOT_DAYS, DAILY_CURRENT_BPS_MIN/MAX (private)
 //   PAR-05: Packed share constants reconstructed and verified
 //   PAR-07: Lootbox EV breakpoint constants (private)
 //   PAR-08: Affiliate commission rate constants (private)

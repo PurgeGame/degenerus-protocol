@@ -35,7 +35,7 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///                [15:16]jackpotPhaseFlag [16:17]jackpotCounter [17:18]lastPurchaseDay
 ///                [18:19]decWindowOpen [19:20]rngLockedFlag [20:21]phaseTransitionActive
 ///                [21:22]gameOver [22:23]dailyJackpotCoinTicketsPending
-///                [23:24]compressedJackpotFlag [24:25]ticketsFullyProcessed
+///                [23:24]jackpotFlags [24:25]ticketsFullyProcessed
 ///                [25:26]ticketWriteSlot [26:27]prizePoolFrozen [27:28]presaleOver
 ///                [28:29]subsFullyProcessed [29:30]presaleDrained [30:31]ticketRedemptionOpen
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
@@ -107,8 +107,8 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev ticketWriteSlot is bool at slot 0 offset 25 bytes = bit 200
     uint256 private constant WRITE_SLOT_SHIFT = 200;
 
-    /// @dev compressedJackpotFlag is uint8 at slot 0 offset 23 bytes = bits 184-191
-    uint256 private constant COMPRESSED_FLAG_SHIFT = 184;
+    /// @dev jackpotFlags is uint8 at slot 0 offset 23 bytes = bits 184-191
+    uint256 private constant JACKPOT_FLAGS_SHIFT = 184;
 
     // =========================================================================
     // Constants matching production code
@@ -116,7 +116,6 @@ contract TicketLifecycleTest is DeployProtocol {
 
     uint24 private constant TICKET_SLOT_BIT = 1 << 23;
     uint24 private constant TICKET_FAR_FUTURE_BIT = 1 << 22;
-    uint8 private constant JACKPOT_LEVEL_CAP = 5;
 
     TLKeyComputer private keyComputer;
     address private buyer1;
@@ -603,16 +602,16 @@ contract TicketLifecycleTest is DeployProtocol {
 
     // =========================================================================
     // Test 12 [SRC-03]: Last-day tickets route to level+1 when rngLocked and
-    //         jackpotCounter+step >= JACKPOT_LEVEL_CAP
+    //         the next draw is the final jackpot day
     // =========================================================================
 
     /// @notice When rngLocked is true during the last jackpot day
-    ///         (jackpotCounter + step >= JACKPOT_LEVEL_CAP), _processDirectPurchase
+    ///         (turbo active or two standard draws completed), _processDirectPurchase
     ///         routes tickets to level+1 instead of the normal jackpot-phase level.
     ///         This prevents ticket stranding since _endPhase breaks before _unlockRng.
     ///         Uses vm.store to force the exact state (rngLocked=true, jackpotPhaseFlag=true,
-    ///         jackpotCounter=4) since this edge case is timing-fragile to trigger organically.
-    /// @dev SRC-03: Last-day tickets (rngLocked + jackpotCounter+step >= CAP) route to level+1
+    ///         jackpotCounter=2) since this edge case is timing-fragile to trigger organically.
+    /// @dev SRC-03: Last-day tickets under the RNG lock route to level+1.
     function testLastDayTicketsRouteToNextLevel() public {
         // Drive to level 2 to establish game state
         _driveToLevel(3);
@@ -623,19 +622,19 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days + 1);
 
         // Force the game into last-jackpot-day state via vm.store on slot 0:
-        // Set jackpotPhaseFlag=true, jackpotCounter=4 (so step=1 gives 4+1=5 >= CAP=5),
+        // Set jackpotPhaseFlag=true, jackpotCounter=2 (the next draw is day three),
         // and rngLockedFlag=true
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
 
         // Set jackpotPhaseFlag = true (bit 136)
         slot0 = slot0 | (uint256(1) << JACKPOT_PHASE_SHIFT);
-        // Set jackpotCounter = 4 (bits 144-151)
+        // Set jackpotCounter = 2 (bits 144-151)
         slot0 = (slot0 & ~(uint256(0xFF) << JACKPOT_COUNTER_SHIFT))
-              | (uint256(4) << JACKPOT_COUNTER_SHIFT);
+              | (uint256(2) << JACKPOT_COUNTER_SHIFT);
         // Set rngLockedFlag = true (bit 168)
         slot0 = slot0 | (uint256(1) << RNG_LOCKED_SHIFT);
-        // Ensure compressedJackpotFlag = 0 (normal mode, step=1) (bits 200-207)
-        slot0 = slot0 & ~(uint256(0xFF) << COMPRESSED_FLAG_SHIFT);
+        // Ensure jackpotFlags = 0 (standard three-day mode) (bits 184-191)
+        slot0 = slot0 & ~(uint256(0xFF) << JACKPOT_FLAGS_SHIFT);
 
         vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(slot0));
 
@@ -1269,9 +1268,9 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     // EDGE-06: Covered by testLastDayTicketsRouteToNextLevel (Test 12, SRC-03).
-    // That test uses vm.store to force rngLocked + jackpotCounter=4 and verifies
+    // That test uses vm.store to force rngLocked + jackpotCounter=2 and verifies
     // tickets route to level+1. The vm.store approach is definitive because the
-    // last-day state (rngLocked + jackpotCounter+step >= JACKPOT_LEVEL_CAP) is
+    // last-day state (rngLocked with two completed standard draws) is
     // timing-fragile to trigger organically.
 
     // =========================================================================
@@ -2473,7 +2472,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Warm-up: drain pending work on the CURRENT day without warping.
         // This establishes dailyIdx at the current day and prevents multi-day
         // gap backfill from adjusting purchaseStartDay, which would trigger
-        // the turbo path (compressedJackpotFlag=2) at level 0 and cause
+        // the turbo path (jackpotFlags=2) at level 0 and cause
         // purchaseLevel=0 underflow in _consolidatePoolsAndRewardJackpots.
         for (uint256 w = 0; w < 30; w++) {
             _fulfillVrfIfPending();

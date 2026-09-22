@@ -98,7 +98,7 @@
   {
     "bytes": "1",
     "encoding": "inplace",
-    "label": "compressedJackpotFlag",
+    "label": "jackpotFlags",
     "offset": 23,
     "slot": 0,
     "typeLabel": "uint8"

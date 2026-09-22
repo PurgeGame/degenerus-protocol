@@ -254,7 +254,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             emit TerminalAffiliatePaid(top, terminalLevel, affiliateShare);
         }
 
-        // All remaining ETH goes to the final ticket cohort (Day-5-style distribution).
+        // All remaining ETH goes to the final ticket cohort (Final-day distribution).
         // gameOver=true prevents auto-rebuy inside _addClaimableEth (tickets worthless post-game).
         // Pay from the SAME phase-correct level the AdvanceModule terminal drain materialized:
         // current `lvl` in jackpot phase and in the locked last-purchase transition (where level was

@@ -158,7 +158,7 @@ being warm or already cached because the path also reads level/phase flags.
 | Coinflip deposits and daily stake producers | Gate fresh obligations, including operator/gift paths; preserve claim-only calls and necessary recovery credits |
 | WWXRP `enter` | Gate before burning/enrolling; include its linked incinerator entry in the review |
 | Foil purchases | Gate the paid entry path before accepting a new resolve-day obligation |
-| Protocol boon donations | Gate before donor debit and day enrollment |
+| Protocol boon ETH hero entries | Inherit the Degenerette placement gate before funding and day enrollment |
 | sDGNRS gambling burns | Preserve existing stronger word-availability/single-pool guards; verify consistency |
 | AFKing, whale purchases, and other automatic producers | Preserve recovery's required work; prevent repeated historical-day deliveries |
 | Ordinary actions that reward FLIP | Audit every root calling `creditFlip`, batch/pair credit, or `creditSdgnrsBacking`; paused roots may revert |

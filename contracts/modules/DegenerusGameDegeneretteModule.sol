@@ -101,6 +101,17 @@ contract DegenerusGameDegeneretteModule is
         uint256 packed
     );
 
+    /// @notice Paid ETH on a protocol deity's hero enters its next-day boon draw.
+    event ProtocolBoonDrawEntered(
+        address indexed issuer,
+        address indexed player,
+        uint24 indexed day,
+        uint256 amount,
+        uint16 scoreSnapshot,
+        uint64 weight,
+        uint32 entryIndex
+    );
+
     /// @notice Emitted when Degenerette bets are resolved.
     /// @param player The player address.
     /// @param betId The bet ID.
@@ -608,6 +619,16 @@ contract DegenerusGameDegeneretteModule is
                     (updated << shift);
                 dailyHeroWagers[day][heroQuadrant] = wPacked;
             }
+            if (symbol == 0 || symbol == 6) {
+                // Canonical boon score uses the routed ticket level. Reuse the
+                // effective quest streak already read, before this bet's quest credit.
+                uint16 boonScore = _activeTicketLevel() == lvl + 1
+                    ? activityScore
+                    : uint16(_playerActivityScore(player, questStreak));
+                _enterProtocolBoonDraw(
+                    player, symbol, day, totalBet, wagerUnit, boonScore
+                );
+            }
         }
 
         // Degenerette stake boon: consumed here, AFTER every raw-stake consumer above (the
@@ -664,6 +685,29 @@ contract DegenerusGameDegeneretteModule is
 
         degeneretteBets[player][nonce] = packed;
         emit DegeneretteBetPlaced(player, uint32(index), nonce, packed);
+    }
+
+    /// @dev Only ordinary ETH placements reach this helper. A gifted bet belongs
+    ///      to its recipient; all weight is paid stake, before any boon boost.
+    ///      Pool and entry writes revert atomically if later funding fails.
+    function _enterProtocolBoonDraw(
+        address player, uint8 symbol, uint24 day, uint256 amount, uint256 wagerUnits, uint16 score
+    ) private {
+        address issuer = symbol == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
+        if (deityBySymbol[symbol] != issuer) return;
+        uint256 weight = wagerUnits * ActivityCurveLib.boonDrawMultUnits(score);
+        if (weight > type(uint64).max) revert InvalidBet();
+        ProtocolBoonPool storage pool = protocolBoonPools[issuer][day];
+        uint32 index = pool.entryCount;
+        uint32 nextCount = index + 1;
+        uint64 cumulativeWeight = pool.totalWeight + uint64(weight);
+        // Weight <= uint64.max and multiplier >= 800 bound amount well below uint112.
+        uint112 totalWageredWei = pool.totalWageredWei + uint112(amount);
+        protocolBoonEntries[issuer][day][index] = ProtocolBoonEntry(player, cumulativeWeight, score);
+        pool.totalWageredWei = totalWageredWei;
+        pool.totalWeight = cumulativeWeight;
+        pool.entryCount = nextCount;
+        emit ProtocolBoonDrawEntered(issuer, player, day, amount, score, uint64(weight), index);
     }
 
     /// @dev Processes bet funds (burn tokens, handle ETH, check pool).

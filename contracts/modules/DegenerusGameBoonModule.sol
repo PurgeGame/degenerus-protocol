@@ -31,7 +31,6 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
 /**
  * @title DegenerusGameBoonModule
@@ -53,61 +52,11 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  *      are drawn or gifted. See DegenerusGameStorage for bit layout.
  */
 contract DegenerusGameBoonModule is DegenerusGameStorage {
-    /// @notice Donation principal must be 100..25,000 FLIP inclusive.
-    error DonationAmountOutOfRange();
-    /// @notice Principal staked for the issuer and the donor's immutable draw weight.
-    event ProtocolBoonDrawEntered(
-        address indexed issuer,
-        address indexed donor,
-        uint24 indexed day,
-        uint256 amount,
-        uint8 amountUnits,
-        uint16 scoreSnapshot,
-        uint64 weight,
-        uint32 entryIndex
-    );
-
-    /// @notice A protocol slot was automatically awarded to its winning donor.
+    /// @notice A protocol slot was automatically awarded to its winning bettor.
     event ProtocolBoonDrawAwarded(
         address indexed issuer, address indexed winner, uint24 indexed day,
         uint8 slot, uint32 entryIndex, uint8 boonType
     );
-
-    /// @dev Caller remains the protocol wrapper under delegatecall. Neither a direct
-    ///      module call nor a GAME call from a user/operator may name an arbitrary payer.
-    function _requireProtocolIssuer() private view {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (msg.sender != ContractAddresses.VAULT && msg.sender != ContractAddresses.SDGNRS) revert Unauthorized();
-        if (mintPacked_[msg.sender] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
-    }
-
-    /// @notice Stake donor FLIP for the calling protocol owner's next-day coinflip
-    ///         and enroll the donor for that day's three boons. No record or boon bonus.
-    function enterProtocolBoonDraw(address donor, uint256 amount) external {
-        _requireProtocolIssuer();
-        if (amount < 100 ether || amount > 25_000 ether) revert DonationAmountOutOfRange();
-        uint24 day = _simulatedDayIndex();
-        ProtocolBoonPool storage pool = protocolBoonPools[msg.sender][day];
-        uint32 index = pool.entryCount;
-        // The canonical score is capped at 65,534, so its uint16 snapshot fits.
-        uint256 score = IDegenerusGame(address(this)).playerActivityScore(donor);
-        uint8 units = uint8(amount / 100 ether); // range checked above: 1..250
-        uint64 weight = uint64(uint256(units) * ActivityCurveLib.boonDrawMultUnits(score));
-        uint64 cumulativeWeight = pool.totalWeight + weight;
-        uint112 totalDonatedWei = pool.totalDonatedWei + uint112(amount);
-        uint32 nextCount = index + 1; // Checked before any writes or funding calls.
-        protocolBoonEntries[msg.sender][day][index] =
-            ProtocolBoonEntry(donor, cumulativeWeight, units, uint16(score));
-        // Adjacent packed fields commit together; the award flag is untouched.
-        pool.totalDonatedWei = totalDonatedWei;
-        pool.totalWeight = cumulativeWeight;
-        pool.entryCount = nextCount;
-        // Atomically debit the donor and credit precisely the original principal.
-        // The wrappers cannot burn from a different payer, and both sinks already trust GAME.
-        coin.burnCoin(donor, amount);
-        coinflip.creditFlip(msg.sender, amount);
-        emit ProtocolBoonDrawEntered(msg.sender, donor, day, amount, units, uint16(score), weight, index);
-    }
 
     /// @notice Advance-only delegate target. Every funded pool has exactly three
     ///         awards, independently drawn with replacement. No recipient cap applies.
@@ -122,7 +71,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint256 winnerWord = rngWordByDay[awardDay];
         if (winnerWord == 0) return;
         // Deployment day has no daily word. Draw its menu from the finalized
-        // award-day word instead; the donor pool closed before that request.
+        // award-day word instead; the wager pool closed before that request.
         if (menuWord == 0) menuWord = winnerWord;
         _drawProtocolBoons(ContractAddresses.VAULT, awardDay, menuWord, winnerWord);
         _drawProtocolBoons(ContractAddresses.SDGNRS, awardDay, menuWord, winnerWord);
@@ -151,7 +100,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 if (entries[mid].cumulativeWeight <= roll) lo = mid + 1;
                 else hi = mid;
             }
-            address winner = entries[lo].donor;
+            address winner = entries[lo].player;
             if (winner == address(0)) continue;
             uint8 boonType = _deityBoonForSlot(issuer, awardDay, slot, menuWord);
             checkAndClearExpiredBoon(winner);

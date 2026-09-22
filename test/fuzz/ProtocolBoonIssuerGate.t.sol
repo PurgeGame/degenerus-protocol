@@ -37,10 +37,25 @@ contract ProtocolBoonIssuerGateTest is DeployProtocol {
         uint256 donorBefore = coin.balanceOf(donor);
         uint256 holderStakeBefore = coinflip.coinflipAmount(deityHolder);
         vm.prank(deityHolder);
-        (bool ok,) = address(game).call(abi.encodeCall(game.enterProtocolBoonDraw, (donor, 25_000 ether)));
+        (bool ok,) = address(game).call(abi.encodeWithSignature("enterProtocolBoonDraw(address,uint256)", donor, 25_000 ether));
         emit log_named_uint("donor_flip_lost", donorBefore - coin.balanceOf(donor));
         emit log_named_uint("holder_stake_gained", coinflip.coinflipAmount(deityHolder) - holderStakeBefore);
-        assertFalse(ok, "a paid deity holder reached the protocol issuer gate");
+        assertFalse(ok, "the removed donation selector remains reachable");
         assertEq(coin.balanceOf(donor), donorBefore, "donor FLIP was burned without consent");
+    }
+
+    function testRemovedDonationWrappersAndModuleEntryRejectCalls() public {
+        uint256 balance = coin.balanceOf(donor);
+        bytes memory donation = abi.encodeWithSignature("donateFlipForBoons(uint256)", 100 ether);
+        vm.prank(donor);
+        (bool ok,) = address(vault).call(donation);
+        assertFalse(ok);
+        vm.prank(donor);
+        (ok,) = address(sdgnrs).call(donation);
+        assertFalse(ok);
+        vm.prank(address(vault));
+        (ok,) = address(boonModule).call(abi.encodeWithSignature("enterProtocolBoonDraw(address,uint256)", donor, 100 ether));
+        assertFalse(ok);
+        assertEq(coin.balanceOf(donor), balance);
     }
 }

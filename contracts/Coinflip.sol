@@ -124,10 +124,6 @@ contract Coinflip {
         uint24 dayCount,
         uint256 amountPerDay
     );
-    /// @notice Emitted when a century arm tops up the vault's WWXRP reserve.
-    /// @param century The century index that paid it.
-    /// @param amount WWXRP added to the vault's uncirculated allowance.
-    event VaultWwxrpToppedUp(uint24 indexed century, uint256 amount);
     /// @notice Emitted when a coinflip day is resolved.
     /// @param day The resolved day.
     /// @param win Whether the flip outcome is a win.
@@ -281,16 +277,6 @@ contract Coinflip {
     /// @dev Levels between seed windows. The deploy window covers the first, and every
     ///      x00 level re-arms one for VAULT and sDGNRS on the same terms.
     uint24 private constant SEED_CENTURY_LEVELS = 100;
-    /// @dev Mirrors `WWXRP.INITIAL_VAULT_ALLOWANCE`, the vault's deploy-time WWXRP reserve.
-    ///      Each century arm pays the vault double the previous payment, counting that
-    ///      deploy reserve as the first, so arm N pays `WWXRP_VAULT_SEED << N`. Held as a
-    ///      local constant rather than read across the wire; the equality is pinned by test.
-    uint256 private constant WWXRP_VAULT_SEED = 1_000_000_000 ether;
-    /// @dev Doubling stops past this century. `<<` truncates silently rather than
-    ///      reverting, and the seed overflows uint256 somewhere past 166 doublings; 60 is
-    ///      far beyond any reachable level and keeps the shift provably in range.
-    uint24 private constant WWXRP_MAX_DOUBLINGS = 60;
-
     IDegenerusQuests internal constant questModule =
         IDegenerusQuests(ContractAddresses.QUESTS);
 
@@ -1190,8 +1176,7 @@ contract Coinflip {
     }
 
     /// @notice Arm this century's seed window: SEED_FLIP_DAILY per day for
-    ///         SEED_FLIP_DAYS days to VAULT and to sDGNRS, plus the vault's doubling WWXRP
-    ///         reserve, on the same terms as the deploy program.
+    ///         SEED_FLIP_DAYS days to VAULT and to sDGNRS, on the same terms as the deploy program.
     /// @dev GAME only, called from the advance as an x00 level's transition closes and the next
     ///      purchase phase opens. It has no revert path by design: a revert here would brick the
     ///      daily crank at a level boundary, so a call with nothing due simply writes nothing. It
@@ -1228,15 +1213,6 @@ contract Coinflip {
         }
 
         emit SeedWindowArmed(century, firstDay, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
-
-        // Vault WWXRP reserve, doubling each century off the deploy allowance: century N
-        // pays `WWXRP_VAULT_SEED << N`. `mintPrize` to VAULT is intercepted by WWXRP._mint
-        // into `vaultAllowance`, so this raises the uncirculated reserve, not a balance.
-        if (century <= WWXRP_MAX_DOUBLINGS) {
-            uint256 wwxrpAmount = WWXRP_VAULT_SEED << uint256(century);
-            wwxrp.mintPrize(ContractAddresses.VAULT, wwxrpAmount);
-            emit VaultWwxrpToppedUp(century, wwxrpAmount);
-        }
     }
 
     /// @notice Add FLIP to the shared record pool.

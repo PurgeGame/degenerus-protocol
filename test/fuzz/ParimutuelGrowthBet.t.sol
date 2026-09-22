@@ -1030,20 +1030,14 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     /// lands. This is the sole corrective for parimutuel's last-mover advantage, so the
     /// schedule itself is the invariant.
     function testQuestRewardLadderSharesTheTopTierAcrossDayOne() public {
-        uint256[5] memory expected = [
-            uint256(150 ether), // day 0: transition until the first settlement
-            150 ether, // day 1: the rest of the first day
-            75 ether,
-            37 ether,
-            18 ether
-        ];
-        for (uint8 day; day <= 4; ++day) {
+        uint256[3] memory expected = [uint256(150 ether), 150 ether, 37 ether];
+        for (uint8 day; day < 3; ++day) {
             _mockOpenAt(50, day, true);
             (, , , uint256 reward, , , , ) = parimutuel.marketState(alice, 50);
             assertEq(
                 reward,
                 expected[day],
-                "quest reward must follow the four-day ladder"
+                "quest reward must follow the three-day schedule"
             );
         }
     }
@@ -1266,7 +1260,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     /// End to end on the real game: bet during a live jackpot phase, let the protocol
     /// transition, then claim against the ratchet the transition actually wrote. Nothing
     /// pushes a result into the market — the outcome is derived from levelPrizePool alone.
-    /// A turbo phase takes all five logical days in ONE physical day, so its market would
+    /// A turbo phase pays its whole jackpot in ONE physical day, so its market would
     /// open and shut inside a single advance cycle — minutes, not days. Nobody outside the
     /// mempool could act on that, so a turbo level gets no market at all. Driven one advance
     /// at a time: at EVERY point where a turbo phase is live, betting must be shut.
@@ -1292,7 +1286,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
                     abi.encodeWithSignature("advanceGame()")
                 );
                 if (!ok) break;
-                if (game.jackpotPhase() && game.jackpotCompressionTier() >= 2) {
+                if (game.jackpotPhase() && game.jackpotDuration() == 1) {
                     (, , , , bool open, ) = game.growthState(0);
                     assertFalse(open, "a turbo phase must never take bets");
                     turboObservations++;
