@@ -110,20 +110,56 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-22, single-symbol degenerette revision
+## Current evidence — 2026-09-22, single-symbol degenerette and century-recycle revision
 
-The source is the committed revision `a5d4d2cdcfb9eb1febfaa99e84c75954a9fe74de`. It carries three changes on top of
-the reveal and incinerator revision below. `WWXRP.setTrustedMinter(address, bool)` lets the vault
-owner (more than 50.1% of DGVE) register or revoke any address as a WWXRP minter and burner
-alongside the pinned game contracts, with no cap, by design and as disclosed; one mapping is
-appended at WWXRP slot 9. The decimator's activity multiplier now covers a player's first
-500,000 FLIP of base burn at a level (was: until 200,000 FLIP of multiplied weight), tracked in
-the free bits of the existing per-level record. And Degenerette moves to single-symbol tickets:
-the player picks one hero symbol, everything else is generated fresh from committed
-domain-separated draws, colors score independently, gold-on-gold matches add 25% each, and one
-shared payout table (0.5x to 100,000x) replaces the eight per-gold-count tables and the separate
-WWXRP rig family; the module shrinks by roughly a third. An intermediate chain was also run at
-`d3ddb0c0` (the registry and cap merges, before the Degenerette commit); both archives are supplied.
+The source is the committed revision `ce4443c7d98611ed58c68252c50d7319ee7c299c`. Commits after it
+touch only `docs/`, so every hash and every run below describes this tree. It carries six
+changes on top of the reveal and incinerator revision below.
+
+`WWXRP.setTrustedMinter(address, bool)` lets the vault owner (more than 50.1% of DGVE) register
+or revoke any address as a WWXRP minter and burner alongside the pinned game contracts, with no
+cap, by design and as disclosed; one mapping is appended at WWXRP slot 9.
+
+The decimator's activity multiplier now covers a player's first 500,000 FLIP of base burn at a
+level (was: until 200,000 FLIP of multiplied weight), tracked in the free bits of the existing
+per-level record. Two things moved at once, so the effect is larger than the cap ratio alone:
+because the cap now measures base rather than weight, bonus weight above base at maximum
+activity rises from 87,848 to 391,650 FLIP (106,538 to 569,950 on day one). The same commit
+raises `SDGNRS_DECIMATOR_CAP` in `FLIP.sol` from 150,000 to 500,000 FLIP, so the sDGNRS auto
+entry is now entirely multiplied and spends up to 3.33x more backing per opening.
+
+Degenerette moves to single-symbol tickets: the player picks one hero symbol, everything else is
+generated fresh from committed domain-separated draws, colors score independently, gold-on-gold
+matches add 25% each, and one shared payout table (0.5x to 100,000x) replaces the eight
+per-gold-count tables and the separate WWXRP rig family; the module shrinks by roughly a third.
+The trait packer's colors become uniform 1/8 (gold was 1/15), and the WWXRP reel rig drops to a
+5% gate. Return targets: FLIP equals the activity curve exactly, ETH adds five points, WWXRP
+runs 70% to 130% with the surplus on scores 6-9, all reproduced by
+`scripts/data/degenerette_single_symbol_math.py`.
+
+The century incinerator now pays only against a book whose flip actually lost. It reads the
+armed BAF day's stored result rather than assuming the transition word's low bit, because a VRF
+stall can resolve the armed day from a backfilled derived word while the transition keeps a
+later day's, leaving the two independent. A day that won, or never resolved, funds nothing.
+
+And sDGNRS recycles: at the transition close after levels 100, 200 and so on, a random 25-75%
+of the supply decrease since the previous such close is minted back into the Whale, Affiliate,
+Lootbox and Reward pools in a 1:3:2:1 split, with Lootbox taking the allocation dust. The whole
+percentage is drawn from the committed transition word under a mechanism- and level-specific
+domain, so the burn delta sizes the mint but never selects the roll, and a completed century
+cannot be rerolled. No backing moves, so a refill of fraction `r` after a century that burned
+fraction `b` reduces each surviving token's share of the reserves by `r*b / (1 - b + r*b)`; at
+50% burned that is 20%, 33.3% or 42.9% for a 25%, 50% or 75% refill. This is disclosed in
+`ECONOMIC_DISCLOSURES.md`, mapped in [the RNG domain map](audit/RNG-DOMAINS.md) and analysed in
+[the recycling note](audit/SDGNRS-CENTURY-RECYCLE-2026-09-22.md) as amended by
+[the random-refill verification](audit/SDGNRS-CENTURY-RANDOM-2026-09-22.md). Three fields are
+appended at sDGNRS slot 8 and recycling closes permanently at game over. Both the GAME-only
+entry point `recycleCentury(uint24,uint256)` and the `CenturyRecycled` event change shape, so
+each carries a new selector and topic0 rather than changing meaning silently. The same work adds
+the two view-only ticket-lens search helpers.
+
+An intermediate chain was also run at `d3ddb0c0` (the registry and cap merges, before the
+Degenerette commit); both archives are supplied.
 
 | Check | Result |
 | --- | --- |
@@ -131,7 +167,7 @@ WWXRP rig family; the module shrinks by roughly a third. An intermediate chain w
 | Per-test gas, reveal/incinerator revision vs this revision, same fixture pins | GAS4_ROW |
 | Hardhat `make test-hardhat` | HARDHAT4_ROW |
 | Hardhat `npm run test:stat` | STAT4_ROW |
-| Eleven `make check-*` gates and the storage layout oracle | GATES4_ROW |
+| Eleven `make check-*` gates and the storage layout oracle | all pass; judged by exit code, including `check-rng-taint` after the `_rollSingleBoxBoons` manifest row was corrected back to `nonceBase = 0`. The oracle matches every golden and reports delegatecall shared-slot consistency between the modules and the Game |
 | EIP-170 runtime size, checked-in pins | SIZEC4_ROW |
 | EIP-170 runtime size, Hardhat-style fixture pins | SIZEH4_ROW |
 | Slither 0.11.5, same flags as below | SLITHER4_ROW |

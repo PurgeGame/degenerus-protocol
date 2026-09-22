@@ -50,7 +50,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
         assertTrue(vm.revertToState(snapshot));
         vm.prank(address(game));
-        sdgnrs.recycleCentury(100);
+        sdgnrs.recycleCentury(100, RNG_WORD);
         uint256 poolBefore = _lootboxPool();
         vm.prank(address(0xCA11));
         game.openBox(PLAYER, GENESIS_INDEX);

@@ -56,9 +56,10 @@ interface IsDGNRS {
     /// @return transferred Amount actually transferred (may be less if pool has insufficient balance)
     function transferFromPool(Pool pool, address to, uint256 amount) external returns (uint256 transferred);
 
-    /// @notice Recycle half of the completed century's live burns into Whale/Affiliate/Lootbox/Reward.
+    /// @notice Recycle a random 25-75% of the century's live burns into Whale/Affiliate/Lootbox/Reward.
     /// @dev GAME-only; called at the transition close after levels 100, 200, etc. No backing moves.
-    function recycleCentury(uint24 completedLevel) external;
+    /// @param rngWord Committed transition word; determines a whole percentage independently of burn size.
+    function recycleCentury(uint24 completedLevel, uint256 rngWord) external;
 
     /// @notice Burn all undistributed pool tokens at game over and permanently close recycling
     function burnAtGameOver() external;

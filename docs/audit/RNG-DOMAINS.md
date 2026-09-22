@@ -24,6 +24,16 @@ is known. Existing commitment guards remain necessary.
   explicit domains. Numeric ordinals, owners and period identifiers provide
   uniqueness within those domains; they are not sources of entropy.
 
+## Century-refill amendment (2026-09-22)
+
+The century refill uses the committed transition word already passed through
+`advanceGame`, retained locally across `_unlockRng`. It draws an integer percentage
+from 25 through 75, inclusive, with a domain specific to this mechanism and level.
+Burn amounts size the mint but do not enter the draw. The result is public once
+the word is known; permissionless settlement retains its existing live-pool timing.
+Repeated calls cannot reroll a completed century. See
+[the random-refill verification](SDGNRS-CENTURY-RANDOM-2026-09-22.md).
+
 ## Domain map
 
 `H` means Keccak-256. Unless marked packed, fields use 32-byte ABI words;
@@ -56,6 +66,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | BAF ticket award | `H(word, level, BAF_TICKET_TAG, winnerOrdinal)` | Previous awards cannot move this root |
 | Daily / level quests | `H(word, DAILY_QUEST_TAG)` / `H(word, LEVEL_QUEST_TAG)` | Global quests; forced-type policy unchanged |
 | Skim bps / variance | `H(word, SKIM_BPS_TAG)` / `H(word, SKIM_VARIANCE_TAG)` | Second variance draw hashes the first variance word |
+| sDGNRS century refill | `H(word, CENTURY_REFILL_TAG XOR completedLevel) % 51 + 25` | Tag = `H("sdgnrs.century.refill")`; fixed level and transition word; no caller, amount, timestamp or pool balance in seed |
 | Coinflip reward percent | packed `H(REWARD_PERCENT_TAG, word, uint24(epoch))` | Separate from gap-word and other ordinal derivations |
 | Foil packs | `FOIL_SEED_TAG`, `FOIL_SPIN_TAG`, per-draw tags | Buyer, committed level/day and ticket/draw ordinal |
 | Protocol/deity boons | existing issuer/day/slot domains | Shared issuer menu intentional; winner cohort closed before request |

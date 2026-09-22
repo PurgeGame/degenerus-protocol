@@ -41,13 +41,17 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage {
 }
 
 contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
+    uint256 private constant RNG_WORD = uint256(keccak256("century-transition-test")) | 1;
+    uint256 private constant REFILL_PERCENT = 25 + uint256(keccak256(abi.encode(
+        RNG_WORD, uint256(keccak256("sdgnrs.century.refill")) ^ uint256(100)
+    ))) % 51;
     function setUp() public {
         _deployProtocol();
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
         bytes memory realCode = address(game).code;
         PhaseEndSeeder seeder = _etchSeedRestore();
-        seeder.seedTransitionDone(100, uint256(keccak256("century-transition-test")) | 1);
+        seeder.seedTransitionDone(100, RNG_WORD);
         _restore(realCode);
     }
 
@@ -64,18 +68,18 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         assertTrue(game.rngLocked(), "lock holds until transition close");
         for (uint256 i; i < 40 && sdgnrs.lastRecycledCentury() == 0; ++i) game.advanceGame();
         assertEq(sdgnrs.lastRecycledCentury(), 1, "drain reaches real close");
-        assertEq(sdgnrs.totalSupply(), beforeSupply + 50 ether);
-        assertEq(sdgnrs.centurySupplyCheckpoint(), beforeSupply + 50 ether);
+        assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1 ether);
+        assertEq(sdgnrs.centurySupplyCheckpoint(), beforeSupply + REFILL_PERCENT * 1 ether);
     }
 
     function testRecordedTransitionCanCloseAfterCalendarGapWithoutExtraRefill() public {
         vm.warp(block.timestamp + 3 days);
         game.advanceGame();
         assertEq(sdgnrs.lastRecycledCentury(), 1);
-        assertEq(sdgnrs.totalSupply(), 1e30 - 50 ether);
+        assertEq(sdgnrs.totalSupply(), 1e30 - 100 ether + REFILL_PERCENT * 1 ether);
         vm.prank(address(game));
-        sdgnrs.recycleCentury(100);
-        assertEq(sdgnrs.totalSupply(), 1e30 - 50 ether);
+        sdgnrs.recycleCentury(100, RNG_WORD + 1);
+        assertEq(sdgnrs.totalSupply(), 1e30 - 100 ether + REFILL_PERCENT * 1 ether);
     }
 
     function _prepareRequest(uint8 compression) private {

@@ -715,7 +715,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // only once the far-future batch reports no work, so the arm never stacks on
                 // a chunked stage. Silent when nothing is due.
                 if (lvl % 100 == 0) {
-                    dgnrs.recycleCentury(lvl);
+                    dgnrs.recycleCentury(lvl, rngWord);
                     coinflip.armCenturySeed(lvl);
                 }
                 stage = STAGE_TRANSITION_DONE;

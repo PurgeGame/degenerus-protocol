@@ -1,13 +1,15 @@
 # sDGNRS century recycling plan
 
 Status: implemented in the working tree. Updated 2026-09-22 against
-`a5d4d2cdcfb9eb1febfaa99e84c75954a9fe74de` plus the existing working-tree changes.
+`0fca5ff3` plus the random-refill amendment. The originally implemented fixed
+50% rule is superseded by the 25–75% roll below.
 
 ## Agreed behavior
 
 - Count **all live-game sDGNRS burns**, including player redemptions, the sDGNRS
   backing burned by `burnWrapped`, and automatic pool self-award burns.
-- Once per completed century, mint **floor(burned / 2)** into ongoing reward pools.
+- Once per completed century, mint **floor(burned * refillPercent / 100)** into ongoing reward pools.
+  `refillPercent` is a random integer from **25 through 75**, inclusive (mean 50%).
 - Split the mint **Whale : Affiliate : Lootbox : Reward = 1 : 3 : 2 : 1**.
   PresaleBox and the creator/wrapper allocation receive no new allocation.
 - Keep permissionless reward resolution and current reward-pricing rules. Timing
@@ -23,7 +25,7 @@ burns. A century means this gameplay interval, not 100 calendar days.
 
 This can be a small, bounded accounting change. The safest accounting method is a
 **post-refill total-supply checkpoint**: all current live supply reductions are
-burns, and there are currently no post-construction mints. No burn-path counter,
+burns, and there are no post-construction mints outside this refill. No burn-path counter,
 per-wallet history, or century loop is necessary.
 
 The economic cost is real: a refill creates additional claims on existing backing.
@@ -34,7 +36,7 @@ at or below its previous post-refill checkpoint and the initial supply.
 The main implementation risks are a repeated/misplaced refill, accidentally
 changing packed redemption state, and exceeding AdvanceModule's bytecode limit.
 The pre-change source-matching AdvanceModule artifact had **178 bytes spare**;
-the implemented hook leaves **50 bytes** under production pins and **33 bytes**
+the random-refill hook leaves **58 bytes** under production pins and **41 bytes**
 under the tested Hardhat pins. Keep fresh size checks on subsequent changes.
 
 ## Current code and integration point
@@ -50,8 +52,8 @@ under the tested Hardhat pins. Keep fresh size checks on subsequent changes.
 | Terminal ordering | [`DegenerusGameGameOverModule`](../contracts/modules/DegenerusGameGameOverModule.sol) latches `gameOver = true` before calling `dgnrs.burnAtGameOver()`. |
 
 Add one token call inside the existing x00 transition-close block, immediately
-before `coinflip.armCenturySeed(lvl)`. Preserve the surrounding transition/unlock
-ordering. Both calls occur atomically in the same transaction; the token refill
+before `coinflip.armCenturySeed(lvl)`, passing the existing local `rngWord`.
+Preserve the surrounding transition/unlock ordering. Both calls occur atomically in the same transaction; the token refill
 itself makes no external calls. Its own zero-level guard rejects the `% 100 == 0`
 case at level zero.
 
@@ -79,10 +81,17 @@ For opening checkpoint C and current supply S immediately before a refill:
 
 ```text
 B = C - S
-M = floor(B / 2)
-S_after = S + M = C - ceil(B / 2)
+P = 25 + H(rngWord, H("sdgnrs.century.refill") XOR completedLevel) % 51
+M = floor(B * P / 100)
+S_after = S + M = C - (B - M)
 next_checkpoint = S_after
 ```
+
+`H` hashes 32-byte ABI words (the tag hashes its literal string). The existing
+committed transition word is preserved locally across `_unlockRng`; no new VRF
+request, timestamp, caller, burn amount or pool balance enters the roll. The
+modulo draw follows existing protocol conventions, with negligible modulo bias.
+The century marker prevents a later word or keeper from rerolling it.
 
 The checkpoint must be the supply **after** this mint. Using initial supply every
 century would count old burns again. Using the previous pre-mint supply would
@@ -90,8 +99,8 @@ produce incorrect accounting and can underflow at the next boundary.
 
 Count raw token units, with 18 decimals. Do not use `DayPending.burned`: it rounds
 individual redemptions up to whole tokens for the daily cap, omits self-awards,
-and is deleted at resolution. Do not carry an odd raw burn unit into the next
-century; each century independently rounds its half down. A recycled token that
+and is deleted at resolution. Do not carry fractional raw-unit rounding dust into
+the next century; each century independently rounds its mint down. A recycled token that
 is subsequently awarded and burned is a new burn in that later interval.
 
 Allocation, also in raw units:
@@ -109,7 +118,7 @@ No pool reset, creator allocation, PresaleBox refill, or change to reward rates.
 
 ## Entry point, replay protection, and terminal behavior
 
-Add `recycleCentury(uint24 completedLevel)` to
+Add `recycleCentury(uint24 completedLevel, uint256 rngWord)` to
 [`IsDGNRS`](../contracts/interfaces/IsDGNRS.sol) and implement it as `onlyGame`.
 It takes no caller-specified mint amount, recipient, weights, or backing amount.
 
@@ -123,8 +132,8 @@ It takes no caller-specified mint amount, recipient, weights, or backing amount.
    and the new supply before narrowing.
 4. Update inventory, total supply, the four pools, the new checkpoint, and the
    processed-century marker atomically. Mark the century even when B or M is zero.
-5. Emit a dedicated event with completed level, burned amount, minted amount,
-   and the four pool additions. Emit the standard mint `Transfer` for nonzero M.
+5. Emit a dedicated event with completed level, selected percentage, burned amount,
+   minted amount, and the four pool additions. Emit the standard mint `Transfer` for nonzero M.
 
 The live mint's bound follows from the checkpoint equation before narrowing
 `_totalSupply` to `uint128`: genesis issuance totals `INITIAL_SUPPLY`, and every
@@ -144,7 +153,7 @@ unrecycled. Do not introduce a terminal catch-up mint.
 | Property | Required assertion |
 | --- | --- |
 | Supply conservation | `supply = initialSupply + cumulativeRecycleMints - allActualSdgnrsBurns`. |
-| Recycle budget | For every processed interval, `M = floor(B/2)`; at least half of its burned units stay removed. |
+| Recycle budget | For every processed interval, `M = floor(B*P/100)`, `25 <= P <= 75`; at least 25% of its burned units stay removed. |
 | Supply bound | `0 <= S_after <= previousCheckpoint <= INITIAL_SUPPLY`; supply may increase only at the authorized refill. |
 | Inventory funding | The refill increases contract inventory, total supply, and the sum of pool balances by exactly the same M. |
 | Existing inventory surplus | Preserve `balanceOf[sDGNRS] - sum(poolBalances)`. Global equality is too strong: the wrapper can unwrap tokens to sDGNRS without crediting a reward pool. The general invariant is inventory **at least** pool balances. |
@@ -166,12 +175,16 @@ Holding free backing fixed across the mint, each existing token's backing share
 is multiplied by `S / (S + M)`. The immediate percentage reduction is
 `M / (S + M)`. This also affects the value of the wrapper's underlying tokens.
 
-| Fraction of opening supply burned during the century | Mint as fraction of opening supply | Per-token backing reduction at refill |
-| --- | --- | --- |
-| 10% | 5% | 5.26% |
-| 25% | 12.5% | 14.29% |
-| 50% | 25% | 33.33% |
-| 80% | 40% | 66.67% |
+For burn fraction `b` and refill fraction `r`, that reduction is
+`r*b / (1-b+r*b)`, ignoring raw-unit rounding. The 50% column shows the midpoint
+roll, not the expected dilution (the formula is nonlinear).
+
+| Fraction of opening supply burned | Reduction at 25% refill | Reduction at 50% refill | Reduction at 75% refill |
+| --- | --- | --- | --- |
+| 10% | 2.70% | 5.26% | 7.69% |
+| 25% | 7.69% | 14.29% | 20.00% |
+| 50% | 20.00% | 33.33% | 42.86% |
+| 80% | 50.00% | 66.67% | 75.00% |
 
 These are dilution calculations, not predictions of total returns. Actual free
 backing changes through gameplay, yields, redemptions, and reservation releases.
@@ -180,7 +193,7 @@ new supply. Consequently, holders can prefer redeeming before a refill. Their
 burn is still subject to the existing locks, caps, reservation requirement, and
 gambling outcome.
 
-Self-award recycling redirects half of those destroyed units into future player
+Self-award recycling redirects 25–75% of those destroyed units into future player
 rewards. It reduces the permanent scarcity benefit of the self-burn; it creates
 no immediate backing withdrawal. Repeated self-burn/recycle cycles shrink the
 recycled quantity geometrically and cannot grow supply above its checkpoint.
@@ -282,7 +295,7 @@ the appropriate discovery group if needed. Relevant existing coverage includes
 `LootboxNestedDgnrsOrdering`, `Lvl100PhaseEndAdvanceGas`, and
 `DeityTransitionDrainGas`. Run affected governance and token unit suites as well.
 
-## Planning validation performed
+## Original fixed-50% planning validation performed
 
 - Traced current supply writers, reward pools, wrapper transfers, redemption
   reservations, century completion, and terminal ordering directly in source.
@@ -300,3 +313,11 @@ the appropriate discovery group if needed. Relevant existing coverage includes
 - These planning checks preceded implementation. The Solidity execution, size,
   layout, and regression evidence is recorded in the
   [implementation verification](audit/SDGNRS-CENTURY-RECYCLE-2026-09-22.md).
+
+## Random-refill amendment validation
+
+The percentage draw replaces the fixed half without adding storage. Endpoint,
+random-word allocation, replay, domain separation and repeated-century tests
+extend the original accounting coverage. Current execution evidence is recorded
+in [the random-refill verification](audit/SDGNRS-CENTURY-RANDOM-2026-09-22.md);
+prior fixed-half counts and measurements above remain historical.
