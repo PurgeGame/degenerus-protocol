@@ -70,5 +70,13 @@
     "offset": 0,
     "slot": 8,
     "typeLabel": "mapping(uint256 => struct WWXRP.IncinEntry)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "trustedMinter",
+    "offset": 0,
+    "slot": 9,
+    "typeLabel": "mapping(address => bool)"
   }
 ]

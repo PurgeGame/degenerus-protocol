@@ -37,6 +37,12 @@ pragma solidity 0.8.34;
  *      - Standard ERC20 functionality (transfer, approve, etc.)
  *      - mintPrize(): Authorized minters can award WWXRP prizes
  *      - vaultMintTo(): Vault can mint from its uncirculating reserve
+ *      - Trusted minters: the vault owner (>50.1% of DGVE) may register or
+ *        revoke any address as a minter/burner alongside the pinned game
+ *        contracts, so future games can pay and take WWXRP. This is
+ *        deliberate and total: WWXRP is the protocol's inflationary side coin
+ *        and the vault is its sovereign; nothing here bounds what a trusted
+ *        address may mint or burn.
  *      - Vault escrow: the vault holds no circulating WWXRP — transfers and
  *        mints targeting it de-circulate into its mint allowance, and its
  *        burns (WWXRP bets) spend from that allowance (FLIP model)
@@ -115,6 +121,12 @@ interface IDrawGame {
 
     /// @notice DegenerusGame's current level.
     function level() external view returns (uint24);
+}
+
+/// @dev Vault ownership check (>50.1% of DGVE) for the trusted-minter registry.
+interface IDrawVaultOwner {
+    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
+    function isVaultOwner(address account) external view returns (bool);
 }
 
 /// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized
@@ -223,6 +235,11 @@ contract WWXRP {
         uint256 cumulativeScore
     );
 
+    /// @notice Emitted when the vault owner registers or revokes a trusted minter/burner.
+    /// @param account The address whose trust changed.
+    /// @param trusted True when the address may now mint and burn; false when revoked.
+    event TrustedMinterSet(address indexed account, bool trusted);
+
     /// @notice Emitted when a skipped century BAF resolves its incinerator draw
     /// @param bracket Century bracket whose BAF skipped (level x00)
     /// @param winner Player recorded in the winning entry (paid game-side)
@@ -257,6 +274,9 @@ contract WWXRP {
 
     /// @notice Thrown when caller is not the vault
     error OnlyVault();
+
+    /// @notice Thrown when the caller does not hold vault ownership (>50.1% of DGVE)
+    error NotVaultOwner();
 
     /// @notice Thrown when vault allowance is insufficient
     error InsufficientVaultAllowance();
@@ -340,6 +360,7 @@ contract WWXRP {
     /// @dev Game views consumed by the draws: the day's RNG word, activity score
     ///      and level (day indexing is computed locally)
     IDrawGame private constant game = IDrawGame(ContractAddresses.GAME);
+    IDrawVaultOwner private constant vaultOwner = IDrawVaultOwner(ContractAddresses.VAULT);
 
     /// @dev Coinflip contract credited with draw prizes (FLIP-denominated stake)
     IDrawCoinflip private constant coinflip =
@@ -449,6 +470,10 @@ contract WWXRP {
     ///      resolve binary search touches only the cum slot per probe; the
     ///      player slot is read once for the winner.
     mapping(uint256 => IncinEntry) private _incinEntry;
+
+    /// @notice Addresses the vault owner has registered as minters/burners alongside the
+    ///         pinned game contracts (future games). Appended after every prior slot.
+    mapping(address => bool) public trustedMinter;
 
     constructor() {
         // Register this contract's ENS reverse name (best-effort; skipped when the
@@ -603,7 +628,7 @@ contract WWXRP {
       +======================================================================+*/
 
     /// @notice Mint WWXRP to a recipient (for lootbox/game/consolation prizes)
-    /// @dev Only callable by authorized minters (game/coinflip/jackpots contracts).
+    /// @dev Callable by the pinned minters (game/coinflip/jackpots) or a trusted minter.
     /// @param to Recipient of the minted WWXRP
     /// @param amount Amount to mint (18 decimals)
     /// @custom:reverts OnlyMinter When caller is not an authorized minter
@@ -612,12 +637,28 @@ contract WWXRP {
         if (
             msg.sender != MINTER_GAME &&
             msg.sender != MINTER_COINFLIP &&
-            msg.sender != MINTER_JACKPOTS
+            msg.sender != MINTER_JACKPOTS &&
+            !trustedMinter[msg.sender]
         ) {
             revert OnlyMinter();
         }
 
         _mint(to, amount);
+    }
+
+    /// @notice Register or revoke a trusted minter/burner (vault owner only).
+    /// @dev Total by design: a trusted address may mint any amount to anyone through
+    ///      mintPrize and burn any balance through burnForGame, exactly as the pinned
+    ///      game contracts can. The vault owner is whoever holds >50.1% of DGVE.
+    /// @param account The address to trust or revoke.
+    /// @param trusted True to register, false to revoke.
+    /// @custom:reverts NotVaultOwner When the caller is not the vault owner.
+    /// @custom:reverts ZeroAddress When account is address(0).
+    function setTrustedMinter(address account, bool trusted) external {
+        if (!vaultOwner.isVaultOwner(msg.sender)) revert NotVaultOwner();
+        if (account == address(0)) revert ZeroAddress();
+        trustedMinter[account] = trusted;
+        emit TrustedMinterSet(account, trusted);
     }
 
     /// @notice Mint WWXRP to a recipient from the vault's uncirculating reserve
@@ -640,13 +681,13 @@ contract WWXRP {
     }
 
     /// @notice Burn WWXRP for game bets
-    /// @dev Only callable by the game contract. Silently returns if amount is zero.
+    /// @dev Callable by the game contract or a trusted minter. Silently returns if amount is zero.
     /// @param from Address to burn from
     /// @param amount Amount to burn (18 decimals)
-    /// @custom:reverts OnlyMinter When caller is not the game contract
+    /// @custom:reverts OnlyMinter When caller is neither the game contract nor a trusted minter
     /// @custom:reverts InsufficientBalance When from has insufficient balance
     function burnForGame(address from, uint256 amount) external {
-        if (msg.sender != MINTER_GAME) revert OnlyMinter();
+        if (msg.sender != MINTER_GAME && !trustedMinter[msg.sender]) revert OnlyMinter();
         if (amount == 0) return;
         _burn(from, amount);
     }

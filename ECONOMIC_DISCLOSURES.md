@@ -22,6 +22,10 @@ price tables and reward curves.
   may participate in rewards under their entry rules. The vault is excluded from BAF's
   top-4 leaderboard and its 10% top-bettor and 5% third/fourth-place slices, but retains
   BAF score for eligible ticket-based awards.
+- The vault owner (>50.1% of DGVE) can register any address as a WWXRP minter and burner
+  (`WWXRP.setTrustedMinter`), with no cap on what a trusted address may mint or burn. This is
+  deliberate: WWXRP is the inflationary side coin, future games are meant to pay and take it, and
+  the vault is its sovereign. Treat WWXRP's supply as fully at the vault owner's discretion.
 - WWXRP starts with a **1B** uncirculated vault mint allowance, with further century
   allocations.
 - The vault holds one permanent AFKing subscription seat and controls a **998-seat**
