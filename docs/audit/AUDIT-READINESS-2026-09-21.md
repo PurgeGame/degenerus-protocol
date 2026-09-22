@@ -142,3 +142,17 @@ Indexing `sender` on `DegenerusAffiliate.Affiliate` would close the same class o
 gap for per-player referral history at about +119 gas per affiliated purchase; it is
 a product decision and is not part of this revision. `GNRUS.LevelResolved` and the
 admin proposal events are low-volume and already filterable.
+
+## Addendum — craps extsload revision `6d02e4bfa`
+
+`CrapsBattle` gains `extsload(bytes32) external view returns (bytes32)`, the raw storage
+slot reader `DegenerusGame` already exposes. Craps had no read surface beyond
+`progressivePool`, so any lens, viewer or client replay of table state had to index
+history or use `eth_getStorageAt`; this mirrors that visibility to `eth_call` and
+`staticcall` consumers. It is read-only, adds no storage or event, costs nothing on any
+existing path, and adds 42 bytes of runtime: 24,331 bytes with checked-in pins and
+24,399 with Hardhat-style fixture pins, both under the 24,576-byte limit. The
+headroom rail in `test/craps/CrapsGas.t.sol` was raised from 24,300 to 24,400; it is a
+project margin, not the EIP-170 limit, and had been set against a build 45 bytes smaller
+than the shipped table. The full suites, gates, oracle, sizes and analyzers were re-run at
+this revision; see `../VERIFICATION.md`.

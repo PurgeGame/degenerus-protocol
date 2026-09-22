@@ -110,7 +110,30 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-21, event-index revision
+## Current evidence — 2026-09-22, craps extsload revision
+
+The source is the committed revision `6d02e4bfa25157987159eee225e7c3673a384fd1`. It differs from the
+event-index revision below by one view function: `CrapsBattle.extsload(bytes32)`, the
+raw-slot reader `DegenerusGame` already exposes, so craps lens/viewer contracts and client
+replay can read table state through `eth_call` without touching the contract again. It adds
+no storage, no event and no runtime gas on any existing path; it adds 42 bytes of runtime.
+The self-imposed headroom rail in `test/craps/CrapsGas.t.sol` moved from 24,300 to 24,400
+bytes because it was calibrated to an older build; the EIP-170 limit is unchanged. Raw runs
+are in [the supplementary archive](audit/evidence-2026-09-22-craps-extsload.tar.gz).
+
+| Check | Result |
+| --- | --- |
+| Foundry full seven-group sweep at this revision | 2,654 passed, 0 failed, 103 skipped, run in a detached worktree at this exact revision with its own build cache; the invariant that tripped its non-vacuity guard under the default seed on the two prior trees passed here |
+| Per-test gas, event-index revision vs this revision, same fixture pins | +22 gas per external `CrapsBattle` call (one more selector compare in the dispatcher): 812 tests moved, 755 of them exact multiples of 22; largest +1.34% on a craps draw-rate test making thousands of table calls; 4 tests fell, at most 57,538 gas in tests that deploy a module (`gas-delta-per-test.txt`) |
+| Hardhat `make test-hardhat` | 1,659 passing, 22 pending, 0 failing |
+| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`, both pre-disclosed reds |
+| Eleven `make check-*` gates and the storage layout oracle | all pass |
+| EIP-170 runtime size, checked-in pins | `DegenerusGameAdvanceModule` 24,543 (33 spare), `DegenerusGameMintModule` 24,538 (38 spare), `CrapsBattle` 24,331 (245 spare), `DegenerusGame` 24,220 (356 spare); all 32 entries fit |
+| EIP-170 runtime size, Hardhat-style fixture pins | `DegenerusGameAdvanceModule` 24,560 (16 spare), `DegenerusGameMintModule` 24,543 (33 spare), `CrapsBattle` 24,399 (177 spare), `DegenerusGame` 24,225 (351 spare); all 32 entries fit |
+| Slither 0.11.5, same flags as below | 3,889 results over 183 contracts: 200 High, 517 Medium, 555 Low, 2,561 Informational, 56 Optimization; High and Medium sets identical to the event-index run; the one new entry is Informational `missing-inheritance` (`CrapsBattle` now matches the slot-reader interface shape through `extsload`); 33 further Low/Medium/High entries re-keyed with cancelling counterparts in the same functions (`slither-delta-vs-event-index-run.txt`) |
+| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,449 instances; every category and per-category instance count identical to the event-index report |
+
+## Evidence — 2026-09-21, event-index revision (base of the revision above)
 
 The source is the committed revision `91cc40e39bb97ae1ab50e011ff54db92021033d2`. It differs from the
 seed-domain snapshot below by one line: `EntryOwnerRegistered.owner` is now an indexed
