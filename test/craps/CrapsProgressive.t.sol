@@ -47,13 +47,15 @@ contract ProgHarness is CrapsViews {
         return _compositeOf(s) | standing;
     }
 
-    /// @dev The composite a BUST folds: shooters completed, then the remainder.
+    /// @dev The composite a BUST folds: shooters completed, whether it kept anything, its high
+    ///      point, then the remainder. The high point is pinned high here so it never separates
+    ///      two of these: the tests that use this compare on shooters and remainder.
     function bustScore(uint256 hands, uint256 endFlip, uint256 standing) external pure returns (uint256) {
         Settlement memory s;
         s.stop = Craps.SlipStop.Bust;
         s.handsPlayed = hands;
         s.won = endFlip * 1 ether;
-        s.peak = 1e30; // a bust's peak must reach neither field
+        s.peak = 1e30; // saturates the bust's high-point bits, identical across these scores
         return _compositeOf(s) | standing;
     }
 
@@ -1219,12 +1221,12 @@ contract CrapsProgressiveTest is CrapsPins {
 
         craps.scoreAt(key, low, 1, 0, TAP_SLOT);
         assertEq(craps.battleOf(key).winnerId, 1, "the first entrant did not lead unopposed");
-        assertEq(craps.leaderPeakOf(key), 3, "a bust's primary is not its shooter count");
+        assertEq(craps.leaderPeakOf(key) >> 34, 3, "a bust's primary does not lead with its shooter count");
 
         // A LOSING challenger moves neither.
         craps.scoreAt(key, low - 1, 2, 0, TAP_SLOT);
         assertEq(craps.battleOf(key).winnerId, 1, "a losing challenger took the lead");
-        assertEq(craps.leaderPeakOf(key), 3, "a losing challenger overwrote the board");
+        assertEq(craps.leaderPeakOf(key) >> 34, 3, "a losing challenger overwrote the board");
 
         // A WINNING one takes both.
         craps.scoreAt(key, high, 3, 0, TAP_SLOT);
@@ -1274,10 +1276,10 @@ contract CrapsProgressiveTest is CrapsPins {
         assertEq(end, 1234, "a goal did not decode its ending bankroll");
         assertEq(hands, 0, "a goal decoded a shooter count it never stored");
 
-        (stop, hands, peak, end) = craps.decodeBest(craps.rawComposite(false, 41, 9, 12));
+        (stop, hands, peak, end) = craps.decodeBest(craps.rawComposite(false, (41 << 34) | 777, 9, 12));
         assertEq(uint8(stop), uint8(Craps.SlipStop.Bust), "a bust did not decode as a bust");
         assertEq(hands, 41, "a bust did not decode its shooter count");
-        assertEq(peak, 0, "a bust decoded a high point");
+        assertEq(peak, 0, "a bust decoded a high point (it ranks busts but never reaches a reader)");
         assertEq(end, 9, "a bust did not decode its remainder");
 
         // And a real board reports the same through `battleOf`.

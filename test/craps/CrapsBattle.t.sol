@@ -483,7 +483,8 @@ contract CrapsBattleTest is CrapsPins {
 
             // The expected verdict, off the engine's own account of each run but ranked by the
             // independent comparator — the primary first, then the money, then the standing. A
-            // goal's primary is its whole-FLIP HIGH POINT; a bust's is its shooter count.
+            // goal's primary is its whole-FLIP HIGH POINT; a bust's is its shooter count, then
+            // whether it kept a whole FLIP, then its whole-FLIP high point, in that order.
             bool[3] memory g;
             uint256[3] memory h;
             uint256[3] memory prim;
@@ -492,7 +493,9 @@ contract CrapsBattleTest is CrapsPins {
                 CrapsBattle.Settlement memory st = craps.settlementAt(ids[k]);
                 g[k] = st.stop == Craps.SlipStop.Goal;
                 h[k] = st.handsPlayed;
-                prim[k] = g[k] ? st.peak / 1 ether : st.handsPlayed;
+                prim[k] = g[k]
+                    ? st.peak / 1 ether
+                    : (st.handsPlayed << 64) | (uint256(st.won >= 1 ether ? 1 : 0) << 63) | (st.peak / 1 ether);
                 w[k] = st.won;
             }
             // Rank, then the money, then — when those are dead level, which is the whole
@@ -532,7 +535,7 @@ contract CrapsBattleTest is CrapsPins {
                 "winning stop class"
             );
             // A GOAL RANKS ON ITS HIGH POINT, so the composite carries no shooter count for one;
-            // a BUST's primary IS its shooter count.
+            // a BUST's primary LEADS with its shooter count.
             assertEq(info.winningHands, g[best] ? 0 : h[best], "winning hand count");
             assertEq(info.winningEnd, w[best] / 1 ether, "the winner's ending bankroll");
 

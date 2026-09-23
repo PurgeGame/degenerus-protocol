@@ -789,6 +789,81 @@ contract Craps {
         }
     }
 
+    /// @dev THE MERIT VERDICT as one lexicographic scalar, so the common fold is one comparison.
+    ///      Built by `_rankOf` (standing aside, which the table folds in). One hundred and five
+    ///      bits, most significant first:
+    ///
+    ///        bit  104     GOAL. Every goal beats every bust.
+    ///        bits 60..103 THE PRIMARY, read one way for each stop:
+    ///                       * a goal ranks on its HIGH POINT, in whole FLIP;
+    ///                       * a bust ranks on shooters completed (bits 94..103), then on
+    ///                         whether it kept anything (bit 93: a remainder of a whole FLIP or
+    ///                         more beats a run the survival coin took to zero), then on its
+    ///                         HIGH POINT (bits 60..92, whole FLIP, saturated).
+    ///        bits 16..59  THE MONEY: the raw ENDING bankroll in whole FLIP — a goal's payout
+    ///                     figure, a bust's surviving remainder — never the high point.
+    ///        bits  0..15  the entrant's STANDING as the slip last recorded it (entry or the
+    ///                     last amendment), frozen once amendments close.
+    ///
+    ///      Exact equality is resolved separately by the table word's deterministic ordering of
+    ///      bet ids, so settlement order cannot choose the winner.
+    ///
+    ///      BOTH MONEY FIELDS SATURATE rather than mask. A mask would wrap a seventeen-trillion-
+    ///      FLIP figure to a small one and rank it WORSE; saturating can only ever fail to
+    ///      separate two runs that are already past the horizon, and the comparison then falls
+    ///      through to the next field. The largest bankroll the schedule can hand out is 60,000
+    ///      FLIP, so reaching the field's ceiling means a 2.9e8x run — the same order of
+    ///      unreachable as the engine's own 512-roll hand bound.
+    uint256 internal constant _SC_GOAL_BIT = 1 << 104;
+    uint256 internal constant _SC_PRIMARY_SHIFT = 60;
+    uint256 internal constant _SC_PRIMARY_MASK = 0xFFFFFFFFFFF;
+    uint256 internal constant _SC_WON_SHIFT = 16;
+    uint256 internal constant _SC_WON_MASK = 0xFFFFFFFFFFF;
+    /// @dev A bust's primary, packed: shooters completed, then the kept-anything bit, then the
+    ///      high point. `_MAX_SLIP_HANDS` (512) fits the ten hand bits.
+    uint256 internal constant _SC_BUST_HANDS_SHIFT = 34;
+    uint256 internal constant _SC_BUST_LEFT_BIT = 1 << 33;
+    uint256 internal constant _SC_BUST_PEAK_MASK = (1 << 33) - 1;
+
+    /// @dev THE COMPARATOR, as one lexicographic scalar (see `_SC_GOAL_BIT`) — everything but the
+    ///      entrant's standing, which the table folds into the low bits.
+    ///
+    ///      A GOAL BEATS EVERY BUST, and there is ONE comparator for both products:
+    ///
+    ///        * GOALS race on the HIGH POINT, then on the ending bankroll. A run latches its win
+    ///          and plays on, so how fast it got there is no merit; how far it got is.
+    ///        * BUSTS race on shooters completed, then on whether they kept anything, then on the
+    ///          HIGH POINT, then on the remainder still held. A shared shooter ends many runs on
+    ///          the same hand, so length alone ties often; the high point separates them before
+    ///          standing or the coin is needed.
+    function _rankOf(SlipResult memory r) internal pure returns (uint256) {
+        unchecked {
+            uint256 primary;
+            uint256 goalBit;
+            uint256 won = _wonComponent(r.bankrollOut);
+            if (r.stop == SlipStop.Goal) {
+                goalBit = _SC_GOAL_BIT;
+                primary = _wonComponent(r.peakBankroll);
+            } else {
+                uint256 peak = r.peakBankroll / 1 ether;
+                if (peak > _SC_BUST_PEAK_MASK) peak = _SC_BUST_PEAK_MASK;
+                primary = (r.handsPlayed << _SC_BUST_HANDS_SHIFT) | (won != 0 ? _SC_BUST_LEFT_BIT : 0) | peak;
+            }
+            return goalBit | (primary << _SC_PRIMARY_SHIFT) | (won << _SC_WON_SHIFT);
+        }
+    }
+
+    /// @dev The money component of a composite score: whole FLIP, SATURATED at the field rather
+    ///      than masked into it. The mask would wrap a seventeen-trillion-FLIP return to a small
+    ///      one and rank it WORSE; no constructible battle reaches a fortieth of that, but a
+    ///      comparator's job is to be right past the horizon too.
+    function _wonComponent(uint256 won) internal pure returns (uint256 f) {
+        unchecked {
+            f = won / 1 ether;
+            if (f > _SC_WON_MASK) f = _SC_WON_MASK;
+        }
+    }
+
     /// @dev Where the dark side sits in a packed board: ten three-bit legs, the don't-pass leg
     ///      last, so a whole legal board occupies thirty bits.
     uint256 internal constant _CHIP_DONT_SHIFT = 27;

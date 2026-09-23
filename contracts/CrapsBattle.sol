@@ -10,8 +10,9 @@ import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 ///      packed chips and every term of the run, and reads the run back. Reached by STATICCALL —
 ///      the engine holds no storage and can change nothing.
 interface ICrapsEngine {
-    /// @notice CrapsEngine's pure play of one slip to its stop.
-    function settleSlip(
+    /// @notice CrapsEngine's pure play of one slip to its stop, the merit composite in the
+    ///         fifth word (see `CrapsEngine.settleRanked`).
+    function settleRanked(
         uint256 packedChips,
         uint256 chipFlip,
         uint256 scatterHash,
@@ -652,32 +653,9 @@ contract CrapsBattle is LootboxCraps {
     uint256 internal constant _BG_STAKE_SHIFT = 201;
     uint256 internal constant _MASK32 = 0xFFFFFFFF;
 
-    /// @dev THE MERIT VERDICT as one lexicographic scalar, so the common fold is one comparison.
-    ///      One hundred and five bits, most significant first:
-    ///
-    ///        bit  104     GOAL. Every goal beats every bust.
-    ///        bits 60..103 THE PRIMARY, read one way for each stop:
-    ///                       * a goal ranks on its HIGH POINT, in whole FLIP;
-    ///                       * a bust ranks on shooters completed.
-    ///        bits 16..59  THE MONEY: the raw ENDING bankroll in whole FLIP — a goal's payout
-    ///                     figure, a bust's surviving remainder — never the high point.
-    ///        bits  0..15  the entrant's STANDING as the slip last recorded it (entry or the
-    ///                     last amendment), frozen once amendments close.
-    ///
-    ///      Exact equality is resolved separately by the table word's deterministic ordering of
-    ///      bet ids, so settlement order cannot choose the winner.
-    ///
-    ///      BOTH MONEY FIELDS SATURATE rather than mask. A mask would wrap a seventeen-trillion-
-    ///      FLIP figure to a small one and rank it WORSE; saturating can only ever fail to
-    ///      separate two runs that are already past the horizon, and the comparison then falls
-    ///      through to the next field. The largest bankroll the schedule can hand out is 60,000
-    ///      FLIP, so reaching the field's ceiling means a 2.9e8x run — the same order of
-    ///      unreachable as the engine's own 512-roll hand bound.
-    uint256 internal constant _SC_GOAL_BIT = 1 << 104;
-    uint256 internal constant _SC_PRIMARY_SHIFT = 60;
-    uint256 internal constant _SC_PRIMARY_MASK = 0xFFFFFFFFFFF;
-    uint256 internal constant _SC_WON_SHIFT = 16;
-    uint256 internal constant _SC_WON_MASK = 0xFFFFFFFFFFF;
+    /// @dev The scoreboard's composite is `Craps._rankOf` (the layout and every field are
+    ///      documented there) with the entrant's STANDING in its low sixteen bits; this is the
+    ///      mask of the whole 105-bit verdict.
     uint256 internal constant _SC_BEST_MASK = (1 << 105) - 1;
     // The bonus seed lives in the battle's OWN word, not in a global "currently armed" pointer:
     // a seeded battle can still be settling long after the next arm, and its pot must not depend
@@ -722,8 +700,8 @@ contract CrapsBattle is LootboxCraps {
     /// @param finalized    Every entrant resolved: the scoreboard is the verdict.
     /// @param winningStop  The winning outcome class, meaningful once finalized.
     /// @param winningHands The winning hand count — meaningful once finalized, and only where the
-    ///                     composite encodes it: a BUST, whose primary is its shooter count. A
-    ///                     goal ranks on its high point instead and reports zero here.
+    ///                     composite encodes it: a BUST, whose primary leads with its shooter
+    ///                     count. A goal ranks on its high point alone and reports zero here.
     /// @param winningPeak  The winner's HIGH POINT in whole FLIP, once finalized.
     /// @param winningEnd   The winner's raw ENDING bankroll in whole FLIP, once finalized — what
     ///                     it was actually paid on, which a goal's peak may sit well above.
@@ -757,7 +735,7 @@ contract CrapsBattle is LootboxCraps {
     ///      paths as a single memory pointer — the resolver is sensitive to stack pressure.
     ///      Its layout deliberately matches `Craps.SlipResult`: `paid` reuses the dead
     ///      `bankrollIn` word, `won` aliases `bankrollOut`, and `unitsPlayed` keeps the otherwise
-    ///      unused fifth word in place. `_settlementOf` can therefore reuse the engine result
+    ///      fifth word as the merit `rank`. `_settlementOf` can therefore reuse the engine result
     ///      directly instead of allocating and copying a second struct for every seat.
     struct Settlement {
         /// @dev What is actually credited. A bust pays ZERO: whatever it was still holding is
@@ -769,13 +747,14 @@ contract CrapsBattle is LootboxCraps {
         uint256 won;
         /// @dev THE HIGH POINT, raw and unscaled: the largest bankroll this run held at a
         ///      completed-shooter boundary. A scheduled goal RANKS on it and the records read it;
-        ///      it is never what the run is paid, and a bust's peak reaches neither — the
-        ///      comparator drops it the moment the goal bit is clear.
+        ///      it is never what the run is paid. A bust's peak breaks ties among busts with
+        ///      the same hand count and survival state, but never qualifies it for records.
         uint256 peak;
         uint256 handsPlayed;
-        /// @dev Retained to preserve `SlipResult`'s memory layout. The resolver does not rank or
-        ///      charge on escalated units, but keeping the word avoids a five-word copy per seat.
-        uint256 unitsPlayed;
+        /// @dev THE MERIT COMPOSITE (`Craps._rankOf`), less standing: the fifth word, where
+        ///      `SlipResult` carries escalated units, which the table never reads.
+        ///      `CrapsEngine.settleRanked` returns the composite here instead.
+        uint256 rank;
         /// @dev Dice rolls across the run. It ranks NOTHING and qualifies nothing — the
         ///      progressive reads the high point now — and survives only as the settle walk's
         ///      work-unit charge and as telemetry.
@@ -1073,8 +1052,8 @@ contract CrapsBattle is LootboxCraps {
     /// @param winnerId The winning seat within this battle's slot, not the full packed bet id.
     /// @param winningPeak The winner's HIGH POINT in whole FLIP: the largest bankroll it held at
     ///        a completed-shooter boundary. What a scheduled field ranks on.
-    /// @dev THE SHOOTER COUNT IS NOT RESTATED HERE. A bust's primary is its shooter count, and
-    ///      `Battle.winningHands` decodes it from the composite the scoreboard holds; a Goal's
+    /// @dev THE SHOOTER COUNT IS NOT RESTATED HERE. A bust's primary leads with its shooter
+    ///      count, and `Battle.winningHands` decodes it from the composite the scoreboard holds; a Goal's
     ///      primary is its high point in every product, custom included, so a Goal's hand count
     ///      is not recoverable and reads zero. The log carries the figures the two stops differ
     ///      on and leaves the derivable one in the word it came from.
@@ -2142,7 +2121,7 @@ contract CrapsBattle is LootboxCraps {
         // way, and the only thing that falls out at the end is the payment.
         uint256 sc;
         unchecked {
-            sc = _compositeOf(s) | ((header >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK);
+            sc = s.rank | ((header >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK);
         }
         // THE LANE FOLDS FIRST, and the ordering is load-bearing: scoring the main board is what
         // finalizes the field, and finalization is what PAYS — so the last high seat has to be in
@@ -2287,7 +2266,7 @@ contract CrapsBattle is LootboxCraps {
         // from the packed chips and the same owner-keyed scatter hash, so the table carries
         // none of the dice. A pure callee at a pinned address is handed no stipend and no try:
         // it has nothing to fail on.
-        SlipResult memory sr = ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlip(
+        SlipResult memory sr = ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleRanked(
             packed,
             chipFlip,
             _hash3(word, SCATTER_TAG, uint160(header)),
@@ -3583,44 +3562,22 @@ contract CrapsBattle is LootboxCraps {
         return cost | flags;
     }
 
-    /// @dev THE COMPARATOR, as one lexicographic scalar (see `_SC_GOAL_BIT`) — everything but the
-    ///      entrant's standing, which the caller folds into the low bits.
-    ///
-    ///      A GOAL BEATS EVERY BUST, and there is ONE comparator for both products:
-    ///
-    ///        * GOALS race on the HIGH POINT, then on the ending bankroll. A run latches its win
-    ///          and plays on, so how fast it got there is no merit; how far it got is.
-    ///        * BUSTS race on shooters completed, then on the remainder still held. A bust's high
-    ///          point reaches neither field: the goal bit is clear, so the primary is its hand
-    ///          count and nothing about a temporary peak can enter an all-Bust race.
+    /// @dev A settlement's merit composite (see `Craps._rankOf`), for harnesses: production
+    ///      reads the figure the engine already returned in `Settlement.rank`, so this wrapper
+    ///      compiles into nothing a deployment carries.
     function _compositeOf(Settlement memory s) internal pure returns (uint256) {
-        unchecked {
-            uint256 primary;
-            uint256 goalBit;
-            if (s.stop == Craps.SlipStop.Goal) {
-                goalBit = _SC_GOAL_BIT;
-                primary = _wonComponent(s.peak);
-            } else {
-                primary = s.handsPlayed;
-            }
-            return goalBit | (primary << _SC_PRIMARY_SHIFT) | (_wonComponent(s.won) << _SC_WON_SHIFT);
+        SlipResult memory r;
+        assembly ("memory-safe") {
+            r := s
         }
-    }
-
-    /// @dev The money component of a composite score: whole FLIP, SATURATED at the field rather
-    ///      than masked into it. The mask would wrap a seventeen-trillion-FLIP return to a small
-    ///      one and rank it WORSE; no constructible battle reaches a fortieth of that, but a
-    ///      comparator's job is to be right past the horizon too.
-    function _wonComponent(uint256 won) internal pure returns (uint256 f) {
-        unchecked {
-            f = won / 1 ether;
-            if (f > _SC_WON_MASK) f = _SC_WON_MASK;
-        }
+        return _rankOf(r);
     }
 
     /// @dev A stored composite back into what it says. `hands` is recoverable for a BUST, whose
-    ///      primary is its shooter count, and reads zero for a goal, whose primary is its high
-    ///      point instead.
+    ///      primary leads with its shooter count, and reads zero for a goal, whose primary is its
+    ///      high point alone. A bust's high point ranks it against other busts but DECODES AS
+    ///      ZERO: the progressive, the record and the finalization log read a high point only
+    ///      for a goal, whatever a bust once held.
     function _decodeBest(uint256 best)
         internal
         pure
@@ -3629,7 +3586,9 @@ contract CrapsBattle is LootboxCraps {
         unchecked {
             uint256 primary = (best >> _SC_PRIMARY_SHIFT) & _SC_PRIMARY_MASK;
             endFlip = (best >> _SC_WON_SHIFT) & _SC_WON_MASK;
-            if (best & _SC_GOAL_BIT == 0) return (Craps.SlipStop.Bust, primary, 0, endFlip);
+            if (best & _SC_GOAL_BIT == 0) {
+                return (Craps.SlipStop.Bust, primary >> _SC_BUST_HANDS_SHIFT, 0, endFlip);
+            }
             return (Craps.SlipStop.Goal, 0, primary, endFlip);
         }
     }
@@ -4162,7 +4121,8 @@ contract CrapsBattle is LootboxCraps {
             // plays the same game and races on the same comparator; what it does not do is fund
             // or draw on anything the protocol allocates. The single scheduled branch below
             // carries that guard for the progressive, repeat-victory stamp and record alike.
-            // `peakFlip` is zero for a bust in either product, so the goal gate needs no restating.
+            // `peakFlip` decodes as zero for a bust in either product, so the goal gate needs no
+            // restating.
             //
             // THE BIGGEST DICE RUN is the FIFTH category of the record `Coinflip` already owns,
             // not a pool of its own: nothing here funds a record pool, adds craps action, or
@@ -4244,8 +4204,8 @@ contract CrapsBattle is LootboxCraps {
     ///      the amount is a fixed share of the live pool, chosen by the rung and by whether this
     ///      is the day's event. Nothing is re-run and no runner-up is ever considered.
     ///
-    ///      A BUST NEVER QUALIFIES, however high it got: its `peakFlip` is zero, which is below
-    ///      every cutoff. A custom battle neither draws on the pool nor funds it and is excluded
+    ///      A BUST NEVER QUALIFIES, however high it got: its `peakFlip` decodes as zero, which is
+    ///      below every cutoff. A custom battle neither draws on the pool nor funds it and is excluded
     ///      by the caller before this helper is reached.
     /// @param w The window the finalized winner played.
     /// @param peakFlip The finalized winner's HIGH POINT in whole FLIP, straight off the

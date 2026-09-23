@@ -34,6 +34,39 @@ contract CrapsEngine is Craps {
         address player,
         uint256 boost
     ) external pure returns (SlipResult memory r) {
+        r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, player, boost);
+    }
+
+    /// @notice `settleSlip` with the table's MERIT COMPOSITE (`_rankOf`) in the fifth word, in
+    ///         place of the escalated units the table never reads. What `CrapsBattle` calls: the
+    ///         comparator runs here, beside the dice, instead of in the table's bytecode.
+    /// @dev Same parameters and the same run as `settleSlip`; only `unitsPlayed` differs.
+    function settleRanked(
+        uint256 packedChips,
+        uint256 chipFlip,
+        uint256 scatterHash,
+        uint256 scatterCount,
+        bytes32 seed,
+        uint256 bankroll,
+        uint256 goal,
+        address player,
+        uint256 boost
+    ) external pure returns (SlipResult memory r) {
+        r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, player, boost);
+        r.unitsPlayed = _rankOf(r);
+    }
+
+    function _play(
+        uint256 packedChips,
+        uint256 chipFlip,
+        uint256 scatterHash,
+        uint256 scatterCount,
+        bytes32 seed,
+        uint256 bankroll,
+        uint256 goal,
+        address player,
+        uint256 boost
+    ) private pure returns (SlipResult memory r) {
         Bets memory board = _boardFrom(packedChips, chipFlip);
         _scatterInto(board, scatterHash, chipFlip, scatterCount);
         r = _settleSlip(board, seed, bankroll, goal, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, player, boost);

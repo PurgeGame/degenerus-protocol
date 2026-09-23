@@ -1353,8 +1353,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (targetMet && day == wallDay && day >= psd) {
             lastPurchaseDay = true;
             // Level L+1's first generation window opens with this latch: its frozen pool mints
-            // from here on the sealed day's word. One metadata write per level, never a
-            // charged drain step.
+            // on the first word requested after it (a post-seal mid-day word or the
+            // last-purchase word), never on a word already public. One metadata write per
+            // level, never a charged drain step.
             ticketGenerationStartBlock[uint256(purchaseLevel) + 1] = block.number;
             // x0 (BAF) level: arm tomorrow's flip day for the
             // weighted depositor draw — the sealed day's direct
@@ -2334,10 +2335,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      and Sub span fields mutate only in the pre-request STAGE and the
     ///      lock-gated subscribe/cancel path — and the word is domain-separated
     ///      ("SEATDRAW") from every other consumer. Runs only at a seal that
-    ///      releases the lock (the caller's `wasLocked`): a gap day re-walked after
-    ///      a stall, and the wall day recorded in the same fulfil crank, seal with
-    ///      the lock already down and a word public since that crank, so they hold
-    ///      no drawing.
+    ///      releases the lock (the caller's `wasLocked`): the wall day recorded in the
+    ///      same fulfil crank seals with the lock already down and a word public since
+    ///      that crank, so it holds no drawing (stalled gap days are skipped, never
+    ///      re-walked).
     function _afKingSubDraw(uint24 day) private {
         uint256 len = _subscribers.length;
         uint256 word = rngWordByDay[day];

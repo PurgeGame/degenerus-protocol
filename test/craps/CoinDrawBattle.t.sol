@@ -228,8 +228,9 @@ contract CoinDrawBattleTest is Test {
     /// @dev Gas model of one run: FIXED + PER_HAND x hands + PER_ROLL x rolls, fitted as an upper
     ///      envelope over 3,000 capped runs (least squares plus the largest residual). The proven
     ///      field bound evaluates it at both caps for all 50 entrants; this test re-checks every
-    ///      sample against the model on the heaviest board (every leg live), on a bankroll deep
-    ///      enough that only the caps stop it, so samples span the whole (hands, rolls) range.
+    ///      sample against the model on the heaviest board (every leg live) and on random boards
+    ///      (both hand machines), on a bankroll deep enough that only the caps stop it, and on
+    ///      battle-shaped runs (survival coin, goal latch), so samples span every per-roll path.
     uint256 internal constant FIXED = 10_000;
     uint256 internal constant PER_HAND = 1_100;
     uint256 internal constant PER_ROLL = 480;
@@ -248,6 +249,30 @@ contract CoinDrawBattleTest is Test {
             if (h > maxHands) maxHands = h;
         }
         assertEq(maxHands, 22, "the samples never reached the hand cap");
+        // Every other per-roll path: random boards (about a third have no pass line and run the
+        // side machine) on the deep bankroll, and battle-shaped runs on a real five-deep bankroll
+        // (the survival coin and the goal latch), all at both caps.
+        for (uint256 i; i < 1_500; ++i) {
+            uint256 packed = uint256(keccak256(abi.encode("board", i))) & ((1 << 30) - 1);
+            if (packed == 0) packed = 1 << 27;
+            uint256 g = gasleft();
+            (uint256 h, uint256 r) = ref.capped(packed, keccak256(abi.encode("side", i)), 22, 200);
+            g -= gasleft();
+            assertLe(g, FIXED + PER_HAND * h + PER_ROLL * r, "a random board cost more than the gas model");
+        }
+        for (uint256 i; i < 1_500; ++i) {
+            uint256 g = gasleft();
+            Craps.SlipResult memory r =
+                ref.run(uint256(keccak256(abi.encode("shape", i))), address(uint160(i + 1)), 100);
+            g -= gasleft();
+            // `run` also scatters the board and derives both seeds: the work RUN_EXTRA carries in
+            // the composed bound, so these samples are held to the per-run figure it charges.
+            assertLe(
+                g,
+                FIXED + RUN_EXTRA + PER_HAND * r.handsPlayed + PER_ROLL * r.totalRolls,
+                "a battle run cost more than the gas model"
+            );
+        }
         uint256 field = 50 * (FIXED + PER_HAND * 22 + PER_ROLL * 200);
         emit log_named_uint("proven dice bound, 50 entrants", field);
         assertLe(field, 6_600_000, "the proven field bound moved");
