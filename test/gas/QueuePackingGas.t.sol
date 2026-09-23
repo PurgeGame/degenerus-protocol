@@ -15,7 +15,9 @@ contract QueuePackingGasSeeder is DegenerusGame {
     }
 
     function queued(uint24 lvl, address player) external view returns (uint80) {
-        uint24 key = lvl > level + 5 ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
+        // Same routing as the queue sinks: levels above the mint ceiling wait unminted in the
+        // far-future key space; minted levels take the double-buffer write key.
+        uint24 key = lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
         return _entriesOwed(key, player);
     }
 }

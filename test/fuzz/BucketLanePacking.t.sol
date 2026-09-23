@@ -36,6 +36,9 @@ contract BucketLaneHarness is DegenerusGameMintModule, BucketSeed {
 
     /// @dev One player owing `owed` entries in the read-slot queue for `lvl`, cursor reset.
     function seedQueue(uint24 lvl, address p, uint32 owed) external {
+        // The live mint window ends at game level + 1. Put this queue at its
+        // edge so processTicketBatch(lvl + 1) exercises the real sweep.
+        level = lvl - 1;
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("lane-packing-entropy")) | 1;
         uint24 rk = _tqReadKey(lvl);

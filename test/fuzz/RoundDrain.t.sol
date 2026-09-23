@@ -14,6 +14,10 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
     function seedQueue(uint24 lvl, address[] calldata players, uint32[] calldata owed, uint8[] calldata rem, uint256 entropy)
         external
     {
+        // _mintCeiling() = level + 1 by default (lastPurchaseDay false): pin `level` to `lvl`
+        // so the caller's `processTicketBatch(lvl + 1)` window [lvl .. lvl+1] actually covers
+        // the seeded read key, matching the old anchor-relative [anchor-1..anchor+4] window.
+        level = lvl;
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = entropy | 1;
         uint24 rk = _tqReadKey(lvl);
@@ -29,6 +33,9 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
     function seedViaPurchase(uint24 lvl, address[] calldata players, uint32[] calldata entriesScaled, uint256 entropy)
         external
     {
+        // Pin `level` so `lvl` sits at/under _mintCeiling() (level + 1) and routes through the
+        // double buffer, not the far-future key space.
+        level = lvl;
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = entropy | 1;
         for (uint256 i; i < players.length; ++i) {
@@ -179,7 +186,7 @@ contract RoundDrain is Test {
     ///      the drain (rounds and the per-entry tail) pushes nothing and every lane resolves
     ///      to its buyer; fractional purchases keep the position through the remainder roll.
     function test_PurchaseRegistered_NoDrainPushes() public {
-        uint24 lvl = 3; // <= level + 5 with level == 0, so the write key, not far-future
+        uint24 lvl = 3; // seedViaPurchase pins level = lvl, so lvl <= _mintCeiling() (level + 1); write key, not far-future
         uint256 n = 11;
         address[] memory ps = _players(n);
         uint32[] memory q = new uint32[](n);

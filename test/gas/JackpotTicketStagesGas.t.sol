@@ -49,6 +49,7 @@ abstract contract TicketStageGasFixture is BoundaryGasFixture {
         uint256 tickets;
         uint256 nearWins;
         uint256 farWins;
+        uint256 seatWins;
         uint8 stage;
         for (uint256 i; i < logs.length; ++i) {
             bytes32 sig = logs[i].topics[0];
@@ -58,13 +59,17 @@ abstract contract TicketStageGasFixture is BoundaryGasFixture {
                 recipients[tickets++] = player;
             } else if (sig == FLIP_WIN_SIG) ++nearWins;
             else if (sig == FAR_WIN_SIG) ++farWins;
+            else if (sig == CRAPS_WIN_SIG) ++seatWins;
             else if (sig == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
         }
         assertEq(tickets, 96);
-        assertEq(nearWins, carryover() ? 0 : 50);
-        assertEq(farWins, carryover() ? 0 : 8);
+        // The jackpot-day coin draw on level + 1: 25 craps seats and 25 equal coin shares, no
+        // far-future leg.
+        assertEq(nearWins, carryover() ? 0 : 25);
+        assertEq(seatWins, carryover() ? 0 : 25);
+        assertEq(farWins, 0);
         assertEq(stage, carryover() ? STAGE_JACKPOT_CARRYOVER_TICKETS : STAGE_JACKPOT_PHASE_ENDED);
-        emit log_named_uint(carryover() ? "CARRYOVER_96_COLD_INCLUDING_INTRINSIC" : "DAILY_96_TICKETS_58_FLIP_COLD_INCLUDING_INTRINSIC", used);
+        emit log_named_uint(carryover() ? "CARRYOVER_96_COLD_INCLUDING_INTRINSIC" : "DAILY_96_TICKETS_25_SEATS_25_FLIP_COLD_INCLUDING_INTRINSIC", used);
         assertLt(used, EIP7825_TX_GAS_CAP);
     }
 }

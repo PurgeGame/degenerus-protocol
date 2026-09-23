@@ -4,10 +4,15 @@ pragma solidity ^0.8.26;
 import {BoundaryGasFixture, PhaseEndSeeder} from "../gas/Lvl100PhaseEndAdvanceGas.t.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 contract SdgnrsTransitionSeeder is DegenerusGameStorage {
+    /// @dev 150 owners on the NEAREST unminted level: at the transition close of level L the
+    ///      purchase level is L + 1 (minted on L's last-purchase word) and L + 2 is the first
+    ///      level above _mintCeiling(). Its pool mints only as the frozen pool of L + 1's last
+    ///      purchase day, so the transition must leave it untouched.
     function seedFarFutureEntries() external {
-        uint24 target = level + 5;
+        uint24 target = level + 2;
         uint24 key = _tqFarFutureKey(target);
         for (uint160 i; i < 150; ++i) {
             address who = address(0xF0200000 + i);
@@ -55,21 +60,38 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         _restore(realCode);
     }
 
-    function testFarFutureDrainFinishesBeforeExactlyOneRefill() public {
+    /// @dev Formerly testFarFutureDrainFinishesBeforeExactlyOneRefill: the transition used to drain
+    ///      the far-future level crossing into the +5 mint window over several chunked advances
+    ///      (STAGE_TRANSITION_WORKING), and the refill had to wait for the last chunk. That stage is
+    ///      retired: nothing crosses a far-future boundary at the transition any more, so it closes
+    ///      in ONE advance. The property kept is the same — the century refills exactly once, at the
+    ///      real close — plus the new one it now rests on: an unminted queue is not drained there.
+    function testTransitionClosesInOneAdvanceWithExactlyOneRefillLeavingFarFutureUnminted() public {
         bytes memory realCode = address(game).code;
         vm.etch(address(game), type(SdgnrsTransitionSeeder).runtimeCode);
         SdgnrsTransitionSeeder(address(game)).seedFarFutureEntries();
         vm.etch(address(game), realCode);
         uint256 beforeSupply = sdgnrs.totalSupply();
+        uint24 ffKey = (uint24(1) << 22) | (game.level() + 2);
+        bytes32 ffLenSlot = keccak256(abi.encode(uint256(ffKey), uint256(12)));
+        assertEq(uint256(vm.load(address(game), ffLenSlot)), 150, "fixture: unminted queue seeded");
 
         game.advanceGame();
-        assertEq(sdgnrs.lastRecycledCentury(), 0, "working FF chunk must not recycle");
-        assertEq(sdgnrs.totalSupply(), beforeSupply);
-        assertTrue(game.rngLocked(), "lock holds until transition close");
-        for (uint256 i; i < 40 && sdgnrs.lastRecycledCentury() == 0; ++i) game.advanceGame();
-        assertEq(sdgnrs.lastRecycledCentury(), 1, "drain reaches real close");
+        assertEq(sdgnrs.lastRecycledCentury(), 1, "transition closes and refills in one advance");
         assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1 ether);
         assertEq(sdgnrs.centurySupplyCheckpoint(), beforeSupply + REFILL_PERCENT * 1 ether);
+        assertFalse(game.rngLocked(), "lock released at transition close");
+        // The unminted level is not touched by the transition: every owner still owes its entries
+        // on the far-future key, and the queue is not released.
+        assertEq(uint256(vm.load(address(game), ffLenSlot)), 150, "transition must not drain an unminted queue");
+        for (uint160 i; i < 150; ++i) {
+            assertEq(uint32(TQ.owed(address(game), ffKey, address(0xF0200000 + i)) >> 8), 4);
+        }
+        // The close cannot re-run: the same day's next advance has nothing to do.
+        vm.expectRevert(bytes4(keccak256("NotTimeYet()")));
+        game.advanceGame();
+        assertEq(sdgnrs.lastRecycledCentury(), 1);
+        assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1 ether, "exactly one refill");
     }
 
     function testRecordedTransitionCanCloseAfterCalendarGapWithoutExtraRefill() public {

@@ -690,14 +690,14 @@ describe("DegenerusJackpots", function () {
       await bucketSeed.seedTicketQueue(gameAddr, key, addresses);
     }
 
-    /** Set game level (slot 0, offset 18 = 3 bytes at byte 18) */
+    /** Set game level (slot 0, offset 12 = 3 bytes at byte 12) */
     async function setLevel(gameAddr, lvl) {
       // Read current slot 0 value to preserve other packed fields
       const current = await hre.ethers.provider.getStorage(gameAddr, 0);
       const val = BigInt(current);
-      // Clear bytes 18-20 (level is uint24 at offset 18 = bits 144-167)
-      const mask = ~(BigInt(0xFFFFFF) << 144n);
-      const newVal = (val & mask) | (BigInt(lvl) << 144n);
+      // Clear bytes 12-14 (level is uint24 at offset 12 = bits 96-119)
+      const mask = ~(BigInt(0xFFFFFF) << 96n);
+      const newVal = (val & mask) | (BigInt(lvl) << 96n);
       await hre.ethers.provider.send("hardhat_setStorageAt", [
         gameAddr,
         hre.ethers.toBeHex(0, 32),
@@ -771,8 +771,8 @@ describe("DegenerusJackpots", function () {
       let distributed = 0n;
       let scatterFirstCount = 0;
       let scatterSecondCount = 0;
-      const perRoundFirst = (pool * 45n / 100n) / 50n;
-      const perRoundSecond = (pool / 4n) / 50n;
+      const perRoundFirst = (pool / 2n) / 48n;
+      const perRoundSecond = (pool * 30n / 100n) / 48n;
 
       console.log("\n    === BAF Payout: 100 ETH, lvl 10, FULL SLATE ===");
       console.log("    Leaderboard: Alice=500, Bob=300, Carol=100 ETH flips");
@@ -792,8 +792,6 @@ describe("DegenerusJackpots", function () {
         let label = "";
         if (amounts[i] === pool / 10n) label = "Slice A (10% top BAF)";
         else if (amounts[i] === pool / 20n) label = "Slice A2/B (5%)";
-        else if (amounts[i] === (pool * 3n) / 100n) label = "Slice D/D2 (3% FF 1st)";
-        else if (amounts[i] === pool / 50n) label = "Slice D/D2 (2% FF 2nd)";
         else if (amounts[i] === perRoundFirst) { label = "Scatter 1st"; scatterFirstCount++; }
         else if (amounts[i] === perRoundSecond) { label = "Scatter 2nd"; scatterSecondCount++; }
         else label = "Other";
@@ -803,8 +801,8 @@ describe("DegenerusJackpots", function () {
       }
 
       console.log("");
-      console.log(`    Scatter 1st place winners: ${scatterFirstCount}/50 rounds filled (${hre.ethers.formatEther(perRoundFirst)} ETH each)`);
-      console.log(`    Scatter 2nd place winners: ${scatterSecondCount}/50 rounds filled (${hre.ethers.formatEther(perRoundSecond)} ETH each)`);
+      console.log(`    Scatter 1st place winners: ${scatterFirstCount}/48 rounds filled (${hre.ethers.formatEther(perRoundFirst)} ETH each)`);
+      console.log(`    Scatter 2nd place winners: ${scatterSecondCount}/48 rounds filled (${hre.ethers.formatEther(perRoundSecond)} ETH each)`);
       console.log("");
       console.log(`    Distributed: ${hre.ethers.formatEther(distributed)} ETH`);
       console.log(`    Returned:    ${hre.ethers.formatEther(returnAmount)} ETH (unfilled rounds → future pool)`);

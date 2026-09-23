@@ -35,7 +35,9 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
     }
     function _key(uint24 lvl, uint24 purchaseLevel) private pure returns (uint24) {
-        return lvl > purchaseLevel + 5 ? (uint24(1) << 22) | lvl : lvl;
+        // The minted window now ends at level + 1; higher levels use the
+        // far-future queue until their preceding purchase phase seals.
+        return lvl > purchaseLevel + 1 ? (uint24(1) << 22) | lvl : lvl;
     }
     function _owed(uint24 lvl, address who, uint24 atLevel) private view returns (uint256) {
         return uint32(TQ.owed(address(game), _key(lvl, atLevel), who) >> 8);

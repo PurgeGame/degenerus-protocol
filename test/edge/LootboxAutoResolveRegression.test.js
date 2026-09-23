@@ -34,8 +34,9 @@
 //
 // TEST STRATEGY:
 //   All four are source-level structural and byte-identity proofs. Full
-//   end-to-end integration of `processFutureTicketBatch` + `_rollRemainder`
-//   for these scenarios is covered downstream in `test/edge/BackfillIdempotency`
+//   end-to-end integration of `processTicketBatch` (including its private
+//   `_processFutureTicketBatch` continuation) + `_rollRemainder` for these
+//   scenarios is covered downstream in `test/edge/BackfillIdempotency`
 //   and the Foundry suite under `test/fuzz/` (pre-v39, status-quo). The
 //   following remain unchanged and are asserted as such:
 //     - DegenerusGameMintModule.sol (TST-REG-02) — byte-identical to baseline
@@ -156,8 +157,9 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // comments — but should not contain `rem = ` or `remainder = ` writes.
       // Conservative: assert that the `_rollRemainder` call does NOT appear
       // inside this function body (rollRemainder is the post-activation
-      // remainder-promotion helper that runs at processFutureTicketBatch
-      // time, not at queue time).
+      // remainder-promotion helper that runs during ticket-batch drain time
+      // — processTicketBatch's own loop or its private
+      // _processFutureTicketBatch continuation — not at queue time).
       expect(
         body.includes("_rollRemainder"),
         "_queueEntries must NOT invoke _rollRemainder (whole-only helper)"

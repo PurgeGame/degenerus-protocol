@@ -59,10 +59,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _latchConstructionSeat(ContractAddresses.SDGNRS);
         emit EntriesQueuedRange(ContractAddresses.VAULT, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
         emit EntriesQueuedRange(ContractAddresses.SDGNRS, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
-        uint24 currentLevel = level;
+        uint24 mintCeiling = _mintCeiling();
         uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : 0;
         for (uint24 lvl = 1; lvl <= 100; ++lvl) {
-            uint24 key = lvl > currentLevel + 5 ? _tqFarFutureKey(lvl) : lvl | writeSlotBit;
+            uint24 key = lvl > mintCeiling ? _tqFarFutureKey(lvl) : lvl | writeSlotBit;
             _queueGenesisDeities(lvl, key);
         }
     }

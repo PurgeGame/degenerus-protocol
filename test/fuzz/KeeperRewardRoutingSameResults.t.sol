@@ -49,12 +49,14 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///     accessors, element-by-element. (`afkingSnapshot` is an OFF-hot-path Game view — called only by
 ///     `DegenerusVault.sol:518` — NOT a GAS-02 STATICCALL violation; the v55 hot path reads
 ///     `afkingFunding[*]` in-context.)
-///   - GASOPT-01 (DegenerusGameMintModule `owedMap` pointer hoist): the `processFutureTicketBatch`
-///     ticket-processing RESULTS (per-player owed drain) are byte-identical to the expected per-player
-///     accounting. The hoist (`mapping(...) storage owedMap = entriesOwedPacked[rk]`) is `rk`-loop-invariant,
-///     so a multi-player backlog drains every player's owed to zero — a broken pointer hoist would
-///     skip / double-process a player, stranding non-zero owed or mis-decrementing it. Observed via the
-///     contract's own `entriesOwedPacked` storage (the per-player owed truth) after a real advance drain.
+///   - GASOPT-01 (DegenerusGameMintModule per-entry owed drain): the internal, now-private
+///     `_processFutureTicketBatch` ticket-processing RESULTS (per-player owed drain, reached only
+///     through `processTicketBatch`'s lastPurchaseDay continuation — the standalone external entry
+///     point and its former `owedMap` pointer-hoist implementation detail this comment originally
+///     described are gone) are byte-identical to the expected per-player accounting: a multi-player
+///     backlog drains every player's owed to zero — a broken drain would skip / double-process a
+///     player, stranding non-zero owed or mis-decrementing it. Observed via the contract's own
+///     `entriesOwedPacked` storage (the per-player owed truth) after a real advance drain.
 ///
 /// @dev The five call-site deltas applied (D-351-01, PATTERNS §"five call-site deltas"):
 ///   Δ3 doWork→mineFlip: `afKing.doWork()` -> `game.mineFlip()` (the rewarded router).
@@ -408,10 +410,11 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertGt(boughtAfter, boughtBefore, "the STAGE-driven buy stamped the sub bought-today (identical outcome)");
     }
 
-    /// @notice GASOPT-01 (owedMap pointer hoist) same-results: a MULTI-PLAYER far-future ticket backlog
-    ///         drains every player's owed to ZERO through the advance-driven processFutureTicketBatch loop
-    ///         (the hoisted `owedMap = entriesOwedPacked[rk]` is rk-loop-invariant). A broken pointer hoist
-    ///         would skip / double-process a player, leaving non-zero owed or mis-decrementing it; the
+    /// @notice GASOPT-01 (per-entry owed drain) same-results: a MULTI-PLAYER far-future ticket backlog
+    ///         drains every player's owed to ZERO through the advance-driven private
+    ///         `_processFutureTicketBatch` continuation (reached only via `processTicketBatch`'s
+    ///         lastPurchaseDay branch). A broken drain would skip / double-process a player, leaving
+    ///         non-zero owed or mis-decrementing it; the
     ///         per-player owed RESULTS are byte-identical to the expected per-player accounting (full drain).
     function testGasopt01OwedMapHoistSameResults() public {
         // Multi-player backlog: seed M fresh players each with K whole far-future tickets at a level the
@@ -430,7 +433,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertGe(queuedBefore, M, "pre: the far-future queue holds at least the M seeded players");
 
         // Drive the protocol through the advance cycle past the FF-processing range for level L. The
-        // internal processFutureTicketBatch (the GASOPT-01 hoist site) drains the multi-player queue.
+        // internal, private _processFutureTicketBatch (reached via processTicketBatch's
+        // lastPurchaseDay continuation) drains the multi-player queue.
         _driveAdvanceThroughFarFutureProcessing(L);
 
         // SAME-RESULTS: every seeded player's owed drained to ZERO (the rk-loop-invariant pointer processed
@@ -641,7 +645,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     /// @dev Drive the protocol through enough advance cycles that the far-future queue for level L is
-    ///      processed (the constructor + seeded multi-player FF entries drain via processFutureTicketBatch).
+    ///      processed (the constructor + seeded multi-player FF entries drain via the private
+    ///      _processFutureTicketBatch, reached only through processTicketBatch's continuation).
     function _driveAdvanceThroughFarFutureProcessing(uint24 L) internal {
         uint256 simTime = block.timestamp;
         address poolFiller = makeAddr("ff_pool_filler");

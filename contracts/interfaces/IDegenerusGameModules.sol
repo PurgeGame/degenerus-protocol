@@ -116,9 +116,14 @@ interface IDegenerusGameJackpotModule {
     /// @notice Pays daily coin jackpot rewards
     /// @param lvl The current game level
     /// @param randWord Random word for winner selection
-    /// @param minLevel Minimum target level for near-future coin distribution (inclusive)
-    /// @param maxLevel Maximum target level for near-future coin distribution (inclusive)
+    /// @param minLevel Minimum target level for the coin distribution (inclusive)
+    /// @param maxLevel Maximum target level for the coin distribution (inclusive)
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
+
+    /// @notice Pays the purchase-day FLIP fill draw over unminted future levels
+    /// @param lvl The purchase level
+    /// @param randWord Random word for level picks and walks
+    function payDailyFutureFlipJackpot(uint24 lvl, uint256 randWord) external;
 
     /// @notice Emit DailyWinningTraits without running distribution.
     /// @param lvl Current level.
@@ -326,19 +331,9 @@ interface IDegenerusGameMintModule {
         uint256 boxAmount
     ) external;
 
-    /// @notice Processes a batch of future ticket claims
-    /// @param lvl The level to process tickets for
-    /// @param entropy VRF-derived entropy for rarity rolls (caller passes today's daily RNG word)
-    /// @return worked Whether any processing was done
-    /// @return finished Whether all pending tickets are processed
-    /// @return writesUsed Write-budget units consumed (weighted writes and skips), not a raw SSTORE count.
-    function processFutureTicketBatch(
-        uint24 lvl,
-        uint256 entropy
-    ) external returns (bool worked, bool finished, uint32 writesUsed);
-
-    /// @notice The unified ticket sweep: drains the six-key read window
-    ///         [anchor-1 .. anchor+4] plus the foil buckets on one writes budget
+    /// @notice The unified ticket sweep: drains the read window
+    ///         [anchor-1 .. mint ceiling], a latched last purchase day's frozen next-level
+    ///         pool, and the foil buckets on one writes budget
     /// @param lvl The window anchor (purchaseLevel)
     /// @return finished True when the whole window and the foil drain are caught up
     /// @return didWork True if this call materialized at least one ticket or foil entry

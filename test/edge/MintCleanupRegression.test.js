@@ -36,9 +36,15 @@
 //     (lvl, queueIdx, player) per mint:426-429 + raw log topic-hash equals
 //     the v42 literal `0x279edf1c...`.
 //   TST-MINTCLN-03 — B2 path coverage: Path B at lvl=1 (current-level via
-//     `_processOneTicketEntry`) AND Path A at lvl>=2 (future-pool via
-//     `_processFutureTicketBatch`) both emit in one drain run, with
-//     `path-accumulator=A|B` log discrimination per Phase 282 precedent.
+//     `_processOneTicketEntry`, inside the minted window
+//     [purchaseLevel-1 .. _mintCeiling()]) emits during the whale-bundle
+//     drain; Path A at lvl>=2 (the whale pass's far-future span, now beyond
+//     `_mintCeiling()` since the near/far boundary shrank from `level+5` to
+//     `_mintCeiling()`) does NOT emit — those entries stay frozen in the
+//     far-future key space until their own level's last-purchase-day seal
+//     triggers the private `_processFutureTicketBatch` continuation inside
+//     `processTicketBatch`. `path-accumulator=A|B` log discrimination is
+//     retained for whichever levels do emit, per Phase 282 precedent.
 //   TST-MINTCLN-04 — `entriesOwedPacked[rk][player]` slot read decodes to
 //     the expected packed form `(uint48(owed) << 8) | uint48(rem)` (owed in
 //     bits [8..39], snap-done marker at bit 40); outer-mapping key `rk` is derived per-path via
@@ -92,11 +98,16 @@ const TICKET_FAR_FUTURE_BIT = 0x400000n;
 //     bits 0..47 of `lootboxRngPacked` (storage slot 34). The index does
 //     not change while alice's ticket queue at lvl=1 drains, so a single
 //     post-drain read is sufficient for every Path B emission.
-//   Path A (lvl>=2, future-pool via processFutureTicketBatch): entropy is
-//     the `rngWord` advanceGame() loaded via rngGate → either cached
-//     `rngWordByDay[day]` or freshly applied via _applyDailyRng (which
-//     writes rngWordByDay[day] = finalWord at L1808). Per-emission day is
-//     computed from the receipt block.timestamp using GameTimeLib's
+//   Path A (lvl>=2, the whale-pass far-future span, drained only once its
+//     level's own last-purchase-day seal fires the private
+//     `_processFutureTicketBatch` continuation inside `processTicketBatch` —
+//     not exercised by this fixture's single-day whale-bundle drain, so no
+//     Path A emissions are expected here; this entropy resolution is kept
+//     for whichever future scenario does progress far enough to reach it):
+//     entropy is the `rngWord` advanceGame() loaded via rngGate → either
+//     cached `rngWordByDay[day]` or freshly applied via _applyDailyRng
+//     (which writes rngWordByDay[day] = finalWord at L1808). Per-emission
+//     day is computed from the receipt block.timestamp using GameTimeLib's
 //     formula `(ts - 82620)/86400 - DEPLOY_DAY_BOUNDARY + 1`, where the
 //     dynamic DEPLOY_DAY_BOUNDARY is read from the deploy fixture.
 const JACKPOT_RESET_TIME = 82620n;
@@ -185,18 +196,20 @@ async function readDailyIdx(addr) {
 
 function computeRk(lvl, path, ticketWriteSlot) {
   const v = BigInt(lvl);
-  // Both drain paths (B: current-level, A: future-pool for lvl ≤ level+5) read
-  // and write `entriesOwedPacked` via `_tqWriteKey(lvl)` in the queued state.
-  // `_tqFarFutureKey(lvl)` (TICKET_FAR_FUTURE_BIT-marked) only applies when
-  // `isFarFuture = targetLevel > level + 5` is true at queue time — i.e. when
-  // tickets are bought far enough ahead that the current double-buffer slot
-  // would race with the in-flight drain. For the whale-bundle scenario at
-  // lvl=2..5 with deploy-state `level = 0`, all targets satisfy
-  // `targetLevel <= level + 5`, so all queue entries land on `_tqWriteKey`.
-  if (path === "B" || path === "A") {
+  // Path B (current-level) reads/writes `entriesOwedPacked` via `_tqWriteKey(lvl)`
+  // in the queued state. `_tqFarFutureKey(lvl)` (TICKET_FAR_FUTURE_BIT-marked)
+  // applies when `isFarFuture = targetLevel > _mintCeiling()` is true at queue
+  // time — the near/far boundary shrank from the old fixed `level + 5` to
+  // `_mintCeiling()` (normally `level + 1`). At the whale-bundle scenario's
+  // deploy-state `level = 0` (lastPurchaseDay unset, so `_mintCeiling() = 1`),
+  // only lvl=1 (path B) satisfies `targetLevel <= _mintCeiling()` and lands on
+  // `_tqWriteKey`; lvl=2..5 (path A, the whale pass's far-future span) now all
+  // satisfy `targetLevel > _mintCeiling()` and land on `_tqFarFutureKey`, same
+  // as an explicit `FAR_FUTURE` tag.
+  if (path === "B") {
     return ticketWriteSlot ? v | TICKET_SLOT_BIT : v;
   }
-  if (path === "FAR_FUTURE") return v | TICKET_FAR_FUTURE_BIT;
+  if (path === "A" || path === "FAR_FUTURE") return v | TICKET_FAR_FUTURE_BIT;
   throw new Error("computeRk: unknown path " + path);
 }
 
@@ -320,9 +333,12 @@ async function drainViaAdvanceGame(game, caller, storage, deployDayBoundary, max
   // from lootboxRngWordByIndex[lrIndex-1]; the index does not change while
   // alice's ticket queue at lvl=1 is being drained, so the post-drain read
   // returns the same word the emissions consumed.
-  // Path A (lvl>=2, future-pool via processFutureTicketBatch) sources entropy
-  // from the rngWord that advanceGame() loaded from rngWordByDay[day]; we
-  // resolve per-emission via the per-receipt block timestamp + day index.
+  // Path A (lvl>=2, the whale pass's far-future span) sources entropy from the
+  // rngWord that advanceGame() loaded from rngWordByDay[day] on whichever
+  // future call finally mints it (its own level's last-purchase-day seal); not
+  // exercised by this fixture (see TST-MINTCLN-03), but resolved defensively
+  // per-emission via the per-receipt block timestamp + day index in case a
+  // future scenario progresses far enough to reach it.
   const lootboxEntropyCache = await readLootboxEntropy(gameAddr);
   const dailyEntropyCache = new Map();
   for (const e of events) {
@@ -379,7 +395,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       };
     }
 
-    it("TST-MINTCLN-03 anchor — whale-bundle drain emits TraitsGenerated at lvl=1 (Path B) AND at lvl>=2 (Path A) with path-accumulator=A|B discrimination", async function () {
+    it("TST-MINTCLN-03 anchor — whale-bundle drain emits TraitsGenerated at lvl=1 (Path B, inside the minted window) and does NOT emit at lvl>=2 (Path A, the whale pass's far-future span, frozen until its own level's last-purchase-day seal)", async function () {
       const { aliceEvents } = await setupWhaleBundleAndDrain();
 
       expect(aliceEvents.length).to.be.gte(
@@ -405,11 +421,20 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
 
       expect(pathBLevels.length).to.be.gte(
         1,
-        "Path B must emit at lvl=1 (current-level _processOneTicketEntry)"
+        "Path B must emit at lvl=1 (current-level _processOneTicketEntry, inside the minted window)"
       );
-      expect(pathALevels.length).to.be.gte(
-        1,
-        "Path A must emit at lvl>=2 (future-pool _processFutureTicketBatch)"
+      // Post-boundary-shrink behavior: the whale pass's lvl>=2 span now exceeds
+      // _mintCeiling() (level=0 + 1) at purchase time, so it queues into the
+      // far-future key space and is NOT minted by this single-day drain — it
+      // only mints once its own level's last-purchase-day seal fires the
+      // private _processFutureTicketBatch continuation inside
+      // processTicketBatch. This whale-bundle fixture never reaches that seal,
+      // so Path A must emit nothing here (the removed external
+      // processFutureTicketBatch entrypoint this test used to drive directly
+      // no longer exists; see TST-MINTCLN-04 for the frozen-queue-key proof).
+      expect(pathALevels.length).to.equal(
+        0,
+        "Path A (lvl>=2) must NOT emit within the whale-bundle's own drain — those entries are frozen in the far-future key space until their level's own last-purchase-day seal"
       );
     });
 

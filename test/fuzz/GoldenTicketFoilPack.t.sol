@@ -506,7 +506,7 @@ contract GoldenTicketFoilPack is Test {
     // exponent, so the only way one could reach a claim is a LIVE read; the two cases
     // below move the live shift in both directions and must land on the same credit.
 
-    /// @dev THE LEVER THIS CLOSES: a thanos declaration always targets level + 6 or
+    /// @dev THE LEVER THIS CLOSES: a thanos declaration always targets level + 3 or
     ///      beyond, so once it commits a LIVE _snapShiftFor(pastLvl) returns the NEW
     ///      exponent. A claim parked across that commit would pay 2^(new - old) times
     ///      its face if any leg read the exponent live — which would make holding a

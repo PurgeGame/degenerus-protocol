@@ -186,7 +186,7 @@ contract TicketEdgeCasesTest is Test {
     // =========================================================================
 
     function testEdge01NoDoubleCount_FFThenWriteKey() public {
-        // At level=5, target=15: isFarFuture = 15 > 5+5 = true -> FF key
+        // At level=5, target=15: isFarFuture = 15 > mintCeiling(5)=6 -> FF key
         harness.queueTickets(BUYER, 15, 3);
 
         uint24 ffKey = harness.tqFarFutureKey(15);
@@ -200,10 +200,10 @@ contract TicketEdgeCasesTest is Test {
         uint80 ffPacked = harness.getTicketsOwedPacked(ffKey, BUYER);
         assertEq(uint32(ffPacked >> 8), 3, "FF key owed should be 3");
 
-        // Advance level: now 15 <= 10+5=15, near-future
-        harness.setLevel(10);
+        // Advance level: now 15 <= mintCeiling(14)=15, near-future
+        harness.setLevel(14);
 
-        // New deposit at level=10, target=15: isFarFuture = 15 > 10+5 = false -> write key
+        // New deposit at level=14, target=15: isFarFuture = 15 > mintCeiling(14)=15 -> false -> write key
         harness.queueTickets(BUYER, 15, 5);
 
         // FF key unchanged
@@ -267,20 +267,20 @@ contract TicketEdgeCasesTest is Test {
     // =========================================================================
 
     function testEdge02RoutingPreventsNewFFDeposits() public {
-        // level=9: 14 <= 9+5=14, so level 14 is in near-future window (not far-future)
-        harness.setLevel(9);
+        // level=13: mintCeiling(13)=14, so level 14 is in the near-future window (not far-future)
+        harness.setLevel(13);
         harness.queueTickets(BUYER, 14, 2);
 
         uint24 writeKey = harness.tqWriteKey(14);
         uint24 ffKey = harness.tqFarFutureKey(14);
 
-        // Deposit went to write key (isFarFuture = 14 > 9+5 = 14 > 14 = false)
+        // Deposit went to write key (isFarFuture = 14 > mintCeiling(13)=14 -> false)
         assertEq(harness.getQueueLength(writeKey), 1, "write key should have 1 entry");
         assertEq(harness.getQueueLength(ffKey), 0, "FF key should be empty");
 
-        // Advance level further: level=15
-        harness.setLevel(15);
-        // 14 > 15+5 = false, so still goes to write key
+        // Advance level further: level=20
+        harness.setLevel(20);
+        // 14 > mintCeiling(20)=21 = false, so still goes to write key
         harness.queueTickets(BUYER, 14, 1);
 
         // Same player already has entry at writeKey, so queue push does not repeat
@@ -291,9 +291,10 @@ contract TicketEdgeCasesTest is Test {
         uint80 writePacked = harness.getTicketsOwedPacked(writeKey, BUYER);
         assertEq(uint32(writePacked >> 8), 3, "write key owed should be 2+1=3 (accumulated)");
 
-        // Key assertion: once level >= L-5 (here 9 >= 14-5=9), the isFarFuture
-        // condition (targetLevel > level + 5) is permanently false for level L.
-        // New deposits can never reach the FF key for already-near-future levels.
+        // Key assertion: once level has passed a target level (here 20 >= 14), the
+        // isFarFuture condition (targetLevel > mintCeiling) is permanently false for
+        // that level. New deposits can never reach the FF key for already-near-future
+        // levels.
     }
 
     // =========================================================================

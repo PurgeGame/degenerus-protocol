@@ -152,34 +152,35 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev EDGE-05: Constructor FF tickets at levels 6+ drain one-per-transition as game advances
     function testConstructorFFTicketsDrain() public {
         // Constructor pre-queues 2 addresses (sDGNRS + VAULT) per level 1-100.
-        // Levels 6+ route to FF key (6 > 0+5 = true).
-        assertEq(_ffQueueLength(6), 2, "FF queue at level 6 should have 2 entries (sDGNRS + VAULT)");
-        assertEq(_ffQueueLength(7), 2, "FF queue at level 7 should have 2 entries");
-        assertEq(_ffQueueLength(8), 2, "FF queue at level 8 should have 2 entries");
-        assertEq(_ffQueueLength(9), 2, "FF queue at level 9 should have 2 entries");
-        assertEq(_ffQueueLength(10), 2, "FF queue at level 10 should have 2 entries");
+        // At deployment the mint ceiling is level+1 = 1 (level+2 only once a
+        // last-purchase-day latch is open), so only level 1 stays near-future;
+        // levels 2+ route to the FF key (2 > 0+1 = true).
+        assertEq(_ffQueueLength(2), 2, "FF queue at level 2 should have 2 entries (sDGNRS + VAULT)");
+        assertEq(_ffQueueLength(3), 2, "FF queue at level 3 should have 2 entries");
+        assertEq(_ffQueueLength(4), 2, "FF queue at level 4 should have 2 entries");
+        assertEq(_ffQueueLength(5), 2, "FF queue at level 5 should have 2 entries");
+        assertEq(_ffQueueLength(6), 2, "FF queue at level 6 should have 2 entries");
 
-        // Level 5 should NOT be in FF (5 <= 0+5)
-        assertEq(_ffQueueLength(5), 0, "Level 5 should not have FF entries");
+        // Level 1 should NOT be in FF (1 <= 0+1)
+        assertEq(_ffQueueLength(1), 0, "Level 1 should not have FF entries");
 
-        // Drive game through levels -- transition at level L drains FF at L+5.
-        // Drive to level 5, then flush remaining work. At level 5: transitions at
-        // 1,2,3,4,5 drain FF at 6,7,8,9,10.
+        // Drive game through levels. The mint ceiling tracks level+1 (level+2 while a
+        // last-purchase-day latch is open), so a level's FF pool opens and drains well
+        // before the game reaches that level.
         _driveToLevel(5);
         _flushAdvance();
         uint256 finalLevel = game.level();
         assertGe(finalLevel, 4, "Game must reach at least level 4");
 
-        // FF queues for levels 6-8 should be drained (transitions at levels 1-3,
-        // which are guaranteed complete since we drove well past them)
-        assertEq(_ffQueueLength(6), 0, "FF queue at level 6 should be drained after transition");
-        assertEq(_ffQueueLength(7), 0, "FF queue at level 7 should be drained after transition");
-        assertEq(_ffQueueLength(8), 0, "FF queue at level 8 should be drained after transition");
+        // FF queues for levels 2-4 should be drained (their generation windows opened
+        // and were swept long before the game reached finalLevel >= 4).
+        assertEq(_ffQueueLength(2), 0, "FF queue at level 2 should be drained after transition");
+        assertEq(_ffQueueLength(3), 0, "FF queue at level 3 should be drained after transition");
+        assertEq(_ffQueueLength(4), 0, "FF queue at level 4 should be drained after transition");
 
-        // Higher FF levels beyond what transitions could reach should still have entries.
-        // Transition at level L drains FF at L+5. After finalLevel transitions, the max
-        // drained FF level is finalLevel+5. Levels finalLevel+6 and above should be untouched.
-        uint24 firstUndrained = uint24(finalLevel) + 6;
+        // Higher FF levels beyond what the ceiling could reach should still have entries.
+        // The mint ceiling never exceeds finalLevel+2, so finalLevel+3 is guaranteed untouched.
+        uint24 firstUndrained = uint24(finalLevel) + 3;
         assertEq(_ffQueueLength(firstUndrained), 2,
             string.concat("FF at level ", _uint2str(firstUndrained), " should still have 2 entries"));
     }
@@ -268,10 +269,10 @@ contract TicketLifecycleTest is DeployProtocol {
             );
         }
 
-        // Verify FF queues that should have been drained by completed phase transitions.
-        // Transition at level L drains FF at L+5. Only check up to (finalLevel-2)+5
-        // since the most recent transitions may still be in progress.
-        for (uint24 lvl = 6; lvl <= uint24(finalLevel) - 2 + 5; lvl++) {
+        // Verify FF queues that should have been drained by completed generation windows.
+        // The mint ceiling tracks level+1 (level+2 while a last-purchase-day latch is
+        // open), so every FF pool up to finalLevel must already be minted and drained.
+        for (uint24 lvl = 2; lvl <= uint24(finalLevel); lvl++) {
             assertEq(
                 _ffQueueLength(lvl), 0,
                 string.concat("FF queue not drained for level ", _uint2str(lvl))
@@ -288,15 +289,16 @@ contract TicketLifecycleTest is DeployProtocol {
     function testBoundaryRoutingAtDeployment() public {
         assertEq(game.level(), 0, "Should be level 0");
 
-        // Constructor pre-queued at levels 1-100. At level 0:
-        // levels 1-5: targetLevel <= 0+5, routes to write key (near-future)
-        // levels 6+: targetLevel > 0+5, routes to FF key
+        // Constructor pre-queued at levels 1-100. At level 0 the mint ceiling is
+        // level+1 = 1:
+        // level 1: targetLevel <= 0+1, routes to write key (near-future)
+        // levels 2+: targetLevel > 0+1, routes to FF key
 
-        // Level 5: should NOT be in FF
-        assertEq(_ffQueueLength(5), 0, "Level 5 should NOT be FF (5 <= 0+5)");
+        // Level 1: should NOT be in FF
+        assertEq(_ffQueueLength(1), 0, "Level 1 should NOT be FF (1 <= 0+1)");
 
-        // Level 6: should be in FF
-        assertEq(_ffQueueLength(6), 2, "Level 6 SHOULD be FF (6 > 0+5)");
+        // Level 2: should be in FF
+        assertEq(_ffQueueLength(2), 2, "Level 2 SHOULD be FF (2 > 0+1)");
     }
 
     // =========================================================================
@@ -307,28 +309,30 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         phase transition drains exactly one FF level (purchaseLevel+4 = level+5).
     ///         Verify sequential draining.
     function testFFDrainSequentialByTransition() public {
-        // Before any transitions: levels 6-10 should all have FF entries
-        for (uint24 lvl = 6; lvl <= 10; lvl++) {
+        // Before any transitions: levels 2-6 should all have FF entries (the mint
+        // ceiling at deployment is level+1 = 1, so everything from level 2 up starts
+        // life in the FF key).
+        for (uint24 lvl = 2; lvl <= 6; lvl++) {
             assertEq(
                 _ffQueueLength(lvl), 2,
                 string.concat("FF queue should have 2 entries at level ", _uint2str(lvl))
             );
         }
 
-        // Drive to level 3 -- phase transitions at levels 1,2,3 drain FF at 6,7,8
+        // Drive to level 3. The mint ceiling tracks level+1 (level+2 while a
+        // last-purchase-day latch is open), so by the time the game reaches level 3
+        // the pools for levels 2 and 3 must already be minted and drained.
         _driveToLevel(4);
         uint256 reached = game.level();
         assertGe(reached, 3, "Must reach level 3");
 
-        // FF at 6,7,8 should be drained (transitions at levels 1,2,3)
-        assertEq(_ffQueueLength(6), 0, "FF at 6 should drain at level 1 transition");
-        assertEq(_ffQueueLength(7), 0, "FF at 7 should drain at level 2 transition");
-        assertEq(_ffQueueLength(8), 0, "FF at 8 should drain at level 3 transition");
+        assertEq(_ffQueueLength(2), 0, "FF at 2 should drain once the mint ceiling passes it");
+        assertEq(_ffQueueLength(3), 0, "FF at 3 should drain once the mint ceiling passes it");
 
-        // FF at 9+ should still exist (not yet reached by transitions)
-        if (reached < 4) {
-            assertEq(_ffQueueLength(9), 2, "FF at 9 should still exist before level 4 transition");
-        }
+        // FF well beyond the ceiling (level+3, past the maximum level+2 the ceiling
+        // ever reaches) should still hold its constructor entries.
+        assertEq(_ffQueueLength(uint24(reached) + 3), 2,
+            "FF well beyond the mint ceiling should still exist");
     }
 
     // =========================================================================
@@ -782,10 +786,10 @@ contract TicketLifecycleTest is DeployProtocol {
                     " should be zero after processing"));
         }
 
-        // Verify FF queues in the transition drain range are empty.
-        // Near rolls at level 0 target levels 1-5 (all <= 0+5, NOT FF). But any far rolls
-        // would have gone to FF. Either way, after sufficient transitions, FF should be drained.
-        for (uint24 lvl = 6; lvl <= uint24(reached) + 4; lvl++) {
+        // Verify FF queues that are guaranteed to have entered the mint window are empty.
+        // The mint ceiling never exceeds level+2, so by the time the game reaches level
+        // `reached`, every FF pool up to `reached` must be minted and drained.
+        for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
                 string.concat("FF queue at level ", _uint2str(lvl), " should be drained after transitions"));
         }
@@ -874,10 +878,10 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 reached = game.level();
         assertGe(reached, 6, "Must reach at least level 6");
 
-        // Verify FF queues within the drained range are empty.
-        // Phase transition at level L drains FF at L+5.
-        // For levels 6 through reached+5, FF should be zero.
-        for (uint24 lvl = 6; lvl <= uint24(reached) + 4; lvl++) {
+        // Verify FF queues within the drained range are empty. The mint ceiling never
+        // exceeds level+2, so by the time the game reaches level `reached`, every FF
+        // pool up to `reached` must be minted and drained.
+        for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
                 string.concat("FF queue at level ", _uint2str(lvl), " should be drained after transitions"));
         }
@@ -897,7 +901,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertEq(game.level(), 0, "Should start at level 0");
 
         // Record queue state before whale purchase for levels we'll check
-        uint256 writeKey3Before = _queueLength(_writeKeyForLevel(3));
+        uint256 writeKey1Before = _queueLength(_writeKeyForLevel(1));
         uint256 ff10Before = _ffQueueLength(10);
 
         // Buy 1 whale pass at level 0.
@@ -905,12 +909,13 @@ contract TicketLifecycleTest is DeployProtocol {
         // Price at level 0: 2.4 ETH
         _buyWhalePass(buyer1, 1);
 
-        // Verify near-future tickets: levels 1-5 route to write key (all <= 0+5)
-        uint256 writeKey3After = _queueLength(_writeKeyForLevel(3));
-        assertTrue(writeKey3After > writeKey3Before,
-            "Write-key queue at level 3 should grow from whale pass");
+        // Verify near-future tickets: only level 1 routes to write key at deployment
+        // (mint ceiling = level+1 = 1); level 3 now routes to the FF key.
+        uint256 writeKey1After = _queueLength(_writeKeyForLevel(1));
+        assertTrue(writeKey1After > writeKey1Before,
+            "Write-key queue at level 1 should grow from whale pass");
 
-        // Verify far-future tickets: levels 6+ route to FF key (6 > 0+5 = true)
+        // Verify far-future tickets: levels 2+ route to FF key (2 > 0+1 = true)
         // Constructor already placed 2 entries; whale pass adds the buyer
         uint256 ff10After = _ffQueueLength(10);
         assertGt(ff10After, ff10Before,
@@ -942,9 +947,10 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 reached = game.level();
         assertGe(reached, 5, "Must reach at least level 5");
 
-        // FF queues drained by transitions: transition at L drains FF at L+5.
-        // After reaching level 5+, transitions at 1,2,3,4,5 drain FF at 6,7,8,9,10.
-        for (uint24 lvl = 6; lvl <= uint24(reached) + 4; lvl++) {
+        // FF queues drained once their generation window opens: the mint ceiling
+        // never exceeds level+2, so by the time the game reaches level `reached`,
+        // every FF pool up to `reached` must be minted and drained.
+        for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
                 string.concat("Whale FF queue at level ", _uint2str(lvl), " should be drained"));
         }
@@ -974,13 +980,11 @@ contract TicketLifecycleTest is DeployProtocol {
 
         game.claimWhalePass(claimant);
 
-        // h=2 -> one whole ticket (4 entries) every 2nd level from startLevel 1:
-        // odd levels covered, even levels empty.
-        for (uint24 lvl = 1; lvl <= 5; lvl++) {
-            assertEq(_ticketsOwed(_writeKeyForLevel(lvl), claimant), lvl % 2 == 1 ? 4 : 0,
-                string.concat("near-key claim shape at level ", _uint2str(lvl)));
-        }
-        for (uint24 lvl = 6; lvl <= 12; lvl++) {
+        // h=2 -> one whole ticket (4 entries) every 2nd level from startLevel 1: odd
+        // levels covered, even levels empty. Only level 1 is within the mint ceiling
+        // (level 0 + 1) at deployment; levels 2+ route to the far-future key.
+        assertEq(_ticketsOwed(_writeKeyForLevel(1), claimant), 4, "near-key claim shape at level 1");
+        for (uint24 lvl = 2; lvl <= 12; lvl++) {
             assertEq(_ticketsOwed(keyComputer.tqFarFutureKey(lvl), claimant), lvl % 2 == 1 ? 4 : 0,
                 string.concat("FF claim shape at level ", _uint2str(lvl)));
         }
@@ -1089,28 +1093,29 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 L = game.level();
         assertGe(L, 3, "Game must reach at least level 3");
 
-        // Snapshot FF queue lengths at L+5 and L+6 before whale purchase
-        uint256 ff5Before = _ffQueueLength(uint24(L + 5));
-        uint256 ff6Before = _ffQueueLength(uint24(L + 6));
+        // Snapshot FF queue lengths at L+1 (always within the mint window: the ceiling
+        // is level+1, or level+2 while a last-purchase-day latch is open, so L+1 is
+        // never far-future) and L+3 (always beyond it, since the ceiling never
+        // exceeds level+2).
+        uint256 ffNearBefore = _ffQueueLength(uint24(L + 1));
+        uint256 ffFarBefore = _ffQueueLength(uint24(L + 3));
 
         // Buy 1 whale pass: queues tickets at levels (L+1) through (L+100).
-        // Level L+5 is within near range (L+5 <= L+5), so goes to write key.
-        // Level L+6 is far-future (L+6 > L+5), so goes to FF key.
         _buyWhalePass(buyer3, 1);
 
-        // EDGE-01: FF queue at L+5 should NOT have grown from whale pass
-        // (tickets at L+5 route to write key, not FF)
-        assertEq(_ffQueueLength(uint24(L + 5)), ff5Before,
-            "EDGE-01: FF queue at L+5 should not grow (near-future, routed to write key)");
+        // EDGE-01: FF queue at L+1 should NOT have grown from whale pass
+        // (tickets at L+1 route to write key, not FF)
+        assertEq(_ffQueueLength(uint24(L + 1)), ffNearBefore,
+            "EDGE-01: FF queue at L+1 should not grow (near-future, routed to write key)");
 
-        // Verify write key at L+5 has buyer3's tickets
-        uint32 owedAtL5 = _ticketsOwed(_writeKeyForLevel(uint24(L + 5)), buyer3);
-        assertGt(owedAtL5, 0,
-            "EDGE-01: buyer3 should have ticketsOwed at write key for L+5");
+        // Verify write key at L+1 has buyer3's tickets
+        uint32 owedAtL1 = _ticketsOwed(_writeKeyForLevel(uint24(L + 1)), buyer3);
+        assertGt(owedAtL1, 0,
+            "EDGE-01: buyer3 should have ticketsOwed at write key for L+1");
 
-        // EDGE-02: FF queue at L+6 should have grown from whale pass
-        assertGt(_ffQueueLength(uint24(L + 6)), ff6Before,
-            "EDGE-02: FF queue at L+6 should grow (far-future, routed to FF key)");
+        // EDGE-02: FF queue at L+3 should have grown from whale pass
+        assertGt(_ffQueueLength(uint24(L + 3)), ffFarBefore,
+            "EDGE-02: FF queue at L+3 should grow (far-future, routed to FF key)");
     }
 
     // =========================================================================
@@ -1131,14 +1136,13 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 L = game.level();
         assertGe(L, 1, "Must reach at least level 1");
 
-        // At level L, the transition TO level L already drained FF at L+5.
-        // So we check L+6 which is BEYOND the drain range and still has constructor entries.
-        // Transition at level L drains FF at L+5. The next drain target (L+6) only
-        // triggers at the NEXT level transition (L -> L+1).
-        uint256 ffTarget = L + 6;
+        // At steady state (no last-purchase-day latch open) the mint ceiling is L+1,
+        // so L+2 is the first far-future level and should still hold its constructor
+        // entries.
+        uint256 ffTarget = L + 2;
         uint256 ffBefore = _ffQueueLength(uint24(ffTarget));
         assertGt(ffBefore, 0,
-            "FF queue at L+6 should have constructor entries (beyond current drain range)");
+            "FF queue at L+2 should have constructor entries before any last-purchase-day latch");
 
         // Run multiple daily advanceGame cycles WITHOUT triggering a level transition.
         // Keep prize pool LOW so the target isn't reached and _endPhase doesn't fire.
@@ -1165,22 +1169,25 @@ contract TicketLifecycleTest is DeployProtocol {
         assertEq(game.level(), L,
             "Game should still be at level L after low-pool daily cycles");
 
-        // EDGE-03 core assertion: FF queue at L+6 is UNCHANGED after daily cycles.
-        // Daily processing runs: _prepareFutureTickets (+1..+4), _runProcessTicketBatch,
-        // and daily jackpot draws. None of these touch FF keys.
+        // EDGE-03 core assertion: FF queue at L+2 is UNCHANGED while the pool stays
+        // below target, since lastPurchaseDay never latches and the mint ceiling
+        // never extends past L+1.
         assertEq(_ffQueueLength(uint24(ffTarget)), ffBefore,
-            "EDGE-03: FF queue at L+6 must NOT drain during daily cycle processing");
+            "EDGE-03: FF queue at L+2 must NOT drain before the last-purchase-day latch opens its window");
 
-        // Now trigger the next level transition: this will drain FF at L+6.
-        // Transition at level L+1 drains FF at (L+1)+5 = L+6.
+        // Now push the pool high enough to latch lastPurchaseDay and drive the
+        // transition. The latch immediately opens L+2's generation window
+        // (mintCeiling = level+2), and the unified sweep mints it in the SAME
+        // purchase-phase daily cycle -- there is no separate phase-transition-only
+        // drain step any more.
         _seedNextPrizePool(49.9 ether);
         _driveToLevel(L + 2);
         _flushAdvance();
         assertGt(game.level(), L, "Game must advance past level L");
 
-        // After transition: FF at L+6 should be drained by the phaseTransitionActive block
+        // After the latch + sweep: FF at L+2 should be drained.
         assertEq(_ffQueueLength(uint24(ffTarget)), 0,
-            "EDGE-03: FF queue at L+6 must be drained AFTER phase transition");
+            "EDGE-03: FF queue at L+2 must be drained AFTER the latch's sweep");
     }
 
     // =========================================================================
@@ -1303,9 +1310,9 @@ contract TicketLifecycleTest is DeployProtocol {
         }
 
         // ZSA-02 autoBuy: FF-key queue must be empty for all levels in drain range.
-        // Transition at level L drains FF at L+5. So after transitions at levels
-        // 1 through reached-2, FF levels 6 through (reached-2)+5 = reached+3 are drained.
-        for (uint24 lvl = 6; lvl <= uint24(reached) + 3; lvl++) {
+        // The mint ceiling never exceeds level+2, so by the time the game reaches
+        // `reached`, every FF pool up to `reached` must be minted and drained.
+        for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(
                 _ffQueueLength(lvl), 0,
                 string.concat("ZSA-02: FF queue not zero at level ", _uint2str(lvl))
@@ -1373,8 +1380,10 @@ contract TicketLifecycleTest is DeployProtocol {
         // ZSA-01 + ZSA-02: autoBuy all processed levels using the reusable helper
         _assertZeroStranding(1, uint24(reached) - 1);
 
-        // ZSA-02 extended: FF drain range beyond the helper's autoBuy
-        for (uint24 lvl = uint24(reached); lvl <= uint24(reached) + 4; lvl++) {
+        // ZSA-02 extended: FF drain range beyond the helper's autoBuy. The mint
+        // ceiling never exceeds level+2, so by the time the game reaches `reached`,
+        // every FF pool up to `reached` must be minted and drained.
+        for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
                 string.concat("ZSA-02: FF not drained at level ", _uint2str(lvl)));
         }
@@ -1382,8 +1391,8 @@ contract TicketLifecycleTest is DeployProtocol {
         // ZSA-03: buyer3 verification -- buyer3 used whale passes and lootboxes at
         // every level. Read-key queues being empty (via _assertZeroStranding) proves
         // all sources were processed. Additionally verify no stray FF entries at
-        // levels in the combined range of whale + lootbox targets.
-        for (uint24 lvl = 6; lvl <= uint24(reached) + 4; lvl++) {
+        // levels guaranteed to have entered the mint window.
+        for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
                 string.concat("ZSA-03: buyer3 FF not zero at level ", _uint2str(lvl)));
         }

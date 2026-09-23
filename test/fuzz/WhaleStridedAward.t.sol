@@ -39,15 +39,15 @@ contract HalfPassAwardHarness is DegenerusGameStorage {
         rngLockedFlag = v;
     }
 
-    /// @dev Resolve the same key the production walk writes for `lvl` at level 0
-    ///      (write slot for lvl <= 5, far-future key beyond) and return owed entries.
+    /// @dev Resolve the same key the production walk writes for `lvl` (write slot up
+    ///      to the mint ceiling, far-future key beyond) and return owed entries.
     function owedAt(uint24 lvl, address buyer) external view returns (uint32) {
-        uint24 key = lvl > level + 5 ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
+        uint24 key = lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
         return uint32(_entriesOwed(key, buyer) >> 8);
     }
 
     function queueLenAt(uint24 lvl) external view returns (uint256) {
-        uint24 key = lvl > level + 5 ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
+        uint24 key = lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
         return ticketQueue[key].length;
     }
 }

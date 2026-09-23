@@ -634,9 +634,14 @@ describe("v36.0 SURF-01..04 — protected ranges byte-identical vs v35.0 baselin
     if (result.skipped) this.skip();
   });
 
-  it("SURF-03 — MintModule L652 EntropyLib.hash2 callsite byte-identical vs 5db8682b", function () {
-    const result = walkAndAssert(V35_BASELINE, MINT_MODULE_PATH, SURF_03_PROTECTED_RANGES);
-    if (result.skipped) this.skip();
+  // The 30-day queue refactor moved _rollRemainder into shared Storage. Keep the
+  // original keccak call and Bernoulli predicate pinned at their new owner.
+  it("SURF-03 — moved remainder roll retains keccak and the same predicate", function () {
+    const source = fs.readFileSync("contracts/storage/DegenerusGameStorage.sol", "utf8");
+    const body = source.match(/function _rollRemainder\([\s\S]*?\n    }/);
+    expect(body, "_rollRemainder missing from shared Storage").to.not.equal(null);
+    expect(body[0]).to.include("uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);");
+    expect(body[0]).to.include("return (rollEntropy % QTY_SCALE) < rem;");
   });
 
   // SUPERSEDED by the v40.0 SURF block below: Phase 278 Wave 1 swaps the

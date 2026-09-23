@@ -16,19 +16,25 @@ contract FFKeyComputer is DegenerusGameStorage {
 
 /// @title FarFutureIntegrationTest -- TEST-05: Multi-level lifecycle proving zero FF ticket stranding
 /// @notice Deploys the full 23-contract protocol via DeployProtocol, drives the game through
-///         level transitions past level 7 (where constructor-deposited FF entries exist), and
-///         verifies that advanceGame's internal processFutureTicketBatch drains FF queues.
+///         level transitions past level 8 (where constructor-deposited FF entries exist), and
+///         verifies that advanceGame's internal (private) `_processFutureTicketBatch` drains FF
+///         queues via `processTicketBatch`'s lastPurchaseDay continuation.
 ///
 ///         The constructor pre-queues 16 sDGNRS + 16 vault tickets for levels 1-100.
-///         At construction time (level=0), levels 6-100 have targetLevel > 0+5 = true,
-///         so they route to FF key. This test proves those entries are processed (drained)
-///         when the game reaches those levels.
+///         At construction time (level=0), `_mintCeiling()` = level+1 = 1, so only level 1 is
+///         "near" (write key); levels 2-100 have targetLevel > _mintCeiling(), so they route to
+///         FF key. This test proves those entries are processed (drained) when the game reaches
+///         those levels. Unlike the near-window read side (which sweeps a live range every
+///         advance), the far-future pool for level L+2 mints only once, one level at a time,
+///         inside the sweep that follows level L's lastPurchaseDay latch — there is no
+///         standalone "process levels L+2..L+5" sweep function; `_processFutureTicketBatch` is
+///         private and reachable only through that continuation.
 ///
 ///         Key assertions:
-///         1. Constructor pre-queues 2 unique addresses in FF key at levels 6+ (sDGNRS + VAULT)
+///         1. Constructor pre-queues 2 unique addresses in FF key at levels 2+ (sDGNRS + VAULT)
 ///            (ticketQueue stores unique addresses, not ticket counts; each address gets 16 tickets
-///            tracked separately in entriesOwedPacked)
-///         2. Game advances past level 5 without reverting (proves FF processing works)
+///            tracked separately in entriesOwedPacked); level 1 itself is near, not FF.
+///         2. Game advances past level 7 without reverting (proves FF processing works)
 ///         3. FF queues for processed levels drain to zero (addresses removed after processing)
 ///
 /// @dev To fast-track level transitions, this test seeds the nextPrizePool via vm.store
@@ -79,9 +85,9 @@ contract FarFutureIntegrationTest is DeployProtocol {
         uint256 ffLen8 = _ffQueueLength(8);
         assertEq(ffLen8, 2, "Constructor should pre-queue 2 FF addresses at level 8 (sDGNRS + VAULT)");
 
-        // Verify level 5 is NOT in FF key (5 <= 0+5, routes to write key)
-        uint256 ffLen5 = _ffQueueLength(5);
-        assertEq(ffLen5, 0, "Level 5 should NOT have FF entries (5 <= 0+5)");
+        // Verify level 1 is NOT in FF key (1 <= _mintCeiling()=1 at deploy, routes to write key).
+        uint256 ffLen1 = _ffQueueLength(1);
+        assertEq(ffLen1, 0, "Level 1 should NOT have FF entries (1 <= _mintCeiling()=1)");
 
         // --- Phase 2: Drive game through levels ---
         // Each level requires:
@@ -95,8 +101,13 @@ contract FarFutureIntegrationTest is DeployProtocol {
 
         uint256 simTime = block.timestamp; // start at 86400 (deploy time)
 
-        for (uint256 day = 0; day < 300; day++) {
-            if (game.level() >= 6) break;
+        // The far-future pool for level L+2 drains only when level L itself latches
+        // lastPurchaseDay (one level at a time, no ahead-of-time range sweep) — the drain
+        // happens strictly before the L->L+1 transition. Draining level 8's pool needs
+        // level 6's own latch, which has necessarily already fired once level reaches 7;
+        // target level 9 for a full level of margin over that.
+        for (uint256 day = 0; day < 500; day++) {
+            if (game.level() >= 9) break;
             if (game.gameOver()) break;
 
             // Advance to next day
@@ -125,14 +136,17 @@ contract FarFutureIntegrationTest is DeployProtocol {
         }
 
         // --- Phase 3: Assert game advanced past FF-containing levels ---
-        // At level 4, _prepareFutureTickets(4) processes levels 6-9 (draining their FF entries).
+        // Level L's lastPurchaseDay latch drains the far-future pool for level L+2, one
+        // level at a time, strictly before L's own L->L+1 transition (see the loop comment
+        // above); reaching level 7 already implies levels 6's and 5's own latches (draining
+        // pools 8 and 7) have fired, and the loop runs to level 9 for margin.
         uint256 finalLevel = game.level();
         emit log_named_uint("Final level reached", finalLevel);
-        assertGe(finalLevel, 5, "Game should advance past level 4 where FF entries at 6-9 are processed");
+        assertGe(finalLevel, 7, "Game should advance past level 6, whose latch drains the level-8 FF pool");
 
         // --- Phase 4: Verify FF queues for processed levels are drained ---
-        // _prepareFutureTickets at level L processes levels L+2..L+5.
-        // By level 5, levels 6-10 have been in processing range.
+        // Levels 6, 7, 8's far-future pools each drain at the corresponding level-4/5/6
+        // lastPurchaseDay latch, all of which have fired by the time level reaches 7.
         uint256 ffLen6After = _ffQueueLength(6);
         assertEq(ffLen6After, 0, "FF queue for level 6 should be drained to zero after processing");
 

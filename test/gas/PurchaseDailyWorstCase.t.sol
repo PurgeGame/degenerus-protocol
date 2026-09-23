@@ -12,42 +12,53 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {DayOneSeeder, DayOneFixture} from "./JackpotDayOneWorstCase.t.sol";
 
 /// @title PurchaseDailyWorstCase — the per-tx gas ceiling of the PURCHASE-PHASE daily advance.
-/// @notice STAGE_PURCHASE_DAILY (6) pays the ETH and FLIP legs and prices the ticket leg in one
-///         advanceGame tx; STAGE_PURCHASE_DAILY_TICKETS (15) pays that ticket leg from the next
-///         advance on the same recorded word and seals the day. The three winner-capped legs:
-///           - the daily ETH leg: fixed buckets [24,16,8,1] = 49 winners off 23% of the 1%
-///             futurePrizePool drip (`payDailyJackpot(false)` -> `_processDailyEth`);
-///           - the daily ticket leg: up to PURCHASE_PHASE_TICKET_MAX_WINNERS = 120 winners
-///             (40 per non-solo quadrant) once the 50% ticket basis of the 75% ticket-leg
-///             budget covers 120 whole tickets at priceForLevel(purchaseLevel)
-///             (`_distributePoolBackedTickets` -> `_queueEntries`, a cold registry push + queue
-///             push + owed write per fresh winner);
-///           - the daily FLIP leg: DAILY_COIN_MAX_WINNERS = 50 near-future pulls over
-///             [purchaseLevel+1, purchaseLevel+4] plus FAR_FUTURE_FLIP_SAMPLES = 8 far-future
-///             pulls, credited through ONE coinflip.creditFlipBatch each
-///             (`_payDailyCoinJackpot` -> `payDailyFlipJackpot`);
-///         and, on the day the next-pool target is met at an x0 purchase level, the
-///         last-purchase latch + coinflip.armBafDraw ride the same tx.
-///         This suite measures that tx on the REAL advanceGame bytecode at every cap, with every
-///         winner a distinct address holding no claimable / no queued entries / no flip stake
-///         (cold SSTOREs), and asserts it under the EIP-7825 cap.
+/// @notice STAGE_PURCHASE_DAILY (6) pays the ETH leg, prices the ticket leg and runs the day's
+///         coin draw(s) in one advanceGame tx; STAGE_PURCHASE_DAILY_TICKETS (15) pays the priced
+///         ticket leg from the next advance on the same recorded word and seals the day. The legs:
+///           - the daily ETH leg: fixed buckets [24,16,8,1] = 49 winners off the futurePrizePool
+///             drip (`payDailyJackpot(false)` -> `_processDailyEth`);
+///           - the daily ticket leg: priced here, paid in stage 15 at up to
+///             PURCHASE_PHASE_TICKET_MAX_WINNERS = 120 winners;
+///           - the purchase-day coin FILL draw (`payDailyFutureFlipJackpot` ->
+///             `_awardFutureCoinFill`): up to 16 distinct level picks over the unminted far-future
+///             queues [P+1, P+99], walking up to 25 CRAPS wallets + 25 COIN wallets. Budget
+///             B = levelPrizePool[P-1] * 1000 / (price * 400). The craps half seats up to 25
+///             winners on TOMORROW's table (opener via CrapsBattle.vaultComp kind 5 at 2,400 FLIP;
+///             the half's leftover upgrades seats from the front to the whole day via
+///             CrapsBattle.deliverPasses at +20,400), each seat preceded by an extsload of the
+///             table's `_daySeated`; the coin half pays up to 25 equal shares in ONE
+///             coinflip.creditFlipBatch. 25 seats at B >= 120,000 FLIP; all 25 whole days at
+///             B >= 1,140,000 FLIP.
+///           - LEVEL 1 only (P == 1): no ETH / ticket leg; instead a trait draw over
+///             lvlTraitEntry[1] (`payDailyFlipJackpot`) AND the fill draw — TWO coin draws, up to
+///             50 seats in one tx — plus the day seal (the latch rides stage 6 when no ticket leg
+///             was priced).
+///         Every scenario runs the REAL advanceGame bytecode through the full DeployProtocol
+///         wiring (real Game, real CrapsBattle — CrapsViews, a views-only subclass — real
+///         Coinflip, real affiliate/quests), so every seat's table-side work is the production
+///         path. Every winner is a distinct, never-touched address (cold SSTOREs, no prior
+///         seat/claim/stake), and the gas is measured with the call capped at the EIP-7825 limit
+///         minus intrinsic, reported INCLUDING the 21,064 intrinsic, and asserted under 16,777,216.
 /// @dev TEST-INFRA ONLY. No contracts/*.sol is mutated. Seeding happens in setUp() — a SEPARATE
 ///      transaction from the measured body — so the measured call starts on a cold EIP-2929 access
-///      list, as a real keeper tx would (the JackpotDayOneWorstCase pattern). As there, the day's
-///      word is pre-recorded (rngWordByDay[day] != 0), so the rngGate word-apply leg
-///      (coinflip.processCoinflipPayouts + craps openBonusDay) is NOT in the measured figure.
-///      Samplers draw WITH replacement; the suite counts distinct winners.
+///      list, as a real keeper tx would (the JackpotDayOneWorstCase pattern). The far-future queues
+///      [P+1, P+99] are emptied before seeding so the fill walks ONLY distinct fresh wallets (a
+///      genesis VAULT/sDGNRS lane would be a refused, cheaper seat). The default scenarios
+///      pre-record the day's word; the *WithRngApply* scenarios un-record it so the measured tx
+///      also applies the word (coinflip payouts, quest roll, craps openBonusDay, protocol boon draw).
 contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
     struct Shape {
         uint24 lvl; // storage `level`; the daily pays purchaseLevel = lvl + 1
         uint256 word; // the day's recorded VRF word
         uint160 base; // disjoint address-space base for synthetic holders
         uint256 mainHolders; // distinct holders per main-board bucket at purchaseLevel (ETH + ticket legs)
-        uint256 bonusHolders; // distinct holders per bonus-board bucket at purchaseLevel+1..+4 (FLIP leg)
-        uint256 ffHolders; // distinct holders per far-future queue at purchaseLevel+5..+99 (FLIP far leg)
-        uint128 nextPool; // nextPrizePool (> prevPool latches last-purchase + BAF arm at x0)
-        uint128 futurePool; // futurePrizePool: the 4% drip sizes the ETH and ticket legs
-        uint256 prevPool; // levelPrizePool[purchaseLevel-1]: sizes the FLIP budget and the latch target
+        uint256 bonusHolders; // distinct holders per bonus-board bucket at purchaseLevel+1..+4 (unused by
+            // the purchase coin draws; kept populated to prove they ignore minted-ahead boards)
+        uint256 ffHolders; // distinct holders per far-future queue at purchaseLevel+1..+99 (fill draw)
+        uint128 nextPool; // nextPrizePool (> prevPool latches last-purchase; + BAF arm at x0)
+        uint128 futurePool; // futurePrizePool: the drip sizes the ETH and ticket legs
+        uint256 prevPool; // levelPrizePool[purchaseLevel-1]: sizes the coin budget and the latch target
+        uint256 traitHolders; // distinct holders per BONUS-trait bucket at purchaseLevel (level-1 trait draw)
     }
 
     function seedPurchaseDaily(Shape calldata s, uint8[4] calldata mainTraits, uint8[4] calldata bonusTraits)
@@ -82,17 +93,28 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         currentPrizePool = uint128(100 ether);
         _setPrizePools(s.nextPool, s.futurePool);
 
-        // The empty-FLIP split deliberately excludes protocol participation too:
-        // real genesis passes now supply virtual buckets and far-future tickets.
-        if (s.bonusHolders == 0) {
+        // The empty-board split excludes protocol participation too: genesis deity passes supply
+        // virtual bucket entries. A level-1 trait draw excludes them as well — a deity lands on
+        // VAULT / sDGNRS, whose seat is refused (cheaper than a fresh seat).
+        if (s.bonusHolders == 0 || s.traitHolders != 0) {
             deityBySymbol[VAULT_DEITY_SYMBOL] = address(0);
             deityBySymbol[SDGNRS_DEITY_SYMBOL] = address(0);
         }
-        if (s.ffHolders == 0) {
-            for (uint24 c = pl + 5; c <= pl + 99; ++c) {
-                uint256[] storage emptyQueue = ticketQueue[_tqFarFutureKey(c)];
-                assembly ("memory-safe") { sstore(emptyQueue.slot, 0) }
+        // Level 1: genesis tickets sit in level 1's queues and would be drained (their own stage)
+        // ahead of the draws once a fresh word swaps the slots. Empty both slots so the word-apply
+        // variant composes the word apply with both draws in ONE tx, as any drained level-1 day does.
+        if (s.traitHolders != 0) {
+            uint256[] storage q0 = ticketQueue[pl];
+            uint256[] storage q1 = ticketQueue[pl | TICKET_SLOT_BIT];
+            assembly ("memory-safe") {
+                sstore(q0.slot, 0)
+                sstore(q1.slot, 0)
             }
+        }
+        // Empty every unminted queue the fill can walk, then seed only fresh distinct wallets.
+        for (uint24 c = pl + 1; c <= pl + 99; ++c) {
+            uint256[] storage emptyQueue = ticketQueue[_tqFarFutureKey(c)];
+            assembly ("memory-safe") { sstore(emptyQueue.slot, 0) }
         }
 
         // Keep registry position 0 out of every seeded level (a zero lane index understates gas).
@@ -103,6 +125,9 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         for (uint8 q; q < 4; ++q) {
             if (s.mainHolders != 0) {
                 _seedBucketDistinct(pl, mainTraits[q], s.mainHolders, s.base + uint160(q) * 0x100000);
+            }
+            if (s.traitHolders != 0) {
+                _seedBucketDistinct(pl, bonusTraits[q], s.traitHolders, s.base + 0x4000000 + uint160(q) * 0x100000);
             }
             if (s.bonusHolders != 0) {
                 for (uint24 k; k < 4; ++k) {
@@ -117,9 +142,8 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         }
 
         if (s.ffHolders != 0) {
-            for (uint24 c = pl + 5; c <= pl + 99; ++c) {
-                uint256[] storage q = ticketQueue[_tqFarFutureKey(c)];
-                uint160 b = s.base + 0x2000000 + uint160(c - pl - 5) * 0x1000;
+            for (uint24 c = pl + 1; c <= pl + 99; ++c) {
+                uint160 b = s.base + 0x2000000 + uint160(c - pl - 1) * 0x1000;
                 for (uint256 i; i < s.ffHolders; ++i) {
                     _tqAppend(_tqFarFutureKey(c), uint32(_registerEntryOwner(address(b + uint160(i + 1)), c) >> OWNER_IDX_SHIFT));
                 }
@@ -208,13 +232,15 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     /// @dev The 10M soft design target the drains are sized to (USER dual bound).
     uint256 internal constant GAS_TARGET = 10_000_000;
+    /// @dev Intrinsic cost of a zero-arg advanceGame() tx: 21,000 base + 4 non-zero calldata bytes.
+    uint256 internal constant INTRINSIC = 21_064;
 
     bytes32 internal constant ETH_WIN_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
     bytes32 internal constant TICKET_WIN_SIG =
         keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
     bytes32 internal constant FAR_WIN_SIG = keccak256("FarFutureFlipJackpotWinner(address,uint24,uint24,uint256)");
-    bytes32 internal constant COMP_WIN_SIG = keccak256("JackpotCrapsCompWin(address,uint24,uint8,uint32,uint256)");
+    bytes32 internal constant CRAPS_WIN_SIG = keccak256("CoinDrawCrapsWin(address,uint24,bool,bool)");
     bytes32 internal constant BAF_ARMED_SIG = keccak256("BafDrawArmed(uint24)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
 
@@ -222,30 +248,38 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
     uint8 internal constant STAGE_PURCHASE_DAILY_TICKETS = 15;
     uint16 internal constant PURCHASE_ETH_WINNERS = 49; // 24 + 16 + 8 + 1
     uint16 internal constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
-    uint16 internal constant DAILY_COIN_MAX_WINNERS = 50;
-    uint8 internal constant FAR_FUTURE_FLIP_SAMPLES = 8;
+    uint16 internal constant COIN_DRAW_HALF_SLOTS = 25;
 
-    /// @dev level 109 -> purchaseLevel 110: an x0 (BAF) purchase level at the 0.04 ETH price tier,
-    ///      so the target-met latch also arms the BAF draw in the measured tx.
+    /// @dev level 109 -> purchaseLevel 110: an x0 (BAF) purchase level at the 0.04 ETH price
+    ///      (priceForLevel(109) prices the coin budget), so the target-met latch also arms the BAF draw.
     uint24 internal constant LVL = 109;
     uint160 internal constant BASE = uint160(0x1000000000);
     uint256 internal constant MAIN_HOLDERS = 5000; // per main bucket: ~60 draws each, ~0.4 expected repeats
-    uint256 internal constant BONUS_HOLDERS = 200; // per (level, trait): ~3 draws each
-    uint256 internal constant FF_HOLDERS = 8; // per far-future level: 8 lanes of one level's word
-    /// @dev Sizing (price 0.04 ETH at 110/111, PRICE_COIN_UNIT 1000 FLIP):
-    ///      - future 5000 ETH -> slice 200, ticket leg 150, basis 75 -> 1875 whole tickets >= 120 cap;
-    ///        ETH leg 11.5 ETH -> every 20%-share bucket (2.3 ETH) clears its unit*count rounding floor.
-    ///      - prev 1000 ETH -> coinBudget 62,500 FLIP (< 4 day passes, so no comp mode): near 46,875
-    ///        -> 468 units >= 50 pulls; far 15,625 -> 156 units >= 8 samples.
-    ///      - next 1001 ETH > prev -> the last-purchase latch + BAF arm fire in the same tx.
+    uint256 internal constant BONUS_HOLDERS = 200; // minted-ahead boards the purchase draws must ignore
+    uint256 internal constant FF_HOLDERS = 8; // per unminted level: 8 distinct wallets (50 fills in <= 7 picks)
+    uint256 internal constant L1_TRAIT_HOLDERS = 5000; // per level-1 bonus bucket: ~12 pulls each
+
+    /// @dev Sizing at 0.04 ETH (B = prev * 62.5 FLIP/ETH):
+    ///      - future 5000 ETH -> the drip covers 49 ETH winners and >= 120 whole tickets.
+    ///      - PREV_POOL        1,000 ETH -> B    62,500: 13 opener seats, 0 days, 25 shares.
+    ///      - PREV_POOL_OPEN25 2,080 ETH -> B   130,000: 25 opener seats, 0 days, 25 shares.
+    ///      - PREV_POOL_12D    9,920 ETH -> B   620,000: 25 seats, 12 whole days, 25 shares.
+    ///      - PREV_POOL_MAX   20,000 ETH -> B 1,250,000: 25 seats, ALL 25 whole days, 25 shares.
+    ///      - PREV_POOL_NOSEAT  75.2 ETH -> B     4,700: 0 seats (2,350 < 2,400), 25 shares.
+    ///      next = prev + 1 ETH > target -> the last-purchase latch (+ BAF arm at x0).
     uint128 internal constant FUTURE_POOL = 5000 ether;
     uint256 internal constant PREV_POOL = 1000 ether;
+    uint256 internal constant PREV_POOL_NOSEAT = 75.2 ether;
+    uint256 internal constant PREV_POOL_OPEN25 = 2080 ether;
+    uint256 internal constant PREV_POOL_12D = 9920 ether;
+    uint256 internal constant PREV_POOL_MAX = 20_000 ether;
     uint128 internal constant NEXT_POOL_LATCH = 1001 ether;
     uint128 internal constant NEXT_POOL_QUIET = 50 ether;
-    /// @dev prev 12,000 ETH -> coinBudget 750,000 FLIP, near budget 562,500 -> 6 fundable comps (the
-    ///      CRAPS_COMP_MAX_SLOTS ceiling; comps are sized off the 75% near budget), 425,700 FLIP
-    ///      left over -> every remaining pull still funded.
-    uint256 internal constant PREV_POOL_COMP = 12_000 ether;
+    /// @dev Level 1 (storage level 0, 0.01 ETH): B = prev * 250 -> 5,000 ETH = 1,250,000 FLIP per draw,
+    ///      so BOTH draws seat 25 winners for the whole day.
+    uint256 internal constant PREV_POOL_L1_MAX = 5000 ether;
+    /// @dev Level 1 at 520 ETH: B = 130,000 FLIP per draw -> 25 opener seats each, no upgrades.
+    uint256 internal constant PREV_POOL_L1_OPEN25 = 520 ether;
 
     struct Tally {
         uint8 stage;
@@ -253,11 +287,14 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
         uint256 ethDistinct;
         uint256 ticketWins;
         uint256 ticketDistinct;
-        uint256 flipWins;
-        uint256 flipDistinct;
-        uint256 farWins;
+        uint256 flipWins; // trait-draw coin shares (JackpotFlipWin)
+        uint256 farWins; // fill-draw coin shares (FarFutureFlipJackpotWinner)
         uint256 farDistinct;
-        uint256 compWins;
+        uint256 crapsWins; // CoinDrawCrapsWin, every seat attempt
+        uint256 crapsDays; // ... of which whole-day seats
+        uint256 crapsRefused; // ... of which refused and paid as FLIP
+        uint256 crapsLvl1; // ... of which drawn from level 1 (the level-1 trait draw)
+        uint256 coinDistinct; // distinct recipients across every coin-draw event (shares + seats)
         bool bafArmed;
     }
 
@@ -318,20 +355,30 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
         s.prevPool = prevPool;
     }
 
-    /// @dev One advanceGame tx: gas used and a tally of what it emitted.
+    /// @dev The level-1 day: storage level 0, no main board (no ETH leg at level 1), the trait
+    ///      draw's four bonus buckets at level 1 and the fill's queues at 2..100, both draws at B.
+    function _shapeLevelOne(uint256 prevPool, bool latch) internal pure returns (PurchaseDailySeeder.Shape memory s) {
+        s = _shape(0, 0, FF_HOLDERS, latch ? uint128(prevPool + 1 ether) : NEXT_POOL_QUIET, prevPool);
+        s.lvl = 0;
+        s.traitHolders = L1_TRAIT_HOLDERS;
+    }
+
+    /// @dev One advanceGame tx, called with the EIP-7825 limit less intrinsic (so an over-cap
+    ///      composition reverts out of gas rather than passing). `used` INCLUDES the 21,064 intrinsic.
     function _measure() internal returns (uint256 used, Tally memory t) {
         vm.recordLogs();
         uint256 g0 = gasleft();
-        game.advanceGame();
-        used = g0 - gasleft();
+        game.advanceGame{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
+        used = g0 - gasleft() + INTRINSIC;
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         delete lastLogs;
         for (uint256 i; i < logs.length; ++i) lastLogs.push(logs[i]);
         address[] memory ethW = new address[](PURCHASE_ETH_WINNERS + 8);
         address[] memory tkW = new address[](PURCHASE_PHASE_TICKET_MAX_WINNERS + 8);
-        address[] memory flW = new address[](DAILY_COIN_MAX_WINNERS + 8);
-        address[] memory farW = new address[](FAR_FUTURE_FLIP_SAMPLES + 8);
+        address[] memory farW = new address[](2 * COIN_DRAW_HALF_SLOTS + 8);
+        address[] memory coinW = new address[](4 * COIN_DRAW_HALF_SLOTS + 8);
+        uint256 coinN;
         for (uint256 i; i < logs.length; ++i) {
             bytes32 t0 = logs[i].topics[0];
             if (t0 == ETH_WIN_SIG) {
@@ -344,31 +391,37 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
                 ++t.ticketWins;
             } else if (t0 == FLIP_WIN_SIG) {
                 address w = address(uint160(uint256(logs[i].topics[1])));
-                if (_pushDistinct(flW, t.flipWins, w)) ++t.flipDistinct;
+                if (_pushDistinct(coinW, coinN++, w)) ++t.coinDistinct;
                 ++t.flipWins;
             } else if (t0 == FAR_WIN_SIG) {
                 address w = address(uint160(uint256(logs[i].topics[1])));
                 if (_pushDistinct(farW, t.farWins, w)) ++t.farDistinct;
+                if (_pushDistinct(coinW, coinN++, w)) ++t.coinDistinct;
                 ++t.farWins;
-            } else if (t0 == COMP_WIN_SIG) {
-                ++t.compWins;
+            } else if (t0 == CRAPS_WIN_SIG) {
+                address w = address(uint160(uint256(logs[i].topics[1])));
+                if (_pushDistinct(coinW, coinN++, w)) ++t.coinDistinct;
+                (bool fullDay, bool paidAsFlip) = abi.decode(logs[i].data, (bool, bool));
+                ++t.crapsWins;
+                if (fullDay) ++t.crapsDays;
+                if (paidAsFlip) ++t.crapsRefused;
+                if (uint256(logs[i].topics[2]) == 1) ++t.crapsLvl1;
             } else if (t0 == BAF_ARMED_SIG) {
                 t.bafArmed = true;
             } else if (t0 == ADVANCE_SIG) {
                 (t.stage,) = abi.decode(logs[i].data, (uint8, uint24));
             }
         }
+        emit log_named_uint("tx_gas_incl_intrinsic", used);
         emit log_named_uint("headroom_to_16p7M", used < EIP7825_TX_GAS_CAP ? EIP7825_TX_GAS_CAP - used : 0);
-        emit log_named_uint(
-            "distance_to_10M_target", used < GAS_TARGET ? GAS_TARGET - used : 0
-        );
+        emit log_named_uint("distance_to_10M_target", used < GAS_TARGET ? GAS_TARGET - used : 0);
         emit log_named_uint("over_10M_target_by", used > GAS_TARGET ? used - GAS_TARGET : 0);
     }
 
     /// @dev Appends `w` at `n` and reports whether it was unseen among the first `n` (O(n^2), n <= 120).
     function _pushDistinct(address[] memory arr, uint256 n, address w) private pure returns (bool fresh) {
         fresh = true;
-        for (uint256 j; j < n; ++j) {
+        for (uint256 j; j < n && j < arr.length; ++j) {
             if (arr[j] == w) {
                 fresh = false;
                 break;
@@ -385,206 +438,305 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
         emit log_named_uint("  eth_distinct_winners", t.ethDistinct);
         emit log_named_uint("  ticket_wins", t.ticketWins);
         emit log_named_uint("  ticket_distinct_winners", t.ticketDistinct);
-        emit log_named_uint("  flip_near_wins", t.flipWins);
-        emit log_named_uint("  flip_near_distinct_winners", t.flipDistinct);
-        emit log_named_uint("  flip_far_wins", t.farWins);
-        emit log_named_uint("  flip_far_distinct_winners", t.farDistinct);
-        emit log_named_uint("  craps_comp_wins", t.compWins);
+        emit log_named_uint("  trait_coin_shares", t.flipWins);
+        emit log_named_uint("  fill_coin_shares", t.farWins);
+        emit log_named_uint("  craps_seats", t.crapsWins);
+        emit log_named_uint("  craps_whole_days", t.crapsDays);
+        emit log_named_uint("  craps_refused_paid_flip", t.crapsRefused);
+        emit log_named_uint("  coin_draw_distinct_recipients", t.coinDistinct);
         emit log_named_uint("  baf_armed", t.bafArmed ? 1 : 0);
     }
-}
 
-/// @notice HEADLINE: 49 ETH + 120 ticket + 50 near-FLIP + 8 far-FLIP winners, target-met latch + BAF arm.
-contract PurchaseDailyWorstCase is PurchaseDailyFixture {
-    function setUp() public {
-        _seed(_shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, NEXT_POOL_LATCH, PREV_POOL));
+    /// @dev Every seat attempt landed (none refused) on a distinct cold wallet, and the fill paid
+    ///      its 25 shares to distinct cold wallets disjoint from the seats.
+    function _assertFill(Tally memory t, uint256 seats, uint256 days_) internal {
+        assertEq(t.flipWins, 0, "the purchase fill uses only the unminted queues");
+        assertEq(t.farWins, COIN_DRAW_HALF_SLOTS, "the fill paid all 25 coin shares");
+        assertEq(t.crapsWins, seats, "the fill drew every affordable seat");
+        assertEq(t.crapsDays, days_, "whole-day upgrades from the front");
+        assertEq(t.crapsRefused, 0, "no seat refused: every seat is a real table write");
+        assertEq(t.coinDistinct, seats + COIN_DRAW_HALF_SLOTS, "every coin-draw recipient is a distinct cold wallet");
     }
 
-    function test_PurchaseDaily_49Eth_120Tickets_58Flip_Latch_Measured() public {
-        (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_FULL (stage 6): 49 ETH, priced tickets, 50+8 FLIP, latch + BAF arm", used, t);
-        emit log_named_uint("PURCHASE_DAILY_STAGE_WORST_CASE_GAS", used);
+    function _assertCaps(uint256 used) internal {
+        assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
+    }
 
-        // Non-vacuity: every leg MUST have run at its cap, or the ceiling is not one.
+    /// @dev The priced ticket leg: the next advance, same word, 120 distinct cold winners, sealing the day.
+    function _measureTicketStage(string memory label, bool expectBaf) internal returns (uint256 used) {
+        Tally memory tk;
+        (used, tk) = _measure();
+        _emitTally(label, used, tk);
+        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
+        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
+        assertEq(tk.ticketDistinct, PURCHASE_PHASE_TICKET_MAX_WINNERS, "all ticket winners are distinct cold addresses");
+        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.crapsWins, 0, "only the ticket leg rides the ticket stage");
+        assertEq(tk.bafArmed, expectBaf, "the sealing stage latches (and arms the BAF draw) iff the target is met");
+        _assertCaps(used);
+    }
+}
+
+/// @notice The full stage-6 composition at one coin budget: 49 ETH + ticket pricing + the fill at
+///         25 cold seats (`_days()` of them whole days) + 25 cold shares; then the ticket stage that
+///         pays 120 cold winners and, with the target met, latches + arms the BAF draw.
+///         MEASURED: an OPENER seat (vaultComp kind 5 -> a window reservation + slip) costs more than
+///         a whole-day seat (deliverPasses -> one day-seat write), so 25 seats with ZERO upgrades
+///         (B in [120,000, 160,800) FLIP) is the fill's heaviest budget, not the all-days budget.
+abstract contract PurchaseDailyStage is PurchaseDailyFixture {
+    function _prev() internal pure virtual returns (uint256);
+    function _days() internal pure virtual returns (uint256);
+    function _label() internal pure virtual returns (string memory);
+
+    function setUp() public virtual {
+        _seed(_shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, uint128(_prev() + 1 ether), _prev()));
+    }
+
+    function test_PurchaseDaily_49Eth_TicketPricing_25Seats_25Flip_Measured() public virtual {
+        (uint256 used, Tally memory t) = _measure();
+        _emitTally(string.concat("PURCHASE_DAILY (stage 6) ", _label()), used, t);
+        emit log_named_uint(string.concat("PURCHASE_DAILY_STAGE_GAS_", _label()), used);
+        _assertStage(t);
+        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets + latch + BAF arm", true);
+        emit log_named_uint(string.concat("PURCHASE_DAILY_TICKET_STAGE_GAS_", _label()), ticketUsed);
+    }
+
+    function _assertStage(Tally memory t) internal {
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
         assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "the ETH leg paid all 49 fixed-bucket winners");
+        assertEq(t.ethDistinct, PURCHASE_ETH_WINNERS, "all ETH winners are distinct cold addresses");
         assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
-        assertEq(t.flipWins, DAILY_COIN_MAX_WINNERS, "the near-FLIP leg paid all 50 pulls");
-        assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "the far-FLIP leg paid all 8 samples");
-        assertEq(t.compWins, 0, "no comp mode at this FLIP budget");
+        _assertFill(t, COIN_DRAW_HALF_SLOTS, _days());
         assertFalse(t.bafArmed, "the latch waits for the sealing ticket stage");
-        // Sampling is with replacement: nearly every winner must still be a distinct cold address.
-        assertEq(t.ethDistinct, 49, "all ETH winners are distinct cold addresses");
-        assertGe(t.flipDistinct, 48, "at least 48 of the 50 near-FLIP winners are distinct cold addresses");
-
-        assertLt(used, EIP7825_TX_GAS_CAP, "PURCHASE DAILY: the full stage must clear EIP-7825");
-
-        // The ticket leg rides the next advance on the same recorded word and seals the day.
-        (uint256 ticketUsed, Tally memory tk) = _measure();
-        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
-        emit log_named_uint("PURCHASE_DAILY_TICKET_STAGE_WORST_CASE_GAS", ticketUsed);
-        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
-        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
-        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
-        assertEq(tk.ticketDistinct, 120, "all ticket winners are distinct cold addresses");
-        assertTrue(tk.bafArmed, "the sealing ticket stage latched last purchase day and armed the BAF draw");
-        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
     }
 }
 
-/// @notice Same caps with the latch quiet (next pool under target): the stage without the BAF arm.
-contract PurchaseDailyNoLatch is PurchaseDailyFixture {
-    function setUp() public {
-        _seed(_shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, NEXT_POOL_QUIET, PREV_POOL));
-    }
-
-    function test_PurchaseDaily_AllCaps_NoLatch_Measured() public {
-        (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_NO_LATCH (stage 6): 49 ETH, priced tickets, 50+8 FLIP", used, t);
-        emit log_named_uint("PURCHASE_DAILY_NO_LATCH_GAS", used);
-
-        assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
-        assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
-        assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
-        assertEq(t.flipWins, DAILY_COIN_MAX_WINNERS, "50 near-FLIP pulls");
-        assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "8 far-FLIP samples");
-        assertFalse(t.bafArmed, "no latch: no BAF arm");
-        assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
-
-        // The ticket leg rides the next advance on the same recorded word and seals the day.
-        (uint256 ticketUsed, Tally memory tk) = _measure();
-        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
-        emit log_named_uint("PURCHASE_DAILY_NO_LATCH_TICKET_STAGE_GAS", ticketUsed);
-        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
-        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
-        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
-        assertFalse(tk.bafArmed, "no latch: no BAF arm");
-        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
-    }
+/// @notice HEADLINE (heaviest fill budget): 25 cold OPENER seats, no upgrades.
+contract PurchaseDailyWorstCase is PurchaseDailyStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_OPEN25; }
+    function _days() internal pure override returns (uint256) { return 0; }
+    function _label() internal pure override returns (string memory) { return "S25_D00"; }
 }
 
-/// @notice SPLIT (a): ETH + ticket legs only — the FLIP boards empty (the 60 pulls still walk, no credit).
+/// @notice 25 seats, 12 upgraded to whole days.
+contract PurchaseDailyTwelveDays is PurchaseDailyStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_12D; }
+    function _days() internal pure override returns (uint256) { return 12; }
+    function _label() internal pure override returns (string memory) { return "S25_D12"; }
+}
+
+/// @notice The maximum budget: 25 seats, ALL whole days (B >= 1.14M FLIP).
+contract PurchaseDailyAllDays is PurchaseDailyStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_MAX; }
+    function _days() internal pure override returns (uint256) { return 25; }
+    function _label() internal pure override returns (string memory) { return "S25_D25"; }
+}
+
+/// @notice SPLIT (a): ETH + ticket legs only — the unminted queues are empty (the fill walks 16
+///         picks and pays nobody).
 contract PurchaseDailyEthTicketsOnly is PurchaseDailyFixture {
     function setUp() public {
-        _seed(_shape(MAIN_HOLDERS, 0, 0, NEXT_POOL_QUIET, PREV_POOL));
+        _seed(_shape(MAIN_HOLDERS, 0, 0, NEXT_POOL_QUIET, PREV_POOL_MAX));
     }
 
-    function test_PurchaseDaily_49Eth_120Tickets_NoFlipWinners_Measured() public {
+    function test_PurchaseDaily_49Eth_TicketPricing_EmptyFill_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_ETH_TICKETS_ONLY (stage 6): 49 ETH, priced tickets, empty FLIP boards", used, t);
+        _emitTally("PURCHASE_DAILY_ETH_TICKETS_ONLY (stage 6): 49 ETH, ticket pricing, empty fill", used, t);
         emit log_named_uint("PURCHASE_DAILY_ETH_TICKET_LEGS_GAS", used);
 
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
         assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
         assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
-        assertEq(t.flipWins, 0, "no near-FLIP winner drawn");
-        assertEq(t.farWins, 0, "no far-FLIP winner drawn");
-        assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
+        assertEq(t.flipWins + t.farWins + t.crapsWins, 0, "the empty fill paid nobody");
+        _assertCaps(used);
 
-        // The ticket leg rides the next advance on the same recorded word and seals the day.
-        (uint256 ticketUsed, Tally memory tk) = _measure();
-        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
+        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", false);
         emit log_named_uint("PURCHASE_DAILY_ETH_TICKET_LEGS_TICKET_STAGE_GAS", ticketUsed);
-        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
-        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
-        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
-        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
     }
 }
 
-/// @notice SPLIT (b): the FLIP legs only — the main board empty (ETH and ticket legs draw no winner).
-contract PurchaseDailyFlipOnly is PurchaseDailyFixture {
+/// @notice The fill-draw LADDER: the main board empty (no ETH, no ticket winners), the fill at a
+///         budget per rung. Differences between rungs give the per-seat marginal on the REAL table
+///         and the REAL Game (the Game-side extsload vet + the table's seat write + whatever the
+///         table reads back from the Game).
+abstract contract PurchaseFillRung is PurchaseDailyFixture {
+    function _prev() internal pure virtual returns (uint256);
+    function _seats() internal pure virtual returns (uint256);
+    function _days() internal pure virtual returns (uint256);
+    function _label() internal pure virtual returns (string memory);
+
     function setUp() public {
-        _seed(_shape(0, BONUS_HOLDERS, FF_HOLDERS, NEXT_POOL_QUIET, PREV_POOL));
+        _seed(_shape(0, BONUS_HOLDERS, FF_HOLDERS, NEXT_POOL_QUIET, _prev()));
     }
 
-    function test_PurchaseDaily_NoEthNoTickets_58Flip_Measured() public {
+    function test_FillRung_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_FLIP_ONLY (stage 6): empty main board, 50+8 FLIP", used, t);
-        emit log_named_uint("PURCHASE_DAILY_FLIP_LEGS_GAS", used);
-
+        _emitTally(_label(), used, t);
+        emit log_named_uint(string.concat("FILL_RUNG_GAS_", _label()), used);
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
-        assertEq(t.ethWins, 0, "no ETH winner drawn");
-        assertEq(t.ticketWins, 0, "no ticket winner drawn");
-        assertEq(t.flipWins, DAILY_COIN_MAX_WINNERS, "50 near-FLIP pulls");
-        assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "8 far-FLIP samples");
-        assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
+        assertEq(t.ethWins + t.ticketWins, 0, "empty main board");
+        _assertFill(t, _seats(), _days());
+        _assertCaps(used);
     }
 }
 
-/// @notice COMP-MODE BRANCH: a FLIP budget funding 6 whole Craps day passes turns one quadrant's
-///         pulls into up to 6 creditPasses calls on the real table (the other branch of the FLIP leg).
-contract PurchaseDailyCompMode is PurchaseDailyFixture {
-    function setUp() public {
-        _seed(_shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, NEXT_POOL_QUIET, PREV_POOL_COMP));
-    }
-
-    function test_PurchaseDaily_AllCaps_CompMode_Measured() public {
-        (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_COMP_MODE (stage 6): 49 ETH, priced tickets, comp quadrant + FLIP", used, t);
-        emit log_named_uint("PURCHASE_DAILY_COMP_MODE_GAS", used);
-
-        assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
-        assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
-        assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
-        assertEq(t.compWins, 6, "the comp quadrant banked all 6 comp slots");
-        // 37 or 38 non-comp pulls remain depending on which quadrant went comp.
-        assertGe(t.flipWins, 37, "the non-comp quadrants still paid every scheduled pull");
-        assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "8 far-FLIP samples");
-        assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
-
-        // The ticket leg rides the next advance on the same recorded word and seals the day.
-        (uint256 ticketUsed, Tally memory tk) = _measure();
-        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
-        emit log_named_uint("PURCHASE_DAILY_COMP_MODE_TICKET_STAGE_GAS", ticketUsed);
-        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
-        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
-        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
-        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
-    }
+contract PurchaseFillRung00Seats is PurchaseFillRung {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_NOSEAT; }
+    function _seats() internal pure override returns (uint256) { return 0; }
+    function _days() internal pure override returns (uint256) { return 0; }
+    function _label() internal pure override returns (string memory) { return "S00_D00"; }
 }
 
-/// @notice TRUE CEILING: the headline shape with the day's word NOT pre-recorded — the measured tx
-///         applies the freshly fulfilled VRF word (coinflip payouts, quest roll, craps bonus-day open,
-///         lootbox finalize) and then pays the whole purchase daily.
-contract PurchaseDailyWithRngApply is PurchaseDailyFixture, FreshWordLeg {
-    function setUp() public {
-        PurchaseDailySeeder.Shape memory s = _shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, NEXT_POOL_LATCH, PREV_POOL);
+contract PurchaseFillRung13Openers is PurchaseFillRung {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL; }
+    function _seats() internal pure override returns (uint256) { return 13; }
+    function _days() internal pure override returns (uint256) { return 0; }
+    function _label() internal pure override returns (string memory) { return "S13_D00"; }
+}
+
+contract PurchaseFillRung25Openers is PurchaseFillRung {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_OPEN25; }
+    function _seats() internal pure override returns (uint256) { return 25; }
+    function _days() internal pure override returns (uint256) { return 0; }
+    function _label() internal pure override returns (string memory) { return "S25_D00"; }
+}
+
+contract PurchaseFillRung12Days is PurchaseFillRung {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_12D; }
+    function _seats() internal pure override returns (uint256) { return 25; }
+    function _days() internal pure override returns (uint256) { return 12; }
+    function _label() internal pure override returns (string memory) { return "S25_D12"; }
+}
+
+contract PurchaseFillRung25Days is PurchaseFillRung {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_MAX; }
+    function _seats() internal pure override returns (uint256) { return 25; }
+    function _days() internal pure override returns (uint256) { return 25; }
+    function _label() internal pure override returns (string memory) { return "S25_D25"; }
+}
+
+/// @notice TRUE CEILING: the stage-6 composition with the day's word NOT pre-recorded — the measured
+///         tx applies the freshly fulfilled VRF word (coinflip payouts, quest roll, craps bonus-day
+///         open, protocol boon draw, lootbox finalize) and then pays the whole purchase daily.
+abstract contract PurchaseDailyWithRngApplyStage is PurchaseDailyStage, FreshWordLeg {
+    function setUp() public override {
+        PurchaseDailySeeder.Shape memory s =
+            _shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, uint128(_prev() + 1 ether), _prev());
         _seedFresh(s);
         _armFreshWord(s.word, 400);
     }
 
-    function test_PurchaseDaily_AllCaps_WithRngApplyLeg_Measured() public {
+    function test_PurchaseDaily_49Eth_TicketPricing_25Seats_25Flip_Measured() public override {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_WITH_RNG_APPLY (stage 6): word applied + 49 ETH, priced tickets, 50+8 FLIP, latch", used, t);
+        _emitTally(string.concat("PURCHASE_DAILY_WITH_RNG_APPLY (stage 6) ", _label()), used, t);
         (uint256 cfLogs, uint256 crLogs) = _countLegLogs(lastLogs);
         emit log_named_uint("  coinflip_logs", cfLogs);
         emit log_named_uint("  craps_logs", crLogs);
-        emit log_named_uint("PURCHASE_DAILY_TRUE_CEILING_GAS", used);
-
-        assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran in the word-apply tx");
-        assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
-        assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
-        assertEq(t.flipWins, DAILY_COIN_MAX_WINNERS, "50 near-FLIP pulls");
-        assertEq(t.farWins, FAR_FUTURE_FLIP_SAMPLES, "8 far-FLIP samples");
-        assertEq(t.ethDistinct, 49, "all ETH credits are fresh recipient writes");
-        assertEq(t.flipDistinct, 50, "all near-FLIP credits are fresh recipient writes");
-        assertFalse(t.bafArmed, "the latch waits for the sealing ticket stage");
+        emit log_named_uint(string.concat("PURCHASE_DAILY_TRUE_CEILING_GAS_", _label()), used);
+        _assertStage(t);
         assertGe(cfLogs, 1, "coinflip.processCoinflipPayouts ran in the measured tx");
         assertGe(crLogs, 8, "craps openBonusDay opened the day's 7 windows in the measured tx");
-        assertLt(used, EIP7825_TX_GAS_CAP, "TRUE CEILING: purchase daily incl. word apply clears EIP-7825");
+        _assertCaps(used);
 
-        // The ticket leg rides the next advance on the same recorded word and seals the day.
-        (uint256 ticketUsed, Tally memory tk) = _measure();
-        _emitTally("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", ticketUsed, tk);
-        emit log_named_uint("PURCHASE_DAILY_TRUE_CEILING_TICKET_STAGE_GAS", ticketUsed);
-        assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
-        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
-        assertEq(tk.ethWins + tk.flipWins + tk.farWins + tk.compWins, 0, "only the ticket leg rides the ticket stage");
-        assertEq(tk.ticketDistinct, 120, "all ticket winners are distinct cold addresses");
-        assertTrue(tk.bafArmed, "the sealing ticket stage latched last purchase day and armed the BAF draw");
-        assertLt(ticketUsed, EIP7825_TX_GAS_CAP, "TICKET STAGE: clears EIP-7825");
+        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets + latch + BAF arm", true);
+        emit log_named_uint(string.concat("PURCHASE_DAILY_TRUE_CEILING_TICKET_STAGE_GAS_", _label()), ticketUsed);
     }
+}
+
+contract PurchaseDailyWithRngApply is PurchaseDailyWithRngApplyStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_OPEN25; }
+    function _days() internal pure override returns (uint256) { return 0; }
+    function _label() internal pure override returns (string memory) { return "S25_D00"; }
+}
+
+contract PurchaseDailyWithRngApplyAllDays is PurchaseDailyWithRngApplyStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_MAX; }
+    function _days() internal pure override returns (uint256) { return 25; }
+    function _label() internal pure override returns (string memory) { return "S25_D25"; }
+}
+
+/// @notice LEVEL 1: the trait draw over level 1 AND the fill over 2..100 in ONE tx, both at 25 cold
+///         seats (`_days()` whole days each) + 25 cold shares — 50 seats — plus the day seal and the
+///         last-purchase latch (no ticket leg was priced, so the seal rides this stage).
+abstract contract PurchaseDailyLevelOneStage is PurchaseDailyFixture {
+    function _prev() internal pure virtual returns (uint256);
+    function _days() internal pure virtual returns (uint256);
+    function _label() internal pure virtual returns (string memory);
+
+    function setUp() public virtual {
+        _seed(_shapeLevelOne(_prev(), true));
+    }
+
+    function test_LevelOne_TwoDraws_50Seats_50Flip_Latch_Measured() public virtual {
+        (uint256 used, Tally memory t) = _measure();
+        _emitTally(string.concat("LEVEL1_TWO_DRAWS (stage 6) ", _label()), used, t);
+        emit log_named_uint(string.concat("LEVEL1_TWO_DRAWS_GAS_", _label()), used);
+        _assertLevelOne(t);
+        _assertCaps(used);
+    }
+
+    function _assertLevelOne(Tally memory t) internal {
+        assertEq(t.stage, STAGE_PURCHASE_DAILY, "the level-1 purchase daily ran");
+        assertEq(t.ethWins + t.ticketWins, 0, "no ETH / ticket leg at level 1");
+        assertEq(t.crapsWins, 2 * COIN_DRAW_HALF_SLOTS, "both draws seated 25");
+        assertEq(t.crapsLvl1, COIN_DRAW_HALF_SLOTS, "25 seats from the level-1 trait draw");
+        assertEq(t.crapsDays, 2 * _days(), "each draw upgraded the expected seats");
+        assertEq(t.crapsRefused, 0, "no seat refused");
+        assertEq(t.flipWins, COIN_DRAW_HALF_SLOTS, "the trait draw paid 25 shares");
+        assertEq(t.farWins, COIN_DRAW_HALF_SLOTS, "the fill paid 25 shares");
+        emit log_named_uint("  level1_distinct_recipients_of_100", t.coinDistinct);
+        // The trait draw samples with replacement: allow a stray repeat, but the fill is exact.
+        assertGe(t.coinDistinct, 98, "all but a stray trait-draw repeat are distinct cold wallets");
+        (,, bool lastPurchase,,) = game.purchaseInfo();
+        assertTrue(lastPurchase, "the seal latched last purchase day in the same tx");
+    }
+}
+
+/// @notice Level 1, heaviest budget: 2 x 25 OPENER seats (B = 130,000 FLIP per draw).
+contract PurchaseDailyLevelOneTwoDraws is PurchaseDailyLevelOneStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_L1_OPEN25; }
+    function _days() internal pure override returns (uint256) { return 0; }
+    function _label() internal pure override returns (string memory) { return "S50_D00"; }
+}
+
+/// @notice Level 1, maximum budget: 2 x 25 whole-day seats (B = 1,250,000 FLIP per draw).
+contract PurchaseDailyLevelOneAllDays is PurchaseDailyLevelOneStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_L1_MAX; }
+    function _days() internal pure override returns (uint256) { return 25; }
+    function _label() internal pure override returns (string memory) { return "S50_D50"; }
+}
+
+/// @notice LEVEL 1 TRUE CEILING: the two draws + seal/latch AND the word-apply leg in one tx.
+abstract contract PurchaseDailyLevelOneWithRngApplyStage is PurchaseDailyLevelOneStage, FreshWordLeg {
+    function setUp() public override {
+        PurchaseDailySeeder.Shape memory s = _shapeLevelOne(_prev(), true);
+        _seedFresh(s);
+        _armFreshWord(s.word, 400);
+    }
+
+    function test_LevelOne_TwoDraws_50Seats_50Flip_Latch_Measured() public override {
+        (uint256 used, Tally memory t) = _measure();
+        _emitTally(string.concat("LEVEL1_TWO_DRAWS_WITH_RNG_APPLY (stage 6) ", _label()), used, t);
+        (uint256 cfLogs, uint256 crLogs) = _countLegLogs(lastLogs);
+        emit log_named_uint("  coinflip_logs", cfLogs);
+        emit log_named_uint("  craps_logs", crLogs);
+        emit log_named_uint(string.concat("LEVEL1_TWO_DRAWS_TRUE_CEILING_GAS_", _label()), used);
+        _assertLevelOne(t);
+        assertGe(cfLogs, 1, "coinflip payouts ran in the measured tx");
+        assertGe(crLogs, 8, "craps bonus day opened in the measured tx");
+        _assertCaps(used);
+    }
+}
+
+contract PurchaseDailyLevelOneWithRngApply is PurchaseDailyLevelOneWithRngApplyStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_L1_OPEN25; }
+    function _days() internal pure override returns (uint256) { return 0; }
+    function _label() internal pure override returns (string memory) { return "S50_D00"; }
+}
+
+contract PurchaseDailyLevelOneWithRngApplyAllDays is PurchaseDailyLevelOneWithRngApplyStage {
+    function _prev() internal pure override returns (uint256) { return PREV_POOL_L1_MAX; }
+    function _days() internal pure override returns (uint256) { return 25; }
+    function _label() internal pure override returns (string memory) { return "S50_D50"; }
 }
 
 /// @notice TRUE CEILING of the jackpot-phase day-1 ETH stage (tx1, stage 10): word applied in the same tx.

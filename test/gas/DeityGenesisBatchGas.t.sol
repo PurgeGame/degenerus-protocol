@@ -12,8 +12,18 @@ contract GenesisQueueSeeder is DegenerusGameStorage {
 }
 
 contract DeityGenesisBatchGasTest is DeployProtocol {
+    /// @dev `_mintCeiling()` at genesis: level 0, no last-purchase latch -> level + 1. Level 1 is
+    ///      the only minted level; the genesis deities' levels 2..100 wait unminted in the
+    ///      far-future key space (initProtocolDeity routes `lvl > _mintCeiling()` there).
+    uint24 private constant GENESIS_MINT_CEILING = 1;
+
+    function _genesisKey(uint24 lvl) private pure returns (uint24) {
+        return lvl > GENESIS_MINT_CEILING ? lvl | uint24(1 << 22) : lvl;
+    }
+
     function setUp() public {
         _deployProtocol(false);
+        assertEq(game.level(), 0, "fixture: genesis level anchors GENESIS_MINT_CEILING");
     }
 
     function testColdBatchFitsTransactionCapAndWritesEachQueueWordOnce() public {
@@ -25,7 +35,7 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
         assertLt(used, 16_777_216);
         (, bytes32[] memory writes) = vm.accesses(address(game));
         for (uint24 lvl = 1; lvl <= 100; ++lvl) {
-            uint24 key = lvl > 5 ? lvl | uint24(1 << 22) : lvl;
+            uint24 key = _genesisKey(lvl);
             bytes32 lengthSlot = keccak256(abi.encode(uint256(key), uint256(12)));
             bytes32 wordSlot = keccak256(abi.encode(lengthSlot));
             bytes32 ownerLengthSlot = keccak256(abi.encode(uint256(lvl), uint256(67)));
@@ -73,7 +83,7 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
         game.initProtocolDeity();
 
         for (uint24 lvl = 1; lvl <= 100; ++lvl) {
-            uint24 key = lvl > 5 ? lvl | uint24(1 << 22) : lvl;
+            uint24 key = _genesisKey(lvl);
             TQ.assertQueue(address(game), key);
             assertEq(uint32(TQ.owed(address(game), key, address(vault)) >> 8),
                 lvl == 6 || lvl == 7 ? 16 : 4);

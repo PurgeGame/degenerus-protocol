@@ -284,7 +284,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Bit mask for far-future ticket key encoding.
     ///      Set bit 22 of the uint24 level key to create a third key space
     ///      disjoint from both double-buffer slots (bit 23).
-    ///      Far-future = tickets targeting > currentLevel + 5.
+    ///      Far-future = tickets targeting a level above _mintCeiling() (unminted levels).
     ///      Three key spaces: Slot0 [0x000000-0x3FFFFF], FF [0x400000-0x7FFFFF],
     ///      Slot1 [0x800000-0xBFFFFF]. Disjoint for all lvl < 2^22.
     uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
@@ -665,23 +665,24 @@ abstract contract DegenerusGameStorage {
     ///      All tickets (purchases, lootbox rewards, etc.) queue here.
     ///
     ///      PROCESSING SCHEDULE:
-    ///      - Near-future window [purchaseLevel-1 .. purchaseLevel+4]: the read cohort of
-    ///        every key is drained on each advance (processTicketBatch), current and
-    ///        next-level entries alike; the daily slot swap commits the write cohort.
-    ///      - Far-future (> level+5): held in the far-future key space; the level that
-    ///        crosses into the window at a phase transition is drained once, in the
-    ///        transition leg (processFutureTicketBatch).
+    ///      - Minted window [purchaseLevel-1 .. purchaseLevel]: the read cohort of each key
+    ///        is drained on each advance (processTicketBatch); the daily slot swap commits
+    ///        the write cohort.
+    ///      - Unminted future levels (above _mintCeiling()): held in the far-future key space
+    ///        with no traits. When level L's last purchase day latches at its seal, L+1 stops
+    ///        accepting far-future entries; its frozen queue mints once, inside the sweep, with
+    ///        the first cohort committed after that seal (a mid-day or the last-purchase RNG
+    ///        request), in any case before the last-purchase consolidation, so the BAF, the
+    ///        early-bird and the jackpot-phase bonus draws all see L+1 minted.
     ///
-    ///      EXAMPLE (level 5 purchase phase, purchaseLevel = 6):
-    ///      - ticketQueue[5..10] read cohorts → swept every advance
-    ///      - ticketQueue[11+] → far-future space; 11 crosses at the 5→6 transition
+    ///      EXAMPLE (level 5 purchase phase, level = 4, purchaseLevel = 5):
+    ///      - ticketQueue[4..5] read cohorts → swept every advance
+    ///      - ticketQueue[6+] → far-future space; 6 mints after level 5's last purchase day seals
     ///
     ///      Keys are encoded: ticketQueue is indexed by (lvl | slotBit) — bit 23 selects the
-    ///      double-buffer write/read half (ticketWriteSlot); tickets targeting > level+5 use the
+    ///      double-buffer write/read half (ticketWriteSlot); tickets targeting > level+1 use the
     ///      disjoint far-future key space (bit 22). Raw-level indices above hold only when
     ///      ticketWriteSlot is false.
-    ///
-    ///      This allows lootbox tickets to participate in early-bird jackpots at jackpot phase start.
     ///      The length word counts QUEUED OWNERS. Data word w holds eight uint32 lanes for
     ///      positions 8w..8w+7, low lane first, each naming lvlEntryOwner[level][lane - 1].
     ///      Zero is reserved: every append takes the nonzero ownerIdx+1 field from the owed
@@ -711,9 +712,9 @@ abstract contract DegenerusGameStorage {
     uint8 internal snapShift;
 
     /// @dev Pending thanos declaration: levels >= snapLevel drain at snapPendingShift
-    ///      instead of snapShift. Declared via setThanosLevel at least 6 levels ahead,
-    ///      strictly before the target's first materialization (the far-future
-    ///      promotion at the transition to target-5), so one level's entries always
+    ///      instead of snapShift. Declared via setThanosLevel at least 3 levels ahead,
+    ///      strictly before the target's first materialization (the seal of level
+    ///      target-1's purchase phase, while level == target-2), so one level's entries always
     ///      share one exponent regardless of when they were bought or drained —
     ///      the invariant that keeps any declared change (raise or lower) EV-neutral.
     ///      snapLevel == 0 means no pending declaration.
@@ -917,13 +918,34 @@ abstract contract DegenerusGameStorage {
         return (jackpotPhaseFlag || (lastPurchaseDay && rngLockedFlag)) ? lvl : lvl + 1;
     }
 
+    /// @dev Highest level whose tickets are minted: entries up to it take the double buffer,
+    ///      entries above it wait unminted in the far-future key space. Normally level + 1.
+    ///      From the seal that latches lastPurchaseDay until the last-purchase request bumps
+    ///      `level`, it is level + 2: that seal freezes the next level's far-future pool (later
+    ///      entries take its write buffer). The pool mints inside the unified sweep with the first
+    ///      cohort committed after the seal — the first RNG request after it, mid-day or daily
+    ///      (MintModule processTicketBatch). The last-purchase request takes the lock and bumps
+    ///      `level`, returning the ceiling to level + 1 = the same level.
+    function _mintCeiling() internal view returns (uint24) {
+        return level + ((lastPurchaseDay && !rngLockedFlag) ? 2 : 1);
+    }
+
+    /// @dev The frozen next-level pool is sweep work only once a cohort has been
+    ///      committed AFTER the latch — the last-purchase request (rngLockedFlag) or a post-latch
+    ///      mid-day request (mid-day latch). Before that no word exists for it, and a stale
+    ///      !ticketsFullyProcessed (genesis) would make the drain gate demand one that never comes.
+    function _frozenPoolDue() internal view returns (bool) {
+        return lastPurchaseDay && (rngLockedFlag || _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0);
+    }
+
     /// @dev O(1) advance-work discovery, shared by the external keeper view
     ///      (DegenerusGame.advanceDue) and the afking router's in-context predicate.
     ///      TRUE for a new-day advance (regardless of rngLock — advance is
     ///      liveness-critical) OR a mid-day partial-drain whose read window still holds
-    ///      queued tickets or whose sealed foil bucket awaits its drain. The probe
-    ///      mirrors the unified sweep's window [purchaseLevel-1 .. purchaseLevel+4]; a
-    ///      fixed six-key scan, not unbounded.
+    ///      queued tickets (a latched last purchase day's frozen next-level pool counts) or
+    ///      whose sealed foil bucket awaits its drain. The probe
+    ///      mirrors the unified sweep's window [purchaseLevel-1 .. _mintCeiling()]; a
+    ///      fixed scan of at most three read keys plus the frozen pool's key, not unbounded.
     function _advanceDue() internal view returns (bool) {
         if (_simulatedDayIndex() != dailyIdx) return true;
         if (!ticketsFullyProcessed) {
@@ -934,13 +956,14 @@ abstract contract DegenerusGameStorage {
                 ? lvl
                 : lvl + 1;
             uint24 t = purchaseLevel == 0 ? 0 : purchaseLevel - 1;
-            uint24 end = purchaseLevel + 4;
+            uint24 end = _mintCeiling();
             for (; t <= end; ) {
                 if (ticketQueue[_tqReadKey(t)].length > 0) return true;
                 unchecked {
                     ++t;
                 }
             }
+            if (_frozenPoolDue() && ticketQueue[_tqFarFutureKey(end)].length > 0) return true;
             if (_foilDrainPending()) return true;
         }
         return false;
@@ -993,7 +1016,7 @@ abstract contract DegenerusGameStorage {
     /// @param buyer Address to receive entries.
     /// @param targetLevel Level for which entries are queued.
     /// @param entries Number of entries to queue (price/4 units).
-    /// @param rngBypass True to skip the RngLocked revert on a far-future target level.
+    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
     function _queueEntries(
         address buyer,
         uint24 targetLevel,
@@ -1007,8 +1030,11 @@ abstract contract DegenerusGameStorage {
         // can be manipulated by them. Player purchase paths gate liveness at their own entry; the
         // advance-chain daily-jackpot distribution also queues through this sink and must NOT be
         // reverted here, so the gate stays off the shared sink.
-        bool isFarFuture = targetLevel > level + 5;
-        if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
+        // Levels above _mintCeiling() are unminted: they stay queued in the far-future key space
+        // until their level's pool mints. Unminted-level draws sample one queue lane per wallet,
+        // so under the RNG lock only a NEW registration (a new lane) could move them and reverts;
+        // a top-up only raises owed.
+        bool isFarFuture = targetLevel > _mintCeiling();
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
@@ -1016,6 +1042,7 @@ abstract contract DegenerusGameStorage {
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
+            if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
             packed = _registerEntryOwner(buyer, targetLevel);
             if (packed == 0) {
                 if (rngBypass) return;
@@ -1061,7 +1088,7 @@ abstract contract DegenerusGameStorage {
     /// @param buyer Address to receive entries.
     /// @param targetLevel Level for which entries are queued.
     /// @param entriesScaled Scaled entries (entries x 100); owed gains entriesScaled / QTY_SCALE entries.
-    /// @param rngBypass True to skip the RngLocked revert on a far-future target level.
+    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
     function _queueEntriesScaled(
         address buyer,
         uint24 targetLevel,
@@ -1070,8 +1097,7 @@ abstract contract DegenerusGameStorage {
     ) internal {
         if (entriesScaled == 0) return;
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
-        bool isFarFuture = targetLevel > level + 5;
-        if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
+        bool isFarFuture = targetLevel > _mintCeiling();
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
@@ -1079,6 +1105,7 @@ abstract contract DegenerusGameStorage {
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
+            if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
             packed = _registerEntryOwner(buyer, targetLevel);
             if (packed == 0) {
                 if (rngBypass) return;
@@ -1119,7 +1146,7 @@ abstract contract DegenerusGameStorage {
     /// @param startLevel First level in range (inclusive).
     /// @param numLevels Number of consecutive levels.
     /// @param entriesPerLevel Entries to award per level (4 entries = 1 whole ticket).
-    /// @param rngBypass True to skip the RngLocked revert on a far-future level.
+    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
     function _queueEntryRange(
         address buyer,
         uint24 startLevel,
@@ -1146,8 +1173,8 @@ abstract contract DegenerusGameStorage {
     /// @param numLevels Number of covered levels.
     /// @param stride Gap between covered levels (1 = contiguous).
     /// @param entriesPerLevel Entries to award per covered level (4 entries = 1 whole ticket).
-    /// @param rngBypass True to skip the RngLocked revert on a far-future covered level.
-    /// @param currentLevel Caller's cached `level`, read once for every leg of the walk.
+    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
+    /// @param mintCeiling Caller's cached _mintCeiling(), read once for every leg of the walk.
     /// @param rngLockedCached Caller's cached `rngLockedFlag`, read once for every leg.
     /// @param writeSlotBit Caller's cached ticket write-slot bit
     ///        (`ticketWriteSlot ? TICKET_SLOT_BIT : 0`).
@@ -1158,7 +1185,7 @@ abstract contract DegenerusGameStorage {
         uint24 stride,
         uint32 entriesPerLevel,
         bool rngBypass,
-        uint24 currentLevel,
+        uint24 mintCeiling,
         bool rngLockedCached,
         uint24 writeSlotBit
     ) private {
@@ -1169,14 +1196,14 @@ abstract contract DegenerusGameStorage {
         // this body, so the per-level lock check observes the same value either way.
         uint24 lvl = startLevel;
         for (uint24 i = 0; i < numLevels; ) {
-            bool isFarFuture = lvl > currentLevel + 5;
-            if (isFarFuture && rngLockedCached && !rngBypass) revert RngLocked();
+            bool isFarFuture = lvl > mintCeiling;
             uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : (lvl | writeSlotBit);
             uint80 packed = _entriesOwed(wk, buyer);
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
             bool room = true;
             if (packed == 0) {
+                if (isFarFuture && rngLockedCached && !rngBypass) revert RngLocked();
                 packed = _registerEntryOwner(buyer, lvl);
                 // A full registry drops an advance-chain award's level and fails a purchase.
                 room = packed != 0;
@@ -1214,7 +1241,7 @@ abstract contract DegenerusGameStorage {
     ) internal {
         _queueEntryRangeStridedCore(
             buyer, startLevel, numLevels, stride, entriesPerLevel, rngBypass,
-            level, rngLockedFlag, ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0)
+            _mintCeiling(), rngLockedFlag, ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0)
         );
     }
 
@@ -1232,7 +1259,7 @@ abstract contract DegenerusGameStorage {
     /// @param startLevel First level of the span (inclusive).
     /// @param span Number of levels the award covers.
     /// @param halfPasses Half-pass count (1 half-pass = 1 entry/level equivalent).
-    /// @param rngBypass True to skip the RngLocked revert on a far-future covered level.
+    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
     function _queueHalfPassAward(
         address buyer,
         uint24 startLevel,
@@ -1242,22 +1269,22 @@ abstract contract DegenerusGameStorage {
     ) internal {
         // Read the loop-invariant slot-0 fields once for all <=3 legs — none is written by the
         // core body, so this is identical to each leg re-reading them, minus the repeated SLOADs.
-        uint24 currentLevel = level;
+        uint24 mintCeiling = _mintCeiling();
         bool rngLockedCached = rngLockedFlag;
         uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0);
         uint32 baseEntries = uint32((halfPasses / 4) * 4);
         if (baseEntries != 0) {
-            _queueEntryRangeStridedCore(buyer, startLevel, span, 1, baseEntries, rngBypass, currentLevel, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(buyer, startLevel, span, 1, baseEntries, rngBypass, mintCeiling, rngLockedCached, writeSlotBit);
         }
         uint256 rem = halfPasses % 4;
         if (rem == 0) return;
         if (rem >= 2) {
-            _queueEntryRangeStridedCore(buyer, startLevel, (span + 1) / 2, 2, 4, rngBypass, currentLevel, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(buyer, startLevel, (span + 1) / 2, 2, 4, rngBypass, mintCeiling, rngLockedCached, writeSlotBit);
         }
         if (rem == 1) {
-            _queueEntryRangeStridedCore(buyer, startLevel, (span + 3) / 4, 4, 4, rngBypass, currentLevel, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(buyer, startLevel, (span + 3) / 4, 4, 4, rngBypass, mintCeiling, rngLockedCached, writeSlotBit);
         } else if (rem == 3) {
-            _queueEntryRangeStridedCore(buyer, startLevel + 1, (span + 2) / 4, 4, 4, rngBypass, currentLevel, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(buyer, startLevel + 1, (span + 2) / 4, 4, 4, rngBypass, mintCeiling, rngLockedCached, writeSlotBit);
         }
     }
 
@@ -1679,7 +1706,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Compute the ticket queue key for the far-future key space.
     ///      Always sets bit 22, independent of ticketWriteSlot.
     ///      Far-future tickets are not double-buffered; they persist until
-    ///      drained by processFutureTicketBatch.
+    ///      minted as a latched last purchase day's frozen pool (MintModule processTicketBatch).
     function _tqFarFutureKey(uint24 lvl) internal pure returns (uint24) {
         return lvl | TICKET_FAR_FUTURE_BIT;
     }
@@ -3882,12 +3909,13 @@ abstract contract DegenerusGameStorage {
     ///      change the pool the terminal draw receives. Read once by handleGameOverDrain.
     address internal terminalAffiliate;
 
-    /// @dev Inclusive lower block bound for a level's first generation window. Levels
-    ///      0..5 start at deployment; level L+5 starts when the RNG request advances the
-    ///      game to L, before any drain can execute for that window. Written once per
+    /// @dev Inclusive lower block bound for a level's first generation window. Level 1
+    ///      starts at deployment (level 0 never holds tickets); level L+1 starts when level
+    ///      L's last purchase day latches (at its seal, or at a same-day turbo latch), before
+    ///      any drain can execute for that window. Written once per
     ///      level OUTSIDE charged drain steps. Permanent rather than a recycling ring:
     ///      old levels remain claimable in Bingo and must retain their discovery bound.
-    ///      A uint256 key lets the request add five to uint24(level) without narrowing
+    ///      A uint256 key lets the latch add two to uint24(level) without narrowing
     ///      or assembly; abi.encode(level) has the same 32-byte key for every level.
     ///      Read via extsload(keccak256(abi.encode(uint256(lvl), this mapping's slot))).
     ///      Off-chain metadata only — nothing on-chain reads this mapping, so it gates

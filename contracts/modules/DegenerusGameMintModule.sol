@@ -327,19 +327,18 @@ contract DegenerusGameMintModule is
     // Future Ticket Activation
     // -------------------------------------------------------------------------
 
-    /// @notice Activate future-pool tickets for a given level, bounded by a write budget.
+    /// @dev Mint a level's frozen far-future queue, bounded by a write budget. Called only from
+    ///      processTicketBatch, which sets ticketLevel to `lvl | TICKET_FAR_FUTURE_BIT` first.
     /// @param lvl The level whose queued tickets to process.
-    /// @param entropy VRF-derived entropy for rarity rolls. Caller passes today's daily RNG word
-    ///                (rngWordByDay[day]) so entropy cannot be clobbered by mid-day state changes.
+    /// @param entropy VRF-derived entropy for rarity rolls (the sweep's committed word).
     /// @return worked   True if at least one ticket was minted this call.
     /// @return finished True if the entire queue for `lvl` has been drained.
     /// @return writesUsed Write-budget units consumed (each storage write or skip costs one unit).
-    function processFutureTicketBatch(
+    function _processFutureTicketBatch(
         uint24 lvl,
         uint256 entropy
-    ) external returns (bool worked, bool finished, uint32 writesUsed) {
-        bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
-        uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
+    ) private returns (bool worked, bool finished, uint32 writesUsed) {
+        uint24 rk = _tqFarFutureKey(lvl);
 
         uint256[] storage queue = ticketQueue[rk];
         uint256 total = queue.length;
@@ -348,12 +347,6 @@ contract DegenerusGameMintModule is
             ticketLevel = 0;
             if (ticketSeats != 0) ticketSeats = 0;
             return (false, true, 0);
-        }
-
-        if (!inFarFuture && ticketLevel != lvl) {
-            ticketLevel = lvl;
-            ticketCursor = 0;
-            if (ticketSeats != 0) ticketSeats = 0;
         }
 
         uint256 idx = ticketCursor;
@@ -426,20 +419,8 @@ contract DegenerusGameMintModule is
         finished = (idx >= total && ticketSeats == 0);
         if (finished) {
             _releaseTicketQueue(rk);
-            if (!inFarFuture) {
-                uint24 ffk = _tqFarFutureKey(lvl);
-                if (ticketQueue[ffk].length > 0) {
-                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
-                    ticketCursor = 0;
-                    finished = false;
-                } else {
-                    ticketCursor = 0;
-                    ticketLevel = 0;
-                }
-            } else {
-                ticketCursor = 0;
-                ticketLevel = 0;
-            }
+            ticketCursor = 0;
+            ticketLevel = 0;
         } else {
             // Mid-queue stop: persist the resume cursor. The finished paths above
             // write their own terminal cursor/level pair, so the shared packed slot
@@ -548,9 +529,9 @@ contract DegenerusGameMintModule is
     // External Entry Point — Current-Level Ticket Batch Processing
     // -------------------------------------------------------------------------
 
-    /// @notice Processes ticket batches across the six-key read window on one
+    /// @notice Processes ticket batches across the minted read window on one
     ///         gas-bounded writes budget.
-    /// @dev The unified sweep worker: walks [anchor-1 .. anchor+4] in ascending
+    /// @dev The unified sweep worker: walks [anchor-1 .. _mintCeiling()] in ascending
     ///      (routed-priority) order, draining each non-empty read queue and continuing
     ///      into the next level whenever one finishes with budget to spare, so no
     ///      call wastes headroom. The first batch of each fresh level derates the
@@ -589,7 +570,7 @@ contract DegenerusGameMintModule is
         bool terminal = (anchor & TICKET_SLOT_BIT) != 0;
         anchor &= ~TICKET_SLOT_BIT;
         uint24 t = terminal || anchor == 0 ? anchor : anchor - 1;
-        uint24 windowEnd = terminal ? anchor : anchor + 4;
+        uint24 windowEnd = terminal ? anchor : _mintCeiling();
         for (; t <= windowEnd; ) {
             uint24 rk = _tqReadKey(t);
             uint256[] storage queue = ticketQueue[rk];
@@ -657,7 +638,7 @@ contract DegenerusGameMintModule is
                         processed = 0;
                     } else {
                         // Advance the within-player startIndex by the per-iter ticket
-                        // count, matching processFutureTicketBatch. A gas-budget-derived
+                        // count, matching _processFutureTicketBatch. A gas-budget-derived
                         // writesUsed>>1 heuristic would diverge for take > 256.
                         processed += take;
                     }
@@ -678,6 +659,29 @@ contract DegenerusGameMintModule is
             _releaseTicketQueue(rk);
             unchecked {
                 ++t;
+            }
+        }
+
+        // A latched last purchase day's frozen next-level pool belongs to the first cohort
+        // committed after its seal: the seal left the read side drained, so the first swap
+        // since is the first RNG request since, and this sweep's word is that request's (or a
+        // later one's). The pool mints here on that word, one full budget per call; a call that
+        // already worked the window leaves it to the next call, and the sweep is not finished
+        // while any of it remains.
+        if (!terminal && _frozenPoolDue()) {
+            uint24 nextLvl = _mintCeiling();
+            if (ticketQueue[_tqFarFutureKey(nextLvl)].length != 0) {
+                if (didWork) return (false, true);
+                uint24 marker = nextLvl | TICKET_FAR_FUTURE_BIT;
+                if (ticketLevel != marker) {
+                    ticketLevel = marker;
+                    ticketCursor = 0;
+                }
+                if (entropy == 0) {
+                    entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
+                }
+                (bool ffWorked, , ) = _processFutureTicketBatch(nextLvl, entropy);
+                return (false, ffWorked);
             }
         }
 
@@ -878,7 +882,7 @@ contract DegenerusGameMintModule is
             take = owed > maxT ? maxT : owed;
         }
         // Budget-limited takes stay whole-ticket (%4) aligned so the quadrant cycle
-        // restarts correctly on a cross-call resume (see processFutureTicketBatch).
+        // restarts correctly on a cross-call resume (see _processFutureTicketBatch).
         if (take != owed) take &= ~uint32(3);
         if (take == 0) return (0, 0, false);
 
@@ -1130,7 +1134,7 @@ contract DegenerusGameMintModule is
     ///         the vault on the owner-enabled fallback when sDGNRS cannot fund the swap.
     /// @dev Delegatecalled from DegenerusGame.sellFarFutureEntries with an already-resolved `player`
     ///      (so no _resolvePlayer here). Mass-sells far-future ticket ENTRIES (4 entries = 1 whole ticket;
-    ///      6 <= d = L - currentLevel <= 100) for ONE aggregated current-level mint (a normal recycled
+    ///      2 <= d = L - currentLevel <= 100) for ONE aggregated current-level mint (a normal recycled
     ///      Claimable mint) + a cash
     ///      residual. The counterparty is resolved by _resolveSalvageBuyer: sDGNRS first (funded from
     ///      claimableWinnings[SDGNRS] above a >=1 ETH floor), else the vault if its owner enabled the

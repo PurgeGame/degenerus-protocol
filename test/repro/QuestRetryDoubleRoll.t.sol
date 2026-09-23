@@ -51,26 +51,42 @@ contract QuestRetryDoubleRoll is DeployProtocol {
     }
 
     function test_generationWindowBootstrapAndUnopenedLevel() public view {
-        for (uint24 lvl; lvl <= 5; ++lvl) assertEq(_generationStart(lvl), block.number, "bootstrap lower bound");
-        assertEq(_generationStart(6), 0, "level six has not entered its window");
+        // Level 0 never holds tickets (every sink targets level + 1 or later) — its window
+        // never opens.
+        assertEq(_generationStart(0), 0, "level zero never holds tickets");
+        // Level 1 is the ONLY level stamped by the constructor: the purchase phase sells
+        // level-1 tickets from block one.
+        assertEq(_generationStart(1), block.number, "bootstrap lower bound: level one only");
+        // Every level above 1 stays unopened until its predecessor's purchase day seals
+        // (or the same-day turbo latch fires) two levels ahead.
+        for (uint24 lvl = 2; lvl <= 6; ++lvl) {
+            assertEq(_generationStart(lvl), 0, "level has not entered its window");
+        }
     }
 
     function test_generationWindowWrittenAtRequestAndNeverRetry() public {
         _driveToLastPurchaseDay();
         uint24 oldLevel = game.level();
-        uint24 target = oldLevel + 6;
-        assertEq(_generationStart(target), 0);
-        uint256 bootstrapStart = _generationStart(0);
+        // _driveToLastPurchaseDay only returns once lastPurchaseDay is latched (and the
+        // daily lock is not yet held), i.e. AFTER _sealPurchaseDay (or the same-day turbo
+        // latch) has already fired for the active purchase level (oldLevel + 1). That seal
+        // stamps the NEXT level's (oldLevel + 2) window — well before the level-promoting
+        // RNG request below, and before any drain of that level.
+        uint24 target = oldLevel + 2;
+        uint256 sealBlock = _generationStart(target);
+        assertTrue(sealBlock != 0, "seal already opened the next level's window");
+        assertEq(_generationStart(target + 1), 0, "future window remains unopened");
+        uint256 bootstrapStart = _generationStart(1);
         vm.roll(block.number + 100);
         vm.warp(block.timestamp + 1 days + 1);
         vm.recordLogs();
         game.advanceGame();
         assertEq(game.level(), oldLevel + 1, "fresh request advances the level");
         assertTrue(game.rngLocked(), "request returns with word still pending");
-        // NUMBER is constant within a real transaction; via-IR may rematerialize it
-        // across vm.roll. Use the cheatcode getter for a genuinely frozen test value.
-        uint256 firstBlock = vm.getBlockNumber();
-        assertEq(_generationStart(target), firstBlock, "newly active window recorded before draining");
+        // The level-promoting RNG request (_finalizeRngRequest) no longer writes this
+        // mapping at all — the window was opened earlier, at the seal. The stamp recorded
+        // there must be untouched by the request.
+        assertEq(_generationStart(target), sealBlock, "request does not re-stamp the sealed window");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
@@ -81,8 +97,8 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         vm.warp(block.timestamp + 13 hours);
         game.advanceGame();
         assertEq(game.level(), oldLevel + 1, "retry did not advance level");
-        assertEq(_generationStart(target), firstBlock, "retry preserves earliest bound");
-        assertEq(_generationStart(0), bootstrapStart, "old levels retain their bounds");
+        assertEq(_generationStart(target), sealBlock, "retry preserves the sealed bound (never re-stamps)");
+        assertEq(_generationStart(1), bootstrapStart, "old levels retain their bounds");
         assertEq(_generationStart(target + 1), 0, "future window remains unopened");
     }
 

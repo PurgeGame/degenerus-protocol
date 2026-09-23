@@ -108,9 +108,55 @@ operator and charge; the table's `CrapsBonusDonated` records the vault as donor.
 ## Ticket materialization
 
 Purchases queue owed entries; the drain assigns traits from committed entropy. The round
-worker groups up to four entries per seat; cards are client presentation. Current/near
-queues use a double buffer; far-future queues have a separate key space. Resume cursors
+worker groups up to four entries per seat; cards are client presentation. Resume cursors
 and seated round state persist across chunks.
+
+Only levels at or below the mint ceiling are ever minted: `level + 1`, or `level + 2` from
+the seal that latches a level's last purchase day until the next request bumps `level`.
+Minted levels use a double buffer, and each advance drains the read window
+`[purchaseLevel - 1, mint ceiling]`. Every entry for a higher level waits, without traits,
+in the far-future key space.
+
+Level L+1 starts to exist when L's last purchase day latches at its seal. The seal moves
+L+1 under the ceiling: its far-future pool freezes, and later L+1 entries take its write
+buffer. The read side is fully drained at the seal, so the first buffer swap after it is the
+first RNG request after it: typically a craps battle's mid-day request, otherwise the
+last-purchase daily request (or, after a same-day turbo latch, that same request). The
+frozen pool mints inside the unified sweep with that first cohort, on its word, before the
+sweep counts as finished; keepers see it through `advanceDue`. Either way it is fully
+minted before the last-purchase consolidation, so the BAF, the day-1 early-bird and the
+jackpot-phase bonus draws read every L+1 ticket queued before the last-purchase request.
+
+Unminted levels are drawn by wallet, one queue lane per wallet registration. Under the RNG
+lock, a player far-future append reverts when it is a new registration (it would add a
+lane); a top-up only raises an owed count and is allowed. Lootbox resolutions that run under the lock (Degenerette bets,
+Decimator claims, sDGNRS redemption claims, foil claims) revert in those cases; the player
+can retry once the word lands.
+
+Coin jackpot: purchase days pay the ETH drip on the active level and a coin fill draw
+over unminted levels; jackpot days run the coin draw on the bonus traits of level + 1, and
+the carryover board also draws from level + 1. Every coin draw splits its daily budget in
+half. The craps half pays up to 25 winners, one per 2,400 FLIP: each gets a seat on
+tomorrow's opener, and what is left of the half upgrades gifts, from the front, to a whole
+day at 20,400 FLIP more (the 22,800 day-pass value less the seat). A whole-day gift banks
+one normal craps pass, spendable only on a future day whose word does not exist yet. If the
+pass bank is saturated, the winner receives its 22,800 FLIP value instead. The coin half,
+plus whatever the craps half left, pays up to 25 winners equal whole-100-FLIP shares; the
+sub-share remainder is not minted. An opener winner the table cannot seat (one already
+holding tomorrow, or the vault or sDGNRS, which `openBonusDay` seats for the whole day) is
+paid the opener's expected cost, 2,400 FLIP. Opener seats go through the craps comp door
+(`vaultComp` kind 5), which burns nothing for the Game (the draw mints that much less FLIP
+instead), after the Game vets the winner with an `extsload` of the table's day claims.
+Every seat the Game writes (these and lootbox pass reservations) carries a fixed standing
+of 100 rather than a read of the holder's activity score: above the boost floor and most
+casual wallets, below a dedicated player; `amendSlip` re-reads the real score. The fill draw walks wallets:
+it picks an unvisited level in `[purchaseLevel + 1, purchaseLevel + 99]`, walks its queue
+from a random lane, taking each wallet at most once, until it has its wallets or the level
+is exhausted, then picks again (at most 16 picks); the first wallets walked are the craps
+half. The trait draw's craps pulls come first as well. The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
+second) over 48 rounds of four samples: 12 each at the BAF level, level + 1, level + 2..5
+and level + 6..99 (centuries: 8, 8, 8, 8, and 16 on the previous 99 levels). The two
+unminted ranges sample one queue lane per wallet.
 
 The level owner registry is append-only. Trait buckets pack eight uint32 owner indices
 per storage word. The individual drain aggregates trait occurrences before writing runs;
@@ -135,9 +181,9 @@ requires enumerating level keys; there is no wallet-only wildcard inside a compo
 Named `TraitsGenerated` still covers per-entry and foil generation paths.
 
 `ticketGenerationStartBlock[level]` at slot 70 is readable through `extsload` at
-`keccak256(abi.encode(uint256(level), uint256(70)))`. Deployment initializes levels 0..5;
-a fresh level-promoting RNG request stamps the newly opened level+5 window before any
-drain. This inclusive lower bound can precede actual generation; it is not a first-reveal
+`keccak256(abi.encode(uint256(level), uint256(70)))`. Deployment initializes level 1 (level 0 never holds tickets);
+level L+1 is stamped when L's last purchase day latches (the seal, or a same-day turbo
+latch), before any of its drains. This inclusive lower bound can precede actual generation; it is not a first-reveal
 timestamp. Retries preserve it, and older levels retain their bounds.
 
 ## Recent settlement boundaries

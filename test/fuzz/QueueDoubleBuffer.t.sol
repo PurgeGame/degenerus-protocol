@@ -51,6 +51,11 @@ contract QueueHarness is DegenerusGameAdvanceModule {
     }
 
     function setLock(bool locked) external { rngLockedFlag = locked; }
+    // _mintCeiling() = level + 1 (lastPurchaseDay false by default) now gates the
+    // far-future/double-buffer boundary (was `targetLevel > level + 5`); pin `level`
+    // so these unit tests' target LEVEL stays inside the minted window, matching the
+    // old default (level == 0, LEVEL == 5 comfortably < level + 5).
+    function setLevel(uint24 lvl) external { level = lvl; }
     function positionAt(uint24 key, uint256 i) external view returns (uint32) {
         return _tqPositionAt(ticketQueue[key], i);
     }
@@ -105,6 +110,7 @@ contract QueueDoubleBufferTest is Test {
         // Foundry's default block.timestamp is 1; ts - JACKPOT_RESET_TIME would revert Panic(0x11).
         vm.warp(block.timestamp + 1 days);
         harness = new QueueHarness();
+        harness.setLevel(LEVEL);
     }
 
     function test_LockedWritesAcrossWordsKeepReadRecordsFrozen() public {
@@ -282,6 +288,7 @@ contract MidDaySwapTest is Test {
         // Foundry's default block.timestamp is 1; ts - JACKPOT_RESET_TIME would revert Panic(0x11).
         vm.warp(block.timestamp + 1 days);
         harness = new QueueHarness();
+        harness.setLevel(LEVEL);
     }
 
     /// @dev Helper: queue `count` individual ticket entries into the write buffer at LEVEL.

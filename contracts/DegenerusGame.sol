@@ -206,9 +206,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         purchaseStartDay = currentDay;
         dailyIdx = currentDay;
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
-        for (uint24 lvl; lvl <= 5; ++lvl) {
-            ticketGenerationStartBlock[lvl] = block.number;
-        }
+        // Level 1 is the first level with tickets (every sink targets level + 1 or later).
+        ticketGenerationStartBlock[1] = block.number;
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -641,32 +640,33 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Declare a future level a thanos level: every entry drained for
     ///         targetLevel onward divides by 2^shift. A pure prospective price
-    ///         increase — declarations land at least 6 levels ahead, strictly
-    ///         before the target's first materialization (the far-future promotion
-    ///         at the transition to target-5), so no materialized ticket is touched
-    ///         and one level's entries always share one exponent. Already-queued
+    ///         increase — declarations land at least 3 levels ahead, strictly
+    ///         before the target's first materialization (its frozen pool and write
+    ///         buffer first mint after the last-purchase seal of target - 1, while
+    ///         level == target - 2), so no materialized ticket is touched and one
+    ///         level's entries always share one exponent. Already-queued
     ///         raw entries for covered levels divide with everyone else's at
     ///         drain; the uniform division cancels in the pot-share fraction, so
     ///         a raw entry's replacement cost and expected pot share are both
     ///         unchanged by any declaration.
-    /// @dev Access: vault owner only (DGVE majority holder). Bounds: 6-level
+    /// @dev Access: vault owner only (DGVE majority holder). Bounds: 3-level
     ///      notice; shift capped at SNAP_SHIFT_MAX (raising and lowering both
     ///      allowed — fairness needs only that each level's exponent is fixed
     ///      before its first ticket materializes); a non-zero shift must leave the
     ///      target level's projected entries at or above SNAP_FLOOR_ENTRIES, so
     ///      snapping is undeclarable below runaway scale; a pending declaration
-    ///      locks once its 6-level window opens and clears when its level commits.
+    ///      locks once its 3-level window opens and clears when its level commits.
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ThanosBounds If any declaration bound is violated.
     function setThanosLevel(uint24 targetLevel, uint8 shift) external {
         if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
         uint24 lvl = level;
         if (
-            targetLevel < lvl + 6 ||
+            targetLevel < lvl + 3 ||
             shift > SNAP_SHIFT_MAX ||
             // A pending declaration whose materialization window has opened is
             // immutable until its level commits and folds it into snapShift.
-            (snapLevel != 0 && lvl + 6 > snapLevel)
+            (snapLevel != 0 && lvl + 3 > snapLevel)
         ) revert ThanosBounds();
         if (shift != 0) {
             // Projected entries for the target at the PREVIOUS level's final pool
@@ -1869,7 +1869,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      far-future salvage logic (kept off this contract for EIP-170 headroom). Quote without
     ///      executing via previewSellFarFutureEntries.
     /// @param player Owner of the far entries / recipient (resolved via _resolvePlayer).
-    /// @param levels Target levels to sell from (each 6 <= level - currentLevel <= 100).
+    /// @param levels Target levels to sell from (each 2 <= level - currentLevel <= 100).
     /// @param quantities Entries to sell at each level, in whole-ticket multiples of 4 (4 entries = 1 whole ticket).
     /// @param queueIndices Caller-supplied ticketQueue position of the resolved player at each level.
     function sellFarFutureEntries(
@@ -2301,7 +2301,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Get queued future entry rewards owed for a level.
     /// @dev Sums every key space an entry for `lvl` can occupy: the committed read cohort, the
     ///      accumulating write cohort, and the far-future space that buys land in while
-    ///      `lvl > level + 5`. Reading one space alone under-reports — the write key drops the
+    ///      `lvl > _mintCeiling()`. Reading one space alone under-reports — the write key drops the
     ///      committed cohort at every daily slot swap, and misses far-future buys entirely. The
     ///      three keys are pairwise distinct (slot bit 23, far-future bit 22), so nothing is
     ///      counted twice. No overflow guard on the sum: each lane is a uint32 entry count,
@@ -2514,9 +2514,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         that is not a real one:
     ///
     ///         phaseTransitionActive — _endPhase seals the level but leaves
-    ///         jackpotPhaseFlag up until the far-future ticket drain finishes, a span of
-    ///         one or more advances whose length answers to gas chunking rather than to
-    ///         anything about the market. _endPhase also zeroes the day counter, so that
+    ///         jackpotPhaseFlag up until the transition advance closes the phase, a span
+    ///         that answers to advance timing rather than to anything about the
+    ///         market. _endPhase also zeroes the day counter, so that
     ///         span would quote the FIRST day's quest reward to the last mover, inverting
     ///         the decay exactly where it should bite hardest. This is the standalone
     ///         "this level's draws have ended" signal, read the same way by
@@ -2777,53 +2777,49 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Sample up to four far-future candidate slots for BAF.
-    /// @dev Start with one level in [level+5, level+99]; if it has fewer holders than
-    ///      the remaining slots, fill them from another random level. Duplicate owners
-    ///      across levels are allowed. BAF runs after the level increments and before
-    ///      far-future promotion; perpetual tickets keep every candidate level nonempty,
-    ///      so each level normally fills at least one slot and the loop visits at most
-    ///      four levels. An empty level is skipped rather than sampled, and the walk is
-    ///      bounded, so a queue emptied outside that invariant shortens the result
-    ///      instead of reverting the advance.
-    /// @param entropy Random entropy for selecting levels and packed-word samples.
-    /// @return tickets Up to four candidate slots, each naming a live queue owner.
+    /// @notice Sample two BAF rounds' worth of unminted future-level candidates.
+    /// @dev Four packs, each an independent level (uniform in [fromLevel, toLevel], empty
+    ///      levels skipped) and a random eight-lane window of its queue (one lane per wallet
+    ///      registration): a uniform lane plus a distinct lane among the next seven, wrapping.
+    ///      Every registered wallet at the level is equally likely in either slot. Pack p's
+    ///      first lane goes to slot p (the first round's four candidates, slots 0..3) and its
+    ///      second to slot p + 4 (the second round's, slots 4..7), so both rounds draw their
+    ///      four candidates from four different packs. At most 12 attempts
+    ///      bound the gas; an unfilled slot stays address(0), which scores zero. BAF runs
+    ///      after level+1 has minted, so every candidate level is still unminted.
+    /// @param entropy Random entropy for the level, word and lane draws.
+    /// @param fromLevel Lowest candidate level (inclusive; the BAF passes unminted levels only).
+    /// @param toLevel Highest candidate level (inclusive, >= fromLevel).
+    /// @return tickets Eight candidate slots (address(0) where unfilled).
     function sampleFarFutureTickets(
-        uint256 entropy
+        uint256 entropy,
+        uint24 fromLevel,
+        uint24 toLevel
     ) external view returns (address[] memory tickets) {
-        uint24 firstLevel = level + 5;
-        tickets = new address[](4);
-        uint256 found;
-        for (uint256 attempt; found < 4 && attempt < 8; ) {
-            uint24 target = firstLevel + uint24(entropy % 95);
+        uint256 span = uint256(toLevel - fromLevel) + 1;
+        tickets = new address[](8);
+        uint256 packs;
+        for (uint256 attempt; packs < 4 && attempt < 12; ) {
+            entropy = EntropyLib.hash2(entropy, attempt);
+            uint24 target = fromLevel + uint24(entropy % span);
             uint256[] storage queue = ticketQueue[_tqFarFutureKey(target)];
             uint256 len = queue.length;
-            if (len == 0) {
-                // Re-roll the level under a salt the nonempty path never uses.
-                entropy = EntropyLib.hash2(entropy, 0x100 | attempt);
-                unchecked { ++attempt; }
-                continue;
+            if (len != 0) {
+                // Lane a is uniform over the whole queue; lane b is one of the next
+                // min(8, len) - 1 lanes after it, wrapping at the end. Every lane is a with
+                // probability 1/len and b with probability 1/len, so a queue position (the
+                // append order) carries no edge — a word-first pick would over-weight a
+                // partial tail word.
+                uint256 a = (entropy >> 64) % len;
+                tickets[packs] = _tqOwnerAt(queue, target, a);
+                uint256 window = len < 8 ? len : 8;
+                if (window > 1) {
+                    uint256 b = (a + 1 + (entropy >> 128) % (window - 1)) % len;
+                    tickets[packs + 4] = _tqOwnerAt(queue, target, b);
+                }
+                unchecked { ++packs; }
             }
-            uint256 take = 4 - found;
-            if (len < take) take = len;
-            PackedTicketSampleLib.Cursor memory cursor;
-            uint256 base = PackedTicketSampleLib.begin(cursor, len, entropy >> 32);
-            cursor.word = _tqWordAt(queue, base);
-            for (uint256 i; i < take; ) {
-                (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, len);
-                uint256 word = redrawn ? _tqWordAt(queue, index) : cursor.word;
-                uint32 position = uint32(word >> ((index & 7) << 5));
-                tickets[found + i] = address(uint160(_entryRecord(target, position)));
-                unchecked { ++i; }
-            }
-            found += take;
-            entropy = EntropyLib.hash2(entropy, found);
             unchecked { ++attempt; }
-        }
-        if (found < 4) {
-            assembly ("memory-safe") {
-                mstore(tickets, found)
-            }
         }
     }
 

@@ -155,7 +155,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // Advance stage constants (sequential, matching advanceGame flow)
     uint8 private constant STAGE_GAMEOVER = 0;
     uint8 private constant STAGE_RNG_REQUESTED = 1;
-    uint8 private constant STAGE_TRANSITION_WORKING = 2;
+    // Stage 2 (a multi-advance transition drain) is retired: the transition closes in one advance.
     uint8 private constant STAGE_TRANSITION_DONE = 3;
     uint8 private constant STAGE_TICKETS_WORKING = 5;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
@@ -366,6 +366,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // board[D+1], so a same-day collapse would leave the BAF top-flipper board
         // empty. Its turbo-speed latch lives on the evening path instead, keeping a real last-purchase
         // window ahead of the one-day collapse.
+        // Any set mid-day latch defers the arm, delivered word or not: a turbo latch freezes the
+        // next level's pool, which must mint on a word requested after the freeze, and an
+        // undrained mid-day cohort's word was requested before it.
         // Latched mid-day stall: the pre-gate promotion cannot swap while the
         // committed cohort occupies the read slot, and a collapsed turbo phase issues
         // no sentinel swap — so buys queued after the stalled request would drain (the
@@ -375,13 +378,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // draw.
         if (
             !inJackpot && !lastPurchaseDay && !locked && day == wallDay && day >= psd && rngWordByDay[day] == 0
-                && !(rngRequestTime != 0 && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0)
+                && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == 0
         ) {
             uint32 purchaseDays = day - psd;
             if (purchaseDays <= 1 && lvl % 10 != 9 && _getNextPrizePool() > _prizePoolTarget(lvl + 1)) {
                 lastPurchaseDay = true;
                 // Arm turbo without discarding an unpaid bonus from the previous level.
                 jackpotFlags |= JACKPOT_TURBO;
+                // Level L+1's first generation window opens with this latch (see the seal).
+                ticketGenerationStartBlock[uint256(lvl) + 2] = block.number;
             }
         }
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
@@ -668,45 +673,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 break;
             }
 
-            // Phase transition housekeeping + FF promotion
+            // Phase transition housekeeping. Nothing crosses a far-future boundary here any more:
+            // level L+1 minted on L's last-purchase word, and L+2 mints on L+1's.
             if (phaseTransitionActive) {
-                // Drain the one FF level that entered near-future at this level transition.
-                // At new level L the near-future boundary is >L+5, so L+5 is near-future.
-                // No new FF entries can arrive at L+5 (tickets targeting it now route to write key).
-                // purchaseLevel = level + 1, so the FF level is purchaseLevel + 4 = level + 5.
-                uint24 ffLevel = purchaseLevel + 4;
-                bool resumingFF = (ticketLevel == (ffLevel | TICKET_FAR_FUTURE_BIT));
-                if (!resumingFF) {
-                    _processPhaseTransition(purchaseLevel);
-                    // Set up FF drain — ticketLevel signals we've completed transition housekeeping
-                    ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT;
-                    ticketCursor = 0;
-                }
-                (bool ffWorked, bool ffFinished,) = _processFutureTicketBatch(ffLevel, rngWord);
-                if (ffWorked || !ffFinished) {
-                    // A batch that both WORKED and FINISHED clears ticketLevel (the resume marker)
-                    // inside processFutureTicketBatch, yet we still break here for the per-tx
-                    // one-batch gas discipline. Re-assert the marker so the next advance's
-                    // resumingFF check skips the already-completed transition housekeeping;
-                    // the marker is the only guard against running it twice, and a second
-                    // run would grant every deity another perpetual ticket. On that next
-                    // advance the FF queue is empty, so the batch returns finished with no
-                    // work and the transition completes cleanly.
-                    if (ffFinished) {
-                        ticketLevel = ffLevel | TICKET_FAR_FUTURE_BIT;
-                    }
-                    stage = STAGE_TRANSITION_WORKING;
-                    break;
-                }
+                _processPhaseTransition(purchaseLevel);
                 phaseTransitionActive = false;
                 _unlockRng(day);
                 purchaseStartDay = day;
                 jackpotPhaseFlag = false;
                 // Century recycling and seed ride the transition close. `lvl` still names the x00 level —
                 // only a last-purchase request bumps `level`, and the next one is a whole
-                // purchase phase away. This branch is reached exactly once per boundary, and
-                // only once the far-future batch reports no work, so the arm never stacks on
-                // a chunked stage. Silent when nothing is due.
+                // purchase phase away. This branch is reached exactly once per boundary.
+                // Silent when nothing is due.
                 if (lvl % 100 == 0) {
                     dgnrs.recycleCentury(lvl, rngWord);
                     coinflip.armCenturySeed(lvl);
@@ -749,10 +727,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         IDegenerusGame(address(this)).emitDailyWinningTraits(1, rngWord, 1);
                         _payDailyCoinJackpot(1, rngWord, 1, 1);
                         uint256 saltedRng = uint256(keccak256(abi.encodePacked(rngWord, BONUS_TRAITS_TAG)));
-                        _payDailyCoinJackpot(1, saltedRng, 2, 5);
+                        _payDailyFutureCoinJackpot(1, saltedRng);
                     } else {
                         payDailyJackpot(false, purchaseLevel, rngWord);
-                        _payDailyCoinJackpot(purchaseLevel, rngWord, purchaseLevel + 1, purchaseLevel + 4);
+                        _payDailyFutureCoinJackpot(purchaseLevel, rngWord);
                     }
                     // A priced ticket leg seals the day from its own stage instead.
                     if (!_purchaseTicketLegPending()) _sealPurchaseDay(purchaseLevel, day, wallDay, psd);
@@ -1374,6 +1352,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         bool targetMet = _getNextPrizePool() > _prizePoolTarget(purchaseLevel);
         if (targetMet && day == wallDay && day >= psd) {
             lastPurchaseDay = true;
+            // Level L+1's first generation window opens with this latch: its frozen pool mints
+            // from here on the sealed day's word. One metadata write per level, never a
+            // charged drain step.
+            ticketGenerationStartBlock[uint256(purchaseLevel) + 1] = block.number;
             // x0 (BAF) level: arm tomorrow's flip day for the
             // weighted depositor draw — the sealed day's direct
             // deposits stake day + 1, the day the transition word
@@ -1403,19 +1385,32 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Pay daily FLIP jackpot via jackpot module delegatecall.
-    ///      Called during purchase-phase daily processing, in the same advance as the daily jackpot.
+    ///      Called for level 1's main coin draw during purchase-phase daily processing.
     ///      Awards 0.25% of the previous level's recorded pool (levelPrizePool[lvl-1]) in
-    ///      FLIP to trait-matched winners in [minLevel, maxLevel].
+    ///      FLIP to trait-matched winners in [minLevel, maxLevel] (minted levels only).
     /// @param lvl Current level.
     /// @param randWord VRF random word for winner selection.
-    /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
-    /// @param maxLevel Maximum target level for near-future coin distribution (inclusive).
+    /// @param minLevel Minimum target level for the coin distribution (inclusive).
+    /// @param maxLevel Maximum target level for the coin distribution (inclusive).
     function _payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameJackpotModule.payDailyFlipJackpot.selector, lvl, randWord, minLevel, maxLevel
                 )
+            );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Pay the purchase-day FLIP fill draw over unminted future levels via jackpot module
+    ///      delegatecall: the same daily coin budget, drawn from the far-future queues of
+    ///      [lvl + 1, lvl + 99].
+    /// @param lvl Purchase level.
+    /// @param randWord VRF random word for level picks and walks.
+    function _payDailyFutureCoinJackpot(uint24 lvl, uint256 randWord) private {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyFutureFlipJackpot.selector, lvl, randWord)
             );
         if (!ok) _revertDelegate(data);
     }
@@ -1495,7 +1490,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // VRF delivery can't be resolved by this word. Any write-side key in the
         // trailing window may hold pending work (this path reverts while
         // rngLockedFlag is set, so the building level here is always level + 1
-        // and the window is [level .. level + 5]). Stranding is impossible either
+        // and the window is [level .. _mintCeiling()], level + 2 after a seal). Stranding is impossible either
         // way — the unified sweep keeps naming a retired level until both its
         // parities are empty — but the guard below protects DRAW ELIGIBILITY:
         // when the NEXT daily request caps the jackpot counter, a freeze window
@@ -1520,7 +1515,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             if (!lastSwapAhead) {
                 bool queuedWork;
                 uint24 t = level;
-                uint24 end = level + 5;
+                uint24 end = _mintCeiling();
                 for (; t <= end;) {
                     if (ticketQueue[_tqWriteKey(t)].length > 0) {
                         queuedWork = true;
@@ -1970,32 +1965,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /*+======================================================================+
       |                    FUTURE TICKET ACTIVATION                          |
       +======================================================================+
-      |  Far-future entries (> level+5) live in their own key space. At each |
-      |  phase transition the one level that crosses into the near-future    |
-      |  window (level + 5) is drained here, once. The rolling near-future   |
-      |  window itself is swept every advance by _runProcessTicketBatch.     |
+      |  Unminted entries (above the mint ceiling) live in the far-future key |
+      |  space. Level L+1's pool, frozen when L's last purchase day latches, |
+      |  mints inside the unified sweep with the first cohort committed     |
+      |  after that latch (_runProcessTicketBatch / processTicketBatch).    |
       +======================================================================+*/
-
-    /// @dev Process a batch of future ticket rewards for the specified level.
-    ///      Called only from the phase-transition leg for the far-future level that just
-    ///      crossed into the window.
-    /// @param lvl Far-future level to activate (purchaseLevel + 4).
-    /// @param entropy Today's daily RNG word (from rngGate) used for rarity rolls.
-    /// @return worked True if any queued entries were processed.
-    /// @return finished True if all queued entries for this level are processed.
-    /// @return writesUsed Write-budget units consumed (each storage write or skip costs one unit), not a raw SSTORE count.
-    function _processFutureTicketBatch(uint24 lvl, uint256 entropy)
-        private
-        returns (bool worked, bool finished, uint32 writesUsed)
-    {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(IDegenerusGameMintModule.processFutureTicketBatch.selector, lvl, entropy)
-            );
-        if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert EmptyReturn();
-        return abi.decode(data, (bool, bool, uint32));
-    }
 
     /*+======================================================================+
       |                    TICKET / TOKEN AIRDROP BATCHING                   |
@@ -2005,7 +1979,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     /// @dev Run the windowed ticket sweep via mint module delegatecall: one writes
-    ///      budget drains the read window [anchor-1 .. anchor+4] plus foil.
+    ///      budget drains the read window [anchor-1 .. _mintCeiling()], a latched
+    ///      last purchase day's frozen next-level pool, and foil.
     /// @param lvl The window anchor (purchaseLevel).
     /// @return worked True if the batch materialized at least one ticket or foil entry.
     ///         Reported directly by the mint module rather than inferred from a cursor
@@ -2113,24 +2088,28 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @dev The unified sweep's key picker: the first non-empty READ-side plain queue in
-    ///      the six-level window [purchaseLevel-1 .. purchaseLevel+4] — one key per level
-    ///      the distance routing can currently target (plain iff target <= level + 5)
+    ///      the window [purchaseLevel-1 .. _mintCeiling()] — every level the distance
+    ///      routing can currently target plainly (plain iff target <= _mintCeiling())
     ///      plus the trailing key. Ascending order is routed-priority in both phases: in
     ///      the jackpot phase purchaseLevel-1 IS the routed level, and in the purchase
     ///      phase purchaseLevel-1 is the just-finished level, whose self-healing
     ///      leftovers must drain first anyway. The trailing key keeps a retired level
     ///      named until both its parities are provably empty — a leftover re-committed
-    ///      by any later swap drains instead of stranding. Far-future keys are never
-    ///      probed: each is emptied once per level by the transition's crossing drain
-    ///      and is write-dead afterward.
+    ///      by any later swap drains instead of stranding. The only far-future key probed is a
+    ///      latched last purchase day's frozen next-level pool, which the sweep itself mints;
+    ///      every far-future key is emptied once, that way, and is write-dead afterward.
     function _sweepReadLevel(uint24 purchaseLevel) private view returns (uint24 pick, bool found) {
         unchecked {
             uint24 t = purchaseLevel == 0 ? 0 : purchaseLevel - 1;
-            uint24 end = purchaseLevel + 4;
+            uint24 end = _mintCeiling();
             for (; t <= end; ++t) {
                 if (ticketQueue[_tqReadKey(t)].length > 0) {
                     return (t, true);
                 }
+            }
+            // A latched last purchase day's frozen next-level pool drains inside the sweep.
+            if (_frozenPoolDue() && ticketQueue[_tqFarFutureKey(end)].length > 0) {
+                return (end, true);
             }
         }
         return (purchaseLevel, false);
@@ -2243,10 +2222,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             _rewardTopAffiliate(lvl);
             level = lvl;
 
-            // The first near-future generation window for L+5 opens with level L.
-            // This fresh daily request returns before draining; retries do not enter
-            // this branch. One metadata write per level, never a charged drain step.
-            ticketGenerationStartBlock[uint256(lvl) + 5] = block.number;
 
             // Fold a reached thanos declaration into the active shift: from this
             // level onward every drain target resolves to the declared exponent via

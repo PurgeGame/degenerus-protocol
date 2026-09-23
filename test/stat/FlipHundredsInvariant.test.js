@@ -9,8 +9,8 @@
 // its own suite is deleted:
 //
 //   §3a BUDGET-SPLIT (exact integer unit math, no probabilistic rounding)
-//     1. `_awardDailyCoinToTraitWinners`  — JackpotModule
-//     2. `_awardFarFutureCoinJackpot`     — JackpotModule
+//     1. `_awardDailyCoinToTraitWinners`  — JackpotModule (uses shared plan)
+//     2. `_awardFutureCoinFill`           — JackpotModule (uses shared plan)
 //
 //   §3b BIG-LEG TRUNCATE (no RNG at all)
 //     3. `_payGoldenTicket`               — JackpotModule
@@ -154,51 +154,41 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
   });
 
   describe("§3a budget-split sites carry the exact integer unit math", function () {
-    it("[01a] site 1 `_awardDailyCoinToTraitWinners`", function () {
+    it("[01a] site 1 `_awardDailyCoinToTraitWinners` uses the shared plan", function () {
       const body = bodyOf(JACKPOT, "function _awardDailyCoinToTraitWinners(");
       expect(
-        /uint256\s+units\s*=\s*\(\s*coinBudget\s*-\s*spent\s*\)\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
-          body
-        ),
-        "site 1 must split the unbanked budget into whole 100-FLIP units"
+        /_coinDrawPlan\s*\(\s*coinBudget\s*,\s*n\s*\)/.test(body),
+        "site 1 must use the shared coin/Craps plan"
       ).to.equal(true);
       expect(
-        /if\s*\(\s*cap\s*==\s*0\s*\)\s*return\s*;/.test(body),
-        "site 1 must bail when the budget covers no whole unit"
+        /_finishCoinDraw\s*\(/.test(body),
+        "site 1 must settle through the shared coin/Craps payout"
       ).to.equal(true);
-      expect(
-        /uint256\s+amount\s*=\s*\(\s*units\s*\/\s*cap\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
-          body
-        ),
-        "site 1 must pay every pull the SAME `(units / cap)` share"
-      ).to.equal(true);
-      expect(
-        /\bextra\b|\bextraStart\b|\bbaseUnits\b/.test(body),
-        "site 1 must carry no extra-unit machinery — equal shares are owner-ruled"
-      ).to.equal(false);
     });
 
-    it("[01b] site 2 `_awardFarFutureCoinJackpot`", function () {
-      const body = bodyOf(JACKPOT, "function _awardFarFutureCoinJackpot(");
+    it("[01b] site 2 `_awardFutureCoinFill` uses the shared plan", function () {
+      const body = bodyOf(JACKPOT, "function _awardFutureCoinFill(");
       expect(
-        /uint256\s+units\s*=\s*farBudget\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
-          body
-        ),
-        "site 2 must split the budget into whole 100-FLIP units"
+        /_coinDrawPlan\s*\(\s*coinBudget\s*,\s*n\s*\)/.test(body),
+        "site 2 must use the shared coin/Craps plan"
       ).to.equal(true);
       expect(
-        /if\s*\(\s*payCount\s*==\s*0\s*\)\s*return\s*;/.test(body),
-        "site 2 must bail when the budget covers no whole unit"
+        /_finishCoinDraw\s*\(/.test(body),
+        "site 2 must settle through the shared coin/Craps payout"
       ).to.equal(true);
+    });
+
+    it("[01d] the shared plan rounds shares down to whole 100-FLIP units", function () {
+      const body = bodyOf(JACKPOT, "function _coinDrawPlan(");
       expect(
-        /uint256\s+amount\s*=\s*\(\s*units\s*\/\s*payCount\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
+        /amount\s*=\s*\(\s*units\s*\/\s*cap\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
           body
         ),
-        "site 2 must pay every winner the SAME `(units / payCount)` share"
+        "the plan must pay each coin winner the same whole-unit share"
       ).to.equal(true);
       expect(
         /\bextra\b|\bextraStart\b|\bbaseUnits\b/.test(body),
-        "site 2 must carry no extra-unit machinery — equal shares are owner-ruled"
+        "the plan must carry no extra-unit machinery"
       ).to.equal(false);
     });
   });
@@ -388,7 +378,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       };
       for (let k = 0; k < N; k++) {
         const budget = ONE_FLIP * (next(2_000_000n) + 1n);
-        const maxWinners = k % 2 === 0 ? 50n : 10n; // near-future cap / far-future `found`
+        const maxWinners = 25n; // each draw's coin half has at most 25 shares
         const { units, cap, amount, leftover } = splitUnits(budget, maxWinners);
         if (cap === 0n) {
           expect(budget < UNIT).to.equal(

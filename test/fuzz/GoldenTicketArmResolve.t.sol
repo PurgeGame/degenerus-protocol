@@ -446,6 +446,7 @@ contract GoldenTicketArmResolve is Test {
         assertEq(passes, (2 * expEth) / HALF_PASS, "double the ETH leg in passes");
         uint256 expFlipValue = uint256(futBefore) / 20;
         uint256 expFlip = (expFlipValue * COIN_UNIT) / PriceLookupLib.priceForLevel(LVL + 1);
+        expFlip = (expFlip / 100 ether) * 100 ether;
         assertEq(flip, expFlip, "5% fp as flip credit at ticket rate");
         assertEq(flipRec.calls(), 1);
         assertEq(flipRec.lastPlayer(), winner);

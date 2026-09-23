@@ -185,7 +185,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       +======================================================================+*/
 
     /// @dev Fixed number of scatter rounds to keep BAF gas bounded.
-    uint8 private constant BAF_SCATTER_ROUNDS = 50;
+    uint8 private constant BAF_SCATTER_ROUNDS = 48;
     bytes32 private constant BAF_WINNERS_TAG = keccak256("degenerus.baf.winners");
 
     /// @dev Skipped-bracket consolation rate: 1 WWXRP per 1000 FLIP of frozen
@@ -291,10 +291,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  | 10% | Top BAF bettor for this level                               | |
       |  |  5% | Weighted-random final-day coinflip depositor                | |
       |  |  5% | Random pick: 3rd or 4th BAF slot                            | |
-      |  |  5% | Far-future ticket holders (3% 1st / 2% 2nd by BAF score)    | |
-      |  |  5% | Far-future ticket holders 2nd draw (3% 1st / 2% 2nd)        | |
-      |  | 45% | Scatter 1st place (50 rounds x 4 multi-level trait tickets) | |
-      |  | 25% | Scatter 2nd place (50 rounds x 4 multi-level trait tickets) | |
+      |  | 50% | Scatter 1st place (48 rounds x 4 multi-level tickets)       | |
+      |  | 30% | Scatter 2nd place (48 rounds x 4 multi-level tickets)       | |
       |  +-------------------------------------------------------------------+ |
       |                                                                        |
       |  ELIGIBILITY:                                                          |
@@ -333,9 +331,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
         returns (address[] memory winners, uint256[] memory amounts, uint256 returnAmountWei)
     {
         uint256 P = poolWei;
-        // Max prize entries (same address may fill several): 1 (top BAF) + 1 (top flip) + 1 (pick) + 4 (far-future x2) + 100 (scatter) = 107.
-        address[] memory tmpW = new address[](107);
-        uint256[] memory tmpA = new uint256[](107);
+        // Max prize entries (same address may fill several): 1 (top BAF) + 1 (top flip) + 1 (pick) + 96 (scatter) = 99.
+        address[] memory tmpW = new address[](99);
+        uint256[] memory tmpA = new uint256[](99);
         uint256 n;
         uint256 toReturn;
 
@@ -393,66 +391,18 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
-        // Slices D and D2: each draws four far-future candidate slots, grouped by
-        // level (3% 1st / 2% 2nd by BAF score). The ++salt at the head of each pass keeps
-        // the salt/entropy sequence (2 then 3 after slice B) and draw independence.
-        for (uint256 pass; pass < 2; ) {
-            unchecked { ++salt; }
-            entropy = EntropyLib.hash2(entropy, salt);
-            address[] memory farTickets = degenerusGame.sampleFarFutureTickets(entropy);
-
-            uint256 farFirst = (P * 3) / 100;
-            uint256 farSecond = P / 50;
-
-            address best;
-            uint256 bestScore;
-            address second;
-            uint256 secondScore;
-
-            uint256 fLen = farTickets.length;
-            for (uint256 i; i < fLen; ) {
-                address cand = farTickets[i];
-                uint256 score = _bafScore(cand, lvl, currentEpoch);
-                // Select strictly by positive BAF score (same rule as the scatter slice): a
-                // zero-score candidate never populates best/second, so a far-future set with no
-                // BAF activity leaves best/second address(0) and the share returns to the pool
-                // unpaid rather than paying an unearned holder.
-                if (score > bestScore) {
-                    second = best;
-                    secondScore = bestScore;
-                    best = cand;
-                    bestScore = score;
-                } else if (score > secondScore && cand != best) {
-                    second = cand;
-                    secondScore = score;
-                }
-                unchecked { ++i; }
-            }
-
-            if (_creditOrRefund(best, farFirst, tmpW, tmpA, n)) {
-                unchecked { ++n; }
-            } else {
-                toReturn += farFirst;
-            }
-            if (_creditOrRefund(second, farSecond, tmpW, tmpA, n)) {
-                unchecked { ++n; }
-            } else {
-                toReturn += farSecond;
-            }
-            unchecked { ++pass; }
-        }
-
-        // Scatter slice: 200 total draws (4 tickets * 50 rounds). Per round, take top-2 by BAF score.
+        // Scatter slice: 192 total draws (4 tickets * 48 rounds). Per round, take top-2 by BAF score.
         // Unfilled rounds return their per-round share to future pool.
         {
             // Slice E: scatter tickets from trait sampler so casual participants can land smaller cuts.
-            uint256 scatterTop = (P * 45) / 100;
-            uint256 scatterSecond = P / 4;
-            address[50] memory firstWinners;
-            address[50] memory secondWinners;
+            uint256 scatterTop = P / 2;
+            uint256 scatterSecond = (P * 30) / 100;
+            address[BAF_SCATTER_ROUNDS] memory firstWinners;
+            address[BAF_SCATTER_ROUNDS] memory secondWinners;
             uint256 firstCount;
             uint256 secondCount;
             bool isCentury = (lvl % 100 == 0);
+            address[] memory futurePair;
 
             // Fixed rounds of 4-ticket sampling to keep gas bounded per call.
             for (uint8 round = 0; round < BAF_SCATTER_ROUNDS; ) {
@@ -461,21 +411,30 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 }
                 entropy = EntropyLib.hash2(entropy, salt);
 
-                // Level targeting varies by BAF type:
-                // Non-x00: 20 rounds from lvl, 30 rounds random from lvl+1..lvl+4
-                // x00:     4 rounds lvl, 8 rounds lvl+1..lvl+3, 38 random from past 99
+                // Level targeting, in 12-round bands. lvl and lvl+1 are minted (lvl+1 on this
+                // level's last-purchase word, before this draw) and sample trait buckets; the
+                // unminted ranges sample one queue lane per wallet.
+                // Non-x00: 12 lvl, 12 lvl+1, 12 lvl+2..lvl+5, 12 lvl+6..lvl+99
+                // x00:     8 lvl, 8 lvl+1, 8 lvl+2..lvl+5, 8 lvl+6..lvl+99, 16 random from past 99
+                address[] memory tickets;
                 uint24 targetLvl;
-                if (isCentury) {
-                    if (round < 4) targetLvl = lvl;
-                    else if (round < 12) targetLvl = lvl + 1 + uint24(entropy % 3);
-                    else targetLvl = lvl - 1 - uint24(entropy % 99);
-                } else {
-                    if (round < 20) targetLvl = lvl;
-                    else targetLvl = lvl + 1 + uint24(entropy % 4);
+                uint8 band = isCentury ? round / 8 : round / 12;
+                if (band == 0) targetLvl = lvl;
+                else if (band == 1) targetLvl = lvl + 1;
+                else if (band < 4) {
+                    // Unminted bands run in round pairs (bands start on even rounds): the even
+                    // round samples four packs, and each round takes one lane from every pack.
+                    if (round & 1 == 0) {
+                        futurePair = band == 2
+                            ? degenerusGame.sampleFarFutureTickets(entropy, lvl + 2, lvl + 5)
+                            : degenerusGame.sampleFarFutureTickets(entropy, lvl + 6, lvl + 99);
+                    }
+                    tickets = new address[](4);
+                    uint256 off = uint256(round & 1) << 2;
+                    for (uint256 i; i < 4; ++i) tickets[i] = futurePair[off + i];
                 }
-
-                (, address[] memory tickets) = degenerusGame.sampleTraitEntriesAtLevel(targetLvl, entropy);
-
+                else targetLvl = lvl - 1 - uint24(entropy % 99);
+                if (targetLvl != 0) (, tickets) = degenerusGame.sampleTraitEntriesAtLevel(targetLvl, entropy);
                 // Pick up to 4 tickets from the sampled set.
                 uint256 limit = tickets.length;
                 if (limit > 4) limit = 4;

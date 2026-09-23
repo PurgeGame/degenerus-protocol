@@ -11,10 +11,22 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @dev Extends the production mint module so one live `processTicketBatch` call runs a full
 ///      write-budget chunk in THIS contract's storage; adds queue seeders only.
 contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
+    /// @dev Pin `level` so `lvl` sits inside the minted read window the drain walks: the sweep
+    ///      covers [anchor-1 .. _mintCeiling()] and the measured call passes anchor = lvl + 1
+    ///      (the purchase level), so level = lvl gives the window [lvl .. lvl + 1] and routes a
+    ///      purchase at `lvl` (<= _mintCeiling() = level + 1) onto the double-buffer write key.
+    ///      Without it the harness's default level 0 caps the window at level 1 and every chunk
+    ///      measured at a higher level walks nothing.
+    function _pinWindow(uint24 lvl) private {
+        level = lvl;
+    }
+
     /// @dev Queue `n` buyers through the production purchase sink with purchase-time owner
-    ///      registration, then flip the double buffer so they sit on the read key. `lvl` must
-    ///      be within level + 5 (the near window) so the sink uses the write key.
+    ///      registration, then flip the double buffer so they sit on the read key. `lvl` is a
+    ///      minted level (level pinned to `lvl`, so lvl <= _mintCeiling()) and the sink uses
+    ///      the write key.
     function seedViaPurchase(uint24 lvl, uint256 n, uint32 entriesScaled, uint160 base, bool warm) external {
+        _pinWindow(lvl);
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
         if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
@@ -31,6 +43,7 @@ contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
     /// @dev `n` dust entries: zero owed, a fractional remainder only, so every one resolves
     ///      to a skip or a single entry and the drain does nothing but walk them.
     function seedDust(uint24 lvl, uint256 n, uint160 base, bool warm) external {
+        _pinWindow(lvl);
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
         uint24 rk = _tqReadKey(lvl);
@@ -45,11 +58,55 @@ contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
         ticketCursor = warm ? 1 : 0;
     }
 
+    /// @dev Queue `n` buyers through the production purchase sink onto `lvl`'s UNMINTED
+    ///      (far-future) key, then put the game in the state where that queue is the frozen
+    ///      pool the sweep mints: the last-purchase request has taken the RNG lock and bumped
+    ///      `level` to lvl - 1, lastPurchaseDay is latched, so _mintCeiling() = level + 1 = lvl
+    ///      and _frozenPoolDue() holds. The measured call passes anchor = level = lvl - 1 (the
+    ///      purchase level while the last-purchase lock is held); the read window
+    ///      [lvl - 2 .. lvl] is empty, so the call reaches processTicketBatch's frozen-pool
+    ///      continuation. `warm` pins the FF marker and cursor 1 (index 0 drained) so the chunk
+    ///      runs the full, non-derated write budget. Requires lvl >= 2.
+    function seedFrozenPool(uint24 lvl, uint256 n, uint32 entriesScaled, uint160 base, bool warm) external {
+        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
+        lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
+        // Before the seal: level = lvl - 2, ceiling lvl - 1, so `lvl` routes far-future.
+        level = lvl - 2;
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        for (uint256 i; i < n; ++i) {
+            address p = address(base + uint160(i + 1));
+            _queueEntriesScaled(p, lvl, entriesScaled, false);
+        }
+        uint24 ffk = _tqFarFutureKey(lvl);
+        require(ticketQueue[ffk].length == n, "fixture: every buyer sits on the far-future key");
+        // The last-purchase request: lock taken, level bumped.
+        level = lvl - 1;
+        lastPurchaseDay = true;
+        rngLockedFlag = true;
+        require(_mintCeiling() == lvl && _frozenPoolDue(), "fixture: frozen pool due at lvl");
+        ticketLevel = warm ? ffk : 0;
+        ticketCursor = warm ? 1 : 0;
+        if (warm) _seedOwedAt(ffk, address(base + 1), 0);
+    }
+
+    function cursor() external view returns (uint256) {
+        return ticketCursor;
+    }
+
+    function queueLength(uint24 key) external view returns (uint256) {
+        return ticketQueue[key].length;
+    }
+
+    function ffOwedOf(uint24 lvl, address p) external view returns (uint80) {
+        return _entriesOwed(_tqFarFutureKey(lvl), p);
+    }
+
     function owedOf(uint24 lvl, address p) external view returns (uint80) {
         return _entriesOwed(_tqReadKey(lvl), p);
     }
 
     function seed(uint24 lvl, uint256 n, uint32 owedEach, uint160 base, bool warm) external {
+        _pinWindow(lvl);
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
         uint24 rk = _tqReadKey(lvl);
@@ -94,9 +151,11 @@ contract RoundDrainChunkGas is Test {
 
     function _measureAt(uint24 lvl, string memory tag) internal returns (uint256 g) {
         uint256 g0 = gasleft();
-        h.processTicketBatch(lvl + 1);
+        (, bool worked) = h.processTicketBatch(lvl + 1);
         g = g0 - gasleft();
         emit log_named_uint(tag, g);
+        // Non-vacuity: the chunk must drain the seeded queue, not walk an empty window.
+        assertTrue(worked, string.concat(tag, ": chunk did no work (seeded level outside the window)"));
         assertLt(g, GAS_TARGET, string.concat(tag, ": chunk over the 10M soft target"));
         assertLt(g, EIP7825_TX_GAS_CAP, string.concat(tag, ": chunk over the EIP-7825 cap"));
     }

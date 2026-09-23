@@ -13,7 +13,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 /// @notice A level boundary is a CHAIN of advance txs, not one tx. Two of them are measured here:
 ///
 ///           STAGE_JACKPOT_PHASE_ENDED (9) — payDailyJackpotCoinAndTickets + _endPhase, at its
-///             winner caps (100 main-board ticket, 50 near-coin, 8 far-coin), followed by
+///             winner caps (96 main-board tickets, 25 Craps seats, 25 coin shares), followed by
 ///           STAGE_JACKPOT_CARRYOVER_TICKETS (13) — the carryover leg (100 more ticket winners)
 ///             the phase-end stage priced, paid as the first stage of the very next advance so
 ///             the two ticket legs never share one tx.
@@ -69,8 +69,8 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
             );
         }
 
-        // Near-future coin pulls sample lvl+1 .. lvl+4 on the bonus traits.
-        for (uint24 L = lvl + 1; L <= lvl + 4; ++L) {
+        // Jackpot-phase coin pulls sample the minted lvl+1 board on bonus traits.
+        for (uint24 L = lvl + 1; L <= lvl + 1; ++L) {
             for (uint8 q; q < 4; ++q) {
                 _fill(
                     L,
@@ -86,15 +86,6 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
             }
         }
 
-        // Far-future coin samples: 8 lanes of one word at one level in [lvl+5, lvl+99];
-        // seed eight holders at every level so whichever the word picks pays the full count.
-        for (uint24 L = lvl + 5; L <= lvl + 99; ++L) {
-            for (uint160 i; i < 8; ++i) {
-                _tqAppend(_tqFarFutureKey(L), uint32(
-                    _registerEntryOwner(address(base + 0x20000000 + uint160(L) * 0x10 + i), L) >> OWNER_IDX_SHIFT
-                ));
-            }
-        }
     }
 
     /// @notice The transition-close pre-state: _endPhase already ran, the far-future queue is empty,
@@ -135,7 +126,9 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         rngRequestTime = uint48(block.timestamp);
 
         levelPrizePool[lvl] = 1000 ether; // _endPhase record-pool fund (non-zero)
-        levelPrizePool[lvl - 1] = 1000 ether; // coin budget -> 50 near + 8 far winners
+        // 100,000 ETH at x00's 0.24 ETH price gives ~1.04M FLIP: 25 seats, 22 of them
+        // upgraded to whole days, and the other 25 receive coin shares.
+        levelPrizePool[lvl - 1] = 100_000 ether;
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = uint128(200 ether);
     }
@@ -159,6 +152,7 @@ abstract contract BoundaryGasFixture is DeployProtocol {
         keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
     bytes32 internal constant FAR_WIN_SIG =
         keccak256("FarFutureFlipJackpotWinner(address,uint24,uint24,uint256)");
+    bytes32 internal constant CRAPS_WIN_SIG = keccak256("CoinDrawCrapsWin(address,uint24,bool,bool)");
     bytes32 internal constant SEED_ARMED_SIG =
         keccak256("SeedWindowArmed(uint24,uint24,uint24,uint256)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
@@ -200,6 +194,7 @@ abstract contract BoundaryGasFixture is DeployProtocol {
             uint256 ticketWins,
             uint256 flipWins,
             uint256 farWins,
+            uint256 crapsWins,
             bool seedArmed
         )
     {
@@ -214,6 +209,7 @@ abstract contract BoundaryGasFixture is DeployProtocol {
             if (t0 == TICKET_WIN_SIG) ++ticketWins;
             else if (t0 == FLIP_WIN_SIG) ++flipWins;
             else if (t0 == FAR_WIN_SIG) ++farWins;
+            else if (t0 == CRAPS_WIN_SIG) ++crapsWins;
             else if (t0 == SEED_ARMED_SIG) seedArmed = true;
             else if (t0 == ADVANCE_SIG) (lastStage, ) = abi.decode(logs[i].data, (uint8, uint24));
         }
@@ -245,6 +241,7 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
             uint256 ticketWins,
             uint256 flipWins,
             uint256 farWins,
+            uint256 crapsWins,
             bool seedArmed
         ) = _measure();
 
@@ -253,19 +250,20 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
         // Non-vacuity: the composition MUST have run at its winner caps, or the ceiling is not one.
         assertEq(lastStage, STAGE_JACKPOT_PHASE_ENDED, "the phase-end stage ran");
         assertEq(ticketWins, 96, "the main-board ticket leg paid the full 96-winner cap");
-        assertEq(flipWins, 50, "the near coin leg paid the full 50-winner cap");
-        assertEq(farWins, 8, "the far-future coin leg paid all 8 lanes");
+        assertEq(flipWins, 25, "the coin leg paid the full 25-share cap");
+        assertEq(crapsWins, 25, "the Craps leg drew all 25 seats");
+        assertEq(farWins, 0, "jackpot phase has no future fill");
         // The century arm rides the transition close, not this tx — it must not fuse back onto the
         // binding stage.
         assertFalse(seedArmed, "the century arm does NOT ride the binding phase-end tx");
         assertLt(used, EIP7825_TX_GAS_CAP, "the phase-end advance tx clears EIP-7825");
 
         // The carryover leg is the whole of the next advance: 100 more ticket winners, nothing else.
-        (used, ticketWins, flipWins, farWins, seedArmed) = _measure();
+        (used, ticketWins, flipWins, farWins, crapsWins, seedArmed) = _measure();
         emit log_named_uint("LVL100_CARRYOVER_LEG_ADVANCE_GAS", used);
         assertEq(lastStage, STAGE_JACKPOT_CARRYOVER_TICKETS, "the carryover leg ran as the next stage");
         assertEq(ticketWins, 96, "the carryover ticket leg paid the full 96-winner cap");
-        assertEq(flipWins + farWins, 0, "no coin leg rides the carryover stage");
+        assertEq(flipWins + farWins + crapsWins, 0, "no coin leg rides the carryover stage");
         assertFalse(seedArmed, "the century arm does NOT ride the carryover stage");
         assertLt(used, EIP7825_TX_GAS_CAP, "the carryover advance tx clears EIP-7825");
         (, bool jackpotPhase_, , , ) = game.purchaseInfo();
@@ -288,7 +286,7 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
     }
 
     function test_TransitionDoneAdvance_WithCenturyArm() public {
-        (uint256 used, , , , bool seedArmed) = _measure();
+        (uint256 used, , , , , bool seedArmed) = _measure();
 
         emit log_named_uint("LVL100_TRANSITION_DONE_ADVANCE_GAS", used);
         emit log_named_uint(

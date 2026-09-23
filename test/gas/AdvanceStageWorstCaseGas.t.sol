@@ -62,6 +62,11 @@ contract TicketBatchStageHarness is DegenerusGameMintModule, BucketSeed {
     ///      read-slot queue for `lvl`, plus a non-zero lootbox entropy word at index 0 (the word
     ///      the batch reads via lootboxRngWordByIndex[ _lrRead(INDEX) - 1 ]).
     function _seedQueue(uint24 lvl, uint256 n, uint32 owedEach, uint160 base) internal {
+        // The sweep walks [anchor-1 .. _mintCeiling()] and the measured call passes anchor = lvl
+        // (the purchase level), so pin level = lvl - 1: the window is [lvl-1 .. lvl] and the
+        // seeded read queue at `lvl` is inside it. The harness default level 0 caps the window at
+        // level 1, which would leave every measured batch walking nothing.
+        level = lvl - 1;
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("367_ticketbatch_entropy")) | 1;
 
@@ -296,8 +301,9 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.queueLen(TARGET_LVL), 1, "fixture: one deep-owed player queued");
 
         uint256 g0 = gasleft();
-        (bool finished, ) = tb.processTicketBatch(TARGET_LVL);
+        (bool finished, bool worked) = tb.processTicketBatch(TARGET_LVL);
         uint256 gasUsed = g0 - gasleft();
+        assertTrue(worked, "non-vacuity: the batch must mint the seeded queue");
 
         emit log_named_uint("STAGE_0_1_5_6_7_ticket_batch_full_chunk_gas", gasUsed);
         emit log_named_uint("ticket_batch_finished_first_call", finished ? 1 : 0);
@@ -328,8 +334,9 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.cursor(), 1, "fixture: cursor starts at index 1 (warm, no cold-scale)");
 
         uint256 g0 = gasleft();
-        (bool finished, ) = tb.processTicketBatch(TARGET_LVL);
+        (bool finished, bool worked) = tb.processTicketBatch(TARGET_LVL);
         uint256 gasUsed = g0 - gasleft();
+        assertTrue(worked, "non-vacuity: the batch must mint the seeded queue");
 
         emit log_named_uint("STAGE_7_ticket_batch_WARM_full_budget_chunk_gas", gasUsed);
         emit log_named_uint("ticket_batch_warm_finished", finished ? 1 : 0);
@@ -407,8 +414,9 @@ contract AdvanceStageWorstCaseGas is Test {
         // cold-scaled first batch).
         tb.seedTicketQueueWarmResume(TARGET_LVL, 2, 700, uint160(0x40000), 1);
         uint256 gT0 = gasleft();
-        tb.processTicketBatch(TARGET_LVL);
+        (, bool ticketWorked) = tb.processTicketBatch(TARGET_LVL);
         uint256 ticketGas = gT0 - gasleft();
+        assertTrue(ticketWorked, "non-vacuity: the rollup's ticket batch must mint the seeded queue");
 
         // Referenced from V56AfkingGasMarginal (measured cold there): after the subscriber-STAGE reweight
         // (SUB_STAGE_EVICT_WEIGHT 1→7, BUDGET 500→2500) the saturated all-evict chunk dropped 13.6M→~9.7M, so

@@ -33,20 +33,26 @@
 //     reference replay against the same emit-time inputs.
 //
 // B2 symmetric path coverage attestation:
-//   - Path A: `_processFutureTicketBatch` (DegenerusGameMintModule.sol
-//     patched callsite L469-L477). Within-call processed accumulator at L499
-//     is `processed += take`.
-//   - Path B: `_processOneTicketEntry` via `processTicketBatch` (patched
-//     callsite L803-L811). Within-call processed accumulator at L714 is
-//     `processed += writesUsed >> 1`.
-// Both paths share the same `_raritySymbolBatch` body (L544-L643). The
-// 2000-ticket purchase scenario naturally drives Path B only (current-level
-// drain at purchaseLevel=1). The whale-bundle scenario drives BOTH paths
-// simultaneously: Path B at lvl=1 + Path A at lvl=2..5 via
-// _prepareFutureTickets → _processFutureTicketBatch. The path-aware indexer
-// reconstruction (reconstructMultisetViaReference) tries both accumulators
-// per per-level group and confirms which path produced the emissions —
-// validated below in the per-level `path-accumulator=A|B` log output.
+//   - Path A: the private `_processFutureTicketBatch` (DegenerusGameMintModule.sol),
+//     invoked ONLY as a continuation inside `processTicketBatch(anchor)` once
+//     `lastPurchaseDay` latches and the far-future queue at exactly
+//     `_mintCeiling()` is non-empty. Within-call processed accumulator is
+//     `processed += take`.
+//   - Path B: `_processOneTicketEntry` via `processTicketBatch`. Within-call
+//     processed accumulator is `processed += writesUsed >> 1`.
+// Both paths share the same `_raritySymbolBatch` body. The 2000-ticket
+// purchase scenario naturally drives Path B only (current-level drain at
+// purchaseLevel=1). The whale-bundle scenario used to drive BOTH paths
+// simultaneously within its own single-day drain (Path B at lvl=1 + Path A
+// at lvl=2..5 via the external `processFutureTicketBatch`), but the near/far
+// routing boundary shrank from `level + 5` to `_mintCeiling()` and Path A's
+// entrypoint was folded into the private, lastPurchaseDay-gated continuation
+// above — a single-day whale-bundle fixture no longer reaches that gate, so
+// the "[B2-symmetric]" test below instead asserts Path A stays frozen (see
+// that test's docstring). The path-aware indexer reconstruction
+// (reconstructMultisetViaReference) still tries both accumulators per
+// per-level group for whichever levels DO emit — validated in the per-level
+// `path-accumulator=A|B` log output.
 //
 // Reduced scope (user-authorized 2026-05-16 — supersedes 282-01-PLAN.md):
 //   - The v40 production replay branch (TST-FIX-06) is dropped: the v40 bug
@@ -158,8 +164,8 @@ async function readPlayerTraitMultiset(game, lvl, player) {
 
 /// Compute `startIndex` values for each event within its tx-call group,
 /// using a configurable processed-accumulator. For Path A (future-pool via
-/// processFutureTicketBatch L499) the accumulator is `processed += take`;
-/// for Path B (current-level via processTicketBatch L714) it is
+/// the private _processFutureTicketBatch continuation) the accumulator is
+/// `processed += take`; for Path B (current-level via processTicketBatch) it is
 /// `processed += writesUsed >> 1`. The W2 indexer-replay invariant is
 /// path-parametric: an indexer that knows which path emitted (e.g., via the
 /// ticketCursor + ticketLevel storage observation across the tx boundary)
@@ -537,36 +543,45 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       }
     });
 
-    it("[B2-symmetric] whale bundle drain exercises Path A (future-pool via processFutureTicketBatch) — W2 invariant + pairwise-distinct owed_at_call_entry + non-increasing per slot", async function () {
+    it("[B2-symmetric] whale bundle drain leaves Path A (far-future span) frozen behind _mintCeiling() — processTicketBatch's own drain never reaches it", async function () {
       // The 2000-ticket purchase in the prior tests exercises Path B
-      // (current-level) only. To attest B2 symmetric coverage per
-      // D-282-B2-COVERAGE-01, queue alice tickets at FUTURE levels via
-      // purchaseWhalePass (which queues 400 tickets/bundle distributed
-      // across 100 future levels: 40 tickets/level at levels 1-10, 2
-      // tickets/level at levels 11-100 per WHALE_BONUS_ENTRIES_PER_LEVEL +
-      // WHALE_STANDARD_ENTRIES_PER_LEVEL). The advanceGame() chain drains
-      // those tickets via _prepareFutureTickets → _processFutureTicketBatch
-      // (Path A: future-pool path; patched callsite at L469-L477).
+      // (current-level) only. This test originally attested B2 symmetric
+      // coverage by ALSO draining Path A (future-pool) within the SAME
+      // whale-bundle fixture, reached through the now-removed external
+      // `processFutureTicketBatch` selector via the old purchaseLevel+1..+4
+      // transition window.
+      //
+      // Post-change: `processFutureTicketBatch` no longer exists — its body
+      // is now the private `_processFutureTicketBatch`, invoked ONLY as a
+      // continuation inside `processTicketBatch(anchor)`, and only when
+      // `lastPurchaseDay` is latched and the far-future queue belongs to
+      // EXACTLY `_mintCeiling()` (the one level about to be minted next).
+      // The near/far routing boundary also shrank from `level + 5` to
+      // `_mintCeiling()` (normally `level + 1`), so a whale bundle bought at
+      // deploy-state `level = 0` now queues everything from level 2 up as
+      // far-future — frozen until each of those levels' OWN last-purchase-
+      // day seal fires the private continuation, one level at a time. A
+      // single-day whale-bundle fixture like this one never reaches that
+      // seal for level 2, so Path A cannot emit here; asserting exactly that
+      // IS the new regression coverage for the boundary shrink (see the
+      // sibling proof + storage-key-routing proof in
+      // MintCleanupRegression.test.js TST-MINTCLN-03/04).
       const fixture = await loadFixture(deployFullProtocol);
       const { game, deployer, mockVRF, alice } = fixture;
 
       // Buy 10 whale bundles to spread tickets across 100 future levels.
-      // 10 × 2.4 ETH = 24 ETH. Each bundle queues:
-      //   - bonus levels (1..10): 40 × 10 = 400 tickets each level → owed=400 entries
-      //   - standard levels (11..100): 2 × 10 = 20 tickets each level → owed=20 entries
-      // (each ticket = 4 entries per project memory project_ticket_entry_price_units.md;
-      // but _queueEntries enqueues the WHOLE TICKET count, not the entry count
-      // — verify owed math against entriesOwedView post-purchase).
+      // 10 × 2.4 ETH = 24 ETH.
       await game
         .connect(alice)
         .purchaseWhalePass(alice.address, 10, hre.ethers.ZeroHash, { value: eth(24) });
 
-      // Confirm tickets are queued at future levels (levels 2..5 cover Path A
-      // since _prepareFutureTickets covers purchaseLevel+1..+4 = 2..5).
-      const owedAtL2 = Number(await game.entriesOwedView(2, alice.address));
-      const owedAtL3 = Number(await game.entriesOwedView(3, alice.address));
-      console.log(`[B2 path-A] alice owed at lvl=2: ${owedAtL2}, lvl=3: ${owedAtL3}`);
-      expect(owedAtL2 + owedAtL3).to.be.gte(
+      // Confirm tickets are queued at future levels 2..3 (now routed to the
+      // far-future key space; entriesOwedView sums read+write+far-future so
+      // it is unaffected by which key space actually holds them).
+      const owedAtL2Before = Number(await game.entriesOwedView(2, alice.address));
+      const owedAtL3Before = Number(await game.entriesOwedView(3, alice.address));
+      console.log(`[B2 path-A] alice owed at lvl=2: ${owedAtL2Before}, lvl=3: ${owedAtL3Before}`);
+      expect(owedAtL2Before + owedAtL3Before).to.be.gte(
         1,
         "whale bundle must queue alice tickets at future levels 2..3"
       );
@@ -589,7 +604,7 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
       );
 
       // Group by level — emissions at level=1 are Path B; emissions at
-      // level >= 2 are Path A (future-pool).
+      // level >= 2 would be Path A (future-pool), if it fired.
       const eventsByLevel = new Map();
       for (const e of aliceEvents) {
         if (!eventsByLevel.has(e.level)) eventsByLevel.set(e.level, []);
@@ -601,80 +616,34 @@ describe("MintBatchDeterminism — Phase 282 v41.0 multi-call drain regression",
         `[B2 path-A] alice emissions across levels: ${levels.map((l) => `lvl=${l}: ${eventsByLevel.get(l).length}`).join(", ")}`
       );
 
-      // Path-A coverage check: emissions at level >= 2 confirm Path A
-      // exercised. (Path B is the level == 1 emissions; the prior tests
-      // already attested Path B.)
+      // Path-A freeze check: NO emissions at level >= 2 — the far-future
+      // queue only mints on its own level's last-purchase-day seal, which
+      // this single-day fixture never reaches.
       const pathALevels = levels.filter((l) => l >= 2);
-      expect(pathALevels.length).to.be.gte(
-        1,
-        "Path A must emit at least one TraitsGenerated at a future level"
+      expect(pathALevels.length).to.equal(
+        0,
+        "Path A must NOT emit within the whale-bundle's own drain — frozen behind _mintCeiling() until its level's own last-purchase-day seal"
       );
 
-      // Pairwise-distinct owed_at_call_entry within each (level, queueIdx)
-      // slot — same TST-FIX-03 invariant on Path A emissions.
-      for (const [lvl, levelEvents] of eventsByLevel.entries()) {
-        const slotGroups = new Map();
-        for (const e of levelEvents) {
-          const k = `${e.queueIdx}`;
-          if (!slotGroups.has(k)) slotGroups.set(k, []);
-          slotGroups.get(k).push(e);
-        }
-        for (const [slot, slotEvents] of slotGroups.entries()) {
-          if (slotEvents.length < 2) continue;
-          const owedSet = new Set(slotEvents.map((e) => e.owedAtCallEntry));
-          expect(owedSet.size).to.equal(
-            slotEvents.length,
-            `[B2 path-A] lvl=${lvl} queueIdx=${slot}: owed_at_call_entry values must be pairwise distinct`
-          );
-        }
-      }
+      // Path B (level=1) is unaffected by the boundary shrink and must
+      // still drain normally.
+      expect(eventsByLevel.has(1)).to.equal(
+        true,
+        "Path B (lvl=1, inside the minted window) must still emit"
+      );
 
-      // W2 invariant on Path A emissions — JS reference replay against
-      // the emitted (baseKey, entropy, owed_at_call_entry) tuples
-      // reconstructs the on-chain credited trait multiset for each level.
-      // Path A uses the SAME _raritySymbolBatch body (L544-L643) shared
-      // with Path B, so the JS reference impl applies uniformly. The
-      // within-call processed accumulation differs between paths (path A
-      // uses `processed += take` at L499; path B uses `processed +=
-      // writesUsed >> 1` at L714) but for path A, naturally each
-      // _processFutureTicketBatch call produces ONE emission per player
-      // (the budget exhausts on the single chunk), so within-call
-      // accumulation does not apply for the multi-emission grouping.
-      for (const lvl of pathALevels) {
-        const levelEvents = eventsByLevel.get(lvl);
-        const onChain = await readPlayerTraitMultiset(game, lvl, alice.address);
-        const { multiset: reconstructed, pathUsed } =
-          reconstructMultisetViaReference(levelEvents, onChain);
-        const reconstructedTotal = Array.from(reconstructed.values()).reduce(
-          (a, b) => a + b,
-          0
-        );
-        const onChainTotal = Array.from(onChain.values()).reduce(
-          (a, b) => a + b,
-          0
-        );
-        const emittedTotal = levelEvents.reduce((a, e) => a + e.count, 0);
-        console.log(
-          `[B2 path-A W2 lvl=${lvl}] num-emissions=${levelEvents.length} | emitted-count-sum=${emittedTotal} | on-chain=${onChainTotal} | reconstructed=${reconstructedTotal} | path-accumulator=${pathUsed}`
-        );
-
-        expect(reconstructedTotal).to.equal(emittedTotal);
-        expect(onChainTotal).to.equal(emittedTotal);
-        const allTraits = new Set([
-          ...reconstructed.keys(),
-          ...onChain.keys(),
-        ]);
-        const mismatches = [];
-        for (const trait of allTraits) {
-          const r = reconstructed.get(trait) || 0;
-          const o = onChain.get(trait) || 0;
-          if (r !== o) mismatches.push({ trait, reconstructed: r, onChain: o });
-        }
-        expect(mismatches.length).to.equal(
-          0,
-          `[B2 path-A] lvl=${lvl}: ${mismatches.length} trait W2 mismatches: ${JSON.stringify(mismatches.slice(0, 5))}`
-        );
-      }
+      // The far-future owed amounts are untouched by the drain (still
+      // queued, not partially minted).
+      const owedAtL2After = Number(await game.entriesOwedView(2, alice.address));
+      const owedAtL3After = Number(await game.entriesOwedView(3, alice.address));
+      expect(owedAtL2After).to.equal(
+        owedAtL2Before,
+        "lvl=2 far-future owed must be unchanged by the drain (still frozen)"
+      );
+      expect(owedAtL3After).to.equal(
+        owedAtL3Before,
+        "lvl=3 far-future owed must be unchanged by the drain (still frozen)"
+      );
     });
 
     it("TST-FIX-04 — single-call drain byte-identity: small purchase produces ONE emission whose traits match JS reference replay against (baseKey, entropy, processed=0, owedSalt=owed, count=owed)", async function () {

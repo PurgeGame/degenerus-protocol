@@ -11,14 +11,21 @@ pragma solidity ^0.8.26;
 //
 //   .planning/phases/334-spec-design-lock-mintdiv-reachability-proof-rngaudit-structu/334-MINTDIV01-REACHABILITY-VERDICT.md
 //
-// The fix lives at `contracts/modules/DegenerusGameMintModule.sol:720`
-// (`processed += take;`), the within-call advance that aligns
-// processTicketBatch's per-iter startIndex with processFutureTicketBatch:502's
-// reference-correct contiguous advance. This test asserts that the per-ticket
+// The fix lives at `contracts/modules/DegenerusGameMintModule.sol`, in
+// `processTicketBatch`'s own within-call advance (`processed += take;`), which
+// aligns its per-iter startIndex with the SAME shared per-entry engine's
+// reference-correct contiguous advance inside the private `_processFutureTicketBatch`
+// (line numbers drift with the file; grep `processed += take` for the current
+// sites — as of this writing processTicketBatch's is line 643,
+// _processFutureTicketBatch's is line 412). `_processFutureTicketBatch` lost its
+// external entry point and near/read-key mode in a later revision (it is now
+// private, reachable only through processTicketBatch's lastPurchaseDay
+// continuation, and always targets the far-future key) — irrelevant to this
+// test, which never calls it directly. This test asserts that the per-ticket
 // trait derivation captured in `lvlTraitEntry[lvl][traitId]` is byte-identical
 // across two distinct budget-slice trajectories of the SAME (player, lvl, owed,
 // queueIdx, entropy) scenario, satisfying D-TST03-02's cross-path equality
-// oracle (NOT a reference-loop equality against processFutureTicketBatch:502,
+// oracle (NOT a reference-loop equality against _processFutureTicketBatch,
 // and NOT a startIndex-advance assertion).
 //
 // Pitfall 3 mitigation (LIVE 3-arg TraitsGenerated event signature):
@@ -422,10 +429,11 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ///         scenario.
     ///
     /// @dev per `.planning/phases/334-spec-design-lock-mintdiv-reachability-proof-rngaudit-structu/334-MINTDIV01-REACHABILITY-VERDICT.md`:
-    ///      owed=300 at level L, warm budget 550, maxT=292. The MINTDIV-02 fix at
-    ///      `contracts/modules/DegenerusGameMintModule.sol:720` (`processed += take`)
-    ///      aligns the within-call cumulative startIndex advance with
-    ///      processFutureTicketBatch:502's reference-correct contiguous advance.
+    ///      owed=300 at level L, warm budget 550, maxT=292. The MINTDIV-02 fix in
+    ///      `processTicketBatch` (`processed += take`, DegenerusGameMintModule.sol)
+    ///      aligns the within-call cumulative startIndex advance with the same shared
+    ///      per-entry engine's reference-correct contiguous advance inside the private
+    ///      `_processFutureTicketBatch`.
     ///
     ///      Cross-path oracle (D-TST03-02 — across-split == contiguous): Path A drives
     ///      `processTicketBatch` to completion under the natural multi-call budget-slice
@@ -468,8 +476,9 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
             "TST-03 anchor: Path B must credit owed=300 traits in total (non-vacuity)"
         );
 
-        // Cross-path equality (D-TST03-02). If this fails, the MINTDIV-02 invariant at
-        // MintModule:720 is broken — per the plan's HALT-and-REPORT acceptance criterion,
+        // Cross-path equality (D-TST03-02). If this fails, the MINTDIV-02 invariant in
+        // processTicketBatch's `processed += take` is broken — per the plan's HALT-and-REPORT
+        // acceptance criterion,
         // the test exits non-zero and the executor must escalate (D-TST04-04 STOP-and-re-spec).
         assertEq(
             digestA,

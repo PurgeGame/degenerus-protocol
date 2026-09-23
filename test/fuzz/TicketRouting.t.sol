@@ -68,9 +68,11 @@ contract TicketRoutingTest is Test {
     }
 
     function test_MixedRangeAcrossThreeQueueWords() public {
-        for (uint160 i; i < 19; ++i) harness.queueTicketRange(address(0xBB00 + i), 13, 6, 3);
-        for (uint24 lvl = 13; lvl <= 18; ++lvl) {
-            uint24 key = lvl <= 15 ? harness.tqWriteKey(lvl) : harness.tqFarFutureKey(lvl);
+        // level=10, mintCeiling=level+1=11 (lastPurchaseDay defaults false): levels
+        // 9,10,11 route to the write key, 12,13,14 route to the FF key.
+        for (uint160 i; i < 19; ++i) harness.queueTicketRange(address(0xBB00 + i), 9, 6, 3);
+        for (uint24 lvl = 9; lvl <= 14; ++lvl) {
+            uint24 key = lvl <= 11 ? harness.tqWriteKey(lvl) : harness.tqFarFutureKey(lvl);
             assertEq(harness.getQueueLength(key), 19);
             for (uint160 i; i < 19; ++i) assertEq(harness.getQueueEntry(key, i), address(0xBB00 + i));
         }
@@ -95,10 +97,10 @@ contract TicketRoutingTest is Test {
     // =========================================================================
 
     function testNearFutureRoutesToWriteKey() public {
-        // level=10, targetLevel=15 (15 <= 10+5 = true, near-future)
-        harness.queueTickets(buyer, 15, 1);
-        uint24 ffKey = harness.tqFarFutureKey(15);
-        uint24 writeKey = harness.tqWriteKey(15);
+        // level=10, targetLevel=11 (11 <= mintCeiling(10)=11, near-future)
+        harness.queueTickets(buyer, 11, 1);
+        uint24 ffKey = harness.tqFarFutureKey(11);
+        uint24 writeKey = harness.tqWriteKey(11);
         assertEq(harness.getQueueLength(writeKey), 1, "write key should have 1 entry");
         assertEq(harness.getQueueEntry(writeKey, 0), buyer, "write key entry should be buyer");
         assertEq(harness.getQueueLength(ffKey), 0, "FF key should be empty");
@@ -109,10 +111,10 @@ contract TicketRoutingTest is Test {
     // =========================================================================
 
     function testBoundaryLevel5RoutesToWriteKey() public {
-        // level=10, targetLevel=15 (exactly level+5, near-future)
-        harness.queueTickets(buyer, 15, 1);
-        uint24 writeKey = harness.tqWriteKey(15);
-        assertEq(harness.getQueueLength(writeKey), 1, "boundary level+5 must route to write key");
+        // level=10, targetLevel=11 (exactly level+1 = mintCeiling(10), near-future)
+        harness.queueTickets(buyer, 11, 1);
+        uint24 writeKey = harness.tqWriteKey(11);
+        assertEq(harness.getQueueLength(writeKey), 1, "boundary level+1 must route to write key");
     }
 
     function testBoundaryLevel6RoutesToFFKey() public {
@@ -135,9 +137,9 @@ contract TicketRoutingTest is Test {
     }
 
     function testScaledNearFutureRoutesToWriteKey() public {
-        // level=10, targetLevel=15 (15 <= 10+5 = true, near-future), scaled quantity
-        harness.queueTicketsScaled(buyer, 15, 100);
-        uint24 writeKey = harness.tqWriteKey(15);
+        // level=10, targetLevel=11 (11 <= mintCeiling(10)=11, near-future), scaled quantity
+        harness.queueTicketsScaled(buyer, 11, 100);
+        uint24 writeKey = harness.tqWriteKey(11);
         assertEq(harness.getQueueLength(writeKey), 1, "scaled write key should have 1 entry");
         assertEq(harness.getQueueEntry(writeKey, 0), buyer, "scaled write key entry should be buyer");
     }
@@ -147,18 +149,18 @@ contract TicketRoutingTest is Test {
     // =========================================================================
 
     function testRangeRoutingSplitsCorrectly() public {
-        // level=10, startLevel=13, numLevels=6 -> covers levels 13,14,15,16,17,18
-        // levels 13,14,15 (<=10+5) -> write key
-        // levels 16,17,18 (>10+5) -> FF key
-        harness.queueTicketRange(buyer, 13, 6, 1);
+        // level=10, startLevel=9, numLevels=6 -> covers levels 9,10,11,12,13,14
+        // levels 9,10,11 (<= mintCeiling(10)=11) -> write key
+        // levels 12,13,14 (> 11) -> FF key
+        harness.queueTicketRange(buyer, 9, 6, 1);
 
-        // Near-future levels (13, 14, 15) should be in write key
-        for (uint24 lvl = 13; lvl <= 15; lvl++) {
+        // Near-future levels (9, 10, 11) should be in write key
+        for (uint24 lvl = 9; lvl <= 11; lvl++) {
             uint24 writeKey = harness.tqWriteKey(lvl);
             assertEq(harness.getQueueLength(writeKey), 1, "near-future level should be in write key");
         }
-        // Far-future levels (16, 17, 18) should be in FF key
-        for (uint24 lvl = 16; lvl <= 18; lvl++) {
+        // Far-future levels (12, 13, 14) should be in FF key
+        for (uint24 lvl = 12; lvl <= 14; lvl++) {
             uint24 ffKey = harness.tqFarFutureKey(lvl);
             assertEq(harness.getQueueLength(ffKey), 1, "far-future level should be in FF key");
         }
@@ -185,11 +187,12 @@ contract TicketRoutingTest is Test {
     }
 
     function testRngGuardIgnoresNearFuture() public {
-        // rngLocked=true, phaseTransitionActive=false, near-future target -> no revert
+        // rngLocked=true, phaseTransitionActive=false, near-future target
+        // (level+1 = mintCeiling(10)=11) -> no revert
         harness.setRngLockedFlag(true);
         harness.setPhaseTransitionActive(false);
-        harness.queueTickets(buyer, 15, 1);
-        uint24 writeKey = harness.tqWriteKey(15);
+        harness.queueTickets(buyer, 11, 1);
+        uint24 writeKey = harness.tqWriteKey(11);
         assertEq(harness.getQueueLength(writeKey), 1, "near-future unaffected by rngLocked");
     }
 

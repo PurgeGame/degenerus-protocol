@@ -35,33 +35,81 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         // BAF pools were tuned for.
         yieldAccumulator = 18.25 ether + uint256(nextPool) / 400;
 
-        // Perpetual tickets populate every BAF candidate level in a live game.
-        for (uint24 target = 105; target <= 199; ++target) {
-            _seedQueued(_tqFarFutureKey(target), target, ContractAddresses.SDGNRS, uint80(4 << 8));
-            _seedQueued(_tqFarFutureKey(target), target, ContractAddresses.VAULT, uint80(4 << 8));
+        // Perpetual tickets populate every BAF candidate level in a live game. The
+        // far-future scatter bands now start at lvl+2 (102), not lvl+5. Band 2's four
+        // levels (102..105) are revisited by all four future round-pairs (a full
+        // permutation of the tiny 4-level span every time), and band 3's ninety-four
+        // levels (106..199) are occasionally revisited too; every one of those a/b
+        // lane draws must land on a distinct holder; the shape math below assumes 99
+        // distinct BAF recipients, so no two draws across the whole resolution may
+        // return the same address. Holders are wholly synthetic (not the SDGNRS/
+        // VAULT deities, which would otherwise repeat identically across all 98
+        // levels) and keyed by (level, slot index) so every slot's address is unique.
+        // Band 2's levels get a deep pool (2048) since they are guaranteed to be
+        // redrawn by every one of the four round-pairs; band 3's levels need less
+        // depth (128) since a level is only occasionally redrawn across its four
+        // round-pairs. Both depths comfortably exceed the sampler's 8-lane window
+        // cap, so window sizing itself is unaffected by the extra depth.
+        for (uint24 target = 102; target <= 105; ++target) {
+            for (uint256 i; i < 2048; ++i) {
+                address p = address(uint160(0xFA000000 + (uint256(target) - 102) * 2048 + i));
+                _seedQueued(_tqFarFutureKey(target), target, p, uint80(4 << 8));
+            }
+        }
+        for (uint24 target = 106; target <= 199; ++target) {
+            for (uint256 i; i < 128; ++i) {
+                address p = address(uint160(0xFB000000 + (uint256(target) - 106) * 128 + i));
+                _seedQueued(_tqFarFutureKey(target), target, p, uint80(4 << 8));
+            }
         }
 
-        // The selected word has 50 different (level, trait) buckets. All four
-        // candidates are different wallets; their winning BAF scores are seeded later.
+        // WORD's entropy chain sends round 1 and round 2 (both band 0, level 100) to the
+        // same (level, trait) = (100, 96) bucket. Two rounds legitimately sharing a
+        // bucket is fine for the real contract (sampleTraitEntriesAtLevel just rotates
+        // through whatever is there), but this fixture wants every BAF winner distinct
+        // (see the "must be distinct" check below), so that one bucket is pre-filled to
+        // 32 entries (four 8-lane packed words) up front. Round 1's rotation (entropy>>40
+        // mod 32) lands in word 1, round 2's in word 3 (computed offline from WORD's fixed
+        // entropy chain) -- disjoint 8-lane storage words -- so their four-candidate reads
+        // can never share an address, without touching the word's own round-by-round seeding.
+        _seedBucketDistinct(100, 96, 32, uint160(0xC3700000 + 9999 * 16));
+
+        // The selected word has distinct (level, trait) buckets for the lvl / lvl+1 /
+        // past-level bands. All candidates are different wallets; their winning BAF
+        // scores are seeded later. This mirrors runBafJackpot's post-D/D2-removal
+        // sequence exactly: slice B consumes salt=1, then 48 scatter rounds (salt
+        // 2..49) in 8-round century bands (lvl, lvl+1, lvl+2..lvl+5, lvl+6..lvl+99,
+        // then 16 rounds of random past levels).
         uint256 entropy = EntropyLib.hash2(word, uint256(keccak256("degenerus.baf.winners")));
-        for (uint256 salt = 1; salt <= 53; ++salt) {
+        entropy = EntropyLib.hash2(entropy, uint256(1)); // Slice B's ++salt; this fixture doesn't need its pick.
+        for (uint256 salt = 2; salt <= 49; ++salt) {
             entropy = EntropyLib.hash2(entropy, salt);
-            if (salt <= 3) {
-                if (salt == 1) continue;
-                uint24 farTarget = 105 + uint24(entropy % 95);
-                // Two protocol holders plus 254 other holders fill 32 words. The
-                // selected word supplies four distinct, cold BAF candidates.
-                for (uint256 i; i < 254; ++i) {
-                    address p = address(uint160(0xFA000000 + salt * 0x10000 + i));
-                    _seedQueued(_tqFarFutureKey(farTarget), farTarget, p, uint80(4 << 8));
+            uint256 round = salt - 2;
+            uint8 band = uint8(round / 8);
+            if (band == 0 || band == 1) {
+                uint24 target = band == 0 ? 100 : 101;
+                uint8 trait = uint8(entropy >> 24);
+                // (100, 96) is pre-seeded to 32 above (the one known collision for WORD);
+                // every other (level, trait) bucket is still fresh here, so seed it as usual.
+                if (_seedBucketLen(target, trait) < 4) {
+                    _seedBucketDistinct(target, trait, 4, uint160(0xC3700000 + round * 16));
                 }
                 continue;
             }
-            uint256 round = salt - 4;
-            uint24 target = round < 4 ? 100 : round < 12 ? 101 + uint24(entropy % 3) : 99 - uint24(entropy % 99);
+            if (band < 4) {
+                // Bands 2-3 (lvl+2..lvl+5 and lvl+6..lvl+99): the pack/lane sampler
+                // draws straight from the uniformly pre-seeded far-future queues
+                // above, so no per-round bucket seeding is needed here.
+                continue;
+            }
+            // Bands 4-5 (round 32..47): both century sub-bands share the same
+            // random-past-level formula (lvl - 1 - entropy % 99). WORD has no repeat
+            // here, but guard the same way as bands 0-1 for robustness.
+            uint24 target = 99 - uint24(entropy % 99);
             uint8 trait = uint8(entropy >> 24);
-            require(_seedBucketLen(target, trait) == 0, "repeated scatter bucket");
-            _seedBucketDistinct(target, trait, 4, uint160(0xC3700000 + round * 16));
+            if (_seedBucketLen(target, trait) < 4) {
+                _seedBucketDistinct(target, trait, 4, uint160(0xC3700000 + round * 16));
+            }
         }
         // A qualifying burn in every subbucket makes all 11 selected reads nonzero.
         for (uint8 denominator = 2; denominator <= 12; ++denominator) {
@@ -128,16 +176,37 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(game.rngWordForDay(400), 0, "measured transaction must apply fresh RNG");
         assertFalse(game.decWindow(), "real century request closes the burn window");
 
+        // Replays runBafJackpot's exact post-D/D2-removal sampling sequence: slice B
+        // consumes salt=1, then 48 scatter rounds (salt 2..49) in 8-round century
+        // bands (lvl, lvl+1, lvl+2..lvl+5 far-future, lvl+6..lvl+99 far-future, then
+        // 16 rounds of random past levels).
         uint256 entropy = EntropyLib.hash2(word, uint256(keccak256("degenerus.baf.winners")));
-        for (uint256 salt = 1; salt <= 53; ++salt) {
+        entropy = EntropyLib.hash2(entropy, uint256(1)); // Slice B's ++salt; this fixture doesn't need its pick.
+        address[] memory futurePair;
+        for (uint256 salt = 2; salt <= 49; ++salt) {
             entropy = EntropyLib.hash2(entropy, salt);
-            if (salt == 1) continue;
+            uint256 round = salt - 2;
+            uint8 band = uint8(round / 8);
             address[] memory candidates;
-            if (salt <= 3) {
-                candidates = game.sampleFarFutureTickets(entropy);
+            if (band == 0) {
+                (, candidates) = game.sampleTraitEntriesAtLevel(100, entropy);
+            } else if (band == 1) {
+                (, candidates) = game.sampleTraitEntriesAtLevel(101, entropy);
+            } else if (band < 4) {
+                // Bands 2-3 run in round pairs: the even round of the pair samples
+                // eight slots (four packs' a/b lanes) and caches them; both the even
+                // and odd round then take their own four-slot half.
+                if (round & 1 == 0) {
+                    futurePair = band == 2
+                        ? game.sampleFarFutureTickets(entropy, 102, 105)
+                        : game.sampleFarFutureTickets(entropy, 106, 199);
+                    require(futurePair.length == 8, "BAF sampler must fill all candidate slots");
+                }
+                candidates = new address[](4);
+                uint256 off = (round & 1) << 2;
+                for (uint256 i; i < 4; ++i) candidates[i] = futurePair[off + i];
             } else {
-                uint256 round = salt - 4;
-                uint24 target = round < 4 ? 100 : round < 12 ? 101 + uint24(entropy % 3) : 99 - uint24(entropy % 99);
+                uint24 target = 99 - uint24(entropy % 99);
                 (, candidates) = game.sampleTraitEntriesAtLevel(target, entropy);
             }
             require(candidates.length == 4, "all four candidates must be present");
@@ -187,7 +256,9 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         uint256 snapshot = vm.snapshotState();
         vm.prank(address(game));
         (address[] memory winners, uint256[] memory amounts,) = jackpots.runBafJackpot(s.bafPool, 100, word);
-        require(winners.length == 107, "all BAF slots must be filled");
+        // Max prize entries (same address may fill several): 1 (top BAF) + 1 (top flip)
+        // + 1 (pick) + 96 (scatter, 48 rounds x 2) = 99, since D/D2 were removed.
+        require(winners.length == 99, "all BAF slots must be filled");
         uint256 ethCount;
         uint256 rolls;
         uint256 whales;
@@ -207,7 +278,11 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             if (ticketAmount > 5 ether) ++whales;
             else if (ticketAmount != 0) rolls += ticketAmount <= 0.5 ether ? 1 : 2;
         }
-        require(ethCount == 55 && rolls == s.ticketRolls && whales == s.whaleAwards, "shape threshold prediction");
+        // ethCount is now a structural constant: the top-3 slices always clear the
+        // P/20 floor (3), and the 96 scatter slots' per-round shares (P/96, P/160)
+        // never do, so exactly half of them (48, by index parity) fall back to the
+        // even-index eth branch: 3 + 48 = 51.
+        require(ethCount == 51 && rolls == s.ticketRolls && whales == s.whaleAwards, "shape threshold prediction");
         vm.revertToState(snapshot);
 
         uint8 historyMode = _vaultHistoryMode();
@@ -319,8 +394,14 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         emit log_named_uint("distinct_ticket_recipient_level_pairs", distinctTicketPairs);
         emit log_named_uint("far_future_ticket_rolls", farRolls);
         if (_rngWord() != WORD) {
-            // Destination-heavy variants retain at least the prior fixture's pressure.
-            assertGe(distinctTicketPairs, 104, "distinct cold destination pressure");
+            // Destination-heavy variants retain at least the current fixture's pressure.
+            // The far-future queues are now uniformly-seeded, globally-unique holder
+            // pools (needed so BAF scatter winners are always distinct -- see
+            // CenturyConsolidationSeeder's far-future seeding loop) rather than the old
+            // per-round 254-wallet scheme, so the achieved spread (98 pairs / 14 far
+            // rolls) is somewhat lower than the prior fixture's 104 / 13; keep a small
+            // margin under the measured values.
+            assertGe(distinctTicketPairs, 95, "distinct cold destination pressure");
             assertGe(farRolls, 13, "far-future destination pressure");
         }
         uint8 historyMode = _vaultHistoryMode();
@@ -331,10 +412,10 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             assertEq(cursor, historyMode == 1 ? 399 : 34, "365-day settlement must commit or roll back");
         }
         assertEq(stage, 7, "century consolidation must finish");
-        assertEq(ethAwards, 55, "full distinct BAF ETH set");
+        assertEq(ethAwards, 51, "full distinct BAF ETH set");
         assertEq(ticketAwards, expectedRolls, "amount-dependent ticket work");
         assertEq(whaleAwards, expectedWhales, "amount-dependent whale deferrals");
-        assertEq(distinct, 107, "every logical recipient must be awarded");
+        assertEq(distinct, 99, "every logical recipient must be awarded");
         assertEq(decimator, 1, "nonempty decimator must resolve");
         assertEq(yieldEvents, 1, "surplus must distribute");
         assertEq(applied, 1, "fresh RNG must apply in the measured call");
@@ -349,48 +430,48 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
 
 contract AdvanceCenturyConsolidationGas is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(3500 ether, 100 ether, 158_126_247_524_580_441_470, 108, 1, true);
+        return Shape(3500 ether, 100 ether, 158_126_247_524_580_441_470, 100, 1, true);
     }
 }
 
 contract AdvanceCenturyAtHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 475_485_053_530_434_780_923, 100 ether, 85, 0, false);
+        return Shape(100 ether, 475_485_053_530_434_780_923, 100 ether, 102, 0, false);
     }
 }
 
 contract AdvanceCenturyAboveHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 475_485_053_530_434_781_933, 100 ether + 200, 108, 1, false);
+        return Shape(100 ether, 475_485_053_530_434_781_933, 100 ether + 200, 100, 1, false);
     }
 }
 
 contract AdvanceCenturyFarDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 880_838_588_883_970_134_458, 180 ether, 104, 3, false);
+        return Shape(100 ether, 880_838_588_883_970_134_458, 180 ether, 100, 1, false);
     }
 }
 
 contract AdvanceCenturyLargeDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 1_486_899_194_944_576_195_064, 300 ether, 100, 5, false);
+        return Shape(100 ether, 1_486_899_194_944_576_195_064, 300 ether, 96, 3, false);
     }
 }
 
 contract AdvanceCenturyFirstScatterDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 3_002_050_710_096_091_346_579, 600 ether, 50, 30, false);
+        return Shape(100 ether, 3_002_050_710_096_091_346_579, 600 ether, 48, 27, false);
     }
 }
 
 contract AdvanceCenturyAllTicketsDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 5_527_303_235_348_616_599_105, 1100 ether, 0, 55, false);
+        return Shape(100 ether, 5_527_303_235_348_616_599_105, 1100 ether, 0, 51, false);
     }
 }
 
-/// @dev Bounded search under the current award domain: 106 distinct recipient/level
-///      pairs and 14 far-future rolls, exceeding the prior fixture's 104 and 13.
+/// @dev Word 15395 under the current pack/lane far-future sampler and its uniformly
+///      re-seeded queues: 98 distinct recipient/level pairs and 14 far-future rolls.
 contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
     function _rngWord() internal pure override returns (uint256) {
         return 15395;
@@ -399,7 +480,7 @@ contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
         // Retune future funding to preserve the destination-heavy award shape under
         // the 15% trough; raising this BAF pool crosses an amount-dependent threshold.
-        return Shape(3000 ether, 38_181_818_181_818_181_818, 157_001_039_980_229_350_166, 108, 1, true);
+        return Shape(3000 ether, 38_181_818_181_818_181_818, 157_001_039_980_229_350_166, 100, 1, true);
     }
 }
 

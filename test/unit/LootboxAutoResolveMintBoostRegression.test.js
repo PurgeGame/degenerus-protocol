@@ -134,7 +134,7 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
         zeroOwed.slice(0, zeroOwed.indexOf("\n    function ")).includes("_rollRemainder("),
         "_resolveZeroOwedRemainder must roll the remainder"
       ).to.equal(true);
-      for (const entrypoint of ["processTicketBatch", "processFutureTicketBatch"]) {
+      for (const entrypoint of ["processTicketBatch", "_processFutureTicketBatch"]) {
         const body = mint.slice(mint.indexOf(`function ${entrypoint}(`));
         expect(
           body.slice(0, body.indexOf("\n    function ")).includes("_processOneTicketEntry("),

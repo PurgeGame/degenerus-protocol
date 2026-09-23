@@ -183,6 +183,15 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _prepare(21, 4, 3, true);
         vm.deal(address(game), 1000 ether);
         vm.recordLogs();
+        // Genesis (initProtocolDeity) queues VAULT+SDGNRS perpetual entries into the
+        // far-future key space for every level 2..100 at deploy. _mintCeiling() here is
+        // level(4)+1 = 5, and level 5's far-future pool (2 owners) is exactly the "latched
+        // last purchase day's frozen next-level pool" the daily drain gate now mints inside
+        // the unified sweep BEFORE rngGate — one full budget per call, one thing per advance
+        // (see processTicketBatch's far-future continuation block). That first call resolves
+        // the pool and returns early (STAGE_TICKETS_WORKING); the second call finds the gate
+        // clear and reaches rngGate, where the opening-day decimator burn fires.
+        game.advanceGame();
         game.advanceGame();
         (uint256 spent, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(spent, CAP);
@@ -198,6 +207,11 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _fund(400_000 ether);
         _prepare(21, 99, 3, true);
         vm.deal(address(game), 1000 ether);
+        // As in test_RealAdvanceGameReachesTheOpeningEntry: _mintCeiling() = level(99)+1 = 100,
+        // and genesis queued VAULT+SDGNRS perpetual entries into level 100's far-future pool at
+        // deploy. The first advanceGame() call mints that pool inside the daily drain gate and
+        // returns early; the second reaches rngGate and the opening-day decimator entry.
+        game.advanceGame();
         game.advanceGame();
         (uint192 weight,) = harness.entry(100);
         assertGt(weight, 0);

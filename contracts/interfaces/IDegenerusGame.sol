@@ -367,13 +367,17 @@ interface IDegenerusGame {
     /// @return entries Array of player addresses holding sampled entries.
     function sampleTraitEntriesAtLevel(uint24 targetLvl, uint256 entropy) external view returns (uint8 trait, address[] memory entries);
 
-    /// @notice Sample four far-future candidate slots for BAF.
-    /// @dev Sample one populated level in [current+5, current+99], then additional levels
-    ///      only as needed to fill four slots; duplicate owners across levels are allowed.
-    ///      Call during BAF, before the current level's far-future promotion.
+    /// @notice Sample two BAF rounds' worth of unminted future-level candidates.
+    /// @dev Four packs (independent level in [fromLevel, toLevel] + one random eight-lane queue
+    ///      word), two distinct lanes each: slots 0..3 feed one round and 4..7 the next, so
+    ///      each round's candidates come from four different packs. Unfilled slots are
+    ///      address(0). Call during BAF with unminted levels only (above current+1).
     /// @param entropy Random entropy for sampling (typically from VRF).
-    /// @return tickets Four live queue owners (addresses may repeat).
-    function sampleFarFutureTickets(uint256 entropy) external view returns (address[] memory tickets);
+    /// @param fromLevel Lowest candidate level (inclusive).
+    /// @param toLevel Highest candidate level (inclusive).
+    /// @return tickets Eight candidate slots (addresses may repeat or be zero).
+    function sampleFarFutureTickets(uint256 entropy, uint24 fromLevel, uint24 toLevel)
+        external view returns (address[] memory tickets);
 
 
     /// @notice Purchase a deity pass for a specific symbol (0-31).

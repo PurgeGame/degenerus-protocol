@@ -30,6 +30,15 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         in flight (`ticketLevel == lvl`), so the shared cursor is never reset mid-drain; future
 ///         levels are processed after the current drain clears the marker.
 ///
+///         SINCE SUPERSEDED (documented for history; no functional change to this test): a later
+///         revision folded `_prepareFutureTickets` and the near-window drain into one function,
+///         `processTicketBatch`. There is no standalone future-ticket prep step any more — the
+///         far-future continuation (now the private `_processFutureTicketBatch`, reachable only
+///         through `processTicketBatch`) is structurally unreachable until the near-window loop
+///         has returned (idx >= total for every windowed level), so the shared cursor can never
+///         be clobbered mid-drain by construction. This test still exercises that invariant end
+///         to end via real `game.purchase`/`advanceGame` calls, so it needed no changes here.
+///
 ///         The cohort is fed only by real permissionless `game.purchase` calls (no per-day buyer
 ///         cap; per-address dedup at Storage:688). Jackpot-phase buys route to `level`
 ///         (MintModule:1967); the daily RNG-request swap turns that write slot into the read slot

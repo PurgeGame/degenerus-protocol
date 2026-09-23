@@ -66,8 +66,8 @@ contract DegenerusGameFoilPackModule is
     event DeityPerpetualQueued(uint24 indexed targetLevel, uint32 entriesPerOwner);
 
     /// @notice Extend every deity's perpetual coverage by one level, at most 32 owners.
-    /// @dev The advance runs this exactly once per transition (the resumed-transition path
-    ///      skips the housekeeping), so every owner is extended unconditionally. Existing
+    /// @dev The advance runs this exactly once per transition (the transition branch runs
+    ///      once per boundary), so every owner is extended unconditionally. Existing
     ///      queued purchases and affiliate rewards share an owed record; append only newly
     ///      enrolled owners. One event covers the batch.
     function queuePerpetualTickets(uint24 targetLevel) external {

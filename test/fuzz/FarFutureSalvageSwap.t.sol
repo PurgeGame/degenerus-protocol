@@ -728,13 +728,16 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         // After popping `seller` from Lfull, the remaining holders there are the constructor-seeded
         // sDGNRS + VAULT. BAF samples after the request increments level: model that
         // read-only context so +5 is still queued, then restore it before further swaps.
+        // BAF's wide scatter band draws sampleFarFutureTickets(entropy, cl+6, cl+99); Lfull
+        // (cl+6) sits at that band's lower bound, so this range exercises the post-pop level.
         bytes32 priorState = vm.load(address(game), bytes32(0));
         vm.store(address(game), bytes32(0), bytes32(
             (uint256(priorState) & ~(uint256(type(uint24).max) << 96)) | (uint256(cl) << 96)
         ));
         for (uint256 s = 0; s < 32; ++s) {
-            address[] memory sampled = game.sampleFarFutureTickets(uint256(keccak256(abi.encode("samp", s))));
-            assertEq(sampled.length, 4, "BAF sampler must fill all candidate slots");
+            address[] memory sampled =
+                game.sampleFarFutureTickets(uint256(keccak256(abi.encode("samp", s))), uint24(cl + 6), uint24(cl + 99));
+            assertEq(sampled.length, 8, "BAF sampler must fill all candidate slots");
             for (uint256 i = 0; i < sampled.length; ++i) {
                 assertTrue(sampled[i] != address(0), "sampler leaked a zero/stale address after swap-pop");
             }

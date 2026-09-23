@@ -464,6 +464,9 @@ contract CrapsBattle is LootboxCraps {
     ///         clears this within days.
     uint256 internal constant _SYBIL_SCORE_FLOOR = 12;
 
+    /// @dev The standing a Game-written seat carries (see `_standingOf`).
+    uint256 internal constant _AWARD_STANDING = 100;
+
     /// @notice The two sizes a protocol day's high-roller lane can take, and how often. One roll
     ///         off the day's own committed word decides which, nine days in ten the smaller: a
     ///         high roller buys `_HIGH_MULT` copies of the run AND posts that many bounties, so
@@ -2509,8 +2512,12 @@ contract CrapsBattle is LootboxCraps {
         IFlipCoin(ContractAddresses.COIN).burnCoin(msg.sender, amount);
     }
 
-    /// @dev The caller's standing, clamped to the field the bet word carries.
+    /// @dev The caller's standing, clamped to the field the bet word carries. A seat the GAME
+    ///      writes — a coin draw's craps seat or a lootbox pass reserving tomorrow — carries the
+    ///      fixed `_AWARD_STANDING` instead of a read back into the Game: above the boost floor and
+    ///      most casual wallets, below a dedicated player. `amendSlip` re-reads the real one.
     function _standingOf(address player) private view returns (uint256 standing) {
+        if (msg.sender == _GAME) return _AWARD_STANDING;
         standing = IGameActivityScore(_GAME).playerActivityScore(player);
         if (standing > _BET_SCORE_MASK) standing = _BET_SCORE_MASK;
     }
@@ -2846,7 +2853,8 @@ contract CrapsBattle is LootboxCraps {
     }
 
     /// @notice The vault's comp door: seat, reserve, upgrade or bank passes for `to`, charged to
-    ///         the FLIP comp lane at exactly the price the paid door would burn. VAULT-only.
+    ///         the FLIP comp lane at exactly the price the paid door would burn. VAULT, or the
+    ///         GAME seating a coin draw's opener winners a day ahead (kind 5, no burn).
     /// @dev ONE door, one small tuple, no caller-supplied price and no caller-supplied target.
     ///      Every kind runs the SAME private path its paid twin runs — the same validation, seat
     ///      writer, counters and logs — with the recipient in the owner's place and the comp bit
@@ -2880,7 +2888,8 @@ contract CrapsBattle is LootboxCraps {
     /// @custom:reverts DayNotReservable If a reserved window's day is not strictly ahead.
     /// @custom:reverts AlreadyInBonus If the player already holds that window or that day.
     function vaultComp(uint256 code) external returns (uint256 charged) {
-        if (msg.sender != ContractAddresses.VAULT) revert NotVaultOwner();
+        bool game = msg.sender == _GAME;
+        if (!game && msg.sender != ContractAddresses.VAULT) revert NotVaultOwner();
         address to = address(uint160(code));
         uint256 kind = (code >> _COMP_KIND_SHIFT) & 0xFF;
         bool high = code & _COMP_HIGH_BIT != 0;
@@ -2907,7 +2916,10 @@ contract CrapsBattle is LootboxCraps {
         } else if (kind == _COMP_WINDOW_AHEAD) {
             uint256 period = (code >> _COMP_PERIOD_SHIFT) & 0xFF;
             charged = uint256(count) * _windowAheadPrice(period, high);
-            _burnForCraps(to, _tag(charged, _CRAPS_FLAG_COMP));
+            // The GAME seats a coin draw's opener winners here and burns nothing: the draw mints
+            // that much less FLIP instead. It vets every winner first (no claim on the day, not a
+            // protocol body), so the reservation below cannot revert on its daily advance.
+            if (!game) _burnForCraps(to, _tag(charged, _CRAPS_FLAG_COMP));
             unchecked {
                 // A day past the width wraps to one long gone, which the reservation refuses.
                 for (uint256 i = 0; i < count; ++i) {

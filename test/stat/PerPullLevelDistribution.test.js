@@ -14,22 +14,11 @@
 //          rotation on-chain (D-IMPL-01 confirms this implicitly via the
 //          per-i strict-shape check below).
 //
-// D-IMPL-01 boundary cross-validation: at fixed seeds, the deployFullProtocol
-//          fixture is driven through one full VRF cycle that fulfills with the
-//          named seed; the harness harvests the DailyRngApplied event to learn
-//          the exact `randomWord` flowed into _awardDailyCoinToTraitWinners
-//          (raw VRF word + totalFlipReversals nudge — the helper's actual
-//          `randomWord` parameter). For every emitted JackpotFlipWin event
-//          the harness recovers the i-index from traitId/64 (each quadrant
-//          spans 64 trait IDs and is monotonic in i-order, so the i-index of
-//          the k-th emitted event is uniquely determined as the smallest i
-//          strictly greater than the prior match where traitIds[i % 4]
-//          equals the emitted traitId). The strict assertion is then:
-//             jsLvlPrime(randomWord, minLevel, maxLevel, recoveredI) ==
-//             emittedEvent.args.level
-//          for every emitted event — zero softening, zero multiset fallback.
-//          (The event field name is `level` per the contract ABI; this file
-//          uses `lvl` as a JS-internal alias for terseness.)
+// D-IMPL-01 boundary cross-validation: at fixed seeds, drive a real level-1
+//          daily VRF cycle. The trait draw's coin half emits 25 shares from
+//          pull indexes 25..49, all at minted level 1. Assert their exact
+//          trait rotation and target level, and confirm the second draw emits
+//          FarFutureFlipJackpotWinner from the unminted queue.
 //
 // STAT-04 Phase 261 infra reuse: `makeRng`, `CHI2_CRIT_05`, and `wilsonHilfertyZ`
 //          are re-declared verbatim from test/stat/TraitDistribution.test.js
@@ -40,7 +29,8 @@
 // default `npm test`). Deterministic seeded keccak-counter PRNG; reproducibility
 // = exact replay on failure.
 //
-// Phase 263 HEAD: cf564816 — feat(263): per-pull level resample for daily coin jackpot.
+// The nondegenerate range tests exercise the generic sampler formula; current
+// production coin draws pass a single minted target level.
 
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
@@ -68,7 +58,7 @@ import {
 // asserts equality with the recomputed digest as a structural pin.
 const FLIP_LEVEL_TAG = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("coin-level"));
 
-const PULLS_PER_CALL = 50; // DAILY_COIN_MAX_WINNERS — Phase 263 D-SHAPE-01.
+const PULLS_PER_CALL = 50; // 25 Craps pull positions plus 25 coin-share positions.
 
 // ---------------------------------------------------------------------------
 // STAT-04 Phase 261 infra reuse — re-declared verbatim from
@@ -226,20 +216,19 @@ describe("STAT-04 — Phase 261 infrastructure reuse + FLIP_LEVEL_TAG sanity", f
 describe("STAT-01 — per-pull level distribution chi² uniformity over 10K samples", function () {
   this.timeout(60_000); // pure JS loop — sub-second on a modern machine
 
-  // Two range regimes tested independently:
-  //   - jackpot-phase: range = 4 (lvl + 1 .. lvl + 4)              df = 3, crit = 7.815
-  //   - purchase-phase wider: range = 8 (arbitrary [minLevel, maxLevel]) df = 7, crit = 14.067
+  // Two synthetic ranges test the sampler formula independently. Current
+  // production calls use a one-level trait range; future levels use the queue walk.
   // Each regime gets a distinct seed (D-APPROVAL-04 spirit; cross-test isolation).
   const REGIMES = [
     {
-      name: "jackpot-phase range=4",
+      name: "synthetic range=4",
       minLevel: 100,
       maxLevel: 103,
       range: 4,
       seed: 0xC012_0001,
     },
     {
-      name: "purchase-phase range=8",
+      name: "synthetic range=8",
       minLevel: 50,
       maxLevel: 57,
       range: 8,
@@ -290,7 +279,7 @@ describe("STAT-01 — per-pull level distribution chi² uniformity over 10K samp
 
 describe("STAT-02 — per-trait share under deterministic `i % 4` rotation", function () {
   it("i % 4 rotation produces exactly 13/13/12/12 hits per trait per call (degenerate chi² ≈ 0)", function () {
-    // Phase 263 PPL-03 locks trait_idx = i % 4 with cap = DAILY_COIN_MAX_WINNERS = 50.
+    // The combined 25 Craps and 25 coin positions still rotate traits by i % 4.
     // Across 50 pulls per call:
     //   trait 0 → i ∈ {0, 4, 8, ..., 48}  → 13 pulls
     //   trait 1 → i ∈ {1, 5, 9, ..., 49}  → 13 pulls
@@ -333,18 +322,9 @@ describe("STAT-02 — per-trait share under deterministic `i % 4` rotation", fun
 //      coinflip activity, totalFlipReversals == 0 and finalWord == rawWord ==
 //      seed.
 //
-// At purchaseLevel == 1 (level 0, freshly deployed), the advance flow makes
-// TWO coin jackpot calls per the contract's `purchaseLevel == 1` branch in
-// DegenerusGameAdvanceModule.sol:
-//   - First call:  payDailyFlipJackpot(1, rngWord, 1, 1)         range=1
-//   - Second call: payDailyFlipJackpot(1, saltedRng, 2, 5)       range=4
-//                  saltedRng = keccak256(abi.encodePacked(rngWord, keccak256("BONUS_TRAITS")))
-//
-// The first call has range=1 (lvlPrime always 1 — degenerate); the second has
-// range=4 in [2, 5]. The boundary harness asserts on the SECOND call's events
-// so the JS-replica jsLvlPrime is exercised over a non-degenerate range, AND
-// the harness verifies the JS replica computes saltedRng identically to the
-// contract.
+// At purchaseLevel == 1, the advance runs one trait draw on minted level 1
+// and one fill draw over the unminted future queues. The boundary harness
+// checks both event surfaces from that real advance.
 // ---------------------------------------------------------------------------
 
 async function driveOneFullDay(game, deployer, mockVRF, advanceModule, seed) {
@@ -430,10 +410,10 @@ async function harvestJackpotFlipWinByCall(receipts, jackpotInterface) {
 
 
 // ---------------------------------------------------------------------------
-// (4) D-IMPL-01 — JS replica jsLvlPrime == on-chain JackpotFlipWin.lvl.
+// (4) D-IMPL-01 — current level-1 trait draw matches the JS trait rotation.
 // ---------------------------------------------------------------------------
 
-describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotFlipWin.lvl at fixed seeds", function () {
+describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin traits at fixed seeds", function () {
   this.timeout(900_000); // 15 min — heavy lifecycle drive across N seeds
 
   // Distinct deterministic seeds per harness call (D-APPROVAL-04 spirit).
@@ -446,39 +426,21 @@ describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotFl
   ];
 
   for (const seed of SEEDS) {
-    it(`seed=0x${seed.toString(16)}: jsLvlPrime per-pull byte-identity over [2, 5] under deity-backed dense fixture`, async function () {
+    it(`seed=0x${seed.toString(16)}: 25 level-1 coin shares match the current trait rotation`, async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, deployer, mockVRF, advanceModule, jackpotModule, others } =
         fixture;
 
-      // Pre-compute every contract-side derivative of the seed used by call B:
-      //
-      //   rngWord    = seed (post-_applyDailyRng with totalFlipReversals == 0)
-      //   saltedRng  = keccak256(abi.encodePacked(rngWord, BONUS_TRAITS_TAG))
-      //                — passed as `randomWord` arg into call B's helper.
-      //                — used by jsLvlPrime per-pull-level keccak.
-      //   doubleSalted = keccak256(abi.encodePacked(saltedRng, BONUS_TRAITS_TAG))
-      //                — internal `r` in _rollWinningTraits(saltedRng, isBonus=true).
-      //                — used by getRandomTraits to derive traitIds.
-      //
-      // The two distinct salts are required because _rollWinningTraits applies
-      // its own BONUS_TRAITS_TAG keccak when isBonus=true, on TOP of the salt
-      // already applied by the caller for call B. (Call A's helper instead
-      // sees randomWord=rngWord, so its trait roll uses keccak(rngWord, TAG)
-      // == saltedRng — different traits than call B's.)
-      const saltedRng = jsBonusEntropy(seed);
-      const doubleSalted = jsBonusEntropy(saltedRng);
-      const traitIds = jsGetRandomTraits(doubleSalted);
+      // The level-1 trait draw rolls its bonus traits from the daily word.
+      // The other purchase-day draw now walks unminted future queues.
+      const traitIds = jsGetRandomTraits(jsBonusEntropy(seed));
       const fullSymIds = traitIds.map((t) => (t >> 6) * 8 + (t & 0x07));
 
       // Quadrant decomposition guarantees fullSymId in [0, 32) for every
       // quadrant — every trait_i in any quadrant consults the deity cache.
       // Register one deity per quadrant (4 distinct fullSymIds) so the
-      // helper's deity-cache lookup populates virtualCount >= 2 for all 4
-      // traits. Combined with deity-pass-queued tickets, every (lvlPrime,
-      // trait_i) cell across the call B range [2, 5] has effectiveLen >= 2,
-      // which means all 50 pulls emit (no skips). This is the precondition
-      // for the strict per-pull deep.equal assertion below.
+      // helper's deity-cache lookup populates each level-1 trait bucket. The
+      // coin half can then emit all 25 shares with no empty-bucket skips.
       //
       // Each deity pass costs DEITY_PASS_BASE + k*(k+1)/2 ether (k = prior
       // owners count). Symbol IDs are user-chosen; we register the four
@@ -500,12 +462,6 @@ describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotFl
             value: basePrice,
           });
       }
-
-      // The contract emits no public view for deityBySymbol — registration
-      // success is implied by the purchaseDeityPass tx not reverting (the
-      // contract's revert path on duplicate symbolId or other failure modes
-      // would surface here as a test crash). The strict 50/50 emit-count
-      // assertion below acts as the structural confirmation.
 
       // Drive one full daily cycle with the seed.
       const receipts = await driveOneFullDay(
@@ -533,115 +489,31 @@ describe("D-IMPL-01 — JS replica jsLvlPrime EXACTLY matches on-chain JackpotFl
         `— totalFlipReversals nudge unexpected; check fixture state`,
       ).to.equal(seed);
 
-      // Harvest emitted JackpotFlipWin events.
-      //
-      // The advance flow at purchaseLevel==1 makes TWO coin jackpot calls
-      // inside ONE advance transaction:
-      //   call A: payDailyFlipJackpot(1, rngWord,    1, 1)  range = 1, lvl=1
-      //   call B: payDailyFlipJackpot(1, saltedRng,  2, 5)  range = 4, lvl in [2, 5]
-      // The two calls share an emit stream within the same tx. We split them
-      // by emitted lvl: call A's events all have lvl == 1; call B's events
-      // all have lvl in [2, 5]. Helper invocation order means call A's
-      // events come BEFORE call B's events.
+      // The trait call's coin half uses pulls 25..49. Its level range is
+      // [1, 1]; the future-queue fill draw emits a different event.
       const jackpotInterface = jackpotModule.interface;
       const callGroups = await harvestJackpotFlipWinByCall(
         receipts,
         jackpotInterface,
       );
-      expect(
-        callGroups.length,
-        `Expected >=1 transaction emitting JackpotFlipWin events; got ${callGroups.length}`,
-      ).to.be.greaterThanOrEqual(1);
+      const traitEvents = callGroups.flat();
+      expect(traitEvents.length, "every coin-half pull should find its deity-backed bucket").to.equal(25);
+      expect(traitEvents.map((e) => e.args.lvl)).to.deep.equal(
+        Array.from({ length: 25 }, (_, j) => jsLvlPrime(finalWord, 1, 1, 25 + j)),
+      );
+      expect(traitEvents.map((e) => e.args.traitId)).to.deep.equal(
+        Array.from({ length: 25 }, (_, j) => traitIds[(25 + j) % 4]),
+      );
 
-      // Find the transaction containing call B by scanning for events with
-      // lvl in [2, 5]. There should be exactly ONE such transaction (the
-      // advance tx that ran the daily-jackpot branch).
-      let callBEvents = null;
-      for (const group of callGroups) {
-        const callBSubset = group.filter(
-          (e) => e.args.lvl >= 2 && e.args.lvl <= 5,
-        );
-        if (callBSubset.length > 0) {
-          if (callBEvents !== null) {
-            throw new Error(
-              `seed=0x${seed.toString(16)}: multiple transactions emitted ` +
-              `JackpotFlipWin with lvl in [2, 5] — fixture drove an ` +
-              `unexpected branch. Investigate before relaxing the assertion.`,
-            );
-          }
-          callBEvents = callBSubset;
+      let futureWins = 0;
+      for (const { receipt } of receipts) {
+        for (const log of receipt.logs) {
+          try {
+            if (jackpotInterface.parseLog(log)?.name === "FarFutureFlipJackpotWinner") futureWins++;
+          } catch { /* another contract's event */ }
         }
       }
-
-      if (callBEvents === null) {
-        throw new Error(
-          `seed=0x${seed.toString(16)}: no JackpotFlipWin events with ` +
-          `lvl in [2, 5] observed — call B (saltedRng, range=[2, 5]) did not ` +
-          `emit. Investigate before relaxing the assertion.`,
-        );
-      }
-
-      // STRICT PRECONDITION: deity-cache backing pins effectiveLen >= 2 for
-      // every (lvlPrime, trait_i) cell across the call B range. Every pull
-      // must emit. If callBEvents.length != 50, either:
-      //   (a) the deity registration did not take effect (fixture bug), or
-      //   (b) the helper's deity-cache logic regressed (real drift signal).
-      // Either way, surface loud — do NOT relax to per-event match.
-      expect(
-        callBEvents.length,
-        `seed=0x${seed.toString(16)}: call B emitted ${callBEvents.length}/${PULLS_PER_CALL} ` +
-        `events under deity-backed dense fixture. Expected 50 (every pull emits). ` +
-        `Deity registration: ` +
-        traitIds
-          .map((t, q) => `q${q}=trait${t}/sym${fullSymIds[q]}`)
-          .join(", "),
-      ).to.equal(PULLS_PER_CALL);
-
-      // Build the on-chain lvl array (in emission order = i-order).
-      const onChainLvls = callBEvents.map((e) => e.args.lvl);
-      const onChainTraitIds = callBEvents.map((e) => e.args.traitId);
-
-      // Build the JS-replica lvl array for i = 0..49.
-      const jsLvls = [];
-      const jsTraitIds = [];
-      for (let i = 0; i < PULLS_PER_CALL; i++) {
-        jsLvls.push(jsLvlPrime(saltedRng, 2, 5, i));
-        jsTraitIds.push(traitIds[i % 4]);
-      }
-
-      // STRICT per-pull byte-identity assertion (D-IMPL-01 — orchestrator's
-      // explicit requirement: per-pull deep.equal, no multiset fallback).
-      expect(
-        onChainLvls,
-        `seed=0x${seed.toString(16)}: per-pull lvl byte-identity FAILED. ` +
-        `JS replica vs on-chain emit stream diverge at one or more i ∈ [0, 50). ` +
-        `randomWord=0x${saltedRng.toString(16)}, range=[2, 5]. ` +
-        `js[0..9]=[${jsLvls.slice(0, 10).join(",")}] ` +
-        `chain[0..9]=[${onChainLvls.slice(0, 10).join(",")}]`,
-      ).to.deep.equal(jsLvls);
-
-      // STAT-02 cross-check: emitted traitId series must EXACTLY equal the
-      // deterministic `i % 4` rotation under the JS-derived traitIds.
-      expect(
-        onChainTraitIds,
-        `seed=0x${seed.toString(16)}: per-pull traitId byte-identity FAILED. ` +
-        `i % 4 rotation drift between JS replica and on-chain emit stream.`,
-      ).to.deep.equal(jsTraitIds);
-
-      console.log(
-        `      [D-IMPL-01 seed=0x${seed.toString(16)}] ` +
-        `${PULLS_PER_CALL}/${PULLS_PER_CALL} pulls emitted; per-pull byte-identity verified ` +
-        `over range=[2, 5]; lvl distribution=[${countLevels(onChainLvls).join(",")}] ` +
-        `(expected ~12.5 per bucket).`,
-      );
+      expect(futureWins, "the second purchase-day draw must use the future queue").to.be.greaterThan(0);
     });
   }
 });
-
-function countLevels(lvls) {
-  const counts = [0, 0, 0, 0]; // [2, 3, 4, 5]
-  for (const lvl of lvls) {
-    counts[lvl - 2]++;
-  }
-  return counts;
-}

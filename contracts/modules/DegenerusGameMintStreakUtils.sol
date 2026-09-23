@@ -42,7 +42,7 @@ interface IDegenerusVaultOwner {
 ///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
 ///      and mint streak helpers (credits on completed 1x price ETH quest).
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
-    /// @notice Thrown when a far-future salvage swap's target level lies less than 6 or more
+    /// @notice Thrown when a far-future salvage swap's target level lies less than 2 or more
     ///         than 100 levels from the current level.
     error InvalidDistance();
     /// @notice Thrown when a quantity argument is zero or out of range: here, a far-future
@@ -163,9 +163,11 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     // =========================================================================
 
 
-    /// @dev Far-future salvage discount curve (bps of face): two lines, 15% @ d6 -> 10% @ d20 ->
-    ///      5% @ d100. Caller guarantees 6 <= d <= 100. Integer truncation is sub-bps, acceptable.
+    /// @dev Far-future salvage discount curve (bps of face): flat 15% for d2..d6, then two lines,
+    ///      15% @ d6 -> 10% @ d20 -> 5% @ d100. Caller guarantees 2 <= d <= 100. Integer
+    ///      truncation is sub-bps, acceptable.
     function _farFutureFractionBps(uint256 d) internal pure returns (uint256) {
+        if (d <= 6) return 1500; // never above the d6 rate
         if (d <= 20) return 1500 - ((d - 6) * 500) / 14; // 15% -> 10%
         return 1000 - ((d - 20) * 500) / 80; // 10% -> 5%
     }
@@ -214,7 +216,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         for (uint256 i; i < len; ) {
             uint24 L = uint24(levels[i]);
             uint256 d = uint256(L) - uint256(cl); // reverts if L < cl
-            if (d < 6 || d > 100) revert InvalidDistance();
+            if (d < 2 || d > 100) revert InvalidDistance();
             uint256 n = quantities[i];
             // Whole-ticket granularity: every far-future producer queues 4-entry chunks,
             // so 4-aligned balances stay 4-aligned and a partial sale can never strand a

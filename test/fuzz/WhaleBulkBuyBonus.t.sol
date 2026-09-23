@@ -38,6 +38,8 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
     uint256 private constant ENTRIES_OWED_SLOT = 13;
     uint256 private constant LEVEL_SHIFT = 96;
     uint256 private constant WRITE_SLOT_SHIFT = 200;
+    uint256 private constant LAST_PURCHASE_DAY_SHIFT = 136;
+    uint256 private constant RNG_LOCKED_SHIFT = 152;
 
     uint256 private constant WHALE_EARLY_PRICE = 2.4 ether;
     uint256 private constant WHALE_STANDARD_PRICE = 4 ether;
@@ -62,7 +64,12 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
         uint256 s0 = uint256(vm.load(address(game), bytes32(SLOT_0)));
         uint24 cur = uint24(s0 >> LEVEL_SHIFT);
         bool ws = ((s0 >> WRITE_SLOT_SHIFT) & 1) != 0;
-        return lvl > cur + 5 ? keys.farFutureKey(lvl) : keys.writeKey(lvl, ws);
+        // Mirrors DegenerusGameStorage._mintCeiling(): level+1 normally, level+2 while a
+        // last-purchase-day latch is open (and not yet RNG-locked).
+        bool lastPurchaseDay = ((s0 >> LAST_PURCHASE_DAY_SHIFT) & 1) != 0;
+        bool rngLocked = ((s0 >> RNG_LOCKED_SHIFT) & 1) != 0;
+        uint24 mintCeiling = cur + ((lastPurchaseDay && !rngLocked) ? 2 : 1);
+        return lvl > mintCeiling ? keys.farFutureKey(lvl) : keys.writeKey(lvl, ws);
     }
 
     function _owedAt(uint24 lvl, address who) private view returns (uint32) {

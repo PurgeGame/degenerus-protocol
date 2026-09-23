@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// STAT-03-v35-carry — v38 ACCEPTED-DESIGN ledger entry
+// Legacy STAT-03-v35-carry — v38 ACCEPTED-DESIGN ledger entry
 // (carry-forward chain v35.0 -> v36.0 -> v37.0 -> v38.0).
 //
 // Observed: empty-bucket skip rate ~88.24% under the current sparse
@@ -87,7 +87,11 @@
 //
 // Heavy MC + lifecycle drive — runs ONLY under `npm run test:stat`.
 //
-// Phase 263 HEAD: cf564816 — feat(263): per-pull level resample for daily coin jackpot.
+// The current purchase-day draw no longer has a second trait draw over [2, 5].
+// It uses a future-queue fill draw instead, and the trait draw splits into up
+// to 25 Craps awards plus 25 FLIP shares. This historical 50-trait-pull
+// measurement cannot be applied to that path. Current empty-pull conservation
+// and sparse-fill behavior are covered by CoinDrawCrapsSeats.t.sol.
 
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
@@ -239,7 +243,7 @@ function reverseEngineerCallBudget(callEvents, cap) {
 describe("STAT-03 — empty-bucket skip rate and cumulative underspend over N>=50 lifecycle calls", function () {
   this.timeout(1_800_000); // 30 min — heavy player setup x N lifecycle iterations
 
-  it("skip rate <= 10% AND Sigma skipAmount / Sigma coinBudget < 1%", async function () {
+  it.skip("legacy 50-trait-pull skip rate (superseded by the Craps/FLIP split and future fill draw)", async function () {
     const fixture = await loadFixture(deployFullProtocol);
     const { game, deployer, advanceModule, jackpotModule, mockVRF } = fixture;
 

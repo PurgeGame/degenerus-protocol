@@ -41,16 +41,20 @@ interface IWwxrpMintPrize {
     function mintPrize(address to, uint256 amount) external;
 }
 
-/// @dev Return-aware surface of the craps credit door, for the comp lane alone: the returned
-///      count is what actually banked after lane saturation, and only banked value is charged
-///      against the FLIP budget. Every other caller keeps its no-return interface and keeps
-///      ignoring the pair. Called BARE — no stipend, no try/catch — because `creditPasses` is
-///      revert-free for the Game by contract, and this call rides the daily advance.
-interface ICrapsCompPassCredit {
-    /// @notice Bank a rolled pass award as day-pass credits, revert-free (CrapsBattle, game-only).
-    function creditPasses(address player, uint32 normal, uint32 high)
-        external
-        returns (uint32 normalCredited);
+/// @dev The craps doors a coin draw pays its craps half through, called BARE — no stipend, no
+///      try/catch — on the daily advance: a whole day banks one pass (`creditPasses`, revert-free
+///      and saturating); an opener seat goes through the comp door's window-ahead kind, which
+///      burns nothing for the Game, and the Game vets the winner first (`extsload` of the
+///      table's day claims, and never the vault or sDGNRS) so it cannot revert.
+interface ICrapsCoinDrawSeat {
+    /// @notice Read a raw CrapsBattle storage slot.
+    function extsload(bytes32 slot) external view returns (bytes32 value);
+
+    /// @notice GAME: bank pass credits, revert-free and saturating.
+    function creditPasses(address player, uint32 normal, uint32 high) external returns (uint32 normalCredited);
+
+    /// @notice Seat or reserve per the packed `code` (kind 5 = one window ahead).
+    function vaultComp(uint256 code) external returns (uint256 charged);
 }
 
 /**
@@ -93,8 +97,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Events
     // -------------------------------------------------------------------------
 
-    /// @dev Emitted when a far-future ticket holder (5-99 levels ahead) wins the daily FLIP jackpot.
-    ///      These winners are drawn from ticketQueue (traits not yet assigned).
+    /// @dev Emitted when an unminted future-level ticket holder (1-99 levels ahead of the
+    ///      purchase level) wins the purchase-day FLIP fill draw. Drawn from ticketQueue
+    ///      (traits not yet assigned).
     event FarFutureFlipJackpotWinner(
         address indexed winner,
         uint24 indexed currentLevel,
@@ -139,21 +144,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 entryIndex
     );
 
-    /// @notice One comp-quadrant winning slot of the daily coin jackpot banked Craps day passes
-    ///         instead of FLIP. `level`, `traitId` and `entryIndex` mean exactly what they mean
-    ///         on `JackpotFlipWin`; the quadrant is `traitId >> 6`. `normalCompCount` is the
-    ///         count Craps ACTUALLY banked — the adjacent Craps-address `CrapsPassesCredited`
-    ///         log is the authoritative balance mutation, and value the lane refused stayed in
-    ///         the other quadrants' FLIP budget. Never emitted for a zero credit.
-    event JackpotCrapsCompWin(
-        address indexed winner,
-        uint24 indexed level,
-        uint8 indexed traitId,
-        uint32 normalCompCount,
-        uint256 entryIndex
-    );
+    /// @notice A coin draw's craps-half winner. `fullDay` requests one banked normal craps pass
+    ///         (see `CrapsPassesCredited`); otherwise the award seats tomorrow's opener.
+    ///         `refused` means the winner received the award's FLIP value instead: an opener
+    ///         could not be seated, or a full-day pass bank was saturated.
+    ///         `winnerLevel` is the level the winner was drawn from.
+    event CoinDrawCrapsWin(address indexed winner, uint24 indexed winnerLevel, bool fullDay, bool refused);
 
     /// @dev Emitted once per daily drawing with both main and bonus winning traits.
+    ///      bonusTargetLevel is the level the bonus-trait coin draw reads (level + 1 on
+    ///      jackpot days); 0 on purchase days, which have no bonus-trait draw (the bonus set
+    ///      still feeds the day's foil claims).
     event DailyWinningTraits(
         uint24 indexed day,
         uint32 mainTraitsPacked,
@@ -268,23 +269,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Constants — Entropy Salts
     // -------------------------------------------------------------------------
 
-    /// @dev Domain separator for coin jackpot entropy derivation.
-    bytes32 private constant FLIP_JACKPOT_TAG = keccak256("coin-jackpot");
     uint256 private constant BAF_TICKET_TAG = 0x4261665469636b6574; // "BafTicket"
     bytes32 private constant HERO_SYMBOL_TAG = keccak256("degenerus.jackpot.hero-symbol");
 
     /// @dev Domain separator for per-pull level sampling in the daily coin jackpot.
-    ///      Distinct from FLIP_JACKPOT_TAG so (randomWord, FLIP_JACKPOT_TAG, ·) and
-    ///      (randomWord, FLIP_LEVEL_TAG, ·) keccaks cannot collide.
     bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");
 
     /// @dev Domain separator for rolling current-pool daily jackpot percentage.
     bytes32 private constant DAILY_CURRENT_BPS_TAG =
         keccak256("daily-current-bps");
-
-    /// @dev Domain separator for selecting daily carryover source level.
-    bytes32 private constant DAILY_CARRYOVER_SOURCE_TAG =
-        keccak256("daily-carryover-source");
 
     /// @dev Domain separator for bonus trait derivation from same VRF word.
     bytes32 private constant BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS");
@@ -302,8 +295,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      Any value >= 4 matches no bucket index.
     uint8 private constant _NO_QUADRANT_EXCLUDE = 0xFF;
 
-    /// @dev Max forward offset for carryover source selection (lvl+1..lvl+4).
-    uint8 private constant DAILY_CARRYOVER_MAX_OFFSET = 4;
 
     /// @dev Base current-pool jackpot percentage bounds (6%-14%); doubled on the middle day.
     uint16 private constant DAILY_CURRENT_BPS_MIN = 600;
@@ -333,28 +324,28 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// Higher than ETH winners because ticket distribution is cheaper per winner.
     uint16 private constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
 
-    /// @dev Maximum winners for daily coin jackpot (all paid in one coinflip.creditFlipBatch call).
-    uint16 private constant DAILY_COIN_MAX_WINNERS = 50;
+    /// @dev Level picks the purchase-day fill draw may spend. A pick lands on an unvisited
+    ///      level or is spent on a revisit, so empty levels cannot stretch the draw's gas.
+    uint256 private constant FUTURE_FLIP_LEVEL_PICKS = 16;
 
-    /// @dev Share of daily FLIP budget awarded to far-future ticket holders (25%).
-    uint16 private constant FAR_FUTURE_FLIP_BPS = 2500;
-
-    /// @dev Number of far-future levels to sample for FLIP jackpot (10 winners max).
-    uint8 private constant FAR_FUTURE_FLIP_SAMPLES = 8;
-
-    /// @dev Domain separator for far-future coin jackpot entropy derivation.
+    /// @dev Domain separator for the purchase-day future fill draw's entropy derivation.
     bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
 
-    /// @dev Most winning slots the comp quadrant may spread its passes across. Comps are
-    ///      indivisible, so unlike the FLIP legs' equal shares, every funded whole pass is
-    ///      issued: slot counts differ by at most one before saturation.
-    uint256 private constant CRAPS_COMP_MAX_SLOTS = 6;
+    /// @dev Winners in each half of a coin draw: up to this many craps seats, and up to this many
+    ///      equal FLIP shares.
+    uint256 private constant COIN_DRAW_HALF_SLOTS = 25;
 
-    /// @dev Domain separators: which quadrant pays comps today, and where the +1 extra-comp
-    ///      window starts among the found slots. Both derive from the day's existing VRF word —
-    ///      no new randomness, no user-controllable input.
-    bytes32 private constant FLIP_CRAPS_COMP_TAG = keccak256("coin-craps-comp");
-    bytes32 private constant FLIP_CRAPS_COMP_EXTRA_TAG = keccak256("coin-craps-comp-extra");
+    /// @dev What one coin-draw seat on tomorrow's opener costs the craps half — the opener's
+    ///      expected bankroll plus bounty (2,433 FLIP), rounded to the draw's 100-FLIP unit.
+    uint256 private constant CRAPS_OPENER_SEAT_VALUE = 2_400 ether;
+
+    /// @dev CrapsBattle's `_daySeated` mapping slot (scripts/layout/golden/CrapsBattle.json; the
+    ///      layout oracle fails the build on a move). A day's claims live under day * 8.
+    uint256 private constant CRAPS_DAY_SEATED_SLOT = 8;
+
+    /// @dev What turning an opener seat into tomorrow's whole day costs on top: the day pass's
+    ///      value less the seat already paid for.
+    uint256 private constant CRAPS_DAY_UPGRADE_VALUE = NORMAL_DAY_PASS_VALUE - CRAPS_OPENER_SEAT_VALUE;
 
     /// @dev Daily: 32 per non-solo quadrant. Carryover: 24 per quadrant.
     ///      Empty buckets redistribute the cap in whole groups of eight.
@@ -430,7 +421,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Final physical day (day 3, or day 1 for turbo): distributes the remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird ticket jackpot (from futurePrizePool).
     ///      - On every non-early-bird day, takes 0.5% of futurePrizePool and buys tickets
-    ///        at the current level (next level on the final day) for winners from [lvl+1, lvl+4], credited to nextPool.
+    ///        at the current level (next level on the final day) for winners from level + 1, credited to nextPool.
     ///      - Increments jackpotCounter on completion.
     ///
     ///      PURCHASE PHASE PATH (isJackpotPhase=false):
@@ -524,18 +515,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint256 reserveSlice;
                 uint256 carryoverEntries;
                 if (!isEarlyBirdDay) {
-                    sourceLevelOffset = uint8(
-                        (uint256(
-                            keccak256(
-                                abi.encodePacked(
-                                    randWord,
-                                    DAILY_CARRYOVER_SOURCE_TAG,
-                                    counter
-                                )
-                            )
-                        ) % DAILY_CARRYOVER_MAX_OFFSET) + 1
-                    );
-                    sourceLevel = lvl + uint24(sourceLevelOffset);
+                    // The bonus board reads level + 1, the one future level already minted.
+                    sourceLevelOffset = 1;
+                    sourceLevel = lvl + 1;
 
                     // 0.5% of futurePrizePool reserved for carryover tickets, moved future -> next
                     // in one packed-slot read/write that also folds in the daily-ticket next credit
@@ -638,8 +620,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 questDay,
                 winningTraitsPacked,
                 bonusTraitsPacked,
-                randWord,
-                lvl
+                lvl,
+                lvl + 1
             );
 
             dailyJackpotCoinTicketsPending = true;
@@ -657,8 +639,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             questDay,
             winningTraitsPacked,
             bonusTraitsPacked,
-            randWord,
-            lvl
+            lvl,
+            0
         );
 
         // Daily 4% drip from futurePrizePool every ordinary purchase day.
@@ -811,7 +793,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         ) = _rollWinningTraitsPair(randWord);
 
         // --- Coin Jackpot ---
-        _runFlipJackpot(lvl, lvl, lvl + 1, lvl + 4, bonusTraitsPacked, randWord);
+        // Bonus traits on level + 1, minted on the last-purchase word before this phase.
+        _runFlipJackpot(lvl, lvl, lvl + 1, lvl + 1, bonusTraitsPacked, randWord);
 
         // --- Ticket Distribution ---
         // Distribute daily tickets to current level trait winners (main traits)
@@ -2059,26 +2042,34 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      jackpot. Awards 0.25% of the previous level's recorded prize pool
     ///      (`levelPrizePool[lvl - 1]`, the ratchet target before any century floor), converted
     ///      to FLIP at the current level's ticket price.
-    ///      75% goes to near-future trait-matched winners in [minLevel, maxLevel].
-    ///      25% goes to far-future ticketQueue holders ([lvl+5, lvl+99]).
+    ///      Winners are trait-matched ticket holders in [minLevel, maxLevel], which must be
+    ///      minted levels: half the budget seats winners on tomorrow's craps opener or whole
+    ///      day, the rest (and whatever the seats leave) pays equal FLIP shares.
     /// @param lvl Current level.
     /// @param randWord VRF entropy for winner selection.
-    /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
-    /// @param maxLevel Maximum target level for near-future coin distribution (inclusive).
+    /// @param minLevel Minimum target level for the coin distribution (inclusive).
+    /// @param maxLevel Maximum target level for the coin distribution (inclusive).
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external {
         uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
         _runFlipJackpot(lvl, level, minLevel, maxLevel, bonusTraitsPacked, randWord);
     }
 
-    /// @dev Daily FLIP jackpot core: 25% of the budget to far-future
-    ///      ticketQueue holders, 75% to near-future trait-matched winners in
-    ///      [minLevel, maxLevel].
+    /// @notice Purchase-day FLIP fill draw: the daily coin budget over unminted future levels.
+    /// @dev Budget as payDailyFlipJackpot; winners come from the far-future queues of
+    ///      [lvl + 1, lvl + 99] (see _awardFutureCoinFill).
+    /// @param lvl Purchase level (the minted level whose day this is).
+    /// @param randWord VRF entropy for level picks and walk starts.
+    function payDailyFutureFlipJackpot(uint24 lvl, uint256 randWord) external {
+        _awardFutureCoinFill(lvl, _calcDailyCoinBudget(lvl, level), randWord);
+    }
+
+    /// @dev Daily coin draw core over trait-matched winners in [minLevel, maxLevel].
     /// @param lvl Level keying the prize pool snapshot for the budget.
     /// @param currLevel Current game level (storage `level` at call time), used
     ///        for FLIP pricing.
-    /// @param minLevel Minimum target level for near-future coin distribution (inclusive).
-    /// @param maxLevel Maximum target level for near-future coin distribution (inclusive).
-    /// @param bonusTraitsPacked Packed winning trait IDs for the near-future draw.
+    /// @param minLevel Minimum target level for the coin distribution (inclusive).
+    /// @param maxLevel Maximum target level for the coin distribution (inclusive).
+    /// @param bonusTraitsPacked Packed winning trait IDs for the draw.
     /// @param randWord VRF entropy for winner selection.
     function _runFlipJackpot(
         uint24 lvl,
@@ -2088,23 +2079,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint32 bonusTraitsPacked,
         uint256 randWord
     ) private {
-        uint256 coinBudget = _calcDailyCoinBudget(lvl, currLevel);
-        if (coinBudget == 0) return;
-
-        // Split: 25% far-future, 75% near-future
-        uint256 farBudget = (coinBudget * FAR_FUTURE_FLIP_BPS) / 10_000;
-        _awardFarFutureCoinJackpot(lvl, farBudget, randWord);
-
-        uint256 nearBudget = coinBudget - farBudget;
-        if (nearBudget != 0) {
-            _awardDailyCoinToTraitWinners(
-                minLevel,
-                maxLevel,
-                bonusTraitsPacked,
-                nearBudget,
-                randWord
-            );
-        }
+        _awardDailyCoinToTraitWinners(
+            minLevel,
+            maxLevel,
+            bonusTraitsPacked,
+            _calcDailyCoinBudget(lvl, currLevel),
+            randWord
+        );
     }
 
     /// @dev Emit DailyWinningTraits without running any distribution.
@@ -2127,16 +2108,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         emit DailyWinningTraits(questDay, mainTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
     }
 
-    /// @dev Awards FLIP to per-pull random ticket holders across [minLevel, maxLevel].
+    /// @dev Awards a coin draw over trait-matched ticket holders across [minLevel, maxLevel].
     ///      Each pull samples its own random level via keccak256(randomWord, FLIP_LEVEL_TAG, i)
-    ///      and rotates trait deterministically via i % 4. The budget is split into whole
-    ///      100-FLIP units and the pull count floored to the units available, so every
-    ///      pull is worth at least one unit and every pull is worth the SAME; empty
-    ///      (lvl', trait_i) buckets silently skip and their share is simply not minted.
-    ///      The uneven-division leftover and the sub-100-FLIP budget remainder evaporate.
-    ///      Per-trait deity addresses are cached at loop entry. Each (level, trait) owns
-    ///      an independent eight-lane cursor, seeded by keccak256(randomWord, trait, level,
-    ///      firstPull). Level selection stays independent for every scheduled pull.
+    ///      and rotates trait deterministically via i % 4. The CRAPS half runs first, on pulls
+    ///      0 .. _crapsPulls(budget) - 1; the COIN half on pulls COIN_DRAW_HALF_SLOTS onward,
+    ///      as many as it has whole equal shares for (_coinDrawPlan). Empty (lvl', trait_i)
+    ///      buckets skip; an unfilled coin share is not minted. Per-trait deity addresses are
+    ///      cached at loop entry. Each (level, trait) owns an independent eight-lane cursor.
     function _awardDailyCoinToTraitWinners(
         uint24 minLevel,
         uint24 maxLevel,
@@ -2162,88 +2140,145 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             unchecked { ++t; }
         }
 
-        // COMP MODE, iff one nominal quadrant — a quarter of the budget — independently funds
-        // at least one whole normal Craps day pass. The chosen quadrant pays whole day-pass
-        // comps instead of FLIP, and only what Craps ACTUALLY banked leaves the FLIP budget.
-        // Quadrant 4 is the DISABLED sentinel: no pull index is 4 mod 4, so the skip in the
-        // shared loop below goes dead and the historical path runs unchanged.
-        uint256 compQuadrant = 4;
-        uint256 spent;
-        if (coinBudget >= 4 * NORMAL_DAY_PASS_VALUE) {
-            compQuadrant = EntropyLib.hash2(randomWord, uint256(FLIP_CRAPS_COMP_TAG)) & 3;
-            spent = _payCrapsComps(
-                minLevel,
-                maxLevel,
-                traitIds[compQuadrant],
-                deityCache[compQuadrant],
-                compQuadrant,
-                coinBudget / (4 * NORMAL_DAY_PASS_VALUE),
-                randomWord
-            );
-        }
-
-        // Flooring the pull count to the whole 100-FLIP units the budget covers makes every
-        // pull worth at least one unit, so the split is plain integer arithmetic and no winner
-        // is ever credited zero. In comp mode the divisor is the SCHEDULED non-comp pull count
-        // — 37 where quadrant 0 or 1 went comp, 38 where 2 or 3 did — and it needs no
-        // min(units, pulls) clamp: at least three quarters of a four-pass budget remains, 684
-        // whole units against at most 38 pulls, so the share can never floor to zero.
-        uint256 units = (coinBudget - spent) / FlipRoundLib.FLIP_ROUND_UNIT;
-        uint256 cap;
-        uint256 end;
-        if (compQuadrant == 4) {
-            cap = units < DAILY_COIN_MAX_WINNERS ? units : DAILY_COIN_MAX_WINNERS;
-            end = cap;
-        } else {
-            cap = 37 + (compQuadrant >> 1);
-            end = DAILY_COIN_MAX_WINNERS;
-        }
-        if (cap == 0) return;
-
-        // Every paid pull carries the SAME amount. The `units % cap` leftover is simply not
-        // minted: an equal share is worth more than a fully-spent budget, because no winner can
-        // hold their pull against a neighbour's and find it short.
-        uint256 amount = (units / cap) * FlipRoundLib.FLIP_ROUND_UNIT;
         uint24 range = maxLevel - minLevel + 1;
-
-        // Winners pack densely behind a cursor and the arrays shrink to the packed count, so
-        // the one batch call carries no zero pairs for skipped or comp-quadrant pulls.
-        address[] memory batchPlayers = new address[](cap);
-        uint256[] memory batchAmounts = new uint256[](cap);
         PackedTicketSampleLib.Cursor[] memory cursors = new PackedTicketSampleLib.Cursor[](uint256(range) * 4);
-        uint256 found;
 
-        for (uint256 i; i < end; ) {
-            uint8 traitIdx = uint8(i % 4);
-            if (traitIdx == compQuadrant) {
-                unchecked { ++i; }
-                continue;
+        uint256 pulls = _crapsPulls(coinBudget);
+        address[] memory craps = new address[](pulls);
+        uint24[] memory crapsLvls = new uint24[](pulls);
+        uint256 n;
+        for (uint256 i; i < pulls; ) {
+            (address winner, uint24 lvlPrime, ) = _drawCoinEntry(
+                minLevel, range, traitIds[i & 3], deityCache[i & 3], randomWord, i, cursors
+            );
+            if (winner != address(0)) {
+                craps[n] = winner;
+                crapsLvls[n] = lvlPrime;
+                unchecked { ++n; }
             }
-            uint8 trait_i = traitIds[traitIdx];
+            unchecked { ++i; }
+        }
+        assembly ("memory-safe") {
+            mstore(craps, n)
+            mstore(crapsLvls, n)
+        }
 
+        (uint256 fullDays, uint256 amount, uint256 cap) = _coinDrawPlan(coinBudget, n);
+        address[] memory coin = new address[](cap);
+        uint256 paid;
+        for (uint256 i = COIN_DRAW_HALF_SLOTS; i < COIN_DRAW_HALF_SLOTS + cap; ) {
+            uint8 traitIdx = uint8(i & 3);
+            uint8 trait_i = traitIds[traitIdx];
             (address winner, uint24 lvlPrime, uint256 ticketIdx) = _drawCoinEntry(
                 minLevel, range, trait_i, deityCache[traitIdx], randomWord, i, cursors
             );
-
             if (winner != address(0)) {
                 emit JackpotFlipWin(winner, lvlPrime, trait_i, amount, ticketIdx);
-                batchPlayers[found] = winner;
-                batchAmounts[found] = amount;
-                unchecked { ++found; }
+                coin[paid] = winner;
+                unchecked { ++paid; }
             }
-
             unchecked { ++i; }
         }
+        _finishCoinDraw(craps, crapsLvls, fullDays, coin, 0, paid, amount);
+    }
 
-        if (found != 0) {
-            // Shrink the arrays to the packed winner count — writes only the length fields of
-            // this function's own allocations.
-            assembly ("memory-safe") {
-                mstore(batchPlayers, found)
-                mstore(batchAmounts, found)
-            }
-            coinflip.creditFlipBatch(batchPlayers, batchAmounts);
+    /// @dev How many craps-half pulls a budget draws: one per whole opener seat its craps half
+    ///      covers, at most COIN_DRAW_HALF_SLOTS.
+    function _crapsPulls(uint256 budget) private pure returns (uint256 pulls) {
+        pulls = (budget >> 1) / CRAPS_OPENER_SEAT_VALUE;
+        if (pulls > COIN_DRAW_HALF_SLOTS) pulls = COIN_DRAW_HALF_SLOTS;
+    }
+
+    /// @dev Split a coin draw once its `n` craps winners are known. The craps half seats every
+    ///      one of them on tomorrow's opener (n never exceeds what the half covers) and spends
+    ///      what is left upgrading seats to tomorrow's whole day, CRAPS_DAY_UPGRADE_VALUE each.
+    ///      Whatever the craps half does not spend joins the coin half, which pays up to
+    ///      COIN_DRAW_HALF_SLOTS winners one equal whole-unit share each; the sub-share remainder
+    ///      is not minted, so no share can be short.
+    /// @return fullDays Seats upgraded to the whole day, taken from the front.
+    /// @return amount   One coin winner's share, in whole FLIP_ROUND_UNITs.
+    /// @return cap      How many coin shares the budget funds.
+    function _coinDrawPlan(uint256 budget, uint256 n)
+        private
+        pure
+        returns (uint256 fullDays, uint256 amount, uint256 cap)
+    {
+        unchecked {
+            uint256 left = (budget >> 1) - n * CRAPS_OPENER_SEAT_VALUE;
+            fullDays = left / CRAPS_DAY_UPGRADE_VALUE;
+            if (fullDays > n) fullDays = n;
+            uint256 units = (budget - n * CRAPS_OPENER_SEAT_VALUE - fullDays * CRAPS_DAY_UPGRADE_VALUE)
+                / FlipRoundLib.FLIP_ROUND_UNIT;
+            cap = units < COIN_DRAW_HALF_SLOTS ? units : COIN_DRAW_HALF_SLOTS;
+            if (cap != 0) amount = (units / cap) * FlipRoundLib.FLIP_ROUND_UNIT;
         }
+    }
+
+    /// @dev Pay a drawn coin draw: seat each craps winner on tomorrow (the first `fullDays` for
+    ///      the whole day, the rest on its opener), then credit, in one batch, the `paid` coin
+    ///      winners at coin[coinOff ..] their share and every refused Craps winner the award's
+    ///      value (a full-day award normally banks a pass, see _seatOnTable) — a refusal
+    ///      changes the form the winner holds the value in, not how much the draw pays.
+    function _finishCoinDraw(
+        address[] memory craps,
+        uint24[] memory crapsLvls,
+        uint256 fullDays,
+        address[] memory coin,
+        uint256 coinOff,
+        uint256 paid,
+        uint256 amount
+    ) private {
+        uint256 n = craps.length;
+        address[] memory players = new address[](paid + n);
+        uint256[] memory amounts = new uint256[](paid + n);
+        uint256 k;
+        unchecked {
+            for (; k < paid; ++k) {
+                players[k] = coin[coinOff + k];
+                amounts[k] = amount;
+            }
+            for (uint256 i; i < n; ++i) {
+                address w = craps[i];
+                bool day = i < fullDays;
+                uint256 flipOwed = _seatOnTable(w, day);
+                emit CoinDrawCrapsWin(w, crapsLvls[i], day, flipOwed != 0);
+                if (flipOwed != 0) {
+                    players[k] = w;
+                    amounts[k] = flipOwed;
+                    ++k;
+                }
+            }
+        }
+        if (k != 0) {
+            assembly ("memory-safe") {
+                mstore(players, k)
+                mstore(amounts, k)
+            }
+            coinflip.creditFlipBatch(players, amounts);
+        }
+    }
+
+    /// @dev Pay one craps winner. A whole day banks one normal pass (spendable only
+    ///      on a future day whose word does not exist yet); if its bank is saturated,
+    ///      the winner takes its full value in FLIP. An opener is a seat on tomorrow's opener — the first
+    ///      window no word has drawn — through the comp door as kind 5, period 0, count one; it
+    ///      is refused, and owed CRAPS_OPENER_SEAT_VALUE (the opener's expected cost) in FLIP,
+    ///      for the vault or sDGNRS (`openBonusDay` seats both for the whole day, which an opener
+    ///      claim would stand down) and for any claim on tomorrow in the table's
+    ///      `_daySeated[tomorrow * 8]`, including a seat this same draw just wrote.
+    /// @return flipOwed Zero if delivered; the refused award's value otherwise.
+    function _seatOnTable(address w, bool day) private returns (uint256 flipOwed) {
+        ICrapsCoinDrawSeat table = ICrapsCoinDrawSeat(ContractAddresses.CRAPS);
+        if (day) {
+            return table.creditPasses(w, 1, 0) == 0 ? NORMAL_DAY_PASS_VALUE : 0;
+        }
+        uint256 tomorrow = uint256(_simulatedDayIndex()) + 1;
+        bytes32 claims = keccak256(abi.encode(tomorrow * 8, CRAPS_DAY_SEATED_SLOT));
+        if (
+            w == ContractAddresses.VAULT || w == ContractAddresses.SDGNRS
+                || table.extsload(keccak256(abi.encode(w, claims))) != 0
+        ) return CRAPS_OPENER_SEAT_VALUE;
+        table.vaultComp(uint256(uint160(w)) | (tomorrow << 176) | (uint256(1) << 200) | (uint256(5) << 160));
     }
 
     /// @dev Keep the existing independent level draw for each pull. Only repeated draws
@@ -2269,129 +2304,71 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev The comp quadrant's own leg: walk its scheduled pull indices in ascending order —
-    ///      the same level and holder hashes, the same deity weighting, the same duplicate
-    ///      semantics as the FLIP path — until `min(fundableComps, 6)` nonzero winning slots
-    ///      are found or the pulls run out. Every funded whole comp is then spread over the
-    ///      slots actually found, counts differing by at most one, with the +1 window's start
-    ///      rotated by its own domain hash so array position confers no standing advantage.
-    /// @return spent The FLIP value Craps actually banked — credited counts only, so a
-    ///         saturated lane's refusal stays in the caller's FLIP budget.
-    function _payCrapsComps(
-        uint24 minLevel,
-        uint24 maxLevel,
-        uint8 trait,
-        address deity,
-        uint256 quadrant,
-        uint256 fundableComps,
-        uint256 randomWord
-    ) private returns (uint256 spent) {
-        address[CRAPS_COMP_MAX_SLOTS] memory winners;
-        uint24[CRAPS_COMP_MAX_SLOTS] memory levels;
-        uint256[CRAPS_COMP_MAX_SLOTS] memory ticketIdxs;
+    /// @dev Purchase-day coin draw over unminted future levels. Wallets are drawn level by level:
+    ///      pick an unvisited level in [lvl + 1, lvl + 99], walk its far-future queue from a random
+    ///      lane (one lane per wallet registration, each taken at most once) until the draw has
+    ///      its wallets or the level is exhausted, then pick again. Every wallet on a walked level
+    ///      is equally likely to be included. At most FUTURE_FLIP_LEVEL_PICKS picks, so empty
+    ///      levels bound the gas. The first _crapsPulls(budget) wallets are the craps half, the
+    ///      rest the coin half (see _coinDrawPlan).
+    function _awardFutureCoinFill(uint24 lvl, uint256 coinBudget, uint256 rngWord) private {
+        if (coinBudget == 0) return;
+        uint256 entropy = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
+
+        uint256 pulls = _crapsPulls(coinBudget);
+        uint256 want = pulls + COIN_DRAW_HALF_SLOTS;
+        address[] memory winners = new address[](want);
+        uint24[] memory winnerLevels = new uint24[](want);
         uint256 found;
-        uint256 target =
-            fundableComps < CRAPS_COMP_MAX_SLOTS ? fundableComps : CRAPS_COMP_MAX_SLOTS;
-        uint24 range = maxLevel - minLevel + 1;
-        PackedTicketSampleLib.Cursor[] memory cursors = new PackedTicketSampleLib.Cursor[](uint256(range) * 4);
-
-        for (uint256 i = quadrant; i < DAILY_COIN_MAX_WINNERS && found < target; ) {
-            (address winner, uint24 lvlPrime, uint256 ticketIdx) = _drawCoinEntry(
-                minLevel, range, trait, deity, randomWord, i, cursors
-            );
-            if (winner != address(0)) {
-                winners[found] = winner;
-                levels[found] = lvlPrime;
-                ticketIdxs[found] = ticketIdx;
-                unchecked { ++found; }
+        uint256 visited;
+        for (uint256 pick; pick < FUTURE_FLIP_LEVEL_PICKS && found < want; ) {
+            entropy = EntropyLib.hash2(entropy, pick);
+            uint256 offset = entropy % 99;
+            if ((visited >> offset) & 1 == 0) {
+                visited |= uint256(1) << offset;
+                uint24 candidate = lvl + 1 + uint24(offset);
+                uint256[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
+                uint256 len = queue.length;
+                if (len != 0) {
+                    uint256 take = want - found;
+                    if (take > len) take = len;
+                    uint256 idx = (entropy >> 128) % len;
+                    uint256 word = _tqWordAt(queue, idx);
+                    for (uint256 k; k < take; ) {
+                        winners[found] = address(uint160(
+                            _entryRecord(candidate, uint32(word >> ((idx & 7) << 5)))
+                        ));
+                        winnerLevels[found] = candidate;
+                        unchecked {
+                            ++found;
+                            ++k;
+                            ++idx;
+                        }
+                        if (idx == len) idx = 0;
+                        if (idx & 7 == 0 && k < take) word = _tqWordAt(queue, idx);
+                    }
+                }
             }
-            unchecked { i += 4; }
+            unchecked { ++pick; }
         }
-        if (found == 0) return 0;
+        if (found == 0) return;
 
-        uint256 base = fundableComps / found;
-        uint256 extra = fundableComps % found;
-        uint256 extraStart = extra == 0
-            ? 0
-            : EntropyLib.hash2(randomWord, uint256(FLIP_CRAPS_COMP_EXTRA_TAG)) % found;
-
-        for (uint256 s; s < found; ) {
-            uint256 count = base + (((s + found - extraStart) % found) < extra ? 1 : 0);
-            // Unreachable at any real budget — the cap merely makes the cast provable.
-            if (count > type(uint32).max) count = type(uint32).max;
-            uint32 credited = ICrapsCompPassCredit(ContractAddresses.CRAPS).creditPasses(
-                winners[s],
-                uint32(count),
-                0
-            );
-            if (credited != 0) {
-                spent += uint256(credited) * NORMAL_DAY_PASS_VALUE;
-                emit JackpotCrapsCompWin(winners[s], levels[s], trait, credited, ticketIdxs[s]);
-            }
-            unchecked { ++s; }
+        uint256 n = found < pulls ? found : pulls;
+        address[] memory craps = new address[](n);
+        uint24[] memory crapsLvls = new uint24[](n);
+        for (uint256 i; i < n; ) {
+            craps[i] = winners[i];
+            crapsLvls[i] = winnerLevels[i];
+            unchecked { ++i; }
         }
-    }
-
-    /// @dev Awards 25% of the FLIP coin budget to random ticket holders on one far-future level.
-    ///      Picks one level in [lvl+5, lvl+99] and draws up to FAR_FUTURE_FLIP_SAMPLES winners
-    ///      from that level's ticketQueue through one cached packed word (traits not yet
-    ///      assigned), then splits the budget into whole 100-FLIP units across a prefix of the
-    ///      draws, an equal share each. A queue shorter than the sample count rotates through
-    ///      its entries, so each entry keeps its uniform weight.
-    function _awardFarFutureCoinJackpot(
-        uint24 lvl,
-        uint256 farBudget,
-        uint256 rngWord
-    ) private {
-        if (farBudget == 0) return;
-
-        uint256 entropy = uint256(
-            keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG))
-        );
-
-        // Pick a random level in [lvl+5, lvl+99]
-        uint24 candidate = lvl + 5 + uint24(entropy % 95);
-
-        uint256[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
-        uint256 len = queue.length;
-        if (len == 0) return;
-
-        // Whole 100-FLIP units, one minimum per paid draw. Draws are sequential lanes of
-        // one uniformly chosen word, so paying a prefix introduces no new choice. Every
-        // paid draw receives the SAME amount; the `units % payCount` leftover and the
-        // sub-100-FLIP budget remainder both evaporate.
-        uint256 units = farBudget / FlipRoundLib.FLIP_ROUND_UNIT;
-        uint256 payCount = len < FAR_FUTURE_FLIP_SAMPLES ? len : FAR_FUTURE_FLIP_SAMPLES;
-        if (units < payCount) payCount = units;
-        if (payCount == 0) return;
-
-        uint256 amount = (units / payCount) * FlipRoundLib.FLIP_ROUND_UNIT;
-
-        PackedTicketSampleLib.Cursor memory cursor;
-        uint256 base = PackedTicketSampleLib.begin(cursor, len, entropy >> 32);
-        cursor.word = _tqWordAt(queue, base);
-
-        address[] memory batchPlayers = new address[](payCount);
-        uint256[] memory batchAmounts = new uint256[](payCount);
-
-        for (uint256 i; i < payCount; ) {
-            (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, len);
-            uint256 word = redrawn ? _tqWordAt(queue, index) : cursor.word;
-            address winner = address(
-                uint160(_entryRecord(candidate, uint32(word >> ((index & 7) << 5))))
-            );
-
-            emit FarFutureFlipJackpotWinner(winner, lvl, candidate, amount);
-
-            batchPlayers[i] = winner;
-            batchAmounts[i] = amount;
-
-            unchecked {
-                ++i;
-            }
+        (uint256 fullDays, uint256 amount, uint256 cap) = _coinDrawPlan(coinBudget, n);
+        uint256 paid = found - n;
+        if (paid > cap) paid = cap;
+        for (uint256 i; i < paid; ) {
+            emit FarFutureFlipJackpotWinner(winners[n + i], lvl, winnerLevels[n + i], amount);
+            unchecked { ++i; }
         }
-
-        coinflip.creditFlipBatch(batchPlayers, batchAmounts);
+        _finishCoinDraw(craps, crapsLvls, fullDays, winners, n, paid, amount);
     }
 
     /// @dev Roll winning traits with hero symbol override.
@@ -2480,19 +2457,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         bonusPacked = JackpotBucketLib.packWinningTraits(traits);
     }
 
-    /// @dev Emits the daily winning-traits event with the bonus target level
-    ///      derived from the day's VRF word (lvl+1 .. lvl+4).
+    /// @dev Emits the daily winning-traits event (bonusTargetLevel: see DailyWinningTraits).
     function _emitDailyWinningTraits(
         uint24 questDay,
         uint32 mainTraitsPacked,
         uint32 bonusTraitsPacked,
-        uint256 randWord,
-        uint24 lvl
+        uint24 lvl,
+        uint24 bonusTargetLevel
     ) private {
-        uint256 coinEntropy = uint256(
-            keccak256(abi.encode(randWord, lvl, FLIP_JACKPOT_TAG))
-        );
-        uint24 bonusTargetLevel = lvl + 1 + uint24(coinEntropy % 4);
         // Persist the day's two winning sets + cycle level for the foil claim to
         // read (foil == jackpot by construction). One write per day.
         dailyFoilDraw[questDay] = _packFoilDraw(

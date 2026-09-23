@@ -91,14 +91,14 @@ EXEMPT-ADVANCE	PARAM	randWord	_payEarlyBirdTickets	modules/DegenerusGameAdvanceM
 EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payEarlyBirdTickets	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payEarlyBirdTickets from the advance stack
 EXEMPT-ADVANCE	PARAM	randWord	_payDailyCoinJackpot	modules/DegenerusGameAdvanceModule.sol	advance-only wrapper (purchaseLevel==1 path) for payDailyFlipJackpot; randWord is the rngGate word or its BONUS_TRAITS_TAG salt
 EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payDailyCoinJackpot	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payDailyFlipJackpot from the advance stack
+EXEMPT-ADVANCE	PARAM	randWord	_payDailyFutureCoinJackpot	modules/DegenerusGameAdvanceModule.sol	advance-only wrapper for payDailyFutureFlipJackpot; randWord is the rngGate word or its BONUS_TRAITS_TAG salt (level 1)
+EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_JACKPOT_MODULE.delegatecall	_payDailyFutureCoinJackpot	modules/DegenerusGameAdvanceModule.sol	delegatecall into JackpotModule.payDailyFutureFlipJackpot from the advance stack
 EXEMPT-ADVANCE	ARG	coinflip.processCoinflipPayouts	rngGate	modules/DegenerusGameAdvanceModule.sol	rngGate forwards the word _applyDailyRng just sealed for `day`; the coinflip day result is stored once per epoch
 EXEMPT-ADVANCE	ARG	quests.rollDailyQuest	rngGate	modules/DegenerusGameAdvanceModule.sol	rngGate forwards the sealed day word; the forces come from frozen protocol flags; rolled only on the wall day
 EXEMPT-ADVANCE	PARAM	word	_resolvePendingRedemption	modules/DegenerusGameAdvanceModule.sol	advance-only: roll uint16((word>>8)%151+25) on the sealed day word for the sentinel-stamped burn day; single pool sentinel, one-shot
 EXEMPT-ADVANCE	ARG	sdgnrs.resolveRedemptionPeriod	_resolvePendingRedemption	modules/DegenerusGameAdvanceModule.sol	cross-contract seam: GAME-only write of redemptionPeriods[toResolve] from the sealed word; pool stamped at submit, resolved once
 PRODUCER	PARAM	rngWord	_finalizeLootboxRng	modules/DegenerusGameAdvanceModule.sol	lands the applied daily/game-over word into lootboxRngWordByIndex[LR_INDEX-1] once (!=0 guard); index request-advanced
 EXEMPT-ADVANCE	ARG	coinflip.processCoinflipPayouts	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	game-over terminal flow forwards the just-applied word to settle the final day's flips (bonus 0)
-EXEMPT-ADVANCE	PARAM	entropy	_processFutureTicketBatch	modules/DegenerusGameAdvanceModule.sol	advance-only wrapper: today's sealed word drives the ticket drain's rarity rolls via MintModule
-EXEMPT-ADVANCE	ARG	ContractAddresses.GAME_MINT_MODULE.delegatecall	_processFutureTicketBatch	modules/DegenerusGameAdvanceModule.sol	delegatecall into MintModule.processFutureTicketBatch from the advance stack
 PRODUCER	ARG	vrfCoordinator.requestRandomWords	_tryRequestRng	modules/DegenerusGameAdvanceModule.sol	game-over-path VRF request (try/catch); _finalizeRngRequest sets the lock and advances LR_INDEX
 PRODUCER	ARG	vrfCoordinator.requestRandomWords	_requestVrfWord	modules/DegenerusGameAdvanceModule.sol	the single-word VRF request behind _requestRng / requestLootboxRng; lock and index bookkeeping follow in _finalizeRngRequest
 PRODUCER	PARAM	vrfWord	_backfillGapDays	modules/DegenerusGameAdvanceModule.sol	derives keccak(vrfWord, gapDay) per stalled day into rngWordByDay[gapDay]; vrfWord is the first post-gap word, absent when the gap-day flips were placed; the 120-day cap leaves days beyond startDay+120 unworded
@@ -160,23 +160,20 @@ EXEMPT-ADVANCE	PARAM	entropy	_handleSoloBucketWinner	modules/DegenerusGameJackpo
 EXEMPT-ADVANCE	PARAM	entropy	_processSoloBucketWinner	modules/DegenerusGameJackpotModule.sol	private advance-stack: the solo winner's lootbox/ticket split off the threaded entropy
 EXEMPT-ADVANCE	PARAM	entropy	_rollHeroSymbol	modules/DegenerusGameJackpotModule.sol	private view: weighted pick keccak(entropy, HERO_SYMBOL_TAG, day) over dailyHeroWagers[day], every caller passing day = dailyIdx (frozen; live bets key the wall-clock day, a disjoint slot)
 EXEMPT-ADVANCE	PARAM	randomWord	_randTraitTicket	modules/DegenerusGameJackpotModule.sol	private advance sampler: random aligned words and rotated lanes over the frozen trait bucket plus deity virtual entries; partial-word padding is redrawn over the whole valid range
-EXEMPT-ADVANCE	PARAM	randWord	payDailyFlipJackpot	modules/DegenerusGameJackpotModule.sol	delegatecall target of the advance's _payDailyCoinJackpot wrapper; bonus traits + near/far FLIP draws off the word
-EXEMPT-ADVANCE	PARAM	randWord	_runFlipJackpot	modules/DegenerusGameJackpotModule.sol	private advance-stack: 25% far-future queue (lock-frozen), 75% near-future lvlTraitEntry draws, all keccak of the word
+EXEMPT-ADVANCE	PARAM	randWord	payDailyFlipJackpot	modules/DegenerusGameJackpotModule.sol	delegatecall target of the advance's _payDailyCoinJackpot wrapper; bonus traits + trait-matched FLIP draw off the word
+EXEMPT-ADVANCE	PARAM	randWord	payDailyFutureFlipJackpot	modules/DegenerusGameJackpotModule.sol	delegatecall target of the advance's _payDailyFutureCoinJackpot wrapper; purchase-day fill draw off the word
+EXEMPT-ADVANCE	PARAM	randWord	_runFlipJackpot	modules/DegenerusGameJackpotModule.sol	private advance-stack: whole budget to trait-matched lvlTraitEntry draws on minted levels, keccak of the word
 EXEMPT-ADVANCE	PARAM	randWord	emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	msg.sender==GAME (Game self-call from the advance); event-only trait / bonus-level rolls off the word
 PURE-DERIVE	ARG	EntropyLib.hash2	emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	hash2(randWord, BONUS_TRAITS_TAG) salted bonus roll; pure
-EXEMPT-ADVANCE	PARAM	randomWord	_awardDailyCoinToTraitWinners	modules/DegenerusGameJackpotModule.sol	private advance-stack near-future FLIP draw: lvlPrime and holder idx keccak of the word; comp quadrant hash2(word, COMP_TAG) & 3
-PURE-DERIVE	ARG	EntropyLib.hash2	_awardDailyCoinToTraitWinners	modules/DegenerusGameJackpotModule.sol	hash2(randomWord, FLIP_CRAPS_COMP_TAG) & 3: which quadrant pays craps comps; pure
-EXEMPT-ADVANCE	PARAM	randomWord	_payCrapsComps	modules/DegenerusGameJackpotModule.sol	private advance-stack: comp winners keccak of the word over lvlTraitEntry; passes credited via CRAPS.creditPasses
-PURE-DERIVE	ARG	EntropyLib.hash2	_payCrapsComps	modules/DegenerusGameJackpotModule.sol	hash2(randomWord, COMP_EXTRA_TAG) % found: where the remainder passes start; pure
-EXEMPT-ADVANCE	PARAM	rngWord	_awardFarFutureCoinJackpot	modules/DegenerusGameJackpotModule.sol	private advance-stack far-future FLIP draw: keccak(rngWord, lvl, TAG) chain over ticketQueue (far-future pushes RngLocked across the window)
-PURE-DERIVE	ARG	PackedTicketSampleLib.begin	_awardFarFutureCoinJackpot	modules/DegenerusGameJackpotModule.sol	word selection over the chosen level's nonempty frozen far-future queue; cursor is local to one level
+EXEMPT-ADVANCE	PARAM	randomWord	_awardDailyCoinToTraitWinners	modules/DegenerusGameJackpotModule.sol	private advance-stack coin draw: lvlPrime and holder idx keccak of the word per pull; craps half pulls 0.., coin half pulls 25..
+EXEMPT-ADVANCE	PARAM	rngWord	_awardFutureCoinFill	modules/DegenerusGameJackpotModule.sol	private advance-stack purchase-day fill draw: keccak(rngWord, lvl, TAG) chain picks levels and walk starts over frozen far-future queues (new far-future registrations revert across the lock)
+PURE-DERIVE	ARG	EntropyLib.hash2	_awardFutureCoinFill	modules/DegenerusGameJackpotModule.sol	hash2 chain over the pick index for level picks and walk starts; pure
 EXEMPT-ADVANCE	PARAM	randWord	_rollWinningTraits	modules/DegenerusGameJackpotModule.sol	private view: base traits pure in the word, hero override from dailyHeroWagers[dailyIdx] (frozen slot)
 PURE-DERIVE	ARG	JackpotBucketLib.getRandomTraits	_rollWinningTraits	modules/DegenerusGameJackpotModule.sol	pure trait roll from the word
 PURE-DERIVE	ARG	EntropyLib.hash2	_rollWinningTraits	modules/DegenerusGameJackpotModule.sol	hash2(randWord, BONUS_TRAITS_TAG) bonus-trait salt; pure
 EXEMPT-ADVANCE	PARAM	randWord	_rollWinningTraitsPair	modules/DegenerusGameJackpotModule.sol	private view: main + bonus traits off the word; both heroes rolled over dailyHeroWagers[dailyIdx] (frozen; bonus excludes the main slot)
 PURE-DERIVE	ARG	JackpotBucketLib.getRandomTraits	_rollWinningTraitsPair	modules/DegenerusGameJackpotModule.sol	pure trait roll from the word
 PURE-DERIVE	ARG	EntropyLib.hash2	_rollWinningTraitsPair	modules/DegenerusGameJackpotModule.sol	hash2(randWord, BONUS_TRAITS_TAG); pure
-EXEMPT-ADVANCE	PARAM	randWord	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	private event-only: bonusTargetLevel keccak(randWord, lvl, FLIP_JACKPOT_TAG) % 4; no value moves
 PURE-DERIVE	PARAM	randWord	_dailyCurrentPoolBps	modules/DegenerusGameJackpotModule.sol	private pure keccak(randWord, DAILY_CURRENT_BPS_TAG, counter) -> 6-14% budget share
 EXEMPT-ADVANCE	PARAM	rngWord	runBafJackpot	modules/DegenerusGameJackpotModule.sol	msg.sender==address(this) (Game self-call from _consolidate, fire bit rngWord&1); winners from DegenerusJackpots, recirc rolls hash2-chained
 EXEMPT-ADVANCE	ARG	jackpots.runBafJackpot	runBafJackpot	modules/DegenerusGameJackpotModule.sol	forwards the transition word to DegenerusJackpots.runBafJackpot (onlyGame) for the winner set
@@ -220,7 +217,7 @@ CONSUMER-SEALED	ARG	ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall	_call
 PURE-DERIVE	PARAM	seed	_lootboxTicketCount	modules/DegenerusGameLootboxModule.sol	private pure ticket count from budget x _ticketVarianceBps(seed)
 PURE-DERIVE	PARAM	seed	_ticketVarianceBps	modules/DegenerusGameLootboxModule.sol	private pure bits 96..119 of the seed -> variance tier
 PURE-DERIVE	PARAM	entropy	_lootboxDgnrsReward	modules/DegenerusGameLootboxModule.sol	private pure tier roll bits 56..79; the pool balance is a magnitude
-EXEMPT-ADVANCE	PARAM	entropy	processFutureTicketBatch	modules/DegenerusGameMintModule.sol	advance delegatecall target (AdvanceModule._processFutureTicketBatch); today's sealed word drives rarity rolls for the queued tickets
+EXEMPT-ADVANCE	PARAM	entropy	_processFutureTicketBatch	modules/DegenerusGameMintModule.sol	private: processTicketBatch far-future continuation; entropy is the sweep's committed lootboxRngWordByIndex word, requested after the pool froze at the last-purchase-day seal
 EXEMPT-ADVANCE	PARAM	entropyWord	_raritySymbolBatch	modules/DegenerusGameMintModule.sol	private advance-stack trait assignment: LCG seeded keccak(baseKey, entropyWord, group); writes lvlTraitEntry (the jackpot pools)
 PURE-DERIVE	PARAM	entropy	_rollRemainder	storage/DegenerusGameStorage.sol	private pure hash2(entropy, rollSalt) % 100 < rem
 PURE-DERIVE	ARG	EntropyLib.hash2	_rollRemainder	storage/DegenerusGameStorage.sol	hash2(entropy, rollSalt): fractional-ticket roll; pure
@@ -253,7 +250,6 @@ PURE-DERIVE	ARG	PackedTicketSampleLib.begin	sampleTraitEntriesAtLevel	DegenerusG
 EXEMPT-ADVANCE	PARAM	randomWord	_drawBucketEntry	modules/DegenerusGameJackpotModule.sol	private advance sampler; caches only a sealed trait word and resolves immutable registry owners, with no external call during selection
 EXEMPT-ADVANCE	PARAM	randomWord	_drawCoinEntry	modules/DegenerusGameJackpotModule.sol	private advance sampler; preserves the per-pull level hash and uses a separate memory cursor for every frozen level and trait bucket
 NOT-RNG	PARAM	word	_bucketOwnerFromWord	storage/DegenerusGameStorage.sol	packed uint32 owner registry references loaded from a trait bucket, not an entropy word
-PURE-DERIVE	ARG	PackedTicketSampleLib.begin	sampleFarFutureTickets	DegenerusGame.sol	BAF samples a frozen far-future level in a nonempty range; the remaining entropy selects its packed word and lane rotation.
 PURE-DERIVE	ARG	EntropyLib.hash2	sampleFarFutureTickets	DegenerusGame.sol	Mix the committed entropy and filled candidate count for another level when fewer than four slots have been filled.
 CONSUMER-SEALED	PARAM	menuWord	_drawProtocolBoons	modules/DegenerusGameBoonModule.sol	Previous-day word selects the published next-day deity menu; absent predecessor falls back to the finalized award-day word after entries close; pure issuer/day/slot mix separate from the winner domain
 CONSUMER-SEALED	PARAM	winnerWord	_drawProtocolBoons	modules/DegenerusGameBoonModule.sol	Award-day finalized word selects closed prior-day cumulative intervals; entries and snapshotted scores cannot change after the calendar day closes

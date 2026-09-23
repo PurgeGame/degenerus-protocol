@@ -605,44 +605,55 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     // L. The far-future barrier
     // ---------------------------------------------------------------------
 
-    /// The crossing contract: when level L's transition runs, the far-future key of
-    /// L+5 (the level that just became near) is drained WHOLE before the transition
-    /// can complete — and from the arm's level increment onward that key is
-    /// write-dead (the distance routing sends every target <= level+5 to the plain
-    /// window keys), so it never holds content again.
+    /// The crossing contract: level L's purchase-day SEAL (_sealPurchaseDay, or the
+    /// same-day turbo latch) opens the ceiling to level + 2, moving the (level + 2) far
+    /// key from far-future to near. Its frozen content is drained as a continuation of
+    /// MintModule.processTicketBatch on the first buffer swap/RNG request after the
+    /// seal — the level-promoting last-purchase request — strictly before the
+    /// consolidation step that flips jackpotPhaseFlag. So by the time the jackpot phase
+    /// for the promoted level L (= programLevel + 1) is observably active, the
+    /// (L + 1) far key must already be WHOLE-drained, and from there on routing never
+    /// sends a target <= the (now-near) ceiling back to that far-future key, so it
+    /// never holds content again.
     function testFarFutureBarrierCrossesWholeAndNeverRefills() public {
         vm.pauseGasMetering();
-        _driveToJackpotPhase();
-        _drainUntilUnlocked();
-        assertTrue(game.jackpotPhase(), "harness: must be inside the jackpot phase");
-        uint24 L = _level();
-        uint24 ffKey = (L + 5) | TICKET_FAR_FUTURE_BIT;
+
+        // Catch the state right after the seal (lastPurchaseDay latched, RNG still
+        // unlocked) — mirrors QuestRetryDoubleRoll's _driveToLastPurchaseDay window.
+        // The seal has already opened the ceiling and crossed the far key onto the
+        // near side conceptually, but the level-promoting request (and the drain it
+        // triggers) has not fired yet, so the far-future queue is still intact here.
+        uint24 programLevel = _driveToSealedLastPurchaseDay();
+        uint24 ffKey = (programLevel + 2) | TICKET_FAR_FUTURE_BIT;
 
         // Non-vacuity: the deploy-time perpetual seeding guarantees far-future
-        // content at the crossing key before its transition.
+        // content at the crossing key before the transition drains it.
         assertGt(
             _queueLen(ffKey),
             0,
-            "reachability: the crossing key must hold far-future content pre-transition"
+            "reachability: the crossing key must hold far-future content pre-seal"
         );
 
-        // Run the phase out through the transition (the crossing drain runs inside it).
-        for (uint256 d = 0; d < 12 && game.jackpotPhase(); d++) {
+        // Run the phase out through the level-promoting request and into the jackpot
+        // phase (the crossing drain runs as a continuation inside this window, before
+        // jackpotPhaseFlag flips).
+        for (uint256 d = 0; d < 12 && !game.jackpotPhase(); d++) {
             _buyTickets();
             _runFullDay();
         }
-        require(!game.jackpotPhase(), "harness: the phase must have transitioned");
-        _runFullDay();
+        require(game.jackpotPhase(), "harness: the phase must have transitioned");
+        uint24 L = _level();
+        assertEq(L, programLevel + 1, "harness: the level must have promoted exactly once");
 
         assertEq(
             _queueLen(ffKey),
             0,
-            "the crossing drain must empty the WHOLE far key at the transition"
+            "the crossing drain must empty the WHOLE far key before the jackpot phase starts"
         );
 
         // Drive the following level with daily buys and lootbox purchases (whose award
         // rolls exercise the near-offset routing): the crossed key must never refill.
-        for (uint256 i = 0; i < 12 && _level() <= L + 1; i++) {
+        for (uint256 i = 0; i < 12 && _level() <= L; i++) {
             if (!game.jackpotPhase()) {
                 _seedNextPrizePool(500 ether);
             }
@@ -666,10 +677,10 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         }
         assertGt(_level(), L, "harness: the game must have moved past the level");
 
-        // The barrier moved exactly one level: the NEXT crossing key drained at the
-        // next transition.
+        // The barrier moved exactly one level: the NEXT crossing key (L's own seal,
+        // one full purchase phase later) drained at the next transition.
         assertEq(
-            _queueLen((L + 6) | TICKET_FAR_FUTURE_BIT),
+            _queueLen((programLevel + 3) | TICKET_FAR_FUTURE_BIT),
             0,
             "the next level's transition must have crossed the next far key"
         );
@@ -895,6 +906,39 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             }
         }
         revert("harness: did not reach jackpot phase");
+    }
+
+    /// @dev Drive to the seal of a purchase phase's last purchase day: lastPurchaseDay
+    ///      latched, RNG not yet locked, jackpot phase not yet entered. This is the
+    ///      point _sealPurchaseDay (or the same-day turbo latch) has already run —
+    ///      opening the ceiling to level + 2 and thereby crossing the (level + 2)
+    ///      far-future key — but strictly before the level-promoting RNG request that
+    ///      follows on the next day boundary and performs the actual drain. Mirrors
+    ///      QuestRetryDoubleRoll's _driveToLastPurchaseDay. Returns the un-promoted
+    ///      storage `level` value observed at the seal.
+    function _driveToSealedLastPurchaseDay() internal returns (uint24 programLevel) {
+        uint256 stalledDays;
+        for (uint256 i = 0; i < 4000; i++) {
+            require(!game.gameOver(), "harness: gameOver before the seal");
+            (uint24 lvl, bool inJackpot, bool lpd, bool rngL, ) = game.purchaseInfo();
+            if (!inJackpot && lpd && !rngL) return lvl;
+            _fulfillPending();
+            (bool ok, ) = address(game).call(
+                abi.encodeWithSignature("advanceGame()")
+            );
+            if (!ok) {
+                simTime += 1 days + 1;
+                vm.warp(simTime);
+                unchecked {
+                    ++stalledDays;
+                }
+                if (stalledDays >= 5) {
+                    _seedNextPrizePool(49.9 ether);
+                }
+                _buyTickets();
+            }
+        }
+        revert("harness: did not reach the last-purchase-day seal");
     }
 
     function _drainUntilUnlocked() internal {

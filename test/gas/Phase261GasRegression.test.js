@@ -40,7 +40,8 @@
 // measured delta sits ~900-1000 gas above the pure body opcode cost.
 //
 // Measured 4-gold worst-case delta after the pure-stack uint256-packing
-// implementation: ~1260 gas (call-frame 24260, noOp 23000). This delta includes
+// implementation with a separate no-op companion: ~1218 gas (call-frame 24218,
+// noOp 23000). This delta includes
 // the ~900 gas of inherent dispatch/decode/encode overhead PLUS the ~310-350
 // gas pure-body cost. The body-bound `PICK_SOLO_QUADRANT_HARD_BOUND = 1500`
 // gives ~200 gas headroom over the measured value to absorb minor codegen
@@ -97,7 +98,7 @@ const WEIGHTED_COLOR_BUCKET_TOLERANCE     = 100;  // ±100 gas per SURF-05
 
 // PICK_SOLO_QUADRANT_HARD_BOUND — measured-realistic ceiling on the
 // _pickSoloQuadrant body delta as exposed by the paired-empty-wrapper
-// methodology. Measured 4-gold worst-case delta: 1260 gas. Bound includes
+// methodology. Measured 4-gold worst-case delta: 1218 gas. Bound includes
 // ~200 gas headroom for compiler-codegen variance. The underlying pure-body
 // opcode cost (~310-350 gas) remains well under the original SURF-05 500-gas
 // spec target; the 1500-gas bound reflects the inherent ~900 gas of
@@ -132,7 +133,10 @@ async function deployJackpotTester() {
   const F = await hre.ethers.getContractFactory("JackpotSoloTester");
   const t = await F.deploy();
   await t.waitForDeployment();
-  return { tester: t };
+  const N = await hre.ethers.getContractFactory("JackpotSoloNoOp");
+  const companion = await N.deploy();
+  await companion.waitForDeployment();
+  return { tester: t, companion };
 }
 
 function trait(quadrant, color, symbol) {
@@ -216,12 +220,12 @@ describe("Phase 261 SURF-05 — gas regression", function () {
 
   describe("_pickSoloQuadrant — body-cost (paired-empty-wrapper delta) ≤ PICK_SOLO_QUADRANT_HARD_BOUND", function () {
     it("4-gold worst-case body delta ≤ 1500 (callFrame minus noOp companion)", async function () {
-      const { tester } = await loadFixture(deployJackpotTester);
+      const { tester, companion } = await loadFixture(deployJackpotTester);
       const traits = traitsByColors([7, 7, 7, 7]); // 4 gold quadrants — worst case
       const entropy = 0xDEADBEEFn; // arbitrary non-zero — bits 4+ drive the modulo
 
       const callFrameGas = Number(await tester.pickSoloQuadrant.estimateGas(traits, entropy));
-      const overheadGas  = Number(await tester.noOp.estimateGas(traits, entropy));
+      const overheadGas  = Number(await companion.noOp.estimateGas(traits, entropy));
       const bodyGas      = callFrameGas - overheadGas;
 
       console.log(`  [REF-CHECK] _pickSoloQuadrant call-frame=${callFrameGas} noOp=${overheadGas} body-delta=${bodyGas}`);

@@ -35,6 +35,29 @@ contract SnapValveHarness is DegenerusGameMintModule, BucketSeed {
         snapShift = s;
     }
 
+    /// @dev Drives `_mintCeiling()` for the surviving-path drivers below: near-key tests pin
+    ///      `level` so `processTicketBatch`'s read window covers the seeded LVL; the far-future
+    ///      test additionally latches `lastPurchaseDay` (ceiling = level+2) to reach LVL via the
+    ///      one-next-level FF continuation inside processTicketBatch.
+    function setLevel(uint24 lvl_) external {
+        level = lvl_;
+    }
+
+    function setLastPurchaseDay(bool v) external {
+        lastPurchaseDay = v;
+    }
+
+    function setRngLockedFlag(bool v) external {
+        rngLockedFlag = v;
+    }
+
+    /// @dev Arms the lootbox RNG word processTicketBatch lazily reads as its sweep entropy
+    ///      (mirrors the setup seedQueue already performs for the near-key tests).
+    function armEntropy(uint256 word) external {
+        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
+        lootboxRngWordByIndex[0] = word;
+    }
+
     function setPending(uint24 lvl, uint8 s) external {
         snapLevel = lvl;
         snapPendingShift = s;
@@ -70,7 +93,8 @@ contract SnapValveHarness is DegenerusGameMintModule, BucketSeed {
             _tqAppend(ffk, uint32(ownerBits >> OWNER_IDX_SHIFT));
             _seedOwedAt(ffk, p, ownerBits | (uint80(owedEach) << 8));
         }
-        // Arm the FF resume marker so processFutureTicketBatch drains the FF key.
+        // Arm the FF resume marker so the FF continuation inside processTicketBatch (the sole
+        // surviving path to the private _processFutureTicketBatch) drains the FF key.
         ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
         ticketCursor = 0;
     }
@@ -107,6 +131,11 @@ contract SnapValveTest is Test {
             ContractAddresses.GAME_FOILPACK_MODULE,
             address(new DegenerusGameFoilPackModule()).code
         );
+        // _mintCeiling() = level + 1 by default; pin level so processTicketBatch's read
+        // window [anchor-1 .. _mintCeiling()] covers LVL when every _drainAll() caller
+        // below anchors at processTicketBatch(LVL). _drainAllFuture() overrides this
+        // locally for its own far-future routing.
+        h.setLevel(LVL - 1);
     }
 
     // --- _snapOwedPacked math -------------------------------------------------
@@ -141,11 +170,23 @@ contract SnapValveTest is Test {
         }
     }
 
+    /// @dev processFutureTicketBatch is now private, always targeting `_tqFarFutureKey(lvl)`
+    ///      (no near/read-key mode, no near->FF chaining); the sole surviving path to it is
+    ///      processTicketBatch's post-window continuation, which fires only while
+    ///      the frozen pool is due (`_frozenPoolDue`: lastPurchaseDay AND the lock or a mid-day
+    ///      latch) and only for `_mintCeiling()` (the one next level). Model the last-purchase
+    ///      lock: level already bumped to LVL - 1, lock held, ceiling = level + 1 = LVL (the
+    ///      level seedFarFutureQueue armed), then drive an anchor whose read window
+    ///      [anchor-1..ceiling] scans nothing but empty read keys, so the FF branch is reached
+    ///      with no near-side work to mask it.
     function _drainAllFuture() internal returns (uint256 totalTake) {
-        uint256 entropy = uint256(keccak256("snapvalve_future_entropy")) | 1;
+        h.setLevel(LVL - 1);
+        h.setRngLockedFlag(true);
+        h.setLastPurchaseDay(true); // frozen pool due; ceiling = level+1 = LVL
+        h.armEntropy(uint256(keccak256("snapvalve_future_entropy")) | 1);
         vm.recordLogs();
         for (uint256 i; i < 200; ++i) {
-            (, bool finished, ) = h.processFutureTicketBatch(LVL, entropy);
+            (bool finished, ) = h.processTicketBatch(LVL - 1);
             if (finished) break;
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -154,18 +195,22 @@ contract SnapValveTest is Test {
         }
     }
 
-    /// Refactor guard: the future drain (shared per-entry engine) is identity at
-    /// s = 0 and divides exactly at s = 2, including a whale spanning batches.
-    function test_futureDrainDormantAndSnapped() public {
+    /// Refactor guard: the near-key drain (the per-entry engine shared with the far-future
+    /// drain) is identity at s = 0 and divides exactly at s = 2, including a whale spanning
+    /// batches. (Formerly driven through processFutureTicketBatch's now-removed near/read-key
+    /// mode; the engine is identical, so this now drives it the same way every other near-key
+    /// test in this file does — through processTicketBatch. The far-future key path itself is
+    /// covered separately by test_futureDrainFarFutureKey.)
+    function test_nearKeyDrainDormantAndSnapped() public {
         h.seedQueue(LVL, 5, 8, 0, BASE);
-        assertEq(_drainAllFuture(), 5 * 8, "future drain identity at s=0");
+        assertEq(_drainAll(), 5 * 8, "near-key drain identity at s=0");
 
         h.seedQueue(LVL, 5, 8, 0, BASE + 50);
         h.setSnapShift(2);
-        assertEq(_drainAllFuture(), 5 * 2, "future drain quarters at s=2");
+        assertEq(_drainAll(), 5 * 2, "near-key drain quarters at s=2");
 
         h.seedQueue(LVL, 1, 2000, 0, BASE + 100);
-        assertEq(_drainAllFuture(), 2000 >> 2, "whale single division across batches");
+        assertEq(_drainAll(), 2000 >> 2, "whale single division across batches");
         assertEq(h.owedPacked(LVL, address(BASE + 101)), 0, "whale cleared, no residue");
     }
 
