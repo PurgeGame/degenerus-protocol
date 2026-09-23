@@ -763,8 +763,22 @@ contract CrapsRngSealHandler is Test {
     ///         comp lane (its owner is the deployer, who holds the DGVE majority). A grant must
     ///         charge the lane exactly the passes it banked times their value, an over-ask must be
     ///         refused whole, and nothing but a grant may ever lower the lane.
+    ///         Seven requests in eight ask for one to eight passes a recipient, which the 200-pass
+    ///         lane can serve many times over; the rest keep the raw draw, so over-asks are still
+    ///         exercised. Two entry points share the body so a run lands a grant reliably: the
+    ///         suite's per-run vacuity guard needs at least one, and a raw 0..255 ask was refused
+    ///         often enough that a whole run could see none.
     function grantComps(uint256 seed, uint8 countEach) external {
-        if (countEach == 0) countEach = 1;
+        _grantComps(seed, countEach);
+    }
+
+    /// @notice A second door into the same grant, doubling how often the fuzzer draws it.
+    function grantCompsAgain(uint256 seed, uint8 countEach) external {
+        _grantComps(seed, countEach);
+    }
+
+    function _grantComps(uint256 seed, uint8 countEach) internal {
+        if (countEach < 224) countEach = 1 + (countEach % 8);
         uint256 n = 1 + (seed % 3);
         uint256[] memory reqs = new uint256[](n);
         uint256[] memory before = new uint256[](n);

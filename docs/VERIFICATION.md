@@ -53,8 +53,10 @@ whole tree; that is the figure in the evidence table. `npm test` runs only the
 unit/integration/deploy/access/edge globs plus three gas files and reports fewer tests.
 `npm run test:stat` needs `python3` on PATH: two of its suites spawn
 `scripts/data/derive_5_tables.py` (stdlib-only) as the canonical generator of the
-Degenerette payout constants. Its two expected reds are the `v36.0 SURF-01..04` protected-range
-byte-identical baseline check and `STAT-03` (empty-bucket skip rate); both are accepted.
+Degenerette payout constants. It runs fully green at the current revision: the `v36.0 SURF-03`
+check now pins the moved remainder roll, and `STAT-03` (the legacy empty-bucket skip rate) is
+skipped as superseded by the craps / FLIP split and the future fill draw. Earlier revisions
+below record those two as accepted reds.
 
 ### Static analysis
 
