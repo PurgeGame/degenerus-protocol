@@ -85,6 +85,10 @@ export const DEPLOY_ORDER = [
   // address. A pure contract with no ctor args and no deploy-time dependents:
   // CrapsBattle STATICCALLs it at runtime through a compile-time constant.
   "CRAPS_ENGINE",           // N+30: CrapsEngine
+  // Fill-draw craps battle. Appended LAST so adding it shifts no existing
+  // predicted address. No storage, no ctor args, no deploy-time dependents:
+  // GAME calls it at runtime through a compile-time constant.
+  "COIN_DRAW_BATTLE",       // N+31: CoinDrawBattle
 ];
 
 /**
@@ -122,6 +126,7 @@ export const KEY_TO_CONTRACT = {
   RECORD_BOUNTY: "DegenerusRecordBounty",
   CRAPS: "CrapsBattle",
   CRAPS_ENGINE: "CrapsEngine",
+  COIN_DRAW_BATTLE: "CoinDrawBattle",
 };
 
 /**

@@ -121,6 +121,12 @@ library ContractAddresses {
     // (nonce N+30) for the same reason as CRAPS above.
     address internal constant CRAPS_ENGINE =
         address(0xe916cadb12C49389E487eB1e8194B1459b29B0eC);
+    // The purchase-day fill draw's craps battle — appended, so it shifts no prior
+    // address. Holds no storage; only GAME may call it, and it authorizes
+    // nothing: it plays the drawn field and GAME credits the result. Committed
+    // as its Foundry deterministic-test address (nonce N+31).
+    address internal constant COIN_DRAW_BATTLE =
+        address(0x83898D1F3C03189fF03B471dd3456908FCA4423d);
     // Chainlink LINK/ETH aggregator that values LINK donations. Optional:
     // address(0) leaves DegenerusAdmin's feed slot empty, so the reward lane
     // stays dark until the feed-swap governance path installs one. Patched per

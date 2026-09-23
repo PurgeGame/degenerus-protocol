@@ -1403,8 +1403,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     }
 
     /// @dev Pay the purchase-day FLIP fill draw over unminted future levels via jackpot module
-    ///      delegatecall: the same daily coin budget, drawn from the far-future queues of
-    ///      [lvl + 1, lvl + 99].
+    ///      delegatecall: the same daily coin budget, played as one craps battle among wallets
+    ///      drawn from the far-future queues of [lvl + 1, lvl + 99].
     /// @param lvl Purchase level.
     /// @param randWord VRF random word for level picks and walks.
     function _payDailyFutureCoinJackpot(uint24 lvl, uint256 randWord) private {

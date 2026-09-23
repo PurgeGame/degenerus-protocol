@@ -190,6 +190,8 @@ contract Craps {
     uint256 private constant _HR_LOG_SHIFT = 112;
     uint256 private constant _HR_PROFIT_SHIFT = 144;
     uint256 private constant _HR_AMOUNT_MASK = (1 << 112) - 1;
+    /// @dev Where `_handCursor` packs a hand's roll bound above its 32-bit log cursor.
+    uint256 private constant _HC_BOUND_SHIFT = 128;
     uint256 private constant _HR_LOG_MASK = 0xFFFFFFFF;
 
     // ---------------------------------------------------------------------------------------
@@ -316,7 +318,8 @@ contract Craps {
     /// @param bankroll   The bankroll the run starts on, in wei.
     /// @param goal       The bankroll that latches a Goal, in wei.
     /// @param cap        Shooter cap on the run.
-    /// @param rollBudget Roll cap on the run.
+    /// @param rollBudget Roll cap on the run, judged between shooters; one under `_MAX_ROLLS` is
+    ///                   exact, cutting the last hand where it runs out.
     /// @param player     The slip's owner, who seasons the survival coin.
     /// @param boost Packed schedule: the eligible-shooter percentage in bits 0..7, the percent
     ///              added to an eligible shooter's profit in bits 8..15, and above them the
@@ -409,9 +412,12 @@ contract Craps {
 
                 bankroll -= ((cur >> _CUR_MULT_SHIFT) & _CUR_MULT_MASK) * stake;
 
+                // A roll budget shorter than one hand is EXACT: the hand is cut where the budget
+                // runs out and refunds whatever is still live, the rule `_MAX_ROLLS` already
+                // applies. A budget of a hand or more keeps its between-shooters meaning.
                 uint256 handOut = _runSettlement(
                     b,
-                    handSeed(seed, cur & _CUR_HANDS_MASK), cur >> _CUR_LOG_SHIFT, initialState, wins
+                    handSeed(seed, cur & _CUR_HANDS_MASK), _handCursor(cur, rollBudget), initialState, wins
                 );
                 // THE SHOOTER PROFIT BOOST. House money on the base hand's ELIGIBLE PROFIT and on
                 // nothing else, floored ONCE here so the round's escalating multiple below scales
@@ -440,6 +446,18 @@ contract Craps {
             r.handsPlayed = cur & _CUR_HANDS_MASK;
             r.bankrollOut = bankroll;
             r.totalRolls = (cur >> _CUR_LOG_SHIFT) - (cur & _CUR_HANDS_MASK);
+        }
+    }
+
+    /// @dev The next hand's log cursor, with its roll bound packed above bit `_HC_BOUND_SHIFT`
+    ///      (one argument rather than two keeps the slip loop's frame inside the stack): a whole
+    ///      `_MAX_ROLLS` hand, or, under a roll budget shorter than one hand, exactly what the
+    ///      budget has left — at least one roll, since the slip loop stops once it is spent.
+    function _handCursor(uint256 cur, uint256 rollBudget) private pure returns (uint256) {
+        unchecked {
+            uint256 logPos = cur >> _CUR_LOG_SHIFT;
+            uint256 bound = rollBudget < _MAX_ROLLS ? rollBudget + (cur & _CUR_HANDS_MASK) - logPos : _MAX_ROLLS;
+            return logPos | (bound << _HC_BOUND_SHIFT);
         }
     }
 
@@ -526,8 +544,10 @@ contract Craps {
                 return _runSideSettlement(b, seed, logPos, st, wins);
             }
 
+            uint256 maxRolls = logPos >> _HC_BOUND_SHIFT;
+            logPos = uint32(logPos);
             uint256 i;
-            for (; i < _MAX_ROLLS; ++i) {
+            for (; i < maxRolls; ++i) {
                 uint256 w;
                 assembly ("memory-safe") {
                     mstore(0x00, seed)
@@ -591,7 +611,7 @@ contract Craps {
             }
             // Seven-out is the loop's only early exit. Accumulate the cursor once per hand rather
             // than once per roll.
-            logPos += st & ST_SEVEN_OUT == 0 ? _MAX_ROLLS : i + 1;
+            logPos += st & ST_SEVEN_OUT == 0 ? maxRolls : i + 1;
 
             // ELIGIBLE PROFIT, banked before the refunds below can dilute it. What is in
             // `returned` at this point is everything the dice PAID: the light side's winnings,
@@ -643,8 +663,10 @@ contract Craps {
         uint256 returned;
 
         unchecked {
+            uint256 maxRolls = logPos >> _HC_BOUND_SHIFT;
+            logPos = uint32(logPos);
             uint256 i;
-            for (; i < _MAX_ROLLS; ++i) {
+            for (; i < maxRolls; ++i) {
                 uint256 w;
                 assembly ("memory-safe") {
                     mstore(0x00, seed)
@@ -697,7 +719,7 @@ contract Craps {
                     if (t << ST_POINT == point) st &= ~(ST_DONT_LIVE | ST_POINT_MASK);
                 }
             }
-            logPos += st & ST_SEVEN_OUT == 0 ? _MAX_ROLLS : i + 1;
+            logPos += st & ST_SEVEN_OUT == 0 ? maxRolls : i + 1;
 
             uint256 elig = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
 

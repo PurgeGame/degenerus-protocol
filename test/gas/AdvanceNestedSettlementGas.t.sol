@@ -49,8 +49,10 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
     }
 
     function setUp() public {
-        // `_comps()` = the heaviest coin budget: 25 opener seats (see PurchaseDailyWorstCase).
-        uint256 previousPool = _comps() ? PREV_POOL_OPEN25 : PREV_POOL;
+        // `_comps()` = the heaviest coin budget: the fill's battle saturates at all 50 walked
+        // wallets (see PurchaseDailyWorstCase). `false` uses a lighter budget that still finds 50
+        // wallets but only affords 47 of them a run — the entrants-array truncation path.
+        uint256 previousPool = _comps() ? PREV_POOL_OPEN25 : PREV_POOL_PARTIAL;
         uint128 nextPool = uint128(previousPool + 1 ether);
         PurchaseDailySeeder.Shape memory shape = _shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, nextPool, previousPool);
         if (_extras()) {
@@ -109,7 +111,7 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
         uint256 compWins;
         uint256 goldenWins;
         uint256 nearWins;
-        uint256 farWins;
+        uint256 battleRuns;
         bool goldenGrand;
         uint8 stage = 255;
         for (uint256 i; i < logs.length; ++i) {
@@ -118,7 +120,7 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
             if (topic == TICKET_WIN_SIG) ++ticketWins;
             if (topic == CRAPS_WIN_SIG) ++compWins;
             if (topic == FLIP_WIN_SIG) ++nearWins;
-            if (topic == FAR_WIN_SIG) ++farWins;
+            if (topic == BATTLE_RUN_SIG) ++battleRuns;
             if (topic == keccak256("GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"))
             {
                 ++goldenWins;
@@ -132,18 +134,19 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
         emit log_named_uint("full_daily_plus_vault_history_including_intrinsic", used);
         emit log_named_uint("vault_claim_cursor_after", settled);
         emit log_named_uint("trait_FLIP_awards", nearWins);
-        emit log_named_uint("fill_FLIP_awards", farWins);
+        emit log_named_uint("fill_battle_runs", battleRuns);
         emit log_named_uint("craps_seat_awards", compWins);
         assertEq(stage, STAGE_PURCHASE_DAILY, "daily must finish in the RNG-apply transaction");
         assertEq(ethWins, PURCHASE_ETH_WINNERS, "all ETH awards must execute");
         assertEq(ticketWins, 0, "the ticket leg waits for its own stage");
-        // The purchase coin draw is the fill draw alone: 13 opener seats at PREV_POOL (B 62,500),
-        // 25 at PREV_POOL_OPEN25, and 25 equal coin shares either way.
-        assertEq(compWins, _comps() ? 25 : 13, "the craps half must seat every pull");
+        // The purchase coin draw is the fill draw alone, and it no longer touches CrapsBattle at
+        // all: its whole budget plays out as one CoinDrawBattle over the 50 walked wallets, 50 of
+        // them at PREV_POOL_OPEN25 (saturated) or 47 of them at PREV_POOL_PARTIAL (truncated).
+        assertEq(compWins, 0, "the fill draw no longer touches CrapsBattle");
         assertEq(goldenWins, _extras() ? 1 : 0, "golden resolution must execute when armed");
         assertEq(goldenGrand, _extras(), "golden grand branch must execute when armed");
         assertEq(nearWins, 0, "a purchase day past level 1 runs no trait coin draw");
-        assertEq(farWins, 25, "all 25 coin shares must execute");
+        assertEq(battleRuns, _comps() ? FILL_BATTLE_ENTRANTS : 47, "the fill's battle ran the wrong number of entrants");
         if (_extras()) {
             assertEq(
                 uint24(uint256(vm.load(ContractAddresses.SDGNRS, bytes32(0))) >> 224),

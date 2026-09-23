@@ -17,8 +17,9 @@
 // D-IMPL-01 boundary cross-validation: at fixed seeds, drive a real level-1
 //          daily VRF cycle. The trait draw's coin half emits 25 shares from
 //          pull indexes 25..49, all at minted level 1. Assert their exact
-//          trait rotation and target level, and confirm the second draw emits
-//          FarFutureFlipJackpotWinner from the unminted queue.
+//          trait rotation and target level, and confirm the second (fill)
+//          draw's CoinDrawBattle emits CoinDrawBattleRun from the unminted
+//          queue's walked field.
 //
 // STAT-04 Phase 261 infra reuse: `makeRng`, `CHI2_CRIT_05`, and `wilsonHilfertyZ`
 //          are re-declared verbatim from test/stat/TraitDistribution.test.js
@@ -505,15 +506,19 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
         Array.from({ length: 25 }, (_, j) => traitIds[(25 + j) % 4]),
       );
 
-      let futureWins = 0;
+      // The fill draw no longer emits a per-winner event from the jackpot module: it hands its
+      // whole walked field to CoinDrawBattle.resolve in one call, which emits CoinDrawBattleRun
+      // per run (from the battle contract, not the Game/jackpot module).
+      const BATTLE_RUN_TOPIC = hre.ethers.id(
+        "CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)",
+      );
+      let battleRuns = 0;
       for (const { receipt } of receipts) {
         for (const log of receipt.logs) {
-          try {
-            if (jackpotInterface.parseLog(log)?.name === "FarFutureFlipJackpotWinner") futureWins++;
-          } catch { /* another contract's event */ }
+          if (log.topics[0] === BATTLE_RUN_TOPIC) battleRuns++;
         }
       }
-      expect(futureWins, "the second purchase-day draw must use the future queue").to.be.greaterThan(0);
+      expect(battleRuns, "the second purchase-day draw must use the future queue's battle").to.be.greaterThan(0);
     });
   }
 });

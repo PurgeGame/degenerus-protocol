@@ -7,6 +7,7 @@ import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJ
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {CoinDrawBattle} from "../../contracts/CoinDrawBattle.sol";
 import {CrapsViews} from "../craps/CrapsViews.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
@@ -165,8 +166,10 @@ contract CoinDrawCrapsSeatsTest is Test {
     uint256 internal UPGRADE;
 
     bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
-    bytes32 internal constant FAR_WIN_SIG = keccak256("FarFutureFlipJackpotWinner(address,uint24,uint24,uint256)");
     bytes32 internal constant CRAPS_WIN_SIG = keccak256("CoinDrawCrapsWin(address,uint24,bool,bool)");
+    bytes32 internal constant BATTLE_RUN_SIG =
+        keccak256("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
+    bytes32 internal constant BATTLE_POT_SIG = keccak256("CoinDrawBattlePot(uint24,address,uint256)");
 
     function setUp() public {
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 5) * 1 days + 82_620 + 1 hours);
@@ -344,35 +347,71 @@ contract CoinDrawCrapsSeatsTest is Test {
 
     // ── The purchase fill draw ─────────────────────────────────────────────
 
-    /// @dev Fill draw: the first wallets walked are the craps half, the next the coin half.
-    function test_theFillDrawSeatsItsFirstWallets() public {
-        for (uint24 d = 2; d <= 100; ++d) h.seedFarQueue(d, 64, uint160(uint256(d) << 32));
-        h.seedBudgetFor(LVL, 125_000 ether);
-        vm.recordLogs();
-        h.payDailyFutureFlipJackpot(LVL, WORD);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(craps.codeCount(), 25, "25 seats");
-        assertEq(_countSig(logs, FAR_WIN_SIG), 25, "25 coin winners");
-        (, uint256 amount,) = _plan(125_000 ether, 25);
-        assertEq(coinflip.total(), 25 * amount);
-        // No wallet is both a seat and a coin winner.
-        for (uint256 i; i < 25; ++i) {
-            address seated = address(uint160(craps.codes(i)));
-            assertEq(coinflip.amountOf(seated), 0, "a seat also took a coin share");
+    /// @dev The fill draw's jackpot module etched onto GAME (CoinDrawBattle's `resolve` is
+    ///      GAME-gated, so the caller must sit at that address), plus the real CoinDrawBattle at
+    ///      COIN_DRAW_BATTLE. Craps stays the double from `setUp` — the fill draw never calls it.
+    function _fillReal() internal returns (CoinDrawHarness g) {
+        vm.etch(ContractAddresses.GAME, address(new CoinDrawHarness()).code);
+        vm.etch(ContractAddresses.COIN_DRAW_BATTLE, address(new CoinDrawBattle()).code);
+        g = CoinDrawHarness(ContractAddresses.GAME);
+    }
+
+    /// @dev Sum of every `paid` field on the battle's own run events, plus its pot if one was
+    ///      minted — what the Game's single `creditFlipBatch` call must equal exactly.
+    function _battleTotal(Vm.Log[] memory logs) internal pure returns (uint256 total) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == BATTLE_RUN_SIG) {
+                (,,, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
+                total += paid;
+            } else if (logs[i].topics[0] == BATTLE_POT_SIG) {
+                total += abi.decode(logs[i].data, (uint256));
+            }
         }
     }
 
-    /// @dev A thin future (two wallets on every level) fills the craps half first.
-    function test_aThinFillDrawSeatsBeforeItPaysCoin() public {
-        for (uint24 d = 2; d <= 100; ++d) h.seedFarQueue(d, 2, uint160(uint256(d) << 32));
-        h.seedBudgetFor(LVL, 125_000 ether);
-        h.payDailyFutureFlipJackpot(LVL, WORD);
-        uint256 n = craps.codeCount() + craps.passCalls();
-        assertGt(n, 0);
-        assertLe(n, 25);
-        (uint256 days_, uint256 amount, uint256 cap) = _plan(125_000 ether, n);
-        assertLe(n * SEAT + days_ * UPGRADE + coinflip.total(), 125_000 ether, "overspent");
-        assertLe(coinflip.total(), cap * amount);
+    /// @dev Fill draw: a full future walks one level (64 seeded wallets) to its 50-entrant cap in
+    ///      a single pick, so the battle runs exactly FILL_BATTLE_ENTRANTS wallets, all from
+    ///      COIN_DRAW_BATTLE — never CrapsBattle — and the Game credits exactly what the battle's
+    ///      own events say it owes, in one batch.
+    function test_theFillDrawRunsOneBattleOverItsWalkedWallets() public {
+        CoinDrawHarness g = _fillReal();
+        for (uint24 d = 2; d <= 100; ++d) g.seedFarQueue(d, 64, uint160(uint256(d) << 32));
+        g.seedBudgetFor(LVL, 125_000 ether);
+        vm.recordLogs();
+        g.payDailyFutureFlipJackpot(LVL, WORD);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        uint256 runs = _countSig(logs, BATTLE_RUN_SIG);
+        assertEq(runs, 50, "one level alone should have filled all 50 entrants");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == BATTLE_RUN_SIG || logs[i].topics[0] == BATTLE_POT_SIG) {
+                assertEq(logs[i].emitter, ContractAddresses.COIN_DRAW_BATTLE, "battle event off the battle contract");
+            }
+        }
+        assertEq(craps.codeCount(), 0, "the fill draw seated an opener");
+        assertEq(craps.passCalls(), 0, "the fill draw banked a pass");
+        assertEq(coinflip.batches(), 1, "the fill draw's credit was not one batch");
+        assertEq(coinflip.total(), _battleTotal(logs), "credited FLIP does not match the battle's own events");
+    }
+
+    /// @dev A thin future (two wallets on every level) still runs the battle over whatever it
+    ///      walked — bounded by FILL_BATTLE_ENTRANTS, still never touching CrapsBattle, still
+    ///      crediting exactly the battle's own payout.
+    function test_aThinFillDrawStillRunsTheBattle() public {
+        CoinDrawHarness g = _fillReal();
+        for (uint24 d = 2; d <= 100; ++d) g.seedFarQueue(d, 2, uint160(uint256(d) << 32));
+        g.seedBudgetFor(LVL, 125_000 ether);
+        vm.recordLogs();
+        g.payDailyFutureFlipJackpot(LVL, WORD);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        uint256 runs = _countSig(logs, BATTLE_RUN_SIG);
+        assertGt(runs, 0, "a thin future still found wallets to draw");
+        assertLe(runs, 50, "more runs than FILL_BATTLE_ENTRANTS");
+        assertEq(craps.codeCount(), 0, "the fill draw seated an opener");
+        assertEq(craps.passCalls(), 0, "the fill draw banked a pass");
+        assertEq(coinflip.batches(), 1, "the fill draw's credit was not one batch");
+        assertEq(coinflip.total(), _battleTotal(logs), "credited FLIP does not match the battle's own events");
     }
 
     // ── The real CrapsBattle ───────────────────────────────────────────────

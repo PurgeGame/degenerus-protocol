@@ -93,7 +93,8 @@ abstract contract CoinSeatJackpotFixture is DeployProtocol {
     bytes32 internal constant TICKET_WIN_SIG =
         keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
-    bytes32 internal constant FAR_WIN_SIG = keccak256("FarFutureFlipJackpotWinner(address,uint24,uint24,uint256)");
+    bytes32 internal constant BATTLE_RUN_SIG =
+        keccak256("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
     bytes32 internal constant CRAPS_WIN_SIG = keccak256("CoinDrawCrapsWin(address,uint24,bool,bool)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
 
@@ -107,7 +108,7 @@ abstract contract CoinSeatJackpotFixture is DeployProtocol {
         uint256 tickets;
         uint256 ticketDistinct;
         uint256 shares;
-        uint256 farShares;
+        uint256 battleRuns;
         uint256 seats;
         uint256 days_;
         uint256 refused;
@@ -151,8 +152,8 @@ abstract contract CoinSeatJackpotFixture is DeployProtocol {
             } else if (t0 == FLIP_WIN_SIG) {
                 if (_pushDistinct(cw, cn++, address(uint160(uint256(logs[i].topics[1]))))) ++t.coinDistinct;
                 ++t.shares;
-            } else if (t0 == FAR_WIN_SIG) {
-                ++t.farShares;
+            } else if (t0 == BATTLE_RUN_SIG) {
+                ++t.battleRuns;
             } else if (t0 == CRAPS_WIN_SIG) {
                 if (_pushDistinct(cw, cn++, address(uint160(uint256(logs[i].topics[1]))))) ++t.coinDistinct;
                 (bool fullDay, bool paidAsFlip) = abi.decode(logs[i].data, (bool, bool));
@@ -195,7 +196,7 @@ abstract contract CoinSeatJackpotFixture is DeployProtocol {
         assertEq(t.days_, days_, "whole-day upgrades from the front");
         assertEq(t.refused, 0, "no seat refused");
         assertEq(t.shares, HALF, "the coin half paid 25 shares");
-        assertEq(t.farShares, 0, "no fill draw in the jackpot phase");
+        assertEq(t.battleRuns, 0, "no fill-draw battle in the jackpot phase");
         // With-replacement sampling over 5,000-holder buckets: allow one stray repeat.
         assertGe(t.coinDistinct, 2 * HALF - 1, "coin-draw recipients are distinct cold wallets");
     }

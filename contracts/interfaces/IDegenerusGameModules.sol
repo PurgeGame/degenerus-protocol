@@ -120,7 +120,8 @@ interface IDegenerusGameJackpotModule {
     /// @param maxLevel Maximum target level for the coin distribution (inclusive)
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
 
-    /// @notice Pays the purchase-day FLIP fill draw over unminted future levels
+    /// @notice Pays the purchase-day FLIP fill draw over unminted future levels as one closed
+    ///         craps battle (CoinDrawBattle)
     /// @param lvl The purchase level
     /// @param randWord Random word for level picks and walks
     function payDailyFutureFlipJackpot(uint24 lvl, uint256 randWord) external;

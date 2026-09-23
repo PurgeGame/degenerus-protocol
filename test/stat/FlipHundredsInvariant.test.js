@@ -10,7 +10,13 @@
 //
 //   §3a BUDGET-SPLIT (exact integer unit math, no probabilistic rounding)
 //     1. `_awardDailyCoinToTraitWinners`  — JackpotModule (uses shared plan)
-//     2. `_awardFutureCoinFill`           — JackpotModule (uses shared plan)
+//
+//   MOVED OUT OF §3a — the purchase-day fill draw (`_awardFutureCoinFill`) no longer splits
+//   its budget through `_coinDrawPlan`/`_finishCoinDraw` at all: it hands its whole walked
+//   field and its raw `coinBudget` to the standalone `CoinDrawBattle.resolve`, which lands
+//   each wallet's run payout and the pot on the §3c threshold-gated collapse (`_award`:
+//   whole-FLIP floor up to 1,000 FLIP, EV-preserving 100-FLIP granule above, keyed per
+//   wallet off the word). See [01b] / [01e] below.
 //
 //   §3b BIG-LEG TRUNCATE (no RNG at all)
 //     3. `_payGoldenTicket`               — JackpotModule
@@ -49,6 +55,7 @@ const LOOTBOX = SRC("contracts/modules/DegenerusGameLootboxModule.sol");
 const DEGENERETTE = SRC("contracts/modules/DegenerusGameDegeneretteModule.sol");
 const MINT = SRC("contracts/modules/DegenerusGameMintModule.sol");
 const LIB = SRC("contracts/libraries/FlipRoundLib.sol");
+const COIN_DRAW_BATTLE = SRC("contracts/CoinDrawBattle.sol");
 
 // Brace-match function-body extractor (copied from
 // test/unit/JackpotTicketRollSilentColdBust.test.js).
@@ -166,15 +173,23 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       ).to.equal(true);
     });
 
-    it("[01b] site 2 `_awardFutureCoinFill` uses the shared plan", function () {
+    it("[01b] `_awardFutureCoinFill` no longer uses the shared plan — it hands the raw budget to CoinDrawBattle", function () {
       const body = bodyOf(JACKPOT, "function _awardFutureCoinFill(");
       expect(
-        /_coinDrawPlan\s*\(\s*coinBudget\s*,\s*n\s*\)/.test(body),
-        "site 2 must use the shared coin/Craps plan"
-      ).to.equal(true);
+        /_coinDrawPlan\s*\(/.test(body),
+        "the fill draw must not re-grow the shared coin/Craps plan"
+      ).to.equal(false);
       expect(
         /_finishCoinDraw\s*\(/.test(body),
-        "site 2 must settle through the shared coin/Craps payout"
+        "the fill draw must not re-grow the shared coin/Craps payout"
+      ).to.equal(false);
+      expect(
+        /FlipRoundLib/.test(body),
+        "the fill draw performs no local FLIP rounding of its own"
+      ).to.equal(false);
+      expect(
+        /battle\.resolve\s*\(\s*lvl\s*,\s*winners\s*,\s*coinBudget\s*,\s*battleWord\s*\)/.test(body),
+        "the fill draw must hand its raw, unrounded coinBudget to CoinDrawBattle.resolve"
       ).to.equal(true);
     });
 
@@ -190,6 +205,22 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         /\bextra\b|\bextraStart\b|\bbaseUnits\b/.test(body),
         "the plan must carry no extra-unit machinery"
       ).to.equal(false);
+    });
+
+    it("[01e] CoinDrawBattle lands every run payout and the pot on the threshold-gated collapse", function () {
+      const body = bodyOf(COIN_DRAW_BATTLE, "function resolve(");
+      expect(
+        /pay\s*=\s*_award\(\s*pay\s*,\s*_hash3\(\s*word\s*,\s*COIN_DRAW_ROUND_TAG\s*,\s*uint160\(p\)\s*\)\s*\)/.test(body),
+        "a run's payout (all units) must go through _award keyed per wallet"
+      ).to.equal(true);
+      expect(
+        /uint256\s+pot\s*=\s*_award\(\s*half\s*,/.test(body),
+        "the pot must go through _award"
+      ).to.equal(true);
+      const award = bodyOf(COIN_DRAW_BATTLE, "function _award(");
+      expect(/FlipRoundLib\.FLIP_ROUND_THRESHOLD/.test(award), "_award must gate on the shared threshold").to.equal(true);
+      expect(/FlipRoundLib\.roundFlipToHundreds/.test(award), "_award must collapse to hundreds above it").to.equal(true);
+      expect(/FlipRoundLib\.floorWholeFlip/.test(award), "_award must floor whole FLIP at or below it").to.equal(true);
     });
   });
 

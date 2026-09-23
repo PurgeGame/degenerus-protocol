@@ -1,17 +1,26 @@
 // JackpotCompAdvanceGas.test.js — the level-1 purchase-day advance carrying BOTH coin draws, measured
 // as one complete advanceGame transaction through the REAL deployFixture wiring: real Game
-// delegatecalls, the real CrapsBattle seating every craps winner (and reading back into the real
-// Game), the real Coinflip batch credits.
+// delegatecalls, the real CrapsBattle seating the trait draw's craps winners (and reading back into
+// the real Game), the real CoinDrawBattle playing the fill draw's battle, the real Coinflip credits.
 //
 // Level 1 (storage level 0) has no ETH leg; its daily instead runs TWO coin draws in the same tx:
-//   - the trait draw over lvlTraitEntry[1] on the day's bonus traits (`payDailyFlipJackpot`), and
-//   - the fill draw over the unminted far-future queues [2, 100] (`payDailyFutureFlipJackpot`).
-// Each splits its budget B = levelPrizePool[0] * 1000 / (0.01 * 400): the craps half seats up to 25
-// winners on TOMORROW's table (opener via vaultComp kind 5; the half's leftover upgrades seats to the
-// whole day via creditPasses), the coin half pays up to 25 shares — so up to 50 Craps awards in one tx.
-// Two budgets are measured, every winner a distinct never-touched wallet:
-//   - B = 130,000 FLIP (520 ETH): 25 OPENER seats per draw — the heavier seat (a window reservation);
-//   - B = 1,250,000 FLIP (5,000 ETH): 25 whole-day seats per draw — the maximum budget.
+//   - the trait draw over lvlTraitEntry[1] on the day's bonus traits (`payDailyFlipJackpot`) —
+//     UNCHANGED: the craps half seats up to 25 winners on TOMORROW's table (opener via vaultComp
+//     kind 5; the half's leftover upgrades seats to the whole day via creditPasses), the coin half
+//     pays up to 25 shares;
+//   - the fill draw over the unminted far-future queues [2, 100] (`payDailyFutureFlipJackpot`) —
+//     walks up to FILL_BATTLE_ENTRANTS = 50 wallets (independent of budget) and hands them all,
+//     with the whole budget, to CoinDrawBattle.resolve in one call: half the budget stakes one run
+//     per distinct wallet (dropped from the back if the budget affords fewer than 50 x 50-FLIP
+//     bankrolls), half is the pot to the highest surviving run. CrapsBattle is never touched by
+//     the fill any more.
+// Both budgets tested here comfortably saturate the fill's battle at all 50 walked wallets (the
+// 50-FLIP-per-unit floor is far below either budget), so the two scenarios differ only in the
+// trait draw's opener-vs-whole-day split:
+//   - B = 130,000 FLIP (520 ETH): the trait draw seats 25 OPENERs — the heavier seat (a window
+//     reservation) — the fill's battle runs all 50 walked wallets;
+//   - B = 1,250,000 FLIP (5,000 ETH): the trait draw seats all 25 as whole days; the fill's battle
+//     again runs all 50.
 // Asserted under the EIP-7825 cap; logged against the 10M soft target.
 
 import { expect } from "chai";
@@ -31,7 +40,8 @@ const BONUS_TRAITS_TAG = ethers.keccak256(ethers.toUtf8Bytes("BONUS_TRAITS"));
 const TRAIT_BOARD_TAG = ethers.keccak256(ethers.toUtf8Bytes("degenerus.jackpot.trait-board"));
 const CRAPS_WIN_TOPIC = ethers.id("CoinDrawCrapsWin(address,uint24,bool,bool)");
 const FLIP_WIN_TOPIC = ethers.id("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
-const FUTURE_WIN_TOPIC = ethers.id("FarFutureFlipJackpotWinner(address,uint24,uint24,uint256)");
+const BATTLE_RUN_TOPIC = ethers.id("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
+const BATTLE_POT_TOPIC = ethers.id("CoinDrawBattlePot(uint24,address,uint256)");
 const RNG_APPLIED_TOPIC = ethers.id("DailyRngApplied(uint24,uint256,uint256,uint256)");
 
 const EIP7825_TX_GAS_CAP = 16_777_216n;
@@ -164,28 +174,38 @@ async function measureLevelOneAdvance(prevPoolEth) {
       break;
     }
     const r = await tx.wait();
-    if (r.logs.some((l) => l.topics[0] === CRAPS_WIN_TOPIC || l.topics[0] === FUTURE_WIN_TOPIC)) receipt = r;
+    if (r.logs.some((l) => l.topics[0] === CRAPS_WIN_TOPIC || l.topics[0] === BATTLE_RUN_TOPIC)) receipt = r;
   }
   expect(receipt, "the advance chain never reached the level-1 coin draws").to.not.equal(null);
 
   const coder = ethers.AbiCoder.defaultAbiCoder();
+  // The fill draw no longer touches CrapsBattle, so every CoinDrawCrapsWin left is the trait draw's.
   const seats = receipt.logs.filter((l) => l.topics[0] === CRAPS_WIN_TOPIC);
   const decoded = seats.map((l) => coder.decode(["bool", "bool"], l.data));
+  expect(seats.every((l) => BigInt(l.topics[2]) === 1n), "a craps seat came from outside the trait draw").to.equal(
+    true
+  );
+  const battleRuns = receipt.logs.filter((l) => l.topics[0] === BATTLE_RUN_TOPIC);
+  const battlePots = receipt.logs.filter((l) => l.topics[0] === BATTLE_POT_TOPIC);
+  expect(
+    battleRuns.every((l) => l.address.toLowerCase() === battleRuns[0]?.address.toLowerCase()),
+    "battle run events came from more than one emitter"
+  ).to.equal(true);
   const tally = {
     gas: receipt.gasUsed,
-    traitSeats: seats.filter((l) => BigInt(l.topics[2]) === 1n).length,
-    fillSeats: seats.filter((l) => BigInt(l.topics[2]) !== 1n).length,
+    traitSeats: seats.length,
     days: decoded.filter((d) => d[0]).length,
     refused: decoded.filter((d) => d[1]).length,
     traitShares: receipt.logs.filter((l) => l.topics[0] === FLIP_WIN_TOPIC).length,
-    fillShares: receipt.logs.filter((l) => l.topics[0] === FUTURE_WIN_TOPIC).length,
+    battleRuns: battleRuns.length,
+    battlePaidTotal: battleRuns.reduce((sum, l) => sum + coder.decode(["uint256", "uint256", "uint256", "uint256"], l.data)[3], 0n),
+    battlePot: battlePots.length ? coder.decode(["uint256"], battlePots[0].data)[0] : 0n,
     rngApplied: receipt.logs.some((l) => l.topics[0] === RNG_APPLIED_TOPIC),
   };
-  const recipients = new Set(
-    receipt.logs
-      .filter((l) => [CRAPS_WIN_TOPIC, FLIP_WIN_TOPIC, FUTURE_WIN_TOPIC].includes(l.topics[0]))
-      .map((l) => l.topics[1])
-  );
+  const recipients = new Set([
+    ...receipt.logs.filter((l) => l.topics[0] === CRAPS_WIN_TOPIC || l.topics[0] === FLIP_WIN_TOPIC).map((l) => l.topics[1]),
+    ...receipt.logs.filter((l) => l.topics[0] === BATTLE_RUN_TOPIC || l.topics[0] === BATTLE_POT_TOPIC).map((l) => l.topics[2]),
+  ]);
   tally.distinct = recipients.size;
   return tally;
 }
@@ -193,8 +213,9 @@ async function measureLevelOneAdvance(prevPoolEth) {
 function report(label, t) {
   const soft = t.gas < SOFT_TARGET ? `under 10M by ${SOFT_TARGET - t.gas}` : `OVER 10M by ${t.gas - SOFT_TARGET}`;
   console.log(
-    `      [COIN-ADV ${label}] trait seats=${t.traitSeats}, fill seats=${t.fillSeats}, whole days=${t.days}, ` +
-      `refused=${t.refused}, trait shares=${t.traitShares}, fill shares=${t.fillShares}, ` +
+    `      [COIN-ADV ${label}] trait seats=${t.traitSeats}, whole days=${t.days}, ` +
+      `refused=${t.refused}, trait shares=${t.traitShares}, fill battle runs=${t.battleRuns}, ` +
+      `fill battle paid total=${t.battlePaidTotal}, fill battle pot=${t.battlePot}, ` +
       `distinct recipients=${t.distinct}, word applied in this tx=${t.rngApplied}`
   );
   console.log(
@@ -203,13 +224,13 @@ function report(label, t) {
   );
 }
 
-function expectBothDrawsFull(t, days) {
+function expectTraitDrawAndSaturatedBattle(t, days) {
   expect(t.traitSeats, "the trait draw seated 25").to.equal(HALF);
-  expect(t.fillSeats, "the fill draw seated 25").to.equal(HALF);
   expect(t.days, "whole-day upgrades").to.equal(days);
   expect(t.refused, "no seat refused").to.equal(0);
   expect(t.traitShares, "the trait draw paid 25 shares").to.equal(HALF);
-  expect(t.fillShares, "the fill draw paid 25 shares").to.equal(HALF);
+  expect(t.battleRuns, "the fill's battle ran fewer than all 50 walked wallets").to.equal(2 * HALF);
+  // The trait draw samples with replacement (a stray repeat is allowed); the fill's walk is exact.
   expect(t.distinct, "coin-draw recipients are distinct cold wallets").to.be.gte(98);
   expect(t.gas < EIP7825_TX_GAS_CAP, "the two-draw advance tx broke the EIP-7825 ceiling").to.equal(true);
 }
@@ -219,15 +240,15 @@ describe("JackpotCoinAdvanceGas — both level-1 coin draws inside a real advanc
     restoreAddresses();
   });
 
-  it("50 opener seats (B = 130,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
+  it("25 trait-draw opener seats + the fill's saturated 50-run battle (B = 130,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
     const t = await measureLevelOneAdvance("520");
-    report("50 openers", t);
-    expectBothDrawsFull(t, 0);
+    report("openers + fill battle", t);
+    expectTraitDrawAndSaturatedBattle(t, 0);
   });
 
-  it("50 whole-day seats (B = 1,250,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
+  it("25 trait-draw whole-day seats + the fill's saturated 50-run battle (B = 1,250,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
     const t = await measureLevelOneAdvance("5000");
-    report("50 whole days", t);
-    expectBothDrawsFull(t, 2 * HALF);
+    report("whole days + fill battle", t);
+    expectTraitDrawAndSaturatedBattle(t, HALF);
   });
 });

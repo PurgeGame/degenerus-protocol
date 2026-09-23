@@ -150,8 +150,8 @@ abstract contract BoundaryGasFixture is DeployProtocol {
         );
     bytes32 internal constant FLIP_WIN_SIG =
         keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
-    bytes32 internal constant FAR_WIN_SIG =
-        keccak256("FarFutureFlipJackpotWinner(address,uint24,uint24,uint256)");
+    bytes32 internal constant BATTLE_RUN_SIG =
+        keccak256("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
     bytes32 internal constant CRAPS_WIN_SIG = keccak256("CoinDrawCrapsWin(address,uint24,bool,bool)");
     bytes32 internal constant SEED_ARMED_SIG =
         keccak256("SeedWindowArmed(uint24,uint24,uint24,uint256)");
@@ -193,7 +193,7 @@ abstract contract BoundaryGasFixture is DeployProtocol {
             uint256 used,
             uint256 ticketWins,
             uint256 flipWins,
-            uint256 farWins,
+            uint256 battleRuns,
             uint256 crapsWins,
             bool seedArmed
         )
@@ -208,7 +208,7 @@ abstract contract BoundaryGasFixture is DeployProtocol {
             bytes32 t0 = logs[i].topics[0];
             if (t0 == TICKET_WIN_SIG) ++ticketWins;
             else if (t0 == FLIP_WIN_SIG) ++flipWins;
-            else if (t0 == FAR_WIN_SIG) ++farWins;
+            else if (t0 == BATTLE_RUN_SIG) ++battleRuns;
             else if (t0 == CRAPS_WIN_SIG) ++crapsWins;
             else if (t0 == SEED_ARMED_SIG) seedArmed = true;
             else if (t0 == ADVANCE_SIG) (lastStage, ) = abi.decode(logs[i].data, (uint8, uint24));
@@ -240,7 +240,7 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
             uint256 used,
             uint256 ticketWins,
             uint256 flipWins,
-            uint256 farWins,
+            uint256 battleRuns,
             uint256 crapsWins,
             bool seedArmed
         ) = _measure();
@@ -252,18 +252,18 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
         assertEq(ticketWins, 96, "the main-board ticket leg paid the full 96-winner cap");
         assertEq(flipWins, 25, "the coin leg paid the full 25-share cap");
         assertEq(crapsWins, 25, "the Craps leg drew all 25 seats");
-        assertEq(farWins, 0, "jackpot phase has no future fill");
+        assertEq(battleRuns, 0, "jackpot phase has no future fill");
         // The century arm rides the transition close, not this tx — it must not fuse back onto the
         // binding stage.
         assertFalse(seedArmed, "the century arm does NOT ride the binding phase-end tx");
         assertLt(used, EIP7825_TX_GAS_CAP, "the phase-end advance tx clears EIP-7825");
 
         // The carryover leg is the whole of the next advance: 100 more ticket winners, nothing else.
-        (used, ticketWins, flipWins, farWins, crapsWins, seedArmed) = _measure();
+        (used, ticketWins, flipWins, battleRuns, crapsWins, seedArmed) = _measure();
         emit log_named_uint("LVL100_CARRYOVER_LEG_ADVANCE_GAS", used);
         assertEq(lastStage, STAGE_JACKPOT_CARRYOVER_TICKETS, "the carryover leg ran as the next stage");
         assertEq(ticketWins, 96, "the carryover ticket leg paid the full 96-winner cap");
-        assertEq(flipWins + farWins + crapsWins, 0, "no coin leg rides the carryover stage");
+        assertEq(flipWins + battleRuns + crapsWins, 0, "no coin leg rides the carryover stage");
         assertFalse(seedArmed, "the century arm does NOT ride the carryover stage");
         assertLt(used, EIP7825_TX_GAS_CAP, "the carryover advance tx clears EIP-7825");
         (, bool jackpotPhase_, , , ) = game.purchaseInfo();

@@ -31,7 +31,7 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
 
     function setUp() public {
         PurchaseDailySeeder.Shape memory shape =
-            _shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, NEXT_POOL_LATCH, PREV_POOL);
+            _shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, NEXT_POOL_LATCH, PREV_POOL_OPEN25);
         _seed(shape);
         vm.warp((999 + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 3 hours);
         bytes memory original = address(game).code;

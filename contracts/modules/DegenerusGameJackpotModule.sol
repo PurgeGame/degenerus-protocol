@@ -57,6 +57,15 @@ interface ICrapsCoinDrawSeat {
     function vaultComp(uint256 code) external returns (uint256 charged);
 }
 
+/// @dev The purchase-day fill draw's battle (CoinDrawBattle), called BARE: GAME-gated, it plays
+///      and ranks the drawn field in memory and returns what each wallet is owed.
+interface ICoinDrawBattle {
+    /// @notice Play the fill draw's battle; see CoinDrawBattle.resolve.
+    function resolve(uint24 level, address[] calldata entrants, uint256 amount, uint256 word)
+        external
+        returns (address[] memory players, uint256[] memory owed);
+}
+
 /**
  * @title DegenerusGameJackpotModule
  * @author Burnie Degenerus
@@ -96,16 +105,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
-
-    /// @dev Emitted when an unminted future-level ticket holder (1-99 levels ahead of the
-    ///      purchase level) wins the purchase-day FLIP fill draw. Drawn from ticketQueue
-    ///      (traits not yet assigned).
-    event FarFutureFlipJackpotWinner(
-        address indexed winner,
-        uint24 indexed currentLevel,
-        uint24 indexed winnerLevel,
-        uint256 amount
-    );
 
     /// @dev ETH jackpot win.
     ///      traitId is uint16: values 0-255 are real trait IDs; values ≥256 are
@@ -330,6 +329,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Domain separator for the purchase-day future fill draw's entropy derivation.
     bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
+
+    /// @dev Most wallets the purchase-day fill draw enters in its craps battle.
+    uint256 private constant FILL_BATTLE_ENTRANTS = 50;
 
     /// @dev Winners in each half of a coin draw: up to this many craps seats, and up to this many
     ///      equal FLIP shares.
@@ -2304,24 +2306,23 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Purchase-day coin draw over unminted future levels. Wallets are drawn level by level:
-    ///      pick an unvisited level in [lvl + 1, lvl + 99], walk its far-future queue from a random
-    ///      lane (one lane per wallet registration, each taken at most once) until the draw has
-    ///      its wallets or the level is exhausted, then pick again. Every wallet on a walked level
-    ///      is equally likely to be included. At most FUTURE_FLIP_LEVEL_PICKS picks, so empty
-    ///      levels bound the gas. The first _crapsPulls(budget) wallets are the craps half, the
-    ///      rest the coin half (see _coinDrawPlan).
+    /// @dev Purchase-day coin draw over unminted future levels, paid as one closed craps battle.
+    ///      Wallets are drawn level by level: pick an unvisited level in [lvl + 1, lvl + 99], walk
+    ///      its far-future queue from a random lane (one lane per wallet registration, each taken at
+    ///      most once) until the draw has FILL_BATTLE_ENTRANTS wallets or the level is exhausted,
+    ///      then pick again. Every wallet on a walked level is equally likely to be included. At
+    ///      most FUTURE_FLIP_LEVEL_PICKS picks, so empty levels bound the gas. The drawn wallets and
+    ///      the whole budget go to CoinDrawBattle, which plays and ranks every run on this word in
+    ///      this call; its result is credited in one batch.
     function _awardFutureCoinFill(uint24 lvl, uint256 coinBudget, uint256 rngWord) private {
         if (coinBudget == 0) return;
-        uint256 entropy = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
+        uint256 battleWord = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
+        uint256 entropy = battleWord;
 
-        uint256 pulls = _crapsPulls(coinBudget);
-        uint256 want = pulls + COIN_DRAW_HALF_SLOTS;
-        address[] memory winners = new address[](want);
-        uint24[] memory winnerLevels = new uint24[](want);
+        address[] memory winners = new address[](FILL_BATTLE_ENTRANTS);
         uint256 found;
         uint256 visited;
-        for (uint256 pick; pick < FUTURE_FLIP_LEVEL_PICKS && found < want; ) {
+        for (uint256 pick; pick < FUTURE_FLIP_LEVEL_PICKS && found < FILL_BATTLE_ENTRANTS; ) {
             entropy = EntropyLib.hash2(entropy, pick);
             uint256 offset = entropy % 99;
             if ((visited >> offset) & 1 == 0) {
@@ -2330,7 +2331,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint256[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
                 uint256 len = queue.length;
                 if (len != 0) {
-                    uint256 take = want - found;
+                    uint256 take = FILL_BATTLE_ENTRANTS - found;
                     if (take > len) take = len;
                     uint256 idx = (entropy >> 128) % len;
                     uint256 word = _tqWordAt(queue, idx);
@@ -2338,7 +2339,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                         winners[found] = address(uint160(
                             _entryRecord(candidate, uint32(word >> ((idx & 7) << 5)))
                         ));
-                        winnerLevels[found] = candidate;
                         unchecked {
                             ++found;
                             ++k;
@@ -2352,23 +2352,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             unchecked { ++pick; }
         }
         if (found == 0) return;
-
-        uint256 n = found < pulls ? found : pulls;
-        address[] memory craps = new address[](n);
-        uint24[] memory crapsLvls = new uint24[](n);
-        for (uint256 i; i < n; ) {
-            craps[i] = winners[i];
-            crapsLvls[i] = winnerLevels[i];
-            unchecked { ++i; }
+        assembly ("memory-safe") {
+            mstore(winners, found)
         }
-        (uint256 fullDays, uint256 amount, uint256 cap) = _coinDrawPlan(coinBudget, n);
-        uint256 paid = found - n;
-        if (paid > cap) paid = cap;
-        for (uint256 i; i < paid; ) {
-            emit FarFutureFlipJackpotWinner(winners[n + i], lvl, winnerLevels[n + i], amount);
-            unchecked { ++i; }
-        }
-        _finishCoinDraw(craps, crapsLvls, fullDays, winners, n, paid, amount);
+        ICoinDrawBattle battle = ICoinDrawBattle(ContractAddresses.COIN_DRAW_BATTLE);
+        (address[] memory players, uint256[] memory owed) = battle.resolve(lvl, winners, coinBudget, battleWord);
+        if (players.length != 0) coinflip.creditFlipBatch(players, owed);
     }
 
     /// @dev Roll winning traits with hero symbol override.

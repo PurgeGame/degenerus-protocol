@@ -8,6 +8,7 @@
 | `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Decimator, Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
 | `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
 | `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip` as `external pure`, which is what makes the table's pinned call a STATICCALL |
+| `CoinDrawBattle` | `CoinDrawBattle is Craps`, storage-free and GAME-only, deployed after `CrapsEngine`: plays the purchase-day fill draw's closed battle in memory and returns what each wallet is owed; the Game credits it |
 | `DegenerusVault` | DGVE/DGVF share classes, vault-owned positions and comp distribution authority |
 | `sDGNRS` / `DGNRS` / `GNRUS` | Reserve backing, transferable wrapper and charity rights |
 | Affiliate, Quests, Jackpots | Referral rewards, activity state and jackpot support |
@@ -135,7 +136,7 @@ can retry once the word lands.
 
 Coin jackpot: purchase days pay the ETH drip on the active level and a coin fill draw
 over unminted levels; jackpot days run the coin draw on the bonus traits of level + 1, and
-the carryover board also draws from level + 1. Every coin draw splits its daily budget in
+the carryover board also draws from level + 1. Every trait coin draw splits its daily budget in
 half. The craps half pays up to 25 winners, one per 2,400 FLIP: each gets a seat on
 tomorrow's opener, and what is left of the half upgrades gifts, from the front, to a whole
 day at 20,400 FLIP more (the 22,800 day-pass value less the seat). A whole-day gift banks
@@ -149,11 +150,30 @@ paid the opener's expected cost, 2,400 FLIP. Opener seats go through the craps c
 instead), after the Game vets the winner with an `extsload` of the table's day claims.
 Every seat the Game writes (these and lootbox pass reservations) carries a fixed standing
 of 100 rather than a read of the holder's activity score: above the boost floor and most
-casual wallets, below a dedicated player; `amendSlip` re-reads the real score. The fill draw walks wallets:
-it picks an unvisited level in `[purchaseLevel + 1, purchaseLevel + 99]`, walks its queue
-from a random lane, taking each wallet at most once, until it has its wallets or the level
-is exhausted, then picks again (at most 16 picks); the first wallets walked are the craps
-half. The trait draw's craps pulls come first as well. The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
+casual wallets, below a dedicated player; `amendSlip` re-reads the real score. The trait
+draw's craps pulls come first.
+
+The purchase-day fill draw pays no seats, passes or shares: its whole budget is one closed
+craps battle, played and paid in the draw's own transaction. It walks up to 50 wallets: it
+picks an unvisited level in `[purchaseLevel + 1, purchaseLevel + 99]`, walks its queue from
+a random lane, taking each wallet at most once, until it has its wallets or the level is
+exhausted, then picks again (at most 16 picks). `CoinDrawBattle` (a storage-free, GAME-only
+contract at `COIN_DRAW_BATTLE`) plays the field on the day's word: half the budget is the
+stakes, split into equal units of at least 50 FLIP (each exactly five boards deep) (a wallet walked twice holds
+two units but plays one run, and the units multiply only what that run pays), and half is
+the pot. Each run is the scheduled Dice Run shape (five rounds deep, all ten chips thrown by
+the dice, goal at five times the bankroll, no shooter boost) capped at exactly 200 rolls and
+22 shooters (the longest of 200,000 simulated runs; 0.004% reach it): a bust pays nothing, a run stopped
+by either cap or latched at the goal pays its bankroll per unit, and the pot goes to the paid run with the highest ending bankroll (the earlier-drawn
+wallet on a tie; with no paid run it is not minted). Each run payout and the pot land on
+the protocol's award figures (whole FLIP up to 1,000, the EV-preserving 100-FLIP granule
+above). The Game credits the result in one batch. The field, the budget and the entrants' queues are fixed before the word exists, so
+the battle is a jackpot result, not an entry window. A roll budget under one hand's 512 is
+exact in `Craps._settleSlip`: the last hand is cut where it runs out and refunds its live
+stakes; the table's 8,192 budget keeps its between-shooters meaning. The two caps bound
+`resolve` at 7.31M gas for a full field whatever the dice do (test/craps/CoinDrawBattle.t.sol),
+and every purchase-day fixture that runs the battle must clear the 16.7M transaction cap with
+that whole bound added to its measured gas. The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
 second) over 48 rounds of four samples: 12 each at the BAF level, level + 1, level + 2..5
 and level + 6..99 (centuries: 8, 8, 8, 8, and 16 on the previous 99 levels). The two
 unminted ranges sample one queue lane per wallet.

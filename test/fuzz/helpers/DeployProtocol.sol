@@ -23,6 +23,7 @@ import {DegenerusParimutuel} from "../../../contracts/DegenerusParimutuel.sol";
 import {DegenerusRecordBounty} from "../../../contracts/DegenerusRecordBounty.sol";
 import {CrapsViews} from "../../craps/CrapsViews.sol";
 import {CrapsEngine} from "../../../contracts/CrapsEngine.sol";
+import {CoinDrawBattle} from "../../../contracts/CoinDrawBattle.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -76,6 +77,7 @@ abstract contract DeployProtocol is Test {
     DegenerusRecordBounty public recordBounty;
     CrapsViews public crapsBattle;
     CrapsEngine public crapsEngine;
+    CoinDrawBattle public coinDrawBattle;
     FLIP public coin;
     Coinflip public coinflip;
     DegenerusGame public game;
@@ -221,6 +223,10 @@ abstract contract DeployProtocol is Test {
         // Craps dice engine — appended, so it shifts no earlier nonce. Pure, no ctor args; the
         // table STATICCALLs ContractAddresses.CRAPS_ENGINE, so it must resolve to code here.
         crapsEngine = new CrapsEngine();                                    // N+30 = nonce 35
+
+        // Fill-draw craps battle — appended, so it shifts no earlier nonce. No storage, no
+        // ctor args; the jackpot module calls ContractAddresses.COIN_DRAW_BATTLE bare.
+        coinDrawBattle = new CoinDrawBattle();                              // N+31 = nonce 36
         if (initializeDeities) game.initProtocolDeity();
     }
 
