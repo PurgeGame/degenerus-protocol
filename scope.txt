@@ -1,9 +1,10 @@
 # Audit source scope — working-tree snapshot in docs/audit/snapshot.json
 # Game-logic scope, including interfaces, libraries, lenses and inherited code.
 # Deploy set: scripts/lib/predictAddresses.js; counts below are files, not deployments.
-# 59 source files. Deployment constants and artwork data are supporting build inputs.
+# 60 source files. Deployment constants and artwork data are supporting build inputs.
 
 contracts/AFKingSubscriptionToken.sol
+contracts/CoinDrawBattle.sol
 contracts/Coinflip.sol
 contracts/Craps.sol
 contracts/CrapsBattle.sol

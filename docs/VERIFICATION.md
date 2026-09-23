@@ -110,7 +110,59 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-22, single-symbol degenerette and century-recycle revision
+## Current evidence — 2026-09-23, unminted-tickets, fill-battle and foil revision
+
+The source is the committed revision `5d52e4f68f559e5e0f043852d31fa09ef2658922`. Commits after it
+touch only documentation (`docs/` and `scope.txt`), so every hash and every run below describes this
+tree. It carries eight changes on top of the single-symbol degenerette revision below, and adds one
+source file, `contracts/CoinDrawBattle.sol` (60 in scope).
+
+Jackpot phase and timing. The normal jackpot phase is three physical days (turbo still runs it in
+one); the counter always steps by one. After level 0 the purchase deadline is 30 days (day 30 is the
+distress rescue day, game over is eligible from day 31), the VRF deadman is 30 days at every level
+and gap backfill follows it. The purchase-phase drip is 4% of the future pool, and the next-to-future
+skim is keyed on purchase age.
+
+Unminted future tickets. Levels above the mint ceiling (level + 1, or level + 2 from a latched last
+purchase day until its request) stay queued in the far-future key space; the seal freezes the next
+level's pool, which mints once on the first cohort committed after the seal. New far-future
+registrations revert under the RNG lock (top-ups are allowed). The BAF scatter runs 48 rounds with
+wallet-uniform future bands.
+
+Coin draws. Jackpot-day and level-1 coin draws split their budget between craps seats (tomorrow's
+opener, or a banked whole-day pass) and equal FLIP shares. The purchase-day fill draw walks up to 50
+far-future wallets and plays them as one closed craps battle in `CoinDrawBattle`, a storage-free,
+GAME-only contract deployed last (N+31): two thirds of the budget are stakes in whole 300-FLIP
+bankrolls, the pot is everything else, each run is capped at exactly 200 rolls and 22 shooters, and
+the Game credits the result in one batch. `Craps._settleSlip` treats a roll budget under one hand
+as exact; the table's 8,192 budget is unchanged. The battle's `resolve` is bounded at 7,310,000 gas
+for a full field at both caps, and every purchase-day worst-case fixture must clear 16,777,216 with
+that whole bound added to its measured gas.
+
+Craps ranking. Busts now rank on shooters completed, then whether anything was kept, then the high
+point; the comparator runs in `CrapsEngine.settleRanked` and `CrapsBattle` reads the result. A bust's
+high point still decodes as zero for the progressive, the record and the finalization log.
+
+Foil. Purchase days past level 1 roll the main winning set alone and store bonus zero; a bonus-set
+claim on such a day never pays. The face table is four times larger (8 / 24 / 140 / 1,600 / 40,000).
+
+Protocol boon draw and WWXRP. Boon-draw entries come from ordinary ETH Degenerette bets on the deity
+hero symbols; the donation entry points are removed. WWXRP's vault allowance and escrow ledger are
+removed, and the vault or its owner mints directly.
+
+| Check | Result |
+| --- | --- |
+| Foundry full seven-group sweep at this revision | pending the evidence chain at this revision |
+| Per-test gas, previous revision vs this revision, same fixture pins | pending |
+| Hardhat `make test-hardhat` | pending |
+| Hardhat `npm run test:stat` | pending |
+| Eleven `make check-*` gates and the storage layout oracle | pending |
+| EIP-170 runtime size, checked-in pins | pending |
+| EIP-170 runtime size, Hardhat-style fixture pins | pending |
+| Slither 0.11.5, same flags as below | pending |
+| Aderyn 0.6.8 | pending |
+
+## Evidence — 2026-09-22, single-symbol degenerette and century-recycle revision (base of the revision above)
 
 The source is the committed revision `c7287f6eb764274c73a2adb8519c359b953669c6`. Commits after it
 touch only `docs/`, so every hash and every run below describes this tree. It carries six
