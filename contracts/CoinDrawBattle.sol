@@ -14,8 +14,9 @@ import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 ///      is nothing to settle later and no door for anyone else to enter by — the field and the
 ///      pot are fixed before the word exists, which makes the whole battle a jackpot result.
 ///
-///      THE FORMAT. Half the budget is the entrants' stakes and half is the pot. Every unit of
-///      stake is one equal whole-FLIP bankroll; a wallet drawn more than once holds that many units
+///      THE FORMAT. Two thirds of the budget are the entrants' stakes and one third is the pot.
+///      Every unit of
+///      stake is one equal bankroll, a whole multiple of 300 FLIP; a wallet drawn more than once holds that many units
 ///      but still plays ONE run on one unit's bankroll, and the units multiply only what that run
 ///      pays. Each run plays the scheduled Dice Run shape — a bankroll five rounds deep, all ten
 ///      chips thrown by the dice, a goal at five times the bankroll that latches as a protected
@@ -70,22 +71,25 @@ contract CoinDrawBattle is Craps {
     ///         shape play; a run it stops pays the bankroll it holds, as the roll cap's does.
     uint256 internal constant _HAND_CAP = 22;
 
-    /// @notice Smallest per-unit bankroll: five rounds of the ten-FLIP minimum board. A budget too
-    ///         small to give every drawn unit this much plays fewer units, from the front.
-    uint256 internal constant _MIN_BANKROLL = 50 ether;
+    /// @notice The bankroll granule and the smallest per-unit bankroll: every run starts on a
+    ///         whole multiple of 300 FLIP, as every scheduled table does, so its board is a
+    ///         multiple of 60 and its chip a multiple of 6 (the place 6/8 7:6 payout lands exact).
+    ///         A budget too small to give every drawn unit 300 plays fewer units, from the front.
+    uint256 internal constant _BANKROLL_UNIT = 300 ether;
 
     /// @notice The scheduled Dice Run shape: rounds of depth, goal multiple, chips per board.
     uint256 internal constant _DEPTH = 5;
     uint256 internal constant _GOAL_MULT = 5;
     uint256 internal constant _CHIPS = 10;
 
-    /// @dev The widest chip whose ten-chip leg still fits a board leg's uint24.
-    uint256 private constant _MAX_CHIP = type(uint24).max / _CHIPS;
+    /// @dev The widest chip whose ten-chip leg still fits a board leg's uint24, kept a multiple of
+    ///      6 so a clamped bankroll stays a multiple of 300.
+    uint256 private constant _MAX_CHIP = (type(uint24).max / _CHIPS / 6) * 6;
 
     /// @notice Play the battle and return what each wallet is owed.
     /// @param level    The purchase level, carried onto the events.
     /// @param entrants The draw's wallets in draw order; repeats are extra units.
-    /// @param amount   The draw's whole FLIP budget, in wei: half stakes, half pot.
+    /// @param amount   The draw's whole FLIP budget, in wei: two thirds stakes, one third pot.
     /// @param word     The day's word.
     /// @return players Each distinct wallet, first-drawn order.
     /// @return owed    FLIP to credit each, pot included; zero for a bust.
@@ -94,9 +98,9 @@ contract CoinDrawBattle is Craps {
         returns (address[] memory players, uint256[] memory owed)
     {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        uint256 half = amount >> 1;
+        uint256 stakes = (amount * 2) / 3;
         uint256 units = entrants.length;
-        if (units > half / _MIN_BANKROLL) units = half / _MIN_BANKROLL;
+        if (units > stakes / _BANKROLL_UNIT) units = stakes / _BANKROLL_UNIT;
         if (units == 0) return (players, owed);
 
         players = new address[](units);
@@ -120,9 +124,10 @@ contract CoinDrawBattle is Craps {
             mstore(owed, n)
         }
 
-        // The chip first, then the bankroll exactly `_DEPTH` boards of it, so every budget plays
-        // the same shape; what the floor leaves of a unit's share is not minted.
-        uint256 chipFlip = half / units / (_DEPTH * _CHIPS * 1 ether);
+        // Each unit's share floored to a whole multiple of 300 FLIP, then the chip is exactly a
+        // fiftieth of it (`_DEPTH` boards of `_CHIPS` chips), so every budget plays the same shape;
+        // what the floor leaves of a unit's share is not minted.
+        uint256 chipFlip = (stakes / units / _BANKROLL_UNIT) * (_BANKROLL_UNIT / (_DEPTH * _CHIPS * 1 ether));
         if (chipFlip > _MAX_CHIP) chipFlip = _MAX_CHIP;
         uint256 bankroll = chipFlip * (_DEPTH * _CHIPS * 1 ether);
         uint256 best;
@@ -161,7 +166,7 @@ contract CoinDrawBattle is Craps {
             unchecked { ++j; }
         }
         if (winner != type(uint256).max) {
-            uint256 pot = _award(half, _hash2(word, COIN_DRAW_ROUND_TAG));
+            uint256 pot = _award(amount - stakes, _hash2(word, COIN_DRAW_ROUND_TAG));
             owed[winner] += pot;
             emit CoinDrawBattlePot(level, players[winner], pot);
         }

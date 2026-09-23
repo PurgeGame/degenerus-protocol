@@ -112,11 +112,12 @@ contract CoinDrawBattleTest is Test {
 
         (address[] memory players, uint256[] memory owed) = _resolve(e, amount, word);
 
-        uint256 half = amount / 2;
+        uint256 stakes = (amount * 2) / 3;
         uint256 units = 50;
-        if (units > half / 50 ether) units = half / 50 ether;
-        uint256 chipFlip = half / units / 50 ether;
-        if (chipFlip > type(uint24).max / 10) chipFlip = type(uint24).max / 10;
+        if (units > stakes / 300 ether) units = stakes / 300 ether;
+        uint256 chipFlip = (stakes / units / 300 ether) * 6;
+        if (chipFlip > (type(uint24).max / 10 / 6) * 6) chipFlip = (type(uint24).max / 10 / 6) * 6;
+        assertEq((chipFlip * 50 ether) % 300 ether, 0, "a bankroll off the 300-FLIP granule");
 
         // Rebuild the distinct field and its units from the truncated draw.
         address[] memory want = new address[](units);
@@ -149,18 +150,18 @@ contract CoinDrawBattleTest is Test {
             expect[j] = _award(out * held[j], uint256(keccak256(abi.encode(word, ROUND_TAG, uint256(uint160(want[j]))))));
         }
         if (winner != type(uint256).max) {
-            expect[winner] += _award(half, uint256(keccak256(abi.encode(word, ROUND_TAG))));
+            expect[winner] += _award(amount - stakes, uint256(keccak256(abi.encode(word, ROUND_TAG))));
         }
         for (uint256 j; j < n; ++j) assertEq(owed[j], expect[j], "owed");
     }
 
-    /// @dev A budget that cannot give every drawn unit the 50-FLIP floor plays fewer, from the
+    /// @dev A budget that cannot give every drawn unit the 300-FLIP floor plays fewer, from the
     ///      front; one that cannot give even one pays nothing and returns empty.
     function test_SmallBudgetPlaysFewerUnits() public {
         address[] memory e = _field(50, 3);
-        (address[] memory players,) = _resolve(e, 1_000 ether, 11);
-        assertEq(players.length, 10, "500 FLIP of stakes seats ten 50-FLIP bankrolls");
-        (players,) = _resolve(e, 99 ether, 11);
+        (address[] memory players,) = _resolve(e, 4_500 ether, 11);
+        assertEq(players.length, 10, "3,000 FLIP of stakes (two thirds) seats ten 300-FLIP bankrolls");
+        (players,) = _resolve(e, 449 ether, 11);
         assertEq(players.length, 0, "under one bankroll plays nobody");
     }
 
@@ -205,7 +206,7 @@ contract CoinDrawBattleTest is Test {
             uint256 word = uint256(keccak256(abi.encode("word", w)));
             uint256 amount = (5_000 + (w * 7919) % 5_000_000) * 1 ether;
             uint256 modelled = RESOLVE_BASE;
-            uint256 chip = amount / 2 / 50 / 50 ether;
+            uint256 chip = ((amount * 2) / 3 / 50 / 300 ether) * 6;
             for (uint256 i; i < 50; ++i) {
                 Craps.SlipResult memory r = ref.run(word, e[i], chip);
                 modelled += FIXED + RUN_EXTRA + PER_HAND * r.handsPlayed + PER_ROLL * r.totalRolls;
@@ -285,7 +286,7 @@ contract CoinDrawBattleTest is Test {
         uint256 hit;
         for (uint256 i; i < N; ++i) {
             address p = address(uint160(i + 1));
-            Craps.SlipResult memory r = ref.run(uint256(keccak256(abi.encode("tail", i / 50))), p, 100);
+            Craps.SlipResult memory r = ref.run(uint256(keccak256(abi.encode("tail", i / 50))), p, 60);
             if (r.handsPlayed == 22) ++hit;
         }
         emit log_named_uint("runs reaching the hand cap, per 100k", (hit * 100_000) / N);

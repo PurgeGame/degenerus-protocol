@@ -24,13 +24,13 @@ import {DayOneSeeder, DayOneFixture} from "./JackpotDayOneWorstCase.t.sol";
 ///             queues [P+1, P+99], walking up to FILL_BATTLE_ENTRANTS = 50 wallets (independent of
 ///             budget — the walk always tries for 50). Budget B = levelPrizePool[P-1] * 1000 /
 ///             (price * 400) goes whole to CoinDrawBattle.resolve, which plays every walked wallet
-///             as one closed craps battle in the SAME call: half the budget is stakes (one run per
-///             distinct wallet, its bankroll = half / units, at least 50 FLIP or the unit is
-///             dropped from the front), half is the pot to the highest surviving run. The Game
+///             as one closed craps battle in the SAME call: two thirds of the budget are stakes (one
+///             run per distinct wallet, its bankroll = stakes / units floored to a multiple of 300
+///             FLIP, at least 300 or the unit is dropped from the front), one third is the pot. The Game
 ///             credits what the battle returns in ONE coinflip.creditFlipBatch; CrapsBattle is
 ///             never touched by the fill anymore — every seat/pass/opener-window concept that used
 ///             to live here belongs to the trait draw only (see below). All 50 walked wallets play
-///             once B >= 5,000 FLIP (half >= 2,500, i.e. 50 x the 50-FLIP floor).
+///             once B >= 22,500 FLIP (stakes >= 15,000, i.e. 50 x the 300-FLIP floor).
 ///           - LEVEL 1 only (P == 1): no ETH / ticket leg; instead a trait draw over
 ///             lvlTraitEntry[1] (`payDailyFlipJackpot`, UNCHANGED: craps seats + coin shares) AND
 ///             the fill draw's battle — plus the day seal (the latch rides stage 6 when no ticket
@@ -268,23 +268,23 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
     uint256 internal constant L1_TRAIT_HOLDERS = 5000; // per level-1 bonus bucket: ~12 pulls each
 
     /// @dev Sizing at 0.04 ETH (B = prev * 62.5 FLIP/ETH). CoinDrawBattle plays a run for the
-    ///      first `units = min(50, (B/2) / 50 FLIP)` of the 50 walked wallets (dropped from the
+    ///      first `units = min(50, (2B/3) / 300 FLIP)` of the 50 walked wallets (dropped from the
     ///      back when the budget is short), so the fill's run COUNT is a step function of B alone
     ///      — the trait draw's old opener/whole-day split (still real, see COIN_DRAW_HALF_SLOTS)
     ///      has no fill-draw analogue any more:
     ///      - future 5000 ETH -> the drip covers 49 ETH winners and >= 120 whole tickets.
-    ///      - PREV_POOL_OPEN25 2,080 ETH -> B 130,000, half 65,000 -> units = 50 (saturated: every
+    ///      - PREV_POOL_OPEN25 2,080 ETH -> B 130,000, stakes 86,666 -> units = 50 (saturated: every
     ///        walked wallet plays). THE WORST CASE: heaviest fill budget below the trait draw's
     ///        own tiers, one full 50-row creditFlipBatch.
-    ///      - PREV_POOL_NOFILL      1 ETH -> B     62.5, half     31.25 -> units = 0: the walk
+    ///      - PREV_POOL_NOFILL      1 ETH -> B     62.5, stakes    41.67 -> units = 0: the walk
     ///        still runs (50 wallets found, gas spent), the battle plays nobody, nothing credited.
-    ///      - PREV_POOL_PARTIAL  75.2 ETH -> B  4,700, half  2,350 -> units = 47: the entrants
+    ///      - PREV_POOL_PARTIAL   340 ETH -> B 21,250, stakes 14,166 -> units = 47: the entrants
     ///        array is truncated, not every walked wallet gets a run.
     ///      next = prev + 1 ETH > target -> the last-purchase latch (+ BAF arm at x0).
     uint128 internal constant FUTURE_POOL = 5000 ether;
     uint256 internal constant PREV_POOL_OPEN25 = 2080 ether;
     uint256 internal constant PREV_POOL_NOFILL = 1 ether;
-    uint256 internal constant PREV_POOL_PARTIAL = 75.2 ether;
+    uint256 internal constant PREV_POOL_PARTIAL = 340 ether;
     uint128 internal constant NEXT_POOL_LATCH = 1001 ether;
     uint128 internal constant NEXT_POOL_QUIET = 50 ether;
     /// @dev Level 1 (storage level 0, 0.01 ETH): B = prev * 250. Both draws share this budget, but
@@ -582,7 +582,7 @@ contract PurchaseDailyEthTicketsOnly is PurchaseDailyFixture {
 /// @notice The fill-draw LADDER: the main board empty (no ETH, no ticket winners), the fill at a
 ///         budget per rung. The walk itself always finds FILL_BATTLE_ENTRANTS = 50 wallets
 ///         regardless of budget; what varies is how many of those 50 the battle affords a run
-///         (`units = min(50, (B/2) / 50 FLIP)`, dropped from the back when short). Three rungs
+///         (`units = min(50, (2B/3) / 300 FLIP)`, dropped from the back when short). Three rungs
 ///         cover the shape: nobody affordable (the walk still runs, the battle plays nobody),
 ///         partial (units < 50, an entrants-array truncation), and saturated (all 50 play, one
 ///         50-row creditFlipBatch — same scenario as PurchaseDailyWorstCase's headline).

@@ -10,12 +10,12 @@
 //     pays up to 25 shares;
 //   - the fill draw over the unminted far-future queues [2, 100] (`payDailyFutureFlipJackpot`) —
 //     walks up to FILL_BATTLE_ENTRANTS = 50 wallets (independent of budget) and hands them all,
-//     with the whole budget, to CoinDrawBattle.resolve in one call: half the budget stakes one run
-//     per distinct wallet (dropped from the back if the budget affords fewer than 50 x 50-FLIP
-//     bankrolls), half is the pot to the highest surviving run. CrapsBattle is never touched by
-//     the fill any more.
+//     with the whole budget, to CoinDrawBattle.resolve in one call: two thirds of the budget stake
+//     one run per distinct wallet (dropped from the back if the budget affords fewer than 50 x
+//     300-FLIP bankrolls), one third is the pot to the highest surviving run. CrapsBattle is never
+//     touched by the fill any more.
 // Both budgets tested here comfortably saturate the fill's battle at all 50 walked wallets (the
-// 50-FLIP-per-unit floor is far below either budget), so the two scenarios differ only in the
+// 300-FLIP-per-unit floor is far below either budget), so the two scenarios differ only in the
 // trait draw's opener-vs-whole-day split:
 //   - B = 130,000 FLIP (520 ETH): the trait draw seats 25 OPENERs — the heavier seat (a window
 //     reservation) — the fill's battle runs all 50 walked wallets;
