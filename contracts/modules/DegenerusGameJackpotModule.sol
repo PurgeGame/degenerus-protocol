@@ -152,8 +152,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Emitted once per daily drawing with both main and bonus winning traits.
     ///      bonusTargetLevel is the level the bonus-trait coin draw reads (level + 1 on
-    ///      jackpot days); 0 on purchase days, which have no bonus-trait draw (the bonus set
-    ///      still feeds the day's foil claims).
+    ///      jackpot days); 0 on purchase days, which roll no bonus set at all:
+    ///      bonusTraitsPacked is 0 there and foil claims only the main set. (Level 1's
+    ///      purchase days roll both, for their own coin draws.)
     event DailyWinningTraits(
         uint24 indexed day,
         uint32 mainTraitsPacked,
@@ -450,10 +451,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 questDay = dailyIdx + 1;
         // One VRF word drives both rolls; each rolls its OWN hero — the bonus hero is
         // forced distinct from the main hero (main slot excluded from the bonus roll).
+        // A PURCHASE day rolls the main set alone: its bonus set would only have fed foil
+        // claims, so the day stores bonus zero and foil claims the main set only.
         (
             uint32 winningTraitsPacked,
             uint32 bonusTraitsPacked
-        ) = _rollWinningTraitsPair(randWord);
+        ) = _rollWinningTraitsPair(randWord, isJackpotPhase);
 
         // An armed golden ticket resolves against the first main board rolled after the
         // arm draw — this draw, whenever dailyIdx has advanced past the arm draw's
@@ -792,7 +795,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         (
             uint32 mainTraitsPacked,
             uint32 bonusTraitsPacked
-        ) = _rollWinningTraitsPair(randWord);
+        ) = _rollWinningTraitsPair(randWord, true);
 
         // --- Coin Jackpot ---
         // Bonus traits on level + 1, minted on the last-purchase word before this phase.
@@ -847,7 +850,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
         uint24 lvl = level;
         uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
-        (, uint32 bonusTraitsPacked) = _rollWinningTraitsPair(randWord);
+        (, uint32 bonusTraitsPacked) = _rollWinningTraitsPair(randWord, true);
         _distributeTicketJackpot(
             sourceLevel,
             phaseTransitionActive ? lvl + 1 : lvl,
@@ -2407,8 +2410,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      hero). Base traits derive from each roll's own word (main: randWord;
     ///      bonus: keccak-salted with BONUS_TRAITS_TAG); heroes override symbol
     ///      bits only, leaving every quadrant's base-rolled color intact.
+    ///      `withBonus` false skips the bonus roll and returns bonus zero, which no real set
+    ///      can equal (quadrant 1's byte is at least 64): the foil claim reads it as "no
+    ///      bonus draw this day". The main set is identical either way.
     function _rollWinningTraitsPair(
-        uint256 randWord
+        uint256 randWord,
+        bool withBonus
     ) private view returns (uint32 mainPacked, uint32 bonusPacked) {
         // dailyIdx is frozen for this whole view (no writes/external calls between the reads),
         // so cache it once for both hero rolls and the ban-quadrant derivation.
@@ -2427,6 +2434,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
         _applyHeroResult(traits, hasHeroWinner, heroQuadrant, heroSymbol);
         mainPacked = JackpotBucketLib.packWinningTraits(traits);
+        if (!withBonus) return (mainPacked, 0);
 
         uint256 rBonus = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
         traits = JackpotBucketLib.getRandomTraits(rBonus);

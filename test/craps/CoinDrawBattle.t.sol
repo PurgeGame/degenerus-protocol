@@ -150,7 +150,7 @@ contract CoinDrawBattleTest is Test {
             expect[j] = _award(out * held[j], uint256(keccak256(abi.encode(word, ROUND_TAG, uint256(uint160(want[j]))))));
         }
         if (winner != type(uint256).max) {
-            expect[winner] += _award(amount - stakes, uint256(keccak256(abi.encode(word, ROUND_TAG))));
+            expect[winner] += _award(amount - chipFlip * 50 ether * units, uint256(keccak256(abi.encode(word, ROUND_TAG))));
         }
         for (uint256 j; j < n; ++j) assertEq(owed[j], expect[j], "owed");
     }

@@ -214,7 +214,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         "a run's payout (all units) must go through _award keyed per wallet"
       ).to.equal(true);
       expect(
-        /uint256\s+pot\s*=\s*_award\(\s*amount\s*-\s*stakes\s*,/.test(body),
+        /uint256\s+pot\s*=\s*_award\(\s*amount\s*-\s*bankroll\s*\*\s*units\s*,/.test(body),
         "the pot must go through _award"
       ).to.equal(true);
       const award = bodyOf(COIN_DRAW_BATTLE, "function _award(");

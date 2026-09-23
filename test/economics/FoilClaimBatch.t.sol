@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title FoilClaimBatch — behavioural coverage for claimFoilMatchMany
 /// @notice The batch claimer is handed out as one shared tuple list that many senders may
@@ -33,6 +34,9 @@ contract FoilClaimBatch is DeployProtocol {
     address[FOIL_BUYERS] private _fb;
     uint24 private _buyDay;
     uint24 private _endDay;
+
+    bytes32 private constant FOIL_CLAIMED_SIG =
+        keccak256("FoilMatchClaimed(address,uint24,uint256,uint8,uint8,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -227,5 +231,87 @@ contract FoilClaimBatch is DeployProtocol {
         game.claimFoilMatch(good[0].player, good[0].day, good[0].ticketIndex, good[0].drawKind);
         vm.expectRevert();
         game.claimFoilMatch(good[1].player, good[1].day, good[1].ticketIndex, good[1].drawKind);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Purchase days roll no bonus set; the face table
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @dev Storage slots (scripts/layout/golden/DegenerusGame.json): `dailyFoilDraw` packs a
+    ///      day's main set [0..31], bonus set [32..63] and level [64..]; `foilRecord[L][player]`
+    ///      holds the pack's resolveDay in its low 24 bits; `rngWordByDay` is what the pack's
+    ///      four lines derive from.
+    uint256 private constant FOIL_DRAW_SLOT = 60;
+    uint256 private constant FOIL_RECORD_SLOT = 58;
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
+
+    /// @dev A purchase day past level 1 stores bonus zero (it rolls no bonus set), and the
+    ///      claim must read that as "no bonus draw", never as a set to match. To make that
+    ///      bite, both of a day's sets are cleared to zero and the pack's line word is varied
+    ///      until a MAIN-set claim pays against the all-zero main set: that line would score
+    ///      against a zero bonus set too, so only the guard can refuse the bonus claim.
+    function test_aDayWithoutABonusSetPaysNoBonusClaim() public {
+        address player = _fb[0];
+        uint24 day;
+        uint24 lvl;
+        uint24 resolveDay;
+        for (uint24 d = _buyDay + 1; d <= _endDay; d++) {
+            if (game.rngWordForDay(d) == 0) continue;
+            uint256 draw = uint256(vm.load(address(game), keccak256(abi.encode(uint256(d), FOIL_DRAW_SLOT))));
+            uint24 L = uint24(draw >> 64);
+            bytes32 inner = keccak256(abi.encode(uint256(L), FOIL_RECORD_SLOT));
+            uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(player, inner))));
+            if (rec == 0 || d < uint24(rec)) continue;
+            (day, lvl, resolveDay) = (d, L, uint24(rec));
+            break;
+        }
+        assertTrue(day != 0, "no sealed day the pack can claim");
+
+        vm.store(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT)), bytes32(uint256(lvl) << 64));
+        bytes32 wordKey = keccak256(abi.encode(uint256(resolveDay), RNG_WORD_BY_DAY_SLOT));
+
+        bool found;
+        uint8 ticket;
+        for (uint256 k; k < 1_500 && !found; ++k) {
+            vm.store(address(game), wordKey, keccak256(abi.encode("zero-set line", k)));
+            for (uint8 ti; ti < 4 && !found; ++ti) {
+                uint256 snap = vm.snapshotState();
+                try game.claimFoilMatch(player, day, ti, 0) {
+                    found = true;
+                    ticket = ti;
+                } catch {}
+                vm.revertToState(snap);
+            }
+        }
+        assertTrue(found, "no line word scored against an all-zero set");
+
+        game.claimFoilMatch(player, day, ticket, 0); // the main set of zero pays: the line matches zero
+        vm.expectRevert();
+        game.claimFoilMatch(player, day, ticket, 1); // the bonus set of zero never does
+    }
+
+    /// @dev Every real win pays the table's faces for its score: 8 / 24 / 140 / 1,600 / 40,000.
+    function test_winsPayTheFaceTable() public {
+        Tuple[] memory t = _findClaimable(12);
+        assertGt(t.length, 0, "the scenario produced no claimable win");
+        uint256[9] memory faces;
+        faces[4] = 8;
+        faces[5] = 24;
+        faces[6] = 140;
+        faces[7] = 1_600;
+        faces[8] = 40_000;
+        for (uint256 i; i < t.length; ++i) {
+            vm.recordLogs();
+            game.claimFoilMatch(t[i].player, t[i].day, t[i].ticketIndex, t[i].drawKind);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            bool seen;
+            for (uint256 k; k < logs.length; ++k) {
+                if (logs[k].topics.length == 0 || logs[k].topics[0] != FOIL_CLAIMED_SIG) continue;
+                (,, uint8 tier, uint256 paid) = abi.decode(logs[k].data, (uint256, uint8, uint8, uint256));
+                assertEq(paid, faces[tier], "a win paid off the face table");
+                seen = true;
+            }
+            assertTrue(seen, "a settled claim logged no FoilMatchClaimed");
+        }
     }
 }

@@ -14,7 +14,8 @@ import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 ///      is nothing to settle later and no door for anyone else to enter by — the field and the
 ///      pot are fixed before the word exists, which makes the whole battle a jackpot result.
 ///
-///      THE FORMAT. Two thirds of the budget are the entrants' stakes and one third is the pot.
+///      THE FORMAT. Two thirds of the budget are the entrants' stakes and the pot is everything
+///      else: the remaining third plus whatever the 300-FLIP bankroll floor leaves unstaked.
 ///      Every unit of
 ///      stake is one equal bankroll, a whole multiple of 300 FLIP; a wallet drawn more than once holds that many units
 ///      but still plays ONE run on one unit's bankroll, and the units multiply only what that run
@@ -89,7 +90,7 @@ contract CoinDrawBattle is Craps {
     /// @notice Play the battle and return what each wallet is owed.
     /// @param level    The purchase level, carried onto the events.
     /// @param entrants The draw's wallets in draw order; repeats are extra units.
-    /// @param amount   The draw's whole FLIP budget, in wei: two thirds stakes, one third pot.
+    /// @param amount   The draw's whole FLIP budget, in wei: two thirds stakes, the rest the pot.
     /// @param word     The day's word.
     /// @return players Each distinct wallet, first-drawn order.
     /// @return owed    FLIP to credit each, pot included; zero for a bust.
@@ -126,7 +127,7 @@ contract CoinDrawBattle is Craps {
 
         // Each unit's share floored to a whole multiple of 300 FLIP, then the chip is exactly a
         // fiftieth of it (`_DEPTH` boards of `_CHIPS` chips), so every budget plays the same shape;
-        // what the floor leaves of a unit's share is not minted.
+        // what the floor leaves of a unit's share joins the pot.
         uint256 chipFlip = (stakes / units / _BANKROLL_UNIT) * (_BANKROLL_UNIT / (_DEPTH * _CHIPS * 1 ether));
         if (chipFlip > _MAX_CHIP) chipFlip = _MAX_CHIP;
         uint256 bankroll = chipFlip * (_DEPTH * _CHIPS * 1 ether);
@@ -166,7 +167,7 @@ contract CoinDrawBattle is Craps {
             unchecked { ++j; }
         }
         if (winner != type(uint256).max) {
-            uint256 pot = _award(amount - stakes, _hash2(word, COIN_DRAW_ROUND_TAG));
+            uint256 pot = _award(amount - bankroll * units, _hash2(word, COIN_DRAW_ROUND_TAG));
             owed[winner] += pot;
             emit CoinDrawBattlePot(level, players[winner], pot);
         }

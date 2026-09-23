@@ -156,16 +156,20 @@ contract DegenerusGameFoilPackModule is
 
     // Per-score face counts for the graded match (see _tryClaimFoilMatch).
     // One face stakes 1,000 FLIP or priceForLevel(L) ETH — one ticket of value either
-    // way (WWXRP, the third currency, is worthless). Calibrated to
-    // E[faces/comparison] = 0.010972 (E[faces/pack/30d] = 2.633), so the value-bearing ETH and
-    // FLIP lanes (40% each) each deliver ~1 ticket of value per pack over a 30-day, 60-draw
-    // window. Score T (0..8) pays from T=4; T=8 (all four full doubles) also grants a half
-    // whale pass.
-    uint256 private constant FOIL_FACES_T4 = 2;
-    uint256 private constant FOIL_FACES_T5 = 6;
-    uint256 private constant FOIL_FACES_T6 = 35;
-    uint256 private constant FOIL_FACES_T7 = 400;
-    uint256 private constant FOIL_FACES_T8 = 10_000;
+    // way (WWXRP, the third currency, is worthless). E[faces/comparison] = 0.043887.
+    // A pack compares its four lines against ONE set on each purchase day (the day rolls
+    // no bonus set) and TWO on each jackpot day, so its match value grows with how long
+    // its level runs: FOIL IS A BET ON THE LEVEL SLOWING DOWN. Valued at ~0.8 tickets a
+    // face (the ETH and FLIP lanes, 40% each), a pack bought on the first purchase day
+    // returns ~8% of its ten-ticket cost on a one-day purchase phase, ~14% at five days,
+    // ~21% at ten and ~49% at the full thirty; a fast level pays mostly to high-score
+    // buyers through the gold ladder. Score T (0..8) pays from T=4; T=8 (all four full
+    // doubles) also grants a half whale pass.
+    uint256 private constant FOIL_FACES_T4 = 8;
+    uint256 private constant FOIL_FACES_T5 = 24;
+    uint256 private constant FOIL_FACES_T6 = 140;
+    uint256 private constant FOIL_FACES_T7 = 1_600;
+    uint256 private constant FOIL_FACES_T8 = 40_000;
 
     // The gold ladder: FLIP on the pack's TOTAL gold count, its sixteen quadrants read
     // as one pool. This is the rung players actually meet — the boost sets a per-quadrant
@@ -688,6 +692,9 @@ contract DegenerusGameFoilPackModule is
         (bool drawPresent, uint32 mainSet, uint32 bonusSet, uint24 L) =
             _foilDrawFor(day);
         if (!drawPresent) return false;
+        // A purchase day rolls no bonus set and stores zero, which no real set can equal
+        // (quadrant 1's byte is at least 64): there is nothing to match against.
+        if (drawKind == 1 && bonusSet == 0) return false;
 
         // The player's frozen record for that cycle: the boost, the resolveDay the lines
         // derive from, and the activity score frozen at buy (the spin's RTP). present is

@@ -161,7 +161,8 @@ exhausted, then picks again (at most 16 picks). `CoinDrawBattle` (a storage-free
 contract at `COIN_DRAW_BATTLE`) plays the field on the day's word: two thirds of the budget
 are the stakes, split into equal units, each a whole multiple of 300 FLIP (at least 300,
 exactly five boards deep; a wallet walked twice holds two units but plays one run, and the
-units multiply only what that run pays), and one third is the pot. Each run is the scheduled Dice Run shape (five rounds deep, all ten chips thrown by
+units multiply only what that run pays), and the pot is everything else: the remaining third
+plus whatever the 300-FLIP floor leaves unstaked. Each run is the scheduled Dice Run shape (five rounds deep, all ten chips thrown by
 the dice, goal at five times the bankroll, no shooter boost) capped at exactly 200 rolls and
 22 shooters (the longest of 200,000 simulated runs; 0.004% reach it): a bust pays nothing, a run stopped
 by either cap or latched at the goal pays its bankroll per unit, and the pot goes to the paid run with the highest ending bankroll (the earlier-drawn

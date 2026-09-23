@@ -3688,7 +3688,7 @@ abstract contract DegenerusGameStorage {
     ///      maps to one cycle).
     ///      Packed uint256 layout (LSB→MSB):
     ///        [0-31]   mainSet  — the day's main winning set (uint32)
-    ///        [32-63]  bonusSet — the day's bonus winning set (uint32)
+    ///        [32-63]  bonusSet — the day's bonus winning set (uint32); zero on a purchase day, which rolls none
     ///        [64-87]  level    — the active ticket level of that day (uint24)
     ///        [88-255] reserved 0
     mapping(uint24 => uint256) internal dailyFoilDraw;

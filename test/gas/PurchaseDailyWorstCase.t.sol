@@ -538,7 +538,24 @@ abstract contract PurchaseDailyStage is PurchaseDailyFixture {
         emit log_named_uint(string.concat("PURCHASE_DAILY_TICKET_STAGE_GAS_", _label()), ticketUsed);
     }
 
+    /// @dev A purchase day past level 1 rolls the main set alone: its DailyWinningTraits carries
+    ///      bonus zero and bonus target zero (foil claims the main set only that day).
+    function _assertNoPurchaseBonusSet() internal view {
+        bytes32 sig = keccak256("DailyWinningTraits(uint24,uint32,uint32,uint24)");
+        uint256 seen;
+        for (uint256 i; i < lastLogs.length; ++i) {
+            if (lastLogs[i].topics.length == 0 || lastLogs[i].topics[0] != sig) continue;
+            (uint32 mainSet, uint32 bonusSet, uint24 target) = abi.decode(lastLogs[i].data, (uint32, uint32, uint24));
+            assertTrue(mainSet != 0, "the purchase day rolled no main set");
+            assertEq(bonusSet, 0, "a purchase day rolled a bonus set");
+            assertEq(target, 0, "a purchase day named a bonus target");
+            ++seen;
+        }
+        assertEq(seen, 1, "the purchase day did not emit its winning traits once");
+    }
+
     function _assertStage(Tally memory t) internal {
+        _assertNoPurchaseBonusSet();
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
         assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "the ETH leg paid all 49 fixed-bucket winners");
         assertEq(t.ethDistinct, PURCHASE_ETH_WINNERS, "all ETH winners are distinct cold addresses");
