@@ -13,6 +13,17 @@ import {Craps} from "../../contracts/Craps.sol";
 ///         contract, which is what lets the assertions that grade them stay untouched.
 /// @dev Test-only. It is never deployed to a live chain, so its size is nobody's constraint.
 contract CrapsViews is CrapsBattle {
+    /// @dev Legacy score helper for harnesses. Production receives this score from the engine
+    ///      in Settlement.rank and has no reason to compute it again.
+    function _compositeOf(Settlement memory s) internal pure returns (uint256) {
+        SlipResult memory r;
+        r.bankrollOut = s.won;
+        r.peakBankroll = s.peak;
+        r.handsPlayed = s.handsPlayed;
+        r.stop = s.stop;
+        return _rankOf(r);
+    }
+
     // ── Constants ───────────────────────────────────────────────────────────
     uint256 public constant MIN_BANKROLL_FLIP = _MIN_BANKROLL_FLIP;
     uint256 public constant MAX_BANKROLL_MULT = _MAX_BANKROLL_MULT;

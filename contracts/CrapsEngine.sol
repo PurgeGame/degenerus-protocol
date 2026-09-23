@@ -4,8 +4,8 @@ pragma solidity 0.8.34;
 import {Craps} from "./Craps.sol";
 
 /// @title CrapsEngine
-/// @notice The craps table's dice, deployed on their own. One pure function: a slip's packed
-///         chips and the terms of its run in, the settled run out.
+/// @notice The craps table's dice, deployed on their own. Two pure entry points return a
+///         settled run from a slip's packed chips and terms; the table uses `settleRanked`.
 /// @dev Holds no storage, takes no constructor arguments, has no owner and no upgrade path.
 ///      `CrapsBattle` reaches it by STATICCALL at the pinned `ContractAddresses.CRAPS_ENGINE`,
 ///      which is what keeps the table itself under the EIP-170 ceiling: the engine's whole

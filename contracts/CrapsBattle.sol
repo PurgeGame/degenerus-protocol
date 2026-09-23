@@ -3562,17 +3562,6 @@ contract CrapsBattle is LootboxCraps {
         return cost | flags;
     }
 
-    /// @dev A settlement's merit composite (see `Craps._rankOf`), for harnesses: production
-    ///      reads the figure the engine already returned in `Settlement.rank`, so this wrapper
-    ///      compiles into nothing a deployment carries.
-    function _compositeOf(Settlement memory s) internal pure returns (uint256) {
-        SlipResult memory r;
-        assembly ("memory-safe") {
-            r := s
-        }
-        return _rankOf(r);
-    }
-
     /// @dev A stored composite back into what it says. `hands` is recoverable for a BUST, whose
     ///      primary leads with its shooter count, and reads zero for a goal, whose primary is its
     ///      high point alone. A bust's high point ranks it against other busts but DECODES AS
