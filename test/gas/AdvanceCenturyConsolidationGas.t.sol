@@ -19,7 +19,7 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         for (uint256 i = deityPassOwners.length; i < 32; ++i) {
             deityPassOwners.push(address(uint160(0xDE170000 + i)));
         }
-        purchaseStartDay = day - 21;
+        purchaseStartDay = day - 8; // accelerated skim trough; preserve the fixture's minimum-rate shape
         dailyIdx = day - 1;
         lastPurchaseDay = true;
         ticketsFullyProcessed = true;
@@ -349,43 +349,43 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
 
 contract AdvanceCenturyConsolidationGas is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(3500 ether, 100 ether, 144_126_247_524_580_441_470, 108, 1, true);
+        return Shape(3500 ether, 100 ether, 158_126_247_524_580_441_470, 108, 1, true);
     }
 }
 
 contract AdvanceCenturyAtHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 477_525_457_570_838_821_329, 100 ether, 85, 0, false);
+        return Shape(100 ether, 475_485_053_530_434_780_923, 100 ether, 85, 0, false);
     }
 }
 
 contract AdvanceCenturyAboveHundredThreshold is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 477_525_457_570_838_822_340, 100 ether + 200, 108, 1, false);
+        return Shape(100 ether, 475_485_053_530_434_781_933, 100 ether + 200, 108, 1, false);
     }
 }
 
 contract AdvanceCenturyFarDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 882_858_790_904_172_154_664, 180 ether, 104, 3, false);
+        return Shape(100 ether, 880_838_588_883_970_134_458, 180 ether, 104, 3, false);
     }
 }
 
 contract AdvanceCenturyLargeDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 1_488_919_396_964_778_215_270, 300 ether, 100, 5, false);
+        return Shape(100 ether, 1_486_899_194_944_576_195_064, 300 ether, 100, 5, false);
     }
 }
 
 contract AdvanceCenturyFirstScatterDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 3_004_070_912_116_293_366_785, 600 ether, 50, 30, false);
+        return Shape(100 ether, 3_002_050_710_096_091_346_579, 600 ether, 50, 30, false);
     }
 }
 
 contract AdvanceCenturyAllTicketsDeferred is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(100 ether, 5_529_323_437_368_818_619_310, 1100 ether, 0, 55, false);
+        return Shape(100 ether, 5_527_303_235_348_616_599_105, 1100 ether, 0, 55, false);
     }
 }
 
@@ -397,7 +397,9 @@ contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
     }
 
     function _shape() internal pure override returns (Shape memory) {
-        return Shape(3000 ether, 100 ether, 157_001_039_980_229_350_166, 108, 1, true);
+        // Retune future funding to preserve the destination-heavy award shape under
+        // the 15% trough; raising this BAF pool crosses an amount-dependent threshold.
+        return Shape(3000 ether, 38_181_818_181_818_181_818, 157_001_039_980_229_350_166, 108, 1, true);
     }
 }
 

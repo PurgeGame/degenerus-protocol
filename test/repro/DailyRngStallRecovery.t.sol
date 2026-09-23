@@ -450,14 +450,21 @@ contract DailyRngStallRecovery is DeployProtocol {
         _driveDay();
         _stallDailyRequest();
 
-        // Far beyond the grace window, but nowhere near the 120-day deadline.
-        simTime += 60 days;
+        // Beyond the 14-day grace window, but still within the level-0 365-day deadline and the
+        // 30-day deadman.
+        simTime += 25 days;
         vm.warp(simTime);
         assertFalse(
             game.livenessTriggered(),
             "a stall must not end the game before its day deadline"
         );
         assertFalse(game.gameOver(), "no game-over before the deadline");
+
+        // The 30-day deadman bounds level 0 too: past it the stall is terminal even though the
+        // 365-day deploy deadline is far off.
+        simTime += 10 days;
+        vm.warp(simTime);
+        assertTrue(game.livenessTriggered(), "the 30-day deadman must fire at level 0");
     }
 
     /// Game-over is permanent in both directions: once the terminal path has run, the trigger

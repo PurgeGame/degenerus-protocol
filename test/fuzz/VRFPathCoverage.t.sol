@@ -9,7 +9,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 /// @title VRFPathCoverage -- Parametric fuzz tests for gap backfill edge cases (TEST-03)
 /// @notice Complements the invariant tests from VRFPathInvariants by testing specific
 ///         boundary scenarios with fuzzed VRF words: single-day gap, multi-day gap,
-///         maximum 120-day gap, mid-day pending state, entropy uniqueness, and
+///         maximum 29-day gap (the 30-day deadman bound), mid-day pending state, entropy uniqueness, and
 ///         index lifecycle across stall recovery.
 ///
 /// @dev Follows VRFStallEdgeCases patterns: fixed VRF words for deterministic day-1
@@ -142,7 +142,7 @@ contract VRFPathCoverage is DeployProtocol {
     ///         Day 1 uses fixed setup word; recovery word and gap size are fuzzed.
     function test_gapBackfillMultiDay_fuzz(uint256 vrfWord, uint8 rawGapDays) public {
         vrfWord = bound(vrfWord, 1, type(uint256).max);
-        rawGapDays = uint8(bound(rawGapDays, 3, 30));
+        rawGapDays = uint8(bound(rawGapDays, 3, 29)); // day 3 + 30 would trip the 30-day deadman
 
         // Complete the first post-deploy day normally with fixed word
         _completeDay(0xDEAD0001);
@@ -196,8 +196,8 @@ contract VRFPathCoverage is DeployProtocol {
         game.advanceGame();
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
-        // Stall: warp to day 122 (119-day gap; day 123 would trip the 120-day deadman)
-        vm.warp(122 * 86400);
+        // Stall: warp to day 32 (29-day gap; day 33 would trip the 30-day deadman)
+        vm.warp(32 * 86400);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
         // Measure gas for the resume cycle (includes gap backfill)
@@ -208,8 +208,8 @@ contract VRFPathCoverage is DeployProtocol {
         // Gas ceiling: 25M (from STALL-03)
         assertTrue(gasUsed < 25_000_000, "widest survivable gap backfill must use < 25M gas");
 
-        // Verify every gap day (3..121) has a nonzero word
-        for (uint32 d = 3; d <= 121; d++) {
+        // Verify every gap day (3..31) has a nonzero word
+        for (uint32 d = 3; d <= 31; d++) {
             assertTrue(
                 game.rngWordForDay(uint24(d)) != 0,
                 "widest survivable gap: all gap days must have nonzero words"

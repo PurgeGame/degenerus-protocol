@@ -70,6 +70,17 @@ Craps uses distinct bankroll and bounty components: bounty does not earn the com
 Pass denominations and fixed future retail prices differ intentionally; expected-value
 constants are not promises of a realized payout.
 
+After level 0, the purchase target has a **30-day** window: day 30 is the distress
+rescue day, and an unmet target can trigger game over on day 31. Level 0 keeps its
+365-day deadline, provided a day is sealed at least every 30 days (the VRF deadman
+applies at every level). Funded jackpot phases and the existing VRF recovery rules can
+extend elapsed wall-clock time. Ordinary purchase dailies budget **4% of the future
+pool**, retaining the 75/23/2 ticket-backing / ETH-prize / insurance split; unpaid ETH
+prizes stay in the future pool. Level 0 keeps its FLIP-only daily path. The faster
+deadline and revised transition skim change when funds become available for prizes;
+see [the timing and skim
+curve](docs/ARCHITECTURE.md#purchase-timing-and-pool-acceleration).
+
 Game-over distribution and the later final sweep have distinct deadlines and beneficiaries.
 After existing claim liabilities and applicable paid-deity refunds are reserved, 2% of the
 distributable terminal pool is credited to the top affiliate for the terminal ticket level;

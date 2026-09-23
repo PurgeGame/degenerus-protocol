@@ -30,6 +30,25 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {Vm} from "forge-std/Vm.sol";
+
+contract SkimTransitionSeeder is DegenerusGame {
+    function seed(uint24 age, uint24 incomingLevel) external {
+        uint24 day = _simulatedDayIndex();
+        level = incomingLevel - 1;
+        purchaseStartDay = day - age;
+        dailyIdx = day - 1;
+        lastPurchaseDay = true;
+        ticketsFullyProcessed = true;
+        subsFullyProcessed = true;
+        _afkingResetDay = day;
+        _setPrizePools(100 ether, 200 ether);
+        currentPrizePool = 0;
+        yieldAccumulator = 0;
+        levelPrizePool[incomingLevel - 1] = 100 ether;
+    }
+}
 
 /// @title SkimHarness -- Exposes _nextToFutureBps pure helper and pool
 ///        packed-slot getters for pure-math tests. Retained per D-03.
@@ -54,10 +73,10 @@ contract SkimHarness is DegenerusGameAdvanceModule {
     }
 
     function exposed_nextToFutureBps(
-        uint48 elapsed,
+        uint32 purchaseAge,
         uint24 lvl
     ) external pure returns (uint16) {
-        return _nextToFutureBps(uint32(elapsed), lvl);
+        return _nextToFutureBps(purchaseAge, lvl);
     }
 }
 
@@ -90,27 +109,57 @@ contract FuturepoolSkimTest is DeployProtocol {
     }
 
     // =========================================================================
-    //  SMOKE TEST: advanceGame() fires end-to-end at a fresh deploy, proving
-    //  the DeployProtocol integration wires up correctly and the new FuturepoolSkim
-    //  test file exercises the production flow (not a standalone harness).
-    //  This test is the D-02 "full pipeline" touch-point for the skim: it
-    //  drives the real game.advanceGame() which, on reaching a level transition,
-    //  executes _consolidatePoolsAndRewardJackpots where the skim is inlined.
+    //  Integration: production advanceGame requests real mock VRF and emits
+    //  the actual skim. Literal expected base rates catch caller-side age offsets.
     // =========================================================================
-    function test_fullPipeline_advanceGame_smoke() public {
-        // At fresh deploy, advanceGame either requests VRF and returns, or
-        // reverts if preconditions aren't met. Either outcome is a valid
-        // integration touch-point: the call path through game -> advance
-        // module -> storage is wired and exercised. Consolidation itself
-        // cannot be reliably driven in an isolated unit test because it
-        // requires multi-day, multi-VRF, multi-level-transition orchestration
-        // which depends on state beyond the scope of a single function-level test.
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        // Either outcome (ok=true or revert) proves the integration path
-        // was exercised; the revert path is a legitimate production response
-        // when VRF / tickets / level gates are not aligned.
-        ok; // silence unused
-        assertTrue(address(game).code.length > 0, "game contract deployed");
+    function test_fullPipeline_day8Trough() public { _checkTransitionSkim(8, 5, 1500); }
+    function test_fullPipeline_day30EndpointWithBonus() public { _checkTransitionSkim(30, 15, 4600); }
+    function test_fullPipeline_day3PlateauWithBonus() public { _checkTransitionSkim(3, 15, 3100); }
+    function test_fullPipeline_genesisKeepsOffset() public { _checkTransitionSkim(21, 1, 1300); }
+
+    function _checkTransitionSkim(uint24 age, uint24 incomingLevel, uint256 expectedBase) private {
+        vm.warp(block.timestamp + 500 days);
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(SkimTransitionSeeder).runtimeCode);
+        SkimTransitionSeeder(payable(address(game))).seed(age, incomingLevel);
+        vm.etch(address(game), original);
+        vm.deal(address(game), 300 ether); // no yield surplus to perturb the pools
+        uint256 word = 0xA77E1;
+        bytes32 skimSig = keccak256("PoolSkimApplied(uint24,uint256,uint256)");
+        for (uint256 step; step < 100; ++step) {
+            uint256 nextBefore = game.nextPrizePoolView();
+            uint256 futureBefore = game.futurePrizePoolView();
+            vm.recordLogs();
+            game.advanceGame();
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].topics[0] != skimSig) continue;
+                (uint256 take, uint256 insurance) = abi.decode(logs[i].data, (uint256, uint256));
+                // Freeze reserves 1% of future in pending. Use the live pool ratio at the
+                // actual consolidation call, while independently pinning the time curve.
+                uint256 ratio = futureBefore * 100 / nextBefore;
+                uint256 bps = expectedBase + (200 - ratio) * 2;
+                bps += uint256(keccak256(abi.encode(word, keccak256("degenerus.skim.bps")))) % 1001;
+                uint256 nominal = nextBefore * bps / 10_000;
+                uint256 halfWidth = nominal / 4;
+                if (halfWidth < nextBefore / 10) halfWidth = nextBefore / 10;
+                if (halfWidth > nominal) halfWidth = nominal;
+                uint256 variance = uint256(keccak256(abi.encode(word, keccak256("degenerus.skim.variance"))));
+                uint256 range = halfWidth * 2 + 1;
+                uint256 draw = (variance % range + uint256(keccak256(abi.encode(variance))) % range) / 2;
+                uint256 expected = nominal + draw - halfWidth;
+                if (expected > nextBefore * 80 / 100) expected = nextBefore * 80 / 100;
+                assertEq(take, expected, "live consolidation uses the unshifted purchase age");
+                assertEq(insurance, nextBefore / 100, "transition insurance stays at 1%");
+                return;
+            }
+            uint256 id = mockVRF.lastRequestId();
+            if (id != 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(id);
+                if (!fulfilled) mockVRF.fulfillRandomWords(id, word);
+            }
+        }
+        fail("production consolidation never emitted its skim");
     }
 
     // =========================================================================
@@ -143,49 +192,58 @@ contract FuturepoolSkimTest is DeployProtocol {
 
     // =========================================================================
     //  PURE-MATH _nextToFutureBps tests via SkimHarness.
-    //  These assertions are the core of the skim's bps curve: at day 0 the
-    //  curve reports FAST base plus level bonus; past day 28 the curve is
-    //  monotonically non-decreasing; and the curve is hard-capped at 10_000.
-    //  All three properties hold regardless of surrounding state.
+    //  Purchase ages, including the level-0 exception, use the same unshifted
+    //  input as the production consolidation call.
     // =========================================================================
 
-    /// @notice _nextToFutureBps at elapsed=0 returns FAST base (3000) plus level bonus.
-    function test_nextToFutureBps_day0_fastBase() public view {
-        // lvl=5 -> lvlBonus = (5/10)*100 = 0, so bps = 3000
-        assertEq(harness.exposed_nextToFutureBps(0, 5), 3000, "level 5 day 0 = 3000");
-        // lvl=15 -> lvlBonus = (15%100)/10 * 100 = 100, so bps = 3100
-        assertEq(harness.exposed_nextToFutureBps(0, 15), 3100, "level 15 day 0 = 3100");
+    function test_nextToFutureBps_acceleratedBreakpoints() public view {
+        uint32[12] memory ages = [uint32(0), 2, 3, 4, 7, 8, 9, 19, 29, 30, 31, 100];
+        uint16[12] memory expected = [uint16(3000), 3000, 3000, 2700, 1800, 1500, 1636, 3000, 4363, 4500, 4636, 10000];
+        for (uint256 i; i < ages.length; ++i) {
+            assertEq(harness.exposed_nextToFutureBps(ages[i], 2), expected[i], "first accelerated level");
+            assertEq(harness.exposed_nextToFutureBps(ages[i], 101), expected[i], "x01 is not genesis");
+        }
     }
 
-    /// @notice _nextToFutureBps is monotonically non-decreasing past day 28 (stall curve).
-    function testFuzz_nextToFutureBps_stallMonotonic(uint48 elapsed) public view {
-        elapsed = uint48(bound(elapsed, 29, 120));
-        uint16 bpsEarlier = harness.exposed_nextToFutureBps(elapsed - 1, 5);
-        uint16 bpsLater = harness.exposed_nextToFutureBps(elapsed, 5);
-        assertGe(bpsLater, bpsEarlier, "stall bps non-decreasing past day 28");
+    function test_nextToFutureBps_retainsCenturyBonus() public view {
+        assertEq(harness.exposed_nextToFutureBps(3, 99), 3900, "fast rate includes nine-point bonus");
+        assertEq(harness.exposed_nextToFutureBps(4, 99), 3420, "bonus decays toward fixed trough");
+        assertEq(harness.exposed_nextToFutureBps(8, 99), 1500, "trough stays fixed");
+        assertEq(harness.exposed_nextToFutureBps(19, 99), 3450, "bonus returns along the rising leg");
+        assertEq(harness.exposed_nextToFutureBps(30, 99), 5400, "endpoint includes nine-point bonus");
+        assertEq(harness.exposed_nextToFutureBps(30, 100), 4500, "century rollover resets bonus");
+        assertEq(harness.exposed_nextToFutureBps(30, 15), 4600, "one-point bonus");
     }
 
-    /// @notice _nextToFutureBps is hard-capped at 10_000 (100% bps).
-    ///         Fuzz bounded to 500 days (conservative over the stall curve)
-    ///         to avoid overflow inside the internal (elapsed - 28) * step
-    ///         multiplication; the cap is proven for smaller ranges here
-    ///         and the branch is covered by lcov.
-    function testFuzz_nextToFutureBps_cap10k(uint48 elapsed, uint24 lvl) public view {
-        elapsed = uint48(bound(elapsed, 0, 500));
-        lvl = uint24(bound(lvl, 1, 500));
-        uint16 bps = harness.exposed_nextToFutureBps(elapsed, lvl);
-        assertLe(bps, 10_000, "bps capped at 10_000");
+    function test_nextToFutureBps_genesisUnchanged() public view {
+        uint32[9] memory ages = [uint32(0), 8, 9, 20, 21, 22, 35, 120, 365];
+        uint16[9] memory expected = [uint16(3000), 3000, 2870, 1431, 1300, 1421, 3000, 4190, 7620];
+        for (uint256 i; i < ages.length; ++i) {
+            assertEq(harness.exposed_nextToFutureBps(ages[i], 1), expected[i], "original genesis curve");
+        }
     }
 
-    /// @notice _nextToFutureBps mid-range (elapsed in [1,14]) interpolates
-    ///         from FAST down toward MIN; the curve should be <= FAST+bonus.
-    function testFuzz_nextToFutureBps_earlyDecay(uint48 elapsed, uint24 lvl) public view {
-        elapsed = uint48(bound(elapsed, 1, 14));
-        lvl = uint24(bound(lvl, 1, 99));
-        uint256 lvlBonus = (uint256(lvl % 100) / 10) * 100;
-        uint16 bps = harness.exposed_nextToFutureBps(elapsed, lvl);
-        uint16 fastAndBonus = uint16(3000 + lvlBonus);
-        assertLe(bps, fastAndBonus, "early-decay bps <= FAST+bonus");
+    function testFuzz_nextToFutureBps_risingSlope(uint32 age) public view {
+        age = uint32(bound(age, 9, 30));
+        uint16 beforeBps = harness.exposed_nextToFutureBps(age - 1, 5);
+        uint16 afterBps = harness.exposed_nextToFutureBps(age, 5);
+        // 30 percentage points / 22 days = 136 or 137 bps per integer day.
+        assertGe(afterBps - beforeBps, 136);
+        assertLe(afterBps - beforeBps, 137);
+    }
+
+    function testFuzz_nextToFutureBps_cap10k(uint32 age, uint24 lvl) public view {
+        assertLe(harness.exposed_nextToFutureBps(age, lvl), 10_000, "cap holds across full input range");
+        assertLe(harness.exposed_nextToFutureBps(age, 1), 10_000, "genesis cap across full input range");
+    }
+
+    function testFuzz_nextToFutureBps_earlyDecay(uint32 age, uint24 lvl) public view {
+        age = uint32(bound(age, 4, 8));
+        lvl = uint24(bound(lvl, 2, type(uint24).max));
+        uint16 beforeBps = harness.exposed_nextToFutureBps(age - 1, lvl);
+        uint16 afterBps = harness.exposed_nextToFutureBps(age, lvl);
+        uint256 bonus = (uint256(lvl % 100) / 10) * 100;
+        assertEq(beforeBps - afterBps, 300 + bonus / 5, "falls evenly to the fixed trough");
     }
 
     // =========================================================================

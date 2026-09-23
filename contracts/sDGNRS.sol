@@ -992,11 +992,12 @@ contract sDGNRS {
         // already cleared (CEI) and creditFlip makes no callback into this contract.
         uint256 flipPaid;
         // Liveness keys the escrow as it keys the rest of the claim, and it leads the gameOver
-        // latch by at most one crank in either direction: the next advance either latches game
-        // over, or — when the pool target is met — suppresses it and sets lastPurchaseDay in the
-        // same call, which routes liveness back to the deadman. A claim settled inside that
-        // lead-in on a level the met target then rescues forfeits its escrow, which is cheaper
-        // than reading gameOver on every escrowed claim to close a one-crank window.
+        // latch until the next day completes: that day's advance either latches game over, or —
+        // when the pool target is met — suppresses it, and the day's seal sets lastPurchaseDay,
+        // which routes liveness back to the deadman. That lead-in spans the day's request,
+        // fulfilment and drain transactions, not one crank. A claim settled inside it on a level
+        // the met target then rescues forfeits its escrow, which is cheaper than reading gameOver
+        // on every escrowed claim to close the window.
         if (claim.flipEscrow != 0 && !isTerminal) {
             // In a live game day + 1 is normally resolved by claim time (resolveRedemptionPeriod for
             // `day` runs on the advance that settles day + 1). `win` is true only on a resolved win;

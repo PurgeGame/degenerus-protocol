@@ -174,7 +174,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      advanceDue() stays true and the next advance pays the jackpot with the same frozen word.
     uint8 private constant STAGE_GAP_BACKFILLED = 12;
     /// @dev Gas bound on the gap backfill; equals _VRF_DEADMAN_DAYS, past which the game ends.
-    uint24 private constant GAP_BACKFILL_MAX_DAYS = 120;
+    uint24 private constant GAP_BACKFILL_MAX_DAYS = 30;
     /// @dev The carryover ticket leg of a jackpot-phase daily, paid on the advance after
     ///      STAGE_JACKPOT_COIN_TICKETS / STAGE_JACKPOT_PHASE_ENDED priced it, so the two
     ///      96-winner ticket legs never share a tx. Seals the day on a non-final daily.
@@ -248,8 +248,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint48 private constant DAILY_RNG_RETRY_HEAD_START = 1 hours;
 
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
-    uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1300;
-    uint16 private constant NEXT_TO_FUTURE_BPS_DAY_STEP = 14;
+    uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1500;
+    uint16 private constant NEXT_TO_FUTURE_BPS_DEADLINE = 4500;
+    uint16 private constant GENESIS_SKIM_BPS_MIN = 1300;
+    uint16 private constant GENESIS_SKIM_BPS_DAY_STEP = 14;
     uint16 private constant NEXT_TO_FUTURE_BPS_X9_BONUS = 200;
     uint16 private constant NEXT_SKIM_VARIANCE_BPS = 2500;
     uint16 private constant NEXT_SKIM_VARIANCE_MIN_BPS = 1000;
@@ -852,7 +854,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // gameOver check precedes liveness so the post-gameover final-sweep path
         // stays reachable after the VRF-dead path latches gameOver with day-math
-        // still below the 120/365 threshold (e.g., VRF breaks on day 14).
+        // still below the 30/365 threshold (e.g., VRF breaks on day 14).
         if (gameOver) {
             // Post-gameover: check for final sweep (1 month after gameover)
             (ok, data) = ContractAddresses.GAME_GAMEOVER_MODULE
@@ -1133,10 +1135,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
         // --- Time-based future take (batched) ---
         {
-            uint32 start = psd + 7;
-            uint32 elapsed = day > start ? day - start : 0;
-
-            uint256 bps = _nextToFutureBps(elapsed, purchaseLevel);
+            uint32 purchaseAge = day > psd ? day - psd : 0;
+            uint256 bps = _nextToFutureBps(purchaseAge, purchaseLevel);
             if (purchaseLevel % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
 
             uint256 lastPool = levelPrizePool[purchaseLevel - 1];
@@ -1585,7 +1585,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 _backfillOrphanedLootboxIndices(currentWord);
 
                 // Extend death clock by the stall duration -- gap days don't count toward
-                // the 120-day inactivity timeout since the game was stalled, not abandoned.
+                // the purchase deadline since the game was stalled, not abandoned.
                 purchaseStartDay += gapCount;
                 gapDays = gapCount;
                 // The stalled days are over. Their coinflips settled above and anything
@@ -1926,24 +1926,43 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       |                       NEXT-TO-FUTURE SKIM RATE                       |
       +======================================================================+
       |  Compute the bps skimmed from the next pool into the future pool,    |
-      |  ramping by days elapsed and by level within the 100-level cycle.    |
+      |  based on purchase age, with the original level-0 curve preserved.  |
       +======================================================================+*/
 
-    function _nextToFutureBps(uint32 elapsed, uint24 lvl) internal pure returns (uint16) {
-        uint256 lvlBonus = (uint256(lvl % 100) / 10) * 100; // +1% per 10 levels within cycle
+    /// @dev Age is measured from purchaseStartDay, before any offset. The transition has
+    ///      already incremented level, so purchaseLevel == 1 identifies the level-0 curve.
+    ///      Later levels: 30% + level bonus through day 3, 15% at day 8, 45% + bonus
+    ///      at day 30. As before, the trough excludes the century-level bonus. Interpolate
+    ///      the full numerator before flooring so the rising leg lands exactly on 45%.
+    function _nextToFutureBps(uint32 purchaseAge, uint24 purchaseLevel) internal pure returns (uint16) {
         uint256 bps;
+        if (purchaseLevel != 1) {
+            uint256 lvlBonus = (uint256(purchaseLevel % 100) / 10) * 100;
+            uint256 fast = NEXT_TO_FUTURE_BPS_FAST + lvlBonus;
+            if (purchaseAge <= 3) return uint16(fast);
+            if (purchaseAge <= 8) {
+                return uint16(fast - ((fast - NEXT_TO_FUTURE_BPS_MIN) * (purchaseAge - 3)) / 5);
+            }
+            bps = NEXT_TO_FUTURE_BPS_MIN +
+                ((NEXT_TO_FUTURE_BPS_DEADLINE + lvlBonus - NEXT_TO_FUTURE_BPS_MIN) * (purchaseAge - 8)) /
+                (_PURCHASE_TIMEOUT_DAYS - 8);
+            return uint16(bps > 10_000 ? 10_000 : bps);
+        }
+
+        // Level 0 retains the seven-day offset and its original 30% / 13% / 30% curve.
+        uint32 elapsed = purchaseAge > 7 ? purchaseAge - 7 : 0;
         if (elapsed <= 1) {
-            bps = NEXT_TO_FUTURE_BPS_FAST + lvlBonus;
+            bps = NEXT_TO_FUTURE_BPS_FAST;
         } else if (elapsed <= 14) {
             uint256 elapsedAfterDay = elapsed - 1;
-            uint256 delta = NEXT_TO_FUTURE_BPS_FAST + lvlBonus - NEXT_TO_FUTURE_BPS_MIN;
-            bps = NEXT_TO_FUTURE_BPS_FAST + lvlBonus - (delta * elapsedAfterDay) / 13;
+            uint256 delta = NEXT_TO_FUTURE_BPS_FAST - GENESIS_SKIM_BPS_MIN;
+            bps = NEXT_TO_FUTURE_BPS_FAST - (delta * elapsedAfterDay) / 13;
         } else if (elapsed <= 28) {
             uint256 elapsedAfterMin = elapsed - 14;
-            uint256 delta = NEXT_TO_FUTURE_BPS_FAST + lvlBonus - NEXT_TO_FUTURE_BPS_MIN;
-            bps = NEXT_TO_FUTURE_BPS_MIN + (delta * elapsedAfterMin) / 14;
+            uint256 delta = NEXT_TO_FUTURE_BPS_FAST - GENESIS_SKIM_BPS_MIN;
+            bps = GENESIS_SKIM_BPS_MIN + (delta * elapsedAfterMin) / 14;
         } else {
-            bps = NEXT_TO_FUTURE_BPS_FAST + lvlBonus + (elapsed - 28) * NEXT_TO_FUTURE_BPS_DAY_STEP;
+            bps = NEXT_TO_FUTURE_BPS_FAST + uint256(elapsed - 28) * GENESIS_SKIM_BPS_DAY_STEP;
         }
         return uint16(bps > 10_000 ? 10_000 : bps);
     }

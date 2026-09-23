@@ -22,7 +22,7 @@ import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 ///         fresh-request-then-never-fulfilled cycles, each of which needs vrfRequestId to be
 ///         zero again (a completed day) or the request-submission-revert path — single digits
 ///         per realistic stall. The 240-orphan composed case measured here sits two orders
-///         above that, stacked on top of the capped 120-day gap backfill that shares the same
+///         above that, stacked on top of the capped 30-day gap backfill that shares the same
 ///         resume transaction.
 ///
 /// @notice SEARCHDAY-SCAN bound: the loop is hard-capped at 30 iterations by construction
@@ -53,7 +53,7 @@ contract AdvanceLoopMarginalsGas is DeployProtocol {
     // Two-near-N orphan counts for the loop-N-divide marginal.
     uint48 private constant ORPHANS_LO = 64;
     uint48 private constant ORPHANS_HI = 192;
-    // Composed worst case: capped 120-day gap backfill + this many orphans in ONE resume tx.
+    // Composed worst case: capped 30-day gap backfill + this many orphans in ONE resume tx.
     uint48 private constant ORPHANS_WORST = 240;
 
     uint256 private _lastFulfilledReqId;
@@ -202,16 +202,16 @@ contract AdvanceLoopMarginalsGas is DeployProtocol {
         assertLt(perOrphan, 40_000, "per-orphan marginal above the plausible band");
     }
 
-    /// @notice Composed worst case: the widest survivable gap backfill (119 days; one more
+    /// @notice Composed worst case: the widest survivable gap backfill (29 days; one more
     ///         day without a seal trips the VRF deadman) AND a 240-orphan walk in
     ///         the SAME resume tx (they share the rngGate gap branch), asserted strictly
     ///         under the 16.7M never-exceed ceiling. 240 orphans is two orders above the
     ///         reachable accumulation rate (see the growth model in the contract natspec).
     function testGapBackfillPlusOrphanWalkComposedUnderCeiling() public {
-        _stallFixture(118, 0xAA123001); // 119-day gap: the widest the deadman lets through
+        _stallFixture(28, 0xAA123001); // 29-day gap: the widest the deadman lets through
         uint256 gasUsed = _measureResumeAdvance(ORPHANS_WORST);
 
-        emit log_named_uint("composed_gap119_plus_240_orphans_gas", gasUsed);
+        emit log_named_uint("composed_gap29_plus_240_orphans_gas", gasUsed);
         emit log_named_uint(
             "headroom_to_16p7M_gas",
             EFFECTIVE_GAS_CEILING > gasUsed ? EFFECTIVE_GAS_CEILING - gasUsed : 0
@@ -220,7 +220,7 @@ contract AdvanceLoopMarginalsGas is DeployProtocol {
         assertLt(
             gasUsed,
             EFFECTIVE_GAS_CEILING,
-            "composed 119-day backfill + 240-orphan walk must stay under the 16.7M ceiling"
+            "composed 29-day backfill + 240-orphan walk must stay under the 16.7M ceiling"
         );
 
         // The gap range actually backfilled (non-vacuity for the gap leg).
@@ -232,8 +232,8 @@ contract AdvanceLoopMarginalsGas is DeployProtocol {
     // ─────────────────────────────────────────────────────────────────────
 
     /// @dev Gameover-fallback fixture: complete day 2, strand a day-3 daily request, force
-    ///      level=1 (header byte 12) so the 120-day inactivity clock is the alive-guard, keep
-    ///      purchaseStartDay at its organic (early) value, and warp far past both the 120-day
+    ///      level=1 (header byte 12) so the 30-day purchase clock is the alive-guard, keep
+    ///      purchaseStartDay at its organic (early) value, and warp far past both the 30-day
     ///      clock and the 14-day gameover VRF-fallback delay. The next advance routes through
     ///      _gameOverEntropy's fallback leg, which runs _getHistoricalRngFallback(day) with
     ///      day > 30 → searchLimit 30, scanning rngWordByDay[1..29].
@@ -242,8 +242,8 @@ contract AdvanceLoopMarginalsGas is DeployProtocol {
         vm.warp(3 * 86400);
         game.advanceGame();
         assertTrue(game.rngLocked(), "fixture: day-3 daily request in flight");
-        _setHeaderU24(12, 1); // level = 1: the 120-day inactivity clock governs
-        // 130 days: > 120-day inactivity (purchaseStartDay stays early) and the stranded
+        _setHeaderU24(12, 1); // level = 1: the 30-day purchase clock governs
+        // 130 days: > 30-day inactivity (purchaseStartDay stays early) and the stranded
         // request is > 14 days old (GAMEOVER_RNG_FALLBACK_DELAY) — the fallback leg is armed.
         vm.warp(133 * 86400);
     }

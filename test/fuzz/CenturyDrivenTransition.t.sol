@@ -76,6 +76,18 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         );
     }
 
+    /// @dev Zero futurePrizePool (the high half of the packed pools slot), keeping next.
+    function _clearFuturePool() internal {
+        uint256 packed = uint256(
+            vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT))
+        );
+        vm.store(
+            address(game),
+            bytes32(PRIZE_POOLS_PACKED_SLOT),
+            bytes32(packed & ((uint256(1) << 128) - 1))
+        );
+    }
+
     function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
         bytes32 slot = keccak256(
             abi.encode(uint256(lvl), LEVEL_PRIZE_POOL_SLOT)
@@ -189,7 +201,21 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         );
 
         // --- Phase D: the curved floor governs the level-200 target ---
-        _driveToLevelPurchasePhase(199, 1500);
+        // The 4% purchase drip recycles the century's future-pool spill into each level's next
+        // pool, so an organic drive compounds the plain ratchet far past the century floor. Keep
+        // the future pool empty on every purchase day of this drive so the ratchet stays at
+        // bootstrap scale and the floor-vs-ratchet selection is what the assertions exercise.
+        for (uint256 day = 0; day < 1500; day++) {
+            if (game.level() >= 199 && !_jackpotPhase() && !_rngLocked()) break;
+            assertFalse(game.gameOver(), "game must not die during the drive");
+            if (!_jackpotPhase() && !_rngLocked()) {
+                _clearFuturePool();
+                _seedNextPool(_targetView() + 0.01 ether);
+            }
+            _driveDay();
+        }
+        assertEq(game.level(), 199, "drive must reach level 199");
+        assertFalse(_jackpotPhase(), "level 199 must be in purchase phase");
         uint256 floor = 2 * achieved; // 2x tier: snapshot far below 500k ETH
         uint256 ratchet199 = _levelPrizePool(199);
         assertLt(

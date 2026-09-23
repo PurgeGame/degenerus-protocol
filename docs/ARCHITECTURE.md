@@ -45,6 +45,41 @@ FLIP has special routing for VAULT and sDGNRS: their backing/allowances are not 
 wallet balances. Coinflip credits are not equivalent to minting immediately spendable
 FLIP. The comp allowance is neither circulating FLIP nor vault mint backing.
 
+## Purchase timing and pool acceleration
+
+Level 0 retains its 365-day purchase deadline. Later levels have a 30-day purchase
+deadline: elapsed day 30 activates distress purchases, and game-over becomes eligible
+on day 31 if the target is still unmet. A funded last-purchase/jackpot phase can finish
+beyond that boundary. Existing VRF grace, missed-day forgiveness, the independent
+30-day VRF deadman, and the 30-day post-game sweep keep their separate timing rules.
+
+Ordinary purchase dailies budget 4% of the future pool, split 75% to ticket backing
+in the next pool, 23% to ETH prizes, and 2% to the insurance accumulator. These are
+3%, 0.92%, and 0.08% of the future pool respectively, before integer rounding.
+Unpaid ETH stays in the future pool; ticket conversion and winner caps are unchanged.
+Level 0 retains its existing FLIP-only daily path; it does not run this ETH drip.
+
+At the purchase-to-jackpot transition, the base next-to-future skim uses the elapsed
+purchase age directly. For levels after 0:
+
+| Purchase age | Base skim |
+| --- | --- |
+| Days 0–3 | 30% + level bonus |
+| Days 3–8 | Linear decline to 15% |
+| Days 8–30 | Linear rise to 45% + level bonus |
+
+The level bonus remains one percentage point per ten levels within the century,
+using the incoming purchase level as before; the trough excludes that bonus.
+Interpolation floors only after multiplying by elapsed days, so day 30 reaches
+the exact endpoint. If a funded transition finishes later, the rising slope continues,
+with the existing 100% base-rate ceiling. The separate x9 bonus, ratio adjustment,
+overshoot surcharge, randomness, 1% insurance skim, and 80% cap on the actual
+future-pool take remain in place.
+
+The level-0 transition (`purchaseLevel == 1`) keeps its original curve: 30% through
+day 8, down to 13% on day 21, back to 30% on day 35, then +0.14 percentage points
+per day. An x01 transition in a later century uses the accelerated curve.
+
 ## Comp accounting
 
 The shared comp allowance starts at 4.56M FLIP-equivalent. Each battle credits 2% of

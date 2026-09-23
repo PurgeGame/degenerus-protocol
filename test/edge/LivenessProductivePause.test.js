@@ -12,25 +12,25 @@ import { advanceTime } from "../helpers/testUtils.js";
  * _livenessTriggered (DegenerusGameStorage.sol).
  *
  * In-phase day clock: fires when currentDay - purchaseStartDay exceeds
- * 365 days (level 0) or 120 days (level 1+). purchaseStartDay only updates
+ * 365 days (level 0) or 30 days (level 1+). purchaseStartDay only updates
  * at AdvanceModule phase-transition close, so the multi-call window between
  * target-met and the next purchase phase carries the old psd.
  *
  * Productive-phase pause: while lastPurchaseDay or jackpotPhaseFlag is set,
  * _livenessTriggered does NOT consult the in-phase day clock. Instead it
  * returns _vrfDeadmanFired() — the phase-independent VRF-death deadman,
- * (simulatedDayIndex - dailyIdx > 120). So during jackpot / last-purchase
+ * (simulatedDayIndex - dailyIdx > 30). So during jackpot / last-purchase
  * the in-phase clock is suppressed (it would false-fire in the productive
  * window and deadlock _queueEntries), but a permanently-stalled game still
- * reaches terminal fund release once no day has sealed for 120 days.
+ * reaches terminal fund release once no day has sealed for 30 days.
  *
  *   _livenessTriggered():
  *     if (lastPurchaseDay || jackpotPhaseFlag) return _vrfDeadmanFired();
  *     lvl 0  : currentDay - psd > 365  → true
- *     lvl 1+ : currentDay - psd > 120  → true
+ *     lvl 1+ : currentDay - psd > 30  → true
  *     else   : VRF-grace stall bailout
  *
- *   _vrfDeadmanFired(): simulatedDayIndex - dailyIdx > 120
+ *   _vrfDeadmanFired(): simulatedDayIndex - dailyIdx > 30
  *
  * Slot 0 layout (low byte first, authoritative from
  * `forge inspect DegenerusGameStorage storage-layout`):
@@ -113,7 +113,7 @@ describe("LivenessProductivePause", function () {
     expect(await game.livenessTriggered()).to.equal(true);
 
     // Set jackpotPhaseFlag and a fresh dailyIdx (== currentDay) so the deadman
-    // (currentDay - dailyIdx > 120) is NOT fired. _livenessTriggered then
+    // (currentDay - dailyIdx > 30) is NOT fired. _livenessTriggered then
     // returns _vrfDeadmanFired() == false: the in-phase clock is suppressed.
     const currentDay = Number(await game.currentDayView());
     let slot0 = await readSlot0(addr);
@@ -151,7 +151,7 @@ describe("LivenessProductivePause", function () {
     const addr = await game.getAddress();
 
     // dailyIdx is still 0 at deploy (no day sealed). Warping 366 days leaves
-    // simulatedDayIndex - dailyIdx ~= 367 > 120, so the deadman has fired.
+    // simulatedDayIndex - dailyIdx ~= 367 > 30, so the deadman has fired.
     await advanceTime(366 * 86400);
 
     const slot0 = await readSlot0(addr);
@@ -159,35 +159,35 @@ describe("LivenessProductivePause", function () {
 
     expect(await game.livenessTriggered()).to.equal(
       true,
-      "deadman overrides the in-phase pause: no day sealed for >120 days"
+      "deadman overrides the in-phase pause: no day sealed for >30 days"
     );
   });
 
-  it("deadman threshold is exact: false at 120-day stall, true at 121 (jackpot phase)", async function () {
+  it("deadman threshold is exact: false at 30-day stall, true at 31 (jackpot phase)", async function () {
     const { game } = await loadFixture(deployFullProtocol);
     const addr = await game.getAddress();
 
     await advanceTime(366 * 86400);
     const currentDay = Number(await game.currentDayView());
 
-    // Stall of exactly 120 days (currentDay - dailyIdx == 120): deadman is
-    // `120 > 120` == false, so the jackpot-phase pause still holds.
+    // Stall of exactly 30 days (currentDay - dailyIdx == 30): deadman is
+    // `30 > 30` == false, so the jackpot-phase pause still holds.
     let slot0 = await readSlot0(addr);
     slot0 = setByte(slot0, OFF_JACKPOT_PHASE, "01");
-    slot0 = setUint24(slot0, OFF_DAILY_IDX, currentDay - 120);
+    slot0 = setUint24(slot0, OFF_DAILY_IDX, currentDay - 30);
     await writeSlot0(addr, slot0);
     expect(await game.livenessTriggered()).to.equal(
       false,
-      "120-day stall: deadman not yet fired (strict > threshold)"
+      "30-day stall: deadman not yet fired (strict > threshold)"
     );
 
-    // One more day of stall (121): deadman fires, overriding the pause.
+    // One more day of stall (31): deadman fires, overriding the pause.
     slot0 = await readSlot0(addr);
-    slot0 = setUint24(slot0, OFF_DAILY_IDX, currentDay - 121);
+    slot0 = setUint24(slot0, OFF_DAILY_IDX, currentDay - 31);
     await writeSlot0(addr, slot0);
     expect(await game.livenessTriggered()).to.equal(
       true,
-      "121-day stall: deadman fires and overrides the pause"
+      "31-day stall: deadman fires and overrides the pause"
     );
   });
 

@@ -11,7 +11,7 @@ contract TerminalKnownWordSeeder is DegenerusGame, BucketSeed {
     function seed(uint256 word, address subscriber) external {
         uint24 day = _simulatedDayIndex();
         level = 10;
-        purchaseStartDay = day - 120;
+        purchaseStartDay = day - 30;
         dailyIdx = day - 1;
         levelPrizePool[10] = 1000 ether;
         ticketsFullyProcessed = true;

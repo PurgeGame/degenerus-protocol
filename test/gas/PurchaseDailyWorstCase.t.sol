@@ -46,7 +46,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         uint256 bonusHolders; // distinct holders per bonus-board bucket at purchaseLevel+1..+4 (FLIP leg)
         uint256 ffHolders; // distinct holders per far-future queue at purchaseLevel+5..+99 (FLIP far leg)
         uint128 nextPool; // nextPrizePool (> prevPool latches last-purchase + BAF arm at x0)
-        uint128 futurePool; // futurePrizePool: the 1% drip sizes the ETH and ticket legs
+        uint128 futurePool; // futurePrizePool: the 4% drip sizes the ETH and ticket legs
         uint256 prevPool; // levelPrizePool[purchaseLevel-1]: sizes the FLIP budget and the latch target
     }
 
@@ -233,7 +233,7 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
     uint256 internal constant BONUS_HOLDERS = 200; // per (level, trait): ~3 draws each
     uint256 internal constant FF_HOLDERS = 8; // per far-future level: 8 lanes of one level's word
     /// @dev Sizing (price 0.04 ETH at 110/111, PRICE_COIN_UNIT 1000 FLIP):
-    ///      - future 5000 ETH -> slice 50, ticket leg 37.5, basis 18.75 -> 468 whole tickets >= 120 cap;
+    ///      - future 5000 ETH -> slice 200, ticket leg 150, basis 75 -> 1875 whole tickets >= 120 cap;
     ///        ETH leg 11.5 ETH -> every 20%-share bucket (2.3 ETH) clears its unit*count rounding floor.
     ///      - prev 1000 ETH -> coinBudget 62,500 FLIP (< 4 day passes, so no comp mode): near 46,875
     ///        -> 468 units >= 50 pulls; far 15,625 -> 156 units >= 8 samples.

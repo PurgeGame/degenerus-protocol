@@ -9,7 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 
 /// @title DailyEthTicketLegEntries -- the purchase-phase daily jackpot's ticket leg delivers its figure
-/// @notice The daily ETH phase carves one percent of the future pool into a day slice; 75% of the
+/// @notice The daily ETH phase carves four percent of the future pool into a day slice; 75% of the
 ///         slice is the ticket leg, and `_distributePoolBackedTickets` converts HALF of that leg
 ///         into entries at the level's price, four per whole ticket, spread over at most 120
 ///         winners with equal entry counts. Mutation v78 found no foundry assertion of that count
@@ -75,7 +75,7 @@ contract DailyEthTicketLegEntries is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // The arithmetic the leg is meant to deliver.
-        uint256 slice = uint256(FUT_POOL) / 100;
+        uint256 slice = uint256(FUT_POOL) / 25;
         uint256 leg = (slice * TICKET_LEG_BPS) / 10_000;
         uint256 basis = (leg * CONVERSION_BPS) / 10_000;
         uint256 entries = (basis << 2) / PriceLookupLib.priceForLevel(LVL);

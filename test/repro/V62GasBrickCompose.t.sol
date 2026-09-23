@@ -13,7 +13,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         AFTER rngGate -- it decouples the gap backfill from the DOWNSTREAM daily jackpot, not
 ///         from the UPSTREAM subscriber stage. So a single advanceGame() could run BOTH a saturated
 ///         all-evict subscriber chunk (~9.7M cold, measured in V56AfkingGasMarginal::testResidualR1)
-///         AND the 120-day gap backfill (~7M) in one tx -- summing past EIP-7825's 16,777,216 per-tx
+///         AND the widest gap backfill in one tx -- summing past EIP-7825's 16,777,216 per-tx
 ///         cap, permanently bricking advanceGame during stall recovery.
 ///
 ///         THE FIX (AdvanceModule, the VRF-outstanding entry gate): the subscriber STAGE never
@@ -79,12 +79,12 @@ contract V62GasBrickCompose is DeployProtocol {
     ///      in ONE chunk (the heaviest completing chunk).
     uint256 internal constant EVICTING_SUBS = 312;
 
-    /// @dev The VRF/keeper stall length (days). The VRF-death deadman (_VRF_DEADMAN_DAYS = 120) sends any
-    ///      advance with currentDay - dailyIdx > 120 to terminal game-over, so the LARGEST stall that still
-    ///      resumes into the stage + gap-backfill path (rather than game-over) is exactly 120 — which yields
-    ///      a 119-day backfill (gap = currentDay - dailyIdx - 1). The deadman, not the 120-day backfill-loop
+    /// @dev The VRF/keeper stall length (days). The VRF-death deadman (_VRF_DEADMAN_DAYS = 30) sends any
+    ///      advance with currentDay - dailyIdx > 30 to terminal game-over, so the LARGEST stall that still
+    ///      resumes into the stage + gap-backfill path (rather than game-over) is exactly 30 — which yields
+    ///      a 29-day backfill (gap = currentDay - dailyIdx - 1). The deadman, not the 30-day backfill-loop
     ///      cap, is now the binding bound on the backfilled count.
-    uint256 internal constant STALL_DAYS = 120; // == _VRF_DEADMAN_DAYS: max stall that resumes (not game-over)
+    uint256 internal constant STALL_DAYS = 30; // == _VRF_DEADMAN_DAYS: max stall that resumes (not game-over)
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 240;
     uint256 private _lastFulfilledReqId;
@@ -112,7 +112,7 @@ contract V62GasBrickCompose is DeployProtocol {
         _logResult("cold", r);
 
         // Non-vacuity: both heavy legs really ran (in separate txs).
-        assertGt(r.totalBackfilled, 100, "non-vacuity: a near-full 120-day backfill ran");
+        assertGt(r.totalBackfilled, 25, "non-vacuity: a near-full 30-day backfill ran");
         assertEq(r.totalEvicted, EVICTING_SUBS, "non-vacuity: the whole evicting set drained");
 
         // THE GATE: ring work and the gap backfill never share a tx (the ring drains on
@@ -169,7 +169,7 @@ contract V62GasBrickCompose is DeployProtocol {
         bool subsFullyProcessed;
     }
 
-    /// @dev Seed the all-evict subscriber set + the 120-day gap-backfill precondition, then bracket ONE
+    /// @dev Seed the all-evict subscriber set + the widest-gap backfill precondition, then bracket ONE
     ///      advanceGame() and decompose what ran. `evictCount` sizes the evicting set; `cold` re-colds
     ///      the game storage (vm.cool) before the bracketed advance (the realistic first-touch regime).
     function _seedAndMeasure(uint256 evictCount, bool cold) internal returns (Result memory r) {
@@ -211,12 +211,12 @@ contract V62GasBrickCompose is DeployProtocol {
         uint256 subCountBefore = _subscriberCount();
         require(subCountBefore >= evictCount, "fixture: the full evicting set is in _subscribers");
 
-        // ---- (B) The 120-day stall, driven ORGANICALLY ----
+        // ---- (B) The widest resumable stall, driven ORGANICALLY ----
         // No RNG- or level-state pokes: the resume request, the lock, the fulfilled buffered
         // word and the backfill all arise from real advances + the mock VRF, so every branch
         // the recovery takes is the branch mainnet would take (the entry gate keys on the
-        // real rngLockedFlag lifecycle). Level stays at genesis: the 120-day stall is within
-        // the lvl-0 365-day idle clock, and the resume days settle without a level
+        // real rngLockedFlag lifecycle). Level stays at genesis: the 30-day stall is within
+        // the lvl-0 365-day idle clock and the deadman, and the resume days settle without a level
         // transition (no charity-pick dependency in the fixture).
 
         uint32 idxBeforeStall = _dailyIdx();
@@ -232,7 +232,7 @@ contract V62GasBrickCompose is DeployProtocol {
         require(game.advanceDue(), "fixture: advanceDue on resume");
 
         uint256 rawGap = uint256(resumeDay - idxBeforeStall - 1);
-        r.expectedBackfilled = rawGap > 120 ? 120 : rawGap;
+        r.expectedBackfilled = rawGap > 30 ? 30 : rawGap;
 
         // ---- (C) Drive the recovery leg-by-leg and decompose every advance tx ----
         // Under the VRF-outstanding entry gate the organic recovery is a SEQUENCE: the
@@ -301,7 +301,7 @@ contract V62GasBrickCompose is DeployProtocol {
         emit log_named_uint("total_evicted", r.totalEvicted);
         emit log_named_uint("heaviest_evicting_leg", r.maxEvictedLeg);
         emit log_named_uint("total_gap_days_backfilled", r.totalBackfilled);
-        emit log_named_uint("gap_days_expected_capped120", r.expectedBackfilled);
+        emit log_named_uint("gap_days_expected_capped30", r.expectedBackfilled);
         emit log_named_uint("subscribers_remaining_after", r.remaining);
         emit log_named_uint("subs_fully_processed_flag", r.subsFullyProcessed ? 1 : 0);
         emit log_named_string(

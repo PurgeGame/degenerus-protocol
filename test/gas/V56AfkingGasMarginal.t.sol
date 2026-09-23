@@ -168,8 +168,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
     /// @dev A worst-case VRF/keeper stall length (days) for the D-06 gap-resume resume. The gap backfill is
-    ///      capped at 120 days in the contract (_backfillGapDays); 120 is the binding worst case.
-    uint256 internal constant STALL_DAYS = 120;
+    ///      capped at 30 days in the contract (_backfillGapDays) and the 30-day VRF deadman ends any longer
+    ///      stall; 30 is the binding worst case.
+    uint256 internal constant STALL_DAYS = 30;
 
     /// @dev Informational v55/349.2 per-buy lootbox reference (~206k, the v55 measured marginal WITH the
     ///      per-buy cross-contract storm) and the ~130-140k GAS-01 target band (the v56 deferred-settle win).
@@ -458,8 +459,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (f) D-06 / GAS-06 — the per-tx gap-resume ceiling + the gap/jackpot decouple (D-07)
     // =========================================================================
 
-    /// @notice The GAS-06 / D-06 worst-case multi-day VRF-stall resume. A 121+ day VRF/keeper stall, then a
-    ///         resume: rngGate backfills the (capped 120-day) gap on ONE advance, and the gap/jackpot decouple
+    /// @notice The GAS-06 / D-06 worst-case multi-day VRF-stall resume. A 30-day VRF/keeper stall (the widest the deadman lets resume), then a
+    ///         resume: rngGate backfills the (capped 30-day) gap on ONE advance, and the gap/jackpot decouple
     ///         (DegenerusGameAdvanceModule:369-372 `if (gapDays != 0) { stage = STAGE_GAP_BACKFILLED; break; }`)
     ///         defers the up-to-305-winner daily jackpot to the NEXT advance — so the backfill (~9M) and the
     ///         jackpot (~6M+) NEVER execute in one tx. Asserts the D-06 bar: EACH advanceGame tx (advance N =
@@ -480,7 +481,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address[] memory subs = _setupFundedSubs(N_HI, "gr_", 5 ether, false);
 
         _settleClean(uint256(keccak256("gr_clean")) | 1);
-        // Level stays at genesis: the 120-day stall is within the lvl-0 365-day idle clock,
+        // Level stays at genesis: the 30-day stall is within the lvl-0 365-day idle clock and the deadman,
         // and the resume settles without a level transition (no charity-pick dependency).
 
         uint32 idxBeforeStall = _dailyIdx();
@@ -490,7 +491,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // dailyIdx — `day > idx + 1 && rngWordByDay[idx + 1] == 0` (the gap-backfill precondition).
         vm.warp(block.timestamp + STALL_DAYS * 1 days);
         uint32 resumeDay = game.currentDayView();
-        // Death-clock excludes gap days -> purchaseStartDay kept recent (game alive: resumeDay - psd = 1 < 120).
+        // Death-clock excludes gap days -> purchaseStartDay kept recent (game alive: resumeDay - psd = 1 < 30).
         _setHeaderField(0, 3, resumeDay - 1); // purchaseStartDay = resumeDay - 1
         psdBeforeResume = _purchaseStartDay();
 
@@ -544,7 +545,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertTrue(game.advanceDue(), "D-07: advanceDue() stays true between advance N+1 and advance N+2 (jackpot deferred)");
         //  - purchaseStartDay bumped EXACTLY ONCE by the gap count (the death-clock extension, the single bump).
         //    rngGate computes gapCount = day - idx - 1 = resumeDay - idxBeforeStall - 1 (uncapped at the psd
-        //    bump site; the 120-day cap is only on the backfill LOOP, _backfillGapDays).
+        //    bump site; the 30-day cap is only on the backfill LOOP, _backfillGapDays).
         uint32 psdAfterNp1 = _purchaseStartDay();
         uint256 expectedBump = uint256(resumeDay - idxBeforeStall - 1);
         assertEq(uint256(psdAfterNp1 - psdBeforeResume), expectedBump, "D-07: purchaseStartDay bumped exactly once by the gap count (resumeDay - dailyIdx - 1)");

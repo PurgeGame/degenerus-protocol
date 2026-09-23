@@ -24,18 +24,18 @@ const MintPaymentKind = { DirectEth: 0 };
  * does NOT consult the in-phase day clock — that clock would false-fire in the
  * productive window between target-met and phase-transition close, deadlocking
  * the multi-call jackpot dance. Instead it returns _vrfDeadmanFired(), the
- * phase-independent VRF-death deadman: simulatedDayIndex - dailyIdx > 120.
+ * phase-independent VRF-death deadman: simulatedDayIndex - dailyIdx > 30.
  *
- *   - Inside the deadman window (no day sealed for <= 120 days) the pause holds
+ *   - Inside the deadman window (no day sealed for <= 30 days) the pause holds
  *     and liveness stays false: the jackpot phase completes normally.
- *   - Once the stall exceeds 120 days the deadman fires, overriding the pause.
+ *   - Once the stall exceeds 30 days the deadman fires, overriding the pause.
  *     advanceGame then consults it separately (AdvanceModule:216,
  *     `(!inJackpot && !lastPurchase) || _vrfDeadmanFired()`) to reach
  *     _handleGameOverPath and drain to terminal fund release even mid-jackpot,
  *     rather than bricking.
  *
  * dailyIdx (slot 0, byte offset 3, uint24) is read straight from storage to
- * land the warp exactly on the 120-day deadman threshold.
+ * land the warp exactly on the 30-day deadman threshold.
  */
 describe("LivenessMidJackpot", function () {
   this.timeout(600_000);
@@ -188,52 +188,52 @@ describe("LivenessMidJackpot", function () {
 
     // Just entered: dailyIdx tracks currentDay, so the deadman has not fired
     // and the jackpot flag suppresses the in-phase clock.
-    expect(await stallDays(game)).to.be.lessThanOrEqual(120);
+    expect(await stallDays(game)).to.be.lessThanOrEqual(30);
     expect(await game.livenessTriggered()).to.equal(
       false,
       "fresh jackpot phase: in-phase clock suppressed, deadman not fired"
     );
   });
 
-  it("productive pause holds at exactly the 120-day stall (deadman not yet fired)", async function () {
+  it("productive pause holds at exactly the 30-day stall (deadman not yet fired)", async function () {
     const fixture = await loadFixture(deployFullProtocol);
     const { game } = fixture;
 
     await driveIntoJackpotPhase(fixture);
     expect(await game.jackpotPhase()).to.equal(true);
 
-    // Warp the stall (currentDay - dailyIdx) to exactly 120: the deadman is a
-    // strict `> 120`, so it stays unfired and the jackpot pause holds.
-    const warpDays = 120 - (await stallDays(game));
+    // Warp the stall (currentDay - dailyIdx) to exactly 30: the deadman is a
+    // strict `> 30`, so it stays unfired and the jackpot pause holds.
+    const warpDays = 30 - (await stallDays(game));
     expect(warpDays).to.be.greaterThan(0);
     await advanceTime(warpDays * 86400);
 
-    expect(await stallDays(game)).to.equal(120);
+    expect(await stallDays(game)).to.equal(30);
     expect(await game.jackpotPhase()).to.equal(true);
     expect(await game.livenessTriggered()).to.equal(
       false,
-      "120-day stall: deadman not yet fired, in-phase clock still suppressed"
+      "30-day stall: deadman not yet fired, in-phase clock still suppressed"
     );
   });
 
-  it("VRF-death deadman overrides the jackpot pause once the stall exceeds 120 days", async function () {
+  it("VRF-death deadman overrides the jackpot pause once the stall exceeds 30 days", async function () {
     const fixture = await loadFixture(deployFullProtocol);
     const { game } = fixture;
 
     await driveIntoJackpotPhase(fixture);
     expect(await game.jackpotPhase()).to.equal(true);
 
-    // Warp the stall to 121 days: deadman fires. jackpotPhaseFlag is still set,
+    // Warp the stall to 31 days: deadman fires. jackpotPhaseFlag is still set,
     // yet liveness flips true because _livenessTriggered returns the deadman.
-    const warpDays = 121 - (await stallDays(game));
+    const warpDays = 31 - (await stallDays(game));
     expect(warpDays).to.be.greaterThan(0);
     await advanceTime(warpDays * 86400);
 
-    expect(await stallDays(game)).to.equal(121);
+    expect(await stallDays(game)).to.equal(31);
     expect(await game.jackpotPhase()).to.equal(true);
     expect(await game.livenessTriggered()).to.equal(
       true,
-      "121-day stall: deadman overrides the in-phase jackpot pause"
+      "31-day stall: deadman overrides the in-phase jackpot pause"
     );
   });
 

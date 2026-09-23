@@ -27,7 +27,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *
  * Two liveness guards:
  *   - level==0 && currentDay - purchaseStartDay > DEPLOY_IDLE_TIMEOUT_DAYS  (pre-game 365-day idle timeout)
- *   - level!=0 && currentDay - purchaseStartDay > 120                       (post-game 120-day death clock)
+ *   - level!=0 && currentDay - purchaseStartDay > 30                        (post-game 30-day death clock)
  *
  * Deity pass refunds (GameOverModule:105-135):
  *   - Levels 0-9: min(deityPassPricePaid[owner], 20 ETH) per owner, FIFO,

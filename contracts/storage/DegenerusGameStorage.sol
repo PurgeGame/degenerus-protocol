@@ -292,6 +292,9 @@ abstract contract DegenerusGameStorage {
     /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
     uint32 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 365;
 
+    /// @dev Final purchase/rescue day after level 0; game-over is eligible the following day.
+    uint24 internal constant _PURCHASE_TIMEOUT_DAYS = 30;
+
     /// @dev VRF stall duration that flips liveness from "grace" to "VRF-dead game-over".
     ///      Below this, liveness is suppressed so players can propose a coordinator rotation.
     ///      At or above, liveness fires so the game-over fallback path engages.
@@ -302,8 +305,10 @@ abstract contract DegenerusGameStorage {
     ///      and its gap is skipped, so currentDay - dailyIdx counts days since the last good
     ///      word; it freezes during ANY stall (dead coordinator,
     ///      unfilled LINK, request-from-zero revert) and clears only after game-over latches.
-    ///      Far above the in-phase clocks, so it never fires on a healthy game.
-    uint24 internal constant _VRF_DEADMAN_DAYS = 120;
+    ///      Equal to the level>0 purchase deadline and applied at every level, including level 0
+    ///      (whose 365-day deploy window therefore needs a sealed day at least every 30 days).
+    ///      A game that seals daily never trips it before its purchase deadline plus grace.
+    uint24 internal constant _VRF_DEADMAN_DAYS = 30;
 
     // =========================================================================
     // Errors
@@ -963,18 +968,19 @@ abstract contract DegenerusGameStorage {
         return dailyTicketBudgetsPacked >> 208 != 0;
     }
 
-    /// @dev True when gameover liveness guard would fire within ~1 day (day-granularity).
+    /// @dev True from the purchase deadline day (the last day before liveness can fire) until
+    ///      the level's target is met: once lastPurchaseDay or jackpotPhaseFlag is set the level
+    ///      can no longer die by liveness, so there is nothing left to rescue.
     ///      Used to activate distress-mode lootbox behaviour: 100% nextpool allocation
     ///      and 25% ticket bonus on the distress-bought portion.
     function _isDistressMode() internal view returns (bool) {
-        if (gameOver) return false;
-        uint24 psd = purchaseStartDay;
-        uint24 currentDay = _simulatedDayIndex();
-        if (level == 0) {
-            // Distress fires on the final day before the liveness guard would trigger.
-            return currentDay >= psd + _DEPLOY_IDLE_TIMEOUT_DAYS;
-        }
-        return currentDay >= psd + 120;
+        if (gameOver || lastPurchaseDay || jackpotPhaseFlag) return false;
+        return _simulatedDayIndex() >= _purchaseDeadlineDay();
+    }
+
+    /// @dev Shared day boundary for distress and purchase-phase liveness.
+    function _purchaseDeadlineDay() internal view returns (uint24) {
+        return purchaseStartDay + (level == 0 ? uint24(_DEPLOY_IDLE_TIMEOUT_DAYS) : _PURCHASE_TIMEOUT_DAYS);
     }
 
     /// @dev Queues entries for a buyer at a target level. The `entries` arg is in
@@ -2512,7 +2518,7 @@ abstract contract DegenerusGameStorage {
     ///      path in these phases.
     ///
     ///      Purchase phase: a purchase deadline of purchaseStartDay + 365 days at level
-    ///      0 (deploy idle) or + 120 days after. Nothing ends a level before it. Past
+    ///      0 (deploy idle) or + 30 days after. Nothing ends a level before it. Past
     ///      it, a request that was already in flight when it passed SUPPRESSES the
     ///      trigger for _VRF_GRACE_PERIOD rather than confirming it: the word can still
     ///      land, players can propose a coordinator rotation via DegenerusAdmin, the 12h
@@ -2530,8 +2536,7 @@ abstract contract DegenerusGameStorage {
         // Jackpot / last-purchase suppress the in-phase clocks (they would false-fire in the
         // productive window between target-met and phase-transition close).
         if (lastPurchaseDay || jackpotPhaseFlag) return false;
-        uint24 deadlineDay = purchaseStartDay +
-            uint24(level == 0 ? _DEPLOY_IDLE_TIMEOUT_DAYS : 120);
+        uint24 deadlineDay = _purchaseDeadlineDay();
         if (_simulatedDayIndex() <= deadlineDay) return false;
         // Past the deadline. A request already in flight when it passed SUPPRESSES the trigger
         // for the grace window instead of confirming it: the word can still land, and both the

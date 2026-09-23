@@ -50,7 +50,7 @@ pragma solidity 0.8.34;
  *      - RNG lock prevents state manipulation during VRF callback window
  *      - Access control via msg.sender checks
  *      - Delegatecall modules use constant addresses from ContractAddresses
- *      - 12h VRF timeout, 14-day gameover-RNG fallback, 120-day inactivity guard
+ *      - 12h VRF timeout, 14-day gameover-RNG fallback, 30-day purchase inactivity guard
  */
 
 import {IsDGNRS} from "./interfaces/IsDGNRS.sol";
@@ -269,7 +269,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      batched operations.
     ///
     ///      FLOW OVERVIEW:
-    ///      1. Check liveness guards (1yr deploy timeout, 120-day inactivity)
+    ///      1. Check liveness guards (1yr deploy timeout, 30-day purchase inactivity)
     ///      2. Process transition housekeeping during jackpot→purchase transition
     ///      3. Gate on RNG readiness (request new VRF if needed)
     ///      4. Process ticket batches
@@ -2381,7 +2381,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Whether the liveness-timeout game-over trigger is currently active.
     /// @dev Outside jackpot / last-purchase: true once the purchase deadline
-    ///      (365 days at level 0, 120 after) has passed with no request in flight, or
+    ///      (365 days at level 0, 30 after) has passed with no request in flight, or
     ///      with a pre-deadline request that has now stalled for _VRF_GRACE_PERIOD.
     ///      Inside jackpot / last-purchase: true only when the VRF-death deadman fires
     ///      (no day sealed for _VRF_DEADMAN_DAYS). A sub-grace stall past the deadline

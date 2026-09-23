@@ -437,7 +437,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Triggered during purchase phase when burns occur.
     ///      - Rolls winning traits (random + hero override) and runs trait-based jackpot.
     ///      - Fixed winner counts [24, 16, 8, 1] = 49 ETH winners, up to 120 ticket winners.
-    ///      - Adds a 1% futurePrizePool ETH slice every purchase day, split 75/23/2:
+    ///      - Adds a 4% futurePrizePool ETH slice every purchase day, split 75/23/2:
     ///        75% to the ticket leg (backing ETH → nextPrizePool, tickets to trait
     ///        winners), 2% skimmed to the yield accumulator, 23% distributed as ETH.
     ///
@@ -661,9 +661,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             lvl
         );
 
-        // Daily 1% drip from futurePrizePool every purchase day.
+        // Daily 4% drip from futurePrizePool every ordinary purchase day.
         uint256 futureBal = _getFuturePrizePool();
-        uint256 ethDaySlice = futureBal / 100;
+        uint256 ethDaySlice = futureBal / 25;
 
         uint256 ethPool = ethDaySlice;
         uint256 ticketLegBudget;
@@ -718,7 +718,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // the deferred ticket stage does not credit next itself. futureBal is still exact —
         // nothing above writes prizePoolsPacked (purchase-phase distribution never reaches the solo
         // whale-pass leg). The ticket leg, the skim and the ETH leg partition ethDaySlice exactly and
-        // paidEth never exceeds the ETH leg, so the three debits sum to at most the 1% slice and the
+        // paidEth never exceeds the ETH leg, so the three debits sum to at most the 4% slice and the
         // subtraction cannot underflow. The accumulator write touches its own slot, leaving the
         // packed read above exact.
         if (ethDaySlice != 0) {

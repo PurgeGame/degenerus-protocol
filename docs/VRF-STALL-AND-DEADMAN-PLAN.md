@@ -196,7 +196,7 @@ Use a fixed real-time failure rule and explicit callback/activation precedence.
 Preserve valid results accepted before the relevant failure boundary; a caller
 must not choose the deterministic alternative after seeing an accepted result.
 Late callbacks cannot reopen a latched emergency or mutate its entitlements.
-Retain the existing 14-day terminal fallback and 120-day phase-independent
+Retain the existing 14-day terminal fallback and 30-day phase-independent
 deadman constants as starting parameters; specify which trigger applies in each
 phase, including failed requests, before implementation. Retries must not reset
 the escape indefinitely.

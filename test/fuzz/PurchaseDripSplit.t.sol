@@ -39,7 +39,7 @@ contract PurchaseDripHarness is DegenerusGameJackpotModule, BucketSeed {
 }
 
 /// @title PurchaseDripSplitTest -- pins the purchase-phase daily drip's 75/23/2 split
-/// @notice The purchase-phase daily takes a 1% slice of futurePrizePool and partitions it
+/// @notice The purchase-phase daily takes a 4% slice of futurePrizePool and partitions it
 ///         75% ticket leg / 23% ETH leg / 2% insurance skim, with BOTH the ticket leg and
 ///         the skim sized off the WHOLE slice (so the ETH leg keeps the two flooring
 ///         remainders) and the skim credited to yieldAccumulator. These tests are the
@@ -70,14 +70,14 @@ contract PurchaseDripSplitTest is Test {
         return uint256(keccak256("purchase-drip-split-fixed-word"));
     }
 
-    /// @dev Expected partition of a future-pool balance's 1% slice, computed exactly as
+    /// @dev Expected partition of a future-pool balance's 4% slice, computed exactly as
     ///      the contract does: both legs floored off the whole slice, ETH leg = remainder.
     function _expectedSplit(uint256 futureBal)
         internal
         pure
         returns (uint256 slice, uint256 ticketLeg, uint256 insurance, uint256 ethLeg)
     {
-        slice = futureBal / 100;
+        slice = futureBal / 25;
         if (slice != 0) {
             ticketLeg = (slice * PURCHASE_REWARD_JACKPOT_TICKET_BPS) / 10_000;
             insurance = (slice * PURCHASE_INSURANCE_BPS) / 10_000;
@@ -116,7 +116,7 @@ contract PurchaseDripSplitTest is Test {
     }
 
     /// @notice Partition deltas hold exactly for arbitrary pool sizes, including the
-    ///         zero-slice (futureBal < 100) and dust (slice too small to floor a leg)
+    ///         zero-slice (futureBal < 25) and dust (slice too small to floor a leg)
     ///         boundaries, and the two legs never exceed the slice.
     function testFuzz_dripSplit_partition(uint128 future0) public {
         future0 = uint128(bound(future0, 0, 1e30));
@@ -134,7 +134,7 @@ contract PurchaseDripSplitTest is Test {
             uint256(future0) - ticketLeg - insurance,
             "future debit == ticket leg + skim exactly (no ETH paid)"
         );
-        assertLe(ticketLeg + insurance, uint256(future0) / 100, "legs partition within the slice");
+        assertLe(ticketLeg + insurance, uint256(future0) / 25, "legs partition within the slice");
     }
 
     // =========================================================================

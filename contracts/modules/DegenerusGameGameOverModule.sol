@@ -113,8 +113,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     // error E() — inherited from DegenerusGameStorage
 
     /// @notice Process game over by distributing remaining funds via jackpots.
-    /// @dev Called when a liveness guard fires: 1yr deploy-idle timeout (level 0), 120-day
-    ///      inactivity (level>0), a 14-day VRF-stall grace, or the 120-day VRF-death deadman
+    /// @dev Called when a liveness guard fires: 1yr deploy-idle timeout (level 0), 30-day
+    ///      inactivity (level>0), a 14-day VRF-stall grace, or the 30-day VRF-death deadman
     ///      (jackpot/last-purchase phases).
     ///      Sets terminal gameOver flag.
     ///

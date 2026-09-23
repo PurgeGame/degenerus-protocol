@@ -113,7 +113,7 @@ contract DailyEthBucketTable is Test {
 
         // Every non-remainder bucket is 20% of the ETH leg floored to whole granules per winner,
         // and the granule is a quarter of the NEXT level's price.
-        uint256 slice = uint256(FUT_POOL) / 100;
+        uint256 slice = uint256(FUT_POOL) / 25;
         uint256 ethPool = slice - (slice * 7500) / 10_000 - (slice * 200) / 10_000;
         uint256 remainderPaid;
         for (uint8 q; q < 4; q++) {
