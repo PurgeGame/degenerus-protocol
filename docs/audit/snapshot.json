@@ -1,7 +1,7 @@
 {
   "date": "2026-09-23",
   "status": "committed revision audit handoff; not an audited deployment",
-  "base_commit": "5d52e4f68f559e5e0f043852d31fa09ef2658922",
+  "base_commit": "418052332758b6adcda475e669bd0d826be1d0c8",
   "source_file_count": 60,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -86,7 +86,7 @@
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "docs/VERIFICATION.md: current evidence for the 2026-09-22 single-symbol degenerette revision (with the WWXRP registry and decimator cap merged beneath it), earlier evidence retained; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
+  "verification": "docs/VERIFICATION.md: current evidence for the 2026-09-23 unminted-tickets, fill-battle and foil revision, earlier evidence retained; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
   "verification_inputs_hashes_file": "verification-sha256.txt",
   "evidence_archive": "evidence-2026-09-21.tar.gz",
   "evidence_archive_sha256": "651a9e9da46db10565535cc7d949134905b7bd772022e5539c98025e1b6c0855",
@@ -97,5 +97,7 @@
   "supplement_archive_3": "evidence-2026-09-22-reveal-incinerator.tar.gz",
   "supplement_archive_3_sha256": "e12d5b1bd4ae591a715701b1ae31bb58d5b64e14db04f7ec1763d5e2b7fc01ec",
   "supplement_archive_4": "evidence-2026-09-22-degenerette-recycle.tar.gz",
-  "supplement_archive_4_sha256": "6cd150a4ab257cc37ed4d64b7f9db8536ee3b58d6a159d6069ed8de3eece34be"
+  "supplement_archive_4_sha256": "6cd150a4ab257cc37ed4d64b7f9db8536ee3b58d6a159d6069ed8de3eece34be",
+  "supplement_archive_5": "evidence-2026-09-23-fill-battle-foil.tar.gz",
+  "supplement_archive_5_sha256": "10599be04a77072ebeb367c2ee8b8021a9c7fd4cc2f3b8f0d493b95267b9989d"
 }

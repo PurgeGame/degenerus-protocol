@@ -114,9 +114,9 @@ advance calls. Test gas caps must not be raised simply to make a regression pass
 
 ## Current evidence — 2026-09-23, unminted-tickets, fill-battle and foil revision
 
-The source is the committed revision `5d52e4f68f559e5e0f043852d31fa09ef2658922`. Commits after it
-touch only documentation (`docs/` and `scope.txt`), so every hash and every run below describes this
-tree. It carries eight changes on top of the single-symbol degenerette revision below, and adds one
+The source is the committed revision `418052332758b6adcda475e669bd0d826be1d0c8`. Commits after it touch only
+`docs/`, so every hash and every run below describes this tree. Its contracts are those of `5d52e4f6`;
+`41805233` itself changes one test handler (see the first row). It carries eight changes on top of the single-symbol degenerette revision below, and adds one
 source file, `contracts/CoinDrawBattle.sol` (60 in scope).
 
 Jackpot phase and timing. The normal jackpot phase is three physical days (turbo still runs it in
@@ -154,15 +154,15 @@ removed, and the vault or its owner mints directly.
 
 | Check | Result |
 | --- | --- |
-| Foundry full seven-group sweep at this revision | pending the evidence chain at this revision |
-| Per-test gas, previous revision vs this revision, same fixture pins | pending |
-| Hardhat `make test-hardhat` | pending |
-| Hardhat `npm run test:stat` | pending |
-| Eleven `make check-*` gates and the storage layout oracle | pending |
-| EIP-170 runtime size, checked-in pins | pending |
-| EIP-170 runtime size, Hardhat-style fixture pins | pending |
-| Slither 0.11.5, same flags as below | pending |
-| Aderyn 0.6.8 | pending |
+| Foundry full seven-group sweep at this revision | 2,741 passed, 0 failed, 104 skipped. The sweep at `9676d23b` (same contracts) passed 2,608 in six groups, all exit 0; its invariants group reported 2 failures from one suite, `CrapsRealWiringConservation`, whose per-run vacuity guard needs a successful vault comp grant and could see none (a harness flake: the same seed passed on rerun). `41805233` fixes the handler (test-only) and the whole invariants group, re-run at that exact revision with a fresh failure-persist directory, passes 133/0 (`invariants-at-41805233/`). Up 30 on the revision below: the fill-battle, coin-draw, deadline, foil and full-composition suites, less the retired comp and escrow suites |
+| Per-test gas, previous revision vs this revision, same fixture pins | 1,890 entries changed over the six groups with snapshots (invariants has none, see above). The largest moves are harness cost from the unminted ticket queue: `SdgnrsWhaleBuy:test_CapAt100PaidPasses` -76.7%, `RngReuseJackpotStraddle` -69.8%, `FarFutureIntegration:testMultiLevelAdvancementWithFFTickets` +29.1%, `BafFarFutureTickets` +10.8% to +14.5%. Advance stages: `AdvanceNestedVaultCompSettlement` +7.5% (15.50M), `AdvanceNestedDaily*` +4.3% to +4.7% (up to 16.40M in these combined stress fixtures), `AdvanceCenturyAtHundredThreshold` +9.2% (13.79M); `AdvanceNestedFullCompositionGas` (all purchase-day legs plus the full battle envelope) fits 15M (`gas-delta-per-test.txt`) |
+| Hardhat `make test-hardhat` | 1,641 passing, 22 pending, 0 failing; down 18 because the removed far/near-future coin legs took their unit tests with them |
+| Hardhat `npm run test:stat` | 160 passing, 20 pending, 0 failing. Neither former accepted red remains: `v36.0 SURF-03` now pins the moved remainder roll, and `STAT-03` (the legacy empty-bucket skip rate) is skipped as superseded by the craps / FLIP split and the fill draw |
+| Eleven `make check-*` gates and the storage layout oracle | all pass by exit code; the oracle matches every golden and reports delegatecall shared-slot consistency between the modules and the Game |
+| EIP-170 runtime size, checked-in pins | `DegenerusGameMintModule` 24,255 (321 spare), `CrapsBattle` 24,212 (364), `DegenerusGame` 24,195 (381), `DegenerusGameJackpotModule` 24,072 (504), `DegenerusGameAdvanceModule` 24,051 (525), `CoinDrawBattle` 5,845 (new); all 33 entries fit |
+| EIP-170 runtime size, Hardhat-style fixture pins | `CrapsBattle` 24,280 (296 spare), `DegenerusGameMintModule` 24,260 (316), `DegenerusGame` 24,200 (376), `DegenerusGameJackpotModule` 24,077 (499), `DegenerusGameAdvanceModule` 24,068 (508), `CoinDrawBattle` 5,845; all 33 entries fit |
+| Slither 0.11.5, same flags as below | 3,746 results over 188 contracts: 203 High, 517 Medium, 561 Low, 2,409 Informational, 56 Optimization. High composition changes only in the standing delegatecall-storage class: `uninitialized-state` 155 -> 157 (`jackpotFlags` re-keys the removed `compressedJackpotFlag`; new rows for `deityBySymbol` and `protocolBoonEntries` read by the boon-draw entry and draw), and `reentrancy-eth` 3 -> 2. New Medium rows are intentional floors or ignored returns: `divide-before-multiply` in `CoinDrawBattle.resolve` (the 300-FLIP bankroll floor) and `_coinDrawPlan`, `incorrect-equality` on `level == 0` in `_purchaseDeadlineDay`, `unused-return` on the pre-screened `vaultComp` seat in `_seatOnTable`; the rest are re-keyed (`slither-delta-vs-degenerette-recycle-run.txt`) |
+| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,388 instances (26 fewer than the revision below); no new category |
 
 ## Evidence — 2026-09-22, single-symbol degenerette and century-recycle revision (base of the revision above)
 
