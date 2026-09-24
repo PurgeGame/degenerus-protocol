@@ -1,7 +1,7 @@
 {
   "date": "2026-09-24",
   "status": "committed revision audit handoff; not an audited deployment",
-  "base_commit": "4254a87777b946e8cc5106f86f8e1cec030f0c41",
+  "base_commit": "bc66611a901c437f69b9b607ae9acd2fc8ebf6fc",
   "source_file_count": 60,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
