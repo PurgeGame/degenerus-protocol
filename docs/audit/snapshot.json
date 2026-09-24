@@ -1,7 +1,7 @@
 {
   "date": "2026-09-24",
   "status": "committed revision audit handoff; not an audited deployment",
-  "base_commit": "bc66611a901c437f69b9b607ae9acd2fc8ebf6fc",
+  "base_commit": "c7d5d45fc15c45eb199459d27a92af60d5fe3398",
   "source_file_count": 60,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -86,7 +86,7 @@
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "docs/VERIFICATION.md: current evidence for the 2026-09-24 revision (mid-day latch fix, dead-VRF ending, vault afking reserve, 20h vault-owner RNG retry, deadline liveness, lapsed craps seat refunds, review fixes: recovered-stall credit, irreversible terminal claims, stETH-backed afking withdrawals, exact terminal shares, saturating WWXRP; early-bird surplus and jackpot quadrant whale passes), earlier evidence retained; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
+  "verification": "docs/VERIFICATION.md: current evidence for the 2026-09-24 revision (mid-day latch fix, dead-VRF ending, vault afking reserve, 20h vault-owner RNG retry, deadline liveness, lapsed craps seat refunds, review fixes: recovered-stall credit, irreversible terminal claims, stETH-backed afking withdrawals, exact terminal shares, saturating WWXRP; early-bird surplus and jackpot quadrant whale passes; next-level tickets activated by the first fresh request after the purchase goal), earlier evidence retained; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
   "verification_inputs_hashes_file": "verification-sha256.txt",
   "evidence_archive": "evidence-2026-09-21.tar.gz",
   "evidence_archive_sha256": "651a9e9da46db10565535cc7d949134905b7bd772022e5539c98025e1b6c0855",
