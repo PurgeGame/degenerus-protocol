@@ -7,10 +7,22 @@ import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMint
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @dev Extends the production mint module so the live `processTicketBatch` runs the seated
 ///      round drain in THIS contract's storage; adds queue seeders and bucket decoders only.
 contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
+    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
+    ///      not deployed at the Game's address, so it evaluates the tail in place.
+    function _pastDeadlineTriggered(uint24 today, uint24 idx)
+        internal
+        view
+        override(DegenerusGameMintModule, DegenerusGameStorage)
+        returns (bool)
+    {
+        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
+    }
+
     function seedQueue(uint24 lvl, address[] calldata players, uint32[] calldata owed, uint8[] calldata rem, uint256 entropy)
         external
     {

@@ -659,9 +659,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         // was first issued for and the VRF-dead window keeps running from the original send.
         // The request is accepted before the new subscription is LINK-funded; DegenerusAdmin
         // funds it in the same _executeSwap transaction (transferAndCall), and the VRF node
-        // fulfills once funded. If the new coordinator also stalls, the daily advance abandons a
-        // mid-day request and promotes it to the daily word after MIDDAY_RNG_STALL_TIMEOUT; once
-        // an ending holds the advance, that request reaches the VRF-dead ending instead.
+        // fulfills once funded. If the new coordinator also stalls, the vault owner's one retry is
+        // the remaining recourse, and a request unanswered _VRF_DEAD_TIMEOUT from its original
+        // send reaches the VRF-dead ending.
         if (!rngLockedFlag) {
             // Mid-day request in flight, lootbox-only or with a swapped ticket cohort alike:
             // LR_INDEX is preserved, so the new word lands in the same reserved slot via the
@@ -670,7 +670,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             // until the ticket batch drains, and _gameOverEntropy's failed-request stamp sets
             // rngRequestTime with no request in flight — re-issuing then would send a spurious
             // request whose fulfillment overwrites an already-delivered write-once lootbox word.
-            // A promoted mid-day->daily request holds the lock and takes the daily branch below.
+            // A mid-day request re-fired by the vault owner's retry holds the daily lock and takes
+            // the daily branch below.
             // Nothing in flight: config repoint only.
             if (vrfRequestId != 0) vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
         } else {

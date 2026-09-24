@@ -137,8 +137,8 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         assertTrue(game.rngLocked());
         assertEq(sdgnrs.lastRecycledCentury(), 0, "request is too early to refill");
         uint256 req = mockVRF.lastRequestId();
-        vm.warp(block.timestamp + 12 hours + 2);
-        game.advanceGame();
+        vm.warp(block.timestamp + 20 hours + 2);
+        game.advanceGame(); // the vault owner's retry (this test contract holds the DGVE majority)
         assertGt(mockVRF.lastRequestId(), req, "real VRF retry fired");
         assertEq(game.level(), 100);
         assertEq(sdgnrs.lastRecycledCentury(), 0, "retry cannot mint");

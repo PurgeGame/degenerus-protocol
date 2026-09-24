@@ -6,10 +6,22 @@ import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMint
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @dev Extends the production mint module so the live `processTicketBatch` drains into THIS
 ///      contract's packed buckets; adds lane-level seeders and decoders only.
 contract BucketLaneHarness is DegenerusGameMintModule, BucketSeed {
+    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
+    ///      not deployed at the Game's address, so it evaluates the tail in place.
+    function _pastDeadlineTriggered(uint24 today, uint24 idx)
+        internal
+        view
+        override(DegenerusGameMintModule, DegenerusGameStorage)
+        returns (bool)
+    {
+        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
+    }
+
     function append(uint24 lvl, uint8 trait, address player, uint256 n) external {
         _seedBucket(lvl, trait, player, n);
     }

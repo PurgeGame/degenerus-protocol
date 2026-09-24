@@ -24,7 +24,7 @@ pragma solidity 0.8.34;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {RECORD_KIND_BUY, RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameBoonModule,
@@ -321,6 +321,15 @@ contract DegenerusGameMintModule is
         if (afkingUsed != 0) {
             emit AfkingSpent(player, afkingUsed);
         }
+    }
+
+    /// @dev Past the purchase deadline, answer the liveness tail through the Game's own view
+    ///      (this module runs in the Game's context, so `address(this)` is the Game). This module
+    ///      sits at the EIP-170 ceiling; a self-staticcall paid only by purchases after the
+    ///      deadline is cheaper in bytes than a copy of the tail. The Game re-evaluates the whole
+    ///      predicate natively, so the answer is identical.
+    function _pastDeadlineTriggered(uint24, uint24) internal view virtual override returns (bool) {
+        return IDegenerusGame(address(this)).livenessTriggered();
     }
 
     // -------------------------------------------------------------------------

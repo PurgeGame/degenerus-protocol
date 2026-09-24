@@ -306,7 +306,7 @@ describe("VRFIntegration", function () {
   // ---------------------------------------------------------------------------
 
   describe("VRF timeout / retry", function () {
-    it("advanceGame after the 12h timeout issues a new (higher) requestId", async function () {
+    it("advanceGame after the 20h timeout issues a new (higher) requestId", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       // Seal the genesis day first (DEPLOY_DAY_BOUNDARY=0 backfill artifact).
@@ -323,8 +323,8 @@ describe("VRFIntegration", function () {
       const firstRequestId = await getLastVRFRequestId(mockVRF);
       expect(await game.rngLocked()).to.equal(true);
 
-      // Stall past the 12h daily VRF retry timeout (same day).
-      await advanceTime(12 * 60 * 60 + 60);
+      // Stall past the 20h daily VRF retry timeout (same day).
+      await advanceTime(20 * 60 * 60 + 60);
 
       // advanceGame should retry, issuing a new VRF request.
       const tx = await game.connect(deployer).advanceGame();
@@ -348,8 +348,8 @@ describe("VRFIntegration", function () {
       await advanceToNextDay();
       await game.connect(deployer).advanceGame();
 
-      // Trigger timeout (same-day stall past the 12h daily retry threshold).
-      await advanceTime(12 * 60 * 60 + 60);
+      // Trigger timeout (same-day stall past the 20h daily retry threshold).
+      await advanceTime(20 * 60 * 60 + 60);
 
       // Issue retry request.
       await game.connect(deployer).advanceGame();

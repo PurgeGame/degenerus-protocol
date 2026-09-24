@@ -8,7 +8,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 /// @title QuestRetryDoubleRoll -- a cross-midnight daily RETRY must not re-force a quest
 /// @notice The foil daily is rolled at the final-jackpot RNG REQUEST — the boundary where
-///         ticket routing flips to the next level. A 12h VRF retry re-requests a word for a
+///         ticket routing flips to the next level. A 20h VRF retry re-requests a word for a
 ///         transition that ALREADY happened, and if it crosses the simulated-day boundary it
 ///         carries the NEW wall day (no RNGREUSE clamp arm engages while a request is pending:
 ///         rngWordCurrent is 0). Ungated, that second request rolls a SECOND consecutive
@@ -94,7 +94,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
             if (logs[i].topics.length == 4) assertTrue(uint256(logs[i].topics[0]) >> 160 != target, "request emitted no seated reveal");
         }
         vm.roll(block.number + 17);
-        vm.warp(block.timestamp + 13 hours);
+        vm.warp(block.timestamp + 21 hours);
         game.advanceGame();
         assertEq(game.level(), oldLevel + 1, "retry did not advance level");
         assertEq(_generationStart(target), sealBlock, "retry preserves the sealed bound (never re-stamps)");
@@ -115,7 +115,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         );
     }
 
-    /// @notice The 12h retry, fired on the NEXT wall day, must roll nothing: the day it
+    /// @notice The 20h retry, fired on the NEXT wall day, must roll nothing: the day it
     ///         carries must stay unrolled exactly as the pre-change fulfilment path left it.
     function test_crossMidnightRetryDoesNotRerollQuest() public {
         _driveToLastPurchaseDay();
@@ -123,7 +123,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         assertTrue(rolled, "fixture never reached a rolling final-jackpot request");
         assertTrue(game.rngLocked(), "final-jackpot request should leave the daily lock held");
 
-        // Cross midnight AND the 12h retry timeout with the word still unfulfilled, then let
+        // Cross midnight AND the 20h retry timeout with the word still unfulfilled, then let
         // anyone fire the retry. The daily request is still pending, so this is the retry
         // branch (rngRequestTime LSB still 0).
         vm.warp(block.timestamp + 1 days + 1 hours);
@@ -174,7 +174,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
     /// @dev From a last-purchase-day window, drive forward until the FINAL-jackpot RNG
     ///      request fires and leave its word UNFULFILLED (lock held), which is the only state
-    ///      the 12h retry branch can be reached from. Note a plain transition request is NOT
+    ///      the 20h retry branch can be reached from. Note a plain transition request is NOT
     ///      final unless turbo is active; a standard phase's final request comes after
     ///      two completed jackpot draws.
     ///      Returns whether such a request rolled a forced slot-1 quest, plus its type/day.

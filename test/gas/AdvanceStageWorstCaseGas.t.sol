@@ -9,6 +9,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @title AdvanceStageWorstCaseGas — Phase 367 (GASCEIL) measured per-stage advanceGame ceiling
 /// @notice Phase 367 REDO. The prior pass reported the standalone 305-winner daily jackpot stage
@@ -58,6 +59,17 @@ contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
 ///      sets the lootbox RNG entropy word the batch reads at index 1. A worst-case batch mints up
 ///      to WRITES_BUDGET_SAFE write-units of cold lvlTraitEntry SSTOREs in one call.
 contract TicketBatchStageHarness is DegenerusGameMintModule, BucketSeed {
+    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
+    ///      not deployed at the Game's address, so it evaluates the tail in place.
+    function _pastDeadlineTriggered(uint24 today, uint24 idx)
+        internal
+        view
+        override(DegenerusGameMintModule, DegenerusGameStorage)
+        returns (bool)
+    {
+        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
+    }
+
     /// @dev Shared seeding: `n` distinct players each owing `owedEach` traits into the current
     ///      read-slot queue for `lvl`, plus a non-zero lootbox entropy word at index 0 (the word
     ///      the batch reads via lootboxRngWordByIndex[ _lrRead(INDEX) - 1 ]).

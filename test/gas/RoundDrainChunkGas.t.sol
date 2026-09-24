@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
@@ -11,6 +12,17 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @dev Extends the production mint module so one live `processTicketBatch` call runs a full
 ///      write-budget chunk in THIS contract's storage; adds queue seeders only.
 contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
+    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
+    ///      not deployed at the Game's address, so it evaluates the tail in place.
+    function _pastDeadlineTriggered(uint24 today, uint24 idx)
+        internal
+        view
+        override(DegenerusGameMintModule, DegenerusGameStorage)
+        returns (bool)
+    {
+        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
+    }
+
     /// @dev Pin `level` so `lvl` sits inside the minted read window the drain walks: the sweep
     ///      covers [anchor-1 .. _mintCeiling()] and the measured call passes anchor = lvl + 1
     ///      (the purchase level), so level = lvl gives the window [lvl .. lvl + 1] and routes a

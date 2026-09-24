@@ -9,7 +9,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title VRFCore -- Audit tests for VRF request/fulfillment correctness
 /// @notice Covers VRFC-01 (callback revert-safety + gas), VRFC-02 (requestId lifecycle),
-///         VRFC-03 (mutual exclusion), VRFC-04 (12h timeout retry).
+///         VRFC-03 (mutual exclusion), VRFC-04 (20h vault-owner retry).
 contract VRFCore is DeployProtocol {
     VRFHandler public vrfHandler;
 
@@ -322,8 +322,8 @@ contract VRFCore is DeployProtocol {
         // Record lootboxRngIndex after initial request
         uint48 indexAfterRequest = _lootboxRngIndex();
 
-        // Do NOT fulfill -- wait 13 hours for timeout
-        vm.warp(block.timestamp + 13 hours);
+        // Do NOT fulfill -- wait past the 20h vault-owner retry window
+        vm.warp(block.timestamp + 21 hours);
 
         // Retry: advanceGame triggers timeout path -> _requestRng -> _finalizeRngRequest(isRetry=true)
         game.advanceGame();
@@ -362,7 +362,7 @@ contract VRFCore is DeployProtocol {
         uint48 indexAfterRequest = _lootboxRngIndex();
 
         // Timeout + retry
-        vm.warp(block.timestamp + 13 hours);
+        vm.warp(block.timestamp + 21 hours);
         game.advanceGame();
         uint48 indexAfterRetry = _lootboxRngIndex();
         assertEq(indexAfterRetry, indexAfterRequest, "Fuzz: retry should not change index");
@@ -401,30 +401,35 @@ contract VRFCore is DeployProtocol {
         game.requestLootboxRng();
     }
 
-    /// @notice A stalled mid-day ticket request no longer gates the next-day advance: it is
-    ///         abandoned and folded into the daily word. A purchase that creates pending lootbox
-    ///         ETH also leaves tickets in the write slot, so requestLootboxRng swaps a non-empty
-    ///         buffer (LR_MID_DAY=1, ticketsFullyProcessed=false, daily lock clear). When that
-    ///         mid-day VRF stalls past MIDDAY_RNG_STALL_TIMEOUT, the new-day drain gate abandons
-    ///         it and promotes it to this day's daily request: the fresh daily word seals the day,
-    ///         finalizes the reserved bucket, drains the swapped batch, and releases the
-    ///         LR_MID_DAY latch — no retryLootboxRng, no permanent gate.
-    function test_midDayTicketRequest_takenOverByDailyAfterStall() public {
+    /// @notice A stalled mid-day ticket request holds the next-day advance until the vault
+    ///         owner's retry, which re-fires it as that day's daily request. A purchase that
+    ///         creates pending lootbox ETH also leaves tickets in the write slot, so
+    ///         requestLootboxRng swaps a non-empty buffer (LR_MID_DAY=1, ticketsFullyProcessed=
+    ///         false, daily lock clear). Nobody else can replace it; once RNG_RETRY_TIMEOUT (20h)
+    ///         has passed, the owner's advance takes the daily lock, and the fresh daily word seals
+    ///         the day, finalizes the reserved bucket, drains the swapped batch, and releases the
+    ///         LR_MID_DAY latch.
+    function test_midDayTicketRequest_refiredByOwnerRetryAfterStall() public {
         _setupForMidDayRng();
 
         game.requestLootboxRng();
         assertFalse(game.rngLocked(), "mid-day request must not set the daily lock");
         uint256 stalledReqId = mockVRF.lastRequestId();
 
-        // Word does NOT arrive; cross the day boundary, well past MIDDAY_RNG_STALL_TIMEOUT (4h).
+        // Word does NOT arrive; cross the day boundary, past the 20h retry window.
         vm.warp(block.timestamp + 1 days + 13 hours);
 
-        // The new-day advance no longer reverts: it abandons the stalled mid-day request and
-        // promotes it to this day's daily request (drain-gate takeover) in one call.
+        // Nobody but the vault owner can replace it.
+        vm.prank(makeAddr("nonOwner"));
+        vm.expectRevert();
+        game.advanceGame();
+
+        // The vault owner (this test contract holds the DGVE majority) re-fires it as this
+        // day's daily request in one call.
         game.advanceGame();
         uint256 dailyReqId = mockVRF.lastRequestId();
         assertTrue(dailyReqId != stalledReqId, "takeover issued a fresh daily VRF request");
-        assertTrue(game.rngLocked(), "takeover promoted the request to the daily lock");
+        assertTrue(game.rngLocked(), "the owner's retry took the daily lock");
 
         // The abandoned mid-day request is rejected on late arrival (requestId mismatch).
         mockVRF.fulfillRandomWords(stalledReqId, 0x1111);
@@ -556,11 +561,11 @@ contract VRFCore is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // VRFC-04: 12h Timeout Retry
+    // VRFC-04: 20h Vault-Owner Retry
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice After exactly 12 hours, advanceGame triggers retry (not RngNotReady revert).
-    function test_timeoutRetry_12h() public {
+    /// @notice After exactly 20 hours, the vault owner's advanceGame triggers the retry.
+    function test_timeoutRetry_20h() public {
         // Day 1: complete normally
         _completeDay(0xDEAD0001);
 
@@ -571,8 +576,8 @@ contract VRFCore is DeployProtocol {
         uint48 requestTime = _readRngRequestTime();
         uint256 oldReqId = _readVrfRequestId();
 
-        // Warp to exactly rngRequestTime + 12 hours
-        vm.warp(uint256(requestTime) + 12 hours);
+        // Warp to exactly rngRequestTime + 20 hours
+        vm.warp(uint256(requestTime) + 20 hours);
 
         // Record lootboxRngIndex before retry
         uint48 indexBefore = _lootboxRngIndex();
@@ -591,9 +596,9 @@ contract VRFCore is DeployProtocol {
         assertEq(_lootboxRngIndex(), indexBefore, "Index unchanged on retry");
     }
 
-    /// @notice Before the retry window opens, advanceGame reverts with RngNotReady:
-    ///         everyone until 11h, non-vault-owners until 12h.
-    function test_noRetry_before12h() public {
+    /// @notice Before the retry window opens advanceGame reverts with RngNotReady for everyone,
+    ///         and after it opens a non-vault-owner still cannot fire the retry.
+    function test_noRetry_before20hOrForNonOwners() public {
         // Day 1: complete normally
         _completeDay(0xDEAD0001);
 
@@ -603,23 +608,22 @@ contract VRFCore is DeployProtocol {
         assertTrue(game.rngLocked(), "Day 2 VRF request pending");
         uint48 requestTime = _readRngRequestTime();
 
-        // 10h59m: even the vault owner (this test contract holds the DGVE majority)
-        // is before the 11h head start
-        vm.warp(uint256(requestTime) + 11 hours - 1 minutes);
+        // 19h59m: even the vault owner (this test contract holds the DGVE majority) waits
+        vm.warp(uint256(requestTime) + 20 hours - 1 minutes);
         vm.expectRevert();
         game.advanceGame();
 
-        // 11h59m: inside the head-start window a non-owner still reverts
-        vm.warp(uint256(requestTime) + 12 hours - 1 minutes);
+        // Past 20h a non-owner still reverts: the retry is the vault owner's alone
+        vm.warp(uint256(requestTime) + 20 hours + 1 minutes);
         vm.prank(makeAddr("nonOwner"));
         vm.expectRevert();
         game.advanceGame();
     }
 
-    /// @notice The retry is the vault owner's (the deployer here), at 12h and not before; it
+    /// @notice The retry is the vault owner's (the deployer here), at 20h and not before; it
     ///         re-sends the same request without moving its stamp, is single-use (further
     ///         timeouts revert), and the retried request's late fulfillment completes the day.
-    function test_ownerRetryAt12hIsSingleUse() public {
+    function test_ownerRetryAt20hIsSingleUse() public {
         // Day 1: complete normally
         _completeDay(0xDEAD0001);
 
@@ -629,21 +633,21 @@ contract VRFCore is DeployProtocol {
         uint48 requestTime = _readRngRequestTime();
         uint256 oldReqId = _readVrfRequestId();
 
-        // 11h: no head start any more
-        vm.warp(uint256(requestTime) + 11 hours);
+        // 19h: not yet
+        vm.warp(uint256(requestTime) + 19 hours);
         vm.expectRevert();
         game.advanceGame();
 
-        // 12h: the vault owner's retry re-sends the request; the stamp keeps its day
-        vm.warp(uint256(requestTime) + 12 hours);
+        // 20h: the vault owner's retry re-sends the request; the stamp keeps its day
+        vm.warp(uint256(requestTime) + 20 hours);
         game.advanceGame();
         uint256 retryReqId = _readVrfRequestId();
         assertTrue(retryReqId != oldReqId, "Retry re-issues the request");
         assertTrue(game.rngLocked(), "Still locked after retry");
         assertEq(_readRngRequestTime(), requestTime | 1, "same stamp, retry-spent LSB set");
 
-        // Retry spent: 12h+ later even the vault owner gets RngNotReady
-        vm.warp(uint256(requestTime) + 24 hours + 1);
+        // Retry spent: another 20h on, even the vault owner gets RngNotReady
+        vm.warp(uint256(requestTime) + 40 hours + 1);
         vm.expectRevert();
         game.advanceGame();
 
@@ -678,8 +682,8 @@ contract VRFCore is DeployProtocol {
         assertEq(_readRngRequestTime(), requestTime | 1, "Swap keeps the stamp and spends the retry");
         uint256 swapReqId = _readVrfRequestId();
 
-        // No retry after the swap, even 12h on
-        vm.warp(uint256(requestTime) + 12 hours + 1);
+        // No retry after the swap, even 20h on
+        vm.warp(uint256(requestTime) + 20 hours + 1);
         vm.expectRevert();
         game.advanceGame();
         assertEq(_readVrfRequestId(), swapReqId, "the swap's request stands");
@@ -707,7 +711,7 @@ contract VRFCore is DeployProtocol {
         uint256 oldReqId = mockVRF.lastRequestId();
 
         // Timeout + retry
-        vm.warp(block.timestamp + 13 hours);
+        vm.warp(block.timestamp + 21 hours);
         game.advanceGame();
         uint256 newReqId = mockVRF.lastRequestId();
         assertTrue(newReqId != oldReqId, "New request ID after retry");
@@ -739,7 +743,7 @@ contract VRFCore is DeployProtocol {
         uint48 indexAfterRequest = _lootboxRngIndex();
 
         // Timeout + retry
-        vm.warp(block.timestamp + 13 hours);
+        vm.warp(block.timestamp + 21 hours);
         game.advanceGame();
         assertEq(_lootboxRngIndex(), indexAfterRequest, "Index unchanged after retry");
 

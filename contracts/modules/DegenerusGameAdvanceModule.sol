@@ -247,9 +247,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
 
-    /// @dev Age at which a stalled daily request may be re-sent, by the vault owner only: the
-    ///      last resort before a governance coordinator swap.
-    uint48 private constant DAILY_RNG_RETRY_TIMEOUT = 12 hours;
+    /// @dev Age at which an outstanding request — daily, or a mid-day one that bled past the day
+    ///      boundary — may be re-sent, by the vault owner only: the one retry, and the last resort
+    ///      before a governance coordinator swap. The same 20h genuine-stall grace the admin swap
+    ///      proposal waits out.
+    uint48 private constant RNG_RETRY_TIMEOUT = 20 hours;
 
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1500;
@@ -278,7 +280,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      request settles a table already holding staked FLIP, where a lootbox queue can simply
     ///      wait for the daily word it would have shared anyway.
     uint96 private constant MIN_LINK_FOR_CRAPS_RNG = 10 ether;
-    uint48 private constant MIDDAY_RNG_STALL_TIMEOUT = 4 hours;
 
     /// @dev Per-call afking process-STAGE gas-weight budget. Every day is uniform: the streak is
     ///      computed on read from the Sub slot (no per-buy `playerQuestStates` STATICCALL, no
@@ -362,7 +363,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Any set mid-day latch defers the arm, delivered word or not: a turbo latch freezes the
         // next level's pool, which must mint on a word requested after the freeze, and an
         // undrained mid-day cohort's word was requested before it.
-        // Latched mid-day stall: the pre-gate promotion cannot swap while the
+        // Latched mid-day stall: the pre-gate retry cannot swap while the
         // committed cohort occupies the read slot, and a collapsed turbo phase issues
         // no sentinel swap — so buys queued after the stalled request would drain (the
         // sweep's trailing window guarantees that) but only after the level retired:
@@ -483,21 +484,22 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     if (lootboxRngWordByIndex[preIdx] == 0) {
                         uint256 cw = rngWordCurrent;
                         if (cw == 0) {
-                            // A mid-day lootbox request (rngLockedFlag == false) whose own VRF
-                            // word never arrived has bled past the day boundary. If it has stalled
-                            // past MIDDAY_RNG_STALL_TIMEOUT, abandon it and promote it to this
-                            // day's daily request: _requestRng re-fires VRF under the daily lock,
-                            // and its isRetry path preserves the reserved index so the fresh daily
-                            // word seals the day AND finalizes this bucket (preIdx) — just as the
-                            // mid-day word would have. The stale mid-day requestId stops matching
-                            // in rawFulfillRandomWords. Then handle the ticket buffer like a normal
-                            // daily request: if the read slot is drained, swap the write slot in so
-                            // its tickets also resolve against this word; otherwise the read slot
-                            // still holds the undrained mid-day batch, so freeze only and let it
-                            // drain against the new word next advance.
-                            if (
-                                !rngLockedFlag && rngRequestTime != 0 && ts - rngRequestTime >= MIDDAY_RNG_STALL_TIMEOUT
-                            ) {
+                            // The outstanding request's word never arrived. The ONE retry is the
+                            // vault owner's, RNG_RETRY_TIMEOUT after the send (_rngRetryDue) — the
+                            // last resort before a governance coordinator swap.
+                            //
+                            // A mid-day lootbox request (rngLockedFlag == false) that bled past the
+                            // day boundary is re-fired as this day's daily request: _requestRng
+                            // takes the daily lock, and its isRetry path preserves the reserved
+                            // index so the fresh daily word seals the day AND finalizes this bucket
+                            // (preIdx) — just as the mid-day word would have. The stale mid-day
+                            // requestId stops matching in rawFulfillRandomWords. Then the ticket
+                            // buffer is handled like a normal daily request: if the read slot is
+                            // drained, swap the write slot in so its tickets also resolve against
+                            // this word; otherwise the read slot still holds the undrained mid-day
+                            // batch, so freeze only and let it drain against the new word next
+                            // advance.
+                            if (!rngLockedFlag && _rngRetryDue(ts)) {
                                 _requestRng(lastPurchase, (uint48(day) << 24) | uint48(purchaseLevel));
                                 if (!preFound) {
                                     _swapTicketSlot();
@@ -506,13 +508,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                                 stage = STAGE_RNG_REQUESTED;
                                 break;
                             }
-                            // A stalled DAILY request dead-ends here — the cohort needs
+                            // A stalled DAILY request dead-ends here too — the cohort needs
                             // the word this gate is waiting for, and rngGate's retry sits
-                            // behind the gate. Offer the same single vault-owner retry
-                            // (_dailyRetryDue): the cohort is staged and the pool frozen, so
+                            // behind the gate. The cohort is staged and the pool frozen, so
                             // the re-request IS the recovery; _finalizeRngRequest recognizes
                             // the daily lock and finalizes it as a retry.
-                            if (_dailyRetryDue(ts)) {
+                            if (rngLockedFlag && _rngRetryDue(ts)) {
                                 _requestRng(lastPurchase, (uint48(day) << 24) | uint48(purchaseLevel));
                                 stage = STAGE_RNG_REQUESTED;
                                 break;
@@ -627,7 +628,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // Sentinel from an already-locked entry = the daily retry re-firing the
                 // outstanding request. The original request's swap already committed the
                 // read cohort; swapping again would flip it back to the write slot
-                // mid-drain. Only an unlocked entry (fresh request or promoted mid-day
+                // mid-drain. Only an unlocked entry (fresh request or a re-fired mid-day
                 // stall) commits the buffer here.
                 if (!locked) {
                     _swapTicketSlot();
@@ -1487,7 +1488,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // way — the unified sweep keeps naming a retired level until both its
         // parities are empty — but the guard below protects DRAW ELIGIBILITY:
         // when the NEXT daily request caps the jackpot counter, a freeze window
-        // opened now can cross into that final day via a stalled-word promotion,
+        // opened now can cross into that final day via a stalled-word retry,
         // which cannot swap (the committed cohort occupies the read slot). The
         // stall-window buys would then materialize only after the level retires —
         // safe but drawless. Skipping the swap keeps the whole evening cohort
@@ -1532,7 +1533,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         _lrAdvanceIndexClearPending();
         vrfRequestId = id;
         rngWordCurrent = 0;
-        rngRequestTime = uint48(block.timestamp);
+        // Even, like every request stamp: the LSB is the retry-spent flag the vault owner's
+        // retry checks, so an odd stamp would read as a retry already used.
+        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
     }
 
     // Daily VRF consumers: only Coinflip win/loss and the BAF fire gate intentionally
@@ -1664,25 +1667,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             return (currentWord, gapDays);
         }
 
-        // Waiting for VRF - check for timeout retry. A stalled daily request (rngLockedFlag)
-        // gets ONE retry, fired by the vault owner only (_dailyRetryDue): the last resort before
-        // a governance coordinator swap. The retry overwrites the outstanding request ID, so it
-        // discards a word that might still land late; keeping it with the party already trusted
-        // with the swap leaves no public way to time that. The retry-spent state rides in the
-        // LSB of rngRequestTime (set by _finalizeRngRequest, which never moves the stamp); a
-        // coordinator swap spends it too. A lootbox-only mid-day request (rngLockedFlag == false)
-        // that bled past the day boundary is instead abandoned by anyone after
-        // MIDDAY_RNG_STALL_TIMEOUT and promoted to this day's daily request — _requestRng's
-        // isRetry path keeps the reserved index, so the fresh daily word finalizes that bucket
-        // just as the mid-day word would have. The promotion is that day's FIRST daily request
-        // (isDailyRetry false, fresh stamp), so it keeps a retry.
+        // Waiting for VRF. An outstanding request — the daily one (rngLockedFlag), or a
+        // lootbox-only mid-day request that bled past the day boundary — gets ONE retry, fired
+        // by the vault owner only, RNG_RETRY_TIMEOUT after the send (_rngRetryDue): the last
+        // resort before a governance coordinator swap, and the only retry there is. The retry
+        // overwrites the outstanding request ID, so it discards a word that might still land
+        // late; keeping it with the party already trusted with the swap leaves no public way to
+        // time that. A daily retry keeps the stamp and sets its LSB, the retry-spent flag (a
+        // coordinator swap spends it too). A mid-day request re-fires as this day's FIRST daily
+        // request — _requestRng's isRetry path keeps the reserved index, so the fresh daily word
+        // finalizes that bucket just as the mid-day word would have — with a fresh stamp, so the
+        // daily request keeps its own retry.
         if (rngRequestTime != 0) {
-            if (rngLockedFlag) {
-                if (_dailyRetryDue(ts)) {
-                    _requestRng(isTicketJackpotDay, (uint48(day) << 24) | uint48(lvl));
-                    return (1, 0);
-                }
-            } else if (ts - rngRequestTime >= MIDDAY_RNG_STALL_TIMEOUT) {
+            if (_rngRetryDue(ts)) {
                 _requestRng(isTicketJackpotDay, (uint48(day) << 24) | uint48(lvl));
                 return (1, 0);
             }
@@ -1885,14 +1882,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Whether the caller may fire the single daily retry now: a daily request is
-    ///      outstanding (the lock is held and no word has been applied — both callers reach
-    ///      this only while waiting), its retry is unspent, it is DAILY_RNG_RETRY_TIMEOUT old,
-    ///      and the caller is the vault owner. The ownership read runs last, only once the
-    ///      rest holds.
-    function _dailyRetryDue(uint48 ts) private view returns (bool) {
+    /// @dev Whether the caller may fire the single RNG retry now: a request is outstanding (no
+    ///      word has been applied — every caller reaches this only while waiting), its retry is
+    ///      unspent, it is RNG_RETRY_TIMEOUT old, and the caller is the vault owner. The
+    ///      ownership read runs last, only once the rest holds.
+    function _rngRetryDue(uint48 ts) private view returns (bool) {
         uint48 t = rngRequestTime;
-        return rngLockedFlag && t != 0 && (t & 1) == 0 && ts - t >= DAILY_RNG_RETRY_TIMEOUT
+        return t != 0 && (t & 1) == 0 && ts - t >= RNG_RETRY_TIMEOUT
             && IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender);
     }
 
@@ -2065,7 +2061,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         rngWordCurrent = 0;
         // rngRequestTime fixes the request's identity: the day it resolves (the advance works
         // on dayOf(rngRequestTime) while the lock holds a delivered word) and the start of the
-        // VRF-dead window. Only a fresh request (mid-day promotion included) stamps it; the
+        // VRF-dead window. Only a fresh request (a re-fired mid-day request included) stamps it; the
         // retry re-sends the same request and just sets the LSB, the retry-spent flag. A fresh
         // stamp rounds DOWN to an even second (<=1s into the past, so same-second
         // `ts - rngRequestTime` reads never underflow). Day boundaries fall on even seconds

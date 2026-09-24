@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -13,6 +14,17 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///        non-zero snapShift. Test-only; NO contracts/*.sol is mutated. Adds only
 ///        seeders, setters, and inspection views over the inherited module.
 contract SnapValveHarness is DegenerusGameMintModule, BucketSeed {
+    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
+    ///      not deployed at the Game's address, so it evaluates the tail in place.
+    function _pastDeadlineTriggered(uint24 today, uint24 idx)
+        internal
+        view
+        override(DegenerusGameMintModule, DegenerusGameStorage)
+        returns (bool)
+    {
+        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
+    }
+
     function seedQueue(uint24 lvl, uint256 n, uint32 owedEach, uint8 remEach, uint160 base) external {
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
         lootboxRngWordByIndex[0] = uint256(keccak256("snapvalve_entropy")) | 1;

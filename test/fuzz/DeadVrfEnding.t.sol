@@ -110,7 +110,9 @@ contract DeadVrfLivenessTest is Test {
         h.seed(5, 31, 0, 1, 0, 0);
         assertTrue(h.liveness(), "caught up past the deadline");
         h.seed(5, 33, 0, 3, 0, 0);
-        assertFalse(h.liveness(), "behind (unattended days) past the deadline: waits");
+        assertTrue(h.liveness(), "behind (unattended days) past the deadline: no credit, it fires");
+        h.seed(5, 33, uint48(block.timestamp - 2 days), 3, 0, 0);
+        assertFalse(h.liveness(), "behind with a request in flight (a stall): waits for its credit");
         h.startEnding();
         assertTrue(h.liveness(), "an ending in progress keeps it on");
     }
@@ -126,11 +128,11 @@ contract DeadVrfLivenessTest is Test {
         assertTrue(h.liveness(), "an ending in progress keeps it on");
     }
 
-    function test_middayRequestPromotesInLivePlayButDeadEndingStaysLatched() public {
+    function test_middayRequestUnansweredFourteenDaysIsDeadAndStaysLatched() public {
         uint48 sent = uint48(block.timestamp - 15 days);
         h.seed(5, 10, sent, 15, 0, 0);
         h.seedMiddayRequest(sent);
-        assertFalse(h.vrfDead(), "a live mid-day request can still be promoted on advance");
+        assertTrue(h.vrfDead(), "no promotion rescues a mid-day request: 14 days unanswered is dead");
         h.startEnding();
         assertTrue(h.vrfDead(), "a terminal ending cannot promote it and times out");
         h.latchDeadMidday();
@@ -141,7 +143,7 @@ contract DeadVrfLivenessTest is Test {
         uint48 sent = uint48(block.timestamp - 31 days);
         h.seed(5, 10, sent, 31, 0, 0);
         h.seedMiddayRequest(sent);
-        assertTrue(h.vrfDead(), "deadman blocks the usual mid-day promotion");
+        assertTrue(h.vrfDead(), "a mid-day request past the deadman is dead");
         assertTrue(h.liveness(), "deterministic exit stays reachable");
     }
 }
@@ -557,9 +559,9 @@ contract DeadVrfEndingTest is DeployProtocol {
         for (uint256 i; i < 40 && !game.rngLocked(); ++i) game.advanceGame();
         assertTrue(game.rngLocked(), "deadline day requested; VRF stalls");
 
-        vm.warp(block.timestamp + 13 hours);
+        vm.warp(block.timestamp + 21 hours);
         vm.prank(ContractAddresses.CREATOR);
-        game.advanceGame(); // the vault owner's single retry
+        game.advanceGame(); // the vault owner's single retry (20h)
         vm.warp(block.timestamp + 1 days);
         assertFalse(game.livenessTriggered(), "past the deadline, behind, inside the window");
 
@@ -649,39 +651,29 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertFalse(_sawPayoutFixed(vm.getRecordedLogs()), "on the normal VRF payout");
     }
 
-    /// @dev The deadline day seals and nobody advances the next day. The day after catches up:
-    ///      its gap credit moves the deadline behind it while it is being processed. It must
-    ///      still finish on its own word (the trigger stays off for a worded day), and the ending
-    ///      must start the next day on a terminal word requested after the freeze.
-    function test_catchUpPastTheDeadlineFinishesItsDayThenEndsOnAFreshWord() public {
+    /// @dev The deadline day seals and nobody advances the next day. An unattended day earns no
+    ///      deadline credit: the trigger stays on across the gap, purchases stay frozen, and the
+    ///      next advance starts the ending on a terminal word requested after the freeze.
+    function test_unattendedDayPastTheDeadlineEndsOnAFreshWord() public {
         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
         DeadlineSeeder(payable(address(game))).seed(30);
         _restore();
         _runDay(mockVRF);
         uint24 dl = game.currentDayView();
 
-        vm.warp(block.timestamp + 2 days); // dl + 1 unattended
-        assertFalse(game.livenessTriggered(), "behind: the deadline waits");
-        game.advanceGame(); // day dl + 2 requests
-        assertTrue(game.rngLocked(), "requested");
-        _answer(mockVRF);
-        game.advanceGame(); // applies the word, backfills dl + 1, credits the deadline
-        assertTrue(game.rngWordForDay(dl + 2) != 0, "day dl + 2 worded");
-        assertEq(_sealedDay(), dl + 1, "caught up");
-        assertFalse(game.livenessTriggered(), "a worded day finishes on its own word");
+        // vm.getBlockTimestamp, not block.timestamp: via-IR caches the latter across warps.
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(game.livenessTriggered(), "the first day past the deadline is frozen");
+        vm.warp(vm.getBlockTimestamp() + 1 days); // dl + 1 left unattended
+        assertEq(game.currentDayView(), dl + 2, "harness: two days past the sealed deadline day");
+        assertTrue(game.livenessTriggered(), "an unattended day does not thaw it");
 
-        _runDay(mockVRF);
-        assertFalse(game.gameOver(), "day dl + 2 completed normally");
-        assertEq(_sealedDay(), dl + 2, "and sealed");
-
-        vm.warp(block.timestamp + 1 days);
-        assertTrue(game.livenessTriggered(), "the next day starts the ending");
         uint256 before = mockVRF.lastRequestId();
         vm.recordLogs();
         _runDay(mockVRF);
-        assertTrue(game.gameOver(), "ended");
+        assertTrue(game.gameOver(), "the next advance ends the level");
         assertGt(mockVRF.lastRequestId(), before, "on a terminal word requested after the freeze");
-        assertTrue(game.rngWordForDay(dl + 3) != 0, "applied to the ending's own day");
+        assertTrue(game.rngWordForDay(dl + 2) != 0, "applied to the ending's own day");
         assertFalse(_sawPayoutFixed(vm.getRecordedLogs()), "the normal VRF payout");
     }
 

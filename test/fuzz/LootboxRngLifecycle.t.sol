@@ -189,8 +189,8 @@ contract LootboxRngLifecycle is DeployProtocol {
         // Record index after initial request (already incremented)
         uint48 indexAfterRequest = _readLootboxRngIndex();
 
-        // Do NOT fulfill -- wait 13 hours for timeout
-        vm.warp(block.timestamp + 13 hours);
+        // Do NOT fulfill -- wait past the 20h vault-owner retry window
+        vm.warp(block.timestamp + 21 hours);
 
         // Retry fires on next advanceGame
         game.advanceGame();

@@ -11,9 +11,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @notice (1) THE RETRY BEHIND THE GATE. The daily drain gate exists to clean the read
 ///         slot before a FRESH request, but a stalled DAILY request makes that circular:
 ///         the staged cohort cannot drain without the very word the stall is withholding,
-///         and rngGate's 12-hour retry sits behind the gate. The gate therefore offers the
+///         and rngGate's 20-hour retry sits behind the gate. The gate therefore offers the
 ///         same single retry itself. Pinned here: blocked before the timeout, the vault
-///         owner's re-request at 12 hours with tickets pending (no one else's), once-only (the
+///         owner's re-request at 20 hours with tickets pending (no one else's), once-only (the
 ///         LSB latch), and the retried word seals the day.
 ///
 ///         (2) THE SEALED DAY'S KEY. Daily processing keys the foil board and the traits
@@ -109,28 +109,28 @@ contract DailyRngStallRecovery is DeployProtocol {
         _driveDay(); // settle the deploy-day advance
         _stallDailyRequest();
 
-        vm.warp(simTime + 11 hours);
+        vm.warp(simTime + 19 hours);
         vm.prank(keeper);
         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        assertFalse(ok, "the gate must still block inside the 12-hour window");
+        assertFalse(ok, "the gate must still block inside the 20-hour window");
     }
 
-    /// At 12 hours the vault owner re-requests THROUGH the drain gate — the state this retry
+    /// At 20 hours the vault owner re-requests THROUGH the drain gate — the state this retry
     /// exists for is precisely a nonempty staged cohort — and the fresh word seals the day.
     /// Nobody else can fire it.
-    function testStalledDailyRetriesAt12hWithTicketsPending() public {
+    function testStalledDailyRetriesAt20hWithTicketsPending() public {
         vm.pauseGasMetering();
         _driveDay();
         uint24 sealedBefore = _dailyIdx();
         uint256 stalledReqId = _stallDailyRequest();
 
-        vm.warp(simTime + 12 hours + 1);
+        vm.warp(simTime + 20 hours + 1);
         vm.prank(keeper);
         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
         assertFalse(ok, "only the vault owner fires the retry");
         vm.prank(owner);
         (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        assertTrue(ok, "the 12-hour retry must be reachable with tickets pending");
+        assertTrue(ok, "the 20-hour retry must be reachable with tickets pending");
         uint256 retryReqId = mockVRF.lastRequestId();
         assertGt(retryReqId, stalledReqId, "the retry must fire a fresh VRF request");
 
@@ -146,19 +146,19 @@ contract DailyRngStallRecovery is DeployProtocol {
         assertGt(_dailyIdx(), sealedBefore, "the retried word must seal the day");
     }
 
-    /// The retry is once-per-stall: the LSB latch spends it, and a second 12-hour wait
+    /// The retry is once-per-stall: the LSB latch spends it, and a second 20-hour wait
     /// offers nothing more (recovery is then the retried word or a coordinator swap).
     function testDailyRetryIsSingleShot() public {
         vm.pauseGasMetering();
         _driveDay();
         _stallDailyRequest();
 
-        vm.warp(simTime + 12 hours + 1);
+        vm.warp(simTime + 20 hours + 1);
         vm.prank(owner);
         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
         assertTrue(ok, "harness: first retry must fire");
 
-        vm.warp(simTime + 25 hours);
+        vm.warp(simTime + 41 hours);
         vm.prank(owner);
         (bool second, ) = address(game).call(
             abi.encodeWithSignature("advanceGame()")
@@ -257,12 +257,12 @@ contract DailyRngStallRecovery is DeployProtocol {
         // — the state under test.
         _clearQueue(_readKeyOf(L + 1));
 
-        // 12h retry fires through the rngGate sentinel.
-        simTime += 12 hours + 1;
+        // 20h retry fires through the rngGate sentinel.
+        simTime += 20 hours + 1;
         vm.warp(simTime);
         vm.prank(owner);
         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        assertTrue(ok, "the 12-hour retry must fire in jackpot phase");
+        assertTrue(ok, "the 20-hour retry must fire in jackpot phase");
         assertEq(
             _ticketWriteSlot(),
             parityAfterRequest,
@@ -303,13 +303,13 @@ contract DailyRngStallRecovery is DeployProtocol {
             }
             _stallNextDailyRequest();
             _clearQueue(_readKeyOf(L + 1));
-            simTime += 12 hours + 1;
+            simTime += 20 hours + 1;
             vm.warp(simTime);
             vm.prank(owner);
             (bool ok, ) = address(game).call(
                 abi.encodeWithSignature("advanceGame()")
             );
-            assertTrue(ok, "the 12-hour retry must fire on every jackpot day");
+            assertTrue(ok, "the 20-hour retry must fire on every jackpot day");
             _fulfillPending();
             _drainUntilUnlocked();
         }
