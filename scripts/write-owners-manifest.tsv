@@ -38,6 +38,17 @@ OWNER	dailyJackpotCoinTicketsPending	modules/DegenerusGameJackpotModule.sol	payD
 OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets; payEarlyBirdTickets consumes and clears the day-1 early-bird field; payDailyJackpotCoinAndTickets consumes the rest and zeroes the word unless a carryover was priced, which payCarryoverTickets then consumes and zeroes; in the purchase phase payDailyJackpot(false) prices the ticket leg into the top field and payPurchaseDailyTickets consumes and clears it
 OWNER	decDayOneActive	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest clears on a fresh daily request and arms at the x4/x99 window open; sole writer
 OWNER	decWindowOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest opens at x4/x99 and closes at x5/x00 on the level-promoting request; sole writer
+OWNER	deadClaimed	modules/DegenerusGameGameOverModule.sol	claimDeadVrf marks a claimed ticket bit; sole writer, one-way per ticket, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadCreated	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf accumulates the created-ticket count in its stage 2; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadPot	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain fixes the dead ending's pot once; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadTallyFoilDay	modules/DegenerusGameGameOverModule.sol	_saveDeadTally persists the stage-1 foil walk's resume day; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadTallyFoilIdx	modules/DegenerusGameGameOverModule.sol	_saveDeadTally persists the stage-1 foil walk's resume index; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadTallyPos	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf persists the stage-0 registry resume position; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadTallyStage	modules/DegenerusGameGameOverModule.sol	_saveDeadTally advances the tally stage 0 -> 3; sole writer, one-way, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadTotal	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain fixes the total ticket weight once the tally finishes; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadTraitCount	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf counts the non-empty trait buckets in its stage 2; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadUncreated	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf accumulates and _saveDeadTally persists the uncreated weight; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
+OWNER	deadUncreatedLeft	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain seeds the unclaimed uncreated weight; claimDeadVrf draws it down per claim; dead-VRF ending (LR_GO_DEAD latched, terminal)
 OWNER	degeneretteBetNonce	modules/DegenerusGameDegeneretteModule.sol	_placeDegeneretteBetCore increments the per-player bet nonce; sole writer
 OWNER	deityBoonPacked	modules/DegenerusGameBoonModule.sol	Manual gifts and automatic protocol draws stamp day|usedMask
 OWNER	deityBoonRecipientDay	modules/DegenerusGameBoonModule.sol	issueDeityBoon stamps the recipient's boon day (one boon per recipient per day); sole writer
