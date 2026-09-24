@@ -542,10 +542,16 @@ contract CrapsBattle is LootboxCraps {
     ///      3, 5, 6 and 7 are unreachable through the trusted writer and pay nothing if a value
     ///      ever reached storage another way, where a two-bit field would silently mean something.
     ///
-    ///      Bits 209..216 are unused. A day-wide entry is ONE slip — the whole day or a single
+    ///      Bits 210..216 are unused. A day-wide entry is ONE slip — the whole day or a single
     ///      window — so no slip carries a set to be locked as one, and nothing stamps a span.
     uint256 internal constant _BET_BOON_SHIFT = 206;
     uint256 internal constant _BET_BOON_MASK = 7;
+
+    /// @dev Bit 209: a window-ahead seat the GAME wrote for a coin draw's opener winner, rather
+    ///      than one the vault comped. Read only by the lapse sweep, which refunds the two
+    ///      differently: the winner takes the seat's price in FLIP, a comp's goes back to the lane.
+    uint256 internal constant _BET_GAME_SEAT_BIT = 1 << 209;
+
 
     /// @dev A seat took the high-roller lane. Stored as a FLAG rather than inferred from the
     ///      multiple: a custom battle may legally set `H` to a figure an ordinary seat could once
@@ -1219,10 +1225,11 @@ contract CrapsBattle is LootboxCraps {
     );
 
     /// @notice A day the advance never opened was crossed by the scheduled cursor: every seat
-    ///         reserved on it was handed its pass credit back. Nobody else could have entered — a
-    ///         dead day's doors were shut by the clock and the missing word the whole time — so
-    ///         `seats` is the whole of what the day held, and each seat's own
-    ///         `CrapsPassesCredited` precedes this.
+    ///         reserved on it was refunded. Nobody else could have entered — a dead day's doors
+    ///         were shut by the clock and the missing word the whole time. `seats` counts the day
+    ///         tickets, each handed its pass credit back (its own `CrapsPassesCredited` precedes
+    ///         this); every window-ahead seat in the day's windows was refunded too — a coin
+    ///         draw's opener seat to its winner in FLIP, a comp's price back to the comp lane.
     event CrapsDayLapsed(uint24 indexed day, uint64 seats);
 
     /// @notice Protocol money a winner's activity standing would not admit, banked in the
@@ -1761,7 +1768,7 @@ contract CrapsBattle is LootboxCraps {
                     // THE SEPARATOR. An opened day is crossed into its windows; today and the
                     // future wait for the advance to open them; a day the advance never opened is
                     // LAPSED — nobody could have entered it, so all it holds is reservations, and
-                    // they are swept back to pass credits before the WHOLE day is stepped over.
+                    // they are refunded before the WHOLE day is stepped over.
                     if (_boostBudget[day] != 0) {
                         ++cur;
                         continue;
@@ -1820,11 +1827,14 @@ contract CrapsBattle is LootboxCraps {
         slot = cur;
     }
 
-    /// @dev Hand every seat reserved on a lapsed day its pass credit back, metered against the
-    ///      caller's budget and resumable mid-walk: the day's OWN `_bonusCursor` entry is the
-    ///      refund cursor, free because a remainder-zero slot is never a battle and never settles.
-    ///      Restitution is IN KIND — a reservation was a claim on one future day seat, and a pass
-    ///      credit is exactly that claim again.
+    /// @dev Refund every seat reserved on a lapsed day, metered against the caller's budget and
+    ///      resumable mid-walk. Day tickets first: the day's OWN `_bonusCursor` entry is their
+    ///      cursor, free because a remainder-zero slot is never a battle and never settles, and
+    ///      restitution is IN KIND — a reservation was a claim on one future day seat, and a pass
+    ///      credit is exactly that claim again. Then the window-ahead seats in the day's seven
+    ///      windows, each window's own cursor carrying the walk (a window that never armed never
+    ///      settles). Each seat is refunded at its window-ahead price: a coin draw's opener seat
+    ///      to its winner in FLIP, a vault comp's back to the comp lane.
     /// @param daySlot_    The day's separator slot (remainder zero), home to its refund cursor.
     /// @param day         The lapsed day being refunded.
     /// @param budgetUnits The charge budget metering how many seats this call refunds.
@@ -1837,19 +1847,40 @@ contract CrapsBattle is LootboxCraps {
         returns (bool doneAll, bool moved)
     {
         unchecked {
-            uint64 n = uint32(_dayTickets[daySlot_]);
-            uint64 done = _bonusCursor[daySlot_];
-            uint256 base = uint256(daySlot_) << 64;
-            while (done < n) {
-                if (budgetUnits < _SWEEP_SEAT_UNITS) return (false, moved);
-                budgetUnits -= uint64(_SWEEP_SEAT_UNITS);
-                ++done;
-                moved = true;
-                uint256 header = _bets[base | done];
-                _credit(address(uint160(header)), header & _BET_HIGH_BIT != 0, 1);
-                _bonusCursor[daySlot_] = done;
+            // One walk over the day's eight slots: the separator holds the day tickets, the seven
+            // windows the window-ahead seats. Each slot's own `_bonusCursor` is its cursor — the
+            // separator never settles, and a window of a day that never opened never arms. Comp
+            // refunds reach the lane in one credit per call.
+            uint256 comps;
+            bool left;
+            for (uint256 s = daySlot_; s < uint256(daySlot_) + _BONUS_SLOTS_PER_DAY; ++s) {
+                uint64 n = s == daySlot_ ? uint32(_dayTickets[s]) : uint32(_battles[bytes32(s)]);
+                uint64 done = _bonusCursor[s];
+                while (done < n) {
+                    if (budgetUnits < _SWEEP_SEAT_UNITS) {
+                        left = true;
+                        break;
+                    }
+                    budgetUnits -= uint64(_SWEEP_SEAT_UNITS);
+                    ++done;
+                    moved = true;
+                    uint256 header = _bets[(s << 64) | done];
+                    address who = address(uint160(header));
+                    bool high = header & _BET_HIGH_BIT != 0;
+                    if (s == daySlot_) {
+                        _credit(who, high, 1);
+                    } else {
+                        uint256 price = _windowAheadPrice(s - daySlot_ - 1, high);
+                        if (header & _BET_GAME_SEAT_BIT != 0) _creditFlip(who, price);
+                        else comps += price;
+                    }
+                }
+                _bonusCursor[s] = done;
+                if (left) break;
             }
-            emit CrapsDayLapsed(day, n);
+            if (comps != 0) _creditComps(comps);
+            if (left) return (false, moved);
+            emit CrapsDayLapsed(day, uint32(_dayTickets[daySlot_]));
             doneAll = true;
         }
     }
@@ -2479,6 +2510,11 @@ contract CrapsBattle is LootboxCraps {
         ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(player, amount);
     }
 
+    /// @dev Feed the comp lane: a completed battle's share, or a lapsed comp seat's refund.
+    function _creditComps(uint256 amount) private {
+        IFlipCoin(ContractAddresses.COIN).creditCrapsComps(amount);
+    }
+
     /// @dev ONE encoder for every tagged craps burn, always on the caller — the three paid doors
     ///      share this plumbing the same way the payment sites share `_creditFlip`.
     function _burnForCraps(address player, uint256 grossAndFlags) private returns (uint8) {
@@ -2722,7 +2758,15 @@ contract CrapsBattle is LootboxCraps {
         uint256 betId = (slot << 64) | _enterBattle(key, 0);
         if (high) ++_highField[key];
         // `CrapsSlipPlaced` is the whole record: its bet id names the day, the period and the seat.
-        _writeSlip(betId, player, 0, _standingOf(player), high ? _BET_HIGH_BIT : 0, 0, 0);
+        _writeSlip(
+            betId,
+            player,
+            0,
+            _standingOf(player),
+            (high ? _BET_HIGH_BIT : 0) | (msg.sender == _GAME ? _BET_GAME_SEAT_BIT : 0),
+            0,
+            0
+        );
     }
 
     /// @dev Write the run, vetting each day as it goes. ALL OR NOTHING: the first day that
@@ -4025,7 +4069,7 @@ contract CrapsBattle is LootboxCraps {
                 uint256 eligible = uint256(w.bankroll) * entrants;
                 if (highSeats != 0) eligible += uint256(w.bankroll) * highSeats * (w.highMult - 1);
                 uint256 earned = eligible / 50;
-                if (earned != 0) IFlipCoin(ContractAddresses.COIN).creditCrapsComps(earned);
+                if (earned != 0) _creditComps(earned);
             }
             // The winning seat is an index into the same own-then-day range the settle walk used,
             // so naming it takes the same mapping back.

@@ -32,6 +32,9 @@ contract CrapsLapsedDayArmTest is CrapsPins {
     uint256 internal constant PLAIN_WORD = 40 << 8;
     uint256 internal constant GRANULE = 100e18;
     uint8 internal constant KIND_WINDOW_AHEAD = 5;
+    uint256 internal constant ROUTINE_WINDOW_PRICE = 1_227 ether;
+    uint256 internal constant OPENER_SEAT_VALUE = 2_433 ether;
+    uint256 internal constant TAIL_WINDOW_PRICE = 14_235 ether;
 
     address internal alice = makeAddr("alice");
     address internal dave = makeAddr("dave");
@@ -122,6 +125,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         assertTrue(craps.boostBudgetOf(dayG + 1) != 0, "the wall day did not open");
 
         // THE SWEEP: the keeper crosses `today` (never opened, empty) and then G, refunding alice.
+        uint256 laneBefore = flip.compLane();
         vm.recordLogs();
         for (uint256 i = 0; i < 8 && craps.keeperSlot() < daySlotG + 8; ++i) {
             craps.keepScheduled(type(uint64).max);
@@ -132,6 +136,9 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         (aN,) = craps.passCreditsOf(alice);
         assertEq(aN, 1, "alice's lapsed reservation was not refunded as a pass");
         assertEq(craps.bonusCursorOf(daySlotG), 1, "the sweep cursor did not walk alice's seat");
+        // Dave's comp is refunded to the comp lane at the price it was charged (a routine window).
+        assertEq(flip.compLane() - laneBefore, ROUTINE_WINDOW_PRICE, "the lapsed comp seat was not refunded to the lane");
+        assertEq(craps.bonusCursorOf(slot), 1, "the window cursor did not walk dave's seat");
 
         // The sweep left the window's field and dave's seat untouched.
         (uint256 entrantsBefore,) = craps.fieldOf(bytes32(uint256(slot)));
@@ -243,5 +250,72 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         assertTrue(finalized, "the opened day's window did not finalize");
         assertGt(pot, bounties, "no boost was paid on top of the bounties");
         assertTrue(coinflip.totalCredited() != 0, "nobody was paid at settlement");
+    }
+
+    /// @dev A coin draw's opener winner, seated by the GAME on tomorrow's opener, loses that seat
+    ///      when tomorrow lapses. The sweep pays the winner the seat's price in FLIP (the opener's
+    ///      expected cost, the same figure a comp of it is charged) and leaves the comp lane alone.
+    function test_lapsedCoinDrawSeatPaysItsWinnerInFlip() public {
+        uint24 dayG = craps.currentDayIndex() + 1;
+        uint64 slot = _slotAt(dayG, 0);
+        uint64 daySlotG = uint64(uint256(dayG) * craps.BONUS_SLOTS_PER_DAY());
+
+        vm.prank(ContractAddresses.GAME);
+        craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, dayG, 1));
+        (uint256 reserved,) = craps.windowReservedOf(slot);
+        assertEq(reserved, 1, "the coin draw did not seat its winner");
+
+        _lapse(dayG);
+        uint256 laneBefore = flip.compLane();
+        uint256 daveBefore = coinflip.staked(dave);
+        for (uint256 i = 0; i < 8 && craps.keeperSlot() < daySlotG + 8; ++i) {
+            craps.keepScheduled(type(uint64).max);
+        }
+        assertGe(craps.keeperSlot(), daySlotG + 8, "the keeper did not cross G");
+        assertEq(coinflip.staked(dave) - daveBefore, OPENER_SEAT_VALUE, "the winner was not paid the seat's value");
+        assertEq(flip.compLane(), laneBefore, "a coin-draw seat was refunded to the comp lane");
+        assertEq(craps.bonusCursorOf(slot), 1, "the window cursor did not walk the seat");
+    }
+
+    /// @dev The window refunds are metered like the day seats: a budget of one seat per call walks
+    ///      a lapsed day's reservations across several calls, each reporting progress, and never
+    ///      refunds a seat twice.
+    function test_lapsedWindowRefundsResumeAcrossCalls() public {
+        uint24 dayG = craps.currentDayIndex() + 1;
+        uint64 daySlotG = uint64(uint256(dayG) * craps.BONUS_SLOTS_PER_DAY());
+        address erin = makeAddr("erin");
+        vm.startPrank(ContractAddresses.VAULT);
+        craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, dayG, 1) | (uint256(1) << 208));
+        craps.vaultComp(_code(KIND_WINDOW_AHEAD, erin, true, dayG, 1) | (uint256(6) << 208));
+        vm.stopPrank();
+
+        _lapse(dayG);
+        // Cross the empty lapsed `today` first with an unmetered call.
+        while (craps.keeperSlot() < daySlotG) craps.keepScheduled(type(uint64).max);
+        uint256 laneBefore = flip.compLane();
+        uint256 calls;
+        while (craps.keeperSlot() < daySlotG + 8) {
+            (bool progressed,) = craps.keepScheduled(8);
+            assertTrue(progressed, "a metered sweep call reported no progress");
+            ++calls;
+            require(calls < 10, "the sweep did not finish");
+        }
+        assertEq(calls, 2, "two seats at one per call; the call that finishes the day crosses it");
+        assertEq(
+            flip.compLane() - laneBefore,
+            ROUTINE_WINDOW_PRICE + TAIL_WINDOW_PRICE * 19,
+            "each comp refunded exactly once at its own price"
+        );
+    }
+
+    /// @dev Make `day` (tomorrow) lapse: the clock lands on the day after, `day` gets a backfilled
+    ///      word, and only the wall day opens.
+    function _lapse(uint24 day) internal {
+        vm.warp(vm.getBlockTimestamp() + 2 days);
+        _setDailyWord(day, uint256(keccak256("gap-day-word")));
+        _setDailyWord(day + 1, PLAIN_WORD);
+        vm.prank(ContractAddresses.GAME);
+        craps.openBonusDay();
+        assertEq(craps.boostBudgetOf(day), 0, "harness: the stalled day opened");
     }
 }
