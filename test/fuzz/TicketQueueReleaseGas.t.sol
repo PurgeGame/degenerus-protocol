@@ -133,10 +133,10 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         uint256 gasUsed = g0 - gasleft();
 
         assertFalse(didWork, "finishing call materializes no new ticket");
-        // processTicketBatch's FF continuation always reports outer finished=false (it
-        // defers the sweep-finished declaration to the foil-drain check on a later call);
-        // the inner drain's own completion is observable via the cursor/level reset.
-        assertFalse(finished, "outer sweep defers finished to a later call (FF continuation contract)");
+        // The call that releases the frozen pool reports the sweep finished itself (no foil
+        // bucket is pending here): the mid-day advance re-enters the worker only while its
+        // probe still finds work, so a deferred finish would hold the mid-day latch all day.
+        assertTrue(finished, "the releasing call reports the sweep finished");
         assertEq(
             uint256(vm.load(host, bytes32(SLOT_TICKET_CURSOR_LEVEL))),
             0,
