@@ -70,6 +70,27 @@ Craps uses distinct bankroll and bounty components: bounty does not earn the com
 Pass denominations and fixed future retail prices differ intentionally; expected-value
 constants are not promises of a realized payout.
 
+During jackpot phase, each quadrant's ETH allocation can fund a separate full
+whale-pass prize using up to 25% of that allocation, rounded down at 4.5 ETH per
+full prize pass. A quadrant starts converting at 18 ETH. One fresh draw from
+that quadrant receives all its passes; the remaining budget, including the
+unused part of the conversion allowance, pays its normal ETH winners. The exact
+pass cost goes to futurePrizePool. The solo quadrant follows this same full-pass
+rule. These awards concentrate part of the quadrant's prize in one longer-term
+participation claim; they do not create a cash withdrawal claim for that value.
+
+The early-bird jackpot converts large ticket prizes into a mixed award: once its
+ordinary payout exceeds 45 tickets per winning slot and the pooled surplus can
+cover a full prize pass at the 4.5 ETH accounting rate, every slot receives 45
+tickets and one separate winner receives all surplus full passes. The pass draw
+prefers eligible gold winning traits, including deity virtual entries; otherwise
+it draws from the other eligible winning traits. The recipient need not have won
+an immediate ticket prize. All early-bird ETH and rounding remainder still go to
+nextPrizePool; these passes confer future participation, not a segregated ETH
+reserve or cash claim. They must be claimed under the existing pass rules and
+depend on continued play. Repeated ticket wins each retain their 45-ticket award;
+they do not add chances to the separate pass draw.
+
 After level 0, the purchase target has a **30-day** window: day 30 is the distress
 rescue day, and an unmet target can trigger game over on day 31. Level 0 keeps its
 365-day deadline, provided a day is sealed at least every 30 days (the VRF deadman

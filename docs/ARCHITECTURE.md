@@ -5,7 +5,7 @@
 | Component | Responsibility |
 | --- | --- |
 | `DegenerusGame` + 12 game modules | Purchases, ticket materialization, advance/VRF, jackpots, lootboxes, side-games and terminal distribution. The twelve delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, FoilPack, GameOver, Jackpot, Lootbox, Mint and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
-| `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Decimator, Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
+| `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Jackpot to Whale for early-bird and quadrant pass awards; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Decimator, Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
 | `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
 | `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip` and `settleRanked` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls `settleRanked`, which also returns the battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder), so the comparator lives in the engine, not the table |
 | `CoinDrawBattle` | `CoinDrawBattle is Craps`, storage-free and GAME-only, deployed after `CrapsEngine`: plays the purchase-day fill draw's closed battle in memory and returns what each wallet is owed; the Game credits it |
@@ -234,6 +234,30 @@ bounded stages. The packed queue holds eight owner indices per word and must use
 its codec helpers; Solidity array operations do not express its logical length.
 `PackedTicketSampleLib` samples eight lanes from one selected word, with explicit
 handling of a padded final word. These groups intentionally share a word draw.
+
+Each jackpot-phase ETH quadrant can convert up to 25% of its original allocation
+to full whale passes at 4.5 ETH each. The usual shares and ETH winner counts are
+calculated first. The Jackpot module delegates a separate recipient draw and
+claim credit to `WhaleModule.awardWhalePass`; it returns the exact cost credited
+to futurePrizePool. The Jackpot module includes that cost in the current-pool
+debit and pays the remaining ETH to the original winners. The solo ETH winner
+still owns any golden-ticket arm. See the
+[quadrant conversion design](JACKPOT-QUADRANT-WHALE-PASSES.md).
+
+Early-bird pricing still moves the entire 3% future-pool slice to nextPrizePool.
+When the ordinary payout exceeds 45 whole tickets per winning slot and the pooled
+surplus after reserving 45 per slot covers at least one full prize pass (4.5 ETH
+of award value), it caps the immediate awards and latches even half-pass claim
+units. The early-bird settlement stage distributes those tickets and draws one
+additional recipient from the official bonus board, preferring eligible gold
+buckets, with uniform eligible-bucket selection
+and normal entry/deity weights within the selected bucket. Empty gold buckets
+fall back to eligible non-gold buckets. All full passes go to that one player,
+who need not have won immediate tickets. Pass selection uses separate tagged
+entropy from the day's committed word; award amounts do not reroll recipients.
+Settlement moves no ETH and the sub-pass remainder also stays in next. Below
+the conversion conditions, the ordinary ticket payout remains intact. See the
+[early-bird conversion design](EARLY-BIRD-WHALE-PASS-PLAN.md).
 
 Protocol deity grants occur after the deployment sequence. Their perpetual entries
 and protocol boon cohorts have their own pre-request scheduling and closure rules.

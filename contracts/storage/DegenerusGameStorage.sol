@@ -154,6 +154,10 @@ abstract contract DegenerusGameStorage {
     // CONSTANTS
     // =========================================================================
 
+    /// @dev Prize accounting unit: one half-pass grants 100 quarter-ticket entries
+    ///      over 100 levels. A full prize pass is two units (4.5 ETH award value).
+    uint256 internal constant HALF_WHALE_PASS_PRICE = 2.25 ether;
+
     IDegenerusCoin internal constant coin =
         IDegenerusCoin(ContractAddresses.COIN);
     ICoinflip internal constant coinflip =
@@ -1497,6 +1501,30 @@ abstract contract DegenerusGameStorage {
             let idx := and(shr(shl(5, and(k, 7)), word), 0xffffffff)
             mstore(0, owners.slot)
             owner := and(sload(add(keccak256(0, 32), idx)), 0xffffffffffffffffffffffffffffffffffffffff)
+        }
+    }
+
+    /// @dev Virtual deity entry count for a trait bucket of size `len` (zero
+    ///      when no deity holds the trait's symbol):
+    ///        Gold tier (color == 7): flat 1 virtual entry.
+    ///        Colors 5/6: floor(1% of bucket), minimum 1.
+    ///        Colors 0..4: floor(2% of bucket), minimum 2.
+    function _deityVirtualCount(
+        uint8 trait,
+        uint256 len,
+        address deity
+    ) internal pure returns (uint256 virtualCount) {
+        if (deity != address(0)) {
+            uint8 color = (trait >> 3) & 7;
+            if (color == 7) {
+                virtualCount = 1;
+            } else if (color >= 5) {
+                virtualCount = len / 100;
+                if (virtualCount == 0) virtualCount = 1;
+            } else {
+                virtualCount = len / 50;
+                if (virtualCount < 2) virtualCount = 2;
+            }
         }
     }
 
@@ -4010,6 +4038,12 @@ abstract contract DegenerusGameStorage {
     /// @dev Claimed bits for created tickets: key (trait << 64) | (occurrence >> 8), bit
     ///      occurrence & 255.
     mapping(uint256 => uint256) internal deadClaimed;
+
+    /// @dev Day-one early-bird surplus, latched by pricing and consumed by its own
+    ///      award stage. Even half-pass units (two per full prize pass); the entire
+    ///      early-bird ETH budget still backs nextPrizePool. Appended to preserve
+    ///      every existing delegatecall slot. Cleared at settlement or game over.
+    uint256 internal earlyBirdWhalePasses;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

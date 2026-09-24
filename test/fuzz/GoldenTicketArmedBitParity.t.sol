@@ -6,6 +6,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 
 /// @title GoldenTicketArmedBitParity -- the armed flag is bit 189, not the winner's address parity
@@ -23,6 +24,7 @@ contract GoldenTicketArmedBitParity is Test {
 
     function setUp() public {
         h = new GoldenTicketHarness();
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
         vm.etch(ContractAddresses.COINFLIP, address(new CoinflipRecorder()).code);
         vm.etch(ContractAddresses.WWXRP, address(new WwxrpRecorder()).code);
         ReturnZeroSink sink = new ReturnZeroSink();

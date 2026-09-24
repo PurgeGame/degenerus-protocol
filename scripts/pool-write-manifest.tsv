@@ -73,9 +73,7 @@ MUTATOR-DEF	_setPrizePools	_addNextPrizePool	modules/DegenerusGameJackpotModule.
 MUTATOR-DEF	_addFuturePrizePool	_addFuturePrizePool	modules/DegenerusGameJackpotModule.sol	READ	canonical helper definition
 MUTATOR-DEF	_setPrizePools	_addFuturePrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter
 PAIRED-CREDIT	_creditClaimable	_payNormalBucket	modules/DegenerusGameJackpotModule.sol	READ	per-winner half of the liabilityDelta tandem
-PAIRED-CREDIT	claimablePool	_processDailyEth	modules/DegenerusGameJackpotModule.sol	WRITE	winners' liabilityDelta aggregate; per-winner credits in _payNormalBucket/_processSoloBucketWinner; funded by the current-pool debit in payDailyJackpot
-POOL-TO-POOL	_addFuturePrizePool	_processSoloBucketWinner	modules/DegenerusGameJackpotModule.sol	READ	whale-pass cost portion returns to future
-PAIRED-CREDIT	_creditClaimable	_processSoloBucketWinner	modules/DegenerusGameJackpotModule.sol	READ	solo-bucket winner credit folded into liabilityDelta (two sites, one function)
+PAIRED-CREDIT	claimablePool	_processDailyEth	modules/DegenerusGameJackpotModule.sol	WRITE	winners' liabilityDelta aggregate; per-winner credits in _payNormalBucket; funded by the current-pool debit in payDailyJackpot
 POOL-TO-POOL	_setPrizePools	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	READ	golden-ticket ETH rung: future debited (next passed through), re-counted as claimable in tandem
 POOL-TO-POOL	claimablePool	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	WRITE	golden-ticket ETH rung aggregate: future -> claimable; per-player credit paired below
 PAIRED-CREDIT	_creditClaimable	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	READ	winner credit, per-player half of the future->claimable tandem; TWO callers now — the armed board resolution inside VRF fulfillment, and payGoldenTicketGrand pushed from the foil drain (_resolveFoilBuyer) when a pack's lines hold two or more all-gold tickets. Neither consults rngLockedFlag: both run inside advanceGame, a deterministic protocol function with no player discretion, and the foil drain strictly precedes the draw it feeds (the readiness gate holds rngGate until _foilDrainPending clears), so the future debit always lands ahead of the pool math that reads it
@@ -127,3 +125,4 @@ MUTATOR-DEF	prizePoolPendingPacked	_setPendingPools	storage/DegenerusGameStorage
 MUTATOR-DEF	_setPrizePools	_setPrizePools	storage/DegenerusGameStorage.sol	READ	canonical packed-slot setter definition
 MUTATOR-DEF	prizePoolsPacked	_setPrizePools	storage/DegenerusGameStorage.sol	WRITE	the packed write inside the canonical setter
 POOL-TO-POOL	claimablePool	_settleShortfall	storage/DegenerusGameStorage.sol	WRITE	canonical spend waterfall (claimable then afking); the matching value destination is at each call site (D-01: pairing kept at call sites)
+POOL-TO-POOL	_setPrizePools	awardWhalePass	modules/DegenerusGameWhaleModule.sol	READ	exact full-pass cost from up to 25% of a jackpot-phase quadrant credits future; paired current debit includes returned spend; early bird does not write pools

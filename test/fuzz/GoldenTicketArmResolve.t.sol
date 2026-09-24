@@ -5,6 +5,7 @@ import {JackpotBoardFixtures} from "./helpers/JackpotBoardFixtures.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
+import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -179,6 +180,7 @@ contract GoldenTicketArmResolve is Test {
 
     function setUp() public {
         h = new GoldenTicketHarness();
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
 
         CoinflipRecorder fr = new CoinflipRecorder();
         vm.etch(ContractAddresses.COINFLIP, address(fr).code);

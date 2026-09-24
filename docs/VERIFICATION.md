@@ -112,7 +112,62 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-23, unminted-tickets, fill-battle and foil revision
+## Current evidence — 2026-09-24, quadrant and early-bird whale passes
+
+The working-tree changes based on `3a9bbe9c` now include whole-pass conversion
+from up to 25% of each jackpot-phase ETH quadrant. The exact cost funds future,
+one fresh recipient gets all passes for that quadrant, and the remaining ETH
+uses the original draw. Early bird uses the shared award helper with its prior
+nextPool funding and separate gold-preferred recipient rules.
+
+The ten-source affected Foundry run passed **87 tests, zero failures and zero
+skips**, with 1,000 cases per fuzz test. It includes threshold and conservation
+checks, all day shapes and active masks, real/deity weights, unchanged ETH draws,
+amount-independent pass recipients, golden-ticket ownership, deferred claims
+and the early-bird regressions. Cold measured jackpot advance calls peaked at
+**9,431,446 gas** in the plain-board day-one case; the large final-day case used
+**9,322,879 gas**, or **9,325,221 gas** when advanced late. The converted early-bird
+stress case used **7,955,028 gas**. These exclude intrinsic gas and test assertion
+costs and are fixture measurements, not a global maximum proof.
+
+All eleven source/interface gates and all 27 storage-layout goldens pass, with
+shared-slot alignment intact. All 33 deployment entries fit EIP-170 under both
+production and Foundry fixture pins. Jackpot runtime is **24,447 bytes** (129
+spare), and Whale runtime is **24,306 bytes** (270 spare). Production artifacts
+and source metadata were checked after a forced fresh build.
+
+See the [quadrant design and reproduction command](JACKPOT-QUADRANT-WHALE-PASSES.md#verification).
+Raw evidence is in `.audit-test-logs/quadrant-whale-final/`. Full repository suites
+and static analyzers were not rerun for this change.
+
+## Evidence — 2026-09-24, initial early-bird surplus whale passes
+
+The working-tree change from base `3a9bbe9c` conditionally caps early-bird tickets
+at 45 per winning slot and awards surplus full passes to one separate,
+gold-preferred recipient. The full early-bird ETH budget still goes to nextPool.
+
+The six-source affected Foundry run passed **61 tests, zero failures and zero
+skips**, retaining 1,000 fuzz cases. It covers price-tier boundaries, exact
+surplus accounting, ticket-recipient parity, gold/deity selection, amount
+independence, deferred claims, replay and terminal cleanup. Cold converted
+advance calls measured **7,954,662 gas** for both 15 and 6,615 passes; the late,
+partial-queue case measured **7,944,704 gas**, excluding transaction intrinsic
+gas and test assertions. These pass the fixture's 10M target and transaction
+call cap; they are not a proof of a global maximum.
+
+All eleven source/interface gates and all 27 storage-layout goldens pass. The
+new pending-pass field is appended at slot 74 across the Game and twelve modules;
+no existing field moves. All 33 deployment entries fit EIP-170 under production
+and Foundry pins. Jackpot runtime is 24,528 bytes (48 spare), and Whale runtime
+is 23,947 bytes (629 spare); production metadata was checked after a forced
+fresh build.
+
+See the [implementation design and reproduction command](EARLY-BIRD-WHALE-PASS-PLAN.md#implementation-verification--september-24-2026).
+Raw logs are in `.audit-test-logs/early-bird-final/`. This is affected-suite
+verification; full repository suites and static analyzers were not rerun for
+this change. The earlier snapshots below retain their original scope.
+
+## Evidence — 2026-09-23, unminted-tickets, fill-battle and foil revision
 
 The source is the committed revision `418052332758b6adcda475e669bd0d826be1d0c8`. Commits after it touch only
 `docs/`, so every hash and every run below describes this tree. Its contracts are those of `5d52e4f6`;

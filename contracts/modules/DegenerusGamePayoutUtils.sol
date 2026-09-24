@@ -29,10 +29,6 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @dev Shared payout helpers for jackpot-related modules.
 abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
-    /// @dev Half whale pass price unit (each half-pass = 1 entry/level over 100 levels = 100 entries = 25 whole tickets).
-    uint256 internal constant HALF_WHALE_PASS_PRICE =
-        2.25 ether;
-
     /// @dev Route coin-presale-box ETH proceeds: 80% to the vault, 20% to sDGNRS,
     ///      both as claimable credits, while bumping claimablePool by the full
     ///      boxEth to reserve the credits.

@@ -29,6 +29,7 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {IDegenerusGameLootboxModule} from "../interfaces/IDegenerusGameModules.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 
@@ -1228,6 +1229,84 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // =========================================================================
     // Whale Pass Claims
     // =========================================================================
+
+    bytes32 private constant EARLY_BIRD_WHALE_TAG = keccak256("early-bird-whale");
+    bytes32 private constant QUADRANT_WHALE_TAG = keccak256("jackpot-quadrant-whale");
+
+    /// @dev Same event as JackpotModule; denominated in half-pass claim units.
+    event JackpotWhalePassWin(address indexed winner, uint256 halfPasses, uint8 source);
+
+    /// @notice Nested jackpot award against GAME storage, with deferred delivery.
+    /// @dev Early bird supplies half-pass units and never moves pools. A quadrant
+    ///      supplies its original ETH budget; whole passes consume at most 25%,
+    ///      with the exact cost credited to futurePrizePool. JackpotModule includes
+    ///      that spend in its matching current-pool debit, and pays all remaining ETH.
+    /// @return spent Award value credited (early bird ignores this return).
+    function awardWhalePass(uint24 lvl, uint32 traits, uint256 amount, uint256 randWord, bool earlyBird)
+        external returns (uint256 spent)
+    {
+        uint256 halfPasses = earlyBird ? amount : (amount / (8 * HALF_WHALE_PASS_PRICE)) * 2;
+        if (halfPasses == 0) return 0;
+        address winner = _drawWhalePassWinner(lvl, traits, randWord, earlyBird);
+        if (winner == address(0)) return 0;
+        whalePassClaims[winner] += halfPasses;
+        spent = halfPasses * HALF_WHALE_PASS_PRICE;
+        if (!earlyBird) {
+            (uint128 next, uint128 future) = _getPrizePools();
+            _setPrizePools(next, future + uint128(spent));
+        }
+        emit JackpotWhalePassWin(winner, halfPasses, earlyBird ? 4 : 5);
+    }
+
+    /// @dev The deity holding a trait's symbol: the symbol id is the trait's quadrant (bits 7..6)
+    ///      times eight plus its symbol (bits 2..0) — derived from the trait alone, the same form
+    ///      the jackpot's deity lookups use, never from where the trait sits on a board.
+    function _deityOfTrait(uint8 trait) private view returns (address) {
+        return deityBySymbol[(trait >> 6) * 8 + (trait & 7)];
+    }
+
+    /// @dev Fresh recipient from frozen GAME inventory. Early bird supplies the
+    ///      official bonus board and prefers eligible gold buckets. Quadrant ETH
+    ///      conversion supplies one trait in the low byte and its bucket entropy.
+    ///      Both preserve real/deity entry weights and exclude award sizes from seeds.
+    function _drawWhalePassWinner(uint24 lvl, uint32 traits, uint256 randWord, bool earlyBird)
+        private view returns (address)
+    {
+        uint256 entropy = EntropyLib.hash4(
+            randWord, uint256(earlyBird ? EARLY_BIRD_WHALE_TAG : QUADRANT_WHALE_TAG), dailyIdx, lvl
+        );
+        uint8 selectedTrait = uint8(traits);
+        if (earlyBird) {
+            uint256 candidates;
+            uint256 count;
+            bool goldOnly;
+            for (uint8 q; q < 4; ++q) {
+                uint8 trait = uint8(traits >> (q * 8));
+                address deity = _deityOfTrait(trait);
+                if (lvlTraitEntry[lvl][trait].length == 0 && deity == address(0)) continue;
+                bool gold = ((trait >> 3) & 7) == 7;
+                if (gold && !goldOnly) {
+                    candidates = 0;
+                    count = 0;
+                    goldOnly = true;
+                }
+                if (gold || !goldOnly) {
+                    candidates |= uint256(trait) << (count * 8);
+                    ++count;
+                }
+            }
+            if (count == 0) return address(0);
+            selectedTrait = uint8(candidates >> ((entropy % count) * 8));
+        }
+        uint256 len = lvlTraitEntry[lvl][selectedTrait].length;
+        address deity = _deityOfTrait(selectedTrait);
+        uint256 effectiveLen = len + _deityVirtualCount(selectedTrait, len, deity);
+        if (effectiveLen == 0) return address(0);
+        // A single recipient needs no packed-word group/cursor. Sample directly
+        // over the same real-plus-virtual entries and resolve the packed owner.
+        uint256 index = EntropyLib.hash2(entropy, 1) % effectiveLen;
+        return index < len ? _bucketOwnerAt(lvl, selectedTrait, index) : deity;
+    }
 
     /// @notice Claim deferred whale pass rewards for a player.
     /// @dev Awards deterministic tickets based on pre-calculated half-pass count.

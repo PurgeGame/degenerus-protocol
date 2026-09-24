@@ -153,6 +153,8 @@ contract DeadVrfLivenessTest is Test {
 /// @dev Etch overlay to seed an exact dead-VRF terminal state; every measured call still runs
 ///      the production DegenerusGame runtime (restored after seeding).
 contract DeadVrfSeeder is DegenerusGame, BucketSeed {
+    function seedEarlyBirdPasses(uint256 halves) external { earlyBirdWhalePasses = halves; }
+    function pendingEarlyBirdPasses() external view returns (uint256) { return earlyBirdWhalePasses; }
     function seedDeadStall(uint24 lvl) external {
         uint24 day = _simulatedDayIndex();
         purchaseStartDay = day - 10;
@@ -319,6 +321,15 @@ contract DeadVrfEndingTest is DeployProtocol {
     function _endGame() private {
         for (uint256 i; i < 20 && !game.gameOver(); ++i) game.advanceGame();
         assertTrue(game.gameOver(), "dead ending reached game over");
+    }
+
+    function test_terminalDrainClearsPendingEarlyBirdPasses() public {
+        _seedHoldings();
+        _seeder().seedEarlyBirdPasses(10);
+        _restore();
+        _endGame();
+        assertEq(_seeder().pendingEarlyBirdPasses(), 0);
+        _restore();
     }
 
     function _state() private returns (uint256 pot, uint256 total, uint256 created, uint256 uncreated, uint256 traits, uint256 left) {

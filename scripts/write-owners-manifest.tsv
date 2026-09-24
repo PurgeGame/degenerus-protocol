@@ -145,9 +145,9 @@ OWNER	whalePassClaims	modules/DegenerusGameBoonModule.sol	_activateWhalePass add
 OWNER	whalePassClaims	modules/DegenerusGameDecimatorModule.sol	_awardDecimatorLootbox += deferred half-passes; accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameDegeneretteModule.sol	WWXRP jackpot += 1 per level/10 bracket (guarded by the bracket flag); accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameFoilPackModule.sol	_payFoilTier += 1 on tier 8; accrual-only
-OWNER	whalePassClaims	modules/DegenerusGameJackpotModule.sol	solo bucket winner and golden ticket += half-passes; accrual-only
+OWNER	whalePassClaims	modules/DegenerusGameJackpotModule.sol	golden ticket += half-passes; accrual-only
 OWNER	whalePassClaims	modules/DegenerusGamePayoutUtils.sol	_queueWhalePassClaimCore += full half-passes (shared utility); accrual-only
-OWNER	whalePassClaims	modules/DegenerusGameWhaleModule.sol	claimWhalePass reads then zeroes before queueing the award; the sole drain of every accrual site
+OWNER	whalePassClaims	modules/DegenerusGameWhaleModule.sol	awardWhalePass accrues early-bird and quadrant prizes; claimWhalePass reads then zeroes before queueing; the sole drain of every accrual site
 OWNER	wwxrpJackpotWhalePassBracketAwarded	modules/DegenerusGameDegeneretteModule.sol	_resolveBet/resolveWwxrpSpinFromBox set the per-bracket one-shot flag; sole writer
 OWNER	yieldAccumulator	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots stores the settled accumulator at transition
 OWNER	yieldAccumulator	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain zeroes at terminal drain
@@ -158,3 +158,5 @@ OWNER	ticketSeats	modules/DegenerusGameMintModule.sol	_drainSeatedSurvivors pops
 OWNER	ticketSeats	storage/DegenerusGameStorage.sol	_releaseTicketQueue clears the seats with the drained queue
 OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimatorJackpot freezes winning subbuckets at the resolved level
 OWNER	terminalAffiliate	modules/DegenerusGameAdvanceModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; handleGameOverDrain reads it
+OWNER	earlyBirdWhalePasses	modules/DegenerusGameJackpotModule.sol	pricing latches even half-pass units from exact early-bird surplus; settlement consumes once with no pool movement
+OWNER	earlyBirdWhalePasses	modules/DegenerusGameGameOverModule.sol	terminal drain cancels any pending early-bird pass prize

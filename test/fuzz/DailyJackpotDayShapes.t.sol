@@ -7,6 +7,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 
 /// @dev The golden-ticket harness plus a read of the packed daily ticket budgets Phase 1 leaves
@@ -25,6 +26,7 @@ contract DayShapeHarness is GoldenTicketHarness {
     function carryoverPending() external view returns (bool) { return _carryoverLegPending(); }
     function earlyBirdPending() external view returns (bool) { return _earlyBirdLegPending(); }
     function earlyBirdEntries() external view returns (uint256) { return uint64(dailyTicketBudgetsPacked >> 144); }
+    function earlyBirdPasses() external view returns (uint256) { return earlyBirdWhalePasses; }
     function coinTicketsPending() external view returns (bool) { return dailyJackpotCoinTicketsPending; }
     function setJackpotFlags(uint8 v) external { jackpotFlags = v; }
 }
@@ -50,6 +52,7 @@ contract DailyJackpotDayShapes is Test {
 
     function setUp() public {
         h = new DayShapeHarness();
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
         vm.etch(ContractAddresses.COINFLIP, address(new CoinflipRecorder()).code);
         vm.etch(ContractAddresses.WWXRP, address(new WwxrpRecorder()).code);
         ReturnZeroSink sink = new ReturnZeroSink();
@@ -62,7 +65,7 @@ contract DailyJackpotDayShapes is Test {
         h.setPools(NEXT_POOL, FUT_POOL);
     }
 
-    /// @dev The ETH the jackpot-phase solo bucket converted to half whale passes: it is booked
+    /// @dev The ETH the jackpot-phase quadrants converted to full whale passes: it is booked
     ///      back into the future pool in the same call, so the future pool's net move includes it.
     function _whalePassEth(Vm.Log[] memory logs) internal pure returns (uint256 eth) {
         bytes32 topic = keccak256("JackpotWhalePassWin(address,uint256,uint8)");
@@ -123,7 +126,8 @@ contract DailyJackpotDayShapes is Test {
         // for the early-bird stage, which distributes them at LVL + 1 and clears only its field.
         assertTrue(h.earlyBirdPending(), "the early-bird leg is latched for its own stage");
         assertFalse(h.carryoverPending(), "the latch never reads as a carryover leg");
-        assertEq(h.earlyBirdEntries(), (earlyBird << 2) / PriceLookupLib.priceForLevel(LVL + 1), "the latched entries are the 3% slice priced at the next level");
+        assertEq(h.earlyBirdEntries(), 128 * 45 * 4, "120 ETH caps the ticket leg at 45 whole tickets per slot");
+        assertEq(h.earlyBirdPasses(), 2, "the 4.8 ETH surplus buys one full pass");
         assertTrue(h.coinTicketsPending(), "the coin+tickets stage still waits behind it");
         (uint128 next2, uint128 fut2) = h.poolsView();
         vm.recordLogs();
@@ -131,6 +135,7 @@ contract DailyJackpotDayShapes is Test {
         uint256 ticketWins = _ticketWins(vm.getRecordedLogs(), LVL + 1);
         assertGt(ticketWins, 0, "the early-bird stage drew ticket winners at the next level");
         assertFalse(h.earlyBirdPending(), "the early-bird stage cleared its latch");
+        assertEq(h.earlyBirdPasses(), 0, "the pass latch is also consumed");
         (uint256 daily2, uint256 carry2, uint8 offset2) = h.ticketBudgets();
         assertEq(daily2, dailyEntries, "the day's own ticket budget survives for the coin+tickets stage");
         assertEq(carry2, 0);
@@ -161,8 +166,8 @@ contract DailyJackpotDayShapes is Test {
         (, uint256 carryoverEntries,) = h.ticketBudgets();
         assertEq(carryoverEntries, 0, "no carryover on the early-bird day, turbo or not");
         assertTrue(h.earlyBirdPending());
-        uint256 earlyBird = (uint256(fut0) * 300) / 10_000;
-        assertEq(h.earlyBirdEntries(), (earlyBird << 2) / PriceLookupLib.priceForLevel(LVL + 1));
+        assertEq(h.earlyBirdEntries(), 128 * 45 * 4);
+        assertEq(h.earlyBirdPasses(), 2);
         assertEq(h.counter(), 0, "the counter has not moved before the leg stages");
 
         vm.recordLogs();

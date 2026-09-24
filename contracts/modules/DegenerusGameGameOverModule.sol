@@ -231,6 +231,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         // Latch terminal state
         gameOver = true;
+        earlyBirdWhalePasses = 0;
         _goWrite(GO_TIME_SHIFT, GO_TIME_MASK, uint48(block.timestamp));
 
         // Burn unallocated tokens

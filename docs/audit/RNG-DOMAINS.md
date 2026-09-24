@@ -36,6 +36,27 @@ Repeated calls cannot reroll a completed century. See
 
 ## Domain map
 
+Jackpot-phase quadrant conversion uses
+`H(bucketEntropy, keccak256("jackpot-quadrant-whale"), dailyIdx, level)` as its
+pass root, where `bucketEntropy = H(effectiveEthDrawEntropy, quadrant)` is the
+unchanged quadrant seed. `H(passRoot, 1)` selects one real or virtual deity entry
+in that quadrant's official winning trait. The separate root excludes allocation
+and pass quantity, and never selects from the ETH recipient list. The solo ETH
+winner remains the golden-ticket candidate. `WhaleModule.awardWhalePass` uses
+this domain for quadrant mode and the existing early-bird domain below for its
+bonus-board mode; the caller fixes the mode.
+
+The early-bird surplus pass draw uses
+`H(word, keccak256("early-bird-whale"), dailyIdx, level + 1)` to select among
+eligible gold bonus traits, or all eligible bonus traits when none is gold.
+Entry selection uses `H(root, 1) % (realLength + virtualDeityCount)` directly,
+then resolves the packed owner or deity. A single recipient needs no grouped
+word cursor. It reads the same frozen source inventory and official
+hero-adjusted bonus board as the ticket leg. Pool size, pass quantity and
+previous ticket winners are excluded.
+The existing early-bird ticket salts 239–242 remain unchanged. There is no
+additional VRF request, and an empty eligible set consumes the pending award.
+
 `H` means Keccak-256. Unless marked packed, fields use 32-byte ABI words;
 `EntropyLib.hashN` and the craps `_hashN` helpers use that same layout. Tags are
 named constants in the consumer; full string hashes are constant expressions.

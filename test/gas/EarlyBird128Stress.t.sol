@@ -5,6 +5,10 @@ import {Vm} from "forge-std/Vm.sol";
 import {DayOneFixture, DayOneSeeder} from "./JackpotDayOneWorstCase.t.sol";
 
 contract HeroStressSeeder is DayOneSeeder {
+    function setEarlyBirdFuture(uint128 amount) external {
+        (uint128 next,) = _getPrizePools();
+        _setPrizePools(next, amount);
+    }
     function seedTailBuckets() external {
         uint8[4] memory traits = [uint8(61), 66, 161, 222];
         uint256[4] memory lengths = [uint256(513), 761, 1761, 561];
@@ -41,6 +45,7 @@ abstract contract EarlyBird128StressFixture is DayOneFixture {
 
     function prefix() internal pure virtual returns (uint256) { return 0; }
     function late() internal pure virtual returns (bool) { return false; }
+    function futurePool() internal pure virtual returns (uint128) { return 1000 ether; }
 
     function setUp() public {
         _deployProtocol();
@@ -54,8 +59,9 @@ abstract contract EarlyBird128StressFixture is DayOneFixture {
         );
         HeroStressSeeder(payable(address(game))).seedHeroStress(prefix());
         HeroStressSeeder(payable(address(game))).seedTailBuckets();
+        HeroStressSeeder(payable(address(game))).setEarlyBirdFuture(futurePool());
         vm.etch(address(game), realCode);
-        vm.deal(address(game), 10_000 ether);
+        vm.deal(address(game), uint256(futurePool()) + 10_000 ether);
         game.advanceGame();
         if (late()) _warpToDay(401, 3 hours);
     }
@@ -73,6 +79,9 @@ abstract contract EarlyBird128StressFixture is DayOneFixture {
         uint256 uniqueSourceWords;
         uint256[4] memory quadrantCounts;
         uint256 advanceEvents;
+        uint256 passEvents;
+        address passWinner;
+        uint256 halfPasses;
         for (uint256 i; i < logs.length; ++i) {
             bytes32 sig = logs[i].topics[0];
             assertTrue(sig != ETH_WIN_SIG && sig != GOLDEN_WIN_SIG && sig != GOLDEN_ARMED_SIG);
@@ -81,12 +90,19 @@ abstract contract EarlyBird128StressFixture is DayOneFixture {
                 assertEq(stage, STAGE_JACKPOT_EARLY_BIRD_TICKETS);
                 ++advanceEvents;
             }
+            if (sig == WHALE_PASS_SIG) {
+                uint8 source;
+                (halfPasses, source) = abi.decode(logs[i].data, (uint256, uint8));
+                assertEq(source, 4);
+                passWinner = address(uint160(uint256(logs[i].topics[1])));
+                ++passEvents;
+            }
             if (logs[i].topics[0] != TICKET_WIN_SIG) continue;
             uint256 trait = uint256(logs[i].topics[3]);
             address recipient = address(uint160(uint256(logs[i].topics[1])));
             (uint32 entries, uint24 sourceLevel, uint256 index,) =
                 abi.decode(logs[i].data, (uint32, uint24, uint256, bool));
-            assertEq(entries, 20);
+            assertEq(entries, futurePool() == 1000 ether ? 20 : 180);
             assertEq(sourceLevel, LVL + 1);
             assertTrue(index != type(uint256).max, "every draw must read a real owner's source slot");
             uint256 key = (trait << 32) | (index >> 3);
@@ -103,6 +119,15 @@ abstract contract EarlyBird128StressFixture is DayOneFixture {
         assertEq(count, 128);
         assertEq(uniqueSourceWords, 44, "four one-entry tails force 28 padding redraws plus 16 group words");
         assertEq(advanceEvents, 1);
+        if (futurePool() != 1000 ether) {
+            assertEq(passEvents, 1, "one aggregate pass award");
+            uint256 budget = uint256(futurePool()) * 3 / 100;
+            assertEq(halfPasses, ((budget - 128 * 45 * 0.04 ether) / 4.5 ether) * 2);
+            assertEq(game.whalePassClaimAmount(passWinner), halfPasses);
+            assertGt(uint160(passWinner), BASE + 0x800000);
+            assertLe(uint160(passWinner), BASE + 0x800000 + 513, "gold trait wins");
+            for (uint256 i; i < count; ++i) assertTrue(recipients[i] != passWinner, "fresh recipient outside ticket winners");
+        } else assertEq(passEvents, 0);
         for (uint256 q; q < 4; ++q) assertEq(quadrantCounts[q], 32);
         assertLt(used, GAS_TARGET);
     }
@@ -118,4 +143,16 @@ contract EarlyBird128StressEmptyQueueLate is EarlyBird128StressFixture {
 contract EarlyBird128StressPartialQueueLate is EarlyBird128StressFixture {
     function prefix() internal pure override returns (uint256) { return 1; }
     function late() internal pure override returns (bool) { return true; }
+}
+
+contract EarlyBird128StressWhale is EarlyBird128StressFixture {
+    function futurePool() internal pure override returns (uint128) { return 10_000 ether; }
+}
+contract EarlyBird128StressWhaleLate is EarlyBird128StressFixture {
+    function futurePool() internal pure override returns (uint128) { return 10_000 ether; }
+    function prefix() internal pure override returns (uint256) { return 1; }
+    function late() internal pure override returns (bool) { return true; }
+}
+contract EarlyBird128StressWhaleLarge is EarlyBird128StressFixture {
+    function futurePool() internal pure override returns (uint128) { return 1_000_000 ether; }
 }

@@ -32,6 +32,7 @@ import {PackedTicketSampleLib} from "../libraries/PackedTicketSampleLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
+import {IDegenerusGameWhaleModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 
 /// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
@@ -162,7 +163,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 bonusTargetLevel
     );
 
-    /// @dev Whale pass awarded in place of an ETH or lootbox payout — otherwise the
+    /// @dev Whale pass awarded in place of an ETH, lootbox or early-bird ticket payout — otherwise the
     ///      `whalePassClaims` increment is silent. The award is a bare half-pass counter
     ///      binding to no level: claimWhalePass sets the target from the level standing at
     ///      claim time and reports it on WhalePassClaimed. The paying level is not carried
@@ -180,9 +181,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     event YieldSurplusDistributed(uint256 perRecipientShare);
 
     /// @dev `JackpotWhalePassWin.source` values.
-    uint8 private constant WHALE_PASS_SRC_SOLO = 1;
+    // Source 1 was the retired solo-only half-pass conversion.
     uint8 private constant WHALE_PASS_SRC_BAF_DIRECT = 2;
     uint8 private constant WHALE_PASS_SRC_AWARD_TICKETS = 3;
+    // Sources 4 (early bird) and 5 (quadrant conversion) are emitted by WhaleModule.
 
     /// @dev Golden ticket armed: the main board rolled 4 gold colors and the solo bucket
     ///      winner awaits the next main-board draw. `quadrant`/`symbol` are the solo
@@ -356,6 +358,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev Early-bird cap: 32 winners per quadrant when all four buckets are active.
     uint16 private constant EARLY_BIRD_MAX_WINNERS = 128;
+
+    /// @dev Large early-bird prizes retain 45 whole tickets per slot. Only a surplus
+    ///      covering a full pass converts; its ETH still goes to nextPrizePool.
+    uint256 private constant EARLY_BIRD_TICKETS_PER_WINNER = 45;
 
     /// @dev Entries per whole ticket. Jackpot budgets are denominated in entries
     ///      (quarter-tickets), but awards are paid in whole tickets only.
@@ -612,7 +618,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     traitIdsDaily,
                     shareBpsDaily,
                     bucketCountsDaily,
-                    true, // jackpot phase (solo bucket gets whale pass)
+                    true, // jackpot phase: each quadrant can convert 25% to full passes
                     armGold,
                     dailyUnit
                 );
@@ -883,13 +889,29 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      budget always moves future -> next (a single net move on the packed slot; future
     ///      funds the budget, next backs the queued tickets), converted on the same
     ///      4-entries-per-ticket basis every other jackpot path uses (`_budgetToEntries`).
+    ///      If the ordinary prize exceeds 45 whole tickets per slot and the pooled
+    ///      surplus buys at least one full pass, cap tickets and latch the pass units.
+    ///      Surplus uses the exact wei budget, including ordinary distribution dust.
     /// @param lvl The level the early-bird tickets are priced and queued at (outer level + 1).
     /// @return entries The early-bird entry count payEarlyBirdTickets distributes.
     function _priceEarlyBirdTickets(uint24 lvl) private returns (uint256 entries) {
         (uint128 nextBal, uint128 futureBal) = _getPrizePools();
         uint256 totalBudget = (uint256(futureBal) * 300) / 10_000; // 3%
+        earlyBirdWhalePasses = 0;
         if (totalBudget == 0) return 0;
-        (entries, ) = _budgetToEntries(totalBudget, lvl);
+        uint256 unit;
+        (entries, unit) = _budgetToEntries(totalBudget, lvl);
+        // A draw below the 128-slot cap pays at most one ticket per slot. Thus
+        // more than 45 each implies the full cap, with no small-draw division.
+        if (entries / (EARLY_BIRD_MAX_WINNERS * ENTRIES_PER_TICKET) > EARLY_BIRD_TICKETS_PER_WINNER) {
+            uint256 ticketEntries = EARLY_BIRD_MAX_WINNERS * EARLY_BIRD_TICKETS_PER_WINNER * ENTRIES_PER_TICKET;
+            uint256 surplus = totalBudget - ticketEntries * unit;
+            uint256 fullPasses = surplus / (2 * HALF_WHALE_PASS_PRICE);
+            if (fullPasses != 0) {
+                entries = ticketEntries;
+                earlyBirdWhalePasses = fullPasses * 2;
+            }
+        }
         _setPrizePools(
             nextBal + uint128(totalBudget),
             futureBal - uint128(totalBudget)
@@ -906,16 +928,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      leftover is not queued, and leftover groups rotate between active buckets.
     ///      Winners come from `lvlTraitEntry[level + 1]` on the day's bonus traits, re-rolled
     ///      from the word exactly as the carryover stage re-rolls its board; tickets queue at
-    ///      level + 1. Clears its own field and leaves the rest of the packed budgets for the
+    ///      level + 1. A capped draw also awards all surplus full passes to one fresh
+    ///      bonus-trait winner, preferring eligible gold. No pool moves in this stage.
+    ///      Clears its own field and leaves the rest of the packed budgets for the
     ///      coin+tickets stage. The lock held since the request keeps every input frozen.
     /// @param randWord VRF entropy (the day's recorded word).
     function payEarlyBirdTickets(uint256 randWord) external {
         uint256 packed = dailyTicketBudgetsPacked;
         uint24 lvl = level + 1;
+        uint32 traits = _rollWinningTraits(randWord, true);
         _distributeTicketJackpot(
             lvl,
             lvl,
-            _rollWinningTraits(randWord, true),
+            traits,
             uint64(packed >> 144),
             EntropyLib.hash2(randWord, lvl),
             EARLY_BIRD_MAX_WINNERS,
@@ -923,6 +948,28 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             false // bonus board: no ETH distribution, no solo quadrant
         );
         dailyTicketBudgetsPacked = packed & ((uint256(1) << 144) - 1);
+        uint256 halfPasses = earlyBirdWhalePasses;
+        if (halfPasses != 0) {
+            earlyBirdWhalePasses = 0;
+            _awardWhalePass(lvl, traits, halfPasses, randWord, true);
+        }
+    }
+
+    /// @dev Bounded sibling-module award. Early bird passes latched claim units;
+    ///      quadrant conversion passes its original ETH share and gets the spend back.
+    function _awardWhalePass(
+        uint24 lvl, uint32 traits, uint256 amount, uint256 randWord, bool earlyBird
+    ) private returns (uint256 spent) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameWhaleModule.awardWhalePass.selector,
+                lvl, traits, amount, randWord, earlyBird
+            )
+        );
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        }
+        spent = abi.decode(data, (uint256));
     }
 
     /// @notice Distribute yield surplus (stETH appreciation) to stakeholders.
@@ -1433,7 +1480,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      is independently clamped to MAX_BUCKET_WINNERS in _processBucket.
     ///
     ///      JACKPOT PHASE vs PURCHASE/TERMINAL:
-    ///      - Jackpot phase (isJackpotPhase=true): solo bucket routes its winner through the whale-pass handler (75% ETH / 25% half-passes).
+    ///      - Jackpot phase (isJackpotPhase=true): each bucket converts up to 25% to whole
+    ///        whale passes for one fresh winner; the remaining budget pays the ETH draw.
     ///      - Purchase/terminal (isJackpotPhase=false): All buckets paid uniformly.
     ///
     /// @param lvl The level whose winners are being paid.
@@ -1442,7 +1490,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param traitIds The 4 winning trait IDs.
     /// @param shareBps Basis-point share for each of the 4 buckets.
     /// @param bucketCounts Number of holders in each trait bucket.
-    /// @param isJackpotPhase True during jackpot phase (solo bucket gets whale pass).
+    /// @param isJackpotPhase True during jackpot phase (all buckets eligible for conversion).
     /// @param armGold True when the main board rolled 4 golds — the solo bucket
     ///        winner becomes the armed golden-ticket candidate for the next draw.
     /// @param unit Per-winner rounding unit; non-solo bucket shares round down to a
@@ -1491,15 +1539,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
             uint256 paidDelta;
             uint256 claimDelta;
-            (paidDelta, claimDelta,) = _processBucket(
+            (paidDelta, claimDelta) = _processBucket(
                 lvl,
                 traitIds[traitIdx],
                 traitIdx,
                 count,
                 share,
                 bucketEntropy,
-                isJackpotPhase && traitIdx == remainderIdx,
-                armGold
+                isJackpotPhase,
+                armGold && isJackpotPhase && traitIdx == remainderIdx
             );
             paidEth += paidDelta;
             liabilityDelta += claimDelta;
@@ -1514,12 +1562,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @dev Resolves and pays one trait bucket. Selects up to MAX_BUCKET_WINNERS
-    ///      ticket holders for the bucket and credits each winner. The solo path
-    ///      (isSolo, jackpot phase only) routes the single winner through the
-    ///      whale-pass handler; every other bucket pays 100% ETH.
+    ///      ticket holders for the bucket and credits each winner. Jackpot-phase
+    ///      conversion uses the original bucket share and its own recipient draw;
+    ///      neither the ETH winner count nor its sampling inputs change.
     /// @return paidDelta ETH value paid out for this bucket.
     /// @return claimDelta Claimable-liability added for this bucket.
-    /// @return newEntropy Updated entropy after winner selection.
     function _processBucket(
         uint24 lvl,
         uint8 traitId,
@@ -1527,11 +1574,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint16 count,
         uint256 share,
         uint256 entropy,
-        bool isSolo,
+        bool isJackpotPhase,
         bool armGold
-    ) private returns (uint256 paidDelta, uint256 claimDelta, uint256 newEntropy) {
-        newEntropy = entropy;
-
+    ) private returns (uint256 paidDelta, uint256 claimDelta) {
         uint16 totalCount = count;
         if (totalCount > MAX_BUCKET_WINNERS) totalCount = MAX_BUCKET_WINNERS;
 
@@ -1540,30 +1585,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256[] memory ticketIndexes
         ) = _randTraitTicket(
                 lvl,
-                newEntropy,
+                entropy,
                 traitId,
                 uint8(totalCount),
                 uint8(200 + traitIdx)
             );
-        if (winners.length == 0) return (0, 0, newEntropy);
+        if (winners.length == 0) return (0, 0);
 
-        uint256 perWinner = share / totalCount;
-        if (perWinner == 0) return (0, 0, newEntropy);
+        if (share / totalCount == 0) return (0, 0);
 
-        if (isSolo) {
-            // Solo bucket (jackpot phase): 75% ETH + 25% whale passes
-            address w = winners[0];
-            if (w != address(0)) {
-                (claimDelta, paidDelta, newEntropy) = _handleSoloBucketWinner(
-                    w, lvl, traitId, ticketIndexes[0],
-                    perWinner, newEntropy, armGold
-                );
-            }
-        } else {
-            // Normal bucket: 100% ETH
-            (paidDelta, claimDelta) = _payNormalBucket(
-                winners, ticketIndexes, perWinner, lvl, traitId
-            );
+        uint256 passSpent;
+        if (isJackpotPhase && share >= 8 * HALF_WHALE_PASS_PRICE) {
+            passSpent = _awardWhalePass(lvl, traitId, share, entropy, false);
+        }
+        (paidDelta, claimDelta) = _payNormalBucket(
+            winners, ticketIndexes, (share - passSpent) / totalCount, lvl, traitId
+        );
+        paidDelta += passSpent;
+        if (armGold && winners[0] != address(0)) {
+            _armGoldenTicket(winners[0], lvl, traitId);
         }
     }
 
@@ -1571,53 +1611,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Internal Helpers — Winner Resolution
     // =========================================================================
 
-    /// @dev Thin wrapper called from _processDailyEth to avoid stack-too-deep.
-    ///      Calls _processSoloBucketWinner, emits specialized events, and returns
-    ///      only the three values the outer loop needs.
-    function _handleSoloBucketWinner(
-        address w,
-        uint24 lvl,
-        uint8 traitId,
-        uint256 ticketIndex,
-        uint256 perWinner,
-        uint256 entropy,
-        bool armGold
-    )
-        private
-        returns (uint256 claimDelta, uint256 paidDelta, uint256 newEntropy)
-    {
-        (
-            uint256 claimableDelta,
-            uint256 paid,
-            uint256 wpSpent,
-            uint256 newEnt
-        ) = _processSoloBucketWinner(w, perWinner, entropy);
-        newEntropy = newEnt;
-        claimDelta = claimableDelta;
-        if (paid != 0) {
-            emit JackpotEthWin(
-                w,
-                lvl,
-                traitId,
-                paid,
-                ticketIndex
-            );
-            paidDelta += paid;
-        }
-        if (wpSpent != 0) {
-            emit JackpotWhalePassWin(
-                w,
-                wpSpent / HALF_WHALE_PASS_PRICE,
-                WHALE_PASS_SRC_SOLO
-            );
-            paidDelta += wpSpent;
-        }
-        if (armGold) {
-            _armGoldenTicket(w, lvl, traitId);
-        }
-    }
-
-    /// @dev Pays normal (non-solo) bucket winners. Extracted to avoid stack-too-deep in _processDailyEth.
+    /// @dev Pays the original ETH draw, including the solo bucket, after any pass conversion.
     function _payNormalBucket(
         address[] memory winners,
         uint256[] memory ticketIndexes,
@@ -1637,49 +1631,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             unchecked {
                 ++i;
             }
-        }
-    }
-
-    /// @dev Processes solo bucket winner: 75% ETH, 25% as whale passes (only if
-    ///      the 25% covers at least one half-pass; otherwise 100% ETH).
-    /// @return claimableDelta Amount to add to claimablePool.
-    /// @return ethPaid Total ETH value credited.
-    /// @return whalePassSpent Amount moved to futurePrizePool from whale pass conversion.
-    /// @return newEntropy Updated entropy.
-    function _processSoloBucketWinner(
-        address winner,
-        uint256 perWinner,
-        uint256 entropy
-    )
-        private
-        returns (
-            uint256 claimableDelta,
-            uint256 ethPaid,
-            uint256 whalePassSpent,
-            uint256 newEntropy
-        )
-    {
-        // 75/25 split: whale pass only if 25% covers at least one half-pass
-        uint256 quarterAmount = perWinner >> 2; // perWinner / 4
-        uint256 whalePassCount = quarterAmount / HALF_WHALE_PASS_PRICE;
-        newEntropy = entropy;
-
-        if (whalePassCount != 0) {
-            uint256 whalePassCost = whalePassCount * HALF_WHALE_PASS_PRICE;
-            uint256 ethAmount = perWinner - whalePassCost;
-
-            _creditClaimable(winner, ethAmount);
-            claimableDelta = ethAmount;
-            ethPaid = ethAmount;
-
-            whalePassClaims[winner] += whalePassCount;
-            _addFuturePrizePool(whalePassCost);
-            whalePassSpent = whalePassCost;
-        } else {
-            // 25% too small for a whale pass — pay full amount as ETH
-            _creditClaimable(winner, perWinner);
-            claimableDelta = perWinner;
-            ethPaid = perWinner;
         }
     }
 
@@ -1926,30 +1877,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // =========================================================================
     // Internal Helpers — Winner Selection
     // =========================================================================
-
-    /// @dev Virtual deity entry count for a trait bucket of size `len` (zero
-    ///      when no deity holds the trait's symbol):
-    ///        Gold tier (color == 7): flat 1 virtual entry.
-    ///        Colors 5/6: floor(1% of bucket), minimum 1.
-    ///        Colors 0..4: floor(2% of bucket), minimum 2.
-    function _deityVirtualCount(
-        uint8 trait,
-        uint256 len,
-        address deity
-    ) private pure returns (uint256 virtualCount) {
-        if (deity != address(0)) {
-            uint8 color = (trait >> 3) & 7;
-            if (color == 7) {
-                virtualCount = 1;
-            } else if (color >= 5) {
-                virtualCount = len / 100;
-                if (virtualCount == 0) virtualCount = 1;
-            } else {
-                virtualCount = len / 50;
-                if (virtualCount < 2) virtualCount = 2;
-            }
-        }
-    }
 
     /// @dev Selects random winners from a trait's ticket pool, returning both addresses and indices.
     ///      Reads the bucket length and deity itself; distribution paths that

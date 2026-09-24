@@ -958,5 +958,13 @@
     "offset": 0,
     "slot": 73,
     "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "earlyBirdWhalePasses",
+    "offset": 0,
+    "slot": 74,
+    "typeLabel": "uint256"
   }
 ]

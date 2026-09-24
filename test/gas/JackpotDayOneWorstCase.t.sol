@@ -25,7 +25,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///         (payDailyJackpotCoinAndTickets, payCarryoverTickets). This suite measures BOTH txs on the
 ///         REAL advanceGame bytecode at every cap, with every winner a distinct address holding no
 ///         claimable / no queued entries (cold SSTOREs), on the worst ETH-leg branch (all-gold board
-///         -> golden-ticket arm on the solo winner + the solo whale-pass path) with an armed golden
+///         -> golden-ticket arm on the solo ETH winner + four fresh whale-pass draws) with an armed golden
 ///         ticket resolving as a GRAND in the same call, and asserts each tx under the EIP-7825 cap.
 /// @dev TEST-INFRA ONLY. No contracts/*.sol is mutated. Seeding happens in setUp() — a SEPARATE
 ///      transaction from the measured body — so the measured call starts on a cold EIP-2929 access
@@ -33,6 +33,10 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///      draws WITH replacement, so a handful of the 305 ETH draws may repeat a holder; the suite counts
 ///      distinct winners and reports the fully-cold top-up from the measured per-fresh-winner marginal.
 contract DayOneSeeder is DegenerusGame, BucketSeed {
+    function setQuadrantPassStress(uint128 current, uint8 counter) external {
+        _setCurrentPrizePool(current);
+        jackpotCounter = counter;
+    }
     /// @notice The day-1 (early-bird) jackpot-phase pre-state, at every cap the stage can reach.
     /// @param lvl         the level whose jackpot phase is on day 1
     /// @param word        the day's recorded VRF word (non-zero -> rngGate returns it immediately)
@@ -277,7 +281,7 @@ contract JackpotDayOneWorstCase is DayOneFixture {
         // not one.
         assertEq(t1.ethWins, DAILY_ETH_MAX_WINNERS, "the ETH leg paid the full 305-winner cap");
         assertEq(t2.ticketWins, EARLY_BIRD_MAX_WINNERS, "the early-bird leg paid the full 128-winner cap");
-        assertEq(t1.whalePassWins, 1, "the solo bucket took the whale-pass path");
+        assertEq(t1.whalePassWins, 4, "all four quadrants awarded full passes");
         assertTrue(t1.goldenArmed, "the all-gold board armed a golden ticket on the solo winner");
         assertTrue(t1.goldenGrand, "the armed golden ticket resolved as the grand in the same call");
         // Sampling is with replacement: nearly every winner must still be a distinct cold address.
@@ -370,5 +374,34 @@ contract JackpotDayOneEarlyBirdCold is DayOneFixture {
         assertEq(t.ethWins, 0, "the ETH stage must not repeat");
         assertFalse(t.goldenArmed || t.goldenGrand, "golden-ticket processing must not repeat");
         assertLt(used, GAS_TARGET, "the cold early-bird stage must stay below 10M gas");
+    }
+}
+
+/// @notice Cold final-day conversion at the 305-slot ceiling, with four pass awards.
+contract JackpotFinalDayQuadrantPassGas is DayOneFixture {
+    function setUp() public virtual {
+        _seed(_allGoldWord("quadrant-final-gas"), ETH_HOLDERS, 0, true);
+        bytes memory realCode = address(game).code;
+        vm.etch(address(game), type(DayOneSeeder).runtimeCode);
+        DayOneSeeder(payable(address(game))).setQuadrantPassStress(600_000 ether, 2);
+        vm.etch(address(game), realCode);
+        vm.deal(address(game), 610_000 ether);
+    }
+
+    function test_FinalDayLargeQuadrantPassesCold() public {
+        (uint256 used, Tally memory t) = _measure();
+        _emitTally("FINAL_DAY_LARGE_QUADRANT_PASSES", used, t);
+        assertEq(t.ethWins, DAILY_ETH_MAX_WINNERS);
+        assertEq(t.whalePassWins, 4);
+        assertTrue(t.goldenArmed && t.goldenGrand);
+        assertLt(used, GAS_TARGET, "four large deferred awards remain below 10M");
+        assertLt(used, EIP7825_TX_GAS_CAP);
+    }
+}
+
+contract JackpotFinalDayQuadrantPassLateGas is JackpotFinalDayQuadrantPassGas {
+    function setUp() public override {
+        super.setUp();
+        _warpToDay(401, 3 hours);
     }
 }

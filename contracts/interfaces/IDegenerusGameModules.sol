@@ -107,7 +107,7 @@ interface IDegenerusGameJackpotModule {
     /// @param randWord The day's recorded VRF word.
     function payPurchaseDailyTickets(uint256 randWord) external;
 
-    /// @notice Pays the early-bird ticket leg the day-1 ETH stage left pending
+    /// @notice Pays the pending early-bird tickets and any gold-preferred surplus whale-pass prize.
     /// @param randWord Random word for distribution (the same day's word)
     function payEarlyBirdTickets(uint256 randWord) external;
 
@@ -240,6 +240,15 @@ interface IDegenerusGameWhaleModule {
     /// @notice Claim deferred whale pass rewards for a player.
     /// @param player Player address to claim for.
     function claimWhalePass(address player) external;
+
+    /// @notice Awards early-bird or quadrant passes to one fresh recipient.
+    /// @dev Nested delegatecall from JackpotModule against frozen GAME inventory.
+    ///      Early bird supplies a packed bonus board and amount in half-pass units.
+    ///      Otherwise traits holds one quadrant's trait, amount is its ETH allocation,
+    ///      and randWord is its bucket entropy. Quadrant pass cost credits future;
+    ///      early bird moves no pools. Returns award value (zero for an empty draw).
+    function awardWhalePass(uint24 lvl, uint32 traits, uint256 amount, uint256 randWord, bool earlyBird)
+        external returns (uint256 spent);
 
     /// @notice sDGNRS's once-per-level automatic whale purchase (afking process STAGE only).
     /// @dev Delegatecall-only, nested from GameAfkingModule.processSubscriberStage; no facade
