@@ -531,12 +531,11 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         _assertPayoutKeyClear(L + 1);
     }
 
-    /// Dead-VRF death — the fallback ending. A daily request commits a cohort and is
-    /// never fulfilled; stall-window buys land on the write side. Past the fallback
-    /// grace the read cohort drains against the fallback word, then the fallbackDue
-    /// swap commits the write cohort, which drains against the same word. Both
-    /// parities of every window key end empty.
-    function testTerminalFallbackClearsBothBuffers() public {
+    /// Dead-VRF death — the deterministic ending. A daily request commits a cohort and is
+    /// never fulfilled; stall-window buys land on the write side. With nothing delivered for
+    /// 14 days the ending runs no draw and no drain: both cohorts stay queued at the payout
+    /// key, where the tally counted them, and are claimed as uncreated entries.
+    function testTerminalDeadVrfLeavesBothCohortsQueuedForClaims() public {
         vm.pauseGasMetering();
         (uint24 L, , ) = _runJackpotPhase(MIDDAY_NEVER, MODE_DRAIN_SAME_DAY, true);
 
@@ -562,8 +561,10 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             "harness: the stall-window cohort must stage on the write side"
         );
 
-        // Dead VRF: never fulfill again; big warps ride the deadman + fallback
-        // grace to the terminal fallback ending.
+        uint256 owedBefore = _entriesOwed(L + 1, buyer) + _entriesOwed((L + 1) | TICKET_SLOT_BIT, buyer);
+        assertGt(owedBefore, 0, "harness: the buyer holds queued entries at the payout key");
+
+        // Dead VRF: never fulfill again; past the 14-day window the ending is deterministic.
         for (uint256 i = 0; i < 10 && !game.gameOver(); i++) {
             simTime += 90 days;
             vm.warp(simTime);
@@ -576,7 +577,16 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         }
         assertTrue(game.gameOver(), "harness: dead-VRF death must latch game over");
 
-        _assertPayoutKeyClear(L + 1);
+        assertGt(
+            _queueLen(L + 1) + _queueLen((L + 1) | TICKET_SLOT_BIT),
+            0,
+            "dead ending: no drain, the cohorts stay queued"
+        );
+        assertEq(
+            _entriesOwed(L + 1, buyer) + _entriesOwed((L + 1) | TICKET_SLOT_BIT, buyer),
+            owedBefore,
+            "dead ending: every queued entry is left for its claim"
+        );
     }
 
     /// @dev Terminal end-state: the PAYOUT key is fully drained on both parities and

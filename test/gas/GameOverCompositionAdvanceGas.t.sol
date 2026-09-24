@@ -19,9 +19,11 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///         => ~20M > 16,777,216 (EIP-7825). advanceGame is the mandatory heartbeat; a single tx
 ///         over the cap = a permanent, unrecoverable game-over (the tx can never complete).
 ///
-///         The fix drains only the entropy-committed read snapshot, returns after its finishing
-///         batch, and leaves the later write buffer outside the terminal outcome. The terminal
-///         jackpot therefore runs in its OWN tx and every measured transaction stays under the cap.
+///         Now every step is its own transaction: the committed read snapshot drains on its own
+///         word, the write cohort is swapped in once (liveness has frozen purchases) before the
+///         ending requests its terminal word, that word is applied (deriving the skipped days),
+///         the write cohort drains on it, and the terminal jackpot pays. Every measured
+///         transaction stays under the cap.
 /// @dev Test-only. NO contracts/*.sol is mutated. A GameSeeder (DegenerusGame subclass with seeders)
 ///      is etched onto the live game via type().runtimeCode (no constructor side effects), used to
 ///      write the worst-case pre-state into the real game storage, then the real code is restored so
@@ -30,9 +32,9 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 /// @dev Seeder overlay: writes the worst-case game-over pre-state directly into the live game storage.
 contract GameSeeder is DegenerusGame, BucketSeed {
     /// @param lvl          current game level (>=10 so the bounded deity-refund loop is skipped)
-    /// @param rngWord      the (pre-seeded) day word; non-zero so `_gameOverEntropy` is bypassed
+    /// @param rngWord      the word the winning buckets are seeded for; it answers the terminal request
     /// @param readOwed     traits owed by the committed read-slot player (one cold finishing batch)
-    /// @param writeOwed    traits owed by the later write-slot player (excluded from terminal draw)
+    /// @param writeOwed    traits owed by the write-slot player (swapped in before the terminal request)
     /// @param winTraits    the 4 winning trait ids `runTerminalJackpot` rolls for `rngWord`
     /// @param bucketCounts the 305-winner bucket geometry for the seeded pool
     /// @param base         disjoint address-space base for synthetic holders
@@ -48,12 +50,13 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         uint24 day = _simulatedDayIndex();
 
         // --- Liveness game-over pre-state ---
-        // lvl != 0 + (currentDay - psd > 120) + target-never-met => _livenessTriggered() == true.
+        // lvl != 0 + target never met; the 200-day warp after seeding also fires the no-seal
+        // deadman, so the ending's terminal word derives the capped 31 skipped days as well.
         level = lvl;
         purchaseStartDay = 0;
-        dailyIdx = day - 1; // day == dailyIdx+1: no day-clamp, no mid-day branch -> _handleGameOverPath
+        dailyIdx = day - 1;
         levelPrizePool[lvl] = type(uint256).max; // _getNextPrizePool() (0) < target => liveness fires
-        rngWordByDay[day] = rngWord; // != 0 => skip the entropy/VRF block, go straight to ticket drain
+        rngWordByDay[day] = rngWord; // the last sealed day's word; the ending requests its own
 
         // lootbox entropy word the ticket batch reads at lootboxRngWordByIndex[LR_INDEX-1].
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
@@ -61,9 +64,8 @@ contract GameSeeder is DegenerusGame, BucketSeed {
 
         uint24 pl = lvl + 1; // purchaseLevel the drain processes (drain calls processTicketBatch(lvl+1))
 
-        // Preserve the historical two-slot fixture: the committed read slot is a heavy finishing
-        // batch, while the populated write slot proves that later work is not promoted into this
-        // entropy outcome. Before the fix both finished and composed with the terminal jackpot.
+        // The historical two-slot fixture: both slots are heavy finishing batches. Before the
+        // fix both finished and composed with the terminal jackpot in one transaction.
         _seedSlot(_tqReadKey(pl), base, readOwed);
         _seedSlot(_tqWriteKey(pl), base + 0x1000, writeOwed);
         ticketCursor = 0;
@@ -151,8 +153,8 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
     ///         PRE-FIX  : the first advanceGame() runs round1+round2+terminal-jackpot in ONE tx
     ///                    (~20M). The per-tx assertion below FAILS — that failure (with the logged
     ///                    ~20M) is the demonstration of the composition DoS.
-    ///         POST-FIX : the committed read batch and terminal jackpot run in separate txs; the
-    ///                    later write buffer stays excluded, every tx < 16.7M -> PASSES.
+    ///         POST-FIX : each batch, the terminal request, its application and the terminal
+    ///                    jackpot run in separate txs; every tx < 16.7M -> PASSES.
     function test_GameOverDrain_EveryAdvanceTxUnderEipCap() public {
         // Keep both historical slots near the cold write budget. Only the committed read slot is
         // processed post-fix; pre-fix both finishing batches composed with the terminal jackpot.
@@ -162,7 +164,7 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
         uint256 firstTxGas;
         bool over;
 
-        for (uint256 i = 0; i < 12; i++) {
+        for (uint256 i = 0; i < 16; i++) {
             uint256 g0 = gasleft();
             game.advanceGame();
             uint256 used = g0 - gasleft();
@@ -171,6 +173,13 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
             if (used > maxTxGas) maxTxGas = used;
             if (used > EIP7825_TX_GAS_CAP) over = true;
             if (game.gameOver()) break;
+            // The ending requests its own terminal word once the read cohort has drained and
+            // the write cohort is swapped in; answer it with the word the buckets were seeded for.
+            uint256 id = mockVRF.lastRequestId();
+            if (id != 0) {
+                (,, bool done) = mockVRF.pendingRequests(id);
+                if (!done) mockVRF.fulfillRandomWords(id, _word());
+            }
         }
 
         emit log_named_uint("first_advance_tx_gas", firstTxGas);

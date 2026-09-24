@@ -441,6 +441,15 @@ interface IDegenerusGame {
     /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
     function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
+    /// @notice Claim deterministic-ending shares for `player`'s terminal-level tickets after a
+    ///         game over caused by a dead VRF (open until the final sweep).
+    /// @param player Owner of every referenced holding (credited, never the caller).
+    /// @param refs Holdings to claim; the top byte of each is its kind: 0 a created ticket
+    ///        (trait at bits 64..71, occurrence index at bits 0..63), 1 queued entries (registry
+    ///        position plus one at bits 0..31), any other an undrained foil pack (resolve day at
+    ///        bits 64..87, index into that day's bucket at bits 0..63).
+    function claimDeadVrf(address player, uint256[] calldata refs) external;
+
     // -------------------------------------------------------------------------
     // Degenerette Tracking Views
     // -------------------------------------------------------------------------

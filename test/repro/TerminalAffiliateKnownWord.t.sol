@@ -11,8 +11,8 @@ contract TerminalKnownWordSeeder is DegenerusGame, BucketSeed {
     function seed(uint256 word, address subscriber) external {
         uint24 day = _simulatedDayIndex();
         level = 10;
-        purchaseStartDay = day - 30;
-        dailyIdx = day - 1;
+        purchaseStartDay = day - 31; // the deadline passed yesterday
+        dailyIdx = day - 1; // caught up: the deadline starts the ending today
         levelPrizePool[10] = 1000 ether;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
@@ -25,8 +25,10 @@ contract TerminalKnownWordSeeder is DegenerusGame, BucketSeed {
     }
 }
 
-/// @notice Terminal payout changes must not reroll recipients, even when the daily word is public.
-///         The request, fulfillment, affiliate claim and terminal settlement use production code.
+/// @notice The terminal affiliate is fixed before the terminal word exists: the ending latches it
+///         on its first transaction, together with its own terminal request, so an affiliate
+///         claim made once the word is on its way can neither rank the board nor move the pool
+///         the terminal draw is fed. Request, fulfillment, claim and settlement use production code.
 contract TerminalAffiliateKnownWordTest is DeployProtocol {
     uint256 private constant WORD = 0x987654321;
     address private constant AFFILIATE = address(0xAFF1);
@@ -45,44 +47,29 @@ contract TerminalAffiliateKnownWordTest is DeployProtocol {
         affiliate.payAffiliate(0, bytes32(uint256(uint160(AFFILIATE))), SUBSCRIBER, 11, true, 0);
     }
 
-    function test_KnownDailyWordAffiliateDeductionPreservesWinners() public {
-        assertFalse(game.livenessTriggered(), "request day is the purchase deadline");
-        game.advanceGame();
+    function test_AffiliateIsFixedBeforeTheTerminalWord() public {
+        assertTrue(game.livenessTriggered(), "caught up past the deadline");
+        uint256 before = mockVRF.lastRequestId();
+        game.advanceGame(); // latches the cohort level and the (empty) affiliate, requests the word
         uint256 requestId = mockVRF.lastRequestId();
-        assertGt(requestId, 0, "real daily request");
-        assertTrue(game.rngLocked());
-        mockVRF.fulfillRandomWords(requestId, WORD);
-        vm.warp(block.timestamp + 14 days + 2);
-        assertTrue(game.livenessTriggered(), "the grace period expired without an advance");
+        assertGt(requestId, before, "the ending's own terminal request");
         (address top,) = affiliate.affiliateTop(11);
-        assertEq(top, address(0), "terminal board is initially empty");
-        uint256 snapshot = vm.snapshotState();
+        assertEq(top, address(0), "terminal board empty at the latch");
 
+        address[] memory subscribers = new address[](1);
+        subscribers[0] = SUBSCRIBER;
+        affiliate.claim(subscribers); // permissionless, after the latch
+        (top,) = affiliate.affiliateTop(11);
+        assertEq(top, AFFILIATE, "the claim ranks the board, too late to matter");
+
+        mockVRF.fulfillRandomWords(requestId, WORD);
         vm.expectCall(
             address(game), abi.encodeWithSelector(game.runTerminalJackpot.selector, 100 ether, uint24(11), WORD)
         );
         vm.recordLogs();
         _finishTerminal();
-        bytes32 withoutClaim = _winnerFingerprint(vm.getRecordedLogs());
-        assertTrue(game.gameOver());
-        assertEq(game.claimableWinningsOf(AFFILIATE), 0);
-
-        vm.revertToState(snapshot);
-        address[] memory subscribers = new address[](1);
-        subscribers[0] = SUBSCRIBER;
-        affiliate.claim(subscribers); // permissionless, after the word is already public
-        (top,) = affiliate.affiliateTop(11);
-        assertEq(top, AFFILIATE);
-        vm.expectCall(
-            address(game), abi.encodeWithSelector(game.runTerminalJackpot.selector, 98 ether, uint24(11), WORD)
-        );
-        vm.recordLogs();
-        _finishTerminal();
-        bytes32 withClaim = _winnerFingerprint(vm.getRecordedLogs());
-        assertTrue(game.gameOver());
-        assertEq(game.claimableWinningsOf(AFFILIATE), 2 ether);
-        assertEq(mockVRF.lastRequestId(), requestId, "terminal payout reused the daily word");
-        assertEq(withoutClaim, withClaim, "affiliate deduction changes amounts, never jackpot recipients");
+        _winnerFingerprint(vm.getRecordedLogs());
+        assertEq(game.claimableWinningsOf(AFFILIATE), 0, "the latched (empty) affiliate is paid nothing");
     }
 
     function _finishTerminal() private {

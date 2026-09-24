@@ -36,10 +36,13 @@ claim/recipient checks. Permissionless processing is not authority to redirect p
 Game-over processing reserves existing claims and applicable deity refunds, credits 2% of
 the remaining pool to the terminal level's top affiliate, and sends the rest to the main
 terminal ticket jackpot. If no affiliate is ranked, the jackpot receives the entire pool.
-The affiliate winner is fixed when the terminal cohort is latched; later score claims
-do not reopen the award. A delivered daily word may be reused; see the allocation
-timing exception in `KNOWN-ISSUES.md` and the seed rules in `audit/RNG-DOMAINS.md`.
-The later final sweep handles unclaimed balances.
+The affiliate winner is fixed when the terminal cohort is latched, before any terminal
+word exists; later score claims do not reopen the award. The terminal word is one the
+game-over path requests itself after liveness froze purchases, even when the deadman
+ends a game whose day is stuck in processing. If VRF is dead (a
+request unanswered for 14 days) the ending is deterministic instead: deity refunds as
+above, no affiliate share, and the rest split across every ticket of the terminal level,
+claimed through `claimDeadVrf`. The later final sweep handles unclaimed balances.
 Read the terminal paths separately from live-game withdrawal paths.
 
 FLIP has special routing for VAULT and sDGNRS: their backing/allowances are not ordinary
@@ -51,8 +54,10 @@ FLIP. The comp allowance is neither circulating FLIP nor vault mint backing.
 Level 0 retains its 365-day purchase deadline. Later levels have a 30-day purchase
 deadline: elapsed day 30 activates distress purchases, and game-over becomes eligible
 on day 31 if the target is still unmet. A funded last-purchase/jackpot phase can finish
-beyond that boundary. Existing VRF grace, missed-day forgiveness, the independent
-30-day VRF deadman, and the 30-day post-game sweep keep their separate timing rules.
+beyond that boundary. The deadline is read at the start of a caught-up day, so days a
+VRF stall or an unattended stretch skipped are credited to it on catch-up; a stall has
+14 days from its request before VRF counts as dead. The independent 30-day no-seal
+deadman and the 30-day post-game sweep keep their separate timing rules.
 
 Ordinary purchase dailies budget 4% of the future pool, split 75% to ticket backing
 in the next pool, 23% to ETH prizes, and 2% to the insurance accumulator. These are
@@ -233,8 +238,9 @@ handling of a padded final word. These groups intentionally share a word draw.
 Protocol deity grants occur after the deployment sequence. Their perpetual entries
 and protocol boon cohorts have their own pre-request scheduling and closure rules.
 Foil packs resolve tomorrow's committed draw. A VRF stall skips missed days on
-recovery, freezes auto-rebuy arming, and can enter the existing deadman path;
-`VRF-STALL-AND-DEADMAN-PLAN.md` describes a further design that is not implemented.
+recovery and freezes auto-rebuy arming; a request unanswered for 14 days ends the game
+deterministically. `VRF-STALL-AND-DEADMAN-PLAN.md` is an earlier design; `KNOWN-ISSUES.md`
+states the implemented behavior.
 
 At the first AFKing stage of each level, sDGNRS attempts a whale-pass purchase of
 the largest group of five paid passes affordable from a quarter of its claimable,

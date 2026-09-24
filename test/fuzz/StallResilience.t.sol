@@ -8,7 +8,9 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title StallResilience -- Proves VRF stall -> coordinator swap -> resume cycle
 /// @notice Integration tests for gap day RNG backfill (TEST-01), coinflip resolution
-///         across gap days (TEST-02), and lootbox opens after orphaned index backfill (TEST-03).
+///         across gap days (TEST-02), and lootbox opens on a swap-reissued index (TEST-03).
+///         A stalled request's late word finishes the day it was sent for; the wall day's
+///         fresh request then derives the skipped days in between.
 contract StallResilience is DeployProtocol {
     function setUp() public {
         _deployProtocol();
@@ -74,10 +76,27 @@ contract StallResilience is DeployProtocol {
         }
     }
 
+    /// @dev Catch up after the stalled day finished: the wall day's fresh request is answered
+    ///      with `word`, which derives every skipped day in between, and the wall day completes.
+    function _catchUp(MockVRFCoordinator vrf, uint256 word) internal {
+        uint24 wallDay = game.currentDayView();
+        for (uint256 i = 0; i < 60; i++) {
+            game.advanceGame();
+            uint256 id = vrf.lastRequestId();
+            if (id != 0) {
+                (,, bool done) = vrf.pendingRequests(id);
+                if (!done) vrf.fulfillRandomWords(id, word);
+            }
+            if (!game.rngLocked() && game.rngWordForDay(wallDay) != 0) return;
+        }
+        fail("catch-up did not complete the wall day");
+    }
+
     // ── TEST-01: Stall -> Swap -> Resume with gap day backfill ───────
 
-    /// @notice Proves gap days get non-zero backfilled RNG words derived from
-    ///         the resume VRF word via keccak256(vrfWord, gapDay).
+    /// @notice Proves the stalled day finishes on its own (swap-reissued) word and the
+    ///         skipped days get words derived from the wall day's fresh VRF word via
+    ///         keccak256(vrfWord, gapDay).
     function test_stallSwapResume() public {
         // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
@@ -92,27 +111,21 @@ contract StallResilience is DeployProtocol {
         // Stall: warp +3 days without fulfilling (gap days: 3, 4, 5; current day after warp: 6)
         MockVRFCoordinator newVRF = _stallAndSwap(3);
 
-        // Resume on day 6
-        uint256 resumeWord = 0xCAFEBABE;
-        _resumeAfterSwap(newVRF, resumeWord);
+        // The swap re-sent day 3's request; its late word finishes day 3 (no gap yet).
+        _resumeAfterSwap(newVRF, 0xCAFE0003);
+        assertEq(game.rngWordForDay(3), 0xCAFE0003, "Stalled day 3 finishes on its own word");
+        assertEq(game.rngWordForDay(4), 0, "Day 4 not derived before the wall day's request");
+        assertEq(game.rngWordForDay(5), 0, "Day 5 not derived before the wall day's request");
 
-        // Verify gap days backfilled (TEST-01 core assertion)
-        // After day 2 complete, dailyIdx=2. Day 3 VRF requested but never fulfilled.
-        // After swap+resume, _backfillGapDays runs for days 3,4,5 (dailyIdx+1 to currentDay exclusive).
-        assertTrue(game.rngWordForDay(3) != 0, "Gap day 3 backfilled");
+        // Day 6's fresh request derives the skipped days 4 and 5 (TEST-01 core assertion).
+        uint256 resumeWord = 0xCAFEBABE;
+        _catchUp(newVRF, resumeWord);
         assertTrue(game.rngWordForDay(4) != 0, "Gap day 4 backfilled");
         assertTrue(game.rngWordForDay(5) != 0, "Gap day 5 backfilled");
         assertTrue(game.rngWordForDay(6) != 0, "Current day 6 processed");
 
-        // Verify gap day words are deterministic derivations of the resume VRF word.
-        // _backfillGapDays is called BEFORE _applyDailyRng in rngGate.
-        // So it uses rngWordCurrent (the raw VRF word, pre-nudge). The frozen
-        // _backfillGapDays (AdvanceModule:1843-1845) packs the gap day as uint24 (its loop
-        // counter type), so the preimage day width is 3 bytes — match it with uint24.
-        uint256 expectedDay3 = uint256(keccak256(abi.encodePacked(resumeWord, uint24(3))));
-        if (expectedDay3 == 0) expectedDay3 = 1;
-        assertEq(game.rngWordForDay(3), expectedDay3, "Day 3 word is keccak256(vrfWord, 3)");
-
+        // Gap words derive from the raw VRF word (backfill runs before _applyDailyRng), with
+        // the day packed as uint24 (the backfill loop counter type).
         uint256 expectedDay4 = uint256(keccak256(abi.encodePacked(resumeWord, uint24(4))));
         if (expectedDay4 == 0) expectedDay4 = 1;
         assertEq(game.rngWordForDay(4), expectedDay4, "Day 4 word is keccak256(vrfWord, 4)");
@@ -163,12 +176,12 @@ contract StallResilience is DeployProtocol {
         vm.warp(block.timestamp + 2 days);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Resume
+        // Resume: the reissued request's word settles day 3; day 6's fresh request derives
+        // and settles the skipped days 4 and 5.
         _resumeAfterSwap(newVRF, 0xF11FCAFE);
+        _catchUp(newVRF, 0xF11FCAFF);
 
-        // Verify coinflip results populated for gap days.
         // processCoinflipPayouts always writes coinflipDayResult (rewardPercent >= 50).
-        // Gap days 3,4,5 should be processed by _backfillGapDays.
         (uint16 reward3,) = coinflip.getCoinflipDayResult(3);
         (uint16 reward4,) = coinflip.getCoinflipDayResult(4);
         (uint16 reward5,) = coinflip.getCoinflipDayResult(5);
@@ -180,8 +193,8 @@ contract StallResilience is DeployProtocol {
 
     // ── TEST-03: Lootbox open after orphaned index backfill ─────────
 
-    /// @notice Proves lootbox at orphaned RNG index has non-zero rngWord after
-    ///         coordinator swap, and openLootBox does not revert with RngNotReady.
+    /// @notice Proves the lootbox index reserved by a stalled daily request gets a word once
+    ///         the swap-reissued request is answered, and openBox does not revert with RngNotReady.
     function test_lootboxOpenAfterOrphanedIndexBackfill() public {
         // Setup buyer with enough ETH for lootbox purchases
         address buyer = makeAddr("lootBuyer");
@@ -212,25 +225,22 @@ contract StallResilience is DeployProtocol {
         game.advanceGame();
         assertTrue(game.rngLocked(), "Day 2 VRF pending");
 
-        // The orphaned index is preStallIndex (reserved by the day 2 VRF request)
+        // The stalled request reserved preStallIndex
         uint48 orphanedIndex = preStallIndex;
 
         // Verify no RNG word yet for orphaned index
         assertEq(_lootboxRngWord(orphanedIndex), 0, "Orphaned index has no RNG word before swap");
 
-        // Stall + swap (warp 3 days, coordinator swap saves orphaned index but does NOT backfill yet)
+        // Stall + swap: the swap re-sends the request for the same reserved index
         MockVRFCoordinator newVRF = _stallAndSwap(3);
+        assertEq(_lootboxRngIndex(), preStallIndex + 1, "Swap keeps the reserved index");
+        assertEq(_lootboxRngWord(orphanedIndex), 0, "Reserved index has no word before the reissued word");
 
-        // After swap: orphaned index is still 0 — backfill uses VRF entropy, not on-chain state
-        assertEq(_lootboxRngWord(orphanedIndex), 0, "Orphaned index NOT yet backfilled (deferred to rngGate)");
-
-        // Resume: rngGate backfills gap days AND orphaned lootbox index using fresh VRF word
+        // Resume: the reissued request's word finalizes the reserved index
         _resumeAfterSwap(newVRF, 0x1007CAFE);
+        assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Reserved index finalized by the reissued word");
 
-        // After resume: orphaned index should now have a VRF-derived word
-        assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Orphaned index backfilled after resume with VRF entropy");
-
-        // Verify openLootBox does not revert for the orphaned index.
+        // openBox does not revert for that index.
         vm.prank(buyer);
         game.openBox(buyer, orphanedIndex);
     }

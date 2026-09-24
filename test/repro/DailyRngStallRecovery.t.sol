@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title DailyRngStallRecovery — the council-confirmed stall-path repros.
 ///
@@ -11,9 +12,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         slot before a FRESH request, but a stalled DAILY request makes that circular:
 ///         the staged cohort cannot drain without the very word the stall is withholding,
 ///         and rngGate's 12-hour retry sits behind the gate. The gate therefore offers the
-///         same single retry itself. Pinned here: blocked before the timeout, permissionless
-///         re-request at 12 hours with tickets pending, once-only (the LSB latch), and the
-///         retried word seals the day.
+///         same single retry itself. Pinned here: blocked before the timeout, the vault
+///         owner's re-request at 12 hours with tickets pending (no one else's), once-only (the
+///         LSB latch), and the retried word seals the day.
 ///
 ///         (2) THE SEALED DAY'S KEY. Daily processing keys the foil board and the traits
 ///         event by the day being SEALED (dailyIdx + 1), never the wall clock. The two
@@ -32,6 +33,8 @@ contract DailyRngStallRecovery is DeployProtocol {
 
     address private buyer = address(0xB4A1);
     address private keeper = address(0xC4A9);
+    /// @dev The daily retry is the vault owner's (the >50.1% DGVE holder; the deployer here).
+    address private owner = ContractAddresses.CREATOR;
 
     uint256 private simTime;
 
@@ -112,8 +115,9 @@ contract DailyRngStallRecovery is DeployProtocol {
         assertFalse(ok, "the gate must still block inside the 12-hour window");
     }
 
-    /// At 12 hours any caller re-requests THROUGH the drain gate — the state this retry
+    /// At 12 hours the vault owner re-requests THROUGH the drain gate — the state this retry
     /// exists for is precisely a nonempty staged cohort — and the fresh word seals the day.
+    /// Nobody else can fire it.
     function testStalledDailyRetriesAt12hWithTicketsPending() public {
         vm.pauseGasMetering();
         _driveDay();
@@ -123,6 +127,9 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.warp(simTime + 12 hours + 1);
         vm.prank(keeper);
         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        assertFalse(ok, "only the vault owner fires the retry");
+        vm.prank(owner);
+        (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
         assertTrue(ok, "the 12-hour retry must be reachable with tickets pending");
         uint256 retryReqId = mockVRF.lastRequestId();
         assertGt(retryReqId, stalledReqId, "the retry must fire a fresh VRF request");
@@ -147,12 +154,12 @@ contract DailyRngStallRecovery is DeployProtocol {
         _stallDailyRequest();
 
         vm.warp(simTime + 12 hours + 1);
-        vm.prank(keeper);
+        vm.prank(owner);
         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
         assertTrue(ok, "harness: first retry must fire");
 
         vm.warp(simTime + 25 hours);
-        vm.prank(keeper);
+        vm.prank(owner);
         (bool second, ) = address(game).call(
             abi.encodeWithSignature("advanceGame()")
         );
@@ -253,7 +260,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         // 12h retry fires through the rngGate sentinel.
         simTime += 12 hours + 1;
         vm.warp(simTime);
-        vm.prank(keeper);
+        vm.prank(owner);
         (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
         assertTrue(ok, "the 12-hour retry must fire in jackpot phase");
         assertEq(
@@ -298,7 +305,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             _clearQueue(_readKeyOf(L + 1));
             simTime += 12 hours + 1;
             vm.warp(simTime);
-            vm.prank(keeper);
+            vm.prank(owner);
             (bool ok, ) = address(game).call(
                 abi.encodeWithSignature("advanceGame()")
             );
@@ -443,28 +450,26 @@ contract DailyRngStallRecovery is DeployProtocol {
     // (4) The death clock owns game-over
     // ---------------------------------------------------------------------
 
-    /// A VRF outage is a reason to keep waiting, never a cause of death: no stall, however
-    /// long, ends a level before its own day deadline.
-    function testVrfOutageCannotEndTheGameBeforeTheDeadline() public {
+    /// A VRF outage is waited out for 14 days from the stalled request's send; outliving that
+    /// window it is a dead VRF, and the game ends deterministically even with its day deadline
+    /// (here the level-0 365-day window) far off.
+    function testVrfOutageEndsOnlyOnceItOutlivesTheDeadWindow() public {
         vm.pauseGasMetering();
         _driveDay();
         _stallDailyRequest();
 
-        // Beyond the 14-day grace window, but still within the level-0 365-day deadline and the
-        // 30-day deadman.
-        simTime += 25 days;
+        simTime += 13 days;
         vm.warp(simTime);
-        assertFalse(
-            game.livenessTriggered(),
-            "a stall must not end the game before its day deadline"
-        );
-        assertFalse(game.gameOver(), "no game-over before the deadline");
+        assertFalse(game.livenessTriggered(), "inside the VRF-dead window a stall is only waited out");
 
-        // The 30-day deadman bounds level 0 too: past it the stall is terminal even though the
-        // 365-day deploy deadline is far off.
-        simTime += 10 days;
+        simTime += 2 days;
         vm.warp(simTime);
-        assertTrue(game.livenessTriggered(), "the 30-day deadman must fire at level 0");
+        assertTrue(game.livenessTriggered(), "14 days with nothing delivered: VRF dead");
+        for (uint256 j = 0; j < 20 && !game.gameOver(); j++) {
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            if (!ok) break;
+        }
+        assertTrue(game.gameOver(), "the deterministic ending completes");
     }
 
     /// Game-over is permanent in both directions: once the terminal path has run, the trigger

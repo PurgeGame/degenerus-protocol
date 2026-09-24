@@ -110,29 +110,55 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @notice The terminal level's leading affiliate received its one-time ETH share.
     event TerminalAffiliatePaid(address indexed affiliate, uint24 indexed level, uint256 amount);
 
+    /// @notice The deterministic (VRF-dead) ending fixed its payout: `pot` is shared by every
+    ///         ticket of `level`. Uncreated entries (queued or in an undrained foil pack, whose
+    ///         traits were never rolled) take pot * weight / total each, weight in QTY_SCALE
+    ///         units. Created tickets share pot * created * QTY_SCALE / total, split equally
+    ///         across the `traits` non-empty trait buckets and equally within each.
+    event DeadVrfPayoutFixed(
+        uint24 indexed level,
+        uint256 pot,
+        uint256 created,
+        uint256 uncreated,
+        uint256 traits
+    );
+
+    /// @notice A deterministic-ending claim credited `amount` to `player`'s claimable winnings.
+    event DeadVrfClaimed(address indexed player, uint256 amount);
+
     // error E() — inherited from DegenerusGameStorage
 
-    /// @notice Process game over by distributing remaining funds via jackpots.
-    /// @dev Called when a liveness guard fires: 1yr deploy-idle timeout (level 0), 30-day
-    ///      inactivity (level>0), a 14-day VRF-stall grace, or the 30-day VRF-death deadman
-    ///      (jackpot/last-purchase phases).
+    /// @dev Tally units per call: one registry position, one foil pack, or one foil day
+    ///      stepped. Every unit is a single cold read at most, so a call stays near 7.5M gas.
+    uint256 private constant DEAD_TALLY_UNITS = 3000;
+
+    /// @dev claimDeadVrf reference kinds, in the top byte of each reference.
+    uint256 private constant DEAD_REF_CREATED = 0;
+    uint256 private constant DEAD_REF_QUEUED = 1;
+
+    /// @notice Process game over by distributing remaining funds.
+    /// @dev Called when the game-over trigger fires: the purchase deadline (365 days at level
+    ///      0, 30 after), the 30-day no-seal deadman, or a VRF request unanswered for 14 days.
     ///      Sets terminal gameOver flag.
     ///
     ///      Distribution logic:
     ///      - If game ended early (levels 0-9): refund of the price paid (capped at 20 ETH) per deity pass,
     ///        FIFO by purchase order, budget-capped to available funds minus claimablePool
-    ///      - Remaining funds: 2% to the terminal level's top affiliate, 98% to its ticket cohort
-    ///      - No ranked affiliate: the entire remaining pool goes to the terminal ticket cohort
+    ///      - Normal ending: 2% to the terminal level's top affiliate, 98% to its ticket cohort by
+    ///        the terminal jackpot (all of it when no affiliate is ranked)
+    ///      - Deterministic (VRF-dead) ending: no affiliate share and no draw; the remainder is
+    ///        fixed as the pot every terminal-level ticket claims from (claimDeadVrf)
     ///      - Any uncredited remainder later swept by handleFinalSweep three-way to vault / sDGNRS / GNRUS
     ///
-    ///      Reads rngWordByDay[day] for entropy; reverts if funds exist but word is not yet available.
-    ///      VRF fallback logic (historical word, stall timeout) is in AdvanceModule._gameOverEntropy.
+    ///      The normal ending reads rngWordByDay[day] and reverts if funds exist but the word
+    ///      is not yet available. The deterministic ending reads no word.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
     /// @custom:reverts Invariant When distributable funds exist but the RNG word is unavailable (defense-in-depth).
     /// @custom:reverts TransferFailed When an stETH or ETH transfer fails.
     function handleGameOverDrain(uint24 day) external {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return; // Already processed
 
+        bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint24 lvl = level;
 
         uint256 totalFunds = address(this).balance + steth.balanceOf(address(this));
@@ -150,12 +176,20 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         // Defense-in-depth -- caller (_handleGameOverPath) already guarantees
         // rngWordByDay[day] != 0 before calling, so this revert should never fire.
         uint256 rngWord;
-        if (preRefundAvailable != 0) {
+        if (preRefundAvailable != 0 && !dead) {
             rngWord = rngWordByDay[day];
             if (rngWord == 0) revert Invariant();
         }
 
         // === All side effects below this line (RNG confirmed or no funds to distribute) ===
+
+        // The deterministic ending has no word to roll a pending sDGNRS gambling-burn pool
+        // with, so it resolves at the roll's expected value, 100%. The pool's ETH is
+        // segregated in sDGNRS, so this moves nothing out of the game's balance.
+        if (dead) {
+            uint24 pendingDay = dgnrs.pendingResolveDay();
+            if (pendingDay != 0) dgnrs.resolveRedemptionPeriod(100, pendingDay);
+        }
 
         // Deity pass refunds (levels 0-9): refund each owner what they paid, capped at the flat
         // DEITY_PASS_EARLY_GAMEOVER_REFUND so a boon-discounted deity (paid < 20 ETH) never refunds
@@ -245,6 +279,19 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         // The winner was latched with the terminal cohort level before the terminal word
         // existed (_handleGameOverPath); credit it here once.
         uint24 terminalLevel = _gameOverTicketLevel(lvl);
+
+        // Deterministic ending: no affiliate share, no draw. Fix the pot and the total weight
+        // it divides by (tallied by tallyDeadVrf before this ran); every terminal-level ticket
+        // then claims its share through claimDeadVrf until the final sweep.
+        if (dead) {
+            uint256 created = deadCreated;
+            uint256 uncreated = deadUncreated;
+            deadPot = uint128(remaining);
+            deadTotal = uint64(created * QTY_SCALE + uncreated);
+            deadUncreatedLeft = uint64(uncreated);
+            emit DeadVrfPayoutFixed(terminalLevel, remaining, created, uncreated, deadTraitCount);
+            return;
+        }
         address top = terminalAffiliate;
         uint256 affiliateShare = remaining / 50;
         if (top != address(0) && affiliateShare != 0) {
@@ -312,6 +359,217 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         stBal = _sendStethFirst(ContractAddresses.VAULT,  owedV  + thirdShare, stBal);
         stBal = _sendStethFirst(ContractAddresses.SDGNRS, owedSD + thirdShare, stBal);
         _sendStethFirst(ContractAddresses.GNRUS,          owedG  + gnrusExtra, stBal);
+    }
+
+    /*+========================================================================================+
+      |                    DETERMINISTIC (VRF-DEAD) ENDING                                     |
+      +========================================================================================+
+      |  When a VRF request goes unanswered for 14 days the game ends with no entropy at all.  |
+      |  Every ticket of the terminal level shares the pot: an uncreated one (queued, or in an |
+      |  undrained foil pack, its traits never rolled) takes the average; the created ones     |
+      |  share the rest equally per non-empty trait bucket, then equally within each bucket.   |
+      +========================================================================================+*/
+
+    /// @notice Count the terminal level's tickets for the deterministic ending.
+    /// @dev Advance-only delegate target (_handleGameOverPath, after the dead ending latched).
+    ///      No ticket or foil drain runs once it is latched and every entry point that could
+    ///      add a ticket is closed by the liveness trigger, so what is counted here stays
+    ///      put. Resumable, DEAD_TALLY_UNITS per call — a pure function of state, never of
+    ///      the gas supplied. Three stages:
+    ///        0 — uncreated queued entries: the owed balance on every registry position of
+    ///            `lvl`, snap-adjusted as the ticket drain would have applied it, in QTY_SCALE
+    ///            units (a fractional remainder counts as its fraction of an entry);
+    ///        1 — undrained foil packs of `lvl`, FOIL_PACK_ENTRIES entries each;
+    ///        2 — created tickets: every trait bucket's occurrence count, and how many of the
+    ///            256 buckets are non-empty.
+    /// @param lvl The latched terminal ticket level.
+    /// @return finished True once all three stages are done.
+    function tallyDeadVrf(uint24 lvl) external returns (bool finished) {
+        uint256 stage = deadTallyStage;
+        if (stage == 3) return true;
+        uint256 units = DEAD_TALLY_UNITS;
+        uint256 uncreated = deadUncreated;
+        uint24 dd = deadTallyFoilDay;
+        uint256 idx = deadTallyFoilIdx;
+
+        if (stage == 0) {
+            uint256 len = lvlEntryOwner[lvl].length;
+            uint256 pos = deadTallyPos;
+            uint8 shift = _snapShiftFor(lvl);
+            while (pos < len) {
+                if (units == 0) {
+                    deadTallyPos = uint32(pos);
+                    deadUncreated = uint64(uncreated);
+                    return false;
+                }
+                unchecked {
+                    --units;
+                    ++pos;
+                }
+                // pos is now the registry position plus one, the form _entryRecord takes.
+                uncreated += _deadWeight(uint80(_entryRecord(lvl, uint32(pos)) >> 160), shift);
+            }
+            deadTallyPos = uint32(pos);
+            stage = 1;
+            // The foil walk starts at the drain's own low-water mark.
+            dd = foilDrainDay;
+            idx = foilCursor;
+        }
+
+        if (stage == 1) {
+            uint24 last = foilLastResolveDay;
+            while (dd != 0 && dd <= last) {
+                uint256[] storage bucket = foilBuyers[dd];
+                uint256 n = bucket.length;
+                while (idx < n) {
+                    if (units == 0) {
+                        _saveDeadTally(1, dd, idx, uncreated);
+                        return false;
+                    }
+                    unchecked {
+                        --units;
+                    }
+                    if (uint24(bucket[idx] >> 160) == lvl) {
+                        uncreated += FOIL_PACK_ENTRIES * QTY_SCALE;
+                    }
+                    unchecked {
+                        ++idx;
+                    }
+                }
+                // Charge the day step too, so a long run of empty days stays metered.
+                if (units == 0) {
+                    _saveDeadTally(1, dd, idx, uncreated);
+                    return false;
+                }
+                unchecked {
+                    --units;
+                    ++dd;
+                }
+                idx = 0;
+            }
+            stage = 2;
+        }
+
+        // Stage 2: the 256 bucket lengths, in one call once enough units remain.
+        if (units < 256) {
+            _saveDeadTally(2, dd, idx, uncreated);
+            return false;
+        }
+        uint256 created;
+        uint256 traits;
+        for (uint256 t; t < 256; ) {
+            uint256 n = lvlTraitEntry[lvl][t].length;
+            if (n != 0) {
+                created += n;
+                unchecked {
+                    ++traits;
+                }
+            }
+            unchecked {
+                ++t;
+            }
+        }
+        deadCreated = uint64(created);
+        deadTraitCount = uint16(traits);
+        _saveDeadTally(3, dd, idx, uncreated);
+        return true;
+    }
+
+    /// @dev Persist a paused (or finished) tally.
+    function _saveDeadTally(uint256 stage, uint24 dd, uint256 idx, uint256 uncreated) private {
+        deadTallyStage = uint8(stage);
+        deadTallyFoilDay = dd;
+        deadTallyFoilIdx = uint32(idx);
+        deadUncreated = uint64(uncreated);
+    }
+
+    /// @dev An owed word's uncreated weight in QTY_SCALE units, snap-adjusted exactly as the
+    ///      ticket drain applies it on first touch (_processOneTicketEntry).
+    function _deadWeight(uint80 packed, uint8 shift) private pure returns (uint256) {
+        if (shift != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
+            packed = _snapOwedPacked(packed, shift);
+        }
+        return uint256(uint32(packed >> 8)) * QTY_SCALE + uint8(packed);
+    }
+
+    /// @notice Claim deterministic-ending shares for `player`'s terminal-level tickets.
+    /// @dev Delegatecall target of DegenerusGame.claimDeadVrf. Permissionless: every share
+    ///      credits the holding's owner, never the caller. Open from the dead ending's payout
+    ///      until the final sweep. Each reference names one holding; the top byte is its kind:
+    ///        DEAD_REF_CREATED (0) — a created ticket: trait at bits 64..71, occurrence index
+    ///          at bits 0..63 of lvlTraitEntry[level][trait]. Pays the trait's equal share of
+    ///          the created pot, divided equally among that trait's tickets.
+    ///        DEAD_REF_QUEUED (1) — uncreated queued entries: registry position plus one at
+    ///          bits 0..31. Pays pot * weight / total for the position's whole owed balance.
+    ///        any other kind — an undrained foil pack: resolve day at bits 64..87, index into
+    ///          foilBuyers[day] at bits 0..63. Pays pot * FOIL_PACK_ENTRIES * QTY_SCALE / total.
+    ///      Each holding pays once: a created ticket sets its claimed bit, a queued position
+    ///      has its owed balance zeroed, a foil pack has its bucket word zeroed. Uncreated
+    ///      weight claimed is debited from the tallied total, so claims can never exceed it.
+    ///      Rounding dust stays in the contract for the final sweep.
+    /// @param player Owner of every referenced holding.
+    /// @param refs The holdings to claim.
+    /// @custom:reverts E When no deterministic payout is open, or a reference is invalid,
+    ///      not `player`'s, or already claimed.
+    function claimDeadVrf(address player, uint256[] calldata refs) external {
+        uint256 total = deadTotal;
+        if (total == 0 || _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
+        uint256 pot = deadPot;
+        uint24 lvl = _gameOverTicketLevel(level);
+        uint256 traits = deadTraitCount;
+        uint256 perTrait = traits == 0 ? 0 : (pot * uint256(deadCreated) * QTY_SCALE) / total / traits;
+        uint8 shift = _snapShiftFor(lvl);
+        uint256 amount;
+        uint256 weight;
+        for (uint256 i; i < refs.length; ) {
+            uint256 ref = refs[i];
+            uint256 kind = ref >> 248;
+            if (kind == DEAD_REF_CREATED) {
+                uint8 trait = uint8(ref >> 64);
+                uint256 k = uint64(ref);
+                uint256 n = lvlTraitEntry[lvl][trait].length;
+                if (k >= n || _bucketOwnerAt(lvl, trait, k) != player) revert E();
+                uint256 key = (uint256(trait) << 64) | (k >> 8);
+                uint256 bits = deadClaimed[key];
+                uint256 bit = uint256(1) << (k & 255);
+                if (bits & bit != 0) revert E();
+                deadClaimed[key] = bits | bit;
+                amount += perTrait / n;
+            } else if (kind == DEAD_REF_QUEUED) {
+                uint32 pos = uint32(ref);
+                uint256 record = _entryRecord(lvl, pos);
+                if (address(uint160(record)) != player) revert E();
+                uint256 w = _deadWeight(uint80(record >> 160), shift);
+                if (w == 0) revert E();
+                _setEntryOwed(lvl, pos, 0);
+                weight += w;
+                amount += (pot * w) / total;
+            } else {
+                uint24 day = uint24(ref >> 64);
+                uint256 idx = uint64(ref);
+                uint24 low = foilDrainDay;
+                if (day < low || day > foilLastResolveDay || (day == low && idx < foilCursor)) revert E();
+                uint256[] storage bucket = foilBuyers[day];
+                if (idx >= bucket.length) revert E();
+                uint256 pack = bucket[idx];
+                if (address(uint160(pack)) != player || uint24(pack >> 160) != lvl) revert E();
+                bucket[idx] = 0;
+                uint256 w = FOIL_PACK_ENTRIES * QTY_SCALE;
+                weight += w;
+                amount += (pot * w) / total;
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        uint256 left = deadUncreatedLeft;
+        if (weight > left) revert E();
+        deadUncreatedLeft = uint64(left - weight);
+        if (amount != 0) {
+            _creditClaimable(player, amount);
+            claimablePool += uint128(amount);
+            emit DeadVrfClaimed(player, amount);
+        }
     }
 
     /// @dev Send stETH first to a recipient, then ETH for the remainder. Returns updated stETH balance.
@@ -383,43 +641,47 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         address current = address(vrfCoordinator);
         _setVrfConfig(newCoordinator, newSubId, newKeyHash);
 
-        // Detect what is in flight and re-issue on the new coordinator.
+        // Once the game has ended, or the deterministic ending has latched, no word can count
+        // for anything: repoint the config only, never re-issue.
+        if (gameOver || _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0) {
+            emit VrfCoordinatorUpdated(current, newCoordinator);
+            return;
+        }
+
+        // Detect what is in flight and re-issue on the new coordinator. A re-issue is the same
+        // request sent again: rngRequestTime is left as it was, so the request keeps the day it
+        // was first issued for and the VRF-dead window keeps running from the original send.
         // The request is accepted before the new subscription is LINK-funded; DegenerusAdmin
         // funds it in the same _executeSwap transaction (transferAndCall), and the VRF node
         // fulfills once funded. If the new coordinator also stalls, the daily advance abandons a
-        // mid-day request and promotes it to the daily word after MIDDAY_RNG_STALL_TIMEOUT.
-        if (
-            _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0 &&
-            vrfRequestId != 0 &&
-            !rngLockedFlag
-        ) {
-            // Mid-day request actually in flight: KEEP LR_MID_DAY=1; LR_INDEX preserved so the
-            // new word lands in the same reserved slot [N] via the mid-day fulfillment branch.
-            // `vrfRequestId != 0` is the mid-day counterpart of the daily branch's
-            // `rngWordCurrent == 0` guard: an outstanding request is cleared to 0 only on
-            // fulfillment (rawFulfillRandomWords mid-day branch), whereas LR_MID_DAY stays set
-            // after the word lands until the ticket batch drains. Keying on rngRequestTime alone
-            // is unsafe -- _gameOverEntropy's failed-request fallback re-sets rngRequestTime with
-            // no request in flight (vrfRequestId already 0), so a rotation in that window would
-            // re-issue a spurious request whose fulfillment overwrites the already-delivered
-            // write-once lootbox word. `!rngLockedFlag` routes a promoted mid-day->daily request
-            // (LR_MID_DAY set alongside the daily lock) to the daily branch for correct
-            // confirmation depth. When no genuine mid-day request is pending, fall through.
-            vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
-            rngRequestTime = uint48(block.timestamp);
-        } else if (rngLockedFlag) {
+        // mid-day request and promotes it to the daily word after MIDDAY_RNG_STALL_TIMEOUT; once
+        // an ending holds the advance, that request reaches the VRF-dead ending instead.
+        if (!rngLockedFlag) {
+            // Mid-day request in flight, lootbox-only or with a swapped ticket cohort alike:
+            // LR_INDEX is preserved, so the new word lands in the same reserved slot via the
+            // mid-day fulfillment branch. `vrfRequestId != 0` is what marks it outstanding: the
+            // mid-day fulfillment clears it, whereas LR_MID_DAY stays set after the word lands
+            // until the ticket batch drains, and _gameOverEntropy's failed-request stamp sets
+            // rngRequestTime with no request in flight — re-issuing then would send a spurious
+            // request whose fulfillment overwrites an already-delivered write-once lootbox word.
+            // A promoted mid-day->daily request holds the lock and takes the daily branch below.
+            // Nothing in flight: config repoint only.
+            if (vrfRequestId != 0) vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
+        } else {
             // Daily in flight: KEEP rngLockedFlag=true.
             if (rngWordCurrent == 0) {
-                // Daily word not yet delivered: re-request on the new coordinator. The cleared
-                // LSB re-arms the single daily retry — a new coordinator gets its own retry.
+                // Daily word not yet delivered: re-request on the new coordinator. The swap spends
+                // the vault owner's single retry (the low bit; the stamp itself does not move): the
+                // retry is the last resort before a swap, and re-armed here it could discard the
+                // new coordinator's first answer. A replacement that stalls too is recovered by
+                // another swap or reaches the VRF-dead ending.
                 vrfRequestId = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
-                rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+                rngRequestTime |= 1;
             }
             // else: daily word already delivered and valid -> preserve it; no re-issue
             // (a fresh callback would be rejected by the advance module's
             // rngWordCurrent != 0 fulfillment guard).
         }
-        // else: nothing in flight -> config repoint only; no re-issue, no flag change.
 
         // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased
         // with irreversible FLIP burns before or during the stall. They carry over

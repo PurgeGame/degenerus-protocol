@@ -24,7 +24,7 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         bool isLastPurchase,
         bool locked,
         bool readDrained,
-        uint256 terminalWord,
+        uint256 preFreezeWord,
         uint24 queueLevel,
         address readPlayer,
         address writePlayer,
@@ -34,7 +34,6 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
 
         purchaseStartDay = day - 121;
         dailyIdx = day - 121;
-        rngRequestTime = 0;
         level = lvl;
         jackpotPhaseFlag = inJackpot;
         jackpotCounter = 0;
@@ -47,14 +46,18 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         ticketWriteSlot = false;
         prizePoolFrozen = false;
 
-        rngWordCurrent = 0;
-        vrfRequestId = 0;
-        rngWordByDay[day] = terminalWord;
-
-        // processTicketBatch reads lootboxRngWordByIndex[LR_INDEX-1]. Keep index 1 populated for
-        // pre-seeded words; a fresh terminal request advances it to 2 and fills index 1 itself.
-        lootboxRngPacked = 1;
+        // processTicketBatch reads lootboxRngWordByIndex[LR_INDEX-1]; index 0 is an older worded
+        // index. Unlocked, no request is in flight: the terminal request reserves index 1 and
+        // fills it. A held lock is the pre-freeze daily request, sent the day after the last seal:
+        // it reserved index 1 and committed the read cohort, and its word was delivered but never
+        // applied. The ending waits for such a request, lets its word finalize only index 1, then
+        // drops it; the terminal word is always the ending's own later request.
+        rngWordCurrent = locked ? preFreezeWord : 0;
+        vrfRequestId = locked ? 777 : 0;
+        rngRequestTime = locked ? uint48(block.timestamp - 120 days) & ~uint48(1) : 0;
+        lootboxRngPacked = locked ? 2 : 1;
         lootboxRngWordByIndex[0] = uint256(keccak256("terminal-ticket-traits")) | 1;
+        lootboxRngWordByIndex[1] = 0;
 
         ticketCursor = 0;
         ticketLevel = 0;
@@ -77,11 +80,9 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
     ) external {
         uint24 day = _simulatedDayIndex();
 
-        // Trigger game-over through an expired VRF-grace timer on a level already past its day
-        // deadline — past the deadline the grace window suppresses the trigger until the stall
-        // outlives it, so both legs are required. dailyIdx stays at `day`, keeping the >120-day
-        // deadman false, so clearing this timer before gameOver latches would make the terminal
-        // path unreachable on the next transaction.
+        // Trigger game-over through a daily request with nothing delivered for 14 days (VRF
+        // dead). dailyIdx stays at `day`, keeping the deadman false and the day caught up and
+        // sealed, so the purchase deadline stays off: the dead request is the only trigger.
         purchaseStartDay = day - 121;
         dailyIdx = day;
         level = lvl;
@@ -150,8 +151,10 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
     uint24 private constant LEVEL = 777;
     uint32 private constant ENTRIES = 8;
     uint256 private constant TERMINAL_WORD = uint256(keccak256("terminal-word")) | 1;
+    uint256 private constant PRE_FREEZE_WORD = uint256(keccak256("pre-freeze-word")) | 1;
 
     address private committedBuyer;
+    address private frozenBuyer;
     address private lateBuyer;
     address private currentLevelWinner;
     address private nextLevelWinner;
@@ -162,6 +165,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         realGameCode = address(game).code;
 
         committedBuyer = makeAddr("committedBuyer");
+        frozenBuyer = makeAddr("frozenBuyer");
         lateBuyer = makeAddr("lateBuyer");
         currentLevelWinner = makeAddr("currentLevelWinner");
         nextLevelWinner = makeAddr("nextLevelWinner");
@@ -193,10 +197,10 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
             false,
             true,
             false,
-            TERMINAL_WORD,
+            PRE_FREEZE_WORD,
             LEVEL,
             committedBuyer,
-            lateBuyer,
+            frozenBuyer,
             ENTRIES
         );
         // Seed deterministic payout sentinels at both candidate levels. Only the current-level
@@ -206,14 +210,39 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
-        // Tx 1 drains exactly the committed read snapshot and deliberately stops before payout.
+        // The pre-freeze daily request's word only finalizes the lootbox index it reserved.
         game.advanceGame();
-        assertFalse(game.gameOver(), "terminal jackpot remains isolated in its own tx");
+        assertFalse(game.rngLocked(), "pre-freeze request dropped");
+        assertEq(_holderEntryCount(LEVEL, committedBuyer), 0, "finalizing the index runs no drain batch");
+
+        // The read cohort that request committed drains on its word, before the terminal swap.
+        game.advanceGame();
         assertGt(_holderEntryCount(LEVEL, committedBuyer), 0, "pre-request read cohort materialized");
+        assertEq(_holderEntryCount(LEVEL, frozenBuyer), 0, "write cohort waits for the terminal word");
+
+        // The one terminal swap takes the write cohort bought before the freeze, then the terminal
+        // request goes out: from here the terminal draw's cohort is fixed.
+        uint256 before = mockVRF.lastRequestId();
+        game.advanceGame();
+        uint256 requestId = mockVRF.lastRequestId();
+        assertGt(requestId, before, "terminal request sent after the swap");
+
+        // A write-buffer entry at the terminal level after that commitment.
+        seeder = _installSeeder();
+        seeder.seedWriteQueue(LEVEL, lateBuyer, ENTRIES);
+        _restoreGame();
+        mockVRF.fulfillRandomWords(requestId, TERMINAL_WORD);
+
+        // Apply the terminal word, then drain the swapped cohort on it.
+        game.advanceGame();
+        assertEq(_holderEntryCount(LEVEL, frozenBuyer), 0, "the application runs no drain batch");
+        game.advanceGame();
+        assertGt(_holderEntryCount(LEVEL, frozenBuyer), 0, "pre-request write cohort drawn on the terminal word");
+        assertFalse(game.gameOver(), "terminal jackpot remains isolated in its own tx");
         assertEq(_holderEntryCount(LEVEL, lateBuyer), 0, "post-request write cohort not materialized");
         assertEq(_totalQueuedOwed(LEVEL, lateBuyer), ENTRIES, "late write cohort remains queued");
 
-        // Tx 2 must not promote the write buffer; it pays the current-level jackpot and latches.
+        // The payout must not promote the write buffer; it pays the current-level jackpot and latches.
         game.advanceGame();
         assertTrue(game.gameOver(), "game-over latches after committed snapshot drains");
         assertEq(_holderEntryCount(LEVEL, lateBuyer), 0, "late cohort never enters terminal traits");
@@ -250,6 +279,11 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         uint256 requestId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(requestId, TERMINAL_WORD);
 
+        // The terminal word is applied in its own transaction.
+        game.advanceGame();
+        assertTrue(game.rngWordForDay(game.currentDayView()) != 0, "terminal word applied");
+        assertEq(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "the application runs no drain batch");
+
         // Drain the frozen cohort, then settle in a separate transaction.
         game.advanceGame();
         assertGt(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "purchase cohort materialized at level+1");
@@ -268,7 +302,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
             true,
             true,
             false,
-            TERMINAL_WORD,
+            PRE_FREEZE_WORD,
             LEVEL,
             committedBuyer,
             address(0),
@@ -280,31 +314,45 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
+        // The first entry latches the promoted level while the last-purchase request still holds
+        // the lock; that request's word then only finalizes its lootbox index and it is dropped.
+        game.advanceGame();
+        assertFalse(game.rngLocked(), "pre-freeze request dropped");
+
+        // The promoted read cohort drains on that word.
         game.advanceGame();
         assertGt(_holderEntryCount(LEVEL, committedBuyer), 0, "sealed purchase cohort drains at promoted level");
         assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "later level+1 write cohort remains excluded");
         assertEq(_totalQueuedOwed(LEVEL + 1, lateBuyer), ENTRIES, "later write cohort remains queued");
 
+        // Terminal request, word application and payout, one transaction each.
+        uint256 before = mockVRF.lastRequestId();
+        game.advanceGame();
+        uint256 requestId = mockVRF.lastRequestId();
+        assertGt(requestId, before, "terminal request sent");
+        mockVRF.fulfillRandomWords(requestId, TERMINAL_WORD);
+        game.advanceGame();
+        assertFalse(game.gameOver(), "payout runs apart from the word's application");
         game.advanceGame();
         assertTrue(game.gameOver(), "locked-transition terminal settlement completes");
+        assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "later level+1 write cohort never drawn");
+        assertEq(_totalQueuedOwed(LEVEL + 1, lateBuyer), ENTRIES, "later write cohort remains queued at latch");
     }
 
-    function testGraceTimerTerminalStaysLatchedAcrossDrainTransactions() public {
+    function testExpiredStallEndsDeterministicallyWithoutDrawing() public {
         TerminalCohortSeeder seeder = _installSeeder();
         seeder.seedGraceOnlyTerminalState(LEVEL, committedBuyer, ENTRIES);
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
-        // The first transaction commits historical fallback entropy and finishes the selected
-        // read batch, but deliberately isolates the terminal jackpot in the following transaction.
-        game.advanceGame();
-        assertFalse(game.gameOver(), "finishing ticket batch remains isolated from terminal payout");
-        assertGt(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "grace-only cohort materialized");
-
-        // The expired grace timer is the only liveness predicate in this fixture. It must remain a
-        // terminal-intent latch until handleGameOverDrain sets gameOver and _unlockRng clears it.
-        game.advanceGame();
-        assertTrue(game.gameOver(), "grace-only terminal intent survived the transaction boundary");
+        // The request has had nothing delivered for 14 days: VRF is dead, and the ending uses no
+        // entropy at all. The committed cohort is counted, never drawn or drained.
+        assertTrue(game.livenessTriggered(), "the dead request is the only trigger in this fixture");
+        for (uint256 i; i < 5 && !game.gameOver(); ++i) game.advanceGame();
+        assertTrue(game.gameOver(), "the deterministic ending completes");
+        assertEq(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "no ticket was materialized");
+        assertEq(_totalQueuedOwed(LEVEL + 1, committedBuyer), ENTRIES, "the cohort stays queued for its claim");
+        assertTrue(game.livenessTriggered(), "the trigger stays on after game over");
     }
 
     function _installSeeder() private returns (TerminalCohortSeeder seeder) {

@@ -27,14 +27,10 @@ WRAP-INTENDED	modules/DegenerusGameAdvanceModule.sol	advanceGame	1	cw += totalFl
 NO-OVERFLOW-OP	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots	1	total = (seed % 4) + ((seed >> 16) % 4) + ((seed >> 32) % 4) + ((seed >> 48) % 4) + ((seed	Five terms, each a `% 4` result <= 3, summed into uint256: max total 15; the shifts are on an already-full-width hash so nothing leaves range.
 NO-OVERFLOW-OP	modules/DegenerusGameAdvanceModule.sol	requestLootboxRng	1	++t	Loop counter on uint24 t bounded by end = level + 5 (:1393); the increment runs only while t <= end, so it cannot approach 2^24.
 BOUNDED	modules/DegenerusGameAdvanceModule.sol	_tryChargeMiddayCredit	1	balance -= charge	Guard at :1625 (`if (balance < charge) return false;`) makes balance >= charge before the subtraction, so the uint256 difference cannot underflow.
-WRAP-INTENDED	modules/DegenerusGameAdvanceModule.sol	_gameOverEntropy	1	fallbackWord -= totalFlipReversals	Deliberate two's-complement cancellation of the `finalWord += nudges` that _applyDailyRng (:2301) applies to the same uint64 counter; underflow wrap is exactly what makes the pair a no-op on the word.
-NO-OVERFLOW-OP	modules/DegenerusGameAdvanceModule.sol	_getHistoricalRngFallback	1	++found	Counter incremented at most 5 times: the loop breaks at `found == 5` (:1791).
-NO-OVERFLOW-OP	modules/DegenerusGameAdvanceModule.sol	_getHistoricalRngFallback	2	++searchDay	Loop counter under `searchDay < searchLimit` with searchLimit <= 30 (:1786), so uint24 range is never approached.
 BOUNDED	modules/DegenerusGameAdvanceModule.sol	_sweepReadLevel	1	uint24 t = purchaseLevel == 0 ? 0 : purchaseLevel - 1	`- 1` guarded by the ternary (0 when purchaseLevel == 0); `+ 4` and ++t are uint24 with levels far below 2^24, and a wrapped end just makes `t <= end` false (not-found).
 BOUNDED	modules/DegenerusGameAdvanceModule.sol	_afKingSubDraw	1	spanDays = covered - startDay	Guard at :2234 returns early unless covered > startDay, so the uint24 difference is >= 1 and cannot underflow.
 NO-OVERFLOW-OP	modules/DegenerusGameAdvanceModule.sol	_backfillGapDays	1	++gapDay	Loop counter under `gapDay < endDay` with endDay clamped to startDay + 120 at :2258.
-NO-OVERFLOW-OP	modules/DegenerusGameAdvanceModule.sol	_backfillOrphanedLootboxIndices	1	--i	Descending counter entered only when idx > 1 (:2279) and iterated while i >= 1, so the last decrement lands on 0 and exits; no underflow.
-WRAP-INTENDED	modules/DegenerusGameAdvanceModule.sol	_applyDailyRng	1	finalWord += nudges	Nudge add on a full-width VRF word is the daily reverse-flip entropy mix; consumers treat finalWord as opaque 256-bit, and _gameOverEntropy (:1698) pre-subtracts the same value.
+WRAP-INTENDED	modules/DegenerusGameAdvanceModule.sol	_applyDailyRng	1	finalWord += nudges	Nudge add on a full-width VRF word is the daily reverse-flip entropy mix; consumers treat finalWord as opaque 256-bit, so wrapping is harmless.
 NO-OVERFLOW-OP	modules/DegenerusGameBingoModule.sol	claimBingo	1	++c	Loop counter bounded by `c < 8` (:150) over the eight color buckets.
 NO-OVERFLOW-OP	modules/DegenerusGameBoonModule.sol	rollBoxBoonTiers	1	++lane	Loop counter bounded by `lane < 5` (:775).
 NO-OVERFLOW-OP	modules/DegenerusGameBoonModule.sol	_rollBoxBoonLane	1	++i	Loop counter bounded by `i < boxCount`, where boxCount is a uint8 lane count extracted at :776 (<= 255).
@@ -59,6 +55,13 @@ NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_packGold	1	++inLine	uint
 NO-OVERFLOW-OP	modules/DegenerusGameFoilPackModule.sol	_packGold	2	golds += inLine	Fixed `i < 4` loop (:1119) adding inLine <= 4 each pass, so the uint8 golds <= 16; ++allGoldTickets fires at most once per line, so it is <= 4.
 BOUNDED	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain	1	totalRefunded += refund	refund is clamped to budget at :160-162 before `budget -= refund`; totalRefunded sums those refunds so stays <= preRefundAvailable (:135), derived from the ETH+stETH balance.
 NO-OVERFLOW-OP	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain	2	++i	Loop counter bounded by `i < ownerCount`, the deityPassOwners array length.
+NO-OVERFLOW-OP	modules/DegenerusGameGameOverModule.sol	claimDeadVrf	1	++i	Loop counter bounded by `i < refs.length` (calldata array length).
+BOUNDED	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	1	--units	Guarded by `if (units == 0) { ... return false; }` immediately above, so units >= 1; the increment is a registry cursor bounded by `pos < len` (a uint32-capped array length).
+BOUNDED	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	2	--units	Guarded by `if (units == 0) { ... return false; }` immediately above, so units >= 1.
+NO-OVERFLOW-OP	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	3	++idx	Bucket cursor under `idx < n` (foilBuyers[dd].length).
+BOUNDED	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	4	--units	Guarded by `if (units == 0) { ... return false; }` immediately above; the day cursor stays under `dd <= last` (foilLastResolveDay, a calendar day) so 2^24 is unreachable.
+NO-OVERFLOW-OP	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	5	++traits	Counts non-empty buckets among 256, so at most 256.
+NO-OVERFLOW-OP	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	6	++t	Loop counter bounded by `t < 256`.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	payDailyJackpot	1	++i	Loop counter of `for (uint8 i; i < 4; )` at :696 building the rotated bucketCounts; i is bounded by the literal 4.
 BOUNDED	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets	1	jackpotCounter = counterCached + 1	Physical draw counter increments once per day; the advance ends the phase at 1 (turbo) or 3 (standard), far below uint8 overflow.
 BOUNDED	modules/DegenerusGameJackpotModule.sol	payCarryoverTickets	1	++jackpotCounter	Physical draw counter increments once per day; the advance ends the phase at 1 (turbo) or 3 (standard), far below uint8 overflow.

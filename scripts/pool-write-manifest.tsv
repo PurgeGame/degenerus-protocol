@@ -60,6 +60,8 @@ POOL-TO-POOL	_setPendingPools	resolveEthSpinFromBox	modules/DegenerusGameDegener
 VALUE-IN	_setPendingPools	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix)
 VALUE-IN	_setPrizePools	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in live pools (75/25 split)
 DRAIN-ZERO	claimablePool	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
+PAIRED-CREDIT	_creditClaimable	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	READ	deterministic-ending share credited to the holding's owner; paired with its own claimablePool increment
+POOL-TO-POOL	claimablePool	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	WRITE	moves part of the fixed dead-ending pot (unallocated ETH left after handleGameOverDrain) into claimable; total bounded by deadPot (created share <= traits x perTrait, uncreated weight debited from the tally)
 PAIRED-CREDIT	_creditClaimable	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	per-owner refunds aggregate into totalRefunded; terminal affiliate credit paired with its own claimablePool increment
 DRAIN-ZERO	_setCurrentPrizePool	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools zeroed at the game-over drain
 DRAIN-ZERO	_setPrizePools	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools (next|future) zeroed in one packed setter at the game-over drain; value re-credited as claimable or distributed

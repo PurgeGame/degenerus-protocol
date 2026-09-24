@@ -69,6 +69,16 @@ interface IDegenerusGameGameOverModule {
 
     /// @notice Performs the final sweep of remaining funds after game over
     function handleFinalSweep() external;
+
+    /// @notice Count the terminal level's tickets for the deterministic (VRF-dead) ending.
+    /// @param lvl The latched terminal ticket level.
+    /// @return finished True once the count is complete.
+    function tallyDeadVrf(uint24 lvl) external returns (bool finished);
+
+    /// @notice Claim deterministic-ending shares for `player`'s terminal-level tickets.
+    /// @param player Owner of every referenced holding.
+    /// @param refs Holdings to claim (see DegenerusGameGameOverModule.claimDeadVrf).
+    function claimDeadVrf(address player, uint256[] calldata refs) external;
 }
 
 /// @title IDegenerusGameJackpotModule

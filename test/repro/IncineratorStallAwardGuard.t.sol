@@ -10,11 +10,13 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @notice The x00 incinerator pays 10% of the FLIP that the armed BAF day's direct depositors
 ///         burned and LOST. The armed day and the BAF skip decision are only coupled when the
-///         same word resolves both. This drives the one path where they can come apart: a VRF
-///         stall whose retry re-fires on the wall day, so the RNGREUSE buffered clamp does not
-///         engage and rngGate backfills the armed day with a DERIVED word while the transition
-///         keeps the fresh one. The fulfilled word is ground so the armed day WINS (derived low
-///         bit 1) and the transition LOSES (word low bit 0).
+///         same word resolves both. A VRF stall used to split them: a retry that re-stamped the
+///         request onto the wall day let rngGate backfill the armed day with a DERIVED word while
+///         the transition kept the fresh one. A request now keeps the day it was first sent for
+///         (the retry and a coordinator swap re-send it without re-stamping), so the stalled
+///         request's word resolves the armed day itself. Pinned with the word that used to split
+///         them (its derived gap word would win, the word itself loses): the armed day now loses
+///         together with the transition, and the incinerator pays against that losing book.
 ///
 /// @dev Original title retained below for the lifted helpers.
 /// @title WwxrpIncineratorTest -- Century BAF-incinerator draw.
@@ -128,7 +130,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
     }
 
-    function testStalledCenturyIncineratorPaysAgainstTheArmedDaysResult() public {
+    function testStalledCenturyIncineratorStaysCoupledToTheArmedDay() public {
         uint256 simTime = block.timestamp;
 
         for (uint256 d = 0; d < 100; d++) {
@@ -196,8 +198,8 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         _advance();
         assertTrue(game.rngLocked(), "the armed day's request is outstanding");
 
-        // Wall clock runs past the armed day. The 12h retry re-fires ON the wall day, so the
-        // buffered RNGREUSE clamp (request day < processed day) cannot engage.
+        // Wall clock runs past the armed day; the vault owner's 12h retry re-sends the same
+        // request, which keeps the armed day as its day.
         simTime += STALL_DAYS * (1 days + 1);
         vm.warp(simTime);
         _advance();
@@ -246,15 +248,17 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         emit log_named_uint("armed book total (whole FLIP)", bookTotal);
 
         // The invariant the award claims: it is 10% of what the armed day's direct depositors
-        // LOST. This path decouples the armed day from the skip gate — the stall resolves the
-        // armed day from a backfilled derived word while the transition keeps a later day's —
-        // so the armed day WINS here while the BAF still skips. Before the guard in
-        // resolveIncinerator the winner was credited 10% of that winning book; now the draw
-        // still resolves and logs, with a zero award.
+        // LOST. The stalled request's own word resolved the armed day (never a derived gap
+        // word), the same word that made the skip decision, so the armed day lost with it.
+        // resolveIncinerator's zero-award guard for a winning book stays as a backstop.
         assertEq(found, 1, "the incinerator resolved");
-        assertTrue(armedWin, "fixture: this path really does leave the armed day a winner");
-        assertEq(flipAward, 0, "no award may be paid against a book whose flip won");
-        assertGt(bookTotal, 0, "fixture: the winning book was non-empty, so a payout was possible");
+        assertTrue(
+            game.rngWordForDay(armedDay) != uint256(keccak256(abi.encodePacked(word, armedDay))),
+            "the armed day was not backfilled with a derived word"
+        );
+        assertFalse(armedWin, "the armed day resolves on the stalled word and loses with the transition");
+        assertGt(bookTotal, 0, "fixture: the armed book was non-empty");
+        assertGt(flipAward, 0, "the award pays against the losing book");
     }
 
     /// @notice Control: the identical fixture with no stall. The transition word is the one

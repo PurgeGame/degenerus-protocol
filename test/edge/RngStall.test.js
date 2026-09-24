@@ -214,39 +214,37 @@ describe("RngStall", function () {
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
-    it("calling advanceGame at 11h 59m elapsed reverts with RngNotReady for a non-owner", async function () {
-      const { game, alice, advanceModule } = await loadFixture(
+    it("a non-owner never fires the retry, even past 12h", async function () {
+      const { game, alice, mockVRF, advanceModule } = await loadFixture(
         deployFullProtocol
       );
 
       await advanceToNextDay();
       await issueFirstRequest(game, alice);
+      const stalledId = await getLastVRFRequestId(mockVRF);
 
-      // 11 hours and 59 minutes = just under the permissionless 12-hour
-      // threshold. The vault owner's 1-hour head start opens at 11h, so the
-      // sub-12h boundary is pinned with a non-owner caller.
-      await advanceTime(11 * 3600 + 59 * 60);
+      // The retry is the vault owner's alone (the last resort before a governance swap).
+      await advanceTime(12 * 3600 + 60);
 
       await expect(
         game.connect(alice).advanceGame()
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
+      expect(await getLastVRFRequestId(mockVRF)).to.equal(stalledId);
     });
 
-    it("the vault owner's head start opens the retry at 11h+ (no revert)", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(
+    it("the vault owner cannot retry before 12h (no head start)", async function () {
+      const { game, deployer, advanceModule } = await loadFixture(
         deployFullProtocol
       );
 
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
-      const stalledId = await getLastVRFRequestId(mockVRF);
 
-      // 11 hours and 1 minute — inside the owner-only head-start window.
-      await advanceTime(11 * 3600 + 60);
+      await advanceTime(11 * 3600 + 59 * 60);
 
-      await game.connect(deployer).advanceGame();
-      const retriedId = await getLastVRFRequestId(mockVRF);
-      expect(retriedId).to.be.gt(stalledId);
+      await expect(
+        game.connect(deployer).advanceGame()
+      ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
     it("calling advanceGame at 12h+ triggers retry (no revert)", async function () {

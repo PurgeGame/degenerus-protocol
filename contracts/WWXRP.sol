@@ -86,12 +86,9 @@ pragma solidity 0.8.34;
  *      settlement-blindness model as coinflip deposits, which also stay open
  *      through the daily lock and settle on the next word. reverseFlip
  *      nudges are committed blind (blocked while a request is in flight) at
- *      compounding FLIP cost. Accepted residual: the game-over
- *      historical/prevrandao fallback words (partially predictable) exist
- *      only after a 14+ day VRF stall — a terminally broken game whose FLIP
- *      has no remaining redemption path, and whose terminal jackpot already
- *      runs on that same by-design fallback — so entry carries no stall
- *      gate; burns into a dead game's days simply never settle. The draw has
+ *      compounding FLIP cost. No fallback word exists: a game whose VRF
+ *      dies ends deterministically without any word, so entry carries no
+ *      stall gate; burns into a dead game's days simply never settle. The draw has
  *      no owner, no parameter mutation, and no override of RNG, winner,
  *      probability, prize, or recipient.
  *

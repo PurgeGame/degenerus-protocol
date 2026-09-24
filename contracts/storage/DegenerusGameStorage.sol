@@ -295,19 +295,22 @@ abstract contract DegenerusGameStorage {
     /// @dev Final purchase/rescue day after level 0; game-over is eligible the following day.
     uint24 internal constant _PURCHASE_TIMEOUT_DAYS = 30;
 
-    /// @dev VRF stall duration that flips liveness from "grace" to "VRF-dead game-over".
-    ///      Below this, liveness is suppressed so players can propose a coordinator rotation.
-    ///      At or above, liveness fires so the game-over fallback path engages.
-    uint48 internal constant _VRF_GRACE_PERIOD = 14 days;
+    /// @dev How long an unanswered daily VRF request may hold the game before the deterministic
+    ///      ending. An unanswered mid-day request normally promotes to a fresh daily request;
+    ///      if the terminal path has latched or the deadman fired, that promotion is blocked and
+    ///      the original mid-day request gets this same timeout. Measured from the original send:
+    ///      daily retries and coordinator swaps do not re-stamp. This is also the window a daily
+    ///      stall straddling the purchase deadline has to recover in.
+    uint48 internal constant _VRF_DEAD_TIMEOUT = 14 days;
 
-    /// @dev RNG-stall length (in sealed days) past which the VRF-death deadman fires regardless
-    ///      of phase. dailyIdx advances on a successful day-seal or when a stalled word lands
-    ///      and its gap is skipped, so currentDay - dailyIdx counts days since the last good
-    ///      word; it freezes during ANY stall (dead coordinator,
-    ///      unfilled LINK, request-from-zero revert) and clears only after game-over latches.
-    ///      Equal to the level>0 purchase deadline and applied at every level, including level 0
-    ///      (whose 365-day deploy window therefore needs a sealed day at least every 30 days).
-    ///      A game that seals daily never trips it before its purchase deadline plus grace.
+    /// @dev Deadman: no day sealed for this many days ends the game in every phase. dailyIdx
+    ///      advances on a successful day-seal or when a stalled word lands and its gap is
+    ///      skipped, so currentDay - dailyIdx counts days since the last sealed day. A dead VRF
+    ///      reaches _vrfDead first, so with VRF alive this is a game nobody advances (or a ticket
+    ///      backlog longer than the window) and it ends on the normal VRF payout. It also bounds
+    ///      every gap the backfill can meet (GAP_BACKFILL_MAX_DAYS). Applied at every level,
+    ///      including level 0, whose 365-day deploy window therefore needs a sealed day at
+    ///      least every 30 days. It clears only after game-over latches.
     uint24 internal constant _VRF_DEADMAN_DAYS = 30;
 
     // =========================================================================
@@ -394,7 +397,8 @@ abstract contract DegenerusGameStorage {
     ///      SECURITY: Timeout mechanism prevents permanent lockup if VRF fails.
     ///      Note: rngLockedFlag (separate bool) controls the daily RNG lock state.
     ///      The LSB doubles as the daily retry-spent flag (0 = retry available, 1 = spent);
-    ///      written only by DegenerusGameAdvanceModule (_finalizeRngRequest / coordinator swap).
+    ///      set by the retry (AdvanceModule _finalizeRngRequest) and by a coordinator swap's
+    ///      re-issue (GameOverModule updateVrfCoordinatorAndSub); only a fresh request clears it.
     uint48 internal rngRequestTime;
 
     /// @notice Current jackpot level (starts at 0). Purchase phase targets level + 1.
@@ -2535,57 +2539,79 @@ abstract contract DegenerusGameStorage {
         return GameTimeLib.currentDayIndex();
     }
 
-    /// @dev Whether the liveness game-over trigger is active. Two predicates, by phase.
+    /// @dev Whether the game-over trigger is active. Three causes:
     ///
-    ///      Jackpot / last-purchase: the in-phase day clocks are suppressed (they would
-    ///      false-fire in the productive window between target-met and transition close,
-    ///      where purchaseStartDay has not yet moved), so only the phase-independent
-    ///      VRF-death deadman (_vrfDeadmanFired: no day sealed for _VRF_DEADMAN_DAYS)
-    ///      can fire here. advanceGame consults the same deadman to reach the terminal
-    ///      path in these phases.
+    ///      VRF dead (_vrfDead): an unanswered daily request, or an unanswered mid-day request
+    ///      whose normal promotion was blocked by an ending, reaches _VRF_DEAD_TIMEOUT.
+    ///      That ending is deterministic and uses no entropy at all.
     ///
-    ///      Purchase phase: a purchase deadline of purchaseStartDay + 365 days at level
-    ///      0 (deploy idle) or + 30 days after. Nothing ends a level before it. Past
-    ///      it, a request that was already in flight when it passed SUPPRESSES the
-    ///      trigger for _VRF_GRACE_PERIOD rather than confirming it: the word can still
-    ///      land, players can propose a coordinator rotation via DegenerusAdmin, the 12h
-    ///      retry re-arms, and rngGate credits missed days back to purchaseStartDay on
-    ///      fulfillment. Only a pre-deadline request suppresses — every later stamp is
-    ///      the terminal path's own request and must never flip the trigger back off
-    ///      mid-drain. Once the stall outlives the window, or no request is pending,
-    ///      the trigger fires and _gameOverEntropy's historical fallback drains funds
-    ///      to players via the terminal jackpot. Suppression is bounded by the window,
-    ///      so terminal release is always reachable.
+    ///      Deadman: no day sealed for _VRF_DEADMAN_DAYS, in any phase. A dead VRF is caught by
+    ///      the first cause long before this, so here VRF is alive and the ending is the
+    ///      normal VRF payout.
+    ///
+    ///      Purchase deadline, purchase phase only: purchaseStartDay + 365 days at level 0
+    ///      (deploy idle) or + 30 days after. It fires only at the start of a caught-up day
+    ///      (today == dailyIdx + 1, today not yet worded) or once its ending has started (the
+    ///      drain-level latch, which keeps it firing across the multi-tx drain). While a VRF
+    ///      stall, a multi-day ticket backlog or an unattended stretch holds dailyIdx back, the
+    ///      deadline waits; when the game catches up, rngGate credits the skipped days to
+    ///      purchaseStartDay. So a stall that straddles the deadline has the whole VRF-dead
+    ///      window to recover, and a recovery inside it keeps the level alive with the stalled
+    ///      days not counted. A day that already holds its word is finished on it, even when
+    ///      its own catch-up credit left the deadline behind it: the ending starts the next
+    ///      day, before any word exists, so its terminal word is always requested after the
+    ///      freeze and every cohort bought up to then is drawn.
+    ///
+    ///      Jackpot / last-purchase suppress the deadline: it would false-fire in the
+    ///      productive window between target-met and transition close, where purchaseStartDay
+    ///      has not yet moved.
+    ///
+    ///      Normal-path cost: the deadman compare and the VRF-dead probe read slot 0 only (the
+    ///      probe reads the request day's word solely once a request is a whole window old), and
+    ///      today's word and the latch are read only past the deadline.
     function _livenessTriggered() internal view returns (bool) {
-        // No sealed day for _VRF_DEADMAN_DAYS ends the game in every phase: a stall that long
-        // is terminal, and the fair outcome is the game-over payout, not a recovery walk.
-        if (_vrfDeadmanFired()) return true;
-        // Jackpot / last-purchase suppress the in-phase clocks (they would false-fire in the
-        // productive window between target-met and phase-transition close).
+        uint24 today = _simulatedDayIndex();
+        uint24 idx = dailyIdx;
+        if (today > idx + _VRF_DEADMAN_DAYS) return true;
+        if (_vrfDead()) return true;
         if (lastPurchaseDay || jackpotPhaseFlag) return false;
-        uint24 deadlineDay = _purchaseDeadlineDay();
-        if (_simulatedDayIndex() <= deadlineDay) return false;
-        // Past the deadline. A request already in flight when it passed SUPPRESSES the trigger
-        // for the grace window instead of confirming it: the word can still land, and both the
-        // 12h retry and a coordinator rotation re-arm inside that window. Only a pre-deadline
-        // request suppresses — every later stamp is the terminal path's own request, which must
-        // never flip the trigger back off while the multi-tx drain is in progress.
-        uint48 rngStart = rngRequestTime;
-        return
-            rngStart == 0 ||
-            block.timestamp - rngStart >= _VRF_GRACE_PERIOD ||
-            _simulatedDayIndexAt(rngStart) > deadlineDay;
+        if (today <= _purchaseDeadlineDay()) return false;
+        return (today == idx + 1 && rngWordByDay[today] == 0) || _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0;
     }
 
-    /// @dev VRF-death deadman: true once no day has sealed for _VRF_DEADMAN_DAYS. dailyIdx
-    ///      advances in _unlockRng (a completed day) and past a stall's gap when its word
-    ///      lands (rngGate's backfill), so currentDay - dailyIdx counts days since real
-    ///      progress and freezes during any stall — and stays frozen until game-over
-    ///      latches (the terminal _unlockRng runs after gameOver is set), so it never evaporates
-    ///      mid-drain. Phase-independent, unlike _livenessTriggered: advanceGame consults it to
-    ///      reach terminal fund release even while jackpotPhaseFlag / lastPurchaseDay are set.
+    /// @dev Deadman: true once no day has sealed for _VRF_DEADMAN_DAYS. dailyIdx advances in
+    ///      _unlockRng (a completed day) and past a stall's gap when its word lands (rngGate's
+    ///      backfill), so currentDay - dailyIdx counts days since real progress. It stays
+    ///      frozen after game over (the terminal _unlockRng leaves dailyIdx alone), so it never
+    ///      evaporates mid-drain.
     function _vrfDeadmanFired() internal view returns (bool) {
         return _simulatedDayIndex() > uint24(dailyIdx) + _VRF_DEADMAN_DAYS;
+    }
+
+    /// @dev VRF dead: a request has gone _VRF_DEAD_TIMEOUT with no word delivered for it.
+    ///      rngRequestTime is stamped only on a fresh request (the daily retry and a coordinator
+    ///      swap only set its low bit), so the window runs from the original send and nothing
+    ///      can reset it. Judged at the advance: a daily word that was delivered (rngWordCurrent)
+    ///      or applied means VRF works, even if the day processing it never completes (a ticket
+    ///      backlog, or a stage that cannot finish); such a game ends by the deadman instead, on
+    ///      a fresh terminal word. A mid-day request's day already holds its
+    ///      daily word. In live play, the next daily advance can promote an unanswered mid-day
+    ///      request, so its age alone does not end the game. Once a terminal ending has latched
+    ///      or the no-seal deadman has fired, that promotion is bypassed; an unanswered mid-day
+    ///      request must then count as dead after this window. The deterministic ending drops
+    ///      its request ID, and its dead latch keeps this predicate true through the tally and
+    ///      after game over. The recorded-word read runs only once a request is a whole window old.
+    function _vrfDead() internal view returns (bool) {
+        uint48 t = rngRequestTime;
+        if (t == 0 || block.timestamp < uint256(t) + _VRF_DEAD_TIMEOUT) return false;
+        if (!rngLockedFlag) {
+            if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0) return true;
+            if (
+                vrfRequestId != 0
+                    && (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0 || _vrfDeadmanFired())
+            ) return true;
+        }
+        return rngWordCurrent == 0 && rngWordByDay[_simulatedDayIndexAt(t)] == 0;
     }
 
     /// @dev Returns the day index for a specific timestamp.
@@ -2642,9 +2668,9 @@ abstract contract DegenerusGameStorage {
     //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
     //   [bits 184:223]  lootboxRngPendingFlip  uint40   (scaled /1e18, 1 FLIP res, max ~1.1T FLIP)
     //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
-    //   [bits 232:239]  gameOverFallbackLatched  uint8    (bool flag, 8 bits)
+    //   [bits 232:239]  gameOverDeadLatched      uint8    (bool flag, 8 bits)
     //   [bits 240:247]  gameOverDrainLevelLatch  uint8    (0=unset, 1=lvl, 2=lvl+1)
-    //   [bits 248:255]  gameOverSwapConsumed     uint8    (bool flag, 8 bits)
+    //   [bits 248:255]  gameOverTerminalRequested uint8   (bool flag, 8 bits)
 
     /// @dev Packed lootbox RNG state. See layout comment above.
     ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000),
@@ -2667,10 +2693,14 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
     uint256 internal constant LR_MAX_BASEFEE_SHIFT = 176;
     uint256 internal constant LR_MAX_BASEFEE_MASK = 0xFF;                   // 8 bits
-    uint256 internal constant LR_GO_FALLBACK_SHIFT = 232;
-    uint256 internal constant LR_GO_FALLBACK_MASK = 0xFF;                   // 8 bits
+    /// @dev Set on the first entry of the deterministic (VRF-dead) ending; never cleared.
+    uint256 internal constant LR_GO_DEAD_SHIFT = 232;
+    uint256 internal constant LR_GO_DEAD_MASK = 0xFF;                       // 8 bits
     uint256 internal constant LR_GO_LVL_SHIFT = 240;
     uint256 internal constant LR_GO_LVL_MASK = 0xFF;                        // 8 bits
+    /// @dev Set when the normal ending sends its own terminal request (its one ticket swap, if
+    ///      any, goes just before); never cleared. Until then a held daily lock is a pre-freeze
+    ///      request, never the terminal word.
     uint256 internal constant LR_GO_SWAP_SHIFT = 248;
     uint256 internal constant LR_GO_SWAP_MASK = 0xFF;                       // 8 bits
 
@@ -3789,20 +3819,15 @@ abstract contract DegenerusGameStorage {
     ///      on one SLOAD; otherwise it is pending only while the low-water bucket is
     ///      at/below the high-water mark AND its daily word has sealed (a future-dated
     ///      bucket whose word is not yet sealed does not gate the current jackpot).
-    ///      Under the terminal fallback regime an unsealed bucket is pending too: its day
-    ///      will never be worded, and the drain settles it against the committed fallback
-    ///      word instead of leaving those packs out of the terminal cohort. The latch read
-    ///      sits behind the sealed-word test, so live play only reaches it for a
-    ///      future-dated bucket, where the answer is false either way.
+    ///      The normal game-over ending words every bucket it pays from: it derives the days
+    ///      between the last sealed day and its own request from the terminal word, as
+    ///      rngGate does for a gap. The deterministic ending runs no drain.
     function _foilDrainPending() internal view returns (bool) {
         uint24 last = foilLastResolveDay;
         if (last == 0) return false;
         uint24 dd = foilDrainDay;
         if (dd > last) return false;
-        return
-            rngWordByDay[dd] != 0 ||
-            (_lrRead(LR_GO_FALLBACK_SHIFT, LR_GO_FALLBACK_MASK) != 0 &&
-                rngWordCurrent != 0);
+        return rngWordByDay[dd] != 0;
     }
 
     /// @dev The per-cycle one-pack cap: true iff the player already bought a foil
@@ -3924,6 +3949,48 @@ abstract contract DegenerusGameStorage {
     ///      bound EntryOwnerRegistered, which far-future queueing can emit up to 99
     ///      levels ahead of the level whose window this stamps.
     mapping(uint256 => uint256) internal ticketGenerationStartBlock;
+
+    // =========================================================================
+    // Deterministic (VRF-dead) ending — GameOverModule tallyDeadVrf / claimDeadVrf
+    // =========================================================================
+    // One slot of tally state, then one slot of payout state, then the claimed bitmap.
+    // All zero for the life of the game; written only once the dead ending latches.
+
+    /// @dev Tally cursor over lvlEntryOwner[terminal level]: positions counted so far.
+    uint32 internal deadTallyPos;
+
+    /// @dev Tally cursor over the undrained foil buckets: the resolve day being counted.
+    uint24 internal deadTallyFoilDay;
+
+    /// @dev Tally cursor over the undrained foil buckets: the next index in that day's bucket.
+    uint32 internal deadTallyFoilIdx;
+
+    /// @dev Tally stage: 0 queued entries, 1 foil packs, 2 trait buckets, 3 finished.
+    uint8 internal deadTallyStage;
+
+    /// @dev How many of the terminal level's 256 trait buckets hold at least one ticket.
+    uint16 internal deadTraitCount;
+
+    /// @dev Uncreated weight: every queued entry and undrained foil pack of the terminal level,
+    ///      in QTY_SCALE units (an entry is QTY_SCALE; a fractional remainder its fraction).
+    uint64 internal deadUncreated;
+
+    /// @dev Created tickets: the terminal level's total trait-bucket occurrences.
+    uint64 internal deadCreated;
+
+    /// @dev The pot every terminal-level ticket shares, fixed when the dead ending pays out.
+    uint128 internal deadPot;
+
+    /// @dev Total weight the pot divides by: deadCreated * QTY_SCALE + deadUncreated.
+    uint64 internal deadTotal;
+
+    /// @dev Uncreated weight not yet claimed; each uncreated claim debits it, so claims can
+    ///      never exceed what the tally counted.
+    uint64 internal deadUncreatedLeft;
+
+    /// @dev Claimed bits for created tickets: key (trait << 64) | (occurrence >> 8), bit
+    ///      occurrence & 255.
+    mapping(uint256 => uint256) internal deadClaimed;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

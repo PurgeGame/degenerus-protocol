@@ -813,17 +813,17 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             "no gameOver() consult anywhere in Coinflip (locks rely on lastPurchaseDay_)"
         );
 
-        // Fact 1: the phase-independent VRF-death deadman is consulted first, and while either
-        // lock conjunct is set _livenessTriggered then early-returns false, suppressing the
-        // in-phase 120-day / VRF-grace clocks (they would false-fire in the productive
-        // target-met-to-close window).
+        // Fact 1: the phase-independent causes (the no-seal deadman, then a dead VRF) are
+        // consulted first, and while either lock conjunct is set _livenessTriggered then
+        // early-returns false, suppressing the in-phase purchase deadline (it would false-fire
+        // in the productive target-met-to-close window).
         string memory storage_ = _stripComments(
             vm.readFile("contracts/storage/DegenerusGameStorage.sol")
         );
         assertGt(
-            _countOccurrences(storage_, "if (_vrfDeadmanFired()) return true;"),
+            _countOccurrences(storage_, "if (today > idx + _VRF_DEADMAN_DAYS) return true;\n        if (_vrfDead()) return true;\n        if (lastPurchaseDay || jackpotPhaseFlag) return false;"),
             0,
-            "_livenessTriggered consults the VRF-death deadman first, in every phase"
+            "_livenessTriggered consults the deadman and a dead VRF first, in every phase"
         );
         assertGt(
             _countOccurrences(storage_, "if (lastPurchaseDay || jackpotPhaseFlag) return false;"),

@@ -31,6 +31,14 @@ contract TerminalAffiliateSeeder is DegenerusGame, BucketSeed {
         rngWordByDay[_simulatedDayIndex()] = 0;
     }
 
+    /// @dev The locked daily request, sent today, has its word delivered but not yet applied.
+    function deliverPreFreezeWord(uint256 word) external {
+        rngWordByDay[_simulatedDayIndex()] = 0;
+        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+        vrfRequestId = 777;
+        rngWordCurrent = word;
+    }
+
     function paidPass(address owner, uint96 paid) external {
         deityPassOwners.push(owner);
         deityPassPricePaid[owner] = paid;
@@ -47,6 +55,7 @@ contract RejectingTerminalAffiliate {
 
 contract TerminalAffiliatePayoutTest is DeployProtocol {
     uint256 private constant WORD = 0x987654321;
+    uint256 private constant PRE_FREEZE_WORD = 0x1234567;
     address private constant TOP = address(0xAFF1);
     address private constant LATE = address(0xAFF2);
     address private constant CREDITOR = address(0xC4ED17);
@@ -75,6 +84,49 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         // Address-derived referral codes already resolve to their address owner.
         vm.prank(address(game));
         affiliate.payAffiliate(amount, code, sub, lvl, true, 0);
+    }
+
+    /// @dev Sends the ending's own terminal request. With no pre-freeze request to drop, this is
+    ///      the ending's first transaction, which also latches the cohort level and the affiliate.
+    function _latchAndRequest() private returns (uint256 requestId) {
+        uint256 before = mockVRF.lastRequestId();
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "terminal word requested");
+        requestId = mockVRF.lastRequestId();
+        assertGt(requestId, before, "the ending's own terminal request");
+    }
+
+    /// @dev Answers the terminal request; the word is applied in a transaction of its own, which
+    ///      pays nothing, so the payout always runs on a later advance.
+    function _applyTerminalWord(uint256 requestId) private {
+        mockVRF.fulfillRandomWords(requestId, WORD);
+        vm.recordLogs();
+        game.advanceGame();
+        assertFalse(game.gameOver(), "applying the word does not pay out");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID, "no award with the word");
+    }
+
+    /// @dev Phase 3 freezes with the last-purchase request in flight. The ending's first
+    ///      transaction latches the cohort level the lock promoted, spends that request's word
+    ///      on its own lootbox index only and drops it; the terminal word is then the ending's
+    ///      own request.
+    function _dropPreFreezeRequest() private {
+        _fixture(abi.encodeCall(TerminalAffiliateSeeder.deliverPreFreezeWord, (PRE_FREEZE_WORD)));
+        bytes32 applied = keccak256("LootboxRngApplied(uint48,uint256,uint256)");
+        vm.recordLogs();
+        game.advanceGame();
+        assertFalse(game.rngLocked(), "pre-freeze request dropped");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool finalized;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != applied) continue;
+            (, uint256 word,) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+            assertEq(word, PRE_FREEZE_WORD);
+            finalized = true;
+        }
+        assertTrue(finalized, "pre-freeze word finalizes its lootbox index");
+        _applyTerminalWord(_latchAndRequest());
     }
 
     function _assertSettlement(uint24 terminalLevel, uint256 jackpot, address winner, uint256 share) private {
@@ -111,6 +163,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         _rank(TOP, terminalLevel, 1000 ether, address(0xB001));
         // A larger score at the adjacent, wrong level must not steal the terminal reward.
         _rank(LATE, terminalLevel == 10 ? 11 : 10, 10_000 ether, address(0xB002));
+        if (phase == 3) _dropPreFreezeRequest();
         uint256 share = uint256(funds) / 50;
         _assertSettlement(terminalLevel, funds - share, TOP, share);
         assertEq(game.claimableWinningsOf(LATE), 0);
@@ -192,16 +245,17 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         assertEq(game.claimableWinningsOf(LATE), 0);
     }
 
-    /// @dev Real two-step terminal path: the cohort latch and the request come first, the
-    ///      word lands, and only then does the payout run. A first-ever ranking at the terminal
-    ///      level placed after the latch must not reach the payout or shrink the draw's pool.
+    /// @dev Real terminal path: the cohort latch and the ending's own request come first, the
+    ///      word is applied in its own transaction, and only then does the payout run. A
+    ///      first-ever ranking at the terminal level placed after the latch, before or after the
+    ///      word, must not reach the payout or shrink the draw's pool.
     function testRankingAfterTheTerminalLatchCannotReachTheDraw() public {
         _seed(10, 0, 100 ether, 0);
         _fixture(abi.encodeCall(TerminalAffiliateSeeder.clearDayWord, ()));
-        game.advanceGame(); // latches the cohort and requests the terminal word
-        assertTrue(game.rngLocked(), "terminal word requested");
+        uint256 requestId = _latchAndRequest();
         _rank(LATE, 11, 1000 ether, address(0xB002)); // leaderboard 0 -> ranked, after the latch
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
+        _applyTerminalWord(requestId);
+        _rank(address(0xAFF3), 11, 10_000 ether, address(0xB003)); // word public, payout pending
         vm.expectCall(address(game), abi.encodeWithSelector(game.runTerminalJackpot.selector, 100 ether, uint24(11), WORD));
         vm.recordLogs();
         game.advanceGame();
@@ -209,15 +263,14 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID, "no affiliate award");
         assertEq(game.claimableWinningsOf(LATE), 0, "late ranking not paid");
+        assertEq(game.claimableWinningsOf(address(0xAFF3)), 0, "ranking after the word not paid");
     }
 
     function testRankingBeforeTheTerminalLatchIsPaidAfterTheWord() public {
         _seed(10, 0, 100 ether, 0);
         _fixture(abi.encodeCall(TerminalAffiliateSeeder.clearDayWord, ()));
         _rank(TOP, 11, 1000 ether, address(0xB001));
-        game.advanceGame();
-        assertTrue(game.rngLocked(), "terminal word requested");
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
+        _applyTerminalWord(_latchAndRequest());
         _assertSettlement(11, 98 ether, TOP, 2 ether);
     }
 
@@ -225,12 +278,12 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         _seed(10, 0, 100 ether, 0);
         _fixture(abi.encodeCall(TerminalAffiliateSeeder.clearDayWord, ()));
         _rank(TOP, 11, 1000 ether, address(0xB001));
-        game.advanceGame(); // latch + request
+        uint256 requestId = _latchAndRequest();
         assertEq(address(uint160(uint256(vm.load(address(game), bytes32(uint256(69)))))), TOP, "slot 69 holds the latched leader");
         _rank(LATE, 11, 10_000 ether, address(0xB002)); // overtakes on the live leaderboard, after the latch
         (address liveTop,) = affiliate.affiliateTop(11);
         assertEq(liveTop, LATE, "live leaderboard moved");
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
+        _applyTerminalWord(requestId);
         _assertSettlement(11, 98 ether, TOP, 2 ether);
         assertEq(game.claimableWinningsOf(LATE), 0, "overtaker not paid");
     }

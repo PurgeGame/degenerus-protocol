@@ -339,6 +339,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Claim deterministic-ending shares: after a game over caused by a dead VRF, every
+    ///         ticket of the terminal level claims its share of the pot here until the final
+    ///         sweep. Permissionless; each share credits the holding's owner (`player`), never
+    ///         the caller.
+    /// @dev Dispatches to GAME_GAMEOVER_MODULE via delegatecall. Signature:
+    ///      claimDeadVrf(address player, uint256[] refs) — each ref names one holding, its top
+    ///      byte the kind (see DegenerusGameGameOverModule.claimDeadVrf). The signature matches
+    ///      the module function exactly (identical selector), so the calldata forwards as-is.
+    function claimDeadVrf(address, uint256[] calldata) external {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_GAMEOVER_MODULE
+            .delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
     /*+==========================================================================+
       |                      AFKING DISPATCH STUBS                               |
       +==========================================================================+
@@ -2379,13 +2394,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return uint48(_goRead(GO_TIME_SHIFT, GO_TIME_MASK));
     }
 
-    /// @notice Whether the liveness-timeout game-over trigger is currently active.
-    /// @dev Outside jackpot / last-purchase: true once the purchase deadline
-    ///      (365 days at level 0, 30 after) has passed with no request in flight, or
-    ///      with a pre-deadline request that has now stalled for _VRF_GRACE_PERIOD.
-    ///      Inside jackpot / last-purchase: true only when the VRF-death deadman fires
-    ///      (no day sealed for _VRF_DEADMAN_DAYS). A sub-grace stall past the deadline
-    ///      reads false so a coordinator rotation can still be proposed.
+    /// @notice Whether the game-over trigger is currently active.
+    /// @dev In every phase: a VRF request unanswered for 14 days (VRF dead: the deterministic
+    ///      ending), or no day sealed for 30 days (the deadman). In the purchase phase also the
+    ///      purchase deadline (365 days at level 0, 30 after), read at the start of a caught-up
+    ///      day, or an ending already under way. A stall across the deadline reads false until
+    ///      it recovers or VRF counts as dead, so a coordinator rotation can still rescue it.
     function livenessTriggered() external view returns (bool) {
         return _livenessTriggered();
     }

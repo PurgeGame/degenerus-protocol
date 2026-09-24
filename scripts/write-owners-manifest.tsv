@@ -66,7 +66,7 @@ OWNER	lootboxRngPacked	modules/DegenerusGameAdvanceModule.sol	_lrAdvanceIndexCle
 OWNER	lootboxRngPacked	modules/DegenerusGameLootboxModule.sol	beginBoxOrder/recordCoverBox add to the pending-ETH field of the current index (masked RMW from the cached word); the advance module zeroes it at the next request
 HELPER	lootboxRngPacked	storage/DegenerusGameStorage.sol	_lrWrite/_lrAdd field mutators (index, pending, mid-day latch, game-over latches)
 OWNER	lootboxRngWordByIndex	DegenerusGame.sol	rawFulfillRandomWords mid-day branch stores the word at LR_INDEX-1 (slot reserved empty by requestLootboxRng) and clears the request
-OWNER	lootboxRngWordByIndex	modules/DegenerusGameAdvanceModule.sol	advanceGame stores the daily word at the known-empty preIdx, _finalizeLootboxRng guards on ==0, _backfillOrphanedLootboxIndices fills only empty indices; write-once per index
+OWNER	lootboxRngWordByIndex	modules/DegenerusGameAdvanceModule.sol	advanceGame stores the daily word at the known-empty preIdx, _finalizeLootboxRng guards on ==0; write-once per index
 OWNER	middayRngCredit	DegenerusGame.sol	creditMiddayRng (ADMIN) banks donated LINK credit; the advance module debits
 OWNER	middayRngCredit	modules/DegenerusGameAdvanceModule.sol	_tryChargeMiddayCredit debits the caller's credit for a mid-day request; the facade credits
 OWNER	mintPacked_	modules/DegenerusGameBoonModule.sol	_creditActivity bumps LEVEL_COUNT via setPacked on a fresh read; field-isolated

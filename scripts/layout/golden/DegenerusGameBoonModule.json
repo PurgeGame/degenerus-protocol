@@ -870,5 +870,93 @@
     "offset": 0,
     "slot": 70,
     "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "deadTallyPos",
+    "offset": 0,
+    "slot": 71,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "deadTallyFoilDay",
+    "offset": 4,
+    "slot": 71,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "deadTallyFoilIdx",
+    "offset": 7,
+    "slot": 71,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "deadTallyStage",
+    "offset": 11,
+    "slot": 71,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "deadTraitCount",
+    "offset": 12,
+    "slot": 71,
+    "typeLabel": "uint16"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "deadUncreated",
+    "offset": 14,
+    "slot": 71,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "deadCreated",
+    "offset": 22,
+    "slot": 71,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "deadPot",
+    "offset": 0,
+    "slot": 72,
+    "typeLabel": "uint128"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "deadTotal",
+    "offset": 16,
+    "slot": 72,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "deadUncreatedLeft",
+    "offset": 24,
+    "slot": 72,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "deadClaimed",
+    "offset": 0,
+    "slot": 73,
+    "typeLabel": "mapping(uint256 => uint256)"
   }
 ]

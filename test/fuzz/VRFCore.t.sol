@@ -616,10 +616,10 @@ contract VRFCore is DeployProtocol {
         game.advanceGame();
     }
 
-    /// @notice The vault owner can fire the retry from 11h; the retry is single-use
-    ///         (further timeouts revert for everyone) and the retried request's late
-    ///         fulfillment still completes the day.
-    function test_headStartAndSingleRetry() public {
+    /// @notice The retry is the vault owner's (the deployer here), at 12h and not before; it
+    ///         re-sends the same request without moving its stamp, is single-use (further
+    ///         timeouts revert), and the retried request's late fulfillment completes the day.
+    function test_ownerRetryAt12hIsSingleUse() public {
         // Day 1: complete normally
         _completeDay(0xDEAD0001);
 
@@ -629,16 +629,21 @@ contract VRFCore is DeployProtocol {
         uint48 requestTime = _readRngRequestTime();
         uint256 oldReqId = _readVrfRequestId();
 
-        // 11h: vault owner retries during the head start
+        // 11h: no head start any more
         vm.warp(uint256(requestTime) + 11 hours);
+        vm.expectRevert();
+        game.advanceGame();
+
+        // 12h: the vault owner's retry re-sends the request; the stamp keeps its day
+        vm.warp(uint256(requestTime) + 12 hours);
         game.advanceGame();
         uint256 retryReqId = _readVrfRequestId();
         assertTrue(retryReqId != oldReqId, "Retry re-issues the request");
         assertTrue(game.rngLocked(), "Still locked after retry");
-        assertEq(_readRngRequestTime() & 1, 1, "Retry-spent LSB set");
+        assertEq(_readRngRequestTime(), requestTime | 1, "same stamp, retry-spent LSB set");
 
         // Retry spent: 12h+ later even the vault owner gets RngNotReady
-        vm.warp(uint256(_readRngRequestTime()) + 12 hours + 1);
+        vm.warp(uint256(requestTime) + 24 hours + 1);
         vm.expectRevert();
         game.advanceGame();
 
@@ -657,38 +662,35 @@ contract VRFCore is DeployProtocol {
         assertEq(_readRngRequestTime() & 1, 0, "Fresh daily request re-arms the retry");
     }
 
-    /// @notice After the single retry is spent, a coordinator swap re-issues the
-    ///         request and re-arms the retry allowance.
-    function test_coordinatorSwapReArmsRetry() public {
+    /// @notice A coordinator swap re-issues the stalled request and SPENDS the retry, so the
+    ///         vault owner cannot follow the swap with a retry that discards the new
+    ///         coordinator's first answer; the re-issued request's word completes the day.
+    function test_coordinatorSwapSpendsTheRetry() public {
         // Day 1: complete normally
         _completeDay(0xDEAD0001);
 
-        // Day 2: request, then spend the single retry at 12h
+        // Day 2: request stalls; governance swaps an hour later
         vm.warp(block.timestamp + 1 days);
         game.advanceGame();
         uint48 requestTime = _readRngRequestTime();
-        vm.warp(uint256(requestTime) + 12 hours);
-        game.advanceGame();
-        assertEq(_readRngRequestTime() & 1, 1, "Retry spent");
-
-        // Governance coordinator swap re-issues on the new coordinator
+        vm.warp(uint256(requestTime) + 1 hours);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
-        assertEq(_readRngRequestTime() & 1, 0, "Swap re-arms the retry");
-
-        // The re-armed retry fires again after another 12h stall
-        vm.warp(uint256(_readRngRequestTime()) + 12 hours);
+        assertEq(_readRngRequestTime(), requestTime | 1, "Swap keeps the stamp and spends the retry");
         uint256 swapReqId = _readVrfRequestId();
+
+        // No retry after the swap, even 12h on
+        vm.warp(uint256(requestTime) + 12 hours + 1);
+        vm.expectRevert();
         game.advanceGame();
-        assertTrue(_readVrfRequestId() != swapReqId, "Re-armed retry re-issues");
-        assertEq(_readRngRequestTime() & 1, 1, "Second-generation retry spent");
+        assertEq(_readVrfRequestId(), swapReqId, "the swap's request stands");
 
         // Fulfill on the new coordinator and complete the day
-        newVRF.fulfillRandomWords(_readVrfRequestId(), 0xC0FFEE02);
+        newVRF.fulfillRandomWords(swapReqId, 0xC0FFEE02);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
-        assertFalse(game.rngLocked(), "Day completes after swap + retry");
+        assertFalse(game.rngLocked(), "Day completes on the swap's request");
     }
 
     /// @notice After retry overwrites vrfRequestId, old fulfillment is silently discarded.

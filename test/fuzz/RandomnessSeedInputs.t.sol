@@ -53,7 +53,9 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;
-        for (uint256 i; i < logs.length; ++i) {
+        // The box's own result is the first one emitted. A capped ETH spin recirculates its
+        // excess into a further box whose events follow; that box is not this draw's identity.
+        for (uint256 i; i < logs.length && !found; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
             if (route == 3 && logs[i].topics[0] == PRESALE) {
                 (, , uint256 dgnrs, uint256 wwxrp, , ,) =
@@ -92,5 +94,10 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         uint256 first = _resolve(route, word, 1 ether);
         vm.revertToState(snapshot);
         assertEq(_resolve(route, word, 2 ether), first, "amount must not change the draw");
+    }
+
+    /// @dev Pinned seed whose ETH spin caps at 2 ETH and recirculates the excess into a further box.
+    function test_BoxAmountIdentityWithCappedSpinRecirculation() public {
+        testFuzz_BoxAmountDoesNotRerollIdentity(18720, 108);
     }
 }

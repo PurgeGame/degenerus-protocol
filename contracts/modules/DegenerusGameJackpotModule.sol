@@ -393,8 +393,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             EntropyLib.hash2(rngWord, targetLvl)
         );
 
+        // The winner geometry is always the full-size one, never scaled by the pot: the pot is
+        // read from the balance, which anyone can raise once the terminal word is public, and
+        // a pot-scaled count would let that choose how many winners are drawn.
         uint16[4] memory bucketCounts = JackpotBucketLib.bucketCountsForPool(
-            poolWei,
+            poolWei == 0 ? 0 : JackpotBucketLib.JACKPOT_SCALE_SECOND_WEI,
             effectiveEntropy,
             DAILY_JACKPOT_SCALE_MAX_BPS
         );

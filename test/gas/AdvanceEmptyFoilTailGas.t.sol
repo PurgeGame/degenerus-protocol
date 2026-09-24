@@ -12,7 +12,9 @@ contract EmptyFoilTailSeeder is DegenerusGame {
         uint24 first = wallDay - emptyDays;
         dailyIdx = first - 1;
         purchaseStartDay = wallDay;
-        rngRequestTime = uint48(block.timestamp);
+        // The cached daily share is day `first`'s: its request went out that day and its
+        // processing ran past midnight, so the RNGREUSE clamp holds the advance on `first`.
+        rngRequestTime = uint48(block.timestamp - uint256(emptyDays) * 1 days) & ~uint48(1);
         ticketsFullyProcessed = false;
         foilDrainDay = first;
         foilLastResolveDay = wallDay;

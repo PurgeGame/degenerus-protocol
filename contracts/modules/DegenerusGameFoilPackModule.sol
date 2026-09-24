@@ -1307,20 +1307,12 @@ contract DegenerusGameFoilPackModule is
         uint8[256] memory touchedTraits;
 
         while (dd <= last) {
+            // A bucket whose own day has no word yet is future-dated: the drain stops here.
+            // The normal game-over ending words every bucket it pays from (it derives the
+            // days up to its own request from the terminal word), and the deterministic
+            // ending runs no drain.
             uint256 entropy = rngWordByDay[dd];
-            if (entropy == 0) {
-                // A bucket whose own day never sealed. In normal play that is simply a
-                // future-dated bucket and the drain stops here. Under the terminal
-                // fallback regime it is instead a day the dead VRF never worded, and no
-                // later advance will ever seal it — so settle it against the committed
-                // fallback word rather than reporting the drain complete and dropping
-                // paid packs whose level is the one the terminal jackpot pays from.
-                // rngWordCurrent holds that word for the whole drain; _unlockRng clears
-                // it only after handleGameOverDrain has run.
-                if (_lrRead(LR_GO_FALLBACK_SHIFT, LR_GO_FALLBACK_MASK) == 0) break;
-                entropy = rngWordCurrent;
-                if (entropy == 0) break;
-            }
+            if (entropy == 0) break;
 
             // Meter the day-walk itself. A drained-past (empty) bucket between the low- and
             // high-water marks advances dd without entering the per-buyer loop, so a long run

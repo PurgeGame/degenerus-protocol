@@ -43,7 +43,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
     /// @notice Parameterized worst-case advanceGame seeder (the general seam Phase 384 calls).
     /// @param lvl          current game level (>=10 so the bounded deity-refund loop is skipped; a
     ///                     deeper level also means deeper trait buckets)
-    /// @param rngWord      the (pre-seeded) day word; non-zero so `_gameOverEntropy` is bypassed
+    /// @param rngWord      the word the winning buckets are seeded for; it answers the terminal request
     /// @param readOwed     traits owed by the committed read-slot player (one cold finishing batch)
     /// @param writeOwed    traits owed by the later write-slot player (excluded from terminal draw)
     /// @param winTraits    the 4 winning trait ids `runTerminalJackpot` rolls for `rngWord`
@@ -75,12 +75,13 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         uint24 day = _simulatedDayIndex();
 
         // --- Liveness game-over pre-state ---
-        // lvl != 0 + (currentDay - psd > 120) + target-never-met => _livenessTriggered() == true.
+        // lvl != 0 + target never met; the 200-day warp after seeding also fires the no-seal
+        // deadman, so the ending's terminal word derives the capped 31 skipped days as well.
         level = lvl;
         purchaseStartDay = 0;
-        dailyIdx = day - 1; // day == dailyIdx+1: no day-clamp, no mid-day branch -> _handleGameOverPath
+        dailyIdx = day - 1;
         levelPrizePool[lvl] = type(uint256).max; // _getNextPrizePool() (0) < target => liveness fires
-        rngWordByDay[day] = rngWord; // != 0 => skip the entropy/VRF block, go straight to ticket drain
+        rngWordByDay[day] = rngWord; // the last sealed day's word; the ending requests its own
 
         // lootbox entropy word the ticket batch reads at lootboxRngWordByIndex[LR_INDEX-1].
         _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
@@ -132,6 +133,9 @@ contract GameSeeder is DegenerusGame, BucketSeed {
 ///      to learn the per-tx max + whether the heavy branch was exercised. Phase 384 / COMPO-02 import
 ///      THIS — they do not re-author the seeder or the measure loop.
 abstract contract AdvanceGasCeilingBase is DeployProtocol {
+    /// @dev The word the seeded winning buckets are derived from; answers the terminal request.
+    uint256 internal _terminalWord;
+
     /// @dev EIP-7825 per-transaction gas cap. A single advanceGame tx above this = permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     /// @dev USER soft comfort target.
@@ -164,9 +168,9 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     ///         parameters, restore the REAL production code (so the measured tx runs production
     ///         advanceGame bytecode), fund the pool, and warp past the 120-day liveness threshold.
     /// @param lvl       game level for the seeded pre-state (>=10)
-    /// @param rngWord   the pre-seeded day word (forced non-zero so the VRF/entropy block is skipped)
+    /// @param rngWord   the word the winning buckets are seeded for; it answers the terminal request
     /// @param readOwed  committed read-slot owed size — bound near the cold write budget by the caller
-    /// @param writeOwed excluded later write-slot owed size — retained from the historical fixture
+    /// @param writeOwed write-slot owed size — swapped in before the terminal request
     /// @param base      disjoint synthetic-holder address base
     function _etchSeedRestore(
         uint24 lvl,
@@ -175,7 +179,8 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         uint256 writeOwed,
         uint160 base
     ) internal {
-        uint256 word = rngWord | 1; // force non-zero so _gameOverEntropy is bypassed
+        uint256 word = rngWord | 1;
+        _terminalWord = word;
         (uint8[4] memory traitIds, uint16[4] memory bucketCounts) = _deriveJackpot(lvl, word);
 
         bytes memory realGameCode = address(game).code;
@@ -219,6 +224,13 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
             if (game.gameOver()) {
                 reachedHeavy = true; // terminal jackpot ran -> the heavy branch was exercised
                 break;
+            }
+            // The ending requests its own terminal word after the one swap; answer it with the
+            // word the winning buckets were seeded for.
+            uint256 id = mockVRF.lastRequestId();
+            if (id != 0) {
+                (,, bool done) = mockVRF.pendingRequests(id);
+                if (!done) mockVRF.fulfillRandomWords(id, _terminalWord);
             }
         }
         emit log_named_uint("max_advance_tx_gas", maxTxGas);

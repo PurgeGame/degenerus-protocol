@@ -91,10 +91,11 @@ named constants in the consumer; full string hashes are constant expressions.
   preimages does not remove economic weighting or eligibility conditions.
 - Affiliate selection and salvage quotes are intentionally deterministic/public;
   they are not fresh VRF draws.
-- Catastrophic terminal fallback still combines historical words, day and
-  `prevrandao`. This is an accepted emergency release mechanism, not a claim of
-  unbiased live-game randomness. `../VRF-STALL-AND-DEADMAN-PLAN.md` is a future
-  design, not implemented behavior in this snapshot.
+- There is no entropy fallback. A VRF request unanswered for 14 days ends the
+  game deterministically with no word at all: the terminal level's tickets share
+  the pot (`claimDeadVrf`). A normal ending draws only on a terminal word it
+  requested itself after liveness froze purchases. `../VRF-STALL-AND-DEADMAN-PLAN.md`
+  is an earlier design; `KNOWN-ISSUES.md` states the implemented behavior.
 
 ## Regression evidence
 

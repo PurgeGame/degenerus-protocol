@@ -68,7 +68,7 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
 
         // The rngWord drives BOTH the winning-trait selection and (via effEntropy) the bucket-count
         // geometry inside _deriveJackpot — so fuzzing it fuzzes the 305-winner geometry the terminal
-        // jackpot rolls. Force non-zero so the entropy/VRF block is bypassed (the base also ORs 1).
+        // jackpot rolls; it also answers the terminal request (the base ORs 1).
         uint256 rngWord = uint256(keccak256(abi.encodePacked("gasceil_fuzz", geomSeed))) | 1;
 
         // (a) etch the GameSeeder, write the worst-case pre-state from these params, restore the real

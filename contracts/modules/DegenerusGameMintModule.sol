@@ -1917,10 +1917,11 @@ contract DegenerusGameMintModule is
     }
 
     /// @dev Bubble up revert reason from delegatecall failure.
-    ///      Uses assembly to preserve original error data.
+    ///      Uses assembly to preserve original error data. A failure with no data (out of gas)
+    ///      re-raises as EmptyRevert, the marker the game-over drain treats as a starved call.
     /// @param reason The error bytes from failed delegatecall.
     function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert E();
+        if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
             revert(add(32, reason), mload(reason))
         }

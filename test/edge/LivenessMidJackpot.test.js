@@ -113,9 +113,8 @@ describe("LivenessMidJackpot", function () {
   /**
    * Repeatedly call advanceGame until gameOver latches. Once the deadman has
    * fired mid-jackpot, advanceGame enters _handleGameOverPath every call: it
-   * commits the historical-fallback word, drains queued tickets one batch per
-   * tx, then handleGameOverDrain sets gameOver. VRF is fulfilled defensively in
-   * case any path issues a fresh request.
+   * requests its own terminal word (fulfilled below), applies it, drains queued
+   * tickets one batch per tx, then handleGameOverDrain sets gameOver.
    */
   async function driveToGameOver(game, deployer, mockVRF) {
     for (let i = 0; i < 600; i++) {

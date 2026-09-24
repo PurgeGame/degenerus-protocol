@@ -339,8 +339,9 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertTrue(storedWord != 0, "Stale redirect should store nonzero word at correct index");
     }
 
-    /// @notice Orphaned index from coordinator swap gets backfilled with nonzero word.
-    function test_wordWriteBackfill() public {
+    /// @notice A coordinator swap re-sends the stalled request for the same reserved index, and
+    ///         its word (landing days late) finalizes that index: nothing is orphaned.
+    function test_swapReissueFinalizesTheReservedIndex() public {
         // Complete the first post-deploy day (day 2) normally
         _completeDay(0xDEAD0001);
 
@@ -348,27 +349,19 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.warp(3 * 86400);
         game.advanceGame();
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
+        uint48 reservedIndex = _readLootboxRngIndex() - 1;
 
-        // Record the orphaned index (reserved by the day 3 request)
-        uint48 orphanedIndex = _readLootboxRngIndex() - 1;
-
-        // Coordinator swap: abandons the in-flight VRF, clears state
+        // Coordinator swap: the same request is re-sent on the new coordinator
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
         mockVRF = newVRF;
+        assertEq(_readLootboxRngIndex() - 1, reservedIndex, "the reserved index is kept");
+        assertEq(_readLootboxWord(reservedIndex), 0, "no word yet");
 
-        // The orphaned index has no word written (VRF never fulfilled)
-        assertEq(_readLootboxWord(orphanedIndex), 0, "Orphaned index should have no word yet");
-
-        // Warp to day 5 (absolute): days 3 and 4 become gap days.
-        // When advanceGame runs, rngGate detects gap (dailyIdx=2, day=5) and calls
-        // _backfillOrphanedLootboxIndices with the fresh VRF word.
+        // The re-sent request is answered two days late and finishes day 3
         vm.warp(5 * 86400);
         newVRF.fundSubscription(1, 100e18);
-        _completeDay(0xDEAD0005);
-
-        // Orphaned index should now be backfilled with a nonzero word
-        uint256 backfilledWord = _readLootboxWord(orphanedIndex);
-        assertTrue(backfilledWord != 0, "Orphaned index should be backfilled with nonzero word");
+        _fulfillAndDrain(newVRF, 0xDEAD0005);
+        assertTrue(_readLootboxWord(reservedIndex) != 0, "the re-sent request's word finalizes the reserved index");
     }
 
     /// @notice _finalizeLootboxRng is idempotent -- second write does not overwrite.
@@ -398,9 +391,10 @@ contract LootboxRngLifecycle is DeployProtocol {
     // LBOX-03: Zero-State Guards
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice Daily rawFulfillRandomWords with word=0 stores 1 at the lootbox index.
+    /// @notice A daily word of 0 never records as 0 or as the request sentinel 1.
     function test_zeroGuardRawFulfill() public {
         uint48 indexBefore = _readLootboxRngIndex();
+        uint24 day = game.currentDayView();
 
         // Trigger daily VRF request
         game.advanceGame();
@@ -415,32 +409,40 @@ contract LootboxRngLifecycle is DeployProtocol {
             game.advanceGame();
         }
 
-        // The stored lootbox word should be 1 (not 0)
+        // The callback coerces 0 to 1; applying the day lifts a word below 2 by 2, so the
+        // recorded day word never collides with rngGate's request-sent sentinel.
+        assertEq(game.rngWordForDay(day), 3, "zero daily word records as 3");
+        // The pre-gate drain finalizes the index from the delivered word plus nudges, before the
+        // day applies; the index needs only a nonzero word, so it keeps the coerced 1.
         uint256 storedWord = _readLootboxWord(indexBefore);
-        assertEq(storedWord, 1, "Zero-guarded daily word should be stored as 1");
+        assertEq(storedWord, 1, "lootbox index keeps the coerced delivered word");
     }
 
-    /// @notice Backfill of orphaned indices produces nonzero words (zero guard in keccak256 path).
-    function test_zeroGuardBackfill() public {
+    /// @notice A re-sent request answered with word 0 still finalizes its index nonzero (zero guard).
+    function test_zeroGuardReissuedWord() public {
         // Complete the first post-deploy day (day 2)
         _completeDay(0xDEAD0001);
 
-        // Next day (day 3 absolute): trigger VRF, then coordinator swap (orphans the index)
+        // Next day (day 3 absolute): trigger VRF, then a coordinator swap re-sends it
         vm.warp(3 * 86400);
         game.advanceGame();
-        uint48 orphanedIndex = _readLootboxRngIndex() - 1;
+        uint48 reservedIndex = _readLootboxRngIndex() - 1;
 
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
         mockVRF = newVRF;
 
-        // Warp to day 5 (absolute): days 3+4 are gap days, triggers backfill
         vm.warp(5 * 86400);
         newVRF.fundSubscription(1, 100e18);
-        _completeDay(0xDEAD0005);
+        _fulfillAndDrain(newVRF, 0);
+        assertTrue(_readLootboxWord(reservedIndex) != 0, "a zero word is stored nonzero");
+    }
 
-        // All backfilled indices must be nonzero
-        uint256 backfilledWord = _readLootboxWord(orphanedIndex);
-        assertTrue(backfilledWord != 0, "Backfilled word must be nonzero (zero guard)");
+    function _fulfillAndDrain(MockVRFCoordinator vrf, uint256 word) internal {
+        vrf.fulfillRandomWords(vrf.lastRequestId(), word);
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked()) break;
+            game.advanceGame();
+        }
     }
 
     /// @notice Mid-day rawFulfillRandomWords with word=0 stores 1 at the lootbox index.

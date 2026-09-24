@@ -17,20 +17,20 @@ import { advanceTime } from "../helpers/testUtils.js";
  * target-met and the next purchase phase carries the old psd.
  *
  * Productive-phase pause: while lastPurchaseDay or jackpotPhaseFlag is set,
- * _livenessTriggered does NOT consult the in-phase day clock. Instead it
- * returns _vrfDeadmanFired() — the phase-independent VRF-death deadman,
- * (simulatedDayIndex - dailyIdx > 30). So during jackpot / last-purchase
- * the in-phase clock is suppressed (it would false-fire in the productive
- * window and deadlock _queueEntries), but a permanently-stalled game still
- * reaches terminal fund release once no day has sealed for 30 days.
+ * _livenessTriggered does NOT consult the in-phase day clock. Only the
+ * phase-independent causes fire there: the no-seal deadman
+ * (simulatedDayIndex - dailyIdx > 30) and a dead VRF (a request unanswered
+ * for 14 days). So during jackpot / last-purchase the in-phase clock is
+ * suppressed (it would false-fire in the productive window and deadlock
+ * _queueEntries), but a permanently-stalled game still reaches terminal fund
+ * release.
  *
  *   _livenessTriggered():
- *     if (lastPurchaseDay || jackpotPhaseFlag) return _vrfDeadmanFired();
- *     lvl 0  : currentDay - psd > 365  → true
- *     lvl 1+ : currentDay - psd > 30  → true
- *     else   : VRF-grace stall bailout
- *
- *   _vrfDeadmanFired(): simulatedDayIndex - dailyIdx > 30
+ *     deadman or VRF dead            → true
+ *     lastPurchaseDay || jackpotPhase → false
+ *     lvl 0  : currentDay - psd > 365 → true at the start of a caught-up day
+ *     lvl 1+ : currentDay - psd > 30  → true at the start of a caught-up day
+ *     an ending already latched       → true
  *
  * Slot 0 layout (low byte first, authoritative from
  * `forge inspect DegenerusGameStorage storage-layout`):

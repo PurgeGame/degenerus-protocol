@@ -24,8 +24,8 @@ import sys
 
 EXEMPT_ADVANCE = {
     "advanceGame", "rngGate", "_applyDailyRng", "_finalizeRngRequest",
-    "_finalizeLootboxRng", "_backfillGapDays", "_backfillOrphanedLootboxIndices",
-    "_gameOverEntropy", "_handleGameOverPath", "_getHistoricalRngFallback",
+    "_finalizeLootboxRng", "_backfillGapDays",
+    "_gameOverEntropy", "_handleGameOverPath",
     "requestLootboxRng", "updateVrfCoordinatorAndSub", "rawFulfillRandomWords",
     "_lrAdvanceIndexClearPending", "handleGameOverDrain",
 }
