@@ -62,6 +62,10 @@ contract PreJackpotMintSeeder is DegenerusGame {
     function generationBound(uint24 lvl) external view returns (uint256) {
         return ticketGenerationStartBlock[lvl];
     }
+
+    function activatedLevel() external view returns (uint24) {
+        return earlyTicketLevel;
+    }
 }
 
 /// @notice A target-met purchase phase may mint the next level without committing the current
@@ -227,25 +231,21 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         assertEq(_midday(), 2);
     }
 
-    function test_freshDailyRequestStartsNextLevelGenerationBeforeLastPurchaseDay() public {
+    function test_ordinaryDailyLeavesFuturePoolQueuedUntilFollowingMiddayRequest() public {
         _seed(8, false, false, true);
         uint24 currentKey = _writeKey(CURRENT);
         vm.roll(100);
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-
-        for (uint256 i; i < 20 && mockVRF.lastRequestId() == 0; ++i) {
-            game.advanceGame();
-        }
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 reqId = _requestNextDaily();
         assertGt(reqId, 0, "daily advance requests its ordinary fresh word");
         assertEq(game.level(), CURRENT - 1, "the request does not advance the purchase level");
         (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo();
         assertFalse(jackpot);
-        assertFalse(lastPurchase, "generation begins before the last purchase day is sealed");
+        assertFalse(lastPurchase, "the ordinary purchase day is not yet sealed");
         assertTrue(locked, "the daily request keeps its ordinary lock");
-        assertEq(_ceiling(), NEXT, "the first fresh daily request also activates generation");
-        assertEq(_generationBound(), 100);
-        assertEq(_midday(), 0, "daily generation uses the ordinary daily sweep");
+        assertEq(_ceiling(), CURRENT, "ordinary daily RNG does not raise the generation ceiling");
+        assertEq(_activatedLevel(), 0, "ordinary daily RNG does not activate the future pool");
+        assertEq(_generationBound(), 0);
+        assertEq(_midday(), 0);
         assertEq(_readKey(CURRENT), currentKey, "daily commitment includes current-level tickets");
         assertEq(_boxWord(INDEX), 0);
         assertEq(_minted(NEXT, bob), 0, "previous recorded words cannot create the FF cohort");
@@ -253,13 +253,66 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         game.advanceGame();
 
         mockVRF.fulfillRandomWords(reqId, 0xDA113);
-        for (uint256 i; i < 80 && _minted(NEXT, bob) != 8; ++i) {
-            game.advanceGame();
-        }
-        assertEq(_minted(NEXT, bob), 8, "fresh daily word creates every queued next-level entry");
-        assertEq(_minted(CURRENT, alice), 4, "ordinary daily current-level drain remains intact");
+        _finishOrdinaryPurchaseDaily();
+        assertEq(_minted(NEXT, bob), 0, "the ordinary daily jackpot finishes before FF generation");
+        assertEq(_owed(NEXT | FF_BIT, bob), 8, "Bob's future entries remain available through the daily jackpot");
+        assertGt(_queueLen(NEXT | FF_BIT), 0, "the future pool still waits at the last-purchase seal");
+        assertEq(_activatedLevel(), 0, "the ordinary seal uses its natural freeze rather than early activation");
+        assertEq(_ceiling(), NEXT, "the completed last-purchase seal opens its normal ceiling");
+        assertGe(_minted(CURRENT, alice), 4, "ordinary daily current-level drain remains intact");
         assertEq(_owed(currentKey, alice), 0);
+
+        _requestPaidMidday();
+        uint256 middayId = mockVRF.lastRequestId();
+        assertGt(middayId, reqId, "the future pool receives a separate fresh mid-day word");
+        assertEq(_midday(), 2);
+        assertEq(_minted(NEXT, bob), 0, "the earlier daily word cannot resolve this cohort");
+        mockVRF.fulfillRandomWords(middayId, 0xF12345);
+        _drainIsolated();
+        assertEq(_minted(NEXT, bob), 8, "the following mid-day word creates the waiting entries");
         assertEq(_queueLen(NEXT | FF_BIT), 0);
+    }
+
+    function test_freshTurboDailyRequestMintsFuturePoolBeforeJackpot() public {
+        _assertTransitionDrainsFutureBeforeJackpot(true);
+    }
+
+    function test_normalLastPurchaseTransitionStillDrainsFuturePoolBeforeJackpot() public {
+        _assertTransitionDrainsFutureBeforeJackpot(false);
+    }
+
+    function _assertTransitionDrainsFutureBeforeJackpot(bool turbo) private {
+        _seed(8, false, turbo, true);
+        if (!turbo) {
+            mockVRF.fulfillRandomWords(_requestNextDaily(), 0xDA113);
+            _finishOrdinaryPurchaseDaily();
+            assertEq(_minted(NEXT, bob), 0, "the preceding ordinary daily left the pool unminted");
+        }
+        _buyCurrent(carol);
+        uint24 currentKey = _writeKey(CURRENT);
+        assertEq(_owed(currentKey, carol), 4, "the last purchase window includes a fresh current-level buy");
+        assertEq(_owed(NEXT | FF_BIT, bob), 8, "the transition still has a real frozen cohort to drain");
+
+        uint256 reqId = _requestNextDaily();
+        assertEq(game.level(), CURRENT, "last-purchase request promotes the level exactly once");
+        assertTrue(game.rngLocked());
+        assertFalse(game.jackpotPhase());
+        assertEq(_ceiling(), NEXT);
+        assertEq(_activatedLevel(), turbo ? NEXT : 0,
+            "turbo activates early generation; the ordinary transition retains its natural freeze");
+        assertEq(_readKey(CURRENT), currentKey, "the transition commits last-purchase tickets");
+        assertEq(_minted(NEXT, bob), 0, "FF entries wait for this transition's fresh callback");
+
+        mockVRF.fulfillRandomWords(reqId, 0xDA114);
+        for (uint256 i; i < 100 && !game.jackpotPhase(); ++i) {
+            game.advanceGame{gas: 16_777_216}();
+        }
+        assertTrue(game.jackpotPhase(), "the funded transition reaches jackpot entry");
+        assertEq(_minted(NEXT, bob), 8, "all frozen FF entries materialize before the early-bird draw");
+        assertEq(_queueLen(NEXT | FF_BIT), 0, "jackpot entry cannot leave part of the frozen cohort behind");
+        assertEq(_minted(CURRENT, carol), 4, "the last-purchase current cohort materializes before its jackpot");
+        assertEq(_owed(currentKey, carol), 0);
+        assertGe(_minted(CURRENT, alice), 4);
     }
 
     function test_partialBatchesKeepTheirLatchAndCurrentCohortUntouched() public {
@@ -441,6 +494,32 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     function _generationBound() private returns (uint256 result) {
         result = _overlay().generationBound(NEXT);
         _restore();
+    }
+
+    function _activatedLevel() private returns (uint24 result) {
+        result = _overlay().activatedLevel();
+        _restore();
+    }
+
+    function _requestNextDaily() private returns (uint256 reqId) {
+        uint256 oldId = mockVRF.lastRequestId();
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        for (uint256 i; i < 20 && mockVRF.lastRequestId() == oldId; ++i) {
+            game.advanceGame{gas: 16_777_216}();
+        }
+        reqId = mockVRF.lastRequestId();
+        assertGt(reqId, oldId, "the new day requests a fresh word");
+    }
+
+    function _finishOrdinaryPurchaseDaily() private {
+        for (uint256 i; i < 100 && game.rngLocked(); ++i) {
+            game.advanceGame{gas: 16_777_216}();
+        }
+        (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo();
+        assertFalse(locked, "the whole daily jackpot and ticket leg reached their day seal");
+        assertTrue(lastPurchase, "the target-met ordinary day opened its last-purchase window");
+        assertFalse(jackpot, "the last-purchase window precedes the jackpot phase");
+        assertFalse(game.advanceDue(), "no daily work remains before the next request");
     }
 
     function _buyCurrent(address player) private {

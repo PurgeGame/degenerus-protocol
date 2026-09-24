@@ -91,7 +91,8 @@ contract TurboBafTicketFloor is DeployProtocol {
     ///         transition that collapses every draw under its lock, so a swapped cohort
     ///         crossed by a stall would sit write-side through the collapse — safe but
     ///         drawless. Drive: reach the level-10 latch day, fire a mid-day request
-    ///         between two buys, assert no buffer flip, then cross WITHOUT fulfilling
+    ///         between two buys, assert no buffer flip while the isolated next-level
+    ///         future pool activates, then cross WITHOUT fulfilling
     ///         (stall promotion) and run the collapse out. Nothing may strand at the
     ///         x0 level's keys.
     function testLatchDayMiddayRequestRefusesTheSwap() public {
@@ -99,15 +100,22 @@ contract TurboBafTicketFloor is DeployProtocol {
         _driveToLevelTenLatchDay();
 
         _buyTickets();
+        uint24 currentWriteKey = _ticketWriteSlot() ? 10 | TICKET_SLOT_BIT : 10;
+        uint256 currentOwed = _entriesOwed(currentWriteKey, buyer);
+        assertGt(_queueLen(11 | (uint24(1) << 22)), 0, "the ordinary daily left next-level tickets unminted");
         bool swapped = _middayRequest();
         assertFalse(
             swapped,
             "the latch-day mid-day request must not flip the ticket buffer"
         );
-        assertTrue(
+        assertFalse(
             _ticketsFullyProcessed(),
-            "the read window stays drained: no latch, no pending mid-day batch"
+            "the mid-day request starts the isolated next-level batch"
         );
+        assertEq((uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224) & 0xFF, 2,
+            "only the future pool is committed by this mid-day request");
+        assertEq(_entriesOwed(currentWriteKey, buyer), currentOwed,
+            "current-level tickets stay in the write buffer for the final daily request");
         _buyTicketsFor(lateBuyer);
 
         // Cross without fulfilling: the stalled request resolves via promotion or

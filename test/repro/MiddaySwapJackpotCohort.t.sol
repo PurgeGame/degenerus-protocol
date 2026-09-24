@@ -615,11 +615,10 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     // L. The far-future barrier
     // ---------------------------------------------------------------------
 
-    /// The crossing contract: the first fresh RNG request after the purchase goal opens
-    /// the ceiling to level + 2, moving its far key from far-future to near. With no
-    /// intervening mid-day request, the target-met daily request drains that frozen content
-    /// before its purchase-day seal, strictly before the consolidation step that flips
-    /// jackpotPhaseFlag. So by the time the jackpot phase
+    /// The crossing contract: ordinary purchase dailies keep the next-level far key
+    /// unminted for their jackpots. The last-purchase seal opens the ceiling to level + 2
+    /// and freezes that key. A fresh mid-day request may drain it after the seal; otherwise
+    /// the last-purchase transition must drain it before jackpotPhaseFlag flips. By the jackpot phase
     /// for the promoted level L (= programLevel + 1) is observably active, the
     /// (L + 1) far key must already be WHOLE-drained, and from there on routing never
     /// sends a target <= the (now-near) ceiling back to that far-future key, so it
@@ -627,8 +626,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function testFarFutureBarrierCrossesWholeAndNeverRefills() public {
         vm.pauseGasMetering();
 
-        // Observe the untouched cohort before the target-met request. By the later
-        // last-purchase seal this cohort now must already be materialized.
+        // Observe the untouched cohort before the ordinary target-met daily request.
+        // That request's jackpot must leave it waiting through the last-purchase seal.
         uint24 programLevel = _level();
         uint24 ffKey = (programLevel + 2) | TICKET_FAR_FUTURE_BIT;
 
@@ -640,11 +639,12 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             "reachability: the crossing key must hold content before the target-met request"
         );
         assertEq(_driveToSealedLastPurchaseDay(), programLevel,
-            "the early crossing must not promote the purchase level");
-        assertEq(_queueLen(ffKey), 0,
-            "the first target-met daily request drains the whole cohort before its seal");
+            "the last-purchase seal must not promote the purchase level");
+        assertGt(_queueLen(ffKey), 0,
+            "the ordinary target-met daily jackpot leaves the future pool waiting at its seal");
 
-        // Continue through the later level-promoting request into the jackpot phase.
+        // With no intervening mid-day request, the fresh level-promoting request must
+        // still drain that mandatory frozen cohort before entering the jackpot phase.
         for (uint256 d = 0; d < 12 && !game.jackpotPhase(); d++) {
             _buyTickets();
             _runFullDay();

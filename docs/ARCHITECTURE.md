@@ -208,21 +208,25 @@ Named `TraitsGenerated` still covers per-entry and foil generation paths.
 
 `ticketGenerationStartBlock[level]` at slot 70 is readable through `extsload` at
 `keccak256(abi.encode(uint256(level), uint256(70)))`. Deployment initializes level 1 (level 0 never holds tickets);
-level L+1 is stamped at L's first fresh request after meeting its goal, or when L's last purchase day latches
+level L+1 is stamped at L's first fresh mid-day request after meeting its goal, or when L's last purchase day latches
 (the seal or a same-day turbo latch), whichever opens generation first. Later latches preserve
 the original bound. This inclusive lower bound can precede actual generation; it is not a first-reveal
 timestamp. Retries preserve it, and older levels retain their bounds.
 
 ## Recent settlement boundaries
 
-The first fresh RNG request after a purchase level meets its goal activates the next
-level's future-ticket pool. It uses an existing daily or mid-day request, with the normal
+The first fresh mid-day RNG request after a purchase level meets its goal activates the next
+level's future-ticket pool. A daily request activates it early only on a turbo transition,
+where the early-bird draw needs those tickets. Ordinary purchase dailies leave that pool
+unminted for their jackpots. Mid-day requests retain the normal
 LINK, basefee, pending-value and donation-credit rules. Retries keep their original cohort.
 The queue freezes before its word is requested; advance calls then mint it in bounded
 batches. Later next-level purchases enter the ordinary write buffer for a subsequent word.
 A mid-day activation drains the future pool separately, leaving current-level queues for
-the daily request, including during a turbo last-purchase window. A fresh daily activation
-uses the ordinary sweep. The daily retry can commit intervening current-level purchases,
+the daily request, including during a turbo last-purchase window. Turbo daily activation
+uses the ordinary sweep. The standard last-purchase transition still drains its frozen
+next-level pool before jackpots, even without an earlier mid-day activation.
+The daily retry can commit intervening current-level purchases,
 and an unanswered request retains the 14-day deterministic ending. Early-created tickets
 leave the unminted future-queue FLIP draw. No extra request is scheduled for ticket minting.
 

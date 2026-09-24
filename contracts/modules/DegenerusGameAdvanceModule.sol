@@ -1551,8 +1551,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (ticketGenerationStartBlock[lvl] == 0) ticketGenerationStartBlock[lvl] = block.number;
     }
 
-    /// @dev The first fresh request after the goal is met freezes the next level's
-    ///      future queue. Called only at a request boundary with the prior read batch
+    /// @dev A fresh mid-day request or turbo transition after the goal is met freezes
+    ///      the next level's future queue. Called at a request boundary with the prior read batch
     ///      drained; retries never reopen or add a cohort to their reserved word.
     function _activateNextTickets() private returns (bool activated) {
         uint24 nextLvl = level + 2;
@@ -1934,7 +1934,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///        day. Only the foil-quest roll reads the day, and only when it IS the wall day;
     ///        0 suppresses that roll.
     function _requestRng(bool isTicketJackpotDay, uint48 lvlAndQuestDay) private {
-        if (rngRequestTime == 0) _activateNextTickets();
+        // Ordinary purchase dailies leave the next-level future pool unminted for
+        // their jackpots. A turbo transition needs it ready for the early-bird draw.
+        // The standard last-purchase transition retains its existing frozen-pool drain.
+        if (rngRequestTime == 0 && isTicketJackpotDay && (jackpotFlags & JACKPOT_TURBO) != 0) {
+            _activateNextTickets();
+        }
         // Hard revert if Chainlink request fails; this intentionally halts game progress until VRF funding/config is fixed.
         _finalizeRngRequest(isTicketJackpotDay, lvlAndQuestDay, _requestVrfWord(VRF_REQUEST_CONFIRMATIONS));
     }

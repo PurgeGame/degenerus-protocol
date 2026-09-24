@@ -676,8 +676,9 @@ abstract contract DegenerusGameStorage {
     ///        is drained on each advance (processTicketBatch); the daily slot swap commits
     ///        the write cohort.
     ///      - Unminted future levels (above _mintCeiling()): held in the far-future key space
-    ///        with no traits. The first fresh RNG request after level L meets its goal
-    ///        activates L+1. The last-purchase latch may close its far-future queue earlier;
+    ///        with no traits. A fresh mid-day request after level L meets its goal can
+    ///        activate L+1 early. A turbo transition also activates it; the ordinary
+    ///        purchase daily waits. The last-purchase latch may close its far-future queue earlier;
     ///        in either case that frozen queue mints on a word requested after the freeze,
     ///        before the last-purchase consolidation, so the BAF, the
     ///        early-bird and the jackpot-phase bonus draws all see L+1 minted.
@@ -4008,7 +4009,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Inclusive lower block bound for a level's first generation window. Level 1
     ///      starts at deployment (level 0 never holds tickets); level L+1 starts when level
-    ///      L first requests fresh RNG after meeting its goal, or its last purchase day latches, before
+    ///      L first requests fresh mid-day RNG after meeting its goal, or its last purchase day latches, before
     ///      any drain can execute for that window. Written once per
     ///      level OUTSIDE charged drain steps. Permanent rather than a recycling ring:
     ///      old levels remain claimable in Bingo and must retain their discovery bound.
