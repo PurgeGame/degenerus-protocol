@@ -5,12 +5,13 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
-/// @title MiddayFrozenPoolLatch — a mid-day request on a latched last purchase day must release.
+/// @title MiddayFrozenPoolLatch — a mid-day request that freezes a future pool must release.
 ///
-/// @notice On a level's last purchase day (lastPurchaseDay latched, RNG unlocked) the next
-///         level's far-future pool is frozen, and a mid-day `requestLootboxRng` makes it sweep
-///         work (`_frozenPoolDue`: lastPurchaseDay AND the LR_MID_DAY latch). The mid-day
+/// @notice The first fresh request after the purchase goal freezes the next level's
+///         far-future pool. A mid-day request gives that pool an isolated work latch,
+///         retaining the ordinary current-level write buffer for a later word. The mid-day
 ///         branch of advanceGame re-runs the ticket worker only while the sweep probe still
 ///         finds work (or a foil bucket is pending), and only a FINISHED return releases
 ///         ticketsFullyProcessed and the latch. The batch that empties the frozen pool must
@@ -31,16 +32,19 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///                          so the pending bucket is STAGED (an empty bucket for today, whose
 ///                          word is sealed): it isolates the finished-flag composition.
 ///           D  craps     — the craps table's request (exempt from the lootbox pending-value
-///                          gates, so no lootbox is needed) swaps and latches the same way;
+///                          gates, so no lootbox is needed) freezes and latches the same way;
 ///                          the latch releases the same day.
 contract MiddayFrozenPoolLatch is DeployProtocol {
     address private buyer = address(0xB4A1);
     address private crank = address(0xC4A9);
+    address private lateBuyer = address(0x1A7E);
 
     uint256 private simTime;
+    uint24 private currentKey;
+    uint256 private currentOwed;
 
     uint24 private constant TICKET_FAR_FUTURE_BIT = uint24(1) << 22;
-    uint8 private constant JACKPOT_TURBO = 1;
+    uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
 
     bytes4 private constant SEL_NOT_TIME_YET = bytes4(keccak256("NotTimeYet()"));
     bytes4 private constant SEL_MID_DAY_ACTIVE = bytes4(keccak256("MidDayActive()"));
@@ -52,6 +56,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         vm.deal(address(game), 10_000 ether);
         vm.deal(buyer, 200_000 ether);
         vm.deal(crank, 10 ether);
+        vm.deal(lateBuyer, 100 ether);
         // Clear MIN_LINK_FOR_LOOTBOX_RNG. The admin ctor creates subId 1.
         mockVRF.fundSubscription(1, 1_000 ether);
     }
@@ -62,7 +67,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     function testMiddayLatchReleasesAfterFrozenPoolDrainsViaAdvance() public {
         vm.pauseGasMetering();
-        (uint24 ffKey, uint24 day) = _latchMiddayOnLastPurchaseDay(false);
+        (uint24 ffKey, uint24 day) = _latchMiddayAfterTarget(false);
 
         _fulfillPending();
         bytes4 last = _crankAdvance(200);
@@ -76,7 +81,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     function testMiddayLatchReleasesAfterFrozenPoolDrainsViaMineFlip() public {
         vm.pauseGasMetering();
-        (uint24 ffKey, uint24 day) = _latchMiddayOnLastPurchaseDay(false);
+        (uint24 ffKey, uint24 day) = _latchMiddayAfterTarget(false);
 
         _fulfillPending();
         for (uint256 i = 0; i < 200; i++) {
@@ -98,7 +103,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     function testMiddayLatchWaitsForFoilThenReleasesSameDay() public {
         vm.pauseGasMetering();
-        (uint24 ffKey, uint24 day) = _latchMiddayOnLastPurchaseDay(false);
+        (uint24 ffKey, uint24 day) = _latchMiddayAfterTarget(false);
         _stagePendingFoilBucket(day);
         assertTrue(_foilPending(), "reachability: a sealed foil bucket must be pending mid-day");
 
@@ -115,7 +120,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     function testMiddayLatchReleasesAfterCrapsRequest() public {
         vm.pauseGasMetering();
-        (uint24 ffKey, uint24 day) = _latchMiddayOnLastPurchaseDay(true);
+        (uint24 ffKey, uint24 day) = _latchMiddayAfterTarget(true);
 
         _fulfillPending();
         bytes4 last = _crankAdvance(200);
@@ -127,19 +132,21 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     // Drive
     // ---------------------------------------------------------------------
 
-    /// @dev Reach a sealed, non-turbo last purchase day with the frozen pool non-empty, buy
-    ///      tickets so the write side holds work, and fire the mid-day request that swaps
-    ///      and latches — from a lootbox buyer's crank, or with `viaCraps` from the craps table
-    ///      with no lootbox pending.
-    function _latchMiddayOnLastPurchaseDay(bool viaCraps) internal returns (uint24 ffKey, uint24 day) {
-        uint24 programLevel = _driveToSealedLastPurchaseDay();
-        require(_jackpotFlags() & JACKPOT_TURBO == 0, "harness: the seal must be the standard (non-turbo) path");
+    /// @dev Reach a sealed ordinary purchase day, then cross the target. A target already
+    ///      met at the preceding daily request would have minted this pool before the seal.
+    ///      The next mid-day request is therefore the first fresh word after this crossing.
+    function _latchMiddayAfterTarget(bool viaCraps) internal returns (uint24 ffKey, uint24 day) {
+        uint24 programLevel = _driveToSealedPurchaseDay();
         ffKey = (programLevel + 2) | TICKET_FAR_FUTURE_BIT;
         assertGt(_queueLen(ffKey), 0, "reachability: the frozen next-level pool must hold entries");
         assertTrue(_ticketsFullyProcessed(), "reachability: the sealed day leaves the read slot drained");
 
+        _seedNextPrizePool(51 ether);
         _buyTickets();
         bool before = _ticketWriteSlot();
+        currentKey = (programLevel + 1) | (before ? TICKET_SLOT_BIT : 0);
+        currentOwed = uint32(TicketQueueStorage.owed(address(game), currentKey, buyer) >> 8);
+        assertGt(currentOwed, 0, "reachability: current tickets await their own commitment");
         if (viaCraps) {
             vm.prank(ContractAddresses.CRAPS);
             (bool ok, ) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
@@ -147,8 +154,11 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         } else {
             _middayRequest();
         }
-        assertTrue(_ticketWriteSlot() != before, "reachability: the mid-day request must swap");
-        assertEq(_midDayLatch(), 1, "reachability: the mid-day request must set the latch");
+        assertEq(_ticketWriteSlot(), before, "the early future-pool request preserves current writes");
+        assertEq(_midDayLatch(), 2, "reachability: the mid-day request must isolate the future pool");
+        (,,,, uint256 price) = game.purchaseInfo();
+        vm.prank(lateBuyer);
+        game.purchase{value: price * 10}(lateBuyer, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         day = game.currentDayView();
     }
 
@@ -159,6 +169,10 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         assertTrue(_ticketsFullyProcessed(), "the read slot must be marked drained");
         assertFalse(game.advanceDue(), "nothing is left for a keeper");
         assertEq(lastRevert, SEL_NOT_TIME_YET, "advanceGame must refuse only as nothing-to-do");
+        assertEq(uint32(TicketQueueStorage.owed(address(game), currentKey, buyer) >> 8), currentOwed,
+            "the isolated drain preserves original current-level tickets");
+        assertEq(uint32(TicketQueueStorage.owed(address(game), currentKey, lateBuyer) >> 8), 40,
+            "post-request current tickets remain queued for a later word");
 
         // A second mid-day request the same day is accepted (no MidDayActive).
         vm.prank(buyer);
@@ -169,29 +183,34 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
             assertTrue(_selector(ret) != SEL_MID_DAY_ACTIVE, "a stuck latch refuses the next request");
             revert("a second mid-day request must be accepted");
         }
+        _fulfillPending();
+        assertEq(_crankAdvance(200), SEL_NOT_TIME_YET);
+        assertFalse(game.jackpotPhase(), "the later commitment drains before the jackpot phase");
+        assertEq(uint32(TicketQueueStorage.owed(address(game), currentKey, lateBuyer) >> 8), 0);
+        uint24 currentLevel = currentKey & ~TICKET_SLOT_BIT;
+        uint256 materialized;
+        for (uint16 trait; trait < 256; ++trait) {
+            (uint24 count,,) = game.getEntries(uint8(trait), currentLevel, 0, type(uint32).max, lateBuyer);
+            materialized += count;
+        }
+        assertEq(materialized, 40, "every late purchase materializes before the current jackpot");
     }
 
-    function _driveToSealedLastPurchaseDay() internal returns (uint24 programLevel) {
-        uint256 stalledDays;
+    function _driveToSealedPurchaseDay() internal returns (uint24 programLevel) {
         for (uint256 i = 0; i < 4000; i++) {
             require(!game.gameOver(), "harness: gameOver before the seal");
             (uint24 lvl, bool inJackpot, bool lpd, bool rngL, ) = game.purchaseInfo();
-            if (!inJackpot && lpd && !rngL) return lvl;
+            if (!inJackpot && !lpd && !rngL && _ticketsFullyProcessed()
+                && game.rngWordForDay(game.currentDayView()) != 0 && !game.advanceDue()) return lvl;
             _fulfillPending();
             (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
             if (!ok) {
                 simTime += 1 days + 1;
                 vm.warp(simTime);
-                unchecked {
-                    ++stalledDays;
-                }
-                if (stalledDays >= 5) {
-                    _seedNextPrizePool(49.9 ether);
-                }
                 _buyTickets();
             }
         }
-        revert("harness: did not reach the last-purchase-day seal");
+        revert("harness: did not reach a sealed ordinary purchase day");
     }
 
     // ---------------------------------------------------------------------
@@ -294,8 +313,4 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         return uint256(vm.load(address(game), keccak256(abi.encode(uint256(dd), uint256(10))))) != 0;
     }
 
-    /// @dev jackpotFlags — slot 0, byte 23.
-    function _jackpotFlags() internal view returns (uint8) {
-        return uint8(_slot0() >> 184);
-    }
 }

@@ -212,20 +212,18 @@ contract DegenerusGameMintModule is
         MintPaymentKind payKind,
         uint256 ethForLeg
     ) internal returns (uint256 nextShare, uint256 futureShare, uint256 claimableDraw) {
-        uint256 prizeContribution;
-        (prizeContribution, claimableDraw) = _processMintPayment(
+        claimableDraw = _processMintPayment(
             player,
             costWei,
             payKind,
             ethForLeg
         );
-        if (prizeContribution != 0) {
-            futureShare = (prizeContribution * PURCHASE_TO_FUTURE_BPS) / 10_000;
-            nextShare = prizeContribution - futureShare;
-        }
+        // The funding waterfall covers exactly costWei or reverts, including when zero.
+        futureShare = (costWei * PURCHASE_TO_FUTURE_BPS) / 10_000;
+        nextShare = costWei - futureShare;
     }
 
-    /// @dev Process mint payment and return amount contributed to prize pool.
+    /// @dev Cover the full mint cost and return the amount drawn from player balances.
     ///      Handles three payment modes with strict validation:
     ///
     ///      DirectEth: fresh ETH first (overage ignored); afking covers any shortfall; claimable skipped
@@ -241,14 +239,13 @@ contract DegenerusGameMintModule is
     /// @param amount Total cost in wei to cover.
     /// @param payKind Payment method enum.
     /// @param ethForLeg Fresh ETH allocated to this leg by the caller.
-    /// @return prizeContribution Amount contributing to next/future prize pools.
     /// @return claimableDraw Per-player claimable + afking drawn; caller subtracts it from claimablePool.
     function _processMintPayment(
         address player,
         uint256 amount,
         MintPaymentKind payKind,
         uint256 ethForLeg
-    ) private returns (uint256 prizeContribution, uint256 claimableDraw) {
+    ) private returns (uint256 claimableDraw) {
         uint256 ethUsed;
         uint256 claimableUsed;
         uint256 newClaimableBalance;
@@ -256,24 +253,18 @@ contract DegenerusGameMintModule is
             // Direct ETH: fresh ETH first (overpay ignored), afking covers any shortfall;
             // claimable is skipped on this kind.
             ethUsed = ethForLeg < amount ? ethForLeg : amount;
-        } else if (payKind == MintPaymentKind.Claimable) {
-            // No fresh ETH allowed: draw claimable to the 1-wei sentinel, then afking.
-            if (ethForLeg != 0) revert E();
-            uint256 claimable = _claimableOf(player);
-            if (claimable > 1) {
-                uint256 available = claimable - 1; // Preserve 1 wei sentinel
-                claimableUsed = amount < available ? amount : available;
-                if (claimableUsed != 0) {
-                    unchecked {
-                        newClaimableBalance = claimable - claimableUsed;
-                    }
-                }
+        } else {
+            if (payKind == MintPaymentKind.Claimable) {
+                if (ethForLeg != 0) revert E();
+            } else if (payKind == MintPaymentKind.Combined) {
+                if (ethForLeg > amount) revert E();
+                ethUsed = ethForLeg;
+            } else {
+                revert E();
             }
-        } else if (payKind == MintPaymentKind.Combined) {
-            // ETH first, then claimable to the sentinel, then afking for any remainder.
-            if (ethForLeg > amount) revert E();
-            ethUsed = ethForLeg;
-            uint256 remaining = amount - ethForLeg;
+            // Both modes draw the remainder from claimable down to its 1-wei sentinel,
+            // then use afking. DirectEth never enters this claimable tier.
+            uint256 remaining = amount - ethUsed;
             if (remaining != 0) {
                 uint256 claimable = _claimableOf(player);
                 if (claimable > 1) {
@@ -288,16 +279,15 @@ contract DegenerusGameMintModule is
                     }
                 }
             }
-        } else {
-            revert E();
         }
 
         // Afking tier: the player's prepaid afking covers whatever fresh ETH + claimable did
         // not. afking is fresh-ETH-equivalent (own deposited principal), so it counts toward
-        // prizeContribution. Reverts when the three tiers together fall short of the cost.
-        uint256 afkingUsed = amount - ethUsed - claimableUsed;
+        // the prize contribution. Reverts when the three tiers together fall short of the cost.
+        claimableDraw = amount - ethUsed;
+        uint256 afkingUsed = claimableDraw - claimableUsed;
 
-        if (claimableUsed != 0 || afkingUsed != 0) {
+        if (claimableDraw != 0) {
             // One load + store of the packed per-player slot; the helper's per-half guards
             // reproduce the sequential claimable-then-afking debit reverts exactly (the
             // high-half guard IS the afking-sufficiency check).
@@ -305,9 +295,7 @@ contract DegenerusGameMintModule is
             // The claimablePool decrement for this draw is deferred to the caller, which folds
             // the ticket and lootbox legs into one RMW. claimableDraw is the per-player amount
             // drawn here (claimable + afking) that the caller must subtract from claimablePool.
-            claimableDraw = claimableUsed + afkingUsed;
         }
-        prizeContribution = ethUsed + claimableUsed + afkingUsed;
 
         if (claimableUsed != 0) {
             emit ClaimableSpent(
@@ -559,6 +547,13 @@ contract DegenerusGameMintModule is
         external
         returns (bool finished, bool didWork)
     {
+        // A mid-day next-level snapshot leaves ordinary queues for the daily request.
+        // The existing mid-day latch pins the reserved index until this drain completes.
+        // Terminal callers explicitly select their current cohort and ignore future work.
+        if ((anchor & TICKET_SLOT_BIT) == 0 && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == MID_DAY_FUTURE_POOL) {
+            (didWork, finished) = _drainFrozenPool(earlyTicketLevel);
+            return (finished, didWork);
+        }
         uint32 remaining = WRITES_BUDGET_SAFE;
         // Lazily read on the first non-empty level: read-side content implies a
         // committed cohort implies a prior request, so the lootbox index is >= 1
@@ -671,10 +666,9 @@ contract DegenerusGameMintModule is
             }
         }
 
-        // A latched last purchase day's frozen next-level pool belongs to the first cohort
-        // committed after its seal: the seal left the read side drained, so the first swap
-        // since is the first RNG request since, and this sweep's word is that request's (or a
-        // later one's). The pool mints here on that word, one full budget per call; a call that
+        // A next-level pool frozen by a last-purchase seal or a fresh daily activation
+        // belongs to the first cohort committed after its freeze. This sweep's word is that
+        // request's (or a later one's). The pool mints on that word, one full budget per call; a call that
         // already worked the window leaves it to the next call, and the sweep is not finished
         // while any of it remains. The batch that empties it reports finished itself: the
         // mid-day caller re-enters only while its probe still finds work, so an empty pool
@@ -684,15 +678,7 @@ contract DegenerusGameMintModule is
             uint24 nextLvl = _mintCeiling();
             if (ticketQueue[_tqFarFutureKey(nextLvl)].length != 0) {
                 if (didWork) return (false, true);
-                uint24 marker = nextLvl | TICKET_FAR_FUTURE_BIT;
-                if (ticketLevel != marker) {
-                    ticketLevel = marker;
-                    ticketCursor = 0;
-                }
-                if (entropy == 0) {
-                    entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
-                }
-                (bool ffWorked, bool ffFinished, ) = _processFutureTicketBatch(nextLvl, entropy);
+                (bool ffWorked, bool ffFinished) = _drainFrozenPool(nextLvl);
                 return (ffFinished && !_foilDrainPending(), ffWorked);
             }
         }
@@ -716,6 +702,17 @@ contract DegenerusGameMintModule is
             return (true, didWork);
         }
         return (false, didWork);
+    }
+
+    /// @dev Both future-pool paths share the reserved, immutable lootbox word and batch cursor.
+    function _drainFrozenPool(uint24 lvl) private returns (bool worked, bool finished) {
+        uint24 marker = lvl | TICKET_FAR_FUTURE_BIT;
+        if (ticketLevel != marker) {
+            ticketLevel = marker;
+            ticketCursor = 0;
+        }
+        uint256 entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
+        (worked, finished, ) = _processFutureTicketBatch(lvl, entropy);
     }
 
     /// @dev Hand the per-buy-day foil buckets to the foil module on the leftover write
@@ -1977,7 +1974,6 @@ contract DegenerusGameMintModule is
         targetLevel = _activeTicketLevel();
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
-        if (costWei == 0) revert E();
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
         // A dust ticket leg that cannot survive the routed level's snap divide fails closed instead
         // of charging full price for zero entries. The drain divides the accumulated

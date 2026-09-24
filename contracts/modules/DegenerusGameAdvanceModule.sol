@@ -360,7 +360,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // board[D+1], so a same-day collapse would leave the BAF top-flipper board
         // empty. Its turbo-speed latch lives on the evening path instead, keeping a real last-purchase
         // window ahead of the one-day collapse.
-        // Any set mid-day latch defers the arm, delivered word or not: a turbo latch freezes the
+        // An ordinary mid-day latch defers the arm, delivered word or not: a turbo latch freezes the
         // next level's pool, which must mint on a word requested after the freeze, and an
         // undrained mid-day cohort's word was requested before it.
         // Latched mid-day stall: the pre-gate retry cannot swap while the
@@ -369,10 +369,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // sweep's trailing window guarantees that) but only after the level retired:
         // safe yet drawless. Defer the arm; the evening target-met latch takes the
         // standard three-day path instead, whose next-day request commits them in time to
-        // draw.
+        // draw. An isolated early pool (latch 2) was frozen before its own request and
+        // leaves the ordinary read buffer free, so it can retain turbo and swap on retry.
         if (
             !inJackpot && !lastPurchaseDay && !locked && day == wallDay && day >= psd && rngWordByDay[day] == 0
-                && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == 0
+                && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 1
         ) {
             uint32 purchaseDays = day - psd;
             if (purchaseDays <= 1 && lvl % 10 != 9 && _getNextPrizePool() > _prizePoolTarget(lvl + 1)) {
@@ -380,7 +381,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // Arm turbo without discarding an unpaid bonus from the previous level.
                 jackpotFlags |= JACKPOT_TURBO;
                 // Level L+1's first generation window opens with this latch (see the seal).
-                ticketGenerationStartBlock[uint256(lvl) + 2] = block.number;
+                _markTicketGenerationStart(lvl + 2);
             }
         }
         bool lastPurchase = (!inJackpot) && lastPurchaseDay;
@@ -466,9 +467,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // --- Daily drain gate: ensure read slot is fully processed before RNG ---
             if (!ticketsFullyProcessed) {
                 // One packed read of lootboxRngPacked covers LR_INDEX (preIdx) and the post-drain
-                // LR_MID_DAY check below: the _runProcessTicketBatch delegatecall (a CSE barrier)
-                // never writes this slot, and the only writer on a path reaching the mid-day check
-                // (_requestRng) breaks out before it.
+                // LR_MID_DAY check below. A completed isolated pool may change latch 2 to 1;
+                // its index and the nonzero test used by the release below stay unchanged.
+                // A new request changes the index but breaks before that release.
                 uint256 lrCached = lootboxRngPacked;
                 // Unified sweep: any windowed read-side key may hold committed work — a
                 // mid-day batch that crossed the day boundary, the award queue, a
@@ -501,7 +502,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                             // advance.
                             if (!rngLockedFlag && _rngRetryDue(ts)) {
                                 _requestRng(lastPurchase, (uint48(day) << 24) | uint48(purchaseLevel));
-                                if (!preFound) {
+                                // An isolated future pool never occupied the ordinary read
+                                // buffer. Commit all intervening current-level buys on this
+                                // fresh daily request, including a turbo's final cohort.
+                                if (!preFound || ((lrCached >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) == MID_DAY_FUTURE_POOL) {
                                     _swapTicketSlot();
                                 }
                                 _freezePool();
@@ -1349,7 +1353,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             // on the first word requested after it (a post-seal mid-day word or the
             // last-purchase word), never on a word already public. One metadata write per
             // level, never a charged drain step.
-            ticketGenerationStartBlock[uint256(purchaseLevel) + 1] = block.number;
+            _markTicketGenerationStart(purchaseLevel + 1);
             // x0 (BAF) level: arm tomorrow's flip day for the
             // weighted depositor draw — the sealed day's direct
             // deposits stake day + 1, the day the transition word
@@ -1495,7 +1499,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // together on the write side for the final request's own commit, which
         // its chain drains BEFORE the final draw. The word still serves the
         // pending lootboxes.
-        {
+        bool activated = _activateNextTickets();
+        if (activated && ticketQueue[_tqFarFutureKey(earlyTicketLevel)].length != 0) {
+            ticketsFullyProcessed = false;
+            _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, MID_DAY_FUTURE_POOL);
+        } else {
             // A latched one-day collapse (lastPurchaseDay with JACKPOT_TURBO set — an x0
             // evening latch, or an armed turbo whose advance chain broke on
             // ticket work before its request) is the same final-day shape: the
@@ -1536,6 +1544,26 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // Even, like every request stamp: the LSB is the retry-spent flag the vault owner's
         // retry checks, so an odd stamp would read as a retry already used.
         rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+    }
+
+    /// @dev Early generation may precede the last-purchase latch. Keep its original bound.
+    function _markTicketGenerationStart(uint24 lvl) private {
+        if (ticketGenerationStartBlock[lvl] == 0) ticketGenerationStartBlock[lvl] = block.number;
+    }
+
+    /// @dev The first fresh request after the goal is met freezes the next level's
+    ///      future queue. Called only at a request boundary with the prior read batch
+    ///      drained; retries never reopen or add a cohort to their reserved word.
+    function _activateNextTickets() private returns (bool activated) {
+        uint24 nextLvl = level + 2;
+        if (
+            !jackpotPhaseFlag && ticketsFullyProcessed && earlyTicketLevel < nextLvl
+                && _getNextPrizePool() > _prizePoolTarget(level + 1) && !_livenessTriggered()
+        ) {
+            earlyTicketLevel = nextLvl;
+            _markTicketGenerationStart(nextLvl);
+            return true;
+        }
     }
 
     // Daily VRF consumers: only Coinflip win/loss and the BAF fire gate intentionally
@@ -1838,8 +1866,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
       +======================================================================+*/
 
     /// @dev Run the windowed ticket sweep via mint module delegatecall: one writes
-    ///      budget drains the read window [anchor-1 .. _mintCeiling()], a latched
-    ///      last purchase day's frozen next-level pool, and foil.
+    ///      budget drains the read window [anchor-1 .. _mintCeiling()], a committed
+    ///      next-level pool, and foil. An isolated mid-day pool gets its own batch.
     /// @param lvl The window anchor (purchaseLevel).
     /// @return worked True if the batch materialized at least one ticket or foil entry.
     ///         Reported directly by the mint module rather than inferred from a cursor
@@ -1852,6 +1880,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
         if (data.length < 64) revert EmptyReturn();
         (finished, worked) = abi.decode(data, (bool, bool));
+        if (finished && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == MID_DAY_FUTURE_POOL) {
+            // A daily retry may have committed current-level buys while the next-level
+            // snapshot was waiting. Finish the ordinary sweep before paying its jackpot.
+            _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 1);
+            finished = !rngLockedFlag && !_foilDrainPending();
+        }
     }
 
     /// @dev Process jackpot→purchase transition housekeeping (deity perpetual tickets + auto-stake).
@@ -1900,6 +1934,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///        day. Only the foil-quest roll reads the day, and only when it IS the wall day;
     ///        0 suppresses that roll.
     function _requestRng(bool isTicketJackpotDay, uint48 lvlAndQuestDay) private {
+        if (rngRequestTime == 0) _activateNextTickets();
         // Hard revert if Chainlink request fails; this intentionally halts game progress until VRF funding/config is fixed.
         _finalizeRngRequest(isTicketJackpotDay, lvlAndQuestDay, _requestVrfWord(VRF_REQUEST_CONFIRMATIONS));
     }

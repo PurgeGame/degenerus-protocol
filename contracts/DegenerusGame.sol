@@ -608,13 +608,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return _simulatedDayIndex();
     }
 
+    /// @dev Shared by the vault-owner controls; preserve the same external check and error.
+    function _requireVaultOwner() private view {
+        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+    }
+
     /// @notice Update lootbox RNG request threshold (wei).
     /// @dev Access: vault owner only (DGVE majority holder).
     /// @param newThreshold New threshold in wei, non-zero (stored at 0.001 ETH resolution, rounded down; the event echoes the requested wei).
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ZeroValue If newThreshold is zero.
     function setLootboxRngThreshold(uint256 newThreshold) external {
-        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+        _requireVaultOwner();
         if (newThreshold == 0) revert ZeroValue();
         uint256 prev = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
         if (newThreshold == prev) {
@@ -636,7 +641,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts OutOfBounds If newGwei exceeds the packed field's range.
     function setMiddayMaxBasefee(uint256 newGwei) external {
-        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+        _requireVaultOwner();
         if (newGwei > MIDDAY_MAX_BASEFEE_GWEI_CAP) revert OutOfBounds();
         uint256 prev = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
         _lrWrite(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK, newGwei);
@@ -674,7 +679,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ThanosBounds If any declaration bound is violated.
     function setThanosLevel(uint24 targetLevel, uint8 shift) external {
-        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+        _requireVaultOwner();
         uint24 lvl = level;
         if (
             targetLevel < lvl + 3 ||
@@ -2015,7 +2020,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @custom:reverts Insolvent If ETH is insufficient or staking would dip into the player-claim ETH reserve.
     /// @custom:reverts TransferFailed If the Lido submit fails.
     function adminStakeEthForStEth(uint256 amount) external {
-        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
+        _requireVaultOwner();
         if (amount == 0) revert ZeroValue();
 
         uint256 ethBal = address(this).balance;
@@ -2082,6 +2087,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      table clears the pending-value gates and answers to a lower LINK floor — it buys
     ///      the word that settles a window already bound to the index it fills, where a lootbox
     ///      queue can wait for the daily word instead.
+    ///      Once the purchase goal is met, the first fresh request also commits the next
+    ///      level's future tickets. All normal request gates and charges still apply.
     ///      The signature matches the module function exactly (identical selector), so the calldata
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function requestLootboxRng() external {

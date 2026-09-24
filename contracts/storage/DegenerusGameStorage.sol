@@ -676,15 +676,15 @@ abstract contract DegenerusGameStorage {
     ///        is drained on each advance (processTicketBatch); the daily slot swap commits
     ///        the write cohort.
     ///      - Unminted future levels (above _mintCeiling()): held in the far-future key space
-    ///        with no traits. When level L's last purchase day latches at its seal, L+1 stops
-    ///        accepting far-future entries; its frozen queue mints once, inside the sweep, with
-    ///        the first cohort committed after that seal (a mid-day or the last-purchase RNG
-    ///        request), in any case before the last-purchase consolidation, so the BAF, the
+    ///        with no traits. The first fresh RNG request after level L meets its goal
+    ///        activates L+1. The last-purchase latch may close its far-future queue earlier;
+    ///        in either case that frozen queue mints on a word requested after the freeze,
+    ///        before the last-purchase consolidation, so the BAF, the
     ///        early-bird and the jackpot-phase bonus draws all see L+1 minted.
     ///
     ///      EXAMPLE (level 5 purchase phase, level = 4, purchaseLevel = 5):
     ///      - ticketQueue[4..5] read cohorts → swept every advance
-    ///      - ticketQueue[6+] → far-future space; 6 mints after level 5's last purchase day seals
+    ///      - ticketQueue[6+] → far-future space; 6 can mint once level 5 meets its goal
     ///
     ///      Keys are encoded: ticketQueue is indexed by (lvl | slotBit) — bit 23 selects the
     ///      double-buffer write/read half (ticketWriteSlot); tickets targeting > level+1 use the
@@ -946,17 +946,25 @@ abstract contract DegenerusGameStorage {
     ///      entries take its write buffer). The pool mints inside the unified sweep with the first
     ///      cohort committed after the seal — the first RNG request after it, mid-day or daily
     ///      (MintModule processTicketBatch). The last-purchase request takes the lock and bumps
-    ///      `level`, returning the ceiling to level + 1 = the same level.
+    ///      `level`, returning the ceiling to level + 1 = the same level. A target-met
+    ///      request may activate that same level earlier; retain its ceiling after
+    ///      draining so later purchases never reopen the frozen queue.
     function _mintCeiling() internal view returns (uint24) {
-        return level + ((lastPurchaseDay && !rngLockedFlag) ? 2 : 1);
+        uint24 ceiling = level + ((lastPurchaseDay && !rngLockedFlag) ? 2 : 1);
+        uint24 early = earlyTicketLevel;
+        return early > ceiling ? early : ceiling;
     }
 
     /// @dev The frozen next-level pool is sweep work only once a cohort has been
     ///      committed AFTER the latch — the last-purchase request (rngLockedFlag) or a post-latch
     ///      mid-day request (mid-day latch). Before that no word exists for it, and a stale
     ///      !ticketsFullyProcessed (genesis) would make the drain gate demand one that never comes.
+    ///      The isolated early-pool latch is itself a commitment made with a fresh request.
     function _frozenPoolDue() internal view returns (bool) {
-        return lastPurchaseDay && (rngLockedFlag || _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0);
+        // An isolated early pool has earlyTicketLevel == level + 2. If a final-day
+        // retry promotes level before its drain, lastPurchaseDay still holds the latch.
+        return (lastPurchaseDay || earlyTicketLevel > level + 1)
+            && (rngLockedFlag || _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0);
     }
 
     /// @dev O(1) advance-work discovery, shared by the external keeper view
@@ -2728,7 +2736,7 @@ abstract contract DegenerusGameStorage {
     //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
     //   [bits 184:223]  lootboxRngPendingFlip  uint40   (scaled /1e18, 1 FLIP res, max ~1.1T FLIP)
-    //   [bits 224:231]  midDayTicketRngPending   uint8    (bool flag, 8 bits)
+    //   [bits 224:231]  midDayTicketRngPending   uint8    (0=idle, 1=ordinary, 2=isolated future pool)
     //   [bits 232:239]  gameOverDeadLatched      uint8    (bool flag, 8 bits)
     //   [bits 240:247]  gameOverDrainLevelLatch  uint8    (0=unset, 1=lvl, 2=lvl+1)
     //   [bits 248:255]  gameOverTerminalRequested uint8   (bool flag, 8 bits)
@@ -2752,6 +2760,9 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LR_PENDING_FLIP_MASK = 0xFFFFFFFFFF;         // 40 bits
     uint256 internal constant LR_MID_DAY_SHIFT = 224;
     uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
+    /// @dev An isolated next-level pool, committed without swapping the ordinary ticket queues.
+    ///      Like an ordinary mid-day batch (1), it pins LR_INDEX - 1 until the drain completes.
+    uint256 internal constant MID_DAY_FUTURE_POOL = 2;
     uint256 internal constant LR_MAX_BASEFEE_SHIFT = 176;
     uint256 internal constant LR_MAX_BASEFEE_MASK = 0xFF;                   // 8 bits
     /// @dev Set on the first entry of the deterministic (VRF-dead) ending; never cleared.
@@ -3997,15 +4008,14 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Inclusive lower block bound for a level's first generation window. Level 1
     ///      starts at deployment (level 0 never holds tickets); level L+1 starts when level
-    ///      L's last purchase day latches (at its seal, or at a same-day turbo latch), before
+    ///      L first requests fresh RNG after meeting its goal, or its last purchase day latches, before
     ///      any drain can execute for that window. Written once per
     ///      level OUTSIDE charged drain steps. Permanent rather than a recycling ring:
     ///      old levels remain claimable in Bingo and must retain their discovery bound.
-    ///      A uint256 key lets the latch add two to uint24(level) without narrowing
-    ///      or assembly; abi.encode(level) has the same 32-byte key for every level.
+    ///      The uint256 mapping key uses the same 32-byte ABI encoding as a uint24 level.
     ///      Read via extsload(keccak256(abi.encode(uint256(lvl), this mapping's slot))).
-    ///      Off-chain metadata only — nothing on-chain reads this mapping, so it gates
-    ///      nothing. An unreached level reads 0, which means "window not open", NOT
+    ///      Off-chain metadata; on-chain writers only preserve an already-set bound. It gates
+    ///      no generation or payout. An unreached level reads 0, which means "window not open", NOT
     ///      "scan from genesis". The bound covers TRAIT GENERATION only; it does not
     ///      bound EntryOwnerRegistered, which far-future queueing can emit up to 99
     ///      levels ahead of the level whose window this stamps.
@@ -4058,6 +4068,11 @@ abstract contract DegenerusGameStorage {
     ///      early-bird ETH budget still backs nextPrizePool. Appended to preserve
     ///      every existing delegatecall slot. Cleared at settlement or game over.
     uint256 internal earlyBirdWhalePasses;
+
+    /// @dev Highest next-level pool activated by a target-met fresh RNG request. Kept after its
+    ///      drain so later entries cannot reopen that level's frozen far-future queue. The
+    ///      ordinary mint ceiling catches up at the last-purchase level promotion.
+    uint24 internal earlyTicketLevel;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

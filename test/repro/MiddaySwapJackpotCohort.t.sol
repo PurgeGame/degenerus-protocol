@@ -615,12 +615,11 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     // L. The far-future barrier
     // ---------------------------------------------------------------------
 
-    /// The crossing contract: level L's purchase-day SEAL (_sealPurchaseDay, or the
-    /// same-day turbo latch) opens the ceiling to level + 2, moving the (level + 2) far
-    /// key from far-future to near. Its frozen content is drained as a continuation of
-    /// MintModule.processTicketBatch on the first buffer swap/RNG request after the
-    /// seal — the level-promoting last-purchase request — strictly before the
-    /// consolidation step that flips jackpotPhaseFlag. So by the time the jackpot phase
+    /// The crossing contract: the first fresh RNG request after the purchase goal opens
+    /// the ceiling to level + 2, moving its far key from far-future to near. With no
+    /// intervening mid-day request, the target-met daily request drains that frozen content
+    /// before its purchase-day seal, strictly before the consolidation step that flips
+    /// jackpotPhaseFlag. So by the time the jackpot phase
     /// for the promoted level L (= programLevel + 1) is observably active, the
     /// (L + 1) far key must already be WHOLE-drained, and from there on routing never
     /// sends a target <= the (now-near) ceiling back to that far-future key, so it
@@ -628,12 +627,9 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function testFarFutureBarrierCrossesWholeAndNeverRefills() public {
         vm.pauseGasMetering();
 
-        // Catch the state right after the seal (lastPurchaseDay latched, RNG still
-        // unlocked) — mirrors QuestRetryDoubleRoll's _driveToLastPurchaseDay window.
-        // The seal has already opened the ceiling and crossed the far key onto the
-        // near side conceptually, but the level-promoting request (and the drain it
-        // triggers) has not fired yet, so the far-future queue is still intact here.
-        uint24 programLevel = _driveToSealedLastPurchaseDay();
+        // Observe the untouched cohort before the target-met request. By the later
+        // last-purchase seal this cohort now must already be materialized.
+        uint24 programLevel = _level();
         uint24 ffKey = (programLevel + 2) | TICKET_FAR_FUTURE_BIT;
 
         // Non-vacuity: the deploy-time perpetual seeding guarantees far-future
@@ -641,12 +637,14 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         assertGt(
             _queueLen(ffKey),
             0,
-            "reachability: the crossing key must hold far-future content pre-seal"
+            "reachability: the crossing key must hold content before the target-met request"
         );
+        assertEq(_driveToSealedLastPurchaseDay(), programLevel,
+            "the early crossing must not promote the purchase level");
+        assertEq(_queueLen(ffKey), 0,
+            "the first target-met daily request drains the whole cohort before its seal");
 
-        // Run the phase out through the level-promoting request and into the jackpot
-        // phase (the crossing drain runs as a continuation inside this window, before
-        // jackpotPhaseFlag flips).
+        // Continue through the later level-promoting request into the jackpot phase.
         for (uint256 d = 0; d < 12 && !game.jackpotPhase(); d++) {
             _buyTickets();
             _runFullDay();

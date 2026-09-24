@@ -41,9 +41,7 @@ CRANK-SELF	lowlevel:delegatecall	recordAfkingSecondary	DegenerusGame.sol	BARE		Q
 OFF-CRANK	lowlevel:delegatecall	floorAfkingStreakBase	DegenerusGame.sol	BARE		QUESTS.handleFoilPurchase callback on a player foil-pack purchase
 CRANK-CAUGHT	IsDGNRS.poolBalance	payRecordSdgnrs	DegenerusGame.sol	BARE		reached from the keeper craps leg (keepScheduled→resolveSlot→_payout→armDiceRunRecord→payRecordSdgnrs) only inside GameAfkingModule._crapsKeep's try; a revert is swallowed there
 CRANK-CAUGHT	IsDGNRS.transferFromPool	payRecordSdgnrs	DegenerusGame.sol	BARE		same path as poolBalance: the craps leg's try in GameAfkingModule._crapsKeep catches any revert; not on the bare crank
-OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	setLootboxRngThreshold	DegenerusGame.sol	BARE		vault-owner admin setter (lootbox RNG threshold)
-OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	setMiddayMaxBasefee	DegenerusGame.sol	BARE		vault-owner admin setter (midday basefee cap)
-OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	setThanosLevel	DegenerusGame.sol	BARE		vault-owner admin setter (thanos level)
+OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	_requireVaultOwner	DegenerusGame.sol	BARE		shared owner check for lootbox RNG threshold, midday basefee cap, thanos level and admin staking controls
 OFF-CRANK	delegatecall:IDegenerusGameMintModule.purchase	_purchaseFor	DegenerusGame.sol	BARE		player ticket purchase entry (purchase / purchaseFor)
 OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.quoteBoxOrder	_quoteBoxOrderCost	DegenerusGame.sol	BARE		player box-order cost quote inside the purchase path
 OFF-CRANK	delegatecall:IDegenerusGameMintModule.purchaseWith	_purchaseWithFoil	DegenerusGame.sol	BARE		player purchaseWithFoil entry
@@ -83,7 +81,6 @@ OFF-CRANK	delegatecall:IDegenerusGameMintModule.sellFarFutureEntries	sellFarFutu
 OFF-CRANK	lowlevel:delegatecall	previewSellFarFutureEntries	DegenerusGame.sol	BARE		view preview of a far-future sale
 OFF-CRANK	IStETH.balanceOf	adminSwapEthForStEth	DegenerusGame.sol	BARE		ADMIN-only ETH->stETH swap
 OFF-CRANK	IStETH.transfer	adminSwapEthForStEth	DegenerusGame.sol	BARE		ADMIN-only ETH->stETH swap
-OFF-CRANK	IDegenerusVaultOwnerGame.isVaultOwner	adminStakeEthForStEth	DegenerusGame.sol	BARE		vault-owner admin stake entry
 OFF-CRANK	IStETH.submit	adminStakeEthForStEth	DegenerusGame.sol	TRY		vault-owner admin stake entry; the catch re-throws TransferFailed
 OFF-CRANK	lowlevel:delegatecall	updateVrfCoordinatorAndSub	DegenerusGame.sol	BARE		ADMIN governance coordinator rotation (DegenerusAdmin is the caller)
 OFF-CRANK	lowlevel:delegatecall	requestLootboxRng	DegenerusGame.sol	BARE		keeper / CRAPS mid-day RNG request, its own tx; CrapsBattle._armSlot calls it under try and _crapsKeep catches the craps leg

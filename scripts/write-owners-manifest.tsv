@@ -127,7 +127,7 @@ OWNER	_subscribers	modules/GameAfkingModule.sol	_removeFromSet swap-and-pop (pus
 OWNER	subsFullyProcessed	modules/DegenerusGameAdvanceModule.sol	advanceGame clears on a new day and sets when the subscriber stage drains; sole writer
 OWNER	ticketCursor	modules/DegenerusGameMintModule.sol	processTicketBatch and its far-future continuation persist the mid-queue resume position and zero at queue release; sole owner
 INIT	ticketGenerationStartBlock	DegenerusGame.sol	constructor stamps the deployment block for level 1, the first ticket level; outside all drain steps
-OWNER	ticketGenerationStartBlock	modules/DegenerusGameAdvanceModule.sol	advanceGame stamps level+2 at a turbo latch or _sealPurchaseDay stamps purchaseLevel+1 at an evening seal; both open the next level's first generation window before its frozen pool mints
+OWNER	ticketGenerationStartBlock	modules/DegenerusGameAdvanceModule.sol	early target-met request or last-purchase latch stamps the next level's generation window; later latches preserve its first opening block
 OWNER	ticketLevel	modules/DegenerusGameMintModule.sol	ticket batch workers stamp the level being walked (the far-future continuation stamps lvl|FF bit) and clear to 0 at release; sole owner
 OWNER	ticketRedemptionOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest closes the FLIP window at the final jackpot request
 OWNER	ticketRedemptionOpen	modules/DegenerusGameMintModule.sol	_redeemFlipFor opens lazily on the first redeem once target met and unlocked; the crank closes
@@ -160,3 +160,4 @@ OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimato
 OWNER	terminalAffiliate	modules/DegenerusGameAdvanceModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; handleGameOverDrain reads it
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameJackpotModule.sol	pricing latches even half-pass units from exact early-bird surplus; settlement consumes once with no pool movement
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameGameOverModule.sol	terminal drain cancels any pending early-bird pass prize
+OWNER	earlyTicketLevel	modules/DegenerusGameAdvanceModule.sol	first fresh daily or mid-day request after the goal freezes this absolute next-level pool and permanently closes its far-future queue to later entries

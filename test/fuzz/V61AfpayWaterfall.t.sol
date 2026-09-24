@@ -50,6 +50,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
     /// @dev AfkingSpent(address indexed player, uint256 amount) — the headline transparency signal.
     bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(address,uint256)");
+    bytes32 private constant CLAIMABLE_SPENT_SIG = keccak256("ClaimableSpent(address,uint256,uint256,uint8,uint256)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -234,6 +235,8 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 poolBefore = _prizePoolTotal();
 
         vm.expectEmit(true, false, false, true, address(game));
+        emit ClaimableSpent(buyer, expClaimableUsed, 1, MintPaymentKind.Claimable, cost);
+        vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(buyer, expAfkingUsed);
         vm.prank(buyer);
         game.purchase{value: 0}(buyer, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
@@ -262,6 +265,8 @@ contract V61AfpayWaterfall is DeployProtocol {
 
         vm.deal(buyer, ethSent);
         vm.expectEmit(true, false, false, true, address(game));
+        emit ClaimableSpent(buyer, expClaimableUsed, 1, MintPaymentKind.Combined, cost);
+        vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(buyer, expAfkingUsed);
         vm.prank(buyer);
         game.purchase{value: ethSent}(buyer, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
@@ -269,6 +274,76 @@ contract V61AfpayWaterfall is DeployProtocol {
         assertEq(game.claimableWinningsOf(buyer), 1, "Combined: claimable drawn to EXACTLY the sentinel after msg.value");
         assertEq(afkingBefore - game.afkingFundingOf(buyer), expAfkingUsed, "Combined: afking covers the final remainder");
         assertEq(_prizePoolTotal() - poolBefore, cost, "Combined: prizeContribution == msg.value + claimableUsed + afkingUsed == cost");
+    }
+
+    /// @notice A fully paid Combined ticket must skip both balance tiers and emit no debit logs.
+    function testProcessMintFullyPaidCombinedLeavesBalancesUntouched() public {
+        address buyer = makeAddr("pm_combined_full_eth");
+        uint256 cost = _oneTicketCost();
+        _seedClaimable(buyer, 7 ether);
+        _seedAfking(buyer, 5 ether);
+        uint256 poolBefore = _prizePoolTotal();
+        uint256 liabilityBefore = _claimablePoolBalance();
+        vm.deal(buyer, cost);
+
+        vm.recordLogs();
+        vm.prank(buyer);
+        game.purchase{value: cost}(buyer, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+
+        _assertOnlyAfkingDrawEvent(buyer, 0);
+        assertEq(game.claimableWinningsOf(buyer), 7 ether, "full ETH skips claimable");
+        assertEq(game.afkingFundingOf(buyer), 5 ether, "full ETH skips afking");
+        assertEq(_claimablePoolBalance(), liabilityBefore, "no deferred balance draw is charged");
+        assertEq(_prizePoolTotal() - poolBefore, cost, "the full cost still funds the prize pools");
+    }
+
+    /// @notice Both balance-using modes leave absent/sentinel-only claimable unchanged and
+    ///         draw their exact unpaid remainder from afking, without a ClaimableSpent log.
+    function testProcessMintZeroAndSentinelClaimableFallThroughToAfking() public {
+        uint256 cost = _oneTicketCost();
+        for (uint256 i; i < 4; ++i) {
+            address buyer = address(uint160(0xAF6100 + i));
+            uint256 claimableSeed = i & 1;
+            MintPaymentKind kind = i < 2 ? MintPaymentKind.Claimable : MintPaymentKind.Combined;
+            uint256 ethSent = kind == MintPaymentKind.Combined ? cost / 4 : 0;
+            uint256 expectedDraw = cost - ethSent;
+            _seedClaimable(buyer, claimableSeed);
+            _seedAfking(buyer, cost * 2);
+            vm.deal(buyer, ethSent);
+            uint256 poolBefore = _prizePoolTotal();
+            uint256 liabilityBefore = _claimablePoolBalance();
+
+            vm.recordLogs();
+            vm.prank(buyer);
+            game.purchase{value: ethSent}(buyer, 400, 0, bytes32(0), kind, false);
+
+            _assertOnlyAfkingDrawEvent(buyer, expectedDraw);
+            assertEq(game.claimableWinningsOf(buyer), claimableSeed, "0/1 wei is never spendable");
+            assertEq(game.afkingFundingOf(buyer), cost * 2 - expectedDraw, "afking covers exactly the remainder");
+            assertEq(liabilityBefore - _claimablePoolBalance(), expectedDraw, "the deferred pool debit is exact");
+            assertEq(_prizePoolTotal() - poolBefore, cost, "every mode contributes the full ticket cost");
+        }
+    }
+
+    /// @notice Internal is an event classification, not a fourth public ticket payment mode.
+    function testProcessMintRejectsInternalPaymentKindWithoutDebiting() public {
+        address buyer = makeAddr("pm_internal_rejected");
+        uint256 cost = _oneTicketCost();
+        _seedClaimable(buyer, 7 ether);
+        _seedAfking(buyer, 5 ether);
+        vm.deal(buyer, cost);
+        uint256 poolBefore = _prizePoolTotal();
+        uint256 liabilityBefore = _claimablePoolBalance();
+
+        vm.expectRevert(bytes4(keccak256("E()")));
+        vm.prank(buyer);
+        game.purchase{value: cost}(buyer, 400, 0, bytes32(0), MintPaymentKind.Internal, false);
+
+        assertEq(game.claimableWinningsOf(buyer), 7 ether);
+        assertEq(game.afkingFundingOf(buyer), 5 ether);
+        assertEq(_claimablePoolBalance(), liabilityBefore);
+        assertEq(_prizePoolTotal(), poolBefore);
+        assertEq(buyer.balance, cost, "invalid payment mode cannot consume fresh ETH");
     }
 
     /// @notice Both-short revert through the LIVE _processMintPayment: a Claimable buy with too little
@@ -349,6 +424,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     // Mirror event decl for vm.expectEmit
     // =========================================================================
     event AfkingSpent(address indexed player, uint256 amount);
+    event ClaimableSpent(address indexed player, uint256 amount, uint256 newBalance, MintPaymentKind kind, uint256 costWei);
 
     // =========================================================================
     // Helpers
@@ -406,6 +482,25 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 sum = (active & halfMask) + ((active >> 128) & halfMask);
         sum += (pending & halfMask) + ((pending >> 128) & halfMask);
         return sum;
+    }
+
+    function _claimablePoolBalance() internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(CLAIMABLE_POOL_SLOT))) >> (CLAIMABLE_POOL_OFFBYTES * 8);
+    }
+
+    function _assertOnlyAfkingDrawEvent(address buyer, uint256 expectedDraw) internal {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 afkingEvents;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2
+                || logs[i].topics[1] != bytes32(uint256(uint160(buyer)))) continue;
+            assertTrue(logs[i].topics[0] != CLAIMABLE_SPENT_SIG, "unused claimable emits no debit log");
+            if (logs[i].topics[0] == AFKING_SPENT_SIG) {
+                assertEq(abi.decode(logs[i].data, (uint256)), expectedDraw, "afking event names the exact draw");
+                ++afkingEvents;
+            }
+        }
+        assertEq(afkingEvents, expectedDraw == 0 ? 0 : 1, "one afking event per nonzero draw");
     }
 
     function _sawAfkingSpent(address who, uint256 amount) internal returns (bool) {

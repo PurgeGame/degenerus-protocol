@@ -55,6 +55,20 @@ contract ThanosNoticeBound is DeployProtocol {
         assertEq(_snapLevel(), L + 3, "declaration did not land");
     }
 
+    function testSharedOwnerGuardRejectsNonOwnerOnEveryControl() public {
+        vm.startPrank(address(0xBAD));
+        bytes4 onlyVault = bytes4(keccak256("OnlyVault()"));
+        vm.expectRevert(onlyVault);
+        game.setLootboxRngThreshold(1 ether);
+        vm.expectRevert(onlyVault);
+        game.setMiddayMaxBasefee(2);
+        vm.expectRevert(onlyVault);
+        game.setThanosLevel(L + 3, 0);
+        vm.expectRevert(onlyVault);
+        game.adminStakeEthForStEth(1 ether);
+        vm.stopPrank();
+    }
+
     function testPendingDeclarationMovableUntilTargetMinusTwo() public {
         uint24 target = L + 3;
         assertTrue(_declare(target), "declare");

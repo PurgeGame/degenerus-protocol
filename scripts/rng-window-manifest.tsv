@@ -114,6 +114,7 @@ CONSUMER-SEALED	lootboxRngWordByIndex	_openBoxBoth	modules/DegenerusGameLootboxM
 CONSUMER-SEALED	lootboxRngWordByIndex	_openLootBoxLeg	modules/DegenerusGameLootboxModule.sol	READ
 CONSUMER-SEALED	lootboxRngWordByIndex	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	READ
 CONSUMER-SEALED	lootboxRngWordByIndex	processTicketBatch	modules/DegenerusGameMintModule.sol	READ
+CONSUMER-SEALED	lootboxRngWordByIndex	_drainFrozenPool	modules/DegenerusGameMintModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	deityBoonData	DegenerusGame.sol	READ
 CONSUMER-SEALED	rngWordByDay	_payFoilTier	modules/DegenerusGameFoilPackModule.sol	READ
 CONSUMER-SEALED	rngWordByDay	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ

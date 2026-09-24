@@ -27,6 +27,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 contract TurboBafTicketFloor is DeployProtocol {
     address private buyer = address(0xB4A1);
     address private crank = address(0xC4A9);
+    address private lateBuyer = address(0x1A7E);
 
     uint256 private simTime;
 
@@ -46,6 +47,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         vm.warp(simTime);
         vm.deal(address(game), 10_000 ether);
         vm.deal(buyer, 500_000 ether);
+        vm.deal(lateBuyer, 100 ether);
         mockVRF.fundSubscription(1, 1_000 ether);
         // FLIP stake for daily coinflip deposits (BAF score accrues on claimed wins).
         deal(address(coin), buyer, 5_000_000 ether, true);
@@ -106,7 +108,7 @@ contract TurboBafTicketFloor is DeployProtocol {
             _ticketsFullyProcessed(),
             "the read window stays drained: no latch, no pending mid-day batch"
         );
-        _buyTickets();
+        _buyTicketsFor(lateBuyer);
 
         // Cross without fulfilling: the stalled request resolves via promotion or
         // orphan backfill, and the transition collapses the whole phase.
@@ -231,11 +233,15 @@ contract TurboBafTicketFloor is DeployProtocol {
     }
 
     function _buyTickets() internal {
+        _buyTicketsFor(buyer);
+    }
+
+    function _buyTicketsFor(address player) internal {
         (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
         if (rngLocked_) return;
-        vm.prank(buyer);
+        vm.prank(player);
         game.purchase{value: (priceWei * 4000) / 400}(
-            buyer,
+            player,
             4000,
             0,
             bytes32(0),
@@ -292,8 +298,21 @@ contract TurboBafTicketFloor is DeployProtocol {
             (ok, ) = address(game).call(
                 abi.encodeWithSignature("advanceGame()")
             );
+            if (game.jackpotPhase()) _assertLateTicketsMaterialized();
             if (!ok) break;
         }
+        _assertLateTicketsMaterialized();
+    }
+
+    function _assertLateTicketsMaterialized() internal view {
+        assertEq(_entriesOwed(10, lateBuyer) + _entriesOwed(10 | TICKET_SLOT_BIT, lateBuyer), 0,
+            "late tickets must leave the queue before the turbo jackpot");
+        uint256 materialized;
+        for (uint16 trait; trait < 256; ++trait) {
+            (uint24 count,,) = game.getEntries(uint8(trait), 10, 0, type(uint32).max, lateBuyer);
+            materialized += count;
+        }
+        assertEq(materialized, 40, "every post-request ticket must materialize before the collapse completes");
     }
 
     /// @dev Seed the live next-pool half (slot 2, low 128 bits) up to targetNext.
