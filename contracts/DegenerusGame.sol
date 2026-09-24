@@ -1573,9 +1573,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // half (no borrow into claimable) — byte-identical to _debitAfking's checked store.
         balancesPacked[msg.sender] = packed - (amount << 128);
         claimablePool -= uint128(amount); // tandem release (checked math)
-        (bool ok, ) = msg.sender.call{value: amount}("");
-        if (!ok) revert TransferFailed();
         emit AfkingWithdrew(msg.sender, amount);
+        // ETH first, stETH for any shortfall — the same backing claims draw on, so a game holding
+        // most of its reserve as stETH can still pay a prepaid afking balance back.
+        _payoutWithStethFallback(msg.sender, amount);
     }
 
     /// @notice The canonical per-player prepaid afking ETH balance.

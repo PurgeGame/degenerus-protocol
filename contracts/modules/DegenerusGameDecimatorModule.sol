@@ -123,6 +123,9 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @notice Claim attempted for an inactive decimator round.
     error DecClaimInactive();
+    /// @notice The game-over trigger reads true but the ending has not finished: a claim waits for
+    ///         game over rather than settle in a shape the game might not end in.
+    error EndingPending();
 
     /// @notice Claim attempted after already claiming this level.
     error DecAlreadyClaimed();
@@ -428,7 +431,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             e,
             round.rngWord,
             amountWei,
-            gameOver || _livenessTriggered(),
+            _terminalClaim(),
             false
         );
     }
@@ -457,9 +460,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         // Loop-invariant: each iteration's lootbox delegatecall would otherwise force a re-SLOAD.
         uint32 rngWordCached = round.rngWord;
         mapping(address => DecBet) storage decLevelBets = decBurn[lvl];
-        // Terminal mode spans the whole death sequence (see the single-claim path): the
-        // live branch would mint a lootbox whose roll queues entries against a public word.
-        bool over = gameOver || _livenessTriggered();
+        bool over = _terminalClaim();
         uint256 settled;
         for (uint256 i; i < players.length; ++i) {
             DecBet storage e = decLevelBets[players[i]];
@@ -498,6 +499,17 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                     PriceLookupLib.priceForLevel(_activeTicketLevel())
             );
         }
+    }
+
+    /// @dev Whether a claim settles in terminal shape (100% cash, no lootbox): only once the game
+    ///      is over, which is irreversible. While the game-over trigger reads true before that, the
+    ///      claim reverts and waits: the trigger can still read false again, and a terminal shape
+    ///      taken then would stick; and during the ending itself the live branch would mint a
+    ///      lootbox whose roll queues entries against a public word.
+    function _terminalClaim() private view returns (bool) {
+        if (gameOver) return true;
+        if (_livenessTriggered()) revert EndingPending();
+        return false;
     }
 
     /// @dev Shared claim core for the single and batch entry points. The lootbox portion's

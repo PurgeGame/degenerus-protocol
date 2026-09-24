@@ -71,7 +71,6 @@ CRANK-SELF	lowlevel:delegatecall	emitDailyWinningTraits	DegenerusGame.sol	BARE		
 OFF-CRANK	lowlevel:delegatecall	claimDecimatorJackpot	DegenerusGame.sol	BARE		permissionless decimator claim (player-side, separate tx)
 OFF-CRANK	lowlevel:delegatecall	claimDecimatorJackpotMany	DegenerusGame.sol	BARE		permissionless decimator batch claim (player-side, separate tx)
 OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	_claimWinningsWithCurse	DegenerusGame.sol	BARE		claimWinnings / claimWinnings(amount) player claim path; GNRUS, sDGNRS and VAULT redemptions call it as players
-OFF-CRANK	lowlevel:call	withdrawAfkingFunding	DegenerusGame.sol	BARE		player / VAULT afking funding withdrawal entry
 OFF-CRANK	lowlevel:delegatecall	claimAffiliateDgnrs	DegenerusGame.sol	BARE		player affiliate DGNRS claim
 OFF-CRANK	ICoinflip.creditFlip	degeneretteResolve	DegenerusGame.sol	BARE		permissionless degenerette resolver bounty (its own tx; not a mineFlip router leg)
 OFF-CRANK	delegatecall:IGameAfkingModule.drainAfkingBoxes	openBoxes	DegenerusGame.sol	BARE		player liveness valve openBoxes; the router walks afking boxes inside GameAfkingModule instead

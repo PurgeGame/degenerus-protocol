@@ -121,6 +121,8 @@ contract sDGNRS {
 
     /// @notice Thrown when caller is not authorized for the operation
     error Unauthorized();
+    /// @notice The game-over trigger reads true but the game is not over yet: retry once it is.
+    error EndingPending();
 
     /// @notice Thrown when amount exceeds available balance or allowance
     error Insufficient();
@@ -877,7 +879,11 @@ contract sDGNRS {
         // already being drained. The redemption value was segregated to this contract at
         // submit either way, so nothing is withheld — it simply stops minting game
         // positions on the way out.
-        bool isTerminal = game.livenessTriggered();
+        // Terminal shape (all ETH direct, FLIP escrow forfeited) only once the game is over, which
+        // is irreversible. While the game-over trigger reads true before that, wait: it can still
+        // read false again, and a terminal settlement taken then would stick.
+        bool isTerminal = game.gameOver();
+        if (!isTerminal && game.livenessTriggered()) revert EndingPending();
         // In terminal mode the claim direct-pushes ETH to `player`, so it is restricted to `player` or
         // an operator `player` approved on the GAME (the value still lands on `player`; an approved
         // delegate is consensual). Live game stays permissionless (credit into the gated claimable).

@@ -68,10 +68,12 @@ contract WwxrpVaultMintTest is DeployProtocol {
         assertEq(wwxrp.balanceOf(alice), 1002 ether);
     }
 
-    function testOwnerCannotMintToZero() public {
+    function testMintToZeroMintsNothing() public {
+        uint256 supply = wwxrp.totalSupply();
         vm.prank(owner);
-        vm.expectRevert(WWXRP.ZeroAddress.selector);
         wwxrp.vaultMintTo(address(0), 1 ether);
+        assertEq(wwxrp.totalSupply(), supply, "a zero recipient mints nothing");
+        assertEq(wwxrp.balanceOf(address(0)), 0, "and credits nobody");
     }
 
     function testTransferToVaultUsesOrdinaryBalance() public {

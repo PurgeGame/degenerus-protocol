@@ -2596,9 +2596,12 @@ abstract contract DegenerusGameStorage {
         if (lvl != 0 && _getNextPrizePool() > _prizePoolTarget(lvl + 1)) return false;
         // A day that holds its word is finished on it.
         if (rngWordByDay[today] != 0) return false;
-        // A caught-up day, or an unattended gap with nothing in flight. A VRF stall always has
-        // a request in flight, so it still waits for its catch-up credit.
-        return today == idx + 1 || rngRequestTime == 0;
+        // A caught-up day, or an unattended gap: nothing in flight AND no word applied since before
+        // yesterday. A VRF stall has a request in flight; one that has just recovered has applied
+        // its late word (lastVrfProcessedTimestamp is today's or yesterday's) and finished only its
+        // own day, and waits for the next advance's backfill to credit the skipped days.
+        return today == idx + 1
+            || (rngRequestTime == 0 && _simulatedDayIndexAt(lastVrfProcessedTimestamp) + 1 < today);
     }
 
     /// @dev Deadman: true once no day has sealed for _VRF_DEADMAN_DAYS. dailyIdx advances in

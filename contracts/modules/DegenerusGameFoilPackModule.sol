@@ -1296,10 +1296,14 @@ contract DegenerusGameFoilPackModule is
         uint24 last = foilLastResolveDay;
         uint256 cursor = foilCursor;
 
-        // The grand push is closed from the liveness trigger on, matching the pull
-        // claim: past that point the terminal path is drawing down the same pools the
-        // grand debits. Read once for the whole walk — it cannot change mid-call.
-        bool terminal = _livenessTriggered();
+        // The grand push is closed once the ending has latched (normal or dead): from then the
+        // terminal path is drawing down the same pools the grand debits. Keyed on the latch, not
+        // the liveness trigger, which can still read false again — a pack drained in terminal
+        // mode forfeits its grand for good. The drain runs only inside the advance, and an
+        // advance that finds the trigger on latches the ending before it drains. Read once for
+        // the whole walk — it cannot change mid-call.
+        bool terminal = gameOver || _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
+            || _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
 
         // Trait-batch scratch shared across every buyer this call (re-zeroed per buyer
         // inside _resolveFoilBuyer), so memory does not grow per queue entry.

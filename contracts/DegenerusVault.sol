@@ -1119,6 +1119,7 @@ contract DegenerusVault {
                 uint256 afking = gamePlayer.afkingFundingOf(address(this));
                 gamePlayer.withdrawAfkingFunding(shortfall < afking ? shortfall : afking);
                 ethBal = address(this).balance;
+                stBal = _stethBalance(); // the withdrawal falls back to stETH when the game's ETH is short
             }
         }
 

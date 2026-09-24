@@ -512,9 +512,18 @@ contract WWXRP {
         emit Transfer(from, to, amount);
     }
 
-    /// @dev Creates tokens in the recipient's balance.
+    /// @dev Creates tokens in the recipient's balance, SATURATING at the supply ceiling. The vault
+    ///      owner can mint any amount, so a checked add would let it push totalSupply to the top
+    ///      and make every later mint panic — including the ones the game makes inside the daily
+    ///      advance (Coinflip's loss reward, the golden-ticket consolation), which would brick
+    ///      it. Clamped instead, a mint past the ceiling mints what fits; a balance never exceeds
+    ///      totalSupply, so the balance add cannot overflow either.
+    ///      A zero recipient mints nothing rather than reverting: every mint the game makes names a
+    ///      real recipient, and a hot-path mint must never be able to revert.
     function _mint(address to, uint256 amount) internal {
-        if (to == address(0)) revert ZeroAddress();
+        if (to == address(0)) return;
+        uint256 room = type(uint256).max - totalSupply;
+        if (amount > room) amount = room;
         totalSupply += amount;
         balanceOf[to] += amount;
         emit Transfer(address(0), to, amount);
@@ -539,7 +548,7 @@ contract WWXRP {
     /// @param to Recipient of the minted WWXRP
     /// @param amount Amount to mint (18 decimals)
     /// @custom:reverts OnlyMinter When caller is not an authorized minter
-    /// @custom:reverts ZeroAddress When to is address(0)
+    ///      A zero recipient mints nothing.
     function mintPrize(address to, uint256 amount) external {
         if (
             msg.sender != MINTER_GAME &&
@@ -568,7 +577,7 @@ contract WWXRP {
         emit TrustedMinterSet(account, trusted);
     }
 
-    /// @notice Mint any amount of WWXRP for free to a nonzero recipient.
+    /// @notice Mint any amount of WWXRP for free (a zero recipient mints nothing).
     /// @dev Callable by the vault or its current owner (>50.1% of DGVE).
     ///      No reserve, allocation, payment or per-call mint limit applies.
     function vaultMintTo(address to, uint256 amount) external {

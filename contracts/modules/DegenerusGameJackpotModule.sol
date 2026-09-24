@@ -415,7 +415,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             bucketCounts,
             false, // not jackpot phase
             false, // no solo bucket, golden ticket never arms here
-            PriceLookupLib.priceForLevel(targetLvl + 1) >> 2
+            // Exact shares, no ticket-unit rounding: terminal winners are paid in ETH, and the
+            // pot is read from the balance after the terminal word is public, so rounding to a
+            // unit would let a forced-ETH or stETH nudge swing a whole unit between buckets.
+            // Zero, written as a runtime value (targetLvl is a uint24, so the shift is always 0):
+            // a literal would let the optimizer clone the whole helper for this one call site.
+            uint256(targetLvl) >> 24
         );
     }
 
