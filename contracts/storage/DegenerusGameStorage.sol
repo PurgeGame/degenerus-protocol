@@ -2601,7 +2601,8 @@ abstract contract DegenerusGameStorage {
         // its late word (lastVrfProcessedTimestamp is today's or yesterday's) and finished only its
         // own day, and waits for the next advance's backfill to credit the skipped days.
         return today == idx + 1
-            || (rngRequestTime == 0 && _simulatedDayIndexAt(lastVrfProcessedTimestamp) + 1 < today);
+            || (rngRequestTime == 0
+                && (lastVrfProcessedTimestamp == 0 || _simulatedDayIndexAt(lastVrfProcessedTimestamp) + 1 < today));
     }
 
     /// @dev Deadman: true once no day has sealed for _VRF_DEADMAN_DAYS. dailyIdx advances in

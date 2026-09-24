@@ -264,16 +264,23 @@ contract AdvanceStageWorstCaseGas is Test {
         uint256 gasHi = gHi0 - gasleft();
         vm.revertToState(snap);
 
-        // Run 2: a small pool that pins to a much smaller winner geometry (still > 0 winners).
-        uint256 smallPool = 5 ether; // below the max-scale floor -> a small bucket geometry
-        uint16[4] memory bcLo = JackpotBucketLib.bucketCountsForPool(
-            smallPool, EntropyLib.hash2(_word(), TARGET_LVL), DAILY_JACKPOT_SCALE_MAX_BPS
+        // Run 2: the same pot and the same full geometry, but only the smallest paying bucket holds
+        // entries, so only its winners are drawn (an empty bucket draws none). The terminal jackpot
+        // pays exact shares at a fixed full-size geometry, so a smaller pot no longer thins the
+        // winners (the old ticket-unit rounding zeroed small buckets, which this probe relied on).
+        (, uint256 eff) = _deriveTraits(_word());
+        uint16[4] memory bcFull = JackpotBucketLib.bucketCountsForPool(
+            JackpotBucketLib.JACKPOT_SCALE_SECOND_WEI, eff, DAILY_JACKPOT_SCALE_MAX_BPS
         );
-        uint256 loWinners = JackpotBucketLib.sumBucketCounts(bcLo);
-        _seedAllBuckets(traitIds);
+        uint8 qLo = 4;
+        for (uint8 q; q < 4; ++q) {
+            if (bcFull[q] != 0 && (qLo == 4 || bcFull[q] < bcFull[qLo])) qLo = q;
+        }
+        uint256 loWinners = bcFull[qLo];
+        jp.seedBucket(TARGET_LVL, traitIds[qLo], 260, uint160(uint256(0x1000) + uint256(qLo) * 0x10000));
         vm.prank(ContractAddresses.GAME);
         uint256 gLo0 = gasleft();
-        jp.runTerminalJackpot(smallPool, TARGET_LVL, _word());
+        jp.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
         uint256 gasLo = gLo0 - gasleft();
 
         emit log_named_uint("eth_jackpot_gas_at_305_winners", gasHi);

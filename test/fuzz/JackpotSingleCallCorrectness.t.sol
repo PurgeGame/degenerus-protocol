@@ -203,7 +203,7 @@ contract JackpotSingleCallCorrectness is Test {
         );
 
         uint8 soloIdx = JackpotBucketLib.soloBucketIndex(effectiveEntropy);
-        uint256 unit = PriceLookupLib.priceForLevel(TARGET_LVL + 1) >> 2;
+        uint256 unit = 0; // runTerminalJackpot pays exact shares (no ticket-unit rounding)
         uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
             FINAL_DAY_SHARES_PACKED, uint8(effectiveEntropy & 3)
         );
@@ -424,7 +424,7 @@ contract JackpotSingleCallCorrectness is Test {
     function testNoResumeStageSingleCallFullyResolves() public {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
         uint8 soloIdx = JackpotBucketLib.soloBucketIndex(effEntropy);
-        uint256 unit = PriceLookupLib.priceForLevel(TARGET_LVL + 1) >> 2;
+        uint256 unit = 0; // runTerminalJackpot pays exact shares (no ticket-unit rounding)
         uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
             POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
         );

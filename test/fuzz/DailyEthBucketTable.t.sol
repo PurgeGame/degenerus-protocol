@@ -133,7 +133,10 @@ contract DailyEthBucketTable is Test {
         assertEq(remainderPaid, ethPool - distributed, "the solo quadrant takes the whole remainder");
     }
 
-    function test_terminalJackpotPaysWholeGranulesOfTheNextLevelsPrice() public {
+    /// @dev The terminal jackpot pays exact shares (no ticket-unit flooring): its pot is read from
+    ///      the balance after the terminal word is public, so a granule floor would let a 1-wei
+    ///      nudge swing a whole unit between buckets. Only per-winner flooring dust is left over.
+    function test_terminalJackpotPaysExactSharesNotGranules() public {
         uint24 target = LVL;
         (uint256 word, uint8[4] memory traits) = _board(target, 0xFEED);
         uint256 poolWei = 12.345678901234567891 ether;
@@ -141,22 +144,21 @@ contract DailyEthBucketTable is Test {
         vm.recordLogs();
         vm.prank(ContractAddresses.GAME);
         uint256 paid = h.runTerminalJackpot(poolWei, target, word);
-        (uint256[4] memory count, uint256[4] memory total) = _tally(vm.getRecordedLogs(), traits, unit);
+        (uint256[4] memory count, uint256[4] memory total) = _tally(vm.getRecordedLogs(), traits, 0); // no per-winner floor here
 
         uint256 summed;
         uint256 wholeBuckets;
+        uint256 winners;
         for (uint8 q; q < 4; q++) {
             summed += total[q];
+            winners += count[q];
             if (count[q] != 0 && total[q] % unit == 0) wholeBuckets++;
         }
         assertEq(summed, paid, "the events account for every wei the call reports paid");
         assertLe(paid, poolWei, "never more than the pool");
-        // Three buckets are floored to the granule; only the remainder bucket may carry an
-        // unaligned residue, so at least three of the paying buckets are whole granules.
-        assertGe(wholeBuckets, 3, "the shared buckets pay whole quarters of the next level's price");
-        // The mutant that floors to THIS level's granule (half the size) pays a finer figure: some
-        // shared bucket's total is then an odd multiple of it, which the coarse granule rejects.
-        uint256 fine = PriceLookupLib.priceForLevel(target) >> 2;
-        assertEq(unit, 2 * fine, "fixture: the two candidate granules differ");
+        assertLt(poolWei - paid, winners, "only per-winner flooring dust is left (under a wei per winner)");
+        // Under the old granule floor three shared buckets were whole quarters of the next level's
+        // price; exact shares on this odd pot leave them unaligned.
+        assertLt(wholeBuckets, 3, "the shared buckets are exact shares, not floored to a ticket granule");
     }
 }

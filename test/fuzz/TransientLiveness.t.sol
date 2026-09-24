@@ -26,6 +26,8 @@ contract TransientLivenessHarness is DegenerusGameStorage {
         purchaseStartDay = day - age;
         dailyIdx = day - sealedAge;
         rngRequestTime = requestTime;
+        // The last daily word was applied on the last sealed day (an unattended gap since then).
+        lastVrfProcessedTimestamp = uint48(block.timestamp - uint256(sealedAge) * 1 days);
     }
 
     function setPools(uint256 target, uint256 next) external {

@@ -24,6 +24,8 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
         dailyIdx = day - sealedAge;
         rngRequestTime = requestTime;
         rngWordCurrent = word;
+        // The last daily word was applied on the last sealed day (an unattended gap since then).
+        lastVrfProcessedTimestamp = uint48(block.timestamp - uint256(sealedAge) * 1 days);
         lastPurchaseDay = phase == 1;
         jackpotPhaseFlag = phase == 2;
         lootboxRngPacked = 1;
