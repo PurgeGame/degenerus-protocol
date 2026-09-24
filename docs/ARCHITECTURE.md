@@ -239,8 +239,8 @@ Protocol deity grants occur after the deployment sequence. Their perpetual entri
 and protocol boon cohorts have their own pre-request scheduling and closure rules.
 Foil packs resolve tomorrow's committed draw. A VRF stall skips missed days on
 recovery and freezes auto-rebuy arming; a request unanswered for 14 days ends the game
-deterministically. `VRF-STALL-AND-DEADMAN-PLAN.md` is an earlier design; `KNOWN-ISSUES.md`
-states the implemented behavior.
+deterministically. `VRF-STALL-AND-DEADMAN-PLAN.md` is an earlier design; the NatSpec of `_livenessTriggered`,
+`_vrfDead` and `_handleGameOverPath` states the implemented behavior.
 
 At the first AFKing stage of each level, sDGNRS attempts a whale-pass purchase of
 the largest group of five paid passes affordable from a quarter of its claimable,

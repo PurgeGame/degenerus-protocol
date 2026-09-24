@@ -28,7 +28,7 @@
 #   CRANK-CAUGHT   bare at the site, but every crank path to it crosses an upstream try/catch
 #                  (the rationale names the catching site); a revert there is fail-soft.
 #   CRANK-POLICY   bare crank call whose revert is an INTENTIONAL, documented halt (e.g. the
-#                  daily VRF request when Chainlink refuses — KNOWN-ISSUES §1); the rationale
+#                  daily VRF request when Chainlink refuses — KNOWN-ISSUES Governance); the rationale
 #                  must cite the document. Accepted, never silently.
 #   OFF-CRANK      the enclosing function is not reachable from advanceGame, the VRF
 #                  fulfilment, or the keeper router (player, owner or view entry points).

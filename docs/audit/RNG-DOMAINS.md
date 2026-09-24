@@ -95,7 +95,8 @@ named constants in the consumer; full string hashes are constant expressions.
   game deterministically with no word at all: the terminal level's tickets share
   the pot (`claimDeadVrf`). A normal ending draws only on a terminal word it
   requested itself after liveness froze purchases. `../VRF-STALL-AND-DEADMAN-PLAN.md`
-  is an earlier design; `KNOWN-ISSUES.md` states the implemented behavior.
+  is an earlier design; the NatSpec of `_livenessTriggered`, `_vrfDead` and
+  `_handleGameOverPath` states the implemented behavior.
 
 ## Regression evidence
 
