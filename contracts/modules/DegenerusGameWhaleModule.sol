@@ -1233,9 +1233,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     bytes32 private constant EARLY_BIRD_WHALE_TAG = keccak256("early-bird-whale");
     bytes32 private constant QUADRANT_WHALE_TAG = keccak256("jackpot-quadrant-whale");
 
-    /// @dev Same event as JackpotModule; denominated in half-pass claim units.
-    event JackpotWhalePassWin(address indexed winner, uint256 halfPasses, uint8 source);
-
     /// @notice Nested jackpot award against GAME storage, with deferred delivery.
     /// @dev Early bird supplies half-pass units and never moves pools. A quadrant
     ///      supplies its original ETH budget; whole passes consume at most 25%,

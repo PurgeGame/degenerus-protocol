@@ -805,6 +805,20 @@ abstract contract DegenerusGameStorage {
         uint24 level
     );
 
+    /// @dev Whale pass awarded in place of an ETH, lootbox or early-bird ticket payout — otherwise the
+    ///      `whalePassClaims` increment is silent. Declared once here for JackpotModule and WhaleModule,
+    ///      which both emit it through GAME's delegatecall. `halfPassCount` is in half-pass claim units.
+    ///      The award is a bare half-pass counter binding to no level: claimWhalePass sets the target
+    ///      from the level standing at claim time and reports it on WhalePassClaimed. The paying level
+    ///      is not carried here either — every emit site sits in a receipt that already stamps it.
+    ///      `source`: 2 BAF direct, 3 award tickets (JackpotModule), 4 early bird, 5 quadrant
+    ///      conversion (WhaleModule); 1 (the solo-only half-pass conversion) is retired.
+    event JackpotWhalePassWin(
+        address indexed winner,
+        uint256 halfPassCount,
+        uint8 source
+    );
+
     /// @notice Emitted when game-over drain processes terminal jackpots.
     event GameOverDrained(
         uint24 level,

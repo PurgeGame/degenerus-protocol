@@ -163,18 +163,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 bonusTargetLevel
     );
 
-    /// @dev Whale pass awarded in place of an ETH, lootbox or early-bird ticket payout — otherwise the
-    ///      `whalePassClaims` increment is silent. The award is a bare half-pass counter
-    ///      binding to no level: claimWhalePass sets the target from the level standing at
-    ///      claim time and reports it on WhalePassClaimed. The paying level is not carried
-    ///      here either — every emit site sits in a receipt that already stamps it.
-    ///      `source` is one of the WHALE_PASS_SRC_* constants.
-    event JackpotWhalePassWin(
-        address indexed winner,
-        uint256 halfPassCount,
-        uint8 source
-    );
-
     /// @dev Yield surplus split three ways at the level transition. `perRecipientShare` is
     ///      credited to each of VAULT, sDGNRS and GNRUS — equal shares to pinned addresses,
     ///      so one field describes the whole distribution.
