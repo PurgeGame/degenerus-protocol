@@ -312,9 +312,10 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     }
 
     /// @notice Final sweep of all remaining funds after 30 days post-gameover.
-    /// @dev Pays each sink (vault, sDGNRS, GNRUS) the claimable balance still
-    ///      owed to it, then splits the remainder ~1/3 each (GNRUS absorbs the
-    ///      rounding wei). All other unclaimed player balances are forfeited.
+    /// @dev Pays each sink (vault, sDGNRS, GNRUS) its whole game-side balance still
+    ///      owed to it — claimable plus prepaid afking — then splits the remainder ~1/3
+    ///      each (GNRUS absorbs the rounding wei). All other unclaimed player balances
+    ///      are forfeited.
     ///      After GO_SWEPT=1, claimWinnings() reverts, so this is the last
     ///      chance for the three sinks to receive what they earned in-game.
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
@@ -328,15 +329,9 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);
         charityGameOver.onFinalSweep(); // stamp GNRUS with the sweep time (anchors its recovery gates)
 
-        uint256 owedV  = _claimableOf(ContractAddresses.VAULT);
-        uint256 owedSD = _claimableOf(ContractAddresses.SDGNRS);
-        uint256 owedG  = _claimableOf(ContractAddresses.GNRUS);
-        _debitClaimable(ContractAddresses.VAULT, owedV);
-        _debitClaimable(ContractAddresses.SDGNRS, owedSD);
-        _debitClaimable(ContractAddresses.GNRUS, owedG);
-        if (owedV  != 0) emit ClaimableSpent(ContractAddresses.VAULT,  owedV,  0, MintPaymentKind.Internal, owedV);
-        if (owedSD != 0) emit ClaimableSpent(ContractAddresses.SDGNRS, owedSD, 0, MintPaymentKind.Internal, owedSD);
-        if (owedG  != 0) emit ClaimableSpent(ContractAddresses.GNRUS,  owedG,  0, MintPaymentKind.Internal, owedG);
+        uint256 owedV  = _takeSinkBalance(ContractAddresses.VAULT);
+        uint256 owedSD = _takeSinkBalance(ContractAddresses.SDGNRS);
+        uint256 owedG  = _takeSinkBalance(ContractAddresses.GNRUS);
         claimablePool = 0;
 
         // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
@@ -359,6 +354,17 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         stBal = _sendStethFirst(ContractAddresses.VAULT,  owedV  + thirdShare, stBal);
         stBal = _sendStethFirst(ContractAddresses.SDGNRS, owedSD + thirdShare, stBal);
         _sendStethFirst(ContractAddresses.GNRUS,          owedG  + gnrusExtra, stBal);
+    }
+
+    /// @dev Zero a sink's packed balance — claimable (low half) and prepaid afking (high half),
+    ///      both inside claimablePool — and return the total the final sweep owes it.
+    function _takeSinkBalance(address sink) private returns (uint256 owed) {
+        uint256 claimable = _claimableOf(sink);
+        uint256 afking = _afkingOf(sink);
+        _debitClaimableAndAfking(sink, claimable, afking);
+        if (claimable != 0) emit ClaimableSpent(sink, claimable, 0, MintPaymentKind.Internal, claimable);
+        if (afking != 0) emit AfkingSpent(sink, afking);
+        owed = claimable + afking;
     }
 
     /*+========================================================================================+

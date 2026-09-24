@@ -81,6 +81,8 @@ interface IDegenerusGamePlayerActions {
         uint256[] calldata quantities,
         uint256[] calldata queueIndices
     ) external;
+    /// @notice Fund a player's prepaid afking ETH bucket.
+    function depositAfkingFunding(address player) external payable;
     /// @notice Withdraw the caller's prepaid afking ETH (sends to the caller).
     function withdrawAfkingFunding(uint256 amount) external;
     /// @notice A player's prepaid afking ETH balance.
@@ -618,19 +620,23 @@ contract DegenerusVault {
         emit Deposit(msg.sender, msg.value, 0, 0);
     }
 
+    /// @notice Stage vault ETH as the vault's prepaid afking funding in the game.
+    /// @dev Funds the afking leg of the vault's own daily auto-buy and its salvage-buyer
+    ///      fallback. The staged ETH stays part of DGVE's reserve (see _ethReservesView) and
+    ///      burnEth draws on it when the vault's own balance and claimable winnings fall short.
+    /// @param ethValue Additional ETH from vault balance to stage (on top of msg.value)
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @custom:reverts Insufficient If total value exceeds vault balance
+    function gameDepositAfkingFunding(uint256 ethValue) external payable onlyVaultOwner {
+        gamePlayer.depositAfkingFunding{value: _combinedValue(ethValue)}(address(this));
+    }
+
     /// @notice Recover the vault's prepaid afking ETH back into vault reserves.
-    /// @dev Permissionless: any caller, not just the vault owner, can move the vault's staged
-    ///      afking half back at any time. game.withdrawAfkingFunding sends to the CALLER (this
-    ///      vault), so the recovered ETH only ever lands in the vault's own receive() — it never
-    ///      leaves the vault. A zero balance is a no-op (withdrawAfkingFunding(0) returns).
-    ///      Draining it empties the afking leg of the vault's own daily auto-buy for that day,
-    ///      which then draws claimable instead — it does not brick. It can also drop claimable +
-    ///      afking below totalBudget + floorWei in _resolveSalvageBuyer, failing the vault's
-    ///      salvage-buyer test and reverting a sellFarFutureEntries swap whose only counterparty
-    ///      was the vault, until the owner re-stages via depositAfkingFunding. Available anytime
-    ///      pre-sweep; reverts after the 30-day final sweep (the afking reservation is forfeited
-    ///      with claimablePool, claimable-equivalent).
-    function recoverAfkingFunding() external {
+    /// @dev game.withdrawAfkingFunding sends to the caller (this vault), so the ETH lands in
+    ///      the vault's own receive(). A zero balance is a no-op. Available until the 30-day
+    ///      final sweep, which pays the vault its afking balance along with its claimable.
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function recoverAfkingFunding() external onlyVaultOwner {
         gamePlayer.withdrawAfkingFunding(gamePlayer.afkingFundingOf(address(this)));
     }
 
@@ -732,7 +738,7 @@ contract DegenerusVault {
     /// @notice Enable/disable the salvage-buyer fallback and set the protected ETH reserve floor.
     /// @dev When enabled, the game routes a far-future salvage swap to the vault as buyer when sDGNRS
     ///      cannot fund it, spending the vault's game-side ETH — claimable first, then prepaid afking
-    ///      (staged from reserves via the game's depositAfkingFunding) — down to `floorWei`, plus
+    ///      (staged from reserves via gameDepositAfkingFunding) — down to `floorWei`, plus
     ///      vault-owned FLIP, and parking the bought far-future tickets in the vault. This commits
     ///      DGVE/DGVF backing as buyer-of-last-resort at the same -EV quote sDGNRS pays, so it is
     ///      vault-owner gated.
@@ -1082,7 +1088,8 @@ contract DegenerusVault {
     /// @dev ETH is preferred over stETH (uses ETH first, then stETH for remainder).
     ///      Formula: claimValue = (DGVE reserve * sharesBurned) / totalSupply.
     ///      If burning entire supply, caller receives 1T new shares (refill mechanism).
-    ///      May auto-claim game winnings if needed to fulfill the redemption.
+    ///      May auto-claim game winnings, then withdraw prepaid afking funding, if needed to
+    ///      fulfill the redemption.
     /// @param amount Amount of DGVE shares to burn
     /// @return ethOut Amount of ETH sent to caller
     /// @return stEthOut Amount of stETH sent to caller
@@ -1095,16 +1102,24 @@ contract DegenerusVault {
         (uint256 ethBal, uint256 stBal, uint256 combined) = _syncEthReserves();
         uint256 claimable = _netClaimableWinnings();
         uint256 supplyBefore = share.totalSupply();
-        uint256 reserve = combined + claimable;
+        uint256 reserve = combined + claimable + gamePlayer.afkingFundingOf(address(this));
         uint256 claimValue = (reserve * amount) / supplyBefore;
 
-        // claimValue > combined arithmetically implies claimable != 0 for any amount that the
-        // vaultBurn below accepts (claimValue <= reserve = combined + claimable when
-        // amount <= supplyBefore), so no extra conjunct is needed here.
+        // Short of the vault's own balance: claim winnings first, then withdraw the rest from
+        // the prepaid afking funding. After game over the claim also pays the afking balance,
+        // so the withdrawal is capped at what is left.
         if (claimValue > combined) {
-            gamePlayer.claimWinnings(address(this));
-            ethBal = address(this).balance;
-            stBal = _stethBalance();
+            if (claimable != 0) {
+                gamePlayer.claimWinnings(address(this));
+                ethBal = address(this).balance;
+                stBal = _stethBalance();
+            }
+            if (claimValue > ethBal + stBal) {
+                uint256 shortfall = claimValue - ethBal - stBal;
+                uint256 afking = gamePlayer.afkingFundingOf(address(this));
+                gamePlayer.withdrawAfkingFunding(shortfall < afking ? shortfall : afking);
+                ethBal = address(this).balance;
+            }
         }
 
         if (claimValue <= ethBal) {
@@ -1247,13 +1262,14 @@ contract DegenerusVault {
     }
 
     /// @dev View helper for ETH+stETH reserves (stETH rebase yield accrues to DGVE only)
-    /// @return mainReserve DGVE claimable reserve (combined balance + claimable winnings)
+    /// @return mainReserve DGVE claimable reserve (combined balance + claimable winnings +
+    ///         prepaid afking funding)
     /// @return ethBal Current ETH balance
     function _ethReservesView() private view returns (uint256 mainReserve, uint256 ethBal) {
         uint256 combined;
         (ethBal,, combined) = _syncEthReserves();
         unchecked {
-            mainReserve = combined + _netClaimableWinnings();
+            mainReserve = combined + _netClaimableWinnings() + gamePlayer.afkingFundingOf(address(this));
         }
     }
 
