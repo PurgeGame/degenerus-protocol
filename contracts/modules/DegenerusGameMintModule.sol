@@ -667,7 +667,10 @@ contract DegenerusGameMintModule is
         // since is the first RNG request since, and this sweep's word is that request's (or a
         // later one's). The pool mints here on that word, one full budget per call; a call that
         // already worked the window leaves it to the next call, and the sweep is not finished
-        // while any of it remains.
+        // while any of it remains. The batch that empties it reports finished itself: the
+        // mid-day caller re-enters only while its probe still finds work, so an empty pool
+        // would otherwise hold the mid-day latch until the next day. A pending foil bucket
+        // keeps it unfinished; the next call drains foil on its own budget.
         if (!terminal && _frozenPoolDue()) {
             uint24 nextLvl = _mintCeiling();
             if (ticketQueue[_tqFarFutureKey(nextLvl)].length != 0) {
@@ -680,8 +683,8 @@ contract DegenerusGameMintModule is
                 if (entropy == 0) {
                     entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
                 }
-                (bool ffWorked, , ) = _processFutureTicketBatch(nextLvl, entropy);
-                return (false, ffWorked);
+                (bool ffWorked, bool ffFinished, ) = _processFutureTicketBatch(nextLvl, entropy);
+                return (ffFinished && !_foilDrainPending(), ffWorked);
             }
         }
 
