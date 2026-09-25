@@ -1,19 +1,13 @@
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
+import { jackpotSoloFixture as deployTester } from "../helpers/jackpotSoloFixture.js";
 
 // ---------------------------------------------------------------------------
 // Fixture: deploy the test-only JackpotSoloTester harness (Plan 02 Task 1).
 // The harness inherits DegenerusGameJackpotModule and exposes _pickSoloQuadrant
 // as an external pure passthrough so Hardhat JS can invoke production bytes.
 // ---------------------------------------------------------------------------
-
-async function deployTester() {
-  const Tester = await hre.ethers.getContractFactory("JackpotSoloTester");
-  const tester = await Tester.deploy();
-  await tester.waitForDeployment();
-  return { tester };
-}
 
 // ---------------------------------------------------------------------------
 // Trait byte helpers — [QQ][CCC][SSS] format (quadrant 2 bits, color 3 bits,

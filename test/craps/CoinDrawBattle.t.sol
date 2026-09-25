@@ -110,10 +110,24 @@ contract CoinDrawBattleTest is Test {
         uint256 d = bound(dupEvery, 2, 9);
         for (uint256 i = d; i < 50; i += d) e[i] = e[i - d / 2 - 1];
 
+        _assertFieldPaysByTheRules(e, amount, word);
+    }
+
+    function testFuzz_CollidingWalletsPayByTheRules(uint256 word, uint8 repetitions) public {
+        address[] memory e = new address[](50);
+        uint256 distinct = bound(repetitions, 1, 50);
+        for (uint256 i; i < e.length; ++i) e[i] = address(uint160((i % distinct) << 8));
+        _assertFieldPaysByTheRules(e, 150_000 ether, word);
+    }
+
+    function _assertFieldPaysByTheRules(address[] memory e, uint256 amount, uint256 word) private {
+        uint256[2] memory gasBound;
+        gasBound[0] = gasleft();
         (address[] memory players, uint256[] memory owed) = _resolve(e, amount, word);
+        gasBound[0] -= gasleft();
 
         uint256 stakes = (amount * 2) / 3;
-        uint256 units = 50;
+        uint256 units = e.length;
         if (units > stakes / 300 ether) units = stakes / 300 ether;
         uint256 chipFlip = (stakes / units / 300 ether) * 6;
         if (chipFlip > (type(uint24).max / 10 / 6) * 6) chipFlip = (type(uint24).max / 10 / 6) * 6;
@@ -135,9 +149,11 @@ contract CoinDrawBattleTest is Test {
         uint256 best;
         uint256 winner = type(uint256).max;
         uint256[] memory expect = new uint256[](n);
+        gasBound[1] = RESOLVE_BASE;
         for (uint256 j; j < n; ++j) {
             assertEq(players[j], want[j], "draw order");
             Craps.SlipResult memory r = ref.run(word, want[j], chipFlip);
+            gasBound[1] += FIXED + RUN_EXTRA + PER_HAND * r.handsPlayed + PER_ROLL * r.totalRolls;
             assertLe(r.totalRolls, 200, "a run passed the exact roll cap");
             assertLe(r.handsPlayed, 22, "a run passed the hand cap");
             uint256 out = r.stop == Craps.SlipStop.Goal || r.totalRolls >= 200 || r.handsPlayed == 22
@@ -153,6 +169,7 @@ contract CoinDrawBattleTest is Test {
             expect[winner] += _award(amount - chipFlip * 50 ether * units, uint256(keccak256(abi.encode(word, ROUND_TAG))));
         }
         for (uint256 j; j < n; ++j) assertEq(owed[j], expect[j], "owed");
+        assertLe(gasBound[0], gasBound[1], "field exceeds the gas model, including colliding wallets");
     }
 
     /// @dev A budget that cannot give every drawn unit the 300-FLIP floor plays fewer, from the

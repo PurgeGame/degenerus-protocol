@@ -108,14 +108,25 @@ contract CoinDrawBattle is Craps {
         owed = new uint256[](units);
         uint256[] memory held = new uint256[](units);
         uint256 n;
+        uint256 seen;
         unchecked {
             for (uint256 i; i < units; ++i) {
                 address e = entrants[i];
-                uint256 j;
-                while (j < n && players[j] != e) ++j;
+                // An unused low-byte bit proves this wallet is new. A set bit is
+                // only a possible repeat: collisions still take the exact scan.
+                // This preserves first-drawn order without scanning for most of
+                // a usual field's distinct wallets; even all-colliding wallets
+                // do no more scans than before.
+                uint256 bit = uint256(1) << uint8(uint160(e));
+                uint256 j = n;
+                if (seen & bit != 0) {
+                    j = 0;
+                    while (j < n && players[j] != e) ++j;
+                }
                 if (j == n) {
                     players[n] = e;
                     ++n;
+                    seen |= bit;
                 }
                 ++held[j];
             }

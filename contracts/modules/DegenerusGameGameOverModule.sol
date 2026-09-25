@@ -400,7 +400,15 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 idx = deadTallyFoilIdx;
 
         if (stage == 0) {
-            uint256 len = lvlEntryOwner[lvl].length;
+            EntryOwner[] storage owners = lvlEntryOwner[lvl];
+            uint256 len = owners.length;
+            // The registry is immutable during this tally. Reuse its data base for
+            // the bounded walk instead of hashing the same array slot per owner.
+            uint256 records;
+            assembly ("memory-safe") {
+                mstore(0, owners.slot)
+                records := keccak256(0, 32)
+            }
             uint256 pos = deadTallyPos;
             uint8 shift = _snapShiftFor(lvl);
             while (pos < len) {
@@ -413,8 +421,11 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
                     --units;
                     ++pos;
                 }
-                // pos is now the registry position plus one, the form _entryRecord takes.
-                uncreated += _deadWeight(uint80(_entryRecord(lvl, uint32(pos)) >> 160), shift);
+                // pos was below len before the increment; this reads that owner's
+                // single-slot record, whose owed field starts at bit 160.
+                uint80 packed;
+                assembly ("memory-safe") { packed := shr(160, sload(add(records, sub(pos, 1)))) }
+                uncreated += _deadWeight(packed, shift);
             }
             deadTallyPos = uint32(pos);
             stage = 1;
@@ -428,20 +439,30 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             while (dd != 0 && dd <= last) {
                 uint256[] storage bucket = foilBuyers[dd];
                 uint256 n = bucket.length;
-                while (idx < n) {
-                    if (units == 0) {
-                        _saveDeadTally(1, dd, idx, uncreated);
-                        return false;
+                if (idx < n) {
+                    uint256 packs;
+                    assembly ("memory-safe") {
+                        mstore(0, bucket.slot)
+                        packs := keccak256(0, 32)
                     }
-                    unchecked {
-                        --units;
-                    }
-                    if (uint24(bucket[idx] >> 160) == lvl) {
-                        uncreated += FOIL_PACK_ENTRIES * QTY_SCALE;
-                    }
-                    unchecked {
-                        ++idx;
-                    }
+                    do {
+                        if (units == 0) {
+                            _saveDeadTally(1, dd, idx, uncreated);
+                            return false;
+                        }
+                        unchecked {
+                            --units;
+                        }
+                        // idx < n proves this cached-base read is within the day's bucket.
+                        uint256 pack;
+                        assembly ("memory-safe") { pack := sload(add(packs, idx)) }
+                        if (uint24(pack >> 160) == lvl) {
+                            uncreated += FOIL_PACK_ENTRIES * QTY_SCALE;
+                        }
+                        unchecked {
+                            ++idx;
+                        }
+                    } while (idx < n);
                 }
                 // Charge the day step too, so a long run of empty days stays metered.
                 if (units == 0) {
@@ -493,10 +514,11 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @dev An owed word's uncreated weight in QTY_SCALE units, snap-adjusted exactly as the
     ///      ticket drain applies it on first touch (_processOneTicketEntry).
     function _deadWeight(uint80 packed, uint8 shift) private pure returns (uint256) {
-        if (shift != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
-            packed = _snapOwedPacked(packed, shift);
-        }
-        return uint256(uint32(packed >> 8)) * QTY_SCALE + uint8(packed);
+        uint256 weight = uint256(uint32(packed >> 8)) * QTY_SCALE + uint8(packed);
+        // Only the scaled weight is needed here. The drain's snap helper repacks the
+        // quotient and remainder for storage; unpacking those again gives weight >> shift.
+        if (shift != 0 && packed & SNAP_DONE_BIT == 0) return weight >> shift;
+        return weight;
     }
 
     /// @notice Claim deterministic-ending shares for `player`'s terminal-level tickets.

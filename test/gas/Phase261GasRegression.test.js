@@ -113,6 +113,7 @@ const ENTRY_POINT_DELTA_TOLERANCE         = 2000; // < 2000 gas delta per SURF-0
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
+import { jackpotSoloFixture } from "../helpers/jackpotSoloFixture.js";
 import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -130,9 +131,7 @@ async function deployTraitTester() {
 }
 
 async function deployJackpotTester() {
-  const F = await hre.ethers.getContractFactory("JackpotSoloTester");
-  const t = await F.deploy();
-  await t.waitForDeployment();
+  const { tester: t } = await jackpotSoloFixture();
   const N = await hre.ethers.getContractFactory("JackpotSoloNoOp");
   const companion = await N.deploy();
   await companion.waitForDeployment();

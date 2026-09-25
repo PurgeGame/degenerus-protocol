@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import hre from "hardhat";
+import { jackpotSoloFixture as deployTester } from "../helpers/jackpotSoloFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 
 /**
@@ -204,13 +205,6 @@ const TEST_LEVELS = [1n, 5n, 17n, 100n];
 // =============================================================================
 // Fixture: deploy the Plan-02 JackpotSoloTester harness.
 // =============================================================================
-
-async function deployTester() {
-  const Tester = await hre.ethers.getContractFactory("JackpotSoloTester");
-  const tester = await Tester.deploy();
-  await tester.waitForDeployment();
-  return { tester };
-}
 
 // =============================================================================
 // Tests

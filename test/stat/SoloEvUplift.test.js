@@ -51,13 +51,7 @@
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
-
-async function deployTester() {
-  const Tester = await hre.ethers.getContractFactory("JackpotSoloTester");
-  const tester = await Tester.deploy();
-  await tester.waitForDeployment();
-  return { tester };
-}
+import { jackpotSoloFixture as deployTester } from "../helpers/jackpotSoloFixture.js";
 
 // Trait byte helpers — [QQ][CCC][SSS] format.
 function trait(quadrant, color, symbol) {
