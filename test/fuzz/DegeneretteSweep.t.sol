@@ -4,6 +4,20 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+
+/// @dev Etched at the game address to read openHumanBoxes' raw return (the router's input).
+contract HumanSweepProbe is DegenerusGameStorage {
+    function sweep(address module, uint256 budget) external returns (uint256 opened, uint256 units) {
+        (bool ok, bytes memory data) = module.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector, budget)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        (opened, units) = abi.decode(data, (uint256, uint256));
+    }
+}
 
 /// @title DegeneretteSweep -- queued Degenerette bets resolve inside the box-open sweep.
 /// @notice A bet is one word appended to degeneretteQueue[index]; its id is the queue
@@ -437,5 +451,23 @@ contract DegeneretteSweep is DeployProtocol {
         (uint256 resolved, uint256 bounty) = _crank(makeAddr("sweepKeeper"));
         assertEq(resolved, 48, "one crank resolved the backlog");
         assertGt(bounty, 0, "a knee step of bet work earns the bounty");
+    }
+
+    /// @notice A sweep that opens nothing reports every unit it consumed (here ten zeroed bet
+    ///         slots plus the index header), not their zero credit, so the mineFlip router sizes
+    ///         its craps leg from what the walk really spent.
+    function testSweepThatOpensNothingReportsConsumedUnits() public {
+        for (uint256 i; i < 10; ++i) _place(alice, FLIP, 100 ether, 1);
+        _landWord(IDX, uint256(keccak256("hole_word")));
+        uint64[] memory ids = new uint64[](10);
+        for (uint64 i; i < 10; ++i) ids[i] = i + 1;
+        game.resolveDegeneretteBets(IDX, ids);
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(HumanSweepProbe).runtimeCode);
+        (uint256 opened, uint256 units) =
+            HumanSweepProbe(address(game)).sweep(ContractAddresses.GAME_LOOTBOX_MODULE, 1000);
+        vm.etch(address(game), original);
+        assertEq(opened, 0, "holes open nothing");
+        assertGe(units, 10, "every zeroed slot counted as consumed");
     }
 }

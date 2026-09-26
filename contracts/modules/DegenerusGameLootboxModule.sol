@@ -1354,10 +1354,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        index-header costs one. Neither entries nor boxes are the unit, because neither
     ///        predicts the gas.
     /// @return opened Total boxes opened plus bets resolved this call.
-    /// @return unitsSpent Walk units of work this call did — the crank's work-based bounty basis.
-    ///         Boxes count their walk weight; each resolved bet counts only a small flat credit
-    ///         (DegenerusGameDegeneretteModule.BET_WORK_CREDIT_GAS), far below the worst-case
-    ///         price the budget charged it, and a skipped zeroed bet counts nothing.
+    /// @return unitsSpent When anything opened: the walk units credited — the crank's work-based
+    ///         bounty basis. Boxes count their walk weight; each resolved bet counts only a small
+    ///         flat credit (DegenerusGameDegeneretteModule.BET_WORK_CREDIT_GAS), far below the
+    ///         worst-case price the budget charged it, and a skipped zeroed bet counts nothing.
+    ///         When nothing opened (no bounty is paid): every unit the walk consumed, skips and
+    ///         index headers included, so a caller that spends the rest of the shared budget on
+    ///         another leg cannot overspend it.
     ///         Crediting the knee per BOX would let one five-small order saturate it at a
     ///         fraction of the work five distinct entries represent.
     function openHumanBoxes(uint256 budget) external returns (uint256 opened, uint256 unitsSpent) {
@@ -1489,7 +1492,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             cur = 0;
         }
 
-        unitsSpent = steps - uncredited;
+        // Credited work only matters when something opened (the bounty). A walk that opened
+        // nothing reports what it consumed, so the router's craps leg sizes from the real spend.
+        unitsSpent = opened == 0 ? steps : steps - uncredited;
         boxCursorIndex = idx;
         boxCursor = uint48(cur);
         // Presale is fully drained once the cursor has advanced PAST the close index (every box at
