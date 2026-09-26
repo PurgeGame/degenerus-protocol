@@ -79,7 +79,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     function _drawProtocolBoons(address issuer, uint24 awardDay, uint256 menuWord, uint256 winnerWord) private {
         uint24 day = awardDay - 1;
-        ProtocolBoonPool storage pool = protocolBoonPools[issuer][day];
+        // `day`'s ring slot (see protocolBoonPools). A slot tagged with another day holds an
+        // older day's pool, which must never draw on this day's words: nothing was wagered on
+        // `day`, so there is nothing to award.
+        ProtocolBoonPool storage pool = protocolBoonPools[issuer][day & 1];
+        if (pool.day != day) return;
         uint64 totalWeight = pool.totalWeight;
         uint32 count = pool.entryCount;
         if (totalWeight == 0 || pool.awardedMask != 0) return;
@@ -87,7 +91,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         pool.awardedMask = 7;
         deityBoonPacked[issuer] = uint32(awardDay) | (uint32(7) << 24);
         if (count == 0) return;
-        mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[issuer][day];
+        mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[issuer][day & 1];
         for (uint8 slot; slot < DEITY_DAILY_BOON_COUNT; ++slot) {
             uint256 roll = uint256(keccak256(abi.encode(
                 PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, winnerWord

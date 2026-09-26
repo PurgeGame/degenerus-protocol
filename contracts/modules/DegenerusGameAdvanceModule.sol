@@ -1674,9 +1674,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 // The word is now finalized and yesterday's pools are closed.
                 // Six bounded draws share this existing daily RNG call; no player
                 // claim or additional advance step. Recorded-word retries skip it.
+                // Pools live in two-day rings (protocolBoonPools); the draw itself skips a slot
+                // tagged with another day, so an older day's weight here costs one no-op call.
                 if (day > 1 && (
-                    protocolBoonPools[ContractAddresses.VAULT][day - 1].totalWeight != 0 ||
-                    protocolBoonPools[ContractAddresses.SDGNRS][day - 1].totalWeight != 0
+                    protocolBoonPools[ContractAddresses.VAULT][(day - 1) & 1].totalWeight != 0 ||
+                    protocolBoonPools[ContractAddresses.SDGNRS][(day - 1) & 1].totalWeight != 0
                 )) {
                     (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
                         abi.encodeWithSelector(IDegenerusGameBoonModule.resolveProtocolBoonDraws.selector, day)

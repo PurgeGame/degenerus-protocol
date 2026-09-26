@@ -3148,13 +3148,15 @@ abstract contract DegenerusGameStorage {
     /// @dev Paid deity purchases only: the two genesis grants never advance pricing.
     uint8 internal deityPassSales;
 
-    /// @dev 216 bits. Paid ETH stays in wei; weight uses 0.0001-ETH units times
-    ///      the activity multiplier scaled by 800. Three award bits, one per boon.
+    /// @dev 240 bits. Paid ETH stays in wei; weight uses 0.0001-ETH units times
+    ///      the activity multiplier scaled by 800. Three award bits, one per boon. `day` is
+    ///      the wager day the pool's ring slot currently holds (see protocolBoonPools).
     struct ProtocolBoonPool {
         uint112 totalWageredWei;
         uint64 totalWeight;
         uint32 entryCount;
         uint8 awardedMask;
+        uint24 day;
     }
 
     /// @dev 240 bits, one slot. Checked uint64 cumulative weight bounds the pool's
@@ -3165,6 +3167,13 @@ abstract contract DegenerusGameStorage {
         uint16 scoreSnapshot;
     }
 
+    /// @dev Two-slot rings keyed [issuer][day & 1], so each day reuses the slots written two
+    ///      days earlier instead of fresh zero slots. Sound because day D's pool and entries are
+    ///      written only on wall day D (placement keys the wall day) and drawn only on wall day
+    ///      D + 1 (resolveProtocolBoonDraws returns unless the award day is today), so when day
+    ///      D + 2 reuses the slots, day D has been drawn or never can be. A pool whose `day` tag
+    ///      is not the day asked for holds another day and reads as empty; the first entry
+    ///      of a new day resets it. Entries at or past the pool's entryCount are leftovers.
     mapping(address => mapping(uint24 => ProtocolBoonPool)) internal protocolBoonPools;
     mapping(address => mapping(uint24 => mapping(uint32 => ProtocolBoonEntry))) internal protocolBoonEntries;
 

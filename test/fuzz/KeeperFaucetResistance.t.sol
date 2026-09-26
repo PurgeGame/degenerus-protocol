@@ -76,6 +76,9 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     uint48 private constant INDEX = 1; // default lootboxRngIndex seeded in setUp
 
+    /// @dev Lowest gas price the self-keeper round trip is checked at (see GAS-06).
+    uint256 private constant MIN_GAS_PRICE = 0.1 gwei;
+
     /// @dev A fixed RNG word for deterministic resolution (we craft tickets against its result).
     uint256 private constant FIXED_WORD = uint256(keccak256("crank_faucet_fixed_word"));
 
@@ -397,23 +400,46 @@ contract KeeperFaucetResistance is DeployProtocol {
     // high-activity player's best case.
     // =========================================================================
 
-    /// @notice GAS-06: across batch sizes that reach the knee and realistic gas prices, placing N
-    ///         minimum bets and cranking them costs more gas than the bounty is worth at the level
-    ///         price. ETH and FLIP minimums both checked.
-    function testFuzz_BetSweepSelfKeeperRoundTripNonPositive(uint8 nSel, uint256 gasPriceWei, bool flip) public {
-        uint256 n = (uint256(nSel) % 24) + 1;
-        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
+    /// @notice GAS-06: placing N bets and cranking them yourself costs more gas than the bounty is
+    ///         worth at the level price, down to MIN_GAS_PRICE, for every cheap shape at every
+    ///         batch size one crank can resolve: ETH and FLIP minimums at 1 spin and at the maximum
+    ///         spins, and an ETH minimum on a protocol-deity symbol whose two-day boon-draw ring is
+    ///         already warm. Each resolved bet earns the keeper a small flat credit, so the most a
+    ///         self-keeper can win is about one knee step per ~47 bets. The keeper's gas is
+    ///         discounted by the largest EIP-3529 refund it could get (a fifth), and the house edge
+    ///         is ignored (it only deepens the loss), so this is the self-keeper's best case.
+    /// forge-config: default.fuzz.runs = 256
+    function testFuzz_BetSweepSelfKeeperRoundTripNonPositive(uint16 nSel, uint256 gasPriceWei, uint8 shapeSel) public {
+        gasPriceWei = bound(gasPriceWei, MIN_GAS_PRICE, 2000 gwei);
+        // shape: 0 ETH 1 spin, 1 FLIP 1 spin, 2 ETH 1 spin on symbol 0 (warm ring),
+        //        3 ETH 25 spins, 4 FLIP 15 spins. Caps keep every bet inside one crank's budget.
+        uint8 shape = shapeSel % 5;
+        uint16[5] memory caps = [uint16(48), 300, 48, 21, 95];
+        uint8[5] memory spinsOf = [uint8(1), 1, 1, 25, 15];
+        uint256 n = (uint256(nSel) % caps[shape]) + 1;
+        bool flip = shape == 1 || shape == 4;
         if (flip) {
             vm.prank(address(game));
-            coin.mintForGame(player, 1_000_000 ether);
+            coin.mintForGame(player, 100_000_000 ether);
         }
+        if (shape == 2) _warmBoonRing(address(vault), n + 5);
         uint256 placeGas;
         for (uint256 i; i < n; ++i) {
             vm.prank(player);
             uint256 g = gasleft();
-            if (flip) game.placeDegeneretteBet(address(0), 1, 100 ether, 1, 9);
-            else game.placeDegeneretteBet{value: 0.005 ether}(address(0), 0, 0.005 ether, 1, 9);
+            if (flip) game.placeDegeneretteBet(address(0), 1, 100 ether, spinsOf[shape], 9);
+            else game.placeDegeneretteBet{value: uint256(0.005 ether) * spinsOf[shape]}(
+                address(0), 0, 0.005 ether, spinsOf[shape], shape == 2 ? 0 : 9
+            );
             placeGas += g - gasleft();
+        }
+        if (shape == 2) {
+            // The warm-ring shape really entered the boon draw: the ring slot now holds today.
+            uint24 d = game.currentDayView();
+            uint256 w = uint256(vm.load(address(game), keccak256(abi.encode(uint256(d & 1),
+                keccak256(abi.encode(address(vault), uint256(48)))))));
+            assertEq(uint24(w >> 216), d, "ring slot not retagged to today");
+            assertEq(uint32(w >> 176), n, "every bet entered the boon draw");
         }
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         _openSweepFor(INDEX);
@@ -428,7 +454,23 @@ contract KeeperFaucetResistance is DeployProtocol {
         assertEq(DQ.lastBetId(vm, address(game), INDEX), n, "n bets queued");
         for (uint64 id = 1; id <= n; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "sweep resolved every bet");
         uint256 bountyEth = (bounty * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        assertLt(bountyEth, (placeGas + crankGas) * gasPriceWei, "self-keeping bets is net-negative");
+        assertLt(bountyEth, ((placeGas + crankGas) * 4 / 5) * gasPriceWei, "self-keeping bets is net-negative");
+    }
+
+    /// @dev Steady state of the protocol boon draw's two-day ring: the pool slot two days back holds
+    ///      an older, drawn day and its entry slots hold old entries, so a new day's entries rewrite
+    ///      warm-shaped slots (the cheapest boon-draw placement there is).
+    function _warmBoonRing(address issuer, uint256 entries) internal {
+        uint24 d = game.currentDayView();
+        uint256 ring = uint256(d & 1);
+        bytes32 poolRoot = keccak256(abi.encode(issuer, uint256(48)));
+        bytes32 entryRoot = keccak256(abi.encode(ring, keccak256(abi.encode(issuer, uint256(49)))));
+        uint256 old = uint256(d - 2);
+        vm.store(address(game), keccak256(abi.encode(ring, poolRoot)),
+            bytes32((old << 216) | (uint256(7) << 208) | (uint256(entries) << 176) | (uint256(1) << 112) | 1));
+        for (uint256 i; i < entries; ++i) {
+            vm.store(address(game), keccak256(abi.encode(i, entryRoot)), bytes32((uint256(i + 1) << 160) | 0xBEEF));
+        }
     }
 
     /// @notice The credit is work-based: a queue of cheap losing bets earns far less than the
@@ -450,8 +492,8 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.prank(player);
         game.mineFlip();
         uint256 bounty = coinflip.coinflipAmount(player) - preStake;
-        // Four ETH 1-spin bets are budgeted at 4 x 38 = 152 units (past the 75-unit knee) but ran
-        // about 4 x 8.5k gas of work, a fraction of one knee step.
+        // Four ETH 1-spin bets are budgeted at 4 x 38 = 152 units (past the 75-unit knee) but are
+        // credited well under their work, a fraction of one knee step.
         uint256 fullKnee = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(_lvl());
         assertLt(bounty, fullKnee / 2, "cheap bets do not buy the full knee");
     }

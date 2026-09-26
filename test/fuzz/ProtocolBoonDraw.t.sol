@@ -36,10 +36,12 @@ contract ProtocolBoonFixture is DegenerusGameStorage {
     function endGame() external { gameOver = true; }
     function requireLivenessTriggered() external view { require(_livenessTriggered(), "not past death deadline"); }
     function maxEntries(address issuer, uint24 day) external {
-        protocolBoonPools[issuer][day].entryCount = type(uint32).max;
+        protocolBoonPools[issuer][day & 1].day = day;
+        protocolBoonPools[issuer][day & 1].entryCount = type(uint32).max;
     }
     function fullWeight(address issuer, uint24 day) external {
-        protocolBoonPools[issuer][day].totalWeight = type(uint64).max;
+        protocolBoonPools[issuer][day & 1].day = day;
+        protocolBoonPools[issuer][day & 1].totalWeight = type(uint64).max;
     }
     function bet(uint48 index, uint64 id) external view returns (uint256) { return degeneretteQueue[index][id - 1]; }
     function heroWeight(uint24 day, uint8 symbol) external view returns (uint32) {
@@ -93,7 +95,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         _deployProtocol();
         lens = new DegenerusGameLens();
         fixture = new ProtocolBoonFixture();
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         day = game.currentDayView();
         bettor = makeAddr("bettor");
         vm.deal(bettor, 1_000_000 ether);
@@ -119,7 +121,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
     function _ready() private {
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day, uint256(12345))));
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 1, uint256(987654321))));
     }
     function _finishDailyAdvance(uint256 seed) private {
@@ -191,8 +193,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             vm.record();
             vm.prank(bettor); _bet(0, 0.005 ether);
             (, bytes32[] memory writes) = vm.accesses(address(game));
-            bytes32 poolSlot = keccak256(abi.encode(uint256(day), keccak256(abi.encode(address(vault), uint256(48)))));
-            bytes32 entryRoot = keccak256(abi.encode(uint256(day), keccak256(abi.encode(address(vault), uint256(49)))));
+            bytes32 poolSlot = keccak256(abi.encode(uint256(day & 1), keccak256(abi.encode(address(vault), uint256(48)))));
+            bytes32 entryRoot = keccak256(abi.encode(uint256(day & 1), keccak256(abi.encode(address(vault), uint256(49)))));
             bytes32 entrySlot = keccak256(abi.encode(i, entryRoot));
             uint256 headerWrites;
             uint256 entryWrites;
@@ -281,7 +283,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.prank(bettor); _bet(6, 0.005 ether);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 1);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).entryCount, 1);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.recordLogs();
         _finishDailyAdvance(987654321);
         _assertBettorAwards(vm.getRecordedLogs(), 6);
@@ -301,7 +303,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(game.rngWordForDay(day), 0);
         vm.prank(bettor); _bet(0, 0.005 ether);
         vm.prank(bettor); _bet(6, 0.005 ether);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.recordLogs();
         _finishDailyAdvance(987654321);
         _assertBettorAwards(vm.getRecordedLogs(), 6);
@@ -323,7 +325,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).entryCount, 2);
         _finishDailyAdvance(12345);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 0);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.recordLogs();
         _finishDailyAdvance(987654321);
         _assertBettorAwards(vm.getRecordedLogs(), 6);
@@ -374,18 +376,18 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.prank(bettor); _bet(0, 0.005 ether);
         _resolve();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 0);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _resolve();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 0);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 1, uint256(123))));
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day, uint256(456))));
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _resolve();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 0);
     }
     function testMissingPredecessorUsesAwardWordForMenuAndDoesNotReplay() public {
         vm.prank(bettor); _bet(0, 0.005 ether);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 1, uint256(123))));
         uint256 snapshot = vm.snapshotState();
         vm.recordLogs();
@@ -442,7 +444,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
                 vm.prank(bettor); _bet(0, 0.005 ether);
                 vm.prank(bettor); _bet(6, 0.005 ether);
                 day = game.currentDayView();
-                vm.warp(block.timestamp + 1 days);
+                vm.warp(vm.getBlockTimestamp() + 1 days);
             }
             bool finished;
             for (uint256 i; i < 150; ++i) {
@@ -478,13 +480,13 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 1);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).entryCount, 0);
         // A terminal game retains the liveness trigger that ended it.
-        vm.warp(block.timestamp + 1_000 days);
+        vm.warp(vm.getBlockTimestamp() + 1_000 days);
         vm.expectRevert(); vm.prank(bettor); _bet(0, 0.005 ether);
         vm.expectRevert(); vm.prank(bettor); _bet(6, 0.005 ether);
     }
 
     function testLivenessDeadlineRejectsEthEntries() public {
-        vm.warp(block.timestamp + 1_000 days);
+        vm.warp(vm.getBlockTimestamp() + 1_000 days);
         day = game.currentDayView();
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.requireLivenessTriggered, ()));
         assertFalse(game.gameOver());
@@ -615,4 +617,198 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertLe(whole - split, fixture.multiplier(score));
     }
 
+    // ---------------------------------------------------------------------
+    // Two-day rings: day D's pool and entry slots are reused by day D + 2
+    // ---------------------------------------------------------------------
+
+    bytes32 private constant AWARDED_SIG =
+        keccak256("ProtocolBoonDrawAwarded(address,address,uint24,uint8,uint32,uint8)");
+
+    function _poolWord(address issuer, uint24 d) private view returns (uint256) {
+        return uint256(vm.load(
+            address(game), keccak256(abi.encode(uint256(d & 1), keccak256(abi.encode(issuer, uint256(48)))))
+        ));
+    }
+
+    function _countAwards(Vm.Log[] memory logs) private pure returns (uint256 n) {
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == AWARDED_SIG) ++n;
+    }
+
+    /// @dev Day D + 2 takes over day D's slots after D's draw: the pool restarts empty under
+    ///      D + 2's tag, entry 0 is overwritten, leftovers past the count stay hidden, and day D
+    ///      now reads empty (its history lives in the events).
+    function testRingSlotReusedTwoDaysLaterStartsEmpty() public {
+        _score(bettor, 400);
+        vm.prank(bettor); _bet(0, 0.005 ether);
+        vm.prank(bettor); _bet(0, 0.01 ether);
+        _ready();
+        _resolve();
+        assertEq(lens.protocolBoonPool(address(game), address(vault), day).awardedMask, 7);
+        uint256 drawnWord = _poolWord(address(vault), day);
+
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        address other = makeAddr("ringOther");
+        vm.deal(other, 1 ether);
+        _score(other, 0);
+        vm.prank(other); _bet(0, 0.005 ether);
+
+        DegenerusGameStorage.ProtocolBoonPool memory p = lens.protocolBoonPool(address(game), address(vault), day + 2);
+        assertEq(p.day, day + 2);
+        assertEq(p.entryCount, 1);
+        assertEq(p.awardedMask, 0);
+        assertEq(p.totalWageredWei, 0.005 ether);
+        assertEq(p.totalWeight, 50 * fixture.multiplier(0));
+        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day + 2, 0).player, other);
+        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day + 2, 1).player, address(0));
+        assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 0);
+        assertTrue(_poolWord(address(vault), day + 2) != drawnWord, "same slot rewritten");
+    }
+
+    /// @dev A pool whose draw day passed with no draw (a stall) is never drawn later, even on an
+    ///      award day whose own pool maps to the same ring slot and holds nothing of its own.
+    function testStaleUndrawnPoolNeverDrawsOnALaterAwardDay() public {
+        vm.prank(bettor); _bet(0, 0.005 ether);
+        vm.prank(bettor); _bet(6, 0.005 ether);
+        uint256 staleVault = _poolWord(address(vault), day);
+        uint256 staleSdgnrs = _poolWord(address(sdgnrs), day);
+        // Day + 1 passes with no draw; day + 2 has no bets; day + 3 draws day + 2.
+        vm.warp(vm.getBlockTimestamp() + 3 days);
+        _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 2, uint256(111))));
+        _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 3, uint256(222))));
+        vm.recordLogs();
+        _fixtureCall(abi.encodeCall(ProtocolBoonFixture.resolve, (address(boonModule), day + 3)));
+        assertEq(_countAwards(vm.getRecordedLogs()), 0, "stale pool drew on a later day's words");
+        assertEq(_poolWord(address(vault), day), staleVault, "stale vault pool touched");
+        assertEq(_poolWord(address(sdgnrs), day), staleSdgnrs, "stale sDGNRS pool touched");
+        assertEq(lens.protocolBoonPool(address(game), address(vault), day + 2).entryCount, 0);
+    }
+
+    /// @dev Production advance over a stale ring slot: two days after a drawn pool, a quiet day's
+    ///      draw finds the older pool's weight in the shared slot, calls the draw, which awards
+    ///      nothing and writes nothing, and the daily advance still completes.
+    function testRealAdvanceOverAStaleRingSlotAwardsNothing() public {
+        _finishDailyAdvance(1);
+        vm.prank(bettor); _bet(0, 0.005 ether);
+        vm.prank(bettor); _bet(6, 0.005 ether);
+        uint24 x = game.currentDayView();
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _finishDailyAdvance(2);
+        assertEq(lens.protocolBoonPool(address(game), address(vault), x).awardedMask, 7, "x drawn on x + 1");
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _finishDailyAdvance(3);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        // Un-draw the stale pools so only the day-tag guard can stop them drawing on x + 3.
+        for (uint256 i; i < 2; ++i) {
+            address issuer = i == 0 ? address(vault) : address(sdgnrs);
+            bytes32 slot = keccak256(abi.encode(uint256(x & 1), keccak256(abi.encode(issuer, uint256(48)))));
+            vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) & ~(uint256(0xFF) << 208)));
+        }
+        uint256 vaultWord = _poolWord(address(vault), x);
+        uint256 sdgnrsWord = _poolWord(address(sdgnrs), x);
+        vm.recordLogs();
+        _finishDailyAdvance(4);
+        assertEq(_countAwards(vm.getRecordedLogs()), 0, "stale slot awarded");
+        assertEq(_poolWord(address(vault), x), vaultWord, "stale vault slot written");
+        assertEq(_poolWord(address(sdgnrs), x), sdgnrsWord, "stale sDGNRS slot written");
+    }
+
+    struct RefEntry {
+        address player;
+        uint64 cumulative;
+    }
+
+    /// @dev Random multi-day schedules: each day takes 0-3 bets from three bettors on either
+    ///      protocol symbol, and each day's draw either happens on time or is skipped (a stall).
+    ///      Every award must match an independent per-day model (a fresh pool per day, as if no
+    ///      slot were ever reused): same day, slot, winning index and winner.
+    function testFuzzRingMatchesPerDayModel(uint256 seed) public {
+        address[3] memory bettors = [makeAddr("ringA"), makeAddr("ringB"), makeAddr("ringC")];
+        for (uint256 b; b < 3; ++b) {
+            vm.deal(bettors[b], 1_000 ether);
+            _score(bettors[b], 100 * b);
+        }
+        uint256 days_ = 8;
+        RefEntry[][2][] memory ref = new RefEntry[][2][](days_ + 1);
+        for (uint256 k; k <= days_; ++k) {
+            if (k > 0 && (uint256(keccak256(abi.encode(seed, k))) >> 200) % 3 != 0) {
+                _ringDraw(seed, k, ref[k - 1]);
+            }
+            if (k == days_) break;
+            ref[k] = _ringBets(seed, k, bettors);
+            vm.warp(vm.getBlockTimestamp() + 1 days);
+        }
+    }
+
+    /// @dev Draw yesterday's pool on today's words and check every award against the model.
+    function _ringDraw(uint256 seed, uint256 k, RefEntry[][2] memory entries) private {
+        uint24 d = day + uint24(k);
+        _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (d - 1, uint256(keccak256(abi.encode(seed, "m", k))))));
+        uint256 w = uint256(keccak256(abi.encode(seed, "w", k)));
+        _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (d, w)));
+        vm.recordLogs();
+        _fixtureCall(abi.encodeCall(ProtocolBoonFixture.resolve, (address(boonModule), d)));
+        _checkAwards(vm.getRecordedLogs(), entries, d - 1, w);
+    }
+
+    /// @dev Place day k's random bets and return the model's entries per issuer (vault, sDGNRS).
+    function _ringBets(uint256 seed, uint256 k, address[3] memory bettors)
+        private
+        returns (RefEntry[][2] memory out)
+    {
+        uint256 r = uint256(keccak256(abi.encode(seed, k)));
+        uint256 n = r % 4;
+        out[0] = new RefEntry[](0);
+        out[1] = new RefEntry[](0);
+        for (uint256 i; i < n; ++i) {
+            uint256 b = (r >> (8 + i * 4)) % 3;
+            uint256 side = (r >> (40 + i)) & 1;
+            uint128 amount = uint128((0.005 ether + ((r >> (64 + i * 16)) % 1000) * 0.001 ether) / 1 gwei * 1 gwei);
+            vm.prank(bettors[b]); _bet(side == 0 ? 0 : 6, amount);
+            uint64 weight = uint64((uint256(amount) / 1e14) * fixture.multiplier(100 * b));
+            out[side] = _append(out[side], bettors[b], weight);
+        }
+    }
+
+    function _append(RefEntry[] memory list, address player, uint64 weight) private pure returns (RefEntry[] memory grown) {
+        grown = new RefEntry[](list.length + 1);
+        uint64 prior;
+        for (uint256 i; i < list.length; ++i) grown[i] = list[i];
+        if (list.length != 0) prior = list[list.length - 1].cumulative;
+        grown[list.length] = RefEntry(player, prior + weight);
+    }
+
+    function _indexOf(address[3] memory list, address who) private pure returns (uint256) {
+        for (uint256 i; i < 3; ++i) if (list[i] == who) return i;
+        revert("unknown bettor");
+    }
+
+    function _checkAwards(Vm.Log[] memory logs, RefEntry[][2] memory entries, uint24 d, uint256 w) private view {
+        uint64[2] memory totals;
+        for (uint256 side; side < 2; ++side) {
+            if (entries[side].length != 0) totals[side] = entries[side][entries[side].length - 1].cumulative;
+        }
+        uint256[2] memory seen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != AWARDED_SIG) continue;
+            address issuer = address(uint160(uint256(logs[i].topics[1])));
+            uint256 side = issuer == address(vault) ? 0 : 1;
+            assertEq(uint256(logs[i].topics[3]), d, "award for the wrong day");
+            (uint8 slot, uint32 index, ) = abi.decode(logs[i].data, (uint8, uint32, uint8));
+            uint256 roll = uint256(keccak256(abi.encode(
+                keccak256("degenerus.protocol.boon.winner"), issuer, d, slot, w
+            ))) % totals[side];
+            uint32 lo;
+            uint32 hi = uint32(entries[side].length);
+            while (lo < hi) {
+                uint32 mid = lo + (hi - lo) / 2;
+                if (entries[side][mid].cumulative <= roll) lo = mid + 1;
+                else hi = mid;
+            }
+            assertEq(index, lo, "winning index");
+            assertEq(address(uint160(uint256(logs[i].topics[2]))), entries[side][lo].player, "winner");
+            ++seen[side];
+        }
+        assertEq(seen[0], entries[0].length != 0 ? 3 : 0, "vault award count");
+        assertEq(seen[1], entries[1].length != 0 ? 3 : 0, "sDGNRS award count");
+    }
 }

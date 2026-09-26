@@ -12,7 +12,9 @@ contract ProtocolBoonDrawSeeder is DegenerusGameStorage {
             address issuer = i == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
             uint32 count = type(uint32).max;
             uint64 total = uint64(count) * 40_000;
-            protocolBoonPools[issuer][day - 1] = ProtocolBoonPool(uint112(uint256(count) * 0.005 ether), total, count, 0);
+            // Pools and entries live in two-day rings keyed by `day & 1`, tagged with their day.
+            protocolBoonPools[issuer][(day - 1) & 1] =
+                ProtocolBoonPool(uint112(uint256(count) * 0.005 ether), total, count, 0, day - 1);
             // Sparse materialization of the exact nodes a uniform 2^32-1-entry
             // pool searches. All three walks have 32 nodes and genuine distinct
             // final players; no shortcut or warm setup reads in the measured tx.
@@ -23,7 +25,7 @@ contract ProtocolBoonDrawSeeder is DegenerusGameStorage {
                 while (lo < hi) {
                     uint32 mid = lo + (hi - lo) / 2;
                     uint64 cumulative = (uint64(mid) + 1) * 40_000;
-                    protocolBoonEntries[issuer][day - 1][mid] = ProtocolBoonEntry(
+                    protocolBoonEntries[issuer][(day - 1) & 1][mid] = ProtocolBoonEntry(
                         address(uint160(0xB000000000 + i * 0x100000000 + mid)), cumulative, 0
                     );
                     if (cumulative <= roll) lo = mid + 1;

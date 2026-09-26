@@ -78,26 +78,34 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Exact paid ETH, scaled weight, entry count and award mask for a draw.
+    /// @dev Pools live in two-day rings (DegenerusGameStorage.protocolBoonPools), so a day's
+    ///      pool stays readable until a later day of the same parity (normally two days on)
+    ///      takes over its slot; a day whose slot now holds another day reads as empty.
+    ///      The events (ProtocolBoonDrawEntered / ProtocolBoonDrawAwarded) keep the history.
     function protocolBoonPool(address game, address issuer, uint24 day)
         public view returns (ProtocolBoonPool memory pool)
     {
         uint256 base;
         assembly { base := protocolBoonPools.slot }
-        uint256 word = _sload(game, _mapSlot(uint256(day), uint256(_mapSlot(issuer, base))));
+        uint256 word = _sload(game, _mapSlot(uint256(day & 1), uint256(_mapSlot(issuer, base))));
+        if (uint24(word >> 216) != day) return pool;
         pool.totalWageredWei = uint112(word);
         pool.totalWeight = uint64(word >> 112);
         pool.entryCount = uint32(word >> 176);
         pool.awardedMask = uint8(word >> 208);
+        pool.day = day;
     }
 
-    /// @notice Immutable player, cumulative weight and activity score snapshot.
-    /// @dev An absent index returns zero fields, matching a mapping read.
+    /// @notice Player, cumulative weight and activity score snapshot of a held pool's entry
+    ///         (entries are overwritten once a later day takes over the ring slot).
+    /// @dev An index outside the day's held pool returns zero fields, matching a mapping read.
     function protocolBoonEntryAt(address game, address issuer, uint24 day, uint32 index)
         public view returns (ProtocolBoonEntry memory entry)
     {
+        if (index >= protocolBoonPool(game, issuer, day).entryCount) return entry;
         uint256 base;
         assembly { base := protocolBoonEntries.slot }
-        bytes32 daySlot = _mapSlot(uint256(day), uint256(_mapSlot(issuer, base)));
+        bytes32 daySlot = _mapSlot(uint256(day & 1), uint256(_mapSlot(issuer, base)));
         uint256 word = _sload(game, _mapSlot(uint256(index), uint256(daySlot)));
         entry.player = address(uint160(word));
         entry.cumulativeWeight = uint64(word >> 160);
@@ -122,7 +130,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Locate all three winning intervals without an on-chain participant sweep.
-    /// @dev Historical outcomes stay inspectable after automatic next-day issuance.
+    /// @dev Inspectable while the day's pool is held (the wager day and the day after, which is
+    ///      when it is drawn) until a later same-parity day takes over the slot; after that the
+    ///      day reads not-ready, and its entries and awards remain in the events.
     function findProtocolBoonWinners(address game, address issuer, uint24 day)
         external view returns (bool ready, address[3] memory winners, uint32[3] memory indices, uint64[3] memory rolls)
     {

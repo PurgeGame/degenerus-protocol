@@ -746,16 +746,19 @@ contract DegenerusGameDegeneretteModule is
         if (deityBySymbol[symbol] != issuer) return;
         uint256 weight = wagerUnits * ActivityCurveLib.boonDrawMultUnits(score);
         if (weight > type(uint64).max) revert InvalidBet();
-        ProtocolBoonPool storage pool = protocolBoonPools[issuer][day];
+        // The ring slot for `day` (see protocolBoonPools). One still tagged with an older day
+        // starts over empty; its entries are overwritten from index 0.
+        uint24 ring = day & 1;
+        ProtocolBoonPool memory pool = protocolBoonPools[issuer][ring];
+        if (pool.day != day) pool = ProtocolBoonPool(0, 0, 0, 0, day);
         uint32 index = pool.entryCount;
-        uint32 nextCount = index + 1;
         uint64 cumulativeWeight = pool.totalWeight + uint64(weight);
+        protocolBoonEntries[issuer][ring][index] = ProtocolBoonEntry(player, cumulativeWeight, score);
         // Weight <= uint64.max and multiplier >= 800 bound amount well below uint112.
-        uint112 totalWageredWei = pool.totalWageredWei + uint112(amount);
-        protocolBoonEntries[issuer][day][index] = ProtocolBoonEntry(player, cumulativeWeight, score);
-        pool.totalWageredWei = totalWageredWei;
+        pool.totalWageredWei += uint112(amount);
         pool.totalWeight = cumulativeWeight;
-        pool.entryCount = nextCount;
+        pool.entryCount = index + 1;
+        protocolBoonPools[issuer][ring] = pool;
         emit ProtocolBoonDrawEntered(issuer, player, day, amount, score, uint64(weight), index);
     }
 

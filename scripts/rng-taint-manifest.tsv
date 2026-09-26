@@ -255,7 +255,7 @@ EXEMPT-ADVANCE	PARAM	randomWord	_drawCoinEntry	modules/DegenerusGameJackpotModul
 NOT-RNG	PARAM	word	_bucketOwnerFromWord	storage/DegenerusGameStorage.sol	packed uint32 owner registry references loaded from a trait bucket, not an entropy word
 PURE-DERIVE	ARG	EntropyLib.hash2	sampleFarFutureTickets	DegenerusGame.sol	Mix the committed entropy and filled candidate count for another level when fewer than four slots have been filled.
 CONSUMER-SEALED	PARAM	menuWord	_drawProtocolBoons	modules/DegenerusGameBoonModule.sol	Previous-day word selects the published next-day deity menu; absent predecessor falls back to the finalized award-day word after entries close; pure issuer/day/slot mix separate from the winner domain
-CONSUMER-SEALED	PARAM	winnerWord	_drawProtocolBoons	modules/DegenerusGameBoonModule.sol	Award-day finalized word selects closed prior-day cumulative intervals; entries and snapshotted scores cannot change after the calendar day closes
+CONSUMER-SEALED	PARAM	winnerWord	_drawProtocolBoons	modules/DegenerusGameBoonModule.sol	Award-day finalized word selects closed prior-day cumulative intervals; entries and snapshotted scores cannot change after the calendar day closes and stay fixed through the draw day (D+1); the two-day ring slot is reused only from D+2, and a slot tagged with another day never draws
 
 # 2026-09-21 seed hygiene and domain separation
 PURE-DERIVE	ARG	EntropyLib.hash1	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	second variance draw from the SKIM_VARIANCE_TAG substream; no state inputs

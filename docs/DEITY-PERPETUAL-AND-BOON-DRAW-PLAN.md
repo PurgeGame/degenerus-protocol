@@ -176,8 +176,10 @@ ignored. These collisions never invoke the manual recipient-limit reverts and
 never cause a reroll or extra recipient selection.
 
 Awards are only issued on their designated next calendar day. A missed day does
-not later grant permanent activity/shield/pass benefits. Historical pools remain
-inspectable. A missing predecessor word uses the award-day menu fallback; empty,
+not later grant permanent activity/shield/pass benefits. Pools are held for two
+days (see below), so a day's pool stays inspectable through its draw day; older
+pools are recoverable from the events. A missing predecessor word uses the
+award-day menu fallback; empty,
 expired, or already processed work does not block advance. Normal game-over
 handling does not issue fresh boons.
 
@@ -194,8 +196,20 @@ migration of existing contract state.
 
 | Record | Fields | Bits |
 |---|---|---:|
-| Pool | `uint112 totalWageredWei`, `uint64 totalWeight`, `uint32 entryCount`, `uint8 awardedMask` | 216 |
+| Pool | `uint112 totalWageredWei`, `uint64 totalWeight`, `uint32 entryCount`, `uint8 awardedMask`, `uint24 day` | 240 |
 | Entry | `address player`, `uint64 cumulativeWeight`, `uint16 scoreSnapshot` | 240 |
+
+Pools and entries are two-slot rings keyed `[issuer][day & 1]`, so a day reuses the
+slots written two days earlier instead of fresh zero slots (about 17k gas less per
+entry once the ring is warm). This is safe because day D's pool is written only
+while the wall day is D and drawn only while the wall day is D + 1 (the draw
+returns unless its award day is today); by the time day D + 2 writes the same
+slots, day D has been drawn or can never be. The pool's `day` tag names the wager
+day the slot holds: the first entry of a new day resets the pool, and a draw or a
+lens read for a day the slot is not tagged with sees an empty pool, so an older
+day's pool (for example one whose draw day passed during a VRF stall) can never be
+drawn on a later day's words. Entries at or past the pool's `entryCount` are
+leftovers from an older day and are never read.
 
 Each record fits one slot. Entry count and cumulative weight use checked
 arithmetic, and an individual weight must fit `uint64` before casting. With a
@@ -211,7 +225,9 @@ the three winner intervals.
 `findProtocolBoonWinners`. Quotes return
 `(wagerUnits, score, multiplierUnits, weight)` for an ETH amount and the recipient's
 current canonical score; they do not promise bet eligibility
-or remaining pool capacity. Quotes and historical winner lookup stay outside the
+or remaining pool capacity. The pool, entry and winner lookups answer for the
+wager day and its draw day, until a later same-parity day reuses the ring slot; after that the day reads as an empty,
+not-ready pool. Quotes and winner lookup stay outside the
 size-constrained GAME facade. `ProtocolBoonDrawEntered` and
 `ProtocolBoonDrawAwarded` provide entry and issuance logs. Entry events are emitted
 by the Degenerette module through GAME and include issuer, player, day, paid ETH,
