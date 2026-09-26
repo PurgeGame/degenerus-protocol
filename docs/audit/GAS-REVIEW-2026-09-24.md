@@ -107,6 +107,63 @@ the original gas model as well as exact player order, unit-weighted payouts,
 rounding and the pot winner. Dedicated gas regressions retain the distinct-field
 saving and cap collision/repeat costs.
 
+## Follow-up: merging repeats versus separate bets (2026-09-25)
+
+**Decision: retain the current merge for its gas savings on repeated wallets.**
+Separate entries are valid; per-entry rounding differences were explicitly accepted
+for this comparison. The simpler alternative removes the duplicate scan and held-unit
+array, copies the funded entrants directly, and resolves/rounds/emits once per entry.
+It preserves the wallet-keyed board and dice and awards the pot only once.
+
+Compared with committed `0faee98e`, using 100 deterministic words and wallet fields
+per row, a fixed 150,000-FLIP budget, and the same production compiler settings:
+
+| Entries | Distinct wallets | Current merge | Separate bets | Cheaper approach |
+|---:|---:|---:|---:|---|
+| 50 | 50 | 2,367,732 | 2,320,022 | Separate by 47,710 (2.0%) |
+| 50 | 49 | 2,320,052 | 2,320,884 | Approximately equal |
+| 50 | 48 | 2,275,288 | 2,323,393 | Merge by 48,105 |
+| 50 | 45 | 2,126,991 | 2,318,521 | Merge by 191,530 |
+| 50 | 40 | 1,895,874 | 2,308,300 | Merge by 412,426 |
+| 50 | 25 | 1,244,723 | 2,296,438 | Merge by 1,051,715 |
+| 16 | 16 | 735,556 | 728,308 | Separate by 7,248 |
+| 16 | 8 | 384,878 | 735,007 | Merge by 350,129 |
+| 16 | 1 | 62,797 | 760,282 | Merge by 697,485 |
+
+These are mean **resolve-call** measurements, excluding intrinsic gas and the
+subsequent Coinflip credits. Every sample uses a fresh caller frame to avoid
+accumulated caller-memory expansion. Account warmth is symmetric between the two
+alternatives. The absolute figures differ from the earlier 150-field benchmark,
+which used a different field/word/budget distribution; only paired rows here are
+comparable. Duplicate payout credits would add more work to the separate version.
+
+One repeat is approximately the break-even point in this sample. At two repeats,
+merging was cheaper in 99 of 100 fields; at five or more, it won every sampled
+field. This is a scenario comparison, not an assumed live repeat frequency.
+The draw can encounter the same wallet across different future levels, so repeat
+fields matter even though each level is walked without revisiting its lanes.
+
+Separate bets use less code: runtime shrinks from **5,878 to 5,610 bytes**. The
+small all-distinct saving does not justify losing the large repeated-wallet saving
+for the gas-focused objective. Production code remains unchanged in this follow-up.
+
+**Verification:** 12 comparison tests passed, including 1,000 fuzz cases checking
+identical per-wallet run results, roll counts, pot recipient, and pot amount.
+All-distinct fields also match exact returned payouts. No aggregate-payout equality
+was required for repeats, because per-bet rounding was allowed to differ.
+
+The experiment and measured results are preserved locally under
+`.audit-test-logs/gas-merge-comparison-2026-09-25/`: `results.json`,
+`final/focused.log`, and `experiment/test/{gas,helpers}/`. To reproduce in a
+throwaway checkout of `0faee98e`, copy the two experimental Solidity files into
+the same `test/` paths, then run:
+
+```sh
+python3 scripts/test-foundry-groups.py \
+  --file test/gas/CoinDrawMergeComparison.t.sol \
+  --log-dir .audit-test-logs/gas-merge-comparison
+```
+
 ## Validation of the optimization patch
 
 - Initial arithmetic-only change: **33 tests passed**.
