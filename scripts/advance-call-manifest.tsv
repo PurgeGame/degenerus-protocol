@@ -58,7 +58,7 @@ OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseLazyPass	_purchaseLazyP
 OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseDeityPass	_purchaseDeityPassFor	DegenerusGame.sol	BARE		player deity pass purchase
 OFF-CRANK	lowlevel:delegatecall	placeDegeneretteBet	DegenerusGame.sol	BARE		player degenerette bet placement
 OFF-CRANK	lowlevel:delegatecall	resolveDegeneretteBets	DegenerusGame.sol	BARE		any caller's early resolution of chosen bets at one index; the keeper resolves bets through openHumanBoxes -> sweepDegeneretteBets instead
-OFF-CRANK	lowlevel:delegatecall	consumeCoinflipBoon	DegenerusGame.sol	BARE		FLIP / COINFLIP deposit-path callback (recordAmount != 0; payout re-stakes use 0), or WWXRP player entry / trusted-minter ecosystem consumption; WWXRP mint and draw settlement never consume boons
+OFF-CRANK	lowlevel:delegatecall	consumeCoinflipBoon	DegenerusGame.sol	BARE		FLIP / COINFLIP deposit-path callback (recordAmount != 0; payout re-stakes use 0), or WWXRP player entry (only when the entrant's WWXRP lane holds a tier) / trusted-minter ecosystem consumption; WWXRP mint and draw settlement never consume boons
 CRANK-SELF	delegatecall:IDegenerusGameBoonModule.consumeDecimatorBoost	consumeDecimatorBoon	DegenerusGame.sol	BARE		FLIP decimator callback, including opening-day autoDecimatorBurn; own-storage boon consume
 OFF-CRANK	delegatecall:IDegenerusGameBoonModule.issueDeityBoon	issueDeityBoon	DegenerusGame.sol	BARE		player deity boon issuance
 CRANK-SELF	lowlevel:delegatecall	recordDecBurn	DegenerusGame.sol	BARE		FLIP decimator callback, including opening-day autoDecimatorBurn; own-storage entry accounting

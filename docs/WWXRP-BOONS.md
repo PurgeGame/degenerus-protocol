@@ -7,7 +7,10 @@ the boon table. They are separate from ETH and FLIP Degenerette stake boons.
 ## Daily burn and century incinerator
 
 `WWXRP.enter(amount)` consumes the player's live WWXRP boon once. It applies
-the bonus to the entry's activity-weighted burn amount:
+the bonus to the entry's activity-weighted burn amount. It first reads the
+player's WWXRP lane through the Game's read-only `extsload` and calls the Game's
+consume only when the lane holds a tier; an empty lane would consume nothing
+anyway, so the skip saves the dispatch without changing any outcome:
 
 ```text
 weightedWei = floor(amount * activityMultiplierBps * (10_000 + boonBps) / 100_000_000)

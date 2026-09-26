@@ -118,6 +118,9 @@ interface IDrawGame {
 
     /// @notice Consume the player's WWXRP boon through the caller-specific Game dispatch.
     function consumeCoinflipBoon(address player) external returns (uint16);
+
+    /// @notice DegenerusGame's raw storage read (read-only).
+    function extsload(bytes32 slot) external view returns (bytes32);
 }
 
 /// @dev Vault ownership check (>50.1% of DGVE) for the trusted-minter registry.
@@ -359,6 +362,14 @@ contract WWXRP {
         ActivityCurveLib.MULT_MAX_BPS - ActivityCurveLib.MULT_MIN_BPS; // 7_833
     uint256 private constant TARGET_SPAN_BPS = 20_000;
     uint256 private constant BPS = 10_000;
+
+    /// @dev Where DegenerusGame keeps a player's WWXRP boon: `boonPacked` is the mapping at Game
+    ///      slot 50, the lane is 24 bits at bit 232 of the player's second word, and its low two
+    ///      bits are the tier (0 = no boon). Read-only, used to skip the consume dispatch for a
+    ///      player holding no WWXRP boon; pinned against the Game layout by WwxrpBoonLaneSkip.
+    uint256 private constant GAME_BOON_PACKED_SLOT = 50;
+    uint256 private constant GAME_WWXRP_LANE_SHIFT = 232;
+    uint256 private constant GAME_LANE_TIER_MASK = 0x3;
 
     /// @dev Draw accumulators are denominated in WHOLE WWXRP (sub-token dust
     ///      burns but adds no weight): uint96 then holds ~7.9e28 tokens per
@@ -679,7 +690,10 @@ contract WWXRP {
         uint8 bucket = bucketOf(day, msg.sender);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
         // daily weight truncates to whole WWXRP, while the century keeps full wei precision.
-        uint16 boonBps = game.consumeCoinflipBoon(msg.sender);
+        // The Game's consume returns 0 with no write and no event when the WWXRP lane's tier is
+        // 0, so reading the lane first and skipping the dispatch for an empty lane is exact.
+        uint16 boonBps;
+        if (_holdsWwxrpBoon(msg.sender)) boonBps = game.consumeCoinflipBoon(msg.sender);
         uint256 multBps = drawMultBps(game.playerActivityScore(msg.sender));
         uint256 fullWeight = _entryWeight(amount, multBps, boonBps);
         uint256 effective = fullWeight / SCORE_UNIT;
@@ -723,6 +737,17 @@ contract WWXRP {
             effective,
             newTotal
         );
+    }
+
+    /// @dev True when `player`'s WWXRP boon lane in the Game has a nonzero tier (live or
+    ///      expired; the consume clears an expired lane and pays 0, as before).
+    function _holdsWwxrpBoon(address player) private view returns (bool) {
+        bytes32 slot;
+        unchecked {
+            // Struct member addressing wraps, as Solidity's own does.
+            slot = bytes32(uint256(keccak256(abi.encode(player, GAME_BOON_PACKED_SLOT))) + 1);
+        }
+        return (uint256(game.extsload(slot)) >> GAME_WWXRP_LANE_SHIFT) & GAME_LANE_TIER_MASK != 0;
     }
 
     /// @dev Both multipliers are at least 1x. Amounts above the century's uint192 cap can

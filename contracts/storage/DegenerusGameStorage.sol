@@ -3229,7 +3229,10 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Per-player packed boon state. Public getter returns (uint256 slot0, uint256
     ///      slot1); bit layout above. UI readers combine with currentDayView() to compute
-    ///      per-category expiry.
+    ///      per-category expiry. WWXRP.enter reads slot1's WWXRP lane by raw slot (its
+    ///      GAME_BOON_PACKED_SLOT / GAME_WWXRP_LANE_SHIFT / GAME_LANE_TIER_MASK mirror this
+    ///      mapping's slot, BP_WWXRP_LANE_SHIFT and BP_LANE_TIER_MASK): moving any of them
+    ///      must move those too (pinned by test/fuzz/WwxrpBoonLaneSkip.t.sol).
     mapping(address => BoonPacked) public boonPacked;
 
     // =========================================================================
@@ -3267,7 +3270,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant BP_DEITY_LAZY_PASS_DAY_SHIFT = 152;
     uint256 internal constant BP_LAZY_PASS_TIER_SHIFT = 176;
     uint256 internal constant BP_DEGEN_LANE0_SHIFT = 184;
-    uint256 internal constant BP_WWXRP_LANE_SHIFT = 232;
+    uint256 internal constant BP_WWXRP_LANE_SHIFT = 232; // mirrored in WWXRP (see boonPacked)
     uint256 internal constant BP_LANE_MASK = 0xFFFFFF;
     uint256 internal constant BP_LANE_TIER_MASK = 0x3;
     uint256 internal constant BP_LANE_DEITY_BIT = 0x4;
