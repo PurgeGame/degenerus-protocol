@@ -112,7 +112,28 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-26, single daily board, jackpot fill stage and flat foil table
+## Current evidence — 2026-09-26, deadline fires only on a caught-up day
+
+One commit on top of `36cc70c1`:
+
+- `e995dc55` The purchase deadline's trigger (`_pastDeadlineTriggered`) fires only on a caught-up day
+  (`today == dailyIdx + 1`). A gap behind `dailyIdx` is a stall of that length (a daily or mid-day VRF
+  request that has not come back, the coordinator-swap re-send, a ticket backlog, or days nobody
+  advanced) and waits for the next daily word's backfill to credit it to `purchaseStartDay`. This
+  closes audit A-1: a stalled mid-day word landing past the deadline ended the level before the
+  credit. Liveness no longer reads `rngRequestTime` or `lastVrfProcessedTimestamp`; the VRF callback,
+  the deadman and the VRF-dead window are unchanged. New `test/fuzz/MidDayStallCredit.t.sol`; the
+  `TransientLiveness`, `DeadVrfEnding` and `ReviewFixes0924` cases that pinned the removed
+  unattended-gap clause now pin the new rule.
+
+At `e995dc55` (clean worktree): the 11 gates, `check-interfaces` and the storage-layout oracle pass;
+foundry integration-gas 763, repro-symbolic 260, fuzz-1 482 and fuzz-2 383 passed with 0 failed. The
+fuzz-3, fuzz-4 and invariants groups, hardhat and `test:stat` were still running at this re-pin and are
+recorded in the next update. Gas is unchanged on every probed path (mid-day and daily callbacks,
+mid-day request, daily-request advance, backfill advance); `DegenerusGame` shrinks 94 B and
+`DegenerusGameAdvanceModule` 101 B (inherited predicate).
+
+## Evidence — 2026-09-26, single daily board, jackpot fill stage and flat foil table
 
 One commit on top of `ee60d36f`:
 
