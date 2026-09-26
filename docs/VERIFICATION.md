@@ -129,6 +129,8 @@ Five commits on top of `9a36d3b2`:
 - `70d06e60` `WWXRP.enter` reads the entrant's WWXRP boon lane through `extsload` and skips the
   consume dispatch for an empty lane.
 - `224de529` Protocol boon-draw pools and entries use two-slot rings keyed `day & 1` with a day tag.
+- `de852e79` A human-box sweep that opens nothing reports the walk units it consumed, so the
+  `mineFlip` router sizes its craps leg from the real spend (audit finding E L-01).
 
 Each commit's tree was rebuilt from `9a36d3b2` by applying the commit patches in order and checked
 with the 11 gates, the storage-layout oracle and the suites it touches. At `224de529`: the 11
