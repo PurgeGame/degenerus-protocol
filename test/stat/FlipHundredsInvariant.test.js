@@ -335,13 +335,24 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
   });
 
   describe("Anti-grind: the caller-composed aggregate is NEVER rounded (§4)", function () {
-    it("[04a] `resolveDegeneretteBets` flushes `acc.flipMint` raw — no collapse at the flush", function () {
-      const body = bodyOf(DEGENERETTE, "function resolveDegeneretteBets(");
+    it("[04a] `resolveDegeneretteBets` flushes through the shared `_flushOwner`, which mints `acc.flipMint` raw — no collapse at the flush", function () {
+      // Post-queue-refactor, resolveDegeneretteBets(index, betIds) and
+      // sweepDegeneretteBets both loop bets into a shared ResolveAcc and delegate the
+      // per-owner payout to `_flushOwner` (called once per owner-run and once at the
+      // end of the call). The entry-point body itself no longer inlines the mint —
+      // pin it to the shared flush instead, which both entry points route through.
+      const entry = bodyOf(DEGENERETTE, "function resolveDegeneretteBets(");
       expect(
-        /if\s*\(\s*acc\.flipMint\s*!=\s*0\s*\)\s*coin\.mintForGame\(\s*player\s*,\s*acc\.flipMint\s*\)\s*;/.test(
+        /_flushOwner\s*\(\s*acc\s*\)\s*;/.test(entry),
+        "resolveDegeneretteBets must settle through the shared per-owner flush"
+      ).to.equal(true);
+
+      const body = bodyOf(DEGENERETTE, "function _flushOwner(");
+      expect(
+        /if\s*\(\s*acc\.flipMint\s*!=\s*0\s*\)\s*\{?\s*coin\.mintForGame\(\s*acc\.owner\s*,\s*acc\.flipMint\s*\)\s*;/.test(
           body
         ),
-        "the flush must mint the bare accumulator"
+        "the flush must mint the bare accumulator to the accumulated owner"
       ).to.equal(true);
       expect(
         /FlipRoundLib/.test(body),

@@ -35,9 +35,15 @@ contract DegeneretteHandler is Test {
     uint256 public ghost_betsFailed;
     uint256 public ghost_resolvesFailed;
 
-    // Track per-actor bet nonces for resolution
-    mapping(address => uint64[]) public actorBetIds;
-    mapping(address => uint256) public actorBetCount;
+    // Track per-actor bets for resolution: a bet is (RNG index, id within that index's queue).
+    struct PlacedBet {
+        uint48 index;
+        uint64 betId;
+    }
+    mapping(address => PlacedBet[]) internal actorBets;
+    /// @dev Last known queue length per index. Placement appends and an index with its word
+    ///      unset has no resolved bets, so the new length is found by probing upward.
+    mapping(uint48 => uint64) internal knownQueueLen;
 
     // --- Call counters ---
     uint256 public calls_placeBet;
@@ -79,7 +85,7 @@ contract DegeneretteHandler is Test {
         if (game.gameOver()) return;
 
         // Bound inputs
-        amountPerSpin = uint128(bound(uint256(amountPerSpin), 0.005 ether, 1 ether));
+        amountPerSpin = uint128(bound(uint256(amountPerSpin), 0.005 ether, 1 ether) / 1 gwei * 1 gwei);
         ticketCount = uint8(bound(uint256(ticketCount), 1, 10));
         symbol = uint8(bound(uint256(symbol), 0, 31));
 
@@ -87,16 +93,16 @@ contract DegeneretteHandler is Test {
         if (totalBet > currentActor.balance) return;
 
         // Open the lootbox RNG window so placeDegeneretteBet's index-gate is satisfiable.
-        _ensureLootboxIndexOpen();
+        uint48 index = _ensureLootboxIndexOpen();
 
         vm.prank(currentActor);
         try game.placeDegeneretteBet{value: totalBet}(currentActor, 0, amountPerSpin, ticketCount, symbol) {
             ghost_totalEthWagered += totalBet;
             ghost_betsPlaced++;
-            // Track bet nonce for this actor (nonce is sequential per player)
-            uint256 count = actorBetCount[currentActor];
-            actorBetIds[currentActor].push(uint64(count + 1));
-            actorBetCount[currentActor] = count + 1;
+            uint64 len = knownQueueLen[index];
+            while (game.degeneretteBetInfo(index, len + 1) != 0) ++len;
+            knownQueueLen[index] = len;
+            actorBets[currentActor].push(PlacedBet(index, len));
         } catch {
             ghost_betsFailed++;
         }
@@ -107,28 +113,28 @@ contract DegeneretteHandler is Test {
     function resolveBets(uint256 actorSeed) external useActor(actorSeed) {
         calls_resolveBet++;
 
-        uint256 count = actorBetIds[currentActor].length;
+        uint256 count = actorBets[currentActor].length;
         if (count == 0) return;
 
-        // Try to resolve the oldest unresolved bet
-        uint64 betId = actorBetIds[currentActor][count - 1];
+        // Try to resolve the newest unresolved bet
+        PlacedBet memory bet = actorBets[currentActor][count - 1];
 
         uint64[] memory ids = new uint64[](1);
-        ids[0] = betId;
+        ids[0] = bet.betId;
 
         // Fill the bet's lootbox word so the resolve RNG-ready gate is satisfiable.
-        _fillLootboxWordForResolve();
+        _fillLootboxWordForResolve(bet.index);
 
         uint256 claimableBefore = game.claimableWinningsOf(currentActor);
 
         vm.prank(currentActor);
-        try game.resolveDegeneretteBets(currentActor, ids) {
+        try game.resolveDegeneretteBets(bet.index, ids) {
             ghost_betsResolved++;
             uint256 claimableAfter = game.claimableWinningsOf(currentActor);
             if (claimableAfter > claimableBefore) {
                 ghost_totalEthPayout += (claimableAfter - claimableBefore);
             }
-            actorBetIds[currentActor].pop();
+            actorBets[currentActor].pop();
         } catch {
             ghost_resolvesFailed++;
         }
@@ -193,11 +199,11 @@ contract DegeneretteHandler is Test {
     ///      and the solvency invariant passes vacuously (betsPlaced stays 0). We force LR_INDEX to a
     ///      fixed open index (word still zero) so the live placeDegeneretteBet path actually executes
     ///      against real ETH. This is the same mechanism the DegeneretteHeroScore unit harness uses.
-    function _ensureLootboxIndexOpen() private {
+    function _ensureLootboxIndexOpen() private returns (uint48 index) {
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))
         );
-        uint48 index = uint48(lrPacked);
+        index = uint48(lrPacked);
         if (index == 0) {
             lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(SEED_LR_INDEX);
             vm.store(
@@ -214,15 +220,11 @@ contract DegeneretteHandler is Test {
         }
     }
 
-    /// @dev Make a placed bet resolvable: _resolveBet reverts (RngNotReady) unless
-    ///      lootboxRngWordByIndex[betIndex] is non-zero. Fill the active index's word with a
+    /// @dev Make a placed bet resolvable: resolveDegeneretteBets reverts (RngNotReady) unless
+    ///      lootboxRngWordByIndex[index] is non-zero. Fill the bet's index word with a
     ///      deterministic non-zero entropy so resolveDegeneretteBets executes its live payout +
     ///      claimable-credit path (exercising the post-resolve solvency leg too).
-    function _fillLootboxWordForResolve() private {
-        uint256 lrPacked = uint256(
-            vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))
-        );
-        uint48 index = uint48(lrPacked);
+    function _fillLootboxWordForResolve(uint48 index) private {
         if (index == 0) return;
         bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
         if (uint256(vm.load(address(game), wordSlot)) == 0) {

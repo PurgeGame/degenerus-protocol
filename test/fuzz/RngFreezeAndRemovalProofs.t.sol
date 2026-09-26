@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -74,10 +75,6 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
-    /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
     /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
     ///      box-owed signal (set on first deposit, zeroed on open in one SSTORE) — it replaced
     ///      the removed lootboxEthBase mapping the old pin read.
@@ -236,7 +233,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
         game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(winTicket & 7));
-        uint64 betId = _betNonce(player);
+        uint64 betId = DQ.lastBetId(vm, address(game), INDEX);
 
         // Seed the live future prize pool so the winning ETH payout is solvent.
         _seedFuturePrizePool(10_000 ether);
@@ -244,17 +241,15 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint256 preClaimable = game.claimableWinningsOf(player);
         assertEq(preClaimable, 0, "no claimable before resolve");
 
-        // Land the word and resolve via the permissionless crank (post-unlock, SAFE-04).
+        // Land the word and resolve it from an unrelated caller (permissionless, post-unlock).
         _injectLootboxRngWord(INDEX, word);
-        address[] memory players = new address[](1);
         uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
         betIds[0] = betId;
         vm.prank(cranker);
-        game.degeneretteResolve(players, betIds);
+        game.resolveDegeneretteBets(INDEX, betIds);
 
-        // The bet resolved (slot deleted) and the winnings landed wholly in claimable.
-        assertEq(_readBetPacked(player, betId), 0, "winning bet resolved");
+        // The bet resolved (queue word zeroed) and the winnings landed wholly in claimable.
+        assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "winning bet resolved");
         uint256 postClaimable = game.claimableWinningsOf(player);
         assertGt(
             postClaimable,
@@ -876,7 +871,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint128 betAmount = 0.01 ether;
         vm.prank(better);
         game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
-        betId = _betNonce(better);
+        betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
@@ -946,24 +941,6 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         return uint256(vm.load(address(game), leaf));
     }
 
-    function _readBetPacked(
-        address owner,
-        uint64 id
-    ) internal view returns (uint256) {
-        bytes32 inner = keccak256(
-            abi.encode(owner, uint256(DEGENERETTE_BETS_SLOT))
-        );
-        bytes32 leaf = keccak256(abi.encode(uint256(id), uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
-    }
-
-    function _betNonce(address who) internal view returns (uint64) {
-        bytes32 slot = keccak256(
-            abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT))
-        );
-        return uint64(uint256(vm.load(address(game), slot)));
-    }
-
     /// @dev Seed the live futurePrizePool (future half (bits 128-255) of prizePoolsPacked slot 2) so winning
     ///      ETH payouts are solvent. Preserves the next half.
     function _seedFuturePrizePool(uint256 targetFuture) internal {
@@ -990,17 +967,15 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint128 betAmount = 0.01 ether;
         vm.prank(who);
         game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(winTicket & 7));
-        uint64 betId = _betNonce(who);
+        uint64 betId = DQ.lastBetId(vm, address(game), atIndex);
 
         _seedFuturePrizePool(10_000 ether);
         uint256 pre = game.claimableWinningsOf(who);
         _injectLootboxRngWord(atIndex, word);
-        address[] memory players = new address[](1);
         uint64[] memory betIds = new uint64[](1);
-        players[0] = who;
         betIds[0] = betId;
         vm.prank(cranker);
-        game.degeneretteResolve(players, betIds);
+        game.resolveDegeneretteBets(atIndex, betIds);
         creditDelta = game.claimableWinningsOf(who) - pre;
     }
 

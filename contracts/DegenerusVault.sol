@@ -66,8 +66,6 @@ interface IDegenerusGamePlayerActions {
         uint8 spinCount,
         uint8 symbol
     ) external payable;
-    /// @notice Resolve degenerette bets for a player.
-    function resolveDegeneretteBets(address player, uint64[] calldata betIds) external;
     /// @notice Set operator approval for a player.
     function setOperatorApproval(address operator, bool approved) external;
     /// @notice View claimable ETH winnings for a player.
@@ -691,7 +689,8 @@ contract DegenerusVault {
 
     /// @notice Place a Degenerette bet for the vault in ETH or FLIP.
     /// @dev ETH bets fund from msg.value + ethValue from the vault balance, falling back to
-    ///      claimable winnings when underfunded; other currencies send no value.
+    ///      claimable winnings when underfunded; other currencies send no value. The Game's
+    ///      mineFlip sweep resolves the bet and pays the vault; no resolve call is needed.
     /// @param currency Bet currency (0 = ETH, 1 = FLIP; other values unsupported)
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of tickets (must satisfy game rules)
@@ -715,13 +714,6 @@ contract DegenerusVault {
         gamePlayer.placeDegeneretteBet{value: value}(
             address(this), currency, amountPerSpin, spinCount, symbol
         );
-    }
-
-    /// @notice Resolve Degenerette bets for the vault
-    /// @param betIds Bet identifiers to resolve
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameResolveDegeneretteBets(uint64[] calldata betIds) external onlyVaultOwner {
-        gamePlayer.resolveDegeneretteBets(address(this), betIds);
     }
 
     /// @notice Salvage the vault's far-future ticket entries for current tickets + cash — vault owner. Counterparty resolves to sDGNRS or, on fallback, to the vault itself.

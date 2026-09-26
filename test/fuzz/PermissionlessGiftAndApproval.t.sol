@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 
 /// @title PermissionlessGiftAndApproval
 /// @notice Covers the permissionless-settlement behaviors added in the permissionless work:
@@ -12,8 +13,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 contract PermissionlessGiftAndApproval is DeployProtocol {
     // Storage slots (game) — mirror DegeneretteResolveRepeg.t.sol.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
-    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
+    uint48 private constant BET_INDEX = 1;
 
     uint8 private constant CURRENCY_ETH = 0;
     uint8 private constant CURRENCY_FLIP = 1;
@@ -45,13 +45,9 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
     }
 
-    function _betNonce(address who) internal view returns (uint64) {
-        return uint64(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT))))));
-    }
-
-    function _betSlot(address who, uint64 betId) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(who, uint256(DEGENERETTE_BETS_SLOT)));
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(betId), inner))));
+    /// @dev Newest bet id at the seeded index (the queue length).
+    function _lastBetId() internal view returns (uint64) {
+        return DQ.lastBetId(vm, address(game), BET_INDEX);
     }
 
     function _fundFlip(address who, uint256 amount) internal {
@@ -67,30 +63,31 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         _fundFlip(player, 1000 ether); // the player's FLIP must remain untouched
         uint256 playerBefore = coin.balanceOf(player);
         uint256 gifterBefore = coin.balanceOf(gifter);
-        uint64 nonceBefore = _betNonce(player);
+        uint64 idBefore = _lastBetId();
 
         vm.prank(gifter); // gifter is NOT the player and NOT approved
         game.placeDegeneretteBet(player, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
 
         assertEq(coin.balanceOf(player), playerBefore, "no drain: player FLIP untouched");
         assertLt(coin.balanceOf(gifter), gifterBefore, "funder paid the bet");
-        uint64 nonceAfter = _betNonce(player);
-        assertEq(nonceAfter, nonceBefore + 1, "bet recorded under the player");
-        assertGt(_betSlot(player, nonceAfter), 0, "the player owns the gifted bet");
+        uint64 idAfter = _lastBetId();
+        assertEq(idAfter, idBefore + 1, "one bet queued");
+        assertEq(DQ.owner(game.degeneretteBetInfo(BET_INDEX, idAfter)), player, "the player owns the gifted bet");
     }
 
     /// @notice An ETH gift is funded by the caller's msg.value; the player's ETH is untouched.
     function testEthGiftFundedByCaller() public {
         uint256 playerEthBefore = player.balance;
         uint256 gifterEthBefore = gifter.balance;
-        uint64 nonceBefore = _betNonce(player);
+        uint64 idBefore = _lastBetId();
 
         vm.prank(gifter);
         game.placeDegeneretteBet{value: BET_ETH}(player, CURRENCY_ETH, BET_ETH, 1, 0);
 
         assertEq(gifter.balance, gifterEthBefore - BET_ETH, "funder's ETH funded the bet");
         assertEq(player.balance, playerEthBefore, "no drain: player ETH untouched");
-        assertEq(_betNonce(player), nonceBefore + 1, "bet recorded under the player");
+        assertEq(_lastBetId(), idBefore + 1, "one bet queued");
+        assertEq(DQ.owner(game.degeneretteBetInfo(BET_INDEX, idBefore + 1)), player, "bet recorded under the player");
     }
 
     /// @notice WWXRP is unsupported even when an unrelated caller tries to gift the bet.

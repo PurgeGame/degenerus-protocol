@@ -49,11 +49,11 @@ OWNER	deadTotal	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain fixe
 OWNER	deadTraitCount	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf counts the non-empty trait buckets in its stage 2; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
 OWNER	deadUncreated	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf accumulates and _saveDeadTally persists the uncreated weight; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
 OWNER	deadUncreatedLeft	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain seeds the unclaimed uncreated weight; claimDeadVrf draws it down per claim; dead-VRF ending (LR_GO_DEAD latched, terminal)
-OWNER	degeneretteBetNonce	modules/DegenerusGameDegeneretteModule.sol	_placeDegeneretteBetCore increments the per-player bet nonce; sole writer
 OWNER	deityBoonPacked	modules/DegenerusGameBoonModule.sol	Manual gifts and automatic protocol draws stamp day|usedMask
 OWNER	deityBoonRecipientDay	modules/DegenerusGameBoonModule.sol	issueDeityBoon stamps the recipient's boon day (one boon per recipient per day); sole writer
 OWNER	deityBySymbol	modules/DegenerusGameWhaleModule.sol	_registerDeity records genesis or purchased symbol -> owner; sole writer
 OWNER	deityPassPricePaid	modules/DegenerusGameWhaleModule.sol	purchaseDeityPass records the price paid (caps the early-gameover refund); plain assignment, one pass per buyer
+OWNER	degeneretteRecordBounty	modules/DegenerusGameDegeneretteModule.sol	_placeDegeneretteBetCore writes the armed record bounty beside the queued bet; _resolveBet reads and deletes it once; sole writer
 OWNER	foilCursor	modules/DegenerusGameFoilPackModule.sol	_processFoilDrain persists the per-bucket resume position on budget deferral and zeroes when caught up; sole writer
 OWNER	foilDrainDay	modules/DegenerusGameFoilPackModule.sol	buyFoilPack skips the low-water cursor forward when the drain is caught up; _processFoilDrain advances it; both foil-module, monotone
 OWNER	foilLastResolveDay	modules/DegenerusGameFoilPackModule.sol	buyFoilPack raises the high-water mark; sole writer

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
@@ -8,7 +9,7 @@ import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 /// @title DegeneretteFlipRoundAntiGrind — the 100-FLIP collapse is fixed at VRF fulfillment,
 ///        not at settle time, however the caller composes the batch.
 ///
-/// @notice `resolveDegeneretteBets(address player, uint64[] betIds)` is PERMISSIONLESS and takes
+/// @notice `resolveDegeneretteBets(uint48 index, uint64[] betIds)` is PERMISSIONLESS and takes
 ///         a CALLER-CHOSEN `betIds[]` array. The per-bet FLIP payouts sum into one `acc.flipMint`
 ///         and mint in a single flush. That combination is the one real grind this design has to
 ///         defend against:
@@ -33,6 +34,9 @@ import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 ///      `DegeneretteResolveRepeg.t.sol`, which in turn copies `DegeneretteFreezeResolution.t.sol`.
 ///      CROSS-CITE: .planning/PLAN-FLIP-ROUND-HUNDREDS.md §4.
 contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
+    /// @dev Every bet here is placed at the seeded lootbox index 1.
+    uint48 private constant BET_INDEX = 1;
+
     // =========================================================================
     // Storage slot constants (confirmed via `forge inspect ... storage`)
     // =========================================================================
@@ -41,8 +45,6 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
     /// @dev lootboxRngPacked; lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
@@ -254,20 +256,27 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         if (betIds.length == 0) return 0;
         uint256 before = coin.balanceOf(player);
         vm.prank(keeper);
-        game.resolveDegeneretteBets(player, betIds);
+        game.resolveDegeneretteBets(BET_INDEX, betIds);
         minted = coin.balanceOf(player) - before;
     }
 
-    /// @dev Place a Degenerette bet for `player` and return its betId (nonce).
+    /// @dev Place a Degenerette bet for `player` and return its id within the index queue.
     function _placeBet(
         uint8 currency,
         uint128 perTicket,
         uint8 spins,
         uint32 ticket
     ) internal returns (uint64 betId) {
+        vm.recordLogs();
         vm.prank(player);
         game.placeDegeneretteBet(address(0), currency, perTicket, spins, uint8(ticket & 7));
-        betId = _betNonce(player);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)")) {
+                return uint64(uint256(logs[i].topics[3]));
+            }
+        }
+        revert("bet not placed");
     }
 
     /// @dev The spin-0 winning custom ticket for (index, word): the spin-0 result ticket itself
@@ -309,13 +318,6 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
             abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT))
         );
         vm.store(address(game), slot, bytes32(rngWord));
-    }
-
-    function _betNonce(address who) internal view returns (uint64) {
-        bytes32 slot = keccak256(
-            abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT))
-        );
-        return uint64(uint256(vm.load(address(game), slot)));
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {

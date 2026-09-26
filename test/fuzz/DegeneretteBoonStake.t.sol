@@ -39,8 +39,9 @@ contract DegeneretteBoonStake is DeployProtocol {
     uint256 private constant BP_DEGEN_LANE_DEITY_BIT = 0x4;
 
     // --- Packed bet layout (DegeneretteModule) ---
-    uint256 private constant DEGEN_AMOUNT_SHIFT = 42;
-    uint256 private constant MASK_128 = (uint256(1) << 128) - 1;
+    // --- Queued bet word: stake units at [188..251] (ETH gwei, FLIP whole), currency at 170.
+    uint256 private constant BET_STAKE_SHIFT = 188;
+    uint256 private constant BET_CURRENCY_SHIFT = 170;
 
     uint8 private constant CURRENCY_ETH = 0;
     uint8 private constant CURRENCY_FLIP = 1;
@@ -158,7 +159,8 @@ contract DegeneretteBoonStake is DeployProtocol {
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] != BET_PLACED_SIG) continue;
             uint256 packed = abi.decode(logs[i].data, (uint256));
-            return (packed >> DEGEN_AMOUNT_SHIFT) & MASK_128;
+            uint256 unit = (packed >> BET_CURRENCY_SHIFT) & 1 == 0 ? 1 gwei : 1 ether;
+            return ((packed >> BET_STAKE_SHIFT) & type(uint64).max) * unit;
         }
         revert("DegeneretteBetPlaced not emitted");
     }

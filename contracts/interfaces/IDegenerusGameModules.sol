@@ -587,13 +587,31 @@ interface IDegenerusGameDegeneretteModule {
         uint8 symbol
     ) external payable;
 
-    /// @notice Resolves one or more pending bets for a player (permissionless: credits the owner)
-    /// @param player The player address (use zero address for msg.sender)
-    /// @param betIds Array of bet IDs to resolve
+    /// @notice Resolves queued bets at one RNG index (permissionless: credits each owner)
+    /// @param index Lootbox RNG index the bets were placed at
+    /// @param betIds Bet ids within `index` (queue position + 1)
     function resolveDegeneretteBets(
-        address player,
+        uint48 index,
         uint64[] calldata betIds
     ) external;
+
+    /// @notice Human-box sweep leg: resolves the bet queue at `index` from `pos` within `budget`
+    /// @param index The swept RNG index
+    /// @param pos Queue position to resume from
+    /// @param budget Walk units left in the crank call
+    /// @param mustRunFirst True when the crank has opened nothing yet (the first bet always runs)
+    /// @param rngWord The index's committed word
+    /// @return resolved Bets resolved
+    /// @return newPos Position to resume from
+    /// @return unitsSpent Walk units charged against the budget (worst-case prices)
+    /// @return workUnits Walk units of work actually done (the keeper bounty's basis)
+    function sweepDegeneretteBets(
+        uint48 index,
+        uint256 pos,
+        uint256 budget,
+        bool mustRunFirst,
+        uint256 rngWord
+    ) external returns (uint256 resolved, uint256 newPos, uint256 unitsSpent, uint256 workUnits);
 
     /// @notice Resolve a lootbox WWXRP roll as a single WWXRP Degenerette spin.
     /// @param player The reward recipient.

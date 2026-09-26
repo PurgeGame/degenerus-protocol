@@ -22,7 +22,7 @@ There is no full-ticket selection or separate hero-quadrant parameter.
 For ordinary ETH and FLIP bets:
 
 - Same RNG round, hero and spin index means the same player ticket, regardless
-  of wallet, bet nonce, stake or requested spin count. Five spins are exactly the
+  of wallet, bet id, stake or requested spin count. Five spins are exactly the
   first five of ten spins. Each bet starts at spin zero.
 - Different hero symbols independently regenerate the other symbols and colors.
   Independent draws can coincidentally match; they are not forced apart.
@@ -50,8 +50,10 @@ houseSeed  = H(rewardSeed, RESULT_TICKET_TAG)
 rigSeed    = H(rewardSeed, WWXRP_RIG_SALT)
 ```
 
-FLIP survival and award rounding retain their separate owner/bet-nonce domains.
-Thus shared reels do not imply identical final FLIP awards. Activity, stake boons,
+FLIP survival and award rounding retain their separate owner/bet-id domains,
+where the bet id is scoped to the RNG index the bet queued at (see
+[DEGENERETTE-BET-QUEUE.md](DEGENERETTE-BET-QUEUE.md)). Thus shared reels do
+not imply identical final FLIP awards. Activity, stake boons,
 ETH caps and downstream reward draws also affect settlement independently.
 
 ## Protocol deity boon entries

@@ -7,6 +7,8 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
+import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
 
 /// @title DegeneretteV73SolvencyFuzz — stateless property fuzz over single-symbol bets.
 ///
@@ -25,15 +27,10 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
-    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
-    uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51;
     uint8 private constant CURRENCY_FLIP = 1;
 
-    bytes32 private constant FULL_TICKET_RESULT_SIG =
-        keccak256("DegeneretteResult(address,uint64,uint8,uint32,uint8,uint256)");
 
     // ROI curve mirror (DegeneretteModule._roiBpsFromScore).
     uint256 private constant ACTIVITY_SCORE_MAX_POINTS = 305;
@@ -45,9 +42,11 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     uint256 private constant ROI_MAX_BPS = 9_990;
 
     address private player;
+    DegeneretteMathHarness private math;
 
     function setUp() public {
         _deployProtocol();
+        math = new DegeneretteMathHarness();
         vm.warp(block.timestamp + 1 days);
         player = makeAddr("v73_fuzz_player");
         vm.deal(player, 1_000_000 ether);
@@ -68,13 +67,16 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         coin.mintForGame(player, uint256(perTicket) + 1 ether);
         vm.prank(player);
         game.placeDegeneretteBet(address(0), CURRENCY_FLIP, perTicket, 1, symbol);
-        uint64 betId = _betNonce(player);
-        uint256 roiBps = _roiBpsOfBet(betId);
+        uint64 betId = DQ.lastBetId(vm, address(game), 1);
+        uint256 bet = game.degeneretteBetInfo(1, betId);
+        uint256 roiBps = _roiBps(DQ.activity(bet));
         _injectLootboxRngWord(1, word);
         vm.recordLogs();
         vm.prank(player);
-        game.resolveDegeneretteBets(address(0), _one(betId));
-        (uint8 score, uint256 payout) = _firstSpinScoreAndPayout();
+        game.resolveDegeneretteBets(1, _one(betId));
+        (uint8 score, uint8 gold) = _firstSpin();
+        assertLe(gold, 4, "at most four gold matches");
+        uint256 payout = math.payout(score, gold, CURRENCY_FLIP, DQ.stake(bet), DQ.activity(bet));
         assertLe(score, 9, "score must be in {0..9}");
         uint256 base = (payout * 1_000_000) / (uint256(perTicket) * roiBps);
         assertLe(base, 20_000_000, "honest base exceeds S=9 with four gold matches");
@@ -133,11 +135,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         }
     }
 
-    function _roiBpsOfBet(uint64 betId) internal view returns (uint256 roiBps) {
-        bytes32 inner = keccak256(abi.encode(player, uint256(DEGENERETTE_BETS_SLOT)));
-        bytes32 slot = keccak256(abi.encode(uint256(betId), inner));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 score = (packed >> DEGEN_ACTIVITY_SHIFT) & 0xFFFF;
+    function _roiBps(uint256 score) internal pure returns (uint256 roiBps) {
         if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return ROI_MAX_BPS;
         if (score <= ACTIVITY_SCORE_MAX_POINTS) {
             return ROI_MIN_BPS + (score * (ROI_VA_BPS - ROI_MIN_BPS)) / ACTIVITY_SCORE_MAX_POINTS;
@@ -155,21 +153,16 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         a[0] = betId;
     }
 
-    function _betNonce(address who) internal view returns (uint64) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
-        return uint64(uint256(vm.load(address(game), slot)));
-    }
-
-    function _firstSpinScoreAndPayout() internal returns (uint8 s, uint256 payout) {
+    function _firstSpin() internal returns (uint8 score, uint8 gold) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == FULL_TICKET_RESULT_SIG) {
-                (uint8 spinIdx, , uint8 matches, uint256 p) =
-                    abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
-                if (spinIdx == 0) return (matches, p);
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == DQ.RESOLVED_SIG) {
+                (,, bytes memory spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));
+                (, score, gold) = DQ.spinAt(spins, 0);
+                return (score, gold);
             }
         }
-        revert("no DegeneretteResult for spin 0");
+        revert("no DegeneretteResolved");
     }
 
     function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx) internal pure returns (uint32) {

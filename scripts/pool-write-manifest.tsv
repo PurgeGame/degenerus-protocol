@@ -53,8 +53,8 @@ PAIRED-CREDIT	_creditClaimable	_addClaimableEth	modules/DegenerusGameDegenerette
 PAIRED-CREDIT	claimablePool	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	WRITE	aggregate + per-player in tandem; funded by the running pool debit in _distributePayout
 VALUE-IN	_setPendingPools	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet lands in pending future during freeze; claimable/afking-funded shortfall leg pre-debited via _settleShortfall (relabel)
 VALUE-IN	_setPrizePools	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet lands in future (same funding mix as the frozen path)
-POOL-TO-POOL	_setFuturePrizePool	resolveDegeneretteBets	modules/DegenerusGameDegeneretteModule.sol	READ	unfrozen-path flush of the running future local after ETH-win debits
-POOL-TO-POOL	_setPendingPools	resolveDegeneretteBets	modules/DegenerusGameDegeneretteModule.sol	READ	frozen-path flush of the running pending-future local after ETH-win debits
+POOL-TO-POOL	_setFuturePrizePool	_flushPool	modules/DegenerusGameDegeneretteModule.sol	READ	unfrozen-path flush of the running future local after ETH-win debits (manual resolve and the mineFlip bet sweep)
+POOL-TO-POOL	_setPendingPools	_flushPool	modules/DegenerusGameDegeneretteModule.sol	READ	frozen-path flush of the running pending-future local after ETH-win debits (manual resolve only; the sweep holds its queue while the pool is frozen)
 POOL-TO-POOL	_setFuturePrizePool	resolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush, unfrozen path
 POOL-TO-POOL	_setPendingPools	resolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as resolveDegeneretteBets)
 VALUE-IN	_setPendingPools	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix)

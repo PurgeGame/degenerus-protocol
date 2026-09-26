@@ -3,78 +3,51 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
-import {Vm} from "forge-std/Vm.sol";
-import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 
-/// @title DegeneretteResolveRepeg -- flat keeper reward for supported ETH/FLIP bets.
-/// @notice Three or more successful resolutions pay one flat FLIP reward. One or two
-///         settle without reward; zero successful resolutions revert. Reward gating must
-///         leave the player's settlement amounts unchanged.
+/// @title DegeneretteResolveRepeg -- batch-partitioning invariance of queued-bet resolution.
+/// @notice Bets are queued per RNG index (`degeneretteQueue[index]`, id = queue position + 1).
+///         `resolveDegeneretteBets(index, betIds)` is PERMISSIONLESS and pays NO keeper reward
+///         of any kind -- the flat ~1-FLIP "loser" reward, the >=3-successful-resolutions gate,
+///         `BatchAlreadyTaken`, and the zero-resolved `NoWork()` revert this file used to test
+///         all belonged to the removed `game.degeneretteResolve(players, betIds)` keeper-crank
+///         helper and have no replacement (confirmed absent from contracts/ by grep). Unresolved
+///         bets settle automatically once their index's box entries clear, via the human-box
+///         sweep (`game.openBoxes`, unrewarded, or `game.mineFlip`, rewarded to the CALLER based
+///         on the walk-unit work actually done -- see KeeperFaucetResistance.t.sol and
+///         DegeneretteSweep.t.sol for that reward's own faucet-safety and equivalence proofs).
+///
+///         What remains meaningful here: the cross-bet payout accumulator
+///         (`DegenerusGameDegeneretteModule.ResolveAcc`) sums ETH/FLIP per owner and flushes once
+///         per owner-run, purely additively. This file proves that additivity end-to-end -- the
+///         SAME set of queued bets must settle to byte-identical player balances whether resolved
+///         in one `resolveDegeneretteBets` call, across several separate calls, or picked up by
+///         the automatic sweep -- so a caller's choice of batch partitioning (or a caller simply
+///         never showing up, leaving the sweep to do it) can never move value.
 contract DegeneretteResolveRepeg is DeployProtocol {
     // =========================================================================
     // Storage slot constants (confirmed via `forge inspect ... storage`)
     // =========================================================================
 
-    /// @dev lootboxRngWordByIndex mapping root slot (post Stage-B game-storage repack: was 36).
+    /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
-    /// @dev lootboxRngPacked at slot 34 (post Stage-B game-storage repack: was 35); lootboxRngIndex is the low 48 bits.
+    /// @dev lootboxRngPacked; lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     /// @dev claimablePool (uint128) lives in slot 1, byte 16 (high 128 bits).
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64) (post Stage-B game-storage repack: was 41).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
 
-    // =========================================================================
-    // Degenerette bet currencies (DegeneretteModule:208-216) — ETH and FLIP
-    // =========================================================================
+    /// @dev Mirrors DegenerusGameDegeneretteModule's private BET_SURVIVAL_TAG domain separator.
+    uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
 
     uint8 private constant CURRENCY_ETH = 0;
     uint8 private constant CURRENCY_FLIP = 1;
 
-    /// @dev Per-currency minimum bets (DegeneretteModule:217-225).
-    uint256 private constant MIN_BET_ETH = 5 ether / 1000;
-    uint256 private constant MIN_BET_FLIP = 100 ether;
-
-    /// @dev The flat ~1-FLIP "lose" reward (DegenerusGame.sol:1544, RESOLVE_FLAT_FLIP).
-    uint256 private constant RESOLVE_FLAT_FLIP = 1e18;
-
-    // =========================================================================
-    // Event topics
-    // =========================================================================
-
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — emitted EXACTLY once
-    ///      per creditFlip via _addDailyFlip; the count + amount oracle for the flat-ONE reward.
-    bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
-
-    /// @dev DegeneretteResult topic0 — one per resolved spin (the raw per-spin payout source).
-    bytes32 private constant FULL_TICKET_RESULT_SIG =
-        keccak256("DegeneretteResult(address,uint64,uint8,uint32,uint8,uint256)");
-    /// @dev PayoutCapped topic0 — one per ETH spin that flipped into the lootbox.
-    bytes32 private constant PAYOUT_CAPPED_SIG =
-        0xf8a9468f6767206f82ef0f809e2c4fb396a1495ad99e9f116652fe99a91f20c5;
-    /// @dev DegeneretteResolved topic0 — one per resolved betId.
-    bytes32 private constant FULL_TICKET_RESOLVED_SIG =
-        keccak256("DegeneretteResolved(address,uint64,uint8,uint256,uint32)");
-
-    // =========================================================================
-    // Actors / scratch
-    // =========================================================================
-
     address private player;
-    address private keeper;
-
-    /// @dev DGNRS award bps per match tier (DegeneretteModule:203-205).
-    uint256 private constant DEGEN_DGNRS_6_BPS = 400;
-    uint256 private constant DEGEN_DGNRS_7_BPS = 800;
-    uint256 private constant DEGEN_DGNRS_8_BPS = 1500;
-    /// @dev ETH win pool cap: 10% of futurePool (DegeneretteModule:196).
-    uint256 private constant ETH_WIN_CAP_BPS = 1_000;
 
     function setUp() public {
         _deployProtocol();
@@ -82,7 +55,6 @@ contract DegeneretteResolveRepeg is DeployProtocol {
 
         player = makeAddr("degen_resolve_player");
         vm.deal(player, 1000 ether);
-        keeper = makeAddr("degen_resolve_keeper");
 
         // Fund the game with ETH to back any pool / winning credit.
         vm.deal(address(game), 500 ether);
@@ -92,206 +64,28 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
-
-        // Resolution is permissionless: settlement only credits the bet owner, so the keeper
-        // resolves the player's bets with no operator approval (placement stays gated).
     }
 
     // =========================================================================
-    // Flat reward, success threshold, and mixed supported-currency settlement
+    // Batch-partitioning invariance
     // =========================================================================
 
-    /// @notice Case (a): >= 3 supported resolved -> exactly ONE flat creditFlip to the keeper,
-    ///         amount == RESOLVE_FLAT_FLIP (1e18). This is the FLAT literal, NOT a per-item sum:
-    ///         we assert COUNT == 1 AND amount == 1e18 (never `3 * peg`). Three supported bets
-    ///         (ETH + FLIP + ETH) resolve, so successCount == 3 trips the gate exactly once.
-    function testGteThreeNonWwxrpPaysExactlyOneFlat() public {
-        // Large pool so resolutions are real but the exact payout is irrelevant to the count oracle.
+    /// @notice The player's total resolution deltas (ETH claimable / claimablePool / FLIP minted)
+    ///         are byte-identical no matter how a caller partitions or delivers the same set of
+    ///         queued bets: one `resolveDegeneretteBets` call for all three, three separate
+    ///         single-bet calls, or the automatic `openBoxes` sweep never called by the player at
+    ///         all. Also proves the sweep result matches hand resolution exactly for a mixed
+    ///         ETH/FLIP batch (DegeneretteSweep.t.sol proves the single-bet and resume-across-
+    ///         calls shapes of this same property; this file owns the batch-partitioning angle).
+    function testResolutionDeltasIndependentOfBatchPartitioning() public {
         _seedFuturePrizePool(1_000_000 ether);
 
+        // Word chosen so the FLIP bet (betId 2) WINS its bet-keyed survival flip
+        // (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 1) -- keeps the FLIP
+        // non-vacuity assert live under every partitioning.
         uint48 index = 1;
-        uint256 word = uint256(keccak256("repeg_gte3_word"));
-        uint32 ticket = _winningTicketFor(index, word);
-
-        // 3 supported bets: ETH, FLIP, ETH.
-        _fundFlip(player, 1_000 ether);
-        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        uint64 b1 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
-        uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-
-        _injectLootboxRngWord(index, word);
-
-        (address[] memory players, uint64[] memory betIds) = _list3(b0, b1, b2);
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.degeneretteResolve(players, betIds);
-
-        // The reward is paid ONCE (count == 1) AND the credited AMOUNT is the FLAT literal 1e18 —
-        // NOT a per-item sum (e.g. 3 * peg). Recipient-isolated to the keeper; single log pass.
-        (uint256 count, uint256 credited) = _keeperCredit(keeper);
-        assertEq(
-            count,
-            1,
-            "Case (a): >= 3 supported -> exactly ONE keeper creditFlip (flat, never per-item)"
-        );
-        assertEq(
-            credited,
-            RESOLVE_FLAT_FLIP,
-            "Case (a): credited == RESOLVE_FLAT_FLIP (1e18), the FLAT literal, never a per-item sum"
-        );
-
-        // All three bets actually resolved (slots deleted) — the gate fired on real work.
-        assertEq(_betSlot(player, b0), 0, "bet 0 resolved");
-        assertEq(_betSlot(player, b1), 0, "bet 1 resolved");
-        assertEq(_betSlot(player, b2), 0, "bet 2 resolved");
-    }
-
-    /// @notice Case (b): 1-2 supported resolved -> committed (resolved) but UNPAID (count == 0),
-    ///         and NO revert. Two supported bets resolve; successCount == 2 < 3, so the flat
-    ///         reward does NOT fire, yet the call commits the resolutions (the trailing tail is
-    ///         never stranded — only zero-resolved reverts).
-    function testOneOrTwoNonWwxrpCommittedUnpaidNoRevert() public {
-        _seedFuturePrizePool(1_000_000 ether);
-
-        uint48 index = 1;
-        uint256 word = uint256(keccak256("repeg_two_word"));
-        uint32 ticket = _winningTicketFor(index, word);
-
-        _fundFlip(player, 1_000 ether);
-        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        uint64 b1 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
-
-        _injectLootboxRngWord(index, word);
-
-        address[] memory players = new address[](2);
-        uint64[] memory betIds = new uint64[](2);
-        players[0] = player;
-        players[1] = player;
-        betIds[0] = b0;
-        betIds[1] = b1;
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        // No revert — the call commits the 2 resolutions.
-        game.degeneretteResolve(players, betIds);
-
-        // UNPAID: successCount == 2 < 3 -> zero keeper creditFlip.
-        assertEq(
-            _countCoinflipStakeUpdatedFor(keeper),
-            0,
-            "Case (b): 1-2 supported -> UNPAID (no creditFlip), but committed and NOT reverted"
-        );
-
-        // The tail is committed, not stranded: both bets resolved.
-        assertEq(_betSlot(player, b0), 0, "Case (b): bet 0 committed (resolved)");
-        assertEq(_betSlot(player, b1), 0, "Case (b): bet 1 committed (resolved)");
-    }
-
-    /// @notice Case (c): 0 resolved -> reverts NoWork(). The single supplied bet's RNG word never
-    ///         lands, so the `this.resolveDegeneretteBets` item call reverts (caught by the per-item
-    ///         try/catch), totalResolved stays 0, and the call reverts NoWork(). The AUTO-02 probe passes
-    ///         (the slot is non-zero — the bet exists but is not yet resolvable).
-    function testZeroResolvedRevertsNoWork() public {
-        _seedFuturePrizePool(1_000_000 ether);
-
-        uint48 index = 1;
-        uint256 word = uint256(keccak256("repeg_nowork_word"));
-        uint32 ticket = _winningTicketFor(index, word);
-
-        // Place a real bet (slot non-zero so the AUTO-02 probe passes) but DO NOT inject the
-        // RNG word — _resolveBet reverts RngNotReady (word == 0), caught per-item -> 0 resolved.
-        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        assertGt(_betSlot(player, b0), 0, "precondition: bet slot non-zero (probe passes)");
-
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = b0;
-
-        vm.prank(keeper);
-        vm.expectRevert(_noWorkSelector());
-        game.degeneretteResolve(players, betIds);
-
-        // Nothing resolved: the bet slot is intact.
-        assertGt(_betSlot(player, b0), 0, "Case (c): bet unresolved after NoWork() revert");
-    }
-
-    /// @notice Five mixed ETH/FLIP bets all settle while the keeper receives one flat reward.
-    function testFiveMixedSupportedBetsPayOneFlatReward() public {
-        _seedFuturePrizePool(1_000_000 ether);
-
-        uint48 index = 1;
-        uint256 word = uint256(keccak256("repeg_mixed_word"));
-        uint32 ticket = _winningTicketFor(index, word);
-
-        _fundFlip(player, 1_000 ether);
-
-        // Place five supported bets (ETH, FLIP, FLIP, FLIP, ETH).
-        uint64 nw0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        uint64 w0 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
-        uint64 nw1 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
-        uint64 w1 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
-        uint64 nw2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-
-        _injectLootboxRngWord(index, word);
-
-        address[] memory players = new address[](5);
-        uint64[] memory betIds = new uint64[](5);
-        for (uint256 i; i < 5; ++i) players[i] = player;
-        betIds[0] = nw0;
-        betIds[1] = w0;
-        betIds[2] = nw1;
-        betIds[3] = w1;
-        betIds[4] = nw2;
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.degeneretteResolve(players, betIds);
-
-        // All five supported bets count, but the keeper reward is paid only once.
-        (uint256 count, uint256 credited) = _keeperCredit(keeper);
-        assertEq(
-            count,
-            1,
-            "five supported bets -> PAID exactly once"
-        );
-        assertEq(
-            credited,
-            RESOLVE_FLAT_FLIP,
-            "Case (e): credited == RESOLVE_FLAT_FLIP (flat, never a per-item sum)"
-        );
-
-        // All five supported bets resolved.
-        assertEq(_betSlot(player, nw0), 0, "Case (e): supported 0 resolved");
-        assertEq(_betSlot(player, w0), 0, "additional FLIP 0 resolved");
-        assertEq(_betSlot(player, nw1), 0, "Case (e): supported 1 resolved");
-        assertEq(_betSlot(player, w1), 0, "additional FLIP 1 resolved");
-        assertEq(_betSlot(player, nw2), 0, "Case (e): supported 2 resolved");
-    }
-
-    // =========================================================================
-    // Task 2 — RESULTS-equality, value-invariant to the bounty wrapper
-    // =========================================================================
-
-    /// @notice RESULTS independence of the reward gate: prove the per-bet RESOLUTION deltas are
-    ///         IDENTICAL whether or not the >= 3 flat reward fired. Resolve the SAME 3 supported
-    ///         bets two ways against a snapshot:
-    ///           Run A — all 3 in ONE `degeneretteResolve` call (the >= 3 gate FIRES; keeper paid);
-    ///           Run B — revert, resolve the SAME 3 bets in THREE separate single-bet calls (the
-    ///                   gate NEVER fires — each call has 1 supported < 3 -> UNPAID, no revert).
-    ///         The player's total resolution deltas (FLIP/claimable/pool) must be byte-identical
-    ///         between A and B, while the keeper creditFlip count differs (1 in A, 0 in B). This
-    ///         proves the bounty wrapper provably never touches the resolution math: the resolution
-    ///         RESULTS are value-invariant to whether the gate fired.
-    function testResolutionDeltasIndependentOfRewardGate() public {
-        _seedFuturePrizePool(1_000_000 ether);
-
-        // Word chosen so the FLIP bet b1 (betId 2) WINS its bet-keyed survival flip
-        // (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 1) — keeps the FLIP non-vacuity assert live.
-        uint48 index = 1;
-        uint256 word = uint256(keccak256("gate_independence_word_v3"));
-        while (uint256(keccak256(abi.encode(word, player, uint256(2), uint256(0x446567656e537572766976616c)))) & 1 == 0) ++word;
+        uint256 word = uint256(keccak256("repeg_partition_independence_v1"));
+        while (uint256(keccak256(abi.encode(word, player, uint256(2), BET_SURVIVAL_TAG))) & 1 == 0) ++word;
         uint32 ticket = _winningTicketFor(index, word);
 
         _fundFlip(player, 1_000 ether);
@@ -307,106 +101,70 @@ contract DegeneretteResolveRepeg is DeployProtocol {
 
         uint256 snap = vm.snapshotState();
 
-        // --- Run A: all 3 in ONE call -> the >= 3 gate FIRES (keeper paid once) ---
-        (address[] memory players, uint64[] memory betIds) = _list3(b0, b1, b2);
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.degeneretteResolve(players, betIds);
+        // --- A: all 3 bets in ONE resolveDegeneretteBets call ---
+        uint64[] memory allIds = new uint64[](3);
+        allIds[0] = b0;
+        allIds[1] = b1;
+        allIds[2] = b2;
+        game.resolveDegeneretteBets(index, allIds);
 
-        uint256 keeperCountA = _countCoinflipStakeUpdatedFor(keeper);
         uint256 claimableDeltaA = game.claimableWinningsOf(player) - preClaimable;
         uint256 claimablePoolDeltaA = _readClaimablePool() - preClaimablePool;
         uint256 flipDeltaA = coin.balanceOf(player) - preFlip;
+        assertEq(game.degeneretteBetInfo(index, b0), 0, "Run A: bet 0 resolved");
+        assertEq(game.degeneretteBetInfo(index, b1), 0, "Run A: bet 1 resolved");
+        assertEq(game.degeneretteBetInfo(index, b2), 0, "Run A: bet 2 resolved");
 
-        // --- Run B: revert, resolve the SAME 3 bets one-at-a-time -> the gate NEVER fires ---
+        // --- B: revert, resolve the SAME 3 bets in THREE separate single-bet calls ---
         vm.revertToState(snap);
-
-        uint256 keeperCountB;
-        keeperCountB += _resolveSingleAndCountKeeperCredit(b0);
-        keeperCountB += _resolveSingleAndCountKeeperCredit(b1);
-        keeperCountB += _resolveSingleAndCountKeeperCredit(b2);
+        uint64[] memory one = new uint64[](1);
+        one[0] = b0;
+        game.resolveDegeneretteBets(index, one);
+        one[0] = b1;
+        game.resolveDegeneretteBets(index, one);
+        one[0] = b2;
+        game.resolveDegeneretteBets(index, one);
 
         uint256 claimableDeltaB = game.claimableWinningsOf(player) - preClaimable;
         uint256 claimablePoolDeltaB = _readClaimablePool() - preClaimablePool;
         uint256 flipDeltaB = coin.balanceOf(player) - preFlip;
 
-        // The bounty wrapper differs: gate fired once in A, never in B.
-        assertEq(keeperCountA, 1, "Run A: the >= 3 gate fired (keeper paid once)");
-        assertEq(keeperCountB, 0, "Run B: single-bet calls never trip the gate (keeper unpaid)");
+        // --- C: revert, resolve the SAME 3 bets via the automatic sweep (no caller-driven
+        // resolveDegeneretteBets call at all) ---
+        vm.revertToState(snap);
+        _advanceActiveIndexPast(index);
+        game.openBoxes(type(uint256).max);
 
-        // The player resolution RESULTS are byte-identical regardless of whether the reward fired.
+        uint256 claimableDeltaC = game.claimableWinningsOf(player) - preClaimable;
+        uint256 claimablePoolDeltaC = _readClaimablePool() - preClaimablePool;
+        uint256 flipDeltaC = coin.balanceOf(player) - preFlip;
+        assertEq(game.degeneretteBetInfo(index, b0), 0, "Run C: sweep resolved bet 0");
+        assertEq(game.degeneretteBetInfo(index, b1), 0, "Run C: sweep resolved bet 1");
+        assertEq(game.degeneretteBetInfo(index, b2), 0, "Run C: sweep resolved bet 2");
+
         assertEq(claimableDeltaA, claimableDeltaB,
-            "value-invariant: ETH claimable delta identical whether or not the >= 3 reward fired");
+            "batch-invariant: ETH claimable delta identical, one call vs three separate calls");
+        assertEq(claimableDeltaA, claimableDeltaC,
+            "batch-invariant: ETH claimable delta identical, one call vs the automatic sweep");
         assertEq(claimablePoolDeltaA, claimablePoolDeltaB,
-            "value-invariant: claimablePool delta identical whether or not the >= 3 reward fired");
+            "batch-invariant: claimablePool delta identical, one call vs three separate calls");
+        assertEq(claimablePoolDeltaA, claimablePoolDeltaC,
+            "batch-invariant: claimablePool delta identical, one call vs the automatic sweep");
         assertEq(flipDeltaA, flipDeltaB,
-            "value-invariant: FLIP mint delta identical whether or not the >= 3 reward fired");
+            "batch-invariant: FLIP mint delta identical, one call vs three separate calls");
+        assertEq(flipDeltaA, flipDeltaC,
+            "batch-invariant: FLIP mint delta identical, one call vs the automatic sweep");
 
         // Non-vacuity: the resolutions actually paid SOMETHING (the equality is not 0 == 0).
         assertGt(claimableDeltaA, 0, "non-vacuity: the resolutions credited ETH claimable");
         assertGt(flipDeltaA, 0, "non-vacuity: the resolutions minted FLIP");
     }
 
-    /// @dev Resolve a SINGLE bet via `degeneretteResolve` (a 1-item list -> the >= 3 gate cannot
-    ///      fire) and return the keeper creditFlip count for that call (always 0 for one supported).
-    function _resolveSingleAndCountKeeperCredit(uint64 betId) internal returns (uint256) {
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = betId;
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.degeneretteResolve(players, betIds);
-        return _countCoinflipStakeUpdatedFor(keeper);
-    }
-
     // =========================================================================
-    // creditFlip count + amount oracle (ported from CrankLeversAndPacking.t.sol:534-548)
+    // Bet placement / RNG helpers
     // =========================================================================
 
-    /// @dev Drain the recorded logs ONCE and return BOTH the count of CoinflipStakeUpdated emissions
-    ///      credited to `who` (the indexed `player` topic == who) AND the LAST such amount. The event is
-    ///      `CoinflipStakeUpdated(address indexed player, uint32 indexed day, uint256 amount, uint256 newTotal)`
-    ///      so the credited player is topics[1] and `amount` is data word 0. A single pass is required
-    ///      because `vm.getRecordedLogs()` clears the buffer (a second call would see nothing).
-    ///      Recipient-isolated: separates the keeper's flat reward from any other (e.g. winnings) credit.
-    function _keeperCredit(address who) internal returns (uint256 count, uint256 amount) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
-            if (
-                logs[i].emitter == address(coinflip) &&
-                logs[i].topics.length > 1 &&
-                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == bytes32(uint256(uint160(who)))
-            ) {
-                ++count;
-                // data = (uint256 amount, uint256 newTotal); amount is the per-call credit.
-                (amount, ) = abi.decode(logs[i].data, (uint256, uint256));
-            }
-        }
-    }
-
-    /// @dev Count-only oracle (drains the log buffer once). For cases where no amount is expected.
-    function _countCoinflipStakeUpdatedFor(address who) internal returns (uint256 count) {
-        (count, ) = _keeperCredit(who);
-    }
-
-    // =========================================================================
-    // Bet placement / RNG / slot helpers
-    // (byte-faithful copies of DegeneretteFreezeResolution.t.sol)
-    // =========================================================================
-
-    /// @dev degeneretteBets mapping root slot (address => betId => packed) (post Stage-B game-storage repack: was 40).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
-
-    /// @dev Read the packed degeneretteBets slot for (player, betId). Non-zero == unresolved.
-    function _betSlot(address who, uint64 betId) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(who, uint256(DEGENERETTE_BETS_SLOT)));
-        bytes32 slot = keccak256(abi.encode(uint256(betId), inner));
-        return uint256(vm.load(address(game), slot));
-    }
-
-    /// @dev Place a Degenerette bet for `player` and return its betId (nonce).
+    /// @dev Place a Degenerette bet for `player` and return its betId (queue position + 1).
     function _placeBet(uint8 currency, uint128 perTicket, uint8 spins, uint32 ticket)
         internal
         returns (uint64 betId)
@@ -414,41 +172,13 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
         vm.prank(player);
         game.placeDegeneretteBet{value: ethValue}(address(0), currency, perTicket, spins, uint8(ticket & 7));
-        betId = _betNonce(player);
-    }
-
-    /// @dev Build a 3-item (players, betIds) list, all owned by `player` (item 0 is the AUTO-02 probe).
-    function _list3(uint64 b0, uint64 b1, uint64 b2)
-        internal
-        view
-        returns (address[] memory players, uint64[] memory betIds)
-    {
-        players = new address[](3);
-        betIds = new uint64[](3);
-        players[0] = player;
-        players[1] = player;
-        players[2] = player;
-        betIds[0] = b0;
-        betIds[1] = b1;
-        betIds[2] = b2;
+        betId = DQ.lastBetId(vm, address(game), 1);
     }
 
     /// @dev The spin-0 winning custom ticket for (index, word): the spin-0 result ticket itself
     ///      (8/8 self-match guarantees a win on spin 0 -> the resolution actually pays).
     function _winningTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
         return _resultTicketForSpin(index, word, 0);
-    }
-
-    /// @dev The 3-tier ETH split (_distributePayout, cap-free): ethShare = payout if
-    ///      payout <= 3*bet else max(2.5*bet, payout/4). The cap is a separate resolution
-    ///      property (proven in DegeneretteFreezeResolution); the large pool keeps it cap-free here.
-    function _ethShareOf(uint256 payout, uint128 betAmount) internal pure returns (uint256) {
-        if (payout == 0) return 0;
-        uint256 threeBet = uint256(betAmount) * 3;
-        if (payout <= threeBet) return payout;
-        uint256 minEth = (uint256(betAmount) * 5) / 2;
-        uint256 stdEth = payout / 4;
-        return stdEth > minEth ? stdEth : minEth;
     }
 
     /// @dev Reproduce the on-chain per-spin result ticket (_resolveBet derivation).
@@ -463,16 +193,18 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         return DegenerusTraitUtils.packedTraitsDegenerette(resultSeed);
     }
 
-    /// @dev Inject a lootbox RNG word for a given index (lootboxRngWordByIndex mapping, slot 35).
+    /// @dev Inject a lootbox RNG word for a given index (lootboxRngWordByIndex mapping).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
-    /// @dev Read the current degeneretteBetNonce for a player (slot 39) = newest betId.
-    function _betNonce(address who) internal view returns (uint64) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT)));
-        return uint64(uint256(vm.load(address(game), slot)));
+    /// @dev Move the active lootbox RNG index (low 48 bits of lootboxRngPacked) to `idx + 1`, the
+    ///      state the human-box sweep needs before it will reach `idx`'s bet queue.
+    function _advanceActiveIndexPast(uint48 idx) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(idx) + 1);
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
     }
 
     /// @dev Seed futurePrizePool (future half, bits 128-255 of prizePoolsPacked, slot 2). Preserves nextPrizePool.
@@ -492,10 +224,5 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
-    }
-
-    /// @dev NoWork() error selector — the revert-on-no-work signal (DegenerusGame.sol:1629).
-    function _noWorkSelector() internal pure returns (bytes4) {
-        return bytes4(keccak256("NoWork()"));
     }
 }

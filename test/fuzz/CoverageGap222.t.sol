@@ -1532,8 +1532,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o2, ) = address(game).call(
             abi.encodeWithSignature(
-                "resolveDegeneretteBets(address,uint64[])",
-                buyer,
+                "resolveDegeneretteBets(uint48,uint64[])",
+                uint48(1),
                 ids
             )
         );

@@ -30,7 +30,7 @@ narrowed) in the same packed slot as before, and the claim-box root re-hashes it
 with the level. No storage layout changed.
 Both skim variance draws now use full-width
 hashes; the previous second draw was limited to the top 64 bits of the raw word.
-Degenerette auxiliary rolls bind owner and bet nonce under separate tags. Its
+Degenerette auxiliary rolls bind owner and bet id (queue position within the RNG index) under separate tags. Its
 ETH/FLIP result boards remain shared by every player in an RNG period. The
 intentional WWXRP rig remains in place. `PRESALE_BOX_TAG` is a named constant;
 the literal hash is constant-foldable and no longer written inline at the call.

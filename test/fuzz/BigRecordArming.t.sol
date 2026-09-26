@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
@@ -24,14 +25,15 @@ contract BigRecordArmingTest is DeployProtocol {
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
+    /// @dev degeneretteRecordBounty mapping root slot, keyed (index << 64) | betId.
+    uint256 private constant RECORD_BOUNTY_SLOT = 37;
+    uint48 private constant BET_INDEX = 1;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     uint256 private constant LB_COVER_SHIFT = 161; // coverWei [161:209] @1e12 (lootboxOrder word)
     uint256 private constant LB_CUSTOM_SCALE = 1e12;
 
-    /// @dev Packed-bet tail carrying a biggest-spin record claim, in whole FLIP.
-    uint256 private constant DEGEN_RECORD_SHIFT = 220;
-    uint256 private constant DEGEN_RECORD_MASK = (uint256(1) << 36) - 1;
+    /// @dev Bet-word flag: a biggest-spin record claim waits in the side slot.
+    uint256 private constant BET_RECORD_FLAG = uint256(1) << 171;
     /// @dev BoxSpin betId spin-type tag for a record bounty (bits 62-60).
     uint256 private constant BOX_SPIN_TYPE_RECORD = 3;
 
@@ -86,7 +88,7 @@ contract BigRecordArmingTest is DeployProtocol {
     /// @notice A bet totalling under the 1 ETH floor never arms; at the floor it
     ///         bootstraps.
     function testSpinFloorGatesTheArm() public {
-        _placeEth(player, uint128(SPIN_MIN_ETH - 1), 1);
+        _placeEth(player, uint128(SPIN_MIN_ETH - 1 gwei), 1); // just under, in whole gwei
         assertEq(coinflip.biggestSpinEver(), 0, "sub-floor bet never arms");
 
         _placeEth(player, uint128(SPIN_MIN_ETH), 1);
@@ -126,7 +128,7 @@ contract BigRecordArmingTest is DeployProtocol {
     }
 
     /// @notice A 20%-beat spin draws its share from the pool but pays NO flip credit:
-    ///         the claim rides the packed bet in whole FLIP and spins at resolution.
+    ///         the claim waits beside the queued bet in whole FLIP and spins at resolution.
     function testSpinClaimRidesTheBetInsteadOfPayingCredit() public {
         _placeEth(player, 10 ether, 1);
         uint256 pool = coinflip.recordPool();
@@ -141,11 +143,9 @@ contract BigRecordArmingTest is DeployProtocol {
             0,
             "a spin claim never lands as flip stake"
         );
-        assertEq(
-            (_lastBetPacked() >> DEGEN_RECORD_SHIFT) & DEGEN_RECORD_MASK,
-            expected / 1 ether,
-            "the claim rides the bet in whole FLIP"
-        );
+        uint64 betId = DQ.lastBetId(vm, address(game), BET_INDEX);
+        assertTrue(_lastBetPacked() & BET_RECORD_FLAG != 0, "the bet word flags the claim");
+        assertEq(_recordBounty(betId), expected / 1 ether, "the claim waits beside the bet in whole FLIP");
     }
 
     /// @notice A bet under the beat bar carries no bounty at all.
@@ -155,11 +155,9 @@ contract BigRecordArmingTest is DeployProtocol {
         vm.recordLogs();
         _placeEth(rival, 11 ether, 1); // +10%, under the fifth
 
-        assertEq(
-            (_lastBetPacked() >> DEGEN_RECORD_SHIFT) & DEGEN_RECORD_MASK,
-            0,
-            "a bare ratchet packs no bounty"
-        );
+        uint64 betId = DQ.lastBetId(vm, address(game), BET_INDEX);
+        assertEq(_lastBetPacked() & BET_RECORD_FLAG, 0, "a bare ratchet flags no bounty");
+        assertEq(_recordBounty(betId), 0, "a bare ratchet stores no bounty");
     }
 
     /// @notice The bounty resolves as its own FLIP spin chain off the bet's own word —
@@ -167,14 +165,16 @@ contract BigRecordArmingTest is DeployProtocol {
     function testSpinClaimSpinsAtResolution() public {
         _placeEth(player, 10 ether, 1);
         _placeEth(rival, 12 ether, 1); // claims the floor share
-        uint64 betId = _betNonce(rival);
+        uint64 betId = DQ.lastBetId(vm, address(game), BET_INDEX);
+        assertGt(_recordBounty(betId), 0, "the rival armed a claim");
 
         _injectLootboxRngWord(1, uint256(keccak256("record-spin-word")));
         vm.recordLogs();
         vm.prank(rival);
-        game.resolveDegeneretteBets(address(0), _one(betId));
+        game.resolveDegeneretteBets(BET_INDEX, _one(betId));
 
         assertTrue(_sawRecordBoxSpin(), "the bounty spun as a type-3 BoxSpin");
+        assertEq(_recordBounty(betId), 0, "resolution clears the side slot");
     }
 
     // ---------------------------------------------------------------------
@@ -378,11 +378,9 @@ contract BigRecordArmingTest is DeployProtocol {
         a[0] = betId;
     }
 
-    function _betNonce(address who) internal view returns (uint64) {
-        bytes32 slot = keccak256(
-            abi.encode(who, uint256(DEGENERETTE_BET_NONCE_SLOT))
-        );
-        return uint64(uint256(vm.load(address(game), slot)));
+    function _recordBounty(uint64 betId) internal view returns (uint256) {
+        uint256 key = (uint256(BET_INDEX) << 64) | betId;
+        return uint256(vm.load(address(game), keccak256(abi.encode(key, RECORD_BOUNTY_SLOT))));
     }
 
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {

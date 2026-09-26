@@ -122,10 +122,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Caller is not approved to act for the requested player.
     error NotApproved();
 
-    /// @notice Caller-supplied work list is already resolved (a competitor got ahead).
-    error BatchAlreadyTaken();
-
-    /// @notice No resolvable work in the supplied batch (degeneretteResolve at zero resolutions).
+    /// @notice mineFlip found nothing to do (raised by the afking router it delegates to).
     error NoWork();
     /// @notice Thrown when a tunable parameter is set outside its permitted range.
     error OutOfBounds();
@@ -1131,14 +1128,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Resolve multiple Degenerette bets once RNG is available.
-    /// @dev Permissionless: settlement only credits the bet owner, so any caller may resolve
-    ///      any player's bets (no approval); address(0) resolves to msg.sender. Signature:
-    ///      resolveDegeneretteBets(address player, uint64[] betIds). The signature matches the
+    /// @notice Resolve queued Degenerette bets at one RNG index once its word is available.
+    /// @dev Permissionless: settlement only credits each bet's owner, so any caller may resolve
+    ///      any bet early; the mineFlip sweep resolves every bet on its own. Signature:
+    ///      resolveDegeneretteBets(uint48 index, uint64[] betIds). The signature matches the
     ///      module function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding here would cost contract-size headroom for no behavior change.
     function resolveDegeneretteBets(
-        address,
+        uint48,
         uint64[] calldata
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
@@ -1637,67 +1634,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  storage directly, so it lives in-game by construction.              |
       +======================================================================+*/
 
-    /// @dev Flat ~1-FLIP "lose" reward for the Degenerette resolve helper, paid ONCE per tx
-    ///      at >=3 resolutions. A count-independent consolation flip-credit;
-    ///      the bet-stake gate (>=3 placed bets at the house edge) makes every self-resolve
-    ///      farm net-negative, so it is intentionally NOT pegged to the per-resolve marginal.
-    uint256 private constant RESOLVE_FLAT_FLIP = 1e18;
-
-    /// @notice Permissionlessly resolve a caller-supplied list of Degenerette bets.
-    /// @dev Items are parallel arrays: item i = (players[i], betIds[i]),
-    ///      front-to-back. Item 0 is the caller's own probe: if it is already resolved
-    ///      (degeneretteBets[players[0]][betIds[0]] == 0) a competitor got ahead, so the
-    ///      whole list reverts with BatchAlreadyTaken (a loser-gas cap, reusing the SLOAD
-    ///      item 0 needs anyway). Items 1..N are isolated per-item (a stale/reverting item
-    ///      skips). The reward is a FLAT ~1-FLIP creditFlip granted ONCE at >=3
-    ///      successfully-resolved bets. Zero resolutions revert NoWork(); 1-2
-    ///      resolved commit UNPAID (never strand the trailing tail). Any caller including a
-    ///      self-resolver (no caller restriction).
-    /// @param players Bet owners, grouped/ordered by the caller (item 0 is the probe).
-    /// @param betIds Bet ids, parallel to players.
-    function degeneretteResolve(
-        address[] calldata players,
-        uint64[] calldata betIds
-    ) external {
-        uint256 len = players.length;
-        if (len == 0 || betIds.length != len) revert LengthMismatch();
-
-        // Short-circuit: probe item 0 (the caller's own choice). A resolved
-        // bet is deleted (slot == 0), so a zero slot means a competitor got ahead.
-        if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();
-
-        uint256 successCount;
-        uint256 i;
-        // Single-bet array reused each iteration: resolveDegeneretteBets is the
-        // catchable external boundary that gives per-item isolation (try/catch needs
-        // an external call), so no dedicated self-call wrapper is required.
-        uint64[] memory ids = new uint64[](1);
-        do {
-            ids[0] = betIds[i];
-            // Per-item isolation: a stale/reverting/not-ready bet skips, never bricks.
-            try this.resolveDegeneretteBets(players[i], ids) {
-                unchecked {
-                    ++successCount;
-                }
-            } catch {}
-            unchecked {
-                ++i;
-            }
-        } while (i < len);
-
-        // Flat ~1-FLIP "lose": pay ONCE at >=3 resolutions; revert
-        // NoWork() if nothing resolved; 1-2 resolved commit UNPAID (never strand the tail).
-        if (successCount == 0) revert NoWork();
-        if (successCount >= 3) {
-            coinflip.creditFlip(msg.sender, RESOLVE_FLAT_FLIP);
-            emit MinerBounty(
-                MINER_BOUNTY_DEGENERETTE_RESOLVE,
-                msg.sender,
-                RESOLVE_FLAT_FLIP
-            );
-        }
-    }
-
     /// @notice O(1) discovery: does advanceGame() have pending work?
     /// @dev The shared storage-level predicate (`_advanceDue`) exposed for off-chain
     ///      keepers; the afking router reads the same predicate in-context.
@@ -1726,7 +1662,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (idx > finalized) return false; // swept up to the un-finalized active index
         if (lootboxRngWordByIndex[idx] == 0) return false; // frontier index not yet worded
         uint256 effectiveCursor = boxCursorIndex == idx ? boxCursor : 0;
-        return boxPlayers[idx].length > effectiveCursor;
+        return boxPlayers[idx].length + degeneretteQueue[idx].length > effectiveCursor;
     }
 
     /// @notice True once the permissionless sweep has fully distributed every box at `index`
@@ -1750,7 +1686,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///        sweep's walk units at the per-entry weight, so one unit buys about one human
     ///        entry-open. An entry's boxes are charged inside the sweep at the lighter per-box
     ///        weight — MAX_BOXES_PER_ORDER of them can ride one entry.
-    /// @return opened Total boxes opened (afking + human).
+    /// @return opened Total boxes opened (afking + human) plus Degenerette bets the sweep resolved.
     function openBoxes(uint256 maxCount) external returns (uint256 opened) {
         if (maxCount == 0) return 0;
         // AfKing boxes first — delegatecall the afking module so the open runs in this Game's
@@ -2335,15 +2271,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
 
-    /// @notice View Degenerette packed bet info for a player/betId.
-    /// @param player Player address to query.
-    /// @param betId Bet identifier for the player.
-    /// @return packed The raw packed bet word, unchanged from storage.
+    /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
+    /// @param index Lootbox RNG index the bet was placed at.
+    /// @param betId Bet id within `index` (queue position + 1).
+    /// @return packed The raw bet word, unchanged from storage.
     function degeneretteBetInfo(
-        address player,
+        uint48 index,
         uint64 betId
     ) external view returns (uint256 packed) {
-        return degeneretteBets[player][betId];
+        uint256[] storage bets = degeneretteQueue[index];
+        if (betId == 0 || betId > bets.length) return 0;
+        return bets[betId - 1];
     }
 
     /// @notice Check whether lootbox presale mode is currently active.

@@ -61,7 +61,7 @@ contract DegenerusGameDegeneretteModule is
 
     /// @notice Thrown when the bet index's RNG word is in the wrong state for the call:
     ///         already landed at placement (a bet binds to a still-unrevealed index), or
-    ///         still absent at a strict resolution.
+    ///         still absent at a manual resolution.
     error RngNotReady();
 
     /// @notice Thrown when bet parameters are invalid (zero amount, below minimum, invalid spec, etc.).
@@ -75,10 +75,10 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
 
     /// @notice Emitted when a Degenerette bet is placed.
-    /// @param player The address that placed the bet.
+    /// @param player The bet owner (the address paid when it resolves).
     /// @param index The lootbox RNG index this bet is tied to.
-    /// @param betId The unique bet identifier for this player.
-    /// @param packed The packed bet data.
+    /// @param betId The bet's id within `index`: its queue position + 1.
+    /// @param packed The queued bet word (layout on DegenerusGameStorage.degeneretteQueue).
     event DegeneretteBetPlaced(
         address indexed player,
         uint32 indexed index,
@@ -97,37 +97,24 @@ contract DegenerusGameDegeneretteModule is
         uint32 entryIndex
     );
 
-    /// @notice Emitted when Degenerette bets are resolved.
-    /// @param player The player address.
-    /// @param betId The bet ID.
-    /// @param spinCount Number of spins resolved.
-    /// @param totalPayout Total payout across all spins. For a FLIP bet it diverges from the
-    ///        per-spin DegeneretteResult sums: the summed payout doubles or zeroes on the
-    ///        bet's survival flip, then collapses to a whole-FLIP floor or, above
-    ///        FLIP_ROUND_THRESHOLD, a 100-FLIP multiple (FlipRoundLib).
-    /// @param resultTraits The spin-0 result traits (additional spin results are derived per spinIndex).
+    /// @notice Emitted once per resolved Degenerette bet, carrying every spin.
+    /// @param player The bet owner (paid).
+    /// @param index The lootbox RNG index the bet resolved against.
+    /// @param betId The bet's id within `index` (queue position + 1).
+    /// @param totalPayout Total payout across all spins. For a FLIP bet the summed spin
+    ///        payouts double or zero on the bet's survival flip, then collapse to a whole-FLIP
+    ///        floor or, above FLIP_ROUND_THRESHOLD, a 100-FLIP multiple (FlipRoundLib).
+    /// @param resultTraits The spin-0 house result traits.
+    /// @param spins Five bytes per spin, spin 0 first: the player's traits (4 bytes,
+    ///        big-endian), then score S (low 4 bits, 0-9) | matched gold (bits 4-6). Each
+    ///        spin's payout follows from these plus the bet's stake and activity score.
     event DegeneretteResolved(
         address indexed player,
+        uint32 indexed index,
         uint64 indexed betId,
-        uint8 spinCount,
         uint256 totalPayout,
-        uint32 resultTraits
-    );
-
-    /// @notice Emitted for each individual Degenerette spin result.
-    /// @param player The player address.
-    /// @param betId The bet ID.
-    /// @param spinIndex Index of this spin (0 to count-1).
-    /// @param playerTraits The player's spin traits.
-    /// @param matches Composite score S (0-9; independent colors, hero symbol +2). Field name retained for the off-chain indexer.
-    /// @param payout Payout for this spin.
-    event DegeneretteResult(
-        address indexed player,
-        uint64 indexed betId,
-        uint8 spinIndex,
-        uint32 playerTraits,
-        uint8 matches,
-        uint256 payout
+        uint32 resultTraits,
+        bytes spins
     );
 
     /// @notice Emitted when ETH payout exceeds pool cap and excess is converted to lootbox.
@@ -142,8 +129,8 @@ contract DegenerusGameDegeneretteModule is
 
     /// @notice A stake resolved as a Degenerette spin outside the ordinary bet flow — a lootbox
     ///         roll (WWXRP / FLIP×3 / ETH) or a biggest-spin record bounty (FLIP×3) — the single
-    ///         self-contained record of that outcome (replaces the per-spin DegeneretteResult /
-    ///         DegeneretteResolved for these rolls). Every reel + every output reward is here or, for
+    ///         self-contained record of that outcome (placed bets report through
+    ///         DegeneretteResolved instead). Every reel + every output reward is here or, for
     ///         the ETH recirc, in the fresh box's own (now-emitted) events.
     /// @param player The reward recipient.
     /// @param betId Self-classifying id: bit 63 = synthetic-origin sentinel, bits 62-60 = spin type
@@ -241,8 +228,8 @@ contract DegenerusGameDegeneretteModule is
     // mark for free.
     //
     // The claim is drawn from the pool at placement but paid as a FLIP spin chain,
-    // not as flip credit: it rides the packed bet in whole FLIP (DEGEN_RECORD_*)
-    // and spins when the bet resolves, off the same word the bet itself is bound
+    // not as flip credit: it waits in whole FLIP beside the queued bet
+    // (degeneretteRecordBounty, flagged on the bet word) and spins when the bet resolves, off the same word the bet itself is bound
     // to. Placement already refuses an index whose word is revealed, so the claim
     // is armed against an unknown word by construction — the same freeze the bet's
     // own spins rest on.
@@ -293,17 +280,13 @@ contract DegenerusGameDegeneretteModule is
     uint8 private constant RANDOM_HERO = 32; // internal award spins only
 
     // -------------------------------------------------------------------------
-    // Packed Bet Layout
+    // Queued Bet Layout
     // -------------------------------------------------------------------------
     //
-    // A bet packs into one uint256 (one symbol, score-based payouts):
-    // [0..4]     symbol (5 bits): selected hero symbol (0..31); [5..31] reserved
-    // [32..39]   spinCount (8 bits): per-currency cap (ETH 25 / FLIP 15)
-    // [40..41]   currency (2 bits): ETH=0, FLIP=1; other values unsupported
-    // [42..169]  amountPerSpin (128 bits)
-    // [170..201] index (32 bits): lootbox RNG index
-    // [202..217] activityScore (16 bits)
-    // [218..219] reserved; hero quadrant is derived from symbol
+    // A bet is one word in degeneretteQueue[index] (full layout on the storage declaration):
+    // owner [0..159] | symbol [160..164] | spinCount [165..169] | currency [170] |
+    // record flag [171] | activity score [172..187] | stake per spin in units [188..251].
+    // The bet id is the queue position + 1, so the index and id need no bits.
     //
     /// Every symbol choice has the same distribution. Fresh uniform colors,
     /// independent color scoring, and matched-gold boosts share one payout table.
@@ -311,28 +294,48 @@ contract DegenerusGameDegeneretteModule is
     //
     // -------------------------------------------------------------------------
 
-    // Degenerette packed-bet bit positions
-    uint256 private constant DEGEN_SYMBOL_SHIFT = 0;
-    uint256 private constant DEGEN_COUNT_SHIFT = 32;
-    uint256 private constant DEGEN_CURRENCY_SHIFT = 40;
-    uint256 private constant DEGEN_AMOUNT_SHIFT = 42;
-    uint256 private constant DEGEN_INDEX_SHIFT = 170;
-    uint256 private constant DEGEN_ACTIVITY_SHIFT = 202;
-    /// @dev A biggest-spin record claim riding this bet, in WHOLE FLIP, at bits
-    ///      [220..255] — the word's free tail (every other field ends at bit 219), so
-    ///      carrying the claim costs no slot and no extra write. Saturating at the
-    ///      36-bit ceiling (~68.7 billion FLIP) rather than wrapping: unreachable in
-    ///      practice against a pool that drips RECORD_POOL_DAILY_FLIP a day, and a clamp
-    ///      can only ever under-pay where a wrap could hand out a wrong number.
-    uint256 private constant DEGEN_RECORD_SHIFT = 220;
-    uint256 private constant DEGEN_RECORD_MASK = (uint256(1) << 36) - 1;
+    uint256 private constant BET_SYMBOL_SHIFT = 160;
+    uint256 private constant BET_COUNT_SHIFT = 165;
+    uint256 private constant BET_CURRENCY_SHIFT = 170;
+    uint256 private constant BET_RECORD_FLAG = uint256(1) << 171;
+    uint256 private constant BET_ACTIVITY_SHIFT = 172;
+    uint256 private constant BET_STAKE_SHIFT = 188;
+
+    /// @dev Stake units. An ETH stake is whole gwei and a FLIP stake whole FLIP, so 64 bits
+    ///      cover any stake (about 1.8e10 ETH or 1.8e19 FLIP per spin). Placement rejects an
+    ///      amount that is not a whole unit; a boon bonus floors to the unit.
+    uint256 private constant ETH_STAKE_UNIT = 1 gwei;
+    uint256 private constant FLIP_STAKE_UNIT = 1 ether;
+
+    /// @dev Sweep BUDGET price of one bet in the shared walk unit (~4.7k gas, see
+    ///      OPEN_HUMAN_ENTRY_WEIGHT): an entry floor plus a per-spin weight, read off the bet
+    ///      word before it runs, so the crank's work stays a pure function of state. Sized for
+    ///      the worst case so a call stays bounded: the ETH floor carries the one win box an ETH
+    ///      bet can open, and an armed record adds its three-spin FLIP chain. A zeroed (already
+    ///      resolved) word costs one unit to skip. Measured sweep cost per bet: ~5k base,
+    ///      ~3.8k (ETH) / ~4.2k (FLIP) per spin, ~71k for a win box, and up to ~169k for a cold
+    ///      1-spin ETH bet whose spin scores 7+ (win box plus the sDGNRS award). Outcomes key on
+    ///      (word, index, symbol, spin), not the owner, so every bet on one symbol at one index
+    ///      hits together; the ETH floor prices that case, never an average.
+    uint256 private constant BET_ENTRY_WEIGHT_ETH = 36;
+    uint256 private constant BET_ENTRY_WEIGHT_FLIP = 4;
+    uint256 private constant BET_SPIN_WEIGHT_ETH = 2;
+    uint256 private constant BET_SPIN_WEIGHT_FLIP = 1;
+    uint256 private constant BET_RECORD_WEIGHT = 6;
+
+    /// @dev Work a resolved bet is CREDITED toward the keeper bounty, in gas, set at or below
+    ///      the measured cost of what actually ran (a box only when one opened). Summed per
+    ///      sweep call and floored to walk units, so a self-keeper is paid for real work only,
+    ///      never for the worst-case budget headroom.
+    uint256 private constant BET_WORK_BASE_GAS = 5_000;
+    uint256 private constant BET_WORK_SPIN_GAS = 3_500;
+    uint256 private constant BET_WORK_BOX_GAS = 65_000;
+    uint256 private constant BET_WORK_UNIT_GAS = 4_700;
 
     // Common masks
-    uint256 private constant MASK_2 = 0x3;
-    uint256 private constant MASK_8 = 0xFF;
+    uint256 private constant MASK_5 = 0x1F;
     uint256 private constant MASK_16 = 0xFFFF;
-    uint256 private constant MASK_32 = 0xFFFFFFFF;
-    uint256 private constant MASK_128 = (uint256(1) << 128) - 1;
+    uint256 private constant MASK_64 = 0xFFFFFFFFFFFFFFFF;
 
     // -------------------------------------------------------------------------
     // Public API
@@ -383,10 +386,10 @@ contract DegenerusGameDegeneretteModule is
         );
     }
 
-    /// @dev Cross-bet payout accumulator threaded through resolveDegeneretteBets → _resolveBet
-    ///      → _distributePayout. Per-currency payouts are
-    ///      summed across the whole resolveDegeneretteBets call and flushed ONCE (additive, so
-    ///      byte-identical to the per-spin writes). The prize-pool decrement runs
+    /// @dev Cross-bet payout accumulator threaded through the resolve paths → _resolveBet
+    ///      → _distributePayout. Per-currency payouts are summed per owner and flushed when
+    ///      the next bet belongs to someone else or the call ends (additive, so byte-identical
+    ///      to the per-spin writes). The prize-pool decrement runs
     ///      against a running local that mirrors the live storage value spin-by-spin:
     ///      read once at first ETH win, decremented in memory per spin (so each
     ///      spin's ETH_WIN_CAP_BPS cap sees the same shrinking pool it would have
@@ -394,6 +397,7 @@ contract DegenerusGameDegeneretteModule is
     ///      NOT accumulated here — it is summed PER betId and resolved once per bet
     ///      inside _resolveBet (resolution-batch-invariant).
     struct ResolveAcc {
+        address owner; // whose payouts ethClaimable / flipMint currently hold
         uint256 ethClaimable; // summed ETH claimable across all bets
         uint256 flipMint; // summed FLIP mint across all bets
         bool poolFrozen; // prizePoolFrozen snapshot (loaded with the pool locals)
@@ -411,46 +415,127 @@ contract DegenerusGameDegeneretteModule is
         uint32 firstResultTraits;
     }
 
-    /// @notice Resolves one or more pending bets for a player.
-    /// @dev Permissionless: payouts always credit the bet owner, so any caller may settle
-    ///      any player's bets. Requires RNG word to be available. Processes wins by minting
-    ///      tokens or crediting ETH. ETH/FLIP payouts are accumulated across the whole
-    ///      call and flushed once per currency (one mint per currency, one claimable +
-    ///      claimablePool write, one prize-pool write); lootbox-share is summed per betId and
-    ///      resolved per bet.
-    /// @param player Bet owner whose bets to settle (use zero address for msg.sender).
-    /// @param betIds Array of bet IDs to resolve.
-    function resolveDegeneretteBets(address player, uint64[] calldata betIds) external {
+    /// @notice Resolves queued bets at one RNG index ahead of the sweep.
+    /// @dev Permissionless: payouts always credit each bet's owner, so any caller may settle
+    ///      any bet; the mineFlip sweep resolves every bet without being asked. The first id
+    ///      fail-fasts on an already-resolved or unknown bet so a racing duplicate settle
+    ///      bails cheaply; later ids skip instead. ETH/FLIP payouts accumulate per owner and
+    ///      flush once per owner run; the prize-pool running local is written once.
+    /// @param index Lootbox RNG index the bets were placed at.
+    /// @param betIds Bet ids within `index` (queue position + 1).
+    function resolveDegeneretteBets(uint48 index, uint64[] calldata betIds) external {
         // Once game-over liveness has drained the balance into claimable, resolving a
         // pending bet would credit ETH claimable out of the already-distributed
         // futurePrizePool residual, pushing claimablePool above the ETH balance
-        // (unbacked obligation). Same guard as claimWhalePass. Pending bets are NOT settled
-        // by the game-over drain: their stakes stay in the pools the terminal distribution
-        // already paid out, so nothing is credited to claimable after it.
+        // (unbacked obligation). Pending bets are NOT settled by the game-over drain: their
+        // stakes stay in the pools the terminal distribution already paid out.
         if (_livenessTriggered()) revert GameOver();
-        // Permissionless: a resolved bet only ever credits the player who placed it, never the
-        // caller, so anyone may settle any player's pending bets (zero address = caller).
-        // Placement debits the funder (the player/approved operator, else the caller for a
-        // gift), so it carries its own funding gate.
-        if (player == address(0)) player = msg.sender;
+        uint256 rngWord = lootboxRngWordByIndex[index];
+        if (rngWord == 0) revert RngNotReady();
+        uint256[] storage queue = degeneretteQueue[index];
+        uint256 qlen = queue.length;
         ResolveAcc memory acc;
         uint256 len = betIds.length;
         for (uint256 i; i < len; ) {
-            // First bet (i==0) fail-fasts on an already-resolved/not-ready bet so a racing
-            // duplicate settle bails cheaply; later bets skip instead, so an en-masse settle
-            // tolerates stale/not-ready ids mixed into the batch.
-            _resolveBet(player, betIds[i], acc, i == 0);
+            uint64 betId = betIds[i];
+            uint256 bet = betId == 0 || betId > qlen ? 0 : queue[betId - 1];
+            if (bet != 0) {
+                queue[betId - 1] = 0;
+                _resolveBet(bet, uint32(index), betId, rngWord, acc);
+            } else if (i == 0) {
+                revert InvalidBet();
+            }
             unchecked {
                 ++i;
             }
         }
+        _flushOwner(acc);
+        _flushPool(acc);
+    }
 
-        // Single per-currency flush (additive → byte-identical to the per-spin writes).
-        if (acc.flipMint != 0) coin.mintForGame(player, acc.flipMint);
-        if (acc.ethClaimable != 0) _addClaimableEth(player, acc.ethClaimable);
+    /// @notice Human-box sweep leg for bets: resolves the queue at `index` from `pos`.
+    /// @dev Delegatecall target of the lootbox module's openHumanBoxes, which reaches a bet
+    ///      queue only after that index's box entries and only once its word has landed.
+    ///      Each bet is priced in walk units from its own word (see BET_ENTRY_WEIGHT_*) and
+    ///      a zeroed word costs one unit to skip, so the call stays inside `budget`. The first
+    ///      bet runs whatever it costs when `mustRunFirst` (nothing opened yet this call), so
+    ///      no wide bet can wedge the cursor.
+    /// @param index The swept RNG index.
+    /// @param pos Queue position to resume from.
+    /// @param budget Walk units left in the crank call.
+    /// @param mustRunFirst True when the crank has opened nothing yet.
+    /// @param rngWord The index's committed word (already loaded by the sweep).
+    /// @return resolved Bets resolved.
+    /// @return newPos Position to resume from (the queue length once drained).
+    /// @return unitsSpent Walk units charged against the budget (worst-case prices).
+    /// @return workUnits Walk units of work actually done, the keeper bounty's basis.
+    function sweepDegeneretteBets(
+        uint48 index,
+        uint256 pos,
+        uint256 budget,
+        bool mustRunFirst,
+        uint256 rngWord
+    ) external returns (uint256 resolved, uint256 newPos, uint256 unitsSpent, uint256 workUnits) {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        // The frozen-pool ETH path reverts Insolvent when the pending buffer runs short, and a
+        // revert here would stall the whole box frontier behind this queue. The freeze only
+        // runs inside the RNG lock the sweep already waits out; hold the queue while it is up.
+        if (prizePoolFrozen) return (0, pos, 0, 0);
+        uint256[] storage queue = degeneretteQueue[index];
+        uint256 qlen = queue.length;
+        ResolveAcc memory acc;
+        uint256 workGas;
+        while (pos < qlen && unitsSpent < budget) {
+            uint256 bet = queue[pos];
+            if (bet == 0) {
+                unchecked {
+                    ++pos;
+                    ++unitsSpent;
+                    workGas += BET_WORK_UNIT_GAS;
+                }
+                continue;
+            }
+            uint256 cost = _betWeight(bet);
+            // BREAK, never skip: the cursor is monotonic, so a bet that does not fit stays
+            // at the cursor for the next call's fresh budget.
+            if ((resolved != 0 || !mustRunFirst) && unitsSpent + cost > budget) break;
+            queue[pos] = 0;
+            unchecked {
+                ++pos;
+                unitsSpent += cost;
+                ++resolved;
+            }
+            workGas += _resolveBet(bet, uint32(index), uint64(pos), rngWord, acc);
+        }
+        _flushOwner(acc);
+        _flushPool(acc);
+        newPos = pos;
+        workUnits = workGas / BET_WORK_UNIT_GAS;
+    }
 
-        // Single prize-pool write reflecting the running decrement (only if any ETH
-        // win touched it — poolLoaded guards against a pointless rewrite otherwise).
+    /// @dev Worst-case walk-unit budget price of one queued bet.
+    function _betWeight(uint256 bet) private pure returns (uint256 weight) {
+        uint256 spins = (bet >> BET_COUNT_SHIFT) & MASK_5;
+        weight = (bet >> BET_CURRENCY_SHIFT) & 1 == CURRENCY_ETH
+            ? BET_ENTRY_WEIGHT_ETH + spins * BET_SPIN_WEIGHT_ETH
+            : BET_ENTRY_WEIGHT_FLIP + spins * BET_SPIN_WEIGHT_FLIP;
+        if (bet & BET_RECORD_FLAG != 0) weight += BET_RECORD_WEIGHT;
+    }
+
+    /// @dev Pay the current owner's accumulated FLIP and ETH, then clear them.
+    function _flushOwner(ResolveAcc memory acc) private {
+        if (acc.flipMint != 0) {
+            coin.mintForGame(acc.owner, acc.flipMint);
+            acc.flipMint = 0;
+        }
+        if (acc.ethClaimable != 0) {
+            _addClaimableEth(acc.owner, acc.ethClaimable);
+            acc.ethClaimable = 0;
+        }
+    }
+
+    /// @dev Write the running prize-pool local back once, only if an ETH win loaded it.
+    function _flushPool(ResolveAcc memory acc) private {
         if (acc.poolLoaded) {
             if (acc.poolFrozen) {
                 _setPendingPools(acc.pendingNext, acc.pendingFuture);
@@ -514,17 +599,20 @@ contract DegenerusGameDegeneretteModule is
         // reward-spin currency and never enters the bet book.
         uint8 maxSpins;
         uint256 minBet;
+        uint256 unit;
         if (currency == CURRENCY_ETH) {
             maxSpins = MAX_SPINS_ETH;
             minBet = MIN_BET_ETH;
+            unit = ETH_STAKE_UNIT;
         } else if (currency == CURRENCY_FLIP) {
             maxSpins = MAX_SPINS_FLIP;
             minBet = MIN_BET_FLIP;
+            unit = FLIP_STAKE_UNIT;
         } else {
             revert UnsupportedCurrency();
         }
         if (spinCount == 0 || spinCount > maxSpins) revert InvalidBet();
-        if (uint256(amountPerSpin) < minBet) revert InvalidBet();
+        if (uint256(amountPerSpin) < minBet || uint256(amountPerSpin) % unit != 0) revert InvalidBet();
         if (symbol >= 32) revert InvalidBet();
         uint8 heroQuadrant = symbol >> 3;
 
@@ -554,7 +642,7 @@ contract DegenerusGameDegeneretteModule is
             // Gifted bets arm normally: the ETH is real and the record belongs to
             // `player`.
             //
-            // The claim does not pay out here. It rides the packed bet as whole FLIP
+            // The claim does not pay out here. It waits beside the queued bet as whole FLIP
             // and resolves as its own FLIP spin chain off the very word THIS bet is
             // already bound to — an index whose word the gate above proved unrevealed,
             // so a claim can never be armed against a known word. Beating the
@@ -565,9 +653,7 @@ contract DegenerusGameDegeneretteModule is
                     player,
                     totalBet
                 ) / LR_FLIP_SCALE;
-                recordBounty = whole > DEGEN_RECORD_MASK
-                    ? DEGEN_RECORD_MASK
-                    : whole;
+                recordBounty = whole;
             }
 
             // Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
@@ -610,7 +696,7 @@ contract DegenerusGameDegeneretteModule is
         // holding no boon in THIS currency — the overwhelmingly common case — pays one
         // SLOAD instead of a nested dispatch; boons in the other currency lanes are
         // untouched by construction.
-        uint128 stakePerSpin = amountPerSpin;
+        uint256 stakeUnits = uint256(amountPerSpin) / unit;
         uint16 boonBps;
         if (
             selfFunded &&
@@ -626,30 +712,29 @@ contract DegenerusGameDegeneretteModule is
             } else if (currency == CURRENCY_FLIP) {
                 if (boostBase > DEGENERETTE_BOON_FLIP_CAP) boostBase = DEGENERETTE_BOON_FLIP_CAP;
             }
-            // Spread across the spins; integer division drops sub-spin dust, matching the
-            // whole-granule rounding used by the other award paths.
-            uint256 bonusPerSpin = ((boostBase * boonBps) / 10_000) / spinCount;
-            stakePerSpin = uint128(uint256(amountPerSpin) + bonusPerSpin);
+            // Spread across the spins, then floor to the stake unit: integer division drops
+            // the sub-unit dust, matching the whole-granule rounding of the other award paths.
+            stakeUnits += ((boostBase * boonBps) / 10_000) / spinCount / unit;
         }
+        if (stakeUnits > MASK_64) revert InvalidBet();
 
-        // The symbol already encodes its quadrant; store it once.
-        uint256 packed =
-            (uint256(symbol) << DEGEN_SYMBOL_SHIFT) |
-            (uint256(spinCount) << DEGEN_COUNT_SHIFT) |
-            (uint256(currency) << DEGEN_CURRENCY_SHIFT) |
-            (uint256(stakePerSpin) << DEGEN_AMOUNT_SHIFT) |
-            (uint256(uint32(index)) << DEGEN_INDEX_SHIFT) |
-            (uint256(activityScore) << DEGEN_ACTIVITY_SHIFT) |
-            (recordBounty << DEGEN_RECORD_SHIFT);
-
-        uint64 nonce = degeneretteBetNonce[player];
-        unchecked {
-            ++nonce;
+        // The bet itself is the sweep's queue entry: one word, appended at this index. Its
+        // id is the queue position + 1, fixed here while the index word is still unset.
+        uint256[] storage queue = degeneretteQueue[index];
+        uint64 betId = uint64(queue.length + 1);
+        uint256 bet =
+            uint256(uint160(player)) |
+            (uint256(symbol) << BET_SYMBOL_SHIFT) |
+            (uint256(spinCount) << BET_COUNT_SHIFT) |
+            (uint256(currency) << BET_CURRENCY_SHIFT) |
+            (uint256(activityScore) << BET_ACTIVITY_SHIFT) |
+            (stakeUnits << BET_STAKE_SHIFT);
+        if (recordBounty != 0) {
+            bet |= BET_RECORD_FLAG;
+            degeneretteRecordBounty[(uint256(index) << 64) | betId] = recordBounty;
         }
-        degeneretteBetNonce[player] = nonce;
-
-        degeneretteBets[player][nonce] = packed;
-        emit DegeneretteBetPlaced(player, uint32(index), nonce, packed);
+        queue.push(bet);
+        emit DegeneretteBetPlaced(player, uint32(index), betId, bet);
     }
 
     /// @dev Only ordinary ETH placements reach this helper. A gifted bet belongs
@@ -710,67 +795,56 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Resolves a single bet: decodes the packed bet and materializes its spins against
-    ///      the lootbox RNG word. Per-currency payouts accumulate into `acc` (flushed once
-    ///      cross-bet by resolveDegeneretteBets); lootbox-share is summed across this bet's
-    ///      spins and resolved ONCE here (one box per betId). `strict` is set for the first bet
-    ///      of a batch: it reverts on any non-resolvable bet (already-resolved or RNG-not-ready)
-    ///      so a racing duplicate settle bails cheaply; a trailing (non-strict) bet skips those
-    ///      cases so one stale/not-ready id can't brick the rest of the batch.
+    /// @dev Resolves one queued bet the caller has already zeroed in the queue: decodes the
+    ///      word and materializes its spins against the index word. Per-currency payouts
+    ///      accumulate into `acc` per owner (flushed by the caller or at the next owner);
+    ///      lootbox-share is summed across this bet's spins and resolved ONCE here (one box
+    ///      per bet). Every spin is recorded in the bet's single DegeneretteResolved event.
+    /// @return workGas The work this resolution actually ran, in gas (see BET_WORK_*): the
+    ///         sweep's bounty basis, a pure function of the bet word and the index word.
     function _resolveBet(
-        address player,
+        uint256 bet,
+        uint32 index,
         uint64 betId,
-        ResolveAcc memory acc,
-        bool strict
-    ) private {
-        uint256 packed = degeneretteBets[player][betId];
-        if (packed == 0) {
-            if (strict) revert InvalidBet();
-            return;
+        uint256 rngWord,
+        ResolveAcc memory acc
+    ) private returns (uint256 workGas) {
+        address player = address(uint160(bet));
+        if (player != acc.owner) {
+            _flushOwner(acc);
+            acc.owner = player;
         }
-
-        // Decode packed bet
-        uint8 symbol = uint8(packed >> DEGEN_SYMBOL_SHIFT);
-        uint8 spinCount = uint8((packed >> DEGEN_COUNT_SHIFT) & MASK_8);
-        uint8 currency = uint8((packed >> DEGEN_CURRENCY_SHIFT) & MASK_2);
-        if (currency > CURRENCY_FLIP) revert UnsupportedCurrency();
+        uint8 symbol = uint8((bet >> BET_SYMBOL_SHIFT) & MASK_5);
+        uint8 spinCount = uint8((bet >> BET_COUNT_SHIFT) & MASK_5);
+        uint8 currency = uint8((bet >> BET_CURRENCY_SHIFT) & 1);
+        uint16 activityScore = uint16((bet >> BET_ACTIVITY_SHIFT) & MASK_16);
         uint128 amountPerSpin = uint128(
-            (packed >> DEGEN_AMOUNT_SHIFT) & MASK_128
+            ((bet >> BET_STAKE_SHIFT) & MASK_64) *
+                (currency == CURRENCY_ETH ? ETH_STAKE_UNIT : FLIP_STAKE_UNIT)
         );
-        uint32 index = uint32((packed >> DEGEN_INDEX_SHIFT) & MASK_32);
-        uint16 activityScore = uint16((packed >> DEGEN_ACTIVITY_SHIFT) & MASK_16);
-        uint256 recordBounty = (packed >> DEGEN_RECORD_SHIFT) &
-            DEGEN_RECORD_MASK;
-
-        uint256 rngWord = lootboxRngWordByIndex[index];
-        if (rngWord == 0) {
-            // RNG not yet fulfilled: the first bet reverts RngNotReady; a later bet skips
-            // and stays pending for a future settle (same first-strict tolerance as the
-            // packed==0 gate). Nothing is mutated above this point, so a skip is a clean no-op.
-            if (strict) revert RngNotReady();
-            return;
-        }
-
-        delete degeneretteBets[player][betId];
+        workGas = BET_WORK_BASE_GAS + uint256(spinCount) * BET_WORK_SPIN_GAS;
 
         BetTotals memory totals;
+        // Five bytes per spin: player traits (big-endian), then score | gold << 4.
+        bytes memory spins = new bytes(uint256(spinCount) * 5);
 
         for (uint8 spinIdx; spinIdx < spinCount; ) {
             SpinResult memory spin = _rollBetSpin(rngWord, index, symbol, spinIdx, currency);
             if (spinIdx == 0) totals.firstResultTraits = spin.resultTraits;
             uint8 s = spin.score;
             uint256 payout = _degenerettePayout(spin, currency, amountPerSpin, activityScore);
-
-            // The emit here holds the log order PayoutCapped is read against: it
-            // fires inside _distributePayout, immediately after the spin it caps.
-            emit DegeneretteResult(
-                player,
-                betId,
-                spinIdx,
-                spin.playerTraits,
-                s,
-                payout
-            );
+            {
+                uint256 traits = spin.playerTraits;
+                uint256 tail = uint256(s) | (uint256(spin.goldMatches) << 4);
+                assembly ("memory-safe") {
+                    let p := add(add(spins, 0x20), mul(spinIdx, 5))
+                    mstore8(p, shr(24, traits))
+                    mstore8(add(p, 1), shr(16, traits))
+                    mstore8(add(p, 2), shr(8, traits))
+                    mstore8(add(p, 3), traits)
+                    mstore8(add(p, 4), tail)
+                }
+            }
 
             if (payout != 0) {
                 // Accumulate this spin's payout. ETH credits + the running-pool
@@ -809,13 +883,13 @@ contract DegenerusGameDegeneretteModule is
 
         // FLIP survival flip: every FLIP payout must survive one fair coinflip before
         // it mints — the bet's whole payout double-or-nothings on a single bet-keyed flip
-        // (EV-neutral: x2 at 50/50). A dedicated domain binds owner and bet nonce.
+        // (EV-neutral: x2 at 50/50). A dedicated domain binds owner and bet id.
         // Both identities are committed before the VRF word lands, so the outcome
         // is fixed at fulfillment;
         // a losing bet pays zero whether resolved or abandoned, so selective resolution
         // earns nothing. The accumulator holds exactly this bet's payout once (added per
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
-        // reads off DegeneretteResolved: totals.totalPayout vs the per-spin DegeneretteResult sums.
+        // reads off DegeneretteResolved: totalPayout vs the payouts its packed spins imply.
         if (currency == CURRENCY_FLIP && totals.totalPayout != 0) {
             if (EntropyLib.hash4(rngWord, uint160(player), betId, BET_SURVIVAL_TAG) & 1 == 1) {
                 acc.flipMint += totals.totalPayout;
@@ -856,6 +930,7 @@ contract DegenerusGameDegeneretteModule is
         // betId (keccak'd with the index word) so each of a player's bets at the same index rolls
         // independently; the live lootbox-share is NOT a seed input. Never summed across betIds.
         if (totals.betLootboxShare > 0) {
+            workGas += BET_WORK_BOX_GAS;
             // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
             // so the per-box FLIP datum is recoverable.
             _resolveLootboxDirect(
@@ -876,10 +951,11 @@ contract DegenerusGameDegeneretteModule is
 
         emit DegeneretteResolved(
             player,
+            index,
             betId,
-            spinCount,
             totals.totalPayout,
-            totals.firstResultTraits
+            totals.firstResultTraits,
+            spins
         );
 
         // Biggest-spin record bounty: the claim this bet armed at placement, staked as
@@ -889,7 +965,11 @@ contract DegenerusGameDegeneretteModule is
         // the bet's committed word and its immutable betId, so the outcome was fixed at
         // fulfillment and no batch composition can steer it. The chosen hero symbol
         // carries over; the remaining ticket is freshly generated per bounty spin.
-        if (recordBounty != 0) {
+        if (bet & BET_RECORD_FLAG != 0) {
+            uint256 key = (uint256(index) << 64) | betId;
+            uint256 recordBounty = degeneretteRecordBounty[key];
+            delete degeneretteRecordBounty[key];
+            workGas += BOX_FLIP_SPINS * BET_WORK_SPIN_GAS;
             _flipSpinChain(
                 player,
                 recordBounty * LR_FLIP_SCALE,
@@ -927,7 +1007,8 @@ contract DegenerusGameDegeneretteModule is
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
     /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
-    ///        local accumulate here (flushed once by resolveDegeneretteBets); FLIP
+    ///        local accumulate here (flushed once per resolveDegeneretteBets or
+    ///        sweepDegeneretteBets call); FLIP
     ///        mint totals accumulate here too.
     /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP),
     ///         summed by the caller into the per-bet box.
@@ -1304,9 +1385,9 @@ contract DegenerusGameDegeneretteModule is
     // `address(this) != GAME` guard rejects any direct call on the deployed module
     // instance. Spin draws derive purely from the passed (hash2-tagged, freeze-safe)
     // seed — no live state enters the seed, so the outcome is fixed at fulfillment.
-    // Each spin emits ONE self-contained BoxSpin event (the per-spin DegeneretteResult /
-    // DegeneretteResolved pair is intentionally NOT emitted for box rolls — BoxSpin carries
-    // every reel plus the resolved reward). The synthetic betId self-classifies: bit 63 =
+    // Each spin emits ONE self-contained BoxSpin event (DegeneretteResolved is
+    // intentionally NOT emitted for box rolls — BoxSpin carries every reel plus the resolved
+    // reward). The synthetic betId self-classifies: bit 63 =
     // box-origin sentinel, bits 62-60 = spin type, bits 59-0 = seed entropy.
 
     uint256 private constant BOX_FLIP_SPINS = 3;
@@ -1318,8 +1399,8 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
     uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
 
-    // Box-spin BoxSpin.betId header. Bit 63 is a box-origin sentinel (real bet nonces increment
-    // from 1, so they never reach it); bits 62-60 carry the spin type; bits 59-0 are seed entropy
+    // Box-spin BoxSpin.betId header. Bit 63 is a box-origin sentinel (real bet ids are queue
+    // positions + 1, so they never reach it); bits 62-60 carry the spin type; bits 59-0 are seed entropy
     // (a unique per-box-spin id). The off-chain UI reads `betId >> 63` (is-box-spin) and
     // `(betId >> 60) & 7` (type) off the event's data field (only `player` is indexed).
     uint256 private constant BOX_BETID_SENTINEL = uint256(1) << 63;

@@ -893,10 +893,10 @@ abstract contract DegenerusGameStorage {
         uint256 flipAmount
     );
 
-    /// @dev `MinerBounty.kind` values.
+    /// @dev `MinerBounty.kind` values. Kind 3 (the retired Degenerette resolve helper) is
+    ///      unused: queued bets are resolved and bountied inside the box-open sweep (kind 2).
     uint8 internal constant MINER_BOUNTY_ADVANCE = 1;
     uint8 internal constant MINER_BOUNTY_BOX_OPEN = 2;
-    uint8 internal constant MINER_BOUNTY_DEGENERETTE_RESOLVE = 3;
     uint8 internal constant MINER_BOUNTY_CRAPS_KEEP = 4;
 
     /// @dev Emitted whenever a player's claimable balance is debited by the protocol. Covers
@@ -2236,8 +2236,24 @@ abstract contract DegenerusGameStorage {
     ///      Unified storage for all deferred lootbox rewards (BAF, jackpot, decimator).
     mapping(address => uint256) internal whalePassClaims;
 
-    /// @dev Retired WWXRP spin award slot; reserved to preserve shared storage layout.
-    mapping(uint256 => bool) internal wwxrpJackpotWhalePassBracketAwarded;
+    // =========================================================================
+    // Degenerette Bet Queue
+    // =========================================================================
+
+    /// @dev Degenerette bets per lootbox RNG index, one word per bet in placement order.
+    ///      A bet's id is its position + 1. Placement appends only while the index word is
+    ///      unset; the human-box sweep resolves the queue after that index's box entries, and
+    ///      any caller may resolve a bet early once the word lands. A resolved bet is zeroed.
+    ///      Word layout (LSB → MSB):
+    ///      - [0..159]   owner
+    ///      - [160..164] chosen hero symbol (0..31; hero quadrant = symbol >> 3)
+    ///      - [165..169] spin count (1..25)
+    ///      - [170]      currency (0 = ETH, 1 = FLIP)
+    ///      - [171]      record flag: a biggest-spin record bounty waits in degeneretteRecordBounty
+    ///      - [172..187] activity score in whole points
+    ///      - [188..251] stake per spin in currency units (ETH: gwei, FLIP: whole FLIP)
+    ///      - [252..255] reserved (always zero)
+    mapping(uint48 => uint256[]) internal degeneretteQueue;
 
     // =========================================================================
     // Operator Approvals
@@ -2939,22 +2955,19 @@ abstract contract DegenerusGameStorage {
     // Degenerette Bets
     // =========================================================================
 
-    /// @dev Bets keyed by player and bet id.
-    /// Packed layout (LSB → MSB):
-    /// - [0..4]     symbol (chosen hero symbol 0..31; hero quadrant = symbol >> 3)
-    /// - [5..31]    reserved (always zero)
-    /// - [32..39]   spinCount (uint8)
-    /// - [40..41]   currency (0=ETH,1=FLIP;2/3=unsupported)
-    /// - [42..169]  amountPerSpin (uint128)
-    /// - [170..201] RNG index (uint32)
-    /// - [202..217] activity score in whole points (uint16)
-    /// - [218..219] reserved (always zero; the hero quadrant derives from symbol)
-    /// - [220..255] biggest-spin record bounty in WHOLE FLIP (0 = none), staked as its
-    ///              own FLIP spin chain when the bet resolves
-    mapping(address => mapping(uint64 => uint256)) internal degeneretteBets;
+    /// @dev Biggest-spin record bounty in WHOLE FLIP for a queued bet, keyed
+    ///      (index << 64) | betId. Written only when a placement arms the record (the bet word's
+    ///      record flag), read and cleared when that bet resolves.
+    mapping(uint256 => uint256) internal degeneretteRecordBounty;
 
-    /// @dev Per-player bet counters for Degenerette.
-    mapping(address => uint64) internal degeneretteBetNonce;
+    // =========================================================================
+    // Early Ticket Activation
+    // =========================================================================
+
+    /// @dev Highest next-level pool activated by a target-met fresh RNG request. Kept after its
+    ///      drain so later entries cannot reopen that level's frozen far-future queue. The
+    ///      ordinary mint ceiling catches up at the last-purchase level promotion.
+    uint24 internal earlyTicketLevel;
 
     // =========================================================================
     // Lootbox EV Multiplier Cap Tracking
@@ -4068,11 +4081,6 @@ abstract contract DegenerusGameStorage {
     ///      early-bird ETH budget still backs nextPrizePool. Appended to preserve
     ///      every existing delegatecall slot. Cleared at settlement or game over.
     uint256 internal earlyBirdWhalePasses;
-
-    /// @dev Highest next-level pool activated by a target-met fresh RNG request. Kept after its
-    ///      drain so later entries cannot reopen that level's frozen far-future queue. The
-    ///      ordinary mint ceiling catches up at the last-purchase level promotion.
-    uint24 internal earlyTicketLevel;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

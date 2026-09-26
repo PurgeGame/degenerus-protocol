@@ -386,8 +386,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      whichever the crank found to do. Flat rather than pro-rated because the two jobs are
     ///      nothing alike: an arm is one cheap state change and a settle batch is a whole gas
     ///      allowance of them, and pricing them apart would need a second unit to buy very
-    ///      little. It is the same shape and the same figure `degeneretteResolve` pays for the
-    ///      other permissionless batch resolver in the protocol.
+    ///      little.
     uint256 internal constant CRAPS_KEEP_FLAT_FLIP = 1 ether;
 
     /// @dev THE CRAPS LEG SPENDS THE SAME WALK UNITS THE BOX LEGS DO — no gas conversion at all.
@@ -1881,8 +1880,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
             // Human-box leg — the multi-index sweep lives in the lootbox module (delegatecall
             // runs it in this Game's storage, the same nested pattern as _openAfkingBox's
-            // resolveAfkingBox). Its unit is BOXES, not entries: one order can carry up to
-            // MAX_BOXES_PER_ORDER of them.
+            // resolveAfkingBox). It counts boxes opened plus bets resolved, not entries: one order can
+            // carry up to MAX_BOXES_PER_ORDER boxes.
             //
             // The legs stop sharing a call only when the afking leg does REAL work: the sweep
             // always runs its first entry whatever its size, so stacking a maximum entry on a

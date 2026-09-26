@@ -57,7 +57,7 @@ OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseWhalePass	_purchaseWhal
 OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseLazyPass	_purchaseLazyPassFor	DegenerusGame.sol	BARE		player lazy pass purchase
 OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseDeityPass	_purchaseDeityPassFor	DegenerusGame.sol	BARE		player deity pass purchase
 OFF-CRANK	lowlevel:delegatecall	placeDegeneretteBet	DegenerusGame.sol	BARE		player degenerette bet placement
-OFF-CRANK	lowlevel:delegatecall	resolveDegeneretteBets	DegenerusGame.sol	BARE		player / VAULT degenerette bet resolution (VAULT resolves as a player)
+OFF-CRANK	lowlevel:delegatecall	resolveDegeneretteBets	DegenerusGame.sol	BARE		any caller's early resolution of chosen bets at one index; the keeper resolves bets through openHumanBoxes -> sweepDegeneretteBets instead
 OFF-CRANK	lowlevel:delegatecall	consumeCoinflipBoon	DegenerusGame.sol	BARE		FLIP / COINFLIP deposit-path callback (recordAmount != 0; payout re-stakes use 0), or WWXRP player entry / trusted-minter ecosystem consumption; WWXRP mint and draw settlement never consume boons
 CRANK-SELF	delegatecall:IDegenerusGameBoonModule.consumeDecimatorBoost	consumeDecimatorBoon	DegenerusGame.sol	BARE		FLIP decimator callback, including opening-day autoDecimatorBurn; own-storage boon consume
 OFF-CRANK	delegatecall:IDegenerusGameBoonModule.issueDeityBoon	issueDeityBoon	DegenerusGame.sol	BARE		player deity boon issuance
@@ -70,7 +70,6 @@ OFF-CRANK	lowlevel:delegatecall	claimDecimatorJackpot	DegenerusGame.sol	BARE		pe
 OFF-CRANK	lowlevel:delegatecall	claimDecimatorJackpotMany	DegenerusGame.sol	BARE		permissionless decimator batch claim (player-side, separate tx)
 OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	_claimWinningsWithCurse	DegenerusGame.sol	BARE		claimWinnings / claimWinnings(amount) player claim path; GNRUS, sDGNRS and VAULT redemptions call it as players
 OFF-CRANK	lowlevel:delegatecall	claimAffiliateDgnrs	DegenerusGame.sol	BARE		player affiliate DGNRS claim
-OFF-CRANK	ICoinflip.creditFlip	degeneretteResolve	DegenerusGame.sol	BARE		permissionless degenerette resolver bounty (its own tx; not a mineFlip router leg)
 OFF-CRANK	delegatecall:IGameAfkingModule.drainAfkingBoxes	openBoxes	DegenerusGame.sol	BARE		player liveness valve openBoxes; the router walks afking boxes inside GameAfkingModule instead
 OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.openHumanBoxes	openBoxes	DegenerusGame.sol	BARE		player liveness valve openBoxes; the router runs openHumanBoxes from GameAfkingModule.mineFlip instead
 OFF-CRANK	lowlevel:delegatecall	claimWhalePass	DegenerusGame.sol	BARE		player whale pass claim
@@ -148,6 +147,17 @@ CRANK-PINNED	IDegenerusQuests.awardQuestStreakShield	_applyBoon	modules/Degeneru
 CRANK-PINNED	IDegenerusQuests.awardQuestStreakBonus	_creditActivity	modules/DegenerusGameBoonModule.sol	BARE	test/repro/QuestStreakStallForgiveness.t.sol;test/fuzz/QuestBoonAfkingStreakLoss.t.sol	Activity boon on the keeper open legs (_applyBoon -> _creditActivity); callee gated OnlyGame only, streak math clamped
 OFF-CRANK	ICoinflip.creditFlip	claimDecimatorJackpotMany	modules/DegenerusGameDecimatorModule.sol	BARE		Player batch-claim entry (facade claimDecimatorJackpotMany stub); pays the caller's claim bounty
 OFF-CRANK	delegatecall:IDegenerusGameLootboxModule.resolveLootboxDirect	_awardDecimatorLootbox	modules/DegenerusGameDecimatorModule.sol	BARE		Reached only via _claimDecimatorJackpotFor <- claimDecimatorJackpot/Many (player claims); runDecimatorJackpot never calls it
+CRANK-PINNED	IDegenerusCoin.mintForGame	_flushOwner	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	Owner-run FLIP flush on the mineFlip bet sweep (and manual resolve); callee GAME-gated plain mint, zero-skipped here
+OFF-CRANK	IDegenerusQuests.handleDegenerette	_placeDegeneretteBet	modules/DegenerusGameDegeneretteModule.sol	BARE		Bet placement only; the keeper never places a bet
+OFF-CRANK	ICoinflip.armRecord	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	BARE		Bet placement only (biggest-spin record arm)
+OFF-CRANK	IDegenerusCoin.burnCoin	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	BARE		Bet placement only (FLIP stake burn)
+CRANK-PINNED	ICoinflip.creditFlip	_resolveBet	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	Affiliate 7% FLIP credit on a swept ETH bet's high-match box value; GAME is a flip creditor, zero-skipped in the callee
+CRANK-PINNED	IDegenerusAffiliate.getReferrer	_resolveBet	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	View on the same affiliate leg; returns VAULT when unreferred
+OFF-CRANK	delegatecall:IDegenerusGameBoonModule.consumeDegeneretteBoon	_consumeDegeneretteBoon	modules/DegenerusGameDegeneretteModule.sol	BARE		Bet placement only (self-funded stake boon)
+CRANK-SELF	delegatecall:IDegenerusGameLootboxModule.resolveLootboxDirect	_resolveLootboxDirect	modules/DegenerusGameDegeneretteModule.sol	BARE		Delegatecall into own LOOTBOX module for a swept ETH bet's win box and the box ETH-spin recirc (allowEthSpin=false)
+CRANK-PINNED	IsDGNRS.poolBalance	_awardDegeneretteDgnrs	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	S>=7 ETH spin award on the bet sweep and box ETH spins; view
+CRANK-PINNED	IsDGNRS.transferFromPool	_awardDegeneretteDgnrs	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	S>=7 award; callee onlyGame, clamps to the pool; skipped at a zero pool or zero reward
+CRANK-PINNED	IDegenerusCoin.mintForGame	_flipSpinChain	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	Record-bounty FLIP chain mint for a swept bet that armed the record; box FLIP chains return instead of minting
 OFF-CRANK	IDegenerusAffiliate.payAffiliate	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); affiliate kickback leg
 OFF-CRANK	IDegenerusAffiliate.payAffiliate	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); affiliate kickback leg
 OFF-CRANK	ICoinflip.creditFlip	buyFoilPack	modules/DegenerusGameFoilPackModule.sol	BARE		Player purchase entry (facade buyFoilPack stub); kickback credit to the buyer
@@ -188,6 +198,7 @@ CRANK-TRY	ICrapsPassDelivery.deliverPasses	_deliverPasses	modules/DegenerusGameL
 CRANK-PINNED	ICrapsPassDelivery.creditPasses	_deliverPasses	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/CrapsPassAwards.t.sol;test/craps/CrapsPasses.t.sol	Fallback credit inside the catch, same PASS_DELIVERY_GAS stipend; callee OnlyGame then a saturating storage write
 CRANK-SELF	delegatecall:IDegenerusGameBoonModule.rollBoxBoons	_rollTierImmediate	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own BOON module rollBoxBoons on the openHumanBoxes leg (_openLootBoxLegWith)
 CRANK-SELF	delegatecall:IDegenerusGameBoonModule.rollBoxBoonTiers	_rollBatchedTiers	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own BOON module rollBoxBoonTiers on the openHumanBoxes leg (_openLootBoxLegWith)
+CRANK-SELF	delegatecall:IDegenerusGameDegeneretteModule.sweepDegeneretteBets	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	BARE		Delegatecall into own DEGENERETTE module on the keeper human-box leg: resolves the bets queued at the swept index after its box entries; holds the queue while the prize pool is frozen
 CRANK-PINNED	ICrapsPassDelivery.creditPasses	_resolvePresaleBox	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/CrapsPassAwards.t.sol;test/craps/CrapsPasses.t.sol	Presale box resolution on the openHumanBoxes keeper leg; callee OnlyGame then saturating credit
 CRANK-PINNED	IWWXRP.mintPrize	_resolvePresaleBox	modules/DegenerusGameLootboxModule.sol	BARE	test/fuzz/WWXRPDailyDraw.t.sol	Presale box WWXRP leg; callee OnlyMinter gate, plain mint
 CRANK-PINNED	ICoinflip.creditFlip	_resolvePresaleBox	modules/DegenerusGameLootboxModule.sol	BARE	test/gas/KeeperOpenBoxWorstCaseGas.t.sol;test/fuzz/CrapsProtocolWiring.t.sol	Presale box FLIP leg; callee zero-skips past its creditor gate

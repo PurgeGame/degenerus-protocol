@@ -8,13 +8,12 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
+import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 
 contract DegeneretteSingleSymbolTest is DeployProtocol {
     DegeneretteMathHarness private math;
     address private alice;
     address private bob;
-    bytes32 private constant RESULT = keccak256("DegeneretteResult(address,uint64,uint8,uint32,uint8,uint256)");
-    bytes32 private constant RESOLVED = keccak256("DegeneretteResolved(address,uint64,uint8,uint256,uint32)");
 
     function setUp() public {
         _deployProtocol();
@@ -37,7 +36,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         game.placeDegeneretteBet{value: currency == 0 ? uint256(stake) * spins : 0}(
             address(0), currency, stake, spins, symbol
         );
-        id = uint64(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(38))))));
+        id = DQ.lastBetId(vm, address(game), 1);
     }
 
     function _land(uint256 word) private {
@@ -51,16 +50,16 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         uint64[] memory ids = new uint64[](1);
         ids[0] = id;
         vm.recordLogs();
-        game.resolveDegeneretteBets(who, ids);
+        game.resolveDegeneretteBets(1, ids);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 count;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == RESULT) ++count;
-        }
-        tickets = new uint32[](count);
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == RESULT) {
-                (uint8 spin, uint32 ticket, uint8 score,) = abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
+            if (logs[i].topics[0] != DQ.RESOLVED_SIG) continue;
+            assertEq(address(uint160(uint256(logs[i].topics[1]))), who, "bet owner");
+            bytes memory spins;
+            (, firstHouse, spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));
+            tickets = new uint32[](spins.length / 5);
+            for (uint8 spin; spin < tickets.length; ++spin) {
+                (uint32 ticket, uint8 score,) = DQ.spinAt(spins, spin);
                 tickets[spin] = ticket;
                 assertEq(
                     ticket, Ref.player(word, 1, symbol, spin, false), "generated ticket differs from public stream"
@@ -69,8 +68,6 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 uint32 house = Ref.house(word, 1, spin, false);
                 (uint8 natural,) = Ref.score(ticket, house, symbol >> 3);
                 assertEq(score, natural, "independent color score mismatch");
-            } else if (logs[i].topics[0] == RESOLVED) {
-                (,, firstHouse) = abi.decode(logs[i].data, (uint8, uint256, uint32));
             }
         }
     }
@@ -134,7 +131,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 vm.prank(callers[route]);
                 game.placeDegeneretteBet{value: 0.01 ether}(alice, currencies[c], 1 ether, 1, 7);
                 assertEq(_rejectionState(callers[route], boonSlot), beforeState,
-                    "unsupported bet mutated funding, nonce, pool or boon state");
+                    "unsupported bet mutated funding, bet queue, pool or boon state");
             }
         }
     }
@@ -145,7 +142,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             coin.balanceOf(alice), wwxrp.balanceOf(alice), wwxrp.totalSupply(),
             vm.load(address(game), bytes32(uint256(1))),
             vm.load(address(game), bytes32(uint256(2))),
-            vm.load(address(game), keccak256(abi.encode(alice, uint256(38)))),
+            vm.load(address(game), keccak256(abi.encode(uint256(1), DQ.QUEUE_SLOT))), // index-1 bet queue length
             vm.load(address(game), boonSlot)
         ));
     }
@@ -364,10 +361,9 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
 
     function testHeroIsStoredOnlyInTheSelectedSymbol() public {
         uint64 id = _place(alice, 0, 1, 31, 0.005 ether);
-        bytes32 leaf = keccak256(abi.encode(id, keccak256(abi.encode(alice, uint256(37)))));
-        uint256 packed = uint256(vm.load(address(game), leaf));
-        assertEq(uint32(packed), 31);
-        assertEq((packed >> 218) & 3, 0, "redundant hero field must remain reserved");
+        uint256 packed = game.degeneretteBetInfo(1, id);
+        assertEq((packed >> 160) & 0x1F, 31, "symbol field holds the chosen hero");
+        assertEq(packed >> 252, 0, "no separate hero field: the reserved tail stays zero");
         uint256 word = uint256(keccak256("last hero quadrant"));
         _land(word);
         _resolve(alice, id, 31, word);

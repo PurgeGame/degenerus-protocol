@@ -109,7 +109,7 @@ EXEMPT-ADVANCE	rngWordCurrent	advanceGame	modules/DegenerusGameAdvanceModule.sol
 EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	READ
 EXEMPT-ADVANCE	rngWordCurrent	rngGate	modules/DegenerusGameAdvanceModule.sol	READ
 EXEMPT-ADVANCE	rngWordCurrent	updateVrfCoordinatorAndSub	modules/DegenerusGameGameOverModule.sol	READ
-CONSUMER-SEALED	lootboxRngWordByIndex	_resolveBet	modules/DegenerusGameDegeneretteModule.sol	READ
+CONSUMER-SEALED	lootboxRngWordByIndex	resolveDegeneretteBets	modules/DegenerusGameDegeneretteModule.sol	READ
 CONSUMER-SEALED	lootboxRngWordByIndex	_openBoxBoth	modules/DegenerusGameLootboxModule.sol	READ
 CONSUMER-SEALED	lootboxRngWordByIndex	_openLootBoxLeg	modules/DegenerusGameLootboxModule.sol	READ
 CONSUMER-SEALED	lootboxRngWordByIndex	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	READ

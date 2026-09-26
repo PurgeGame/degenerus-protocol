@@ -1335,7 +1335,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      context, mirroring the afking leg's drainAfkingBoxes delegatecall. Walks the open
     ///      frontier from boxCursorIndex up to LR_INDEX-1 (the finalized indices — words land at
     ///      LR_INDEX-1, one behind the pre-incremented active index), opening every ready box at
-    ///      each index, then advancing to the next. `budget` bounds the WORK this call does, in
+    ///      each index and then resolving the Degenerette bets placed there, then advancing to
+    ///      the next. `budget` bounds the WORK this call does, in
     ///      the shared walk unit: an open charges its entry weight plus a per-box weight, a skip
     ///      or index header charges one, so a long skip-prefix (already-opened or presale-only
     ///      entries) can never gas-wall the tx. The first entry of a call always runs whatever
@@ -1349,10 +1350,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      (whale-pass materialization is deferred to claimWhalePass).
     /// @param budget Walk budget in the shared open-weight unit (~4.7k gas each) — the same
     ///        unit the afking leg spends. An entry costs OPEN_HUMAN_ENTRY_WEIGHT plus
-    ///        OPEN_HUMAN_BOX_WEIGHT for each box; a skip or index-header costs
-    ///        one. Neither entries nor boxes are the unit, because neither predicts the gas.
-    /// @return opened Total boxes opened this call.
-    /// @return unitsSpent Walk units this call consumed — the crank's work-based bounty basis.
+    ///        OPEN_HUMAN_BOX_WEIGHT for each box; a bet its per-bet weight; a skip or
+    ///        index-header costs one. Neither entries nor boxes are the unit, because neither
+    ///        predicts the gas.
+    /// @return opened Total boxes opened plus bets resolved this call.
+    /// @return unitsSpent Walk units of work this call did — the crank's work-based bounty basis.
+    ///         Boxes count their walk weight; bets count the work they actually ran, below the
+    ///         worst-case price the budget charged them.
     ///         Crediting the knee per BOX would let one five-small order saturate it at a
     ///         fraction of the work five distinct entries represent.
     function openHumanBoxes(uint256 budget) external returns (uint256 opened, uint256 unitsSpent) {
@@ -1379,6 +1383,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 currentLevel = level + 1;
 
         uint256 steps; // entries + index-headers scanned this call — bounds the tx gas
+        uint256 uncredited; // bet budget headroom above the work the bets actually ran
         while (idx <= finalized && steps < budget) {
             unchecked {
                 ++steps; // each index visit costs a step (bounds an empty-index crawl)
@@ -1445,13 +1450,45 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
 
             if (cur < qlen) break; // budget hit mid-index — resume here next call
+
+            // Degenerette bets placed at this index follow its box entries on the same cursor
+            // (cur = qlen + bet position). Both lists are frozen once the word lands, since
+            // placement and box deposits require an unset word, so the combined position is
+            // stable. The degenerette module prices each bet and resolves within the budget.
+            uint256 blen = degeneretteQueue[idx].length;
+            if (cur - qlen < blen) {
+                if (steps >= budget) break;
+                (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameDegeneretteModule.sweepDegeneretteBets.selector,
+                        idx,
+                        cur - qlen,
+                        budget - steps,
+                        opened == 0,
+                        indexWord
+                    )
+                );
+                if (!ok) revert EmptyRevert();
+                (uint256 resolved, uint256 betPos, uint256 betUnits, uint256 betWork) = abi.decode(
+                    data,
+                    (uint256, uint256, uint256, uint256)
+                );
+                unchecked {
+                    opened += resolved;
+                    steps += betUnits;
+                    // Bets are budgeted at worst case but credited at the work they ran.
+                    if (betUnits > betWork) uncredited += betUnits - betWork;
+                }
+                cur = qlen + betPos;
+                if (betPos < blen) break; // budget hit mid-queue — resume here next call
+            }
             unchecked {
                 ++idx; // index fully swept — advance the open frontier (this index is now complete)
             }
             cur = 0;
         }
 
-        unitsSpent = steps;
+        unitsSpent = steps - uncredited;
         boxCursorIndex = idx;
         boxCursor = uint48(cur);
         // Presale is fully drained once the cursor has advanced PAST the close index (every box at
@@ -2177,8 +2214,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Degenerette module; their sub-seeds are hash2-tagged off `seed` (no primary-
     ///      chunk bits consumed). The ETH-spin only fires on directly-opened boxes
     ///      (`allowEthSpin`); on recirc boxes roll 19 awards tickets instead, which keeps
-    ///      every box resolved inside `resolveDegeneretteBets` (the only ETH-pool memory-accumulator
-    ///      context) free of an ETH-pool read-modify-write.
+    ///      every box resolved inside a bet resolution (`resolveDegeneretteBets` or the sweep's
+    ///      `sweepDegeneretteBets`, the ETH-pool memory-accumulator contexts) free of an ETH-pool
+    ///      read-modify-write.
     /// @param player Player receiving the reward
     /// @param amount The roll's main amount (box amount less the boon budget)
     /// @param targetPrice Price at the rolled target level (ticket legs only)

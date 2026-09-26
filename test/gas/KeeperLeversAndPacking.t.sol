@@ -107,27 +107,28 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // GAS-02 — read-once / one-creditFlip per tx (SOURCE-PRESENCE, v55-reframed)
     // =========================================================================
 
-    /// @notice GAS-02 read-once + one-reward-per-tx, v55-reframed. The game crank reward path
-    ///         (degeneretteResolve) holds exactly ONE post-loop creditFlip (the flat-≥3 grant). The v55
-    ///         afking router `mineFlip()` reads `_mintPriceInContext()` once and pays exactly ONE
+    /// @notice GAS-02 read-once + one-reward-per-tx, v55-reframed. The Game holds no crank reward of
+    ///         its own (the Degenerette resolve helper and its flat grant are retired; queued bets ride
+    ///         the box sweep). The v55 afking router `mineFlip()` reads `_mintPriceInContext()` once and pays exactly ONE
     ///         CEI-last bounty creditFlip per tx (the one-category early-return). The v49 AfKing
     ///         `batchPurchase` one-transfer/one-refund gates are DROPPED (removed surface, D-351-02).
     function testGas02ReadOnceAndOneRewardSourcePresence() public view {
         string memory game_ = _strippedGame();
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
-        // 330-03 flat-≥3 re-peg: degeneretteResolve's reward is a FLAT level-INDEPENDENT constant, so the
-        // prior per-item `uint24 lvl = _activeTicketLevel();` hoist is gone (strictly stronger).
+        // No per-item level read survives in the Game's crank surface (the retired resolve helper's
+        // `uint24 lvl = _activeTicketLevel();` hoist stays gone).
         assertEq(
             _countOccurrences(game_, "uint24 lvl = _activeTicketLevel();"),
             0,
-            "GAS-02 (330-03): no per-item level read - degeneretteResolve reward is a flat level-independent constant"
+            "GAS-02: no per-item level read in the Game crank surface"
         );
-        // The per-tx crank reward creditFlip is byte-present exactly ONCE (degeneretteResolve's flat-≥3 grant).
+        // The flat >=3 Degenerette resolve reward is retired: queued bets resolve inside the mineFlip
+        // box sweep and earn its one unified bounty, so the Game holds no second crank reward.
         assertEq(
-            _countOccurrences(game_, "coinflip.creditFlip(msg.sender, RESOLVE_FLAT_FLIP);"),
-            1,
-            "GAS-02: one guarded post-loop creditFlip in degeneretteResolve (flat->=3 re-peg, one-per-tx)"
+            _countOccurrences(game_, "RESOLVE_FLAT_FLIP"),
+            0,
+            "GAS-02: the retired flat Degenerette resolve reward is gone (bets ride the box bounty)"
         );
 
         // v55 REFRAME: the afking router mineFlip reads mintPrice ONCE into a local (read-once lever).
@@ -281,10 +282,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
         string memory lootbox = _stripComments(vm.readFile(LOOTBOX_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
-        // G1 — RngNotReady freeze guard: placement (reject a bet at an already-worded index) + strict resolve.
+        // G1 — RngNotReady freeze guard: placement (reject a bet at an already-worded index) + resolve.
         assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady guard byte-present");
         assertGt(_countOccurrences(degenerette, "if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();"), 0, "G1: placement freeze guard (reject bet at an already-worded index)");
-        assertGt(_countOccurrences(degenerette, "if (strict) revert RngNotReady();"), 0, "G1: strict bet-resolve freeze guard (cannot resolve before the index word lands)");
+        assertGt(_countOccurrences(degenerette, "if (rngWord == 0) revert RngNotReady();"), 0, "G1: bet-resolve freeze guard (cannot resolve before the index word lands)");
 
         // G2 — RngNotReady open-box guard / orphan-index skip. The relocated multi-index sweep
         // (DegenerusGameLootboxModule.openHumanBoxes) never advances past an un-worded index: it
@@ -293,8 +294,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(lootbox, "if (indexWord == 0) break;"), 0, "G2: sweep orphan-index skip (break, never advance past an un-worded index)");
         assertGt(_countOccurrences(lootbox, "revert RngNotReady()"), 0, "G2: LootboxModule open RngNotReady guard byte-present");
 
-        // G3 — one-reward-per-item: bet delete.
-        assertGt(_countOccurrences(degenerette, "delete degeneretteBets[player][betId];"), 0, "G3: bet delete one-reward guard");
+        // G3 — one-reward-per-item: the queue word is zeroed before the bet resolves, on both paths.
+        assertGt(_countOccurrences(degenerette, "queue[betId - 1] = 0;"), 0, "G3: manual resolve zeroes the bet word first");
+        assertGt(_countOccurrences(degenerette, "queue[pos] = 0;"), 0, "G3: sweep zeroes the bet word first");
 
         // G4 — one-reward-per-item: box zeroing + autoOpen already-emptied skip. Post-repack the box
         // lives in the single packed lootboxOrder word; open clears it in one SSTORE, and the sweep
@@ -303,9 +305,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(lootbox, "uint256 word = lootboxOrder[idx][player];"), 0, "G4: sweep per-entry box-word load (the skip-check read doubles as the open's input)");
         assertGt(_countOccurrences(lootbox, "if (boxes == 0 && stored == 0) {"), 0, "G4: sweep already-opened skip (both legs zero -> continue)");
 
-        // G5 — double-crank short-circuit BatchAlreadyTaken (degeneretteResolve).
-        assertGt(_countOccurrences(game_, "revert BatchAlreadyTaken();"), 0, "G5: double-crank short-circuit BatchAlreadyTaken");
-        assertGt(_countOccurrences(game_, "if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();"), 0, "G5: item-0 probe read and short-circuit");
+        // G5 — duplicate-settle short-circuit: the first id of a manual resolve fails fast when the
+        // bet is already resolved or unknown, so a racing duplicate settle bails cheaply.
+        assertGt(_countOccurrences(degenerette, "uint256 bet = betId == 0 || betId > qlen ? 0 : queue[betId - 1];"), 0, "G5: bounded id read (zero for unknown ids)");
+        assertGt(_countOccurrences(degenerette, "} else if (i == 0) {"), 0, "G5: first-id fail-fast branch");
 
         // G6 — (v49 batchPurchase per-player slice try/catch) DROPPED, D-351-02 (removed surface). The
         // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.
@@ -317,7 +320,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // resolves both legs in isolation from its own pre-loaded values (robust to either leg
         // empty, guaranteed-non-reverting under the entry-gate) — a long queue can never gas-wall
         // the tx.
-        assertGt(_countOccurrences(game_, "try this.resolveDegeneretteBets(players[i], ids)"), 0, "G7: per-item bet isolation via this.resolveDegeneretteBets");
+        assertGt(_countOccurrences(degenerette, "if ((resolved != 0 || !mustRunFirst) && unitsSpent + cost > budget) break;"), 0, "G7: bet sweep breaks (never skips) on a bet that does not fit, first bet always runs");
+        assertGt(_countOccurrences(degenerette, "if (prizePoolFrozen) return (0, pos, 0, 0);"), 0, "G7: bet sweep holds its queue while the pool is frozen (no Insolvent revert can stall the frontier)");
+        assertGt(_countOccurrences(lootbox, "if (betPos < blen) break;"), 0, "G7: box sweep resumes mid bet queue next call");
         assertGt(_countOccurrences(lootbox, "_openLootBoxLegWith(player, idx, word, indexWord, currentLevel);"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert OnlySelf();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
@@ -335,8 +340,8 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(afking, "lastAutoBoughtDay"), 0, "G11: per-entry lastAutoBoughtDay day-stamp byte-present");
         assertGt(_countOccurrences(afking, "sub.lastAutoBoughtDay >= processDay"), 0, "G11 (v55): the STAGE same-day idempotency self-partition byte-present");
 
-        // G12 — every successfully settled supported bet counts toward the >=3 gate.
-        assertGt(_countOccurrences(game_, "++successCount;"), 0, "G12: successful supported bets count toward keeper reward");
+        // G12 — the explicit-list Degenerette keeper helper and its >=3 flat reward are retired.
+        assertEq(_countOccurrences(game_, "function degeneretteResolve("), 0, "G12: degeneretteResolve removed (mineFlip resolves bets)");
         assertEq(_countOccurrences(game_, "currency != 3"), 0, "G12: retired WWXRP filter removed");
 
         // G13 — rngLocked / gameOver freeze guards. The open path no-ops during the freeze (RD-3).
@@ -359,7 +364,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(bytes(afking).length, 1000, "stripped GameAfkingModule source is non-empty (repoint live)");
         assertGt(bytes(storage_).length, 1000, "stripped DegenerusGameStorage source is non-empty (repoint live)");
         // Known code identifiers that unquestionably exist post-strip in each repointed source.
-        assertGt(_countOccurrences(game_, "function degeneretteResolve("), 0, "harness live: a known Game code symbol is found");
+        assertGt(_countOccurrences(game_, "function resolveDegeneretteBets("), 0, "harness live: a known Game code symbol is found");
         assertGt(_countOccurrences(afking, "function mineFlip()"), 0, "harness live: a known GameAfkingModule code symbol is found");
         assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "harness live: a known DegenerusGameStorage code symbol is found");
         // A comment-only sentinel must be STRIPPED (proves comments are actually removed).

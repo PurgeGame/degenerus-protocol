@@ -41,7 +41,7 @@ contract ProtocolBoonFixture is DegenerusGameStorage {
     function fullWeight(address issuer, uint24 day) external {
         protocolBoonPools[issuer][day].totalWeight = type(uint64).max;
     }
-    function bet(address player, uint64 id) external view returns (uint256) { return degeneretteBets[player][id]; }
+    function bet(uint48 index, uint64 id) external view returns (uint256) { return degeneretteQueue[index][id - 1]; }
     function heroWeight(uint24 day, uint8 symbol) external view returns (uint32) {
         return uint32(dailyHeroWagers[day][symbol >> 3] >> ((symbol & 7) * 32));
     }
@@ -151,13 +151,13 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         uint256 vaultStake = coinflip.coinflipAmount(address(vault));
         uint256 sdgnrsStake = coinflip.coinflipAmount(address(sdgnrs));
         uint256 future = game.futurePrizePoolView();
-        vm.prank(bettor); _bet(0, 0.00995 ether + 17);
+        vm.prank(bettor); _bet(0, 0.00995 ether + 17 gwei);
         vm.prank(bettor); _bet(6, 0.025 ether);
-        assertEq(game.futurePrizePoolView(), future + 0.03495 ether + 17);
+        assertEq(game.futurePrizePoolView(), future + 0.03495 ether + 17 gwei);
         assertEq(coinflip.coinflipAmount(address(vault)), vaultStake);
         assertEq(coinflip.coinflipAmount(address(sdgnrs)), sdgnrsStake);
         DegenerusGameStorage.ProtocolBoonPool memory pool = lens.protocolBoonPool(address(game), address(vault), day);
-        assertEq(pool.totalWageredWei, 0.00995 ether + 17);
+        assertEq(pool.totalWageredWei, 0.00995 ether + 17 gwei);
         assertEq(pool.totalWeight, 99 * 1600);
         assertEq(pool.entryCount, 1);
         assertEq(pool.awardedMask, 0);
@@ -521,8 +521,9 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         // Locate the symbol ledger through the fixture's layout, without guessing a slot.
         bytes memory original = address(game).code;
         vm.etch(address(game), address(fixture).code);
-        uint256 bet = ProtocolBoonFixture(address(game)).bet(bettor, 1);
-        assertEq(uint128(bet >> 42), 0.0112 ether, "effective stake actually received the boon");
+        uint256 bet = ProtocolBoonFixture(address(game)).bet(1, 1);
+        assertEq(address(uint160(bet)), bettor, "the bettor owns queue position 0");
+        assertEq(((bet >> 188) & type(uint64).max) * 1 gwei, 0.0112 ether, "effective stake actually received the boon");
         assertEq(ProtocolBoonFixture(address(game)).heroWeight(day, 6), 300);
         vm.etch(address(game), original);
     }
@@ -564,7 +565,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
 
     function testFuzzPaidWeightMatchesQuote(uint128 amount, uint16 score) public {
-        amount = uint128(bound(amount, 0.005 ether, 100 ether));
+        amount = uint128(bound(amount, 0.005 ether, 100 ether) / 1 gwei * 1 gwei); // whole-gwei stakes
         score = uint16(bound(score, 0, 30_000));
         _score(bettor, score);
         (, uint16 quotedScore,, uint64 weight) = lens.protocolBoonQuote(address(game), bettor, amount);
@@ -601,8 +602,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
 
     function testFuzzSplittingStakeCannotGainWeight(uint96 a, uint96 b, uint16 score) public {
-        a = uint96(bound(a, 0.005 ether, 0.5 ether));
-        b = uint96(bound(b, 0.005 ether, 0.5 ether));
+        a = uint96(bound(a, 0.005 ether, 0.5 ether) / 1 gwei * 1 gwei);
+        b = uint96(bound(b, 0.005 ether, 0.5 ether) / 1 gwei * 1 gwei);
         score = uint16(bound(score, 0, 30_000));
         _score(bettor, score);
         vm.prank(bettor); _bet(0, uint128(a) + b);

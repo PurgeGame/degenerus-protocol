@@ -49,7 +49,8 @@
 //   -                    _wwxrpFactor N=3 bucket=8 dispatch (4 if/else + SLOAD) ~ 2200 (cold) / 200 (warm)
 //   -                    payout multiplication                                  ~  30 gas
 //   - _applyHeroMultiplier SKIPPED at M=8 (hero inherent in M=8 SLOAD)         0 gas
-//   - emit DegeneretteResult (4 fields + indexed)                                ~ 1500 gas
+//   - emit DegeneretteResolved (one per bet, not per spin, post-queue-refactor;    ~ 1500 gas
+//     packs every spin's traits+score into `spins` instead of a per-spin event)
 //   - _distributePayout ETH tier 3 branch:
 //   -   pool.SLOAD                                                              ~ 2100 (cold) / 100 (warm)
 //   -   max(2.5*bet, payout/4) + lootboxShare = payout - ethShare              ~  50 gas
@@ -148,14 +149,14 @@ const WORST_CASE_RNG_WORDS = []; // empty → soft-skip until pinned
 // QUICK_PLAY_SALT per .sol L233.
 const QUICK_PLAY_SALT = "0x51"; // bytes1 = 'Q'
 
-// LOOTBOX_RNG_WORD_SLOT = 36 (per Foundry precedent at
-// test/fuzz/DegeneretteFreezeResolution.t.sol L37).
-// v47 storage-layout shift (forge inspect, frozen at fb29ed51): the presale-box
-// additions minus the earlybird removals shifted these mapping/packed slots down by
-// 2 (lootboxRngPacked 35->37, lootboxRngWordByIndex 36->38). Mirrors the Phase
-// 323-01 foundry slot-shift repair.
-const LOOTBOX_RNG_WORD_SLOT = 37n;
-const LOOTBOX_RNG_PACKED_SLOT = 36n;
+// LOOTBOX_RNG_WORD_SLOT / LOOTBOX_RNG_PACKED_SLOT (per Foundry precedent at
+// test/fuzz/DegeneretteFreezeResolution.t.sol / DegeneretteSweep.t.sol): post
+// Stage-B game-storage repack, lootboxRngPacked is slot 33 and
+// lootboxRngWordByIndex is slot 34 (was 35/36 pre-repack, 36/37 one repack
+// before that — re-verify via `forge inspect DegenerusGame storage` if this
+// ever drifts again).
+const LOOTBOX_RNG_WORD_SLOT = 34n;
+const LOOTBOX_RNG_PACKED_SLOT = 33n;
 
 // Stage constants (mirror test/gas/Phase264GasRegression.test.js L130-133).
 const STAGE_RNG_REQUESTED = 1n;

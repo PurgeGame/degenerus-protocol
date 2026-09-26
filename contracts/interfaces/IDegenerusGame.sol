@@ -339,20 +339,21 @@ interface IDegenerusGame {
         uint8 symbol
     ) external payable;
 
-    /// @notice Resolve Degenerette bets once RNG is available.
-    /// @param player The betting player (address(0) = msg.sender).
-    /// @param betIds Bet identifiers for the player.
+    /// @notice Resolve queued Degenerette bets at one RNG index once its word is available.
+    ///         mineFlip resolves every bet on its own; this settles chosen bets early.
+    /// @param index Lootbox RNG index the bets were placed at.
+    /// @param betIds Bet ids within `index` (queue position + 1).
     function resolveDegeneretteBets(
-        address player,
+        uint48 index,
         uint64[] calldata betIds
     ) external;
 
-    /// @notice View Degenerette packed bet info for a player/betId.
-    /// @param player Player address to query.
-    /// @param betId Bet identifier for the player.
-    /// @return packed Packed bet data (amount/currency/betSpec/rngIndex/resolved).
+    /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
+    /// @param index Lootbox RNG index the bet was placed at.
+    /// @param betId Bet id within `index` (queue position + 1).
+    /// @return packed The bet word (owner, symbol, spins, currency, activity, stake units).
     function degeneretteBetInfo(
-        address player,
+        uint48 index,
         uint64 betId
     )
         external

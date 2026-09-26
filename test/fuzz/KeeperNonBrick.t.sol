@@ -47,10 +47,6 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
-    /// @dev degeneretteBets mapping root slot (address => betId => packed).
-    uint256 private constant DEGENERETTE_BETS_SLOT = 37;
-    /// @dev degeneretteBetNonce mapping root slot (address => uint64).
-    uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
     /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low 128
     ///      bits) is the box-owed signal that replaced the removed lootboxEthBase mapping.
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
