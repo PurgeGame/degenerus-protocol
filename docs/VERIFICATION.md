@@ -112,7 +112,32 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-26, Degenerette bet queue, WWXRP game mint scale and gas levers
+## Current evidence — 2026-09-26, single daily board, jackpot fill stage and flat foil table
+
+One commit on top of `ee60d36f`:
+
+- `b6e8996d` Every day rolls one winning board (`DailyWinningTraits(uint24 indexed day, uint32
+  mainTraitsPacked)`); the bonus set, the jackpot carryover ticket leg (0.5% future reserve, stage
+  13) and the coin draw's craps half are removed. Jackpot days play the fill-draw craps battle from
+  a new advance stage `STAGE_JACKPOT_FILL = 16`, latched by the ETH stage at bit 72 of
+  `dailyTicketBudgetsPacked`, between the ETH / early-bird stages and the coin+tickets stage that
+  seals the day. Early-bird tickets and the early-bird surplus whale pass skip the ETH leg's solo
+  quadrant unless it is the only active bucket. Level 1's trait-matched draw pays up to 50
+  FLIP-only shares. `vaultComp` is VAULT-only and `creditPasses` returns nothing. Foil claims drop
+  `drawKind` and compare once a day at a doubled face table (16 / 48 / 280 / 3,200 / 80,000).
+
+At `b6e8996d`: the 11 gates, `check-interfaces` and the storage-layout oracle pass; foundry
+2,952 passed / 0 failed over all seven compile groups (integration-gas 763, repro-symbolic 260,
+fuzz-1 501, fuzz-2 383, fuzz-3 462, fuzz-4 448, invariants 135); hardhat `npm test` 1,639
+passing / 23 pending; `test:stat` 159 passing / 20 pending; `test:gas` 21 passing / 11 pending.
+Worst cold advance transactions (including intrinsic): fill stage 2,820,598 (10,130,598 with the
+whole 7,310,000 battle bound added); coin+tickets 5,981,402 (final day x00 5,962,448); day-1 ETH
+stage with the word applied 10,570,572; early-bird 7,881,498; level-1 daily with the word applied
+6,202,472 (13,512,472 with the bound); purchase daily with the word applied 5,914,687 (13,224,687
+with the bound). Sizes: `DegenerusGameJackpotModule` 20,776, `DegenerusGameAdvanceModule` 24,104,
+`DegenerusGameWhaleModule` 24,401, `DegenerusGameFoilPackModule` 20,118, `CrapsBattle` 24,251.
+
+## Evidence — 2026-09-26, Degenerette bet queue, WWXRP game mint scale and gas levers
 
 Five commits on top of `9a36d3b2`:
 
