@@ -114,7 +114,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param player Score owner credited with the mint (claims are permissionless).
     /// @param lvl Skipped BAF bracket level.
     /// @param score Frozen bracket score consumed by the claim (FLIP-denominated).
-    /// @param wwxrpAmount WWXRP minted (score / 1000).
+    /// @param wwxrpAmount WWXRP requested (score / 1000), before WWXRP's gameMintScale.
     event BafConsolationClaimed(
         address indexed player,
         uint24 indexed lvl,
@@ -588,7 +588,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
         wwxrp.mintPrize(player, amount);
     }
 
-    /// @notice Claimable WWXRP consolation for a player at a bracket level.
+    /// @notice Claimable WWXRP consolation for a player at a bracket level, before WWXRP's
+    ///         gameMintScale (the mint at claim is scaled).
     /// @return Zero unless the bracket is skipped and the player holds an
     ///         unclaimed live-epoch score.
     function bafConsolationOf(address player, uint24 lvl) external view returns (uint256) {

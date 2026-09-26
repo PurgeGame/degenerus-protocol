@@ -196,7 +196,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      resolve board's gold count on the board route and the qualifying pack's gold
     ///      quadrant count on the foil route. ethAmount moved futurePrizePool -> winner
     ///      claimable; halfPassCount and flipCredit are face-value credits with no pool
-    ///      debit; wwxrpAmount is the 0-gold consolation.
+    ///      debit; wwxrpAmount is the 0-gold consolation, before WWXRP's gameMintScale.
     event GoldenTicketWin(
         address indexed winner,
         uint24 indexed level,

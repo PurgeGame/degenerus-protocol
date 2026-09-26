@@ -139,7 +139,7 @@ contract DegenerusGameDegeneretteModule is
     ///        resultTraits:32 | score:8] (72 bits, spin 0 lowest); bits 216-223 = spin count;
     ///        bit 224 = FLIP survival flag (1 = the survival flip won; unused for WWXRP/ETH);
     ///        bits 225-230 = 2-bit hero quadrants for spins 0/1/2.
-    /// @param payout Total reward: WWXRP minted, FLIP (returned to the box caller and credited
+    /// @param payout Total reward: WWXRP requested (before WWXRP's gameMintScale), FLIP (returned to the box caller and credited
     ///        through coinflip at flush; only the record-bounty chain mints here), or the ETH
     ///        gross (= ethShare + the recirc).
     /// @param ethShare ETH credited to the player's claimable winnings (0 for WWXRP/FLIP). The

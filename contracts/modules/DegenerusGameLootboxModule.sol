@@ -149,7 +149,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        keeps coin, or only the overflow above the 12-high-pass cap when it denominated
     ///        into passes; 0 otherwise.
     /// @param dgnrs DGNRS paid by the roll.
-    /// @param wwxrp WWXRP minted: the 10% dud roll, or the pass side of the FLIP-valued branch
+    /// @param wwxrp WWXRP requested (before WWXRP's gameMintScale): the 10% dud roll, or the pass side of the FLIP-valued branch
     ///        when its fractional pass lost the round (no pass, no coin).
     /// @param closing True iff this was the 50-ETH-crossing closing box.
     /// @param normalPasses Normal Craps day passes credited by the pass side (0 otherwise).

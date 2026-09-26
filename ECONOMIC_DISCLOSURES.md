@@ -45,7 +45,12 @@ price tables and reward curves.
 - The vault owner (>50.1% of DGVE) can register any address as a WWXRP minter and burner
   (`WWXRP.setTrustedMinter`), with no cap on what a trusted address may mint or burn. A trusted
   address may also spend any player's WWXRP boon through `WWXRP.consumeBoon`, without that
-  player's approval. This is
+  player's approval. The vault owner also sets a whole-number multiplier, with no upper bound,
+  on every WWXRP mint the game contracts request (`WWXRP.setGameMintScale`, default 1x).
+  It applies when the mint happens, not when the prize is won: a WWXRP prize minted while the
+  multiplier is 0 mints nothing and is not paid later (anyone can trigger a BAF consolation
+  claim, so those are lost too), and an unclaimed award pays at whatever multiplier is set when
+  it is claimed. This is
   deliberate: WWXRP is the inflationary side coin, future games are meant to pay and take it, and
   the vault is its sovereign. Treat WWXRP's supply as fully at the vault owner's discretion.
 - The vault owner can mint **unlimited WWXRP for free** to any nonzero recipient through

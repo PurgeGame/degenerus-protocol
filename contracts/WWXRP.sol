@@ -25,7 +25,7 @@ pragma solidity 0.8.34;
  */
 
 /**
- * @title WWXRP (Wacky Waybetter XRP)
+ * @title WWXRP (Worthless Wrapped XRP)
  * @author Burnie Degenerus
  * @notice An ERC20 joke prize token with a daily burn draw.
  *
@@ -220,6 +220,10 @@ contract WWXRP {
     /// @param trusted True when the address may now mint and burn; false when revoked.
     event TrustedMinterSet(address indexed account, bool trusted);
 
+    /// @notice Emitted when the vault owner sets the game mint scale.
+    /// @param scale New whole-number multiplier on the requested amount (1 = 1x).
+    event GameMintScaleSet(uint256 scale);
+
     /// @notice Emitted when a skipped century BAF resolves its incinerator draw
     /// @param bracket Century bracket whose BAF skipped (level x00)
     /// @param winner Player recorded in the winning entry (paid game-side)
@@ -288,7 +292,7 @@ contract WWXRP {
       +======================================================================+*/
 
     /// @notice Token name (a parody; not affiliated with or backed by XRP)
-    string public constant name = "Wacky Waybetter XRP";
+    string public constant name = "Worthless Wrapped XRP";
 
     /// @notice Token symbol
     string public constant symbol = "WWXRP";
@@ -441,6 +445,12 @@ contract WWXRP {
     ///         pinned game contracts (future games). Appended after every prior slot.
     mapping(address => bool) public trustedMinter;
 
+    /// @notice Whole-number multiplier on every WWXRP mint the pinned game contracts request
+    ///         (Game and its modules, Coinflip, Jackpots): 1 = 1x, 0 = no game minting, no
+    ///         upper bound. Set by the vault owner. Trusted-minter apps, vault mints and this
+    ///         contract's own draw payouts are not scaled. Appended after every prior slot.
+    uint256 public gameMintScale = 1;
+
     constructor() {
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -546,22 +556,44 @@ contract WWXRP {
       +======================================================================+*/
 
     /// @notice Mint WWXRP to a recipient (for lootbox/game/consolation prizes)
-    /// @dev Callable by the pinned minters (game/coinflip/jackpots) or a trusted minter.
+    /// @dev Callable by the pinned minters (game/coinflip/jackpots) or a trusted minter. A
+    ///      pinned game mint is multiplied by gameMintScale, saturating at 2^256 - 1 (and then
+    ///      at the supply room in _mint), so the scaled path cannot revert on the amount; a
+    ///      trusted minter mints the exact amount.
     /// @param to Recipient of the minted WWXRP
-    /// @param amount Amount to mint (18 decimals)
+    /// @param amount Amount to mint (18 decimals), before the game mint scale
     /// @custom:reverts OnlyMinter When caller is not an authorized minter
     ///      A zero recipient mints nothing.
     function mintPrize(address to, uint256 amount) external {
         if (
-            msg.sender != MINTER_GAME &&
-            msg.sender != MINTER_COINFLIP &&
-            msg.sender != MINTER_JACKPOTS &&
-            !trustedMinter[msg.sender]
+            msg.sender == MINTER_GAME ||
+            msg.sender == MINTER_COINFLIP ||
+            msg.sender == MINTER_JACKPOTS
         ) {
+            uint256 scale = gameMintScale;
+            amount = scale != 0 && amount > type(uint256).max / scale
+                ? type(uint256).max
+                : amount * scale;
+        } else if (!trustedMinter[msg.sender]) {
             revert OnlyMinter();
         }
 
         _mint(to, amount);
+    }
+
+    /// @notice Set the scale applied to WWXRP the game prints (vault owner only).
+    /// @dev 1 = 1x (the deploy default), 0 stops game minting, no upper bound. Applies to mints
+    ///      requested by the Game and its modules, Coinflip and Jackpots; the game's own
+    ///      events keep reporting the unscaled amount, the Transfer shows what minted. The
+    ///      scale applies when the mint happens, not when the prize was won: a prize minted
+    ///      while it is 0 mints nothing and is never paid later, and an unclaimed award (such
+    ///      as a BAF consolation, claimable by anyone) pays at the scale set when it is claimed.
+    /// @param scale New whole-number multiplier on the requested amount.
+    /// @custom:reverts NotVaultOwner When the caller is not the vault owner.
+    function setGameMintScale(uint256 scale) external {
+        if (!vaultOwner.isVaultOwner(msg.sender)) revert NotVaultOwner();
+        gameMintScale = scale;
+        emit GameMintScaleSet(scale);
     }
 
     /// @notice Register or revoke a trusted minter/burner (vault owner only).
