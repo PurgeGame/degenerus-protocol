@@ -312,9 +312,9 @@ contract DegenerusGameDegeneretteModule is
     ///      word before it runs, so the crank's work stays a pure function of state. Sized for
     ///      the worst case so a call stays bounded: the ETH floor carries the one win box an ETH
     ///      bet can open, and an armed record adds its three-spin FLIP chain. A zeroed (already
-    ///      resolved) word costs one unit to skip. Measured sweep cost per bet: ~5k base,
-    ///      ~3.8k (ETH) / ~4.2k (FLIP) per spin, ~71k for a win box, and up to ~169k for a cold
-    ///      1-spin ETH bet whose spin scores 7+ (win box plus the sDGNRS award). Outcomes key on
+    ///      resolved) word costs one unit to skip. Measured sweep cost per bet (warm): ~6.5k base,
+    ///      ~2.5k per spin, ~57k for a win box, and up to ~169k for a cold 1-spin ETH bet whose
+    ///      spin scores 7+ (win box plus the sDGNRS award). Outcomes key on
     ///      (word, index, symbol, spin), not the owner, so every bet on one symbol at one index
     ///      hits together; the ETH floor prices that case, never an average.
     uint256 private constant BET_ENTRY_WEIGHT_ETH = 36;
@@ -323,13 +323,13 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant BET_SPIN_WEIGHT_FLIP = 1;
     uint256 private constant BET_RECORD_WEIGHT = 6;
 
-    /// @dev Work a resolved bet is CREDITED toward the keeper bounty, in gas, set at or below
-    ///      the measured cost of what actually ran (a box only when one opened). Summed per
-    ///      sweep call and floored to walk units, so a self-keeper is paid for real work only,
-    ///      never for the worst-case budget headroom.
-    uint256 private constant BET_WORK_BASE_GAS = 5_000;
-    uint256 private constant BET_WORK_SPIN_GAS = 3_500;
-    uint256 private constant BET_WORK_BOX_GAS = 65_000;
+    /// @dev Keeper-bounty CREDIT per resolved bet, in gas: one small flat amount (~0.3 walk unit)
+    ///      whatever the bet's spins or win box, and nothing for a zeroed slot, so settled bets add
+    ///      only a sliver to the bounty. Placing a bet costs ~100k gas, so placing bets to crank
+    ///      them yourself only pays below ~0.05 gwei, and then only dust (house edge ignored;
+    ///      pinned by KeeperFaucetResistance GAS-06). Summed per sweep call and floored to walk
+    ///      units; the budget still charges each bet its worst-case weight.
+    uint256 private constant BET_WORK_CREDIT_GAS = 1_500;
     uint256 private constant BET_WORK_UNIT_GAS = 4_700;
 
     // Common masks
@@ -468,7 +468,8 @@ contract DegenerusGameDegeneretteModule is
     /// @return resolved Bets resolved.
     /// @return newPos Position to resume from (the queue length once drained).
     /// @return unitsSpent Walk units charged against the budget (worst-case prices).
-    /// @return workUnits Walk units of work actually done, the keeper bounty's basis.
+    /// @return workUnits Walk units credited toward the keeper bounty: BET_WORK_CREDIT_GAS per
+    ///         resolved bet, floored; zeroed slots credit nothing.
     function sweepDegeneretteBets(
         uint48 index,
         uint256 pos,
@@ -484,14 +485,12 @@ contract DegenerusGameDegeneretteModule is
         uint256[] storage queue = degeneretteQueue[index];
         uint256 qlen = queue.length;
         ResolveAcc memory acc;
-        uint256 workGas;
         while (pos < qlen && unitsSpent < budget) {
             uint256 bet = queue[pos];
             if (bet == 0) {
                 unchecked {
                     ++pos;
                     ++unitsSpent;
-                    workGas += BET_WORK_UNIT_GAS;
                 }
                 continue;
             }
@@ -505,12 +504,12 @@ contract DegenerusGameDegeneretteModule is
                 unitsSpent += cost;
                 ++resolved;
             }
-            workGas += _resolveBet(bet, uint32(index), uint64(pos), rngWord, acc);
+            _resolveBet(bet, uint32(index), uint64(pos), rngWord, acc);
         }
         _flushOwner(acc);
         _flushPool(acc);
         newPos = pos;
-        workUnits = workGas / BET_WORK_UNIT_GAS;
+        workUnits = (resolved * BET_WORK_CREDIT_GAS) / BET_WORK_UNIT_GAS;
     }
 
     /// @dev Worst-case walk-unit budget price of one queued bet.
@@ -800,15 +799,13 @@ contract DegenerusGameDegeneretteModule is
     ///      accumulate into `acc` per owner (flushed by the caller or at the next owner);
     ///      lootbox-share is summed across this bet's spins and resolved ONCE here (one box
     ///      per bet). Every spin is recorded in the bet's single DegeneretteResolved event.
-    /// @return workGas The work this resolution actually ran, in gas (see BET_WORK_*): the
-    ///         sweep's bounty basis, a pure function of the bet word and the index word.
     function _resolveBet(
         uint256 bet,
         uint32 index,
         uint64 betId,
         uint256 rngWord,
         ResolveAcc memory acc
-    ) private returns (uint256 workGas) {
+    ) private {
         address player = address(uint160(bet));
         if (player != acc.owner) {
             _flushOwner(acc);
@@ -822,7 +819,6 @@ contract DegenerusGameDegeneretteModule is
             ((bet >> BET_STAKE_SHIFT) & MASK_64) *
                 (currency == CURRENCY_ETH ? ETH_STAKE_UNIT : FLIP_STAKE_UNIT)
         );
-        workGas = BET_WORK_BASE_GAS + uint256(spinCount) * BET_WORK_SPIN_GAS;
 
         BetTotals memory totals;
         // Five bytes per spin: player traits (big-endian), then score | gold << 4.
@@ -930,7 +926,6 @@ contract DegenerusGameDegeneretteModule is
         // betId (keccak'd with the index word) so each of a player's bets at the same index rolls
         // independently; the live lootbox-share is NOT a seed input. Never summed across betIds.
         if (totals.betLootboxShare > 0) {
-            workGas += BET_WORK_BOX_GAS;
             // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
             // so the per-box FLIP datum is recoverable.
             _resolveLootboxDirect(
@@ -969,7 +964,6 @@ contract DegenerusGameDegeneretteModule is
             uint256 key = (uint256(index) << 64) | betId;
             uint256 recordBounty = degeneretteRecordBounty[key];
             delete degeneretteRecordBounty[key];
-            workGas += BOX_FLIP_SPINS * BET_WORK_SPIN_GAS;
             _flipSpinChain(
                 player,
                 recordBounty * LR_FLIP_SCALE,
@@ -1219,17 +1213,24 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev Score and matched gold in one pass: hero symbol +2, other symbols +1,
     /// each matching color +1. Only gold-to-gold matches add the 25% payout boost.
+    /// Branch-free: a lane's symbol (bits 0-2) or color (bits 3-5) matches iff all three bits
+    /// of ~(player ^ result) are set there, so the match bits land on bit 0 / bit 3 of each
+    /// lane byte, and one multiply sums the four lane bytes into the top byte. Gold is color 7
+    /// (all three color bits set). A hero quadrant above 3 lands on no lane and adds nothing.
     function _score(uint32 playerTraits, uint32 resultTraits, uint8 heroQuadrant)
         internal pure returns (uint8 score, uint8 goldMatches)
     {
-        uint32 diff = playerTraits ^ resultTraits;
-        for (uint8 q; q < 4; ++q) {
-            uint8 d = uint8(diff >> (q * 8));
-            if ((d & 7) == 0) score += q == heroQuadrant ? 2 : 1;
-            if ((d & 0x38) == 0) {
-                ++score;
-                if (((playerTraits >> (q * 8)) & 0x38) == 0x38) ++goldMatches;
-            }
+        assembly ("memory-safe") {
+            let nd := not(xor(playerTraits, resultTraits))
+            let m := and(nd, and(shr(1, nd), shr(2, nd)))
+            let sm := and(m, 0x01010101)
+            let cm := and(m, 0x08080808)
+            let pg := and(and(playerTraits, and(shr(1, playerTraits), shr(2, playerTraits))), 0x08080808)
+            score := add(
+                add(shr(24, and(mul(sm, 0x01010101), 0xFF000000)), shr(27, and(mul(cm, 0x01010101), 0xF8000000))),
+                and(shr(mul(8, and(heroQuadrant, 0xff)), sm), 1)
+            )
+            goldMatches := shr(27, and(mul(and(cm, pg), 0x01010101), 0xF8000000))
         }
     }
 

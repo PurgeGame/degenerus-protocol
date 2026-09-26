@@ -203,18 +203,22 @@ library DegenerusTraitUtils {
     }
 
     /// @notice Four Degenerette traits with uniform symbols and colors, including gold.
-    /// @dev Each lane uses disjoint 3-bit slices; format [QQ][CCC][SSS] per byte.
-    function packedTraitsDegenerette(uint256 rand) internal pure returns (uint32) {
-        return uint32(_degTrait(uint64(rand)))
-            | (uint32(_degTrait(uint64(rand >> 64)) | 64) << 8)
-            | (uint32(_degTrait(uint64(rand >> 128)) | 128) << 16)
-            | (uint32(_degTrait(uint64(rand >> 192)) | 192) << 24);
-    }
-
-    function _degTrait(uint64 rnd) private pure returns (uint8) {
-        uint8 color = uint8(rnd) & 7;
-        uint8 symbol = uint8(rnd >> 32) & 7;
-        return (color << 3) | symbol;
+    /// @dev Each lane uses disjoint 3-bit slices; format [QQ][CCC][SSS] per byte. Lane q takes
+    ///      its color from bits [64q, 64q+2] and its symbol from bits [64q+32, 64q+34]; the
+    ///      constant 0xC0804000 is the four quadrant tags (bits 6-7 of each byte).
+    function packedTraitsDegenerette(uint256 rand) internal pure returns (uint32 t) {
+        assembly ("memory-safe") {
+            t := or(
+                or(
+                    or(shl(3, and(rand, 7)), and(shr(32, rand), 7)),
+                    or(shl(11, and(shr(64, rand), 7)), shl(8, and(shr(96, rand), 7)))
+                ),
+                or(
+                    or(shl(19, and(shr(128, rand), 7)), shl(16, and(shr(160, rand), 7))),
+                    or(or(shl(27, and(shr(192, rand), 7)), shl(24, and(shr(224, rand), 7))), 0xC0804000)
+                )
+            )
+        }
     }
 
     /*+======================================================================+

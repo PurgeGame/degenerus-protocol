@@ -2,12 +2,18 @@
 pragma solidity 0.8.34;
 
 import "forge-std/Test.sol";
+import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
 
 /// @title Degenerette v73 independent-color symbolic proofs (pillar hardening — Halmos track).
 /// @notice Proves for ALL 2^32 × 2^32 (player, reel) tickets and every hero quadrant the two
-///         load-bearing arithmetic facts the audit argued informally — mirroring the FROZEN
-///         `_score` (DegenerusGameDegeneretteModule.sol) exactly (same approach as
-///         SolvencyArithmetic.t.sol mirroring the storage packing):
+///         load-bearing arithmetic facts the audit argued informally — on a loop mirror of
+///         `_score` (DegenerusGameDegeneretteModule.sol), the form it had before the branch-free
+///         rewrite (same approach as SolvencyArithmetic.t.sol mirroring the storage packing).
+///         (0) binds the production `_score` to that mirror for every input, so (1) and (2) hold
+///         for the deployed code:
+///
+///         (0) PARITY — the production branch-free `_score` returns the mirror's score and
+///             matched-gold count for all 2^32 × 2^32 tickets and every hero byte.
 ///
 ///         (1) SCORE BOUND — `_score` is always in {0..9}. A score outside that range would index
 ///             the packed payout slot / S8 / S9 dispatch out of its calibrated domain (a solvency /
@@ -22,6 +28,36 @@ import "forge-std/Test.sol";
 ///
 /// @dev halmos --contract DegeneretteV73HalmosTest --solver-timeout-assertion 120000
 contract DegeneretteV73HalmosTest is Test {
+    DegeneretteMathHarness private h;
+
+    function setUp() public {
+        h = new DegeneretteMathHarness();
+    }
+
+    /// @dev Matched gold per the loop form: a quadrant whose colors match and whose player color is
+    ///      gold (7) counts once.
+    function _goldMatches(uint32 playerTicket, uint32 resultTicket) internal pure returns (uint8 g) {
+        for (uint8 q = 0; q < 4; ) {
+            uint8 pQuad = uint8(playerTicket >> (q * 8));
+            uint8 rQuad = uint8(resultTicket >> (q * 8));
+            if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7) && ((pQuad >> 3) & 7) == 7) {
+                unchecked {
+                    ++g;
+                }
+            }
+            unchecked {
+                ++q;
+            }
+        }
+    }
+
+    /// @notice (0) The production `_score` equals the loop mirror everywhere.
+    function check_production_score_matches_mirror(uint32 pt, uint32 rt, uint8 hero) public view {
+        (uint8 s, uint8 g) = h.score(pt, rt, hero);
+        assert(s == _score(pt, rt, hero));
+        assert(g == _goldMatches(pt, rt));
+    }
+
     /// @dev Exact mirror of the FROZEN independent-color `_score`: per quadrant a symbol match scores +1
     ///      (hero +2); the quadrant's color independently scores +1.
     function _score(uint32 playerTicket, uint32 resultTicket, uint8 heroQuadrant)

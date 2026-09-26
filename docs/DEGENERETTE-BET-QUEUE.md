@@ -105,22 +105,25 @@ the resolution:
 | Armed record | `BET_RECORD_WEIGHT` | +6 units |
 | Zeroed/skip slot | — | 1 unit |
 
-The keeper bounty, however, is credited only for the work the call actually
-ran (`workGas`, converted to units by `BET_WORK_UNIT_GAS`):
+The keeper bounty, however, credits each resolved bet only a small flat
+amount, whatever its spins or win box, and a zeroed (already resolved) slot
+nothing:
 
-| Work | Constant | Value |
+| Credit | Constant | Value |
 | --- | --- | --- |
-| Base per resolved bet | `BET_WORK_BASE_GAS` | 5,000 gas |
-| Per spin | `BET_WORK_SPIN_GAS` | 3,500 gas |
-| A win box opened | `BET_WORK_BOX_GAS` | +65,000 gas |
+| Per resolved bet | `BET_WORK_CREDIT_GAS` | 1,500 gas (~0.3 unit) |
 | Unit divisor (floor) | `BET_WORK_UNIT_GAS` | 4,700 gas/unit |
 
-Because the budget charge is worst-case and the bounty is actual-work, a
-self-keeping caller who resolves their own cheap bet earns less bounty than
-the budget it consumed — self-keeping is unprofitable by construction.
-Measured sweep cost per bet: ~9.1k gas for a 1-spin loss, ~68k for FLIP 15
-spins, ~100k for ETH 25 spins without a box, and ~80-86k for a 1-spin ETH win
-that opens a box.
+Bets are not a bounty farm: placing a bet costs ~100k gas, and one full knee
+step of the bounty takes ~47 resolved bets, so placing bets to crank them
+yourself only breaks even below ~0.05 gwei, house edge ignored, and then for
+dust. `KeeperFaucetResistance` (GAS-06) pins this for every cheap bet shape
+(1 to maximum spins, both currencies, a warm boon-draw ring) down to 0.1 gwei,
+after the keeper's largest refund. A work-priced credit (base + per spin + win
+box) was rejected because a 25-spin bet earned about five units for the same
+~100k placement, which paid below ~0.35 gwei.
+Measured sweep cost per bet (warm, same owner): ~9.1k gas for a 1-spin loss,
+~2.5-3k per extra spin, and ~57k more for a win box.
 
 ## Manual resolve API
 

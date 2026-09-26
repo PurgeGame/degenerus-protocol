@@ -8,8 +8,8 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 /// @title DegeneretteSweepGas -- measured sweep cost per queued bet.
 /// @notice Places N identical bets, lands the word, and measures one openBoxes sweep over
 ///         them. The per-bet marginal (N=11 minus N=1, over 10) calibrates the walk-unit price
-///         each bet is charged (worst case, bounds the call) and the work it is credited toward
-///         the keeper bounty (actual work, keeps self-keeping unprofitable).
+///         each bet is charged (worst case, bounds the call), and pins the keeper bounty's small
+///         flat per-bet credit far below every shape's cost.
 contract DegeneretteSweepGas is DeployProtocol {
     uint256 private constant LR_PACKED_SLOT = 33;
     uint256 private constant LR_WORD_SLOT = 34;
@@ -48,7 +48,7 @@ contract DegeneretteSweepGas is DeployProtocol {
 
     function _sweep(uint256 n, uint8 currency, uint128 perSpin, uint8 spins, uint256 word)
         private
-        returns (uint256 gasUsed)
+        returns (uint256 gasUsed, uint256 boxes)
     {
         for (uint256 i; i < n; ++i) {
             address who = _bettor(i);
@@ -66,7 +66,6 @@ contract DegeneretteSweepGas is DeployProtocol {
         gasUsed = g - gasleft();
         assertEq(opened, n, "every bet resolved");
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 boxes;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)")) ++boxes;
         }
@@ -97,18 +96,53 @@ contract DegeneretteSweepGas is DeployProtocol {
 
     function _marginal(string memory label, uint8 currency, uint128 perSpin, uint8 spins, uint256 word) private {
         uint256 snap = vm.snapshotState();
-        uint256 one = _sweep(1, currency, perSpin, spins, word);
+        (uint256 one,) = _sweep(1, currency, perSpin, spins, word);
         vm.revertToState(snap);
-        uint256 eleven = _sweep(11, currency, perSpin, spins, word);
+        (uint256 eleven,) = _sweep(11, currency, perSpin, spins, word);
         emit log_named_uint(string.concat("SWEEP_ONE ", label), one);
         emit log_named_uint(string.concat("SWEEP_PER_BET same-owner ", label), (eleven - one) / 10);
         vm.revertToState(snap);
         distinctOwners = true;
-        uint256 oneD = _sweep(1, currency, perSpin, spins, word);
+        (uint256 oneD,) = _sweep(1, currency, perSpin, spins, word);
         vm.revertToState(snap);
-        uint256 elevenD = _sweep(11, currency, perSpin, spins, word);
+        (uint256 elevenD,) = _sweep(11, currency, perSpin, spins, word);
         distinctOwners = false;
         emit log_named_uint(string.concat("SWEEP_PER_BET distinct-owner ", label), (elevenD - oneD) / 10);
+    }
+
+    // Mirror of DegenerusGameDegeneretteModule.BET_WORK_CREDIT_GAS (flat keeper credit per
+    // resolved bet). Re-sync here when it changes; the margin test below then re-proves it.
+    uint256 private constant CREDIT_GAS = 1_500;
+
+    /// @dev Credit vs the cheapest per-bet sweep cost of a shape: the warm, same-owner marginal,
+    ///      measured inside one test (every slot already warm), which understates a real sweep.
+    ///      A keeper's EIP-3529 refund can return at most a fifth of its gas, so its net cost is
+    ///      at least 0.8x that marginal; the credit must be at most half of that, 0.4x.
+    function _assertCreditMargin(string memory label, uint8 currency, uint128 perSpin, uint8 spins, uint256 word)
+        private
+    {
+        uint256 snap = vm.snapshotState();
+        (uint256 one,) = _sweep(1, currency, perSpin, spins, word);
+        vm.revertToState(snap);
+        (uint256 eleven,) = _sweep(11, currency, perSpin, spins, word);
+        vm.revertToState(snap);
+        uint256 cost = eleven - one; // the ten marginal bets
+        uint256 credit = 10 * CREDIT_GAS;
+        emit log_named_uint(string.concat("CREDIT_10 ", label), credit);
+        emit log_named_uint(string.concat("COST_10 ", label), cost);
+        assertLe(credit * 10, cost * 4, string.concat("credit above 0.4x cost: ", label));
+    }
+
+    /// @notice No bet shape is credited more than half its net cost to the sweep.
+    function testFlatCreditAtMostHalfTheNetCostOfEveryShape() public {
+        _assertCreditMargin("eth_1spin_lose", 0, 0.005 ether, 1, _losingWord());
+        _assertCreditMargin("eth_1spin_win_s5", 0, 0.005 ether, 1, _scoringWord(5));
+        _assertCreditMargin("eth_1spin_win_s7_box", 0, 1 ether, 1, _scoringWord(7));
+        _assertCreditMargin("eth_5spin", 0, 0.005 ether, 5, uint256(keccak256("sweep_gas_5")));
+        _assertCreditMargin("eth_25spin", 0, 0.005 ether, 25, uint256(keccak256("sweep_gas_25")));
+        _assertCreditMargin("flip_1spin_lose", 1, 100 ether, 1, _losingWord());
+        _assertCreditMargin("flip_1spin_win_s5", 1, 100 ether, 1, _scoringWord(5));
+        _assertCreditMargin("flip_15spin", 1, 100 ether, 15, uint256(keccak256("sweep_gas_15")));
     }
 
     function testGasEth1Losing() public {

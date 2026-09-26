@@ -1355,8 +1355,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        predicts the gas.
     /// @return opened Total boxes opened plus bets resolved this call.
     /// @return unitsSpent Walk units of work this call did — the crank's work-based bounty basis.
-    ///         Boxes count their walk weight; bets count the work they actually ran, below the
-    ///         worst-case price the budget charged them.
+    ///         Boxes count their walk weight; each resolved bet counts only a small flat credit
+    ///         (DegenerusGameDegeneretteModule.BET_WORK_CREDIT_GAS), far below the worst-case
+    ///         price the budget charged it, and a skipped zeroed bet counts nothing.
     ///         Crediting the knee per BOX would let one five-small order saturate it at a
     ///         fraction of the work five distinct entries represent.
     function openHumanBoxes(uint256 budget) external returns (uint256 opened, uint256 unitsSpent) {
@@ -1476,7 +1477,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 unchecked {
                     opened += resolved;
                     steps += betUnits;
-                    // Bets are budgeted at worst case but credited at the work they ran.
+                    // Bets are budgeted at worst case but credited a small flat amount each.
                     if (betUnits > betWork) uncredited += betUnits - betWork;
                 }
                 cur = qlen + betPos;

@@ -388,37 +388,54 @@ contract DegeneretteSweep is DeployProtocol {
         assertGe(coin.balanceOf(bob), before, "mintForGame never debits");
     }
 
-    function testMineFlipResolvesQueueAndPaysBoxBounty() public {
-        _placeMixedQueue();
-        _landWord(IDX, uint256(keccak256("keeper_word")));
-        // Anyone earns the bounty 30+ minutes into the day.
-        uint256 elapsed = (block.timestamp - 82620) % 1 days;
-        if (elapsed < 30 minutes) vm.warp(block.timestamp + 30 minutes - elapsed);
-        // Settle today's advance so the router takes its box-open leg: dailyIdx (slot 0,
-        // bits 24..47) = today and ticketsFullyProcessed (bit 192) set.
+    /// @dev Settle today's advance 30+ minutes into the day so mineFlip takes its box-open leg.
+    function _readyKeeperLeg() private {
+        uint256 elapsed = (vm.getBlockTimestamp() - 82620) % 1 days;
+        if (elapsed < 30 minutes) vm.warp(vm.getBlockTimestamp() + 30 minutes - elapsed);
+        // dailyIdx (slot 0, bits 24..47) = today and ticketsFullyProcessed (bit 192) set.
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));
         assertFalse(game.advanceDue(), "advance settled");
+    }
 
-        address keeper = makeAddr("sweepKeeper");
+    /// @dev Run mineFlip as `keeper`; return bets resolved and the box-open bounty paid.
+    function _crank(address keeper) private returns (uint256 resolved, uint256 bounty) {
         vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        uint256 resolved;
-        bool bountied;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == RESOLVED_SIG) ++resolved;
             if (logs[i].topics[0] == MINER_BOUNTY_SIG) {
-                (uint8 kind,) = abi.decode(logs[i].data, (uint8, uint256));
+                (uint8 kind, uint256 amount) = abi.decode(logs[i].data, (uint8, uint256));
                 assertEq(kind, 2, "box-open bounty kind");
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), keeper, "paid to the keeper");
-                bountied = true;
+                bounty += amount;
             }
         }
+    }
+
+    /// @notice A plain mineFlip resolves the whole queue. Each resolved bet credits only a small
+    ///         flat amount toward the bounty, so a short queue alone earns none: six bets credit
+    ///         6 x 1,500 gas, under one knee step (15 walk units of 4,700 gas).
+    function testMineFlipResolvesQueueWithOnlyTheFlatCredit() public {
+        _placeMixedQueue();
+        _landWord(IDX, uint256(keccak256("keeper_word")));
+        _readyKeeperLeg();
+        (uint256 resolved, uint256 bounty) = _crank(makeAddr("sweepKeeper"));
         assertEq(resolved, 6, "mineFlip resolved the whole queue");
-        assertTrue(bountied, "bet work earns the box bounty");
+        assertEq(bounty, 0, "six bets are under one knee step");
+    }
+
+    /// @notice A real backlog still pays the crank: 48 resolved bets credit 72,000 gas, just
+    ///         past one knee step, which earns a fifth of the bounty unit.
+    function testFlatCreditReachesOneKneeStepAtFortyEightBets() public {
+        for (uint256 i; i < 48; ++i) _place(i % 2 == 0 ? alice : bob, FLIP, 100 ether, 1);
+        _landWord(IDX, uint256(keccak256("keeper_word")));
+        _readyKeeperLeg();
+        (uint256 resolved, uint256 bounty) = _crank(makeAddr("sweepKeeper"));
+        assertEq(resolved, 48, "one crank resolved the backlog");
+        assertGt(bounty, 0, "a knee step of bet work earns the bounty");
     }
 }
