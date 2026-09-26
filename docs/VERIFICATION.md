@@ -112,7 +112,34 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-24, quadrant and early-bird whale passes
+## Current evidence — 2026-09-26, Degenerette bet queue, WWXRP game mint scale and gas levers
+
+Five commits on top of `9a36d3b2`:
+
+- `cf5a020d` Degenerette bets become one word each in `degeneretteQueue[index]` and settle in the
+  `mineFlip` / `openBoxes` human-box sweep; `degeneretteResolve` and the Vault resolve wrapper are
+  removed; one packed `DegeneretteResolved` event per bet.
+- `f6e2ad60` `WWXRP.setGameMintScale(uint256)`: the vault owner sets a whole-number multiplier
+  (default 1, no upper bound, saturating so a game mint cannot revert) on every WWXRP mint the pinned
+  game contracts request; one `uint256` is appended at WWXRP slot 9. The token is renamed
+  "Worthless Wrapped XRP".
+- `c30e421e` Straight-line reel unpack and branch-free `_score` (byte-identical: exhaustive lane
+  tests plus the halmos proof `check_production_score_matches_mirror`); each swept bet credits the
+  keeper a flat 1,500 gas.
+- `70d06e60` `WWXRP.enter` reads the entrant's WWXRP boon lane through `extsload` and skips the
+  consume dispatch for an empty lane.
+- `224de529` Protocol boon-draw pools and entries use two-slot rings keyed `day & 1` with a day tag.
+
+Each commit's tree was rebuilt from `9a36d3b2` by applying the commit patches in order and checked
+with the 11 gates, the storage-layout oracle and the suites it touches. At `224de529`: the 11
+gates and the storage-layout oracle pass; foundry 2,836 passed / 0 failed / 102 skipped over all
+seven compile groups; hardhat 1,641 passing / 22 pending; stat 160 passing / 20 pending; halmos
+`DegeneretteV73HalmosTest` 4/4. Gas against `9a36d3b2` (isolated transactions): a boon-draw ETH bet
+33.5k cheaper as a day's first entry on a warm ring and 16.6k on later entries; resolution 1.0k
+cheaper for a 1-spin bet and 28.6k for a 25-spin one; `WWXRP.enter` 5.0k cheaper without a boon
+(1.2k dearer with one).
+
+## Evidence — 2026-09-24, quadrant and early-bird whale passes
 
 The working-tree changes based on `3a9bbe9c` now include whole-pass conversion
 from up to 25% of each jackpot-phase ETH quadrant. The exact cost funds future,
@@ -227,7 +254,7 @@ changes on top of the reveal and incinerator revision below.
 
 `WWXRP.setTrustedMinter(address, bool)` lets the vault owner (more than 50.1% of DGVE) register
 or revoke any address as a WWXRP minter and burner alongside the pinned game contracts, with no
-cap, by design and as disclosed; one mapping is appended at WWXRP slot 9.
+cap, by design and as disclosed; one mapping is appended at WWXRP slot 8.
 
 The decimator's activity multiplier now covers a player's first 500,000 FLIP of base burn at a
 level (was: until 200,000 FLIP of multiplied weight), tracked in the free bits of the existing
