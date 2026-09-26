@@ -127,9 +127,11 @@ One commit on top of `36cc70c1`:
   unattended-gap clause now pin the new rule.
 
 At `e995dc55` (clean worktree): the 11 gates, `check-interfaces` and the storage-layout oracle pass;
-foundry integration-gas 763, repro-symbolic 260, fuzz-1 482 and fuzz-2 383 passed with 0 failed. The
-fuzz-3, fuzz-4 and invariants groups, hardhat and `test:stat` were still running at this re-pin and are
-recorded in the next update. Gas is unchanged on every probed path (mid-day and daily callbacks,
+foundry 2,956 passed / 0 failed / 102 skipped over all seven compile groups (integration-gas 763,
+repro-symbolic 260, fuzz-1 482, fuzz-2 383, fuzz-3 482, fuzz-4 451, invariants 135; the 23 new tests
+included); hardhat `npx hardhat test` 1,639 passing / 23 pending; `test:stat` 159 passing / 20
+pending. The previous section's 2,952 counted `GoldenTicketArmResolve` (19 tests) in both fuzz-1 and
+fuzz-2; counted once, that tree is 2,933. Gas is unchanged on every probed path (mid-day and daily callbacks,
 mid-day request, daily-request advance, backfill advance); `DegenerusGame` shrinks 94 B and
 `DegenerusGameAdvanceModule` 101 B (inherited predicate).
 
