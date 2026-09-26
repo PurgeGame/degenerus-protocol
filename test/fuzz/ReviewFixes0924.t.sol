@@ -65,10 +65,13 @@ contract RecoveredStallLivenessUnitTest is Test {
         assertFalse(h.liveness(), "a late word applied yesterday also waits");
     }
 
-    /// @notice The unattended gap still fires: the last word was applied two or more days ago.
-    function test_unattendedGapWordTwoDaysAgoIsTriggered() public {
+    /// @notice A gap behind dailyIdx waits for its credit whenever the last word was applied: the
+    ///         deadline fires only on a caught-up day.
+    function test_gapWaitsWhateverTheLastWord() public {
         h.seed(5, 33, 3, uint48(block.timestamp - 2 days));
-        assertTrue(h.liveness(), "an unattended gap earns no credit");
+        assertFalse(h.liveness(), "a gap is a stall of that length and waits for its credit");
+        h.seed(5, 33, 1, uint48(block.timestamp - 2 days));
+        assertTrue(h.liveness(), "control: caught up past the deadline fires");
     }
 }
 

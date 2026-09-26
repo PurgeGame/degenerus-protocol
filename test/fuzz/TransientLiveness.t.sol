@@ -64,9 +64,11 @@ contract TransientLivenessUnitTest is Test {
         assertFalse(h.liveness(), "a met target is rescued by the advance, so it must not trigger");
     }
 
-    function test_unattendedGapPastDeadlineStaysTriggered() public {
+    function test_gapPastDeadlineWaitsForItsCredit() public {
+        h.seed(5, 31, 0, 1);
+        assertTrue(h.liveness(), "control: a caught-up day past the deadline triggers");
         h.seed(5, 32, 0, 2);
-        assertTrue(h.liveness(), "an unattended day earns no deadline credit");
+        assertFalse(h.liveness(), "a gap behind dailyIdx is a stall of that length: it waits for its credit");
     }
 
     function test_stallStraddlingDeadlineStillWaits() public {
@@ -172,14 +174,19 @@ contract TransientLivenessIntegrationTest is DeployProtocol {
         assertFalse(game.livenessTriggered(), "and liveness stays false");
     }
 
-    /// @notice Window 2: nobody advances the first day past the deadline.
-    function test_unattendedDayPastDeadlineStaysFrozenAndEnds() public {
+    /// @notice Window 2: nobody advances the first day past the deadline. The skipped day is a gap
+    ///         like any other: it is credited, and the next caught-up day ends the level.
+    function test_skippedDayPastDeadlineIsCreditedThenEnds() public {
         _seed(31);
         assertTrue(game.livenessTriggered(), "control: the first day past the deadline is frozen");
-        vm.warp(block.timestamp + 1 days);
-        assertTrue(game.livenessTriggered(), "an unattended day does not thaw the freeze");
-        assertFalse(_buyBox(BUYER2, 1 ether), "purchases stay closed");
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertFalse(game.livenessTriggered(), "once skipped, the day is a gap that waits for its credit");
+        assertTrue(_buyBox(BUYER2, 1 ether), "purchases reopen during the gap");
+        _sealToday();
+        assertFalse(game.gameOver(), "the gap is credited and the day seals");
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(game.livenessTriggered(), "the next caught-up day past the deadline fires");
         for (uint256 i; i < 30 && !game.gameOver(); ++i) _advanceWithVrf();
-        assertTrue(game.gameOver(), "the next advance ends the level");
+        assertTrue(game.gameOver(), "and its advance ends the level");
     }
 }

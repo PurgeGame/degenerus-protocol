@@ -581,7 +581,8 @@ abstract contract DegenerusGameStorage {
     uint64 internal totalFlipReversals;
 
     /// @dev Timestamp of the last successfully processed VRF word.
-    ///      Used by governance to detect VRF stalls (time-based vs day-gap-based).
+    ///      Used by governance to detect VRF stalls (time-based vs day-gap-based); game
+    ///      liveness does not read it (a gap behind dailyIdx is itself the stall signal).
     ///      Initialized in wireVrf(), updated in _applyDailyRng(). Shares the slot
     ///      with totalFlipReversals.
     uint48 internal lastVrfProcessedTimestamp;
@@ -2620,17 +2621,23 @@ abstract contract DegenerusGameStorage {
     ///
     ///      Purchase deadline, purchase phase only: purchaseStartDay + 365 days at level 0
     ///      (deploy idle) or + 30 days after. Past it the trigger reads exactly what the
-    ///      advance's game-over path will decide, so it never reads true and then false again:
-    ///      it fires once the ending has started (the drain-level latch, which keeps it firing
-    ///      across the multi-tx drain), never while the next pool beats the level's target (the
-    ///      rescue _handleGameOverPath applies), never on a day that already holds its word,
-    ///      and otherwise at the start of a caught-up day (today == dailyIdx + 1) or across an
-    ///      unattended gap with no request in flight — an unattended day earns no deadline
-    ///      credit. While a VRF stall or a multi-day ticket backlog holds dailyIdx back with a
-    ///      request in flight, the deadline waits; when the game catches up, rngGate credits the
-    ///      skipped days to purchaseStartDay. So a stall that straddles the deadline has the whole VRF-dead
-    ///      window to recover, and a recovery inside it keeps the level alive with the stalled
-    ///      days not counted. A day that already holds its word is finished on it, even when
+    ///      advance's game-over path will decide: it fires once the ending has started (the
+    ///      drain-level latch, which keeps it firing across the multi-tx drain), never while the
+    ///      next pool beats the level's target (the rescue _handleGameOverPath applies), never on
+    ///      a day that already holds its word, and otherwise only at a caught-up day
+    ///      (today == dailyIdx + 1). A gap behind dailyIdx is a stall of that length — a VRF
+    ///      request that has not come back (daily or mid-day), a multi-day ticket backlog, or
+    ///      days nobody advanced — and it waits: the next advance requests the day's word, and
+    ///      rngGate's backfill credits the skipped days to purchaseStartDay when that word is
+    ///      applied. So a stall that opens on or before the deadline day and straddles it keeps
+    ///      the level alive with the stalled days not counted, however its word comes back, and
+    ///      needs no record of when it did. A gap that opens after the deadline is credited too,
+    ///      but the credit never outruns the clock (the deadline stays at or behind dailyIdx), so
+    ///      the next caught-up day still ends the level. The deadman and the VRF-dead window
+    ///      bound how long any gap can last. A caught-up day that nobody advances can
+    ///      therefore read true and then false once it has passed; the ending needs one advance
+    ///      on a caught-up day, which the keeper router's advance leg sends whenever an advance
+    ///      is due. A day that already holds its word is finished on it, even when
     ///      its own catch-up credit left the deadline behind it: the ending starts the next
     ///      day, before any word exists, so its terminal word is always requested after the
     ///      freeze and every cohort bought up to then is drawn.
@@ -2641,8 +2648,7 @@ abstract contract DegenerusGameStorage {
     ///
     ///      Normal-path cost: the deadman compare and the VRF-dead probe read slot 0 only (the
     ///      probe reads the request day's word solely once a request is a whole window old), and
-    ///      the latch, the pool target, today's word and the request time are read only past the
-    ///      deadline.
+    ///      the latch, the pool target and today's word are read only past the deadline.
     function _livenessTriggered() internal view returns (bool) {
         uint24 today = _simulatedDayIndex();
         uint24 idx = dailyIdx;
@@ -2666,13 +2672,9 @@ abstract contract DegenerusGameStorage {
         if (lvl != 0 && _getNextPrizePool() > _prizePoolTarget(lvl + 1)) return false;
         // A day that holds its word is finished on it.
         if (rngWordByDay[today] != 0) return false;
-        // A caught-up day, or an unattended gap: nothing in flight AND no word applied since before
-        // yesterday. A VRF stall has a request in flight; one that has just recovered has applied
-        // its late word (lastVrfProcessedTimestamp is today's or yesterday's) and finished only its
-        // own day, and waits for the next advance's backfill to credit the skipped days.
-        return today == idx + 1
-            || (rngRequestTime == 0
-                && (lastVrfProcessedTimestamp == 0 || _simulatedDayIndexAt(lastVrfProcessedTimestamp) + 1 < today));
+        // Only a caught-up day fires. A gap behind dailyIdx is a stall of that length and waits for
+        // the backfill the next daily word runs to credit it.
+        return today == idx + 1;
     }
 
     /// @dev Deadman: true once no day has sealed for _VRF_DEADMAN_DAYS. dailyIdx advances in

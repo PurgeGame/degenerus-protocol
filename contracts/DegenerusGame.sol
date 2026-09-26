@@ -2324,8 +2324,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev In every phase: a VRF request unanswered for 14 days (VRF dead: the deterministic
     ///      ending), or no day sealed for 30 days (the deadman). In the purchase phase also the
     ///      purchase deadline (365 days at level 0, 30 after), read at the start of a caught-up
-    ///      day, or an ending already under way. A stall across the deadline reads false until
-    ///      it recovers or VRF counts as dead, so a coordinator rotation can still rescue it.
+    ///      day, or an ending already under way. For the deadline cause, a gap behind the last
+    ///      sealed day (a stall across the deadline, however its word comes back) reads false
+    ///      until the next daily word's backfill credits it, so a coordinator rotation can still
+    ///      rescue a level whose stall began by its deadline day; the deadman and VRF-dead causes
+    ///      still fire in a gap.
     function livenessTriggered() external view returns (bool) {
         return _livenessTriggered();
     }
