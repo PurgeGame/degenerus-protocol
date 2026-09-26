@@ -6,7 +6,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 
 /// @title CoinDrawBattle
-/// @notice The purchase-day fill draw's craps battle: a closed field the game writes, played out
+/// @notice The daily fill draw's craps battle: a closed field the game writes, played out
 ///         and ranked in the call that draws it.
 /// @dev Holds no storage and has no owner. The game hands it the draw's wallets, the draw's FLIP
 ///      budget and the day's word; it plays every run in memory and returns what each wallet is
@@ -38,7 +38,9 @@ contract CoinDrawBattle is Craps {
     error OnlyGame();
 
     /// @notice One wallet's run.
-    /// @param level       The purchase level whose day drew the battle.
+    /// @param level       The highest minted level when the battle's day drew it (the purchase
+    ///                    level on a purchase day, level + 1 on a jackpot day); the field comes
+    ///                    from the unminted levels above it.
     /// @param player      The wallet.
     /// @param units       Times the draw picked it; what its run pays is multiplied by this.
     /// @param bankrollOut What the run stopped on, per unit, before any bust is voided.
@@ -54,7 +56,7 @@ contract CoinDrawBattle is Craps {
     );
 
     /// @notice The pot's winner.
-    /// @param level  The purchase level whose day drew the battle.
+    /// @param level  The highest minted level when the day drew it (see `CoinDrawBattleRun`).
     /// @param winner The paid run with the highest ending bankroll.
     /// @param pot    FLIP owed on top of its run.
     event CoinDrawBattlePot(uint24 indexed level, address indexed winner, uint256 pot);
@@ -88,7 +90,7 @@ contract CoinDrawBattle is Craps {
     uint256 private constant _MAX_CHIP = (type(uint24).max / _CHIPS / 6) * 6;
 
     /// @notice Play the battle and return what each wallet is owed.
-    /// @param level    The purchase level, carried onto the events.
+    /// @param level    The highest minted level when the day drew the battle, carried onto the events.
     /// @param entrants The draw's wallets in draw order; repeats are extra units.
     /// @param amount   The draw's whole FLIP budget, in wei: two thirds stakes, the rest the pot.
     /// @param word     The day's word.

@@ -450,8 +450,8 @@ abstract contract DegenerusGameStorage {
     bool public gameOver;
 
     /// @dev True when daily jackpot ETH phase completed but coin+tickets phase pending.
-    ///      Gas optimization: splits daily jackpot into multiple advanceGame calls to
-    ///      stay under the ~10M per-tx internal budget. Cleared after coin+ticket distribution.
+    ///      Splits the daily jackpot into multiple advanceGame calls so each stays under the
+    ///      per-tx gas cap. Cleared after the ticket distribution.
     bool internal dailyJackpotCoinTicketsPending;
 
     /// @dev Packed jackpot state: bit 0 selects turbo (one day instead of three);
@@ -482,9 +482,9 @@ abstract contract DegenerusGameStorage {
     ///
     ///      SECURITY: Held for one daily / transition lock window — set at the daily
     ///      request, cleared when _unlockRng seals that day (a final-jackpot chain
-    ///      keeps it through its carryover and far-future legs). Every jackpot
-    ///      payout inside a window reads pre-freeze pool values. _unfreezePool is
-    ///      the single control point.
+    ///      keeps it through the phase transition). Every jackpot payout inside a
+    ///      window reads pre-freeze pool values. _unfreezePool is the single control
+    ///      point.
     bool internal prizePoolFrozen;
 
     /// @dev Latching terminal for the coin-presale-box window. Set once, in the
@@ -587,15 +587,15 @@ abstract contract DegenerusGameStorage {
     uint48 internal lastVrfProcessedTimestamp;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
-    ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)]
-    ///              [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
-    ///              [earlyBirdEntries (64 bits @ 144)] [purchaseEntries (48 bits @ 208)]
+    ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)] [fillPending (1 bit @ 72)]
+    ///              [unused (71 bits @ 73)] [earlyBirdEntries (64 bits @ 144)]
+    ///              [purchaseEntries (48 bits @ 208)]
     ///      Jackpot phase: set by the ETH stage; on the early-bird day the early-bird stage
-    ///      consumes the earlyBird field and clears it; the coin+tickets stage consumes the
-    ///      first three and, when a carryover was priced, leaves the word for the carryover
-    ///      stage, which zeroes it. Purchase phase: the daily prices its ticket leg into the
-    ///      top field and the purchase ticket stage consumes and clears it. The two phases
-    ///      never hold fields at once, and every predicate masks its own field.
+    ///      consumes the earlyBird field and clears it; the fill stage clears fillPending; the
+    ///      coin+tickets stage consumes dailyEntries and zeroes the word. Purchase phase: the
+    ///      daily prices its ticket leg into the top field and the purchase ticket stage consumes
+    ///      and clears it. The two phases never hold fields at once, and every predicate masks
+    ///      its own field.
     uint256 internal dailyTicketBudgetsPacked;
 
     // =========================================================================
@@ -1001,19 +1001,22 @@ abstract contract DegenerusGameStorage {
         return false;
     }
 
-    /// @dev True while the carryover ticket leg of a jackpot-phase daily waits for its own
-    ///      advance stage: the coin+tickets stage cleared its latch and left Phase 1's budgets
-    ///      in dailyTicketBudgetsPacked. The day stays locked until that stage seals it.
-    function _carryoverLegPending() internal view returns (bool) {
-        return !dailyJackpotCoinTicketsPending && (dailyTicketBudgetsPacked & ((uint256(1) << 208) - 1)) != 0;
-    }
-
     /// @dev True while the early-bird ticket leg of a jackpot-phase day-1 daily waits for its
     ///      own advance stage: the ETH stage priced it into the top field of
     ///      dailyTicketBudgetsPacked. The coin+tickets stage is not reached until that stage
     ///      clears the field, so the day stays locked across all three.
     function _earlyBirdLegPending() internal view returns (bool) {
         return uint64(dailyTicketBudgetsPacked >> 144) != 0;
+    }
+
+    /// @dev The fill-pending bit of dailyTicketBudgetsPacked (see its layout).
+    uint256 internal constant _JACKPOT_FILL_PENDING = uint256(1) << 72;
+
+    /// @dev True while the fill draw of a jackpot-phase daily waits for its own advance stage:
+    ///      the ETH stage latched it, and the coin+tickets stage that seals the day is not
+    ///      reached until the fill stage clears it.
+    function _jackpotFillPending() internal view returns (bool) {
+        return (dailyTicketBudgetsPacked & _JACKPOT_FILL_PENDING) != 0;
     }
 
     /// @dev True while the ticket leg of a purchase-phase daily waits for its own advance
@@ -3802,21 +3805,20 @@ abstract contract DegenerusGameStorage {
     mapping(uint24 => mapping(address => uint256)) internal foilRecord;
 
     /// @dev Sparse double-claim marker, keyed by
-    ///      keccak256(abi.encode(player, level, day, drawKind, ticketIndex)).
+    ///      keccak256(abi.encode(player, level, day, ticketIndex)).
     ///      Set BEFORE any payout effect (CEI); a realized winning tuple is
     ///      claimable at most once per draw.
     mapping(bytes32 => bool) internal foilMatchClaimed;
 
-    /// @dev The two daily winning trait sets the jackpot sealed for a day, plus
-    ///      the cycle level active that day. Written once per day at the daily
-    ///      seal; the foil claim reads these (never re-derives), so the foil
-    ///      winning numbers equal the jackpot's. Presence (slot != 0) gates a
-    ///      claim; the level field is the implicit eligibility upper bound (a day
-    ///      maps to one cycle).
+    /// @dev The daily winning trait set the jackpot sealed for a day, plus the
+    ///      cycle level active that day. Written once per day at the daily seal;
+    ///      the foil claim reads it (never re-derives), so the foil winning numbers
+    ///      equal the jackpot's. Presence (slot != 0) gates a claim; the level
+    ///      field is the implicit eligibility upper bound (a day maps to one cycle).
     ///      Packed uint256 layout (LSB→MSB):
-    ///        [0-31]   mainSet  — the day's main winning set (uint32)
-    ///        [32-63]  bonusSet — the day's bonus winning set (uint32); zero on a purchase day, which rolls none
-    ///        [64-87]  level    — the active ticket level of that day (uint24)
+    ///        [0-31]   mainSet — the day's winning set (uint32)
+    ///        [32-63]  reserved 0
+    ///        [64-87]  level   — the active ticket level of that day (uint24)
     ///        [88-255] reserved 0
     mapping(uint24 => uint256) internal dailyFoilDraw;
 
@@ -3867,7 +3869,6 @@ abstract contract DegenerusGameStorage {
     uint256 private constant _FOIL_SCORE_MASK = (uint256(1) << 16) - 1;
 
     uint256 private constant _FOIL_DRAW_MAIN_MASK = (uint256(1) << 32) - 1;
-    uint256 private constant _FOIL_DRAW_BONUS_SHIFT = 32;
     uint256 private constant _FOIL_DRAW_LEVEL_SHIFT = 64;
     uint256 private constant _FOIL_DRAW_LEVEL_MASK = (uint256(1) << 24) - 1;
 
@@ -3877,7 +3878,7 @@ abstract contract DegenerusGameStorage {
     bytes32 internal constant FOIL_SEED_TAG = keccak256("foil-seed");
 
     /// @dev Claim-side entropy lanes off the retained daily word — distinct keccak
-    ///      domains from each other and from BONUS_TRAITS_TAG. FOIL_CCY_TAG rolls the
+    ///      domains from each other. FOIL_CCY_TAG rolls the
     ///      40/40/20 currency split; FOIL_SPIN_TAG seeds the Degenerette box-spin the
     ///      tier magnitude is staked into.
     bytes32 internal constant FOIL_CCY_TAG = keccak256("foil-currency");
@@ -3934,16 +3935,10 @@ abstract contract DegenerusGameStorage {
         return foilRecord[uint24(lvl)][player] != 0;
     }
 
-    /// @dev Pack a daily foil draw record (the two sealed winning sets + the cycle
-    ///      level) for storage in dailyFoilDraw.
-    function _packFoilDraw(uint32 mainSet, uint32 bonusSet, uint24 lvl)
-        internal
-        pure
-        returns (uint256)
-    {
-        return uint256(mainSet)
-            | (uint256(bonusSet) << _FOIL_DRAW_BONUS_SHIFT)
-            | (uint256(lvl) << _FOIL_DRAW_LEVEL_SHIFT);
+    /// @dev Pack a daily foil draw record (the sealed winning set and the cycle level)
+    ///      for storage in dailyFoilDraw.
+    function _packFoilDraw(uint32 mainSet, uint24 lvl) internal pure returns (uint256) {
+        return uint256(mainSet) | (uint256(lvl) << _FOIL_DRAW_LEVEL_SHIFT);
     }
 
     /// @dev Unpack the daily foil draw for a day (one SLOAD). present = (slot !=
@@ -3951,12 +3946,11 @@ abstract contract DegenerusGameStorage {
     function _foilDrawFor(uint256 day)
         internal
         view
-        returns (bool present, uint32 mainSet, uint32 bonusSet, uint24 lvl)
+        returns (bool present, uint32 mainSet, uint24 lvl)
     {
         uint256 packed = dailyFoilDraw[uint24(day)];
         present = packed != 0;
         mainSet = uint32(packed & _FOIL_DRAW_MAIN_MASK);
-        bonusSet = uint32((packed >> _FOIL_DRAW_BONUS_SHIFT) & _FOIL_DRAW_MAIN_MASK);
         lvl = uint24((packed >> _FOIL_DRAW_LEVEL_SHIFT) & _FOIL_DRAW_LEVEL_MASK);
     }
 

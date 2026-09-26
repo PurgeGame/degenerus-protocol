@@ -83,6 +83,10 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
     function poolsView() external view returns (uint128 nextBal, uint128 futBal) {
         (nextBal, futBal) = _getPrizePools();
     }
+
+    function foilDrawFor(uint256 day) external view returns (bool present, uint32 mainSet, uint24 lvl) {
+        return _foilDrawFor(day);
+    }
 }
 
 /// @dev Recorder etched at ContractAddresses.COINFLIP: captures creditFlip calls.
@@ -280,10 +284,21 @@ contract GoldenTicketArmResolve is Test {
     }
 
     function officialMainBoard(Vm.Log[] memory logs) internal pure returns (uint32 mainPacked) {
-        bytes32 topic = keccak256("DailyWinningTraits(uint24,uint32,uint32,uint24)");
+        bytes32 topic = keccak256("DailyWinningTraits(uint24,uint32)");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) {
-                (mainPacked, , ) = abi.decode(logs[i].data, (uint32, uint32, uint24));
+                mainPacked = abi.decode(logs[i].data, (uint32));
+            }
+        }
+    }
+
+    /// @dev The event's `day` topic, for tests that need it alongside the board.
+    function officialDay(Vm.Log[] memory logs) internal pure returns (uint24 day, bool found) {
+        bytes32 topic = keccak256("DailyWinningTraits(uint24,uint32)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == topic) {
+                day = uint24(uint256(logs[i].topics[1]));
+                found = true;
             }
         }
     }
@@ -488,12 +503,12 @@ contract GoldenTicketArmResolve is Test {
         assertEq(wwxrp, 0);
         assertEq(h.claimableOf(winner) - claimBefore, expEth, "only ETH leg hits claimable");
         (, uint128 futAfterRaw) = h.poolsView();
-        // The 0.5% carryover slice runs after the resolve debit in the same call.
-        uint256 futAfterResolve = uint256(futBefore) - expEth;
+        // The zeroed current pool prices the day's own ticket budget at zero, so the only
+        // move left on the future pool this call is the grand's own debit.
         assertEq(
             uint256(futAfterRaw),
-            futAfterResolve - futAfterResolve / 200,
-            "future pool: grand debit then daily carve"
+            uint256(futBefore) - expEth,
+            "future pool: only the grand resolve debit"
         );
     }
 
@@ -616,5 +631,34 @@ contract GoldenTicketArmResolve is Test {
         assertEq((g >> 190) & 1, 1, "prevBan preserved through chain arm");
         assertEq((g >> 191) & 3, oldQuadrant, "prevBan quadrant is the OLD quadrant");
         assertEq((g >> 193) & 0xFFFFFF, ARM_IDX + 1, "prevBan pinned to chain draw idx");
+    }
+
+    // -- daily winning traits event shape --------------------------------------
+
+    /// @dev DailyWinningTraits carries the day's one board: `day` indexed, one uint32
+    ///      data field equal to the set the foil claim reads back from dailyFoilDraw.
+    function testDailyWinningTraitsCarriesOneBoardMatchingTheFoilRecord() public {
+        uint256 word = wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D);
+        seedBoardBuckets(word, 0x1000);
+        vm.recordLogs();
+        h.payDailyJackpot(true, LVL, word);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 topic = keccak256("DailyWinningTraits(uint24,uint32)");
+        bool found;
+        uint24 day;
+        uint32 mainPacked;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != topic) continue;
+            found = true;
+            assertEq(logs[i].topics.length, 2, "day is the only indexed field");
+            day = uint24(uint256(logs[i].topics[1]));
+            assertEq(logs[i].data.length, 32, "exactly one uint32 data field");
+            mainPacked = abi.decode(logs[i].data, (uint32));
+        }
+        assertTrue(found, "DailyWinningTraits emitted with the (uint24,uint32) signature");
+        assertEq(day, ARM_IDX + 1, "day indexed as dailyIdx + 1");
+        (bool present, uint32 recordedMain, ) = h.foilDrawFor(day);
+        assertTrue(present, "the day's foil record was written");
+        assertEq(mainPacked, recordedMain, "the event's board equals the one recorded for foil claims");
     }
 }

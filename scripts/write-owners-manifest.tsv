@@ -31,11 +31,11 @@ HELPER	claimablePool	storage/DegenerusGameStorage.sol	_settleShortfall applies t
 OWNER	jackpotFlags	modules/DegenerusGameAdvanceModule.sol	advanceGame arms the turbo bit; _endPhase replaces it with the bonus-pending bit; rngGate consumes that bonus; sole writer
 OWNER	currentPrizePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots stores the settled current pool directly (single SSTORE batch); the jackpot/gameover modules go through _setCurrentPrizePool
 HELPER	currentPrizePool	storage/DegenerusGameStorage.sol	_setCurrentPrizePool narrows and stores; called by jackpot and gameover modules
-OWNER	dailyFoilDraw	modules/DegenerusGameJackpotModule.sol	payDailyJackpot/emitDailyWinningTraits persist the day's winning trait sets for foil claims; one write per sealed day
+OWNER	dailyFoilDraw	modules/DegenerusGameJackpotModule.sol	payDailyJackpot/emitDailyWinningTraits persist the day's winning board, its double flag and level for foil claims; one write per sealed day
 INIT	dailyIdx	DegenerusGame.sol	constructor seeds dailyIdx to the deploy day so gap detection starts there
 OWNER	dailyIdx	modules/DegenerusGameAdvanceModule.sol	_unlockRng seals the completed day (skipped at gameOver so the deadman's staleness survives); the crank is the sole runtime writer
 OWNER	dailyJackpotCoinTicketsPending	modules/DegenerusGameJackpotModule.sol	payDailyJackpot sets the phase-2 latch, payDailyJackpotCoinAndTickets clears it; both in the jackpot module
-OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets; payEarlyBirdTickets consumes and clears the day-1 early-bird field; payDailyJackpotCoinAndTickets consumes the rest and zeroes the word unless a carryover was priced, which payCarryoverTickets then consumes and zeroes; in the purchase phase payDailyJackpot(false) prices the ticket leg into the top field and payPurchaseDailyTickets consumes and clears it
+OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets; payEarlyBirdTickets consumes and clears the day-1 early-bird field; payJackpotFill clears the fill latch; payDailyJackpotCoinAndTickets consumes the daily field and zeroes the word; in the purchase phase payDailyJackpot(false) prices the ticket leg into the top field and payPurchaseDailyTickets consumes and clears it
 OWNER	decDayOneActive	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest clears on a fresh daily request and arms at the x4/x99 window open; sole writer
 OWNER	decWindowOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest opens at x4/x99 and closes at x5/x00 on the level-promoting request; sole writer
 OWNER	deadClaimed	modules/DegenerusGameGameOverModule.sol	claimDeadVrf marks a claimed ticket bit; sole writer, one-way per ticket, dead-VRF ending (LR_GO_DEAD latched, terminal)
@@ -63,7 +63,7 @@ OWNER	gameOver	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain latch
 HELPER	gameOverStatePacked	storage/DegenerusGameStorage.sol	_goWrite field mutator for the packed game-over state (time, jackpotPaid, swept)
 OWNER	goldenTicket	modules/DegenerusGameJackpotModule.sol	_armGoldenTicket packs winner/quadrant/symbol/day; _resolveGoldenTicket rewrites to the resolved form; both jackpot-module
 OWNER	jackpotCounter	modules/DegenerusGameAdvanceModule.sol	_endPhase zeroes the counter at level end; the jackpot module advances it (counterStep) per paid daily jackpot
-OWNER	jackpotCounter	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets advances by counterStep when it seals the day or ends the level, payCarryoverTickets when it seals a non-final daily; the advance module's _endPhase is the only reset
+OWNER	jackpotCounter	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets advances it by one in the tx that seals the day or ends the level; the advance module's _endPhase is the only reset
 OWNER	jackpotPhaseFlag	modules/DegenerusGameAdvanceModule.sol	advanceGame sets at the purchase->jackpot transition and clears at transition close; sole writer
 OWNER	lastPurchaseDay	modules/DegenerusGameAdvanceModule.sol	advanceGame arms (turbo/target-met) and clears at jackpot entry; sole writer
 OWNER	lastVrfProcessedTimestamp	modules/DegenerusGameAdvanceModule.sol	_applyDailyRng stamps the time the daily word was applied; runtime sole writer

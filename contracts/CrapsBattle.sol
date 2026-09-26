@@ -542,15 +542,10 @@ contract CrapsBattle is LootboxCraps {
     ///      3, 5, 6 and 7 are unreachable through the trusted writer and pay nothing if a value
     ///      ever reached storage another way, where a two-bit field would silently mean something.
     ///
-    ///      Bits 210..216 are unused. A day-wide entry is ONE slip — the whole day or a single
+    ///      Bits 209..216 are unused. A day-wide entry is ONE slip — the whole day or a single
     ///      window — so no slip carries a set to be locked as one, and nothing stamps a span.
     uint256 internal constant _BET_BOON_SHIFT = 206;
     uint256 internal constant _BET_BOON_MASK = 7;
-
-    /// @dev Bit 209: a window-ahead seat the GAME wrote for a coin draw's opener winner, rather
-    ///      than one the vault comped. Read only by the lapse sweep, which refunds the two
-    ///      differently: the winner takes the seat's price in FLIP, a comp's goes back to the lane.
-    uint256 internal constant _BET_GAME_SEAT_BIT = 1 << 209;
 
 
     /// @dev A seat took the high-roller lane. Stored as a FLAG rather than inferred from the
@@ -1228,8 +1223,8 @@ contract CrapsBattle is LootboxCraps {
     ///         reserved on it was refunded. Nobody else could have entered — a dead day's doors
     ///         were shut by the clock and the missing word the whole time. `seats` counts the day
     ///         tickets, each handed its pass credit back (its own `CrapsPassesCredited` precedes
-    ///         this); every window-ahead seat in the day's windows was refunded too — a coin
-    ///         draw's opener seat to its winner in FLIP, a comp's price back to the comp lane.
+    ///         this); every window-ahead seat in the day's windows was refunded too, its comp's
+    ///         price back to the comp lane.
     event CrapsDayLapsed(uint24 indexed day, uint64 seats);
 
     /// @notice Protocol money a winner's activity standing would not admit, banked in the
@@ -1833,8 +1828,8 @@ contract CrapsBattle is LootboxCraps {
     ///      restitution is IN KIND — a reservation was a claim on one future day seat, and a pass
     ///      credit is exactly that claim again. Then the window-ahead seats in the day's seven
     ///      windows, each window's own cursor carrying the walk (a window that never armed never
-    ///      settles). Each seat is refunded at its window-ahead price: a coin draw's opener seat
-    ///      to its winner in FLIP, a vault comp's back to the comp lane.
+    ///      settles). Each seat is a vault comp, refunded at its window-ahead price back to the
+    ///      comp lane.
     /// @param daySlot_    The day's separator slot (remainder zero), home to its refund cursor.
     /// @param day         The lapsed day being refunded.
     /// @param budgetUnits The charge budget metering how many seats this call refunds.
@@ -1870,9 +1865,7 @@ contract CrapsBattle is LootboxCraps {
                     if (s == daySlot_) {
                         _credit(who, high, 1);
                     } else {
-                        uint256 price = _windowAheadPrice(s - daySlot_ - 1, high);
-                        if (header & _BET_GAME_SEAT_BIT != 0) _creditFlip(who, price);
-                        else comps += price;
+                        comps += _windowAheadPrice(s - daySlot_ - 1, high);
                     }
                 }
                 _bonusCursor[s] = done;
@@ -1889,23 +1882,15 @@ contract CrapsBattle is LootboxCraps {
     ///         attempt, no external call, no way to revert past the saturation the credit lane
     ///         already announces. The lootbox module's LAST resort when the full delivery lane
     ///         fails: a pass the table has banked is a pass nobody can lose.
-    /// @dev REVERT-FREE for the authorized caller, and that is load-bearing: the jackpot's comp
-    ///      lane calls this bare from inside the daily advance, so a new revert path here is an
-    ///      advance-liveness regression, not a local style choice.
+    /// @dev REVERT-FREE for the authorized caller, and that is load-bearing: the advance's
+    ///      level-close sDGNRS passes call this bare from inside the daily advance, so a new
+    ///      revert path here is an advance-liveness regression, not a local style choice.
     /// @param player The account credited.
     /// @param normal Normal-lane passes to bank.
     /// @param high   High-lane passes to bank.
-    /// @return normalCredited What the normal lane actually banked after saturation — a caller
-    ///         pricing value off it never charges for a credit the ceiling refused. Only the
-    ///         normal lane reports: the one pricing caller sends normals alone, and the high
-    ///         lane's `CrapsPassesCredited` log already carries its actual count.
-    function creditPasses(address player, uint32 normal, uint32 high)
-        external
-        returns (uint32 normalCredited)
-    {
+    function creditPasses(address player, uint32 normal, uint32 high) external {
         if (msg.sender != _GAME) revert OnlyGame();
-        // `_credit` returns at most `_PASS_MAX`, so the cast is exact.
-        if (normal != 0) normalCredited = uint32(_credit(player, false, normal));
+        if (normal != 0) _credit(player, false, normal);
         if (high != 0) _credit(player, true, high);
     }
 
@@ -2528,9 +2513,9 @@ contract CrapsBattle is LootboxCraps {
     }
 
     /// @dev The caller's standing, clamped to the field the bet word carries. A seat the GAME
-    ///      writes — a coin draw's craps seat or a lootbox pass reserving tomorrow — carries the
-    ///      fixed `_AWARD_STANDING` instead of a read back into the Game: above the boost floor and
-    ///      most casual wallets, below a dedicated player. `amendSlip` re-reads the real one.
+    ///      writes — a lootbox pass reserving tomorrow — carries the fixed `_AWARD_STANDING`
+    ///      instead of a read back into the Game: above the boost floor and most casual wallets,
+    ///      below a dedicated player. `amendSlip` re-reads the real one.
     function _standingOf(address player) private view returns (uint256 standing) {
         if (msg.sender == _GAME) return _AWARD_STANDING;
         standing = IGameActivityScore(_GAME).playerActivityScore(player);
@@ -2763,7 +2748,7 @@ contract CrapsBattle is LootboxCraps {
             player,
             0,
             _standingOf(player),
-            (high ? _BET_HIGH_BIT : 0) | (msg.sender == _GAME ? _BET_GAME_SEAT_BIT : 0),
+            high ? _BET_HIGH_BIT : 0,
             0,
             0
         );
@@ -2876,8 +2861,7 @@ contract CrapsBattle is LootboxCraps {
     }
 
     /// @notice The vault's comp door: seat, reserve, upgrade or bank passes for `to`, charged to
-    ///         the FLIP comp lane at exactly the price the paid door would burn. VAULT, or the
-    ///         GAME seating a coin draw's opener winners a day ahead (kind 5, no burn).
+    ///         the FLIP comp lane at exactly the price the paid door would burn.
     /// @dev ONE door, one small tuple, no caller-supplied price and no caller-supplied target.
     ///      Every kind runs the SAME private path its paid twin runs — the same validation, seat
     ///      writer, counters and logs — with the recipient in the owner's place and the comp bit
@@ -2911,8 +2895,7 @@ contract CrapsBattle is LootboxCraps {
     /// @custom:reverts DayNotReservable If a reserved window's day is not strictly ahead.
     /// @custom:reverts AlreadyInBonus If the player already holds that window or that day.
     function vaultComp(uint256 code) external returns (uint256 charged) {
-        bool game = msg.sender == _GAME;
-        if (!game && msg.sender != ContractAddresses.VAULT) revert NotVaultOwner();
+        if (msg.sender != ContractAddresses.VAULT) revert NotVaultOwner();
         address to = address(uint160(code));
         uint256 kind = (code >> _COMP_KIND_SHIFT) & 0xFF;
         bool high = code & _COMP_HIGH_BIT != 0;
@@ -2939,10 +2922,7 @@ contract CrapsBattle is LootboxCraps {
         } else if (kind == _COMP_WINDOW_AHEAD) {
             uint256 period = (code >> _COMP_PERIOD_SHIFT) & 0xFF;
             charged = uint256(count) * _windowAheadPrice(period, high);
-            // The GAME seats a coin draw's opener winners here and burns nothing: the draw mints
-            // that much less FLIP instead. It vets every winner first (no claim on the day, not a
-            // protocol body), so the reservation below cannot revert on its daily advance.
-            if (!game) _burnForCraps(to, _tag(charged, _CRAPS_FLAG_COMP));
+            _burnForCraps(to, _tag(charged, _CRAPS_FLAG_COMP));
             unchecked {
                 // A day past the width wraps to one long gone, which the reservation refuses.
                 for (uint256 i = 0; i < count; ++i) {

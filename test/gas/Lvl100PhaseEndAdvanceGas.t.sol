@@ -6,23 +6,21 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
-import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title Lvl100PhaseEndAdvanceGas — the per-tx gas ceiling of the x00 level boundary.
-/// @notice A level boundary is a CHAIN of advance txs, not one tx. Two of them are measured here:
+/// @notice A level boundary is a CHAIN of advance txs, not one tx. Three of them are measured here:
 ///
+///           STAGE_JACKPOT_FILL (16)       — payJackpotFill, the full 50-entrant fill battle
+///             alone, from its own stage ahead of the day that ends the phase;
 ///           STAGE_JACKPOT_PHASE_ENDED (9) — payDailyJackpotCoinAndTickets + _endPhase, at its
-///             winner caps (96 main-board tickets, 25 Craps seats, 25 coin shares), followed by
-///           STAGE_JACKPOT_CARRYOVER_TICKETS (13) — the carryover leg (100 more ticket winners)
-///             the phase-end stage priced, paid as the first stage of the very next advance so
-///             the two ticket legs never share one tx.
+///             ticket-board winner cap (96 main-board tickets) and no battle work of its own, then
 ///           STAGE_TRANSITION_DONE (3)     — the tx that reopens the purchase phase and hosts
 ///             `coinflip.armCenturySeed`. Reached only once the far-future batch reports no work,
 ///             so the century arm can never stack on a chunked stage.
 ///
-///         Both drive the REAL production advanceGame() bytecode: the overlay below writes the
-///         pre-state, then the real code is etched back before the measured call.
+///         All three drive the REAL production advanceGame() bytecode: the overlay below writes
+///         the pre-state, then the real code is etched back before the measured call.
 /// @dev TEST-INFRA ONLY. No contracts/*.sol is mutated. Seeding happens in setUp() — a SEPARATE
 ///      transaction from the measured body — so the measured call starts on a cold EIP-2929 access
 ///      list, as a real keeper tx would. Seeding inline understates the phase-end tx by ~565k.
@@ -30,14 +28,12 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
     /// @notice The level-100 jackpot-phase-END pre-state, at every winner cap the leg can reach.
     /// @param lvl         the x00 level whose jackpot phase is closing
     /// @param word        the day's recorded VRF word (non-zero -> rngGate returns it immediately)
-    /// @param mainTraits  the 4 traits the main ticket board draws, mirrored from the live roll
-    /// @param bonusTraits the 4 traits the carryover board and the coin legs draw
+    /// @param mainTraits  the 4 traits the ticket board draws, mirrored from the live roll
     /// @param base        disjoint address-space base for synthetic holders
     function seedPhaseEnd(
         uint24 lvl,
         uint256 word,
         uint8[4] calldata mainTraits,
-        uint8[4] calldata bonusTraits,
         uint160 base
     ) external {
         uint24 day = _simulatedDayIndex();
@@ -51,41 +47,34 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         rngWordByDay[day] = word;
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
-        // _packDailyTicketBudgets(dailyEntries=4000, carryoverEntries=4000, offset=0).
-        // 4000 entries = 1000 whole tickets, so both ticket legs saturate the 96-winner cap.
-        dailyTicketBudgetsPacked =
-            uint256(1) |
-            (uint256(4000) << 8) |
-            (uint256(4000) << 72);
+        // dailyEntries = 4000 (bits 8..71): 1000 whole tickets, so the ticket leg saturates the
+        // 96-winner cap. The fill-pending bit (72) is NOT set here: this is the state Phase 1
+        // leaves once the fill stage has already cleared its own latch, so the coin+tickets stage
+        // this seeds runs the ticket leg alone. `armFillPending` below arms it back for a
+        // fill-stage-only measurement.
+        dailyTicketBudgetsPacked = uint256(4000) << 8;
 
-        // Ticket-board buckets: both legs draw from lvlTraitEntry[lvl] (carryover offset 0).
+        // Ticket-board buckets at lvl.
         for (uint8 q; q < 4; ++q) {
             _fill(lvl, mainTraits[q], 130, base + uint160(q) * 0x40000);
-            _fill(
-                lvl,
-                bonusTraits[q],
-                130,
-                base + 0x800000 + uint160(q) * 0x40000
-            );
         }
 
-        // Jackpot-phase coin pulls sample the minted lvl+1 board on bonus traits.
-        for (uint24 L = lvl + 1; L <= lvl + 1; ++L) {
-            for (uint8 q; q < 4; ++q) {
-                _fill(
-                    L,
-                    bonusTraits[q],
-                    60,
-                    base +
-                        0x4000000 +
-                        uint160(L - lvl) *
-                        0x100000 +
-                        uint160(q) *
-                        0x20000
-                );
+        // The fill draw's far-future queues: levels lvl+2..lvl+100, distinct fresh wallets only.
+        // Unused by the coin+tickets stage (it runs no battle work); read only when a test arms
+        // the fill-pending bit and measures STAGE_JACKPOT_FILL instead.
+        for (uint24 c = lvl + 2; c <= lvl + 100; ++c) {
+            uint160 b = base + 0x4000000 + uint160(c - lvl - 2) * 0x1000;
+            for (uint256 i; i < 8; ++i) {
+                _tqAppend(_tqFarFutureKey(c), uint32(_registerEntryOwner(address(b + uint160(i + 1)), c) >> OWNER_IDX_SHIFT));
             }
         }
+    }
 
+    /// @notice Latches the fill draw (mirrors what Phase 1 leaves on a day with a nonzero FLIP
+    ///         budget), so the next advanceGame() runs STAGE_JACKPOT_FILL instead of falling
+    ///         straight to the ticket-only coin+tickets stage `seedPhaseEnd` otherwise reaches.
+    function armFillPending() external {
+        dailyTicketBudgetsPacked |= _JACKPOT_FILL_PENDING;
     }
 
     /// @notice The transition-close pre-state: _endPhase already ran, the far-future queue is empty,
@@ -126,8 +115,8 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         rngRequestTime = uint48(block.timestamp);
 
         levelPrizePool[lvl] = 1000 ether; // _endPhase record-pool fund (non-zero)
-        // 100,000 ETH at x00's 0.24 ETH price gives ~1.04M FLIP: 25 seats, 22 of them
-        // upgraded to whole days, and the other 25 receive coin shares.
+        // 100,000 ETH at x00's 0.24 ETH price gives ~1.04M FLIP, far above the ~22,500 FLIP the
+        // fill draw's battle needs to saturate all 50 walked wallets.
         levelPrizePool[lvl - 1] = 100_000 ether;
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = uint128(200 ether);
@@ -148,17 +137,14 @@ abstract contract BoundaryGasFixture is DeployProtocol {
         keccak256(
             "JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)"
         );
-    bytes32 internal constant FLIP_WIN_SIG =
-        keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
     bytes32 internal constant BATTLE_RUN_SIG =
         keccak256("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
-    bytes32 internal constant CRAPS_WIN_SIG = keccak256("CoinDrawCrapsWin(address,uint24,bool,bool)");
     bytes32 internal constant SEED_ARMED_SIG =
         keccak256("SeedWindowArmed(uint24,uint24,uint24,uint256)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
 
     uint8 internal constant STAGE_JACKPOT_PHASE_ENDED = 9;
-    uint8 internal constant STAGE_JACKPOT_CARRYOVER_TICKETS = 13;
+    uint8 internal constant STAGE_JACKPOT_FILL = 16;
     uint8 internal lastStage;
 
     uint24 internal constant LVL = 100;
@@ -192,9 +178,8 @@ abstract contract BoundaryGasFixture is DeployProtocol {
         returns (
             uint256 used,
             uint256 ticketWins,
-            uint256 flipWins,
             uint256 battleRuns,
-            uint256 crapsWins,
+            uint256 battleDistinct,
             bool seedArmed
         )
     {
@@ -204,34 +189,42 @@ abstract contract BoundaryGasFixture is DeployProtocol {
         used = g0 - gasleft();
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        address[] memory bw = new address[](64);
         for (uint256 i; i < logs.length; ++i) {
             bytes32 t0 = logs[i].topics[0];
             if (t0 == TICKET_WIN_SIG) ++ticketWins;
-            else if (t0 == FLIP_WIN_SIG) ++flipWins;
-            else if (t0 == BATTLE_RUN_SIG) ++battleRuns;
-            else if (t0 == CRAPS_WIN_SIG) ++crapsWins;
-            else if (t0 == SEED_ARMED_SIG) seedArmed = true;
+            else if (t0 == BATTLE_RUN_SIG) {
+                address w = address(uint160(uint256(logs[i].topics[2])));
+                bool fresh = true;
+                for (uint256 j; j < battleRuns; ++j) {
+                    if (bw[j] == w) {
+                        fresh = false;
+                        break;
+                    }
+                }
+                if (fresh) ++battleDistinct;
+                if (battleRuns < bw.length) bw[battleRuns] = w;
+                ++battleRuns;
+            } else if (t0 == SEED_ARMED_SIG) seedArmed = true;
             else if (t0 == ADVANCE_SIG) (lastStage, ) = abi.decode(logs[i].data, (uint8, uint24));
         }
         emit log_named_uint("headroom_to_16p7M", EIP7825_TX_GAS_CAP - used);
     }
 }
 
-/// @notice STAGE_JACKPOT_PHASE_ENDED then STAGE_JACKPOT_CARRYOVER_TICKETS — the two halves of the
-///         x00 phase-end daily, each at every winner cap it can reach.
+/// @notice STAGE_JACKPOT_PHASE_ENDED — the x00 phase-end daily's ticket leg at its winner cap,
+///         with no battle work of its own (the fill stage owns that, from its own earlier tx —
+///         see Lvl100PhaseEndFillStageGas below, which measures it from this same seeded shape).
 contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
     function setUp() public {
         _deployProtocol();
 
         uint256 word = uint256(keccak256("lvl100-phase-end")) | 1;
         uint8[4] memory mainT = JackpotBucketLib.getRandomTraits(word);
-        uint8[4] memory bonusT = JackpotBucketLib.getRandomTraits(
-            EntropyLib.hash2(word, uint256(keccak256("BONUS_TRAITS")))
-        );
 
         bytes memory realCode = address(game).code;
         PhaseEndSeeder seeder = _etchSeedRestore();
-        seeder.seedPhaseEnd(LVL, word, mainT, bonusT, uint160(0x1000000000));
+        seeder.seedPhaseEnd(LVL, word, mainT, uint160(0x1000000000));
         _restore(realCode);
     }
 
@@ -239,35 +232,65 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
         (
             uint256 used,
             uint256 ticketWins,
-            uint256 flipWins,
             uint256 battleRuns,
-            uint256 crapsWins,
+            uint256 battleDistinct,
             bool seedArmed
         ) = _measure();
 
         emit log_named_uint("LVL100_PHASE_END_ADVANCE_GAS", used);
 
-        // Non-vacuity: the composition MUST have run at its winner caps, or the ceiling is not one.
+        // Non-vacuity: the composition MUST have run at its winner cap, or the ceiling is not one.
         assertEq(lastStage, STAGE_JACKPOT_PHASE_ENDED, "the phase-end stage ran");
         assertEq(ticketWins, 96, "the main-board ticket leg paid the full 96-winner cap");
-        assertEq(flipWins, 25, "the coin leg paid the full 25-share cap");
-        assertEq(crapsWins, 25, "the Craps leg drew all 25 seats");
-        assertEq(battleRuns, 0, "jackpot phase has no future fill");
+        assertEq(battleRuns, 0, "the phase-end coin+tickets stage runs no battle work: the fill stage owns it");
+        assertEq(battleDistinct, 0);
         // The century arm rides the transition close, not this tx — it must not fuse back onto the
         // binding stage.
         assertFalse(seedArmed, "the century arm does NOT ride the binding phase-end tx");
         assertLt(used, EIP7825_TX_GAS_CAP, "the phase-end advance tx clears EIP-7825");
-
-        // The carryover leg is the whole of the next advance: 100 more ticket winners, nothing else.
-        (used, ticketWins, flipWins, battleRuns, crapsWins, seedArmed) = _measure();
-        emit log_named_uint("LVL100_CARRYOVER_LEG_ADVANCE_GAS", used);
-        assertEq(lastStage, STAGE_JACKPOT_CARRYOVER_TICKETS, "the carryover leg ran as the next stage");
-        assertEq(ticketWins, 96, "the carryover ticket leg paid the full 96-winner cap");
-        assertEq(flipWins + battleRuns + crapsWins, 0, "no coin leg rides the carryover stage");
-        assertFalse(seedArmed, "the century arm does NOT ride the carryover stage");
-        assertLt(used, EIP7825_TX_GAS_CAP, "the carryover advance tx clears EIP-7825");
         (, bool jackpotPhase_, , , ) = game.purchaseInfo();
-        assertTrue(jackpotPhase_, "the transition is still ahead: the leg ran before it");
+        assertTrue(jackpotPhase_, "the transition is still ahead: the close runs from its own stage");
+    }
+}
+
+/// @notice STAGE_JACKPOT_FILL — the x00 phase-end daily's fill battle alone, from its own tx
+///         ahead of the coin+tickets stage that ends the phase. Reuses the exact shape
+///         Lvl100PhaseEndAdvanceGas measures (same far-future queues, same ticket-board buckets),
+///         with only the fill-pending bit re-armed, so the two txs are directly comparable halves
+///         of the same worst-case phase-end daily.
+contract Lvl100PhaseEndFillStageGas is BoundaryGasFixture {
+    function setUp() public {
+        _deployProtocol();
+
+        uint256 word = uint256(keccak256("lvl100-phase-end")) | 1;
+        uint8[4] memory mainT = JackpotBucketLib.getRandomTraits(word);
+
+        bytes memory realCode = address(game).code;
+        PhaseEndSeeder seeder = _etchSeedRestore();
+        seeder.seedPhaseEnd(LVL, word, mainT, uint160(0x1000000000));
+        seeder.armFillPending();
+        _restore(realCode);
+    }
+
+    function test_Lvl100PhaseEndFillStage_MaxGas() public {
+        (
+            uint256 used,
+            uint256 ticketWins,
+            uint256 battleRuns,
+            uint256 battleDistinct,
+
+        ) = _measure();
+
+        emit log_named_uint("LVL100_PHASE_END_FILL_STAGE_GAS", used);
+
+        // Non-vacuity: the composition MUST have run at its winner cap, or the ceiling is not one.
+        assertEq(lastStage, STAGE_JACKPOT_FILL, "the fill stage ran");
+        assertEq(ticketWins, 0, "the fill stage touches no ticket-board state");
+        assertEq(battleRuns, 50, "the fill's battle ran fewer than 50 entrants");
+        assertEq(battleDistinct, 50, "every battle run is a distinct cold wallet");
+        assertLt(used, EIP7825_TX_GAS_CAP, "the fill-stage advance tx clears EIP-7825");
+        (, bool jackpotPhase_, , , ) = game.purchaseInfo();
+        assertTrue(jackpotPhase_, "the coin+tickets stage that ends the phase is still ahead");
     }
 }
 
@@ -286,7 +309,7 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
     }
 
     function test_TransitionDoneAdvance_WithCenturyArm() public {
-        (uint256 used, , , , , bool seedArmed) = _measure();
+        (uint256 used, , , , bool seedArmed) = _measure();
 
         emit log_named_uint("LVL100_TRANSITION_DONE_ADVANCE_GAS", used);
         emit log_named_uint(

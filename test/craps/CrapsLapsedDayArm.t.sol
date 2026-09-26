@@ -252,18 +252,18 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         assertTrue(coinflip.totalCredited() != 0, "nobody was paid at settlement");
     }
 
-    /// @dev A coin draw's opener winner, seated by the GAME on tomorrow's opener, loses that seat
-    ///      when tomorrow lapses. The sweep pays the winner the seat's price in FLIP (the opener's
-    ///      expected cost, the same figure a comp of it is charged) and leaves the comp lane alone.
-    function test_lapsedCoinDrawSeatPaysItsWinnerInFlip() public {
+    /// @dev A window-ahead opener seat is a vault comp, whichever period it seats: when tomorrow
+    ///      lapses the sweep refunds it to the comp lane at its price — never FLIP credited
+    ///      straight to the seat's winner.
+    function test_lapsedWindowAheadOpenerRefundsToTheCompLane() public {
         uint24 dayG = craps.currentDayIndex() + 1;
         uint64 slot = _slotAt(dayG, 0);
         uint64 daySlotG = uint64(uint256(dayG) * craps.BONUS_SLOTS_PER_DAY());
 
-        vm.prank(ContractAddresses.GAME);
+        vm.prank(ContractAddresses.VAULT);
         craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, dayG, 1));
         (uint256 reserved,) = craps.windowReservedOf(slot);
-        assertEq(reserved, 1, "the coin draw did not seat its winner");
+        assertEq(reserved, 1, "the comp did not seat its winner");
 
         _lapse(dayG);
         uint256 laneBefore = flip.compLane();
@@ -272,8 +272,8 @@ contract CrapsLapsedDayArmTest is CrapsPins {
             craps.keepScheduled(type(uint64).max);
         }
         assertGe(craps.keeperSlot(), daySlotG + 8, "the keeper did not cross G");
-        assertEq(coinflip.staked(dave) - daveBefore, OPENER_SEAT_VALUE, "the winner was not paid the seat's value");
-        assertEq(flip.compLane(), laneBefore, "a coin-draw seat was refunded to the comp lane");
+        assertEq(coinflip.staked(dave), daveBefore, "the seat's winner was credited FLIP directly");
+        assertEq(flip.compLane() - laneBefore, OPENER_SEAT_VALUE, "the lapsed seat was not refunded to the comp lane");
         assertEq(craps.bonusCursorOf(slot), 1, "the window cursor did not walk the seat");
     }
 

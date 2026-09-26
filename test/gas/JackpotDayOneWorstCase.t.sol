@@ -8,7 +8,6 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
-import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title JackpotDayOneWorstCase — the per-tx gas ceiling of the jackpot-phase DAY-1 daily.
@@ -21,8 +20,8 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///           - STAGE_JACKPOT_EARLY_BIRD_TICKETS (14): `payEarlyBirdTickets` at the
 ///             EARLY_BIRD_MAX_WINNERS = 128 cap (32 per bonus quadrant of lvl+1, once the 3%
 ///             covers 128 tickets at priceForLevel(lvl+1)).
-///         The other two 96-winner ticket legs of the same daily likewise run from their own stages
-///         (payDailyJackpotCoinAndTickets, payCarryoverTickets). This suite measures BOTH txs on the
+///         The daily's other 96-winner ticket leg likewise runs from its own stage
+///         (payDailyJackpotCoinAndTickets, alongside the fill draw). This suite measures BOTH txs on the
 ///         REAL advanceGame bytecode at every cap, with every winner a distinct address holding no
 ///         claimable / no queued entries (cold SSTOREs), on the worst ETH-leg branch (all-gold board
 ///         -> golden-ticket arm on the solo ETH winner + four fresh whale-pass draws) with an armed golden
@@ -40,17 +39,16 @@ contract DayOneSeeder is DegenerusGame, BucketSeed {
     /// @notice The day-1 (early-bird) jackpot-phase pre-state, at every cap the stage can reach.
     /// @param lvl         the level whose jackpot phase is on day 1
     /// @param word        the day's recorded VRF word (non-zero -> rngGate returns it immediately)
-    /// @param mainTraits  the 4 traits the main board draws (ETH leg, sampled from lvlTraitEntry[lvl])
-    /// @param bonusTraits the 4 traits the bonus board draws (early-bird leg, sampled from lvlTraitEntry[lvl+1])
+    /// @param mainTraits  the 4 traits the day's one board draws (ETH leg at lvl, early-bird leg
+    ///                    at lvl+1 — both read the same board)
     /// @param base        disjoint address-space base for synthetic holders
-    /// @param ethHolders  distinct holders per main-board bucket (0 disables the ETH draw's buckets)
-    /// @param ebHolders   distinct holders per bonus-board bucket (0 leaves the early-bird draw with no bucket)
+    /// @param ethHolders  distinct holders per board bucket at lvl (0 disables the ETH draw's buckets)
+    /// @param ebHolders   distinct holders per board bucket at lvl+1 (0 leaves the early-bird draw with no bucket)
     /// @param armGolden   arm a golden ticket on quadrant 0 with the board's symbol so it resolves this draw
     function seedDayOne(
         uint24 lvl,
         uint256 word,
         uint8[4] calldata mainTraits,
-        uint8[4] calldata bonusTraits,
         uint160 base,
         uint256 ethHolders,
         uint256 ebHolders,
@@ -59,7 +57,7 @@ contract DayOneSeeder is DegenerusGame, BucketSeed {
         uint24 day = _simulatedDayIndex();
 
         // The shared jackpot-phase day shape: day == dailyIdx + 1, the day's request still locked
-        // (subscriber STAGE skipped), read slot drained, no carryover leg or coin/ticket leg pending.
+        // (subscriber STAGE skipped), read slot drained, no coin/ticket leg pending yet.
         level = lvl;
         purchaseStartDay = day - 10;
         dailyIdx = day - 1;
@@ -94,7 +92,7 @@ contract DayOneSeeder is DegenerusGame, BucketSeed {
                 _seedBucketDistinct(lvl, mainTraits[q], ethHolders, base + uint160(q) * 0x100000);
             }
             if (ebHolders != 0) {
-                _seedBucketDistinct(lvl + 1, bonusTraits[q], ebHolders, base + 0x800000 + uint160(q) * 0x100000);
+                _seedBucketDistinct(lvl + 1, mainTraits[q], ebHolders, base + 0x800000 + uint160(q) * 0x100000);
             }
         }
 
@@ -176,13 +174,11 @@ abstract contract DayOneFixture is DeployProtocol {
     function _seed(uint256 word, uint256 ethHolders, uint256 ebHolders, bool armGolden) internal {
         _deployProtocol();
         uint8[4] memory mainT = JackpotBucketLib.getRandomTraits(word);
-        uint8[4] memory bonusT =
-            JackpotBucketLib.getRandomTraits(EntropyLib.hash2(word, uint256(keccak256("BONUS_TRAITS"))));
 
         bytes memory realCode = address(game).code;
         _warpToDay(400, 3 hours);
         vm.etch(address(game), type(DayOneSeeder).runtimeCode);
-        DayOneSeeder(payable(address(game))).seedDayOne(LVL, word, mainT, bonusT, BASE, ethHolders, ebHolders, armGolden);
+        DayOneSeeder(payable(address(game))).seedDayOne(LVL, word, mainT, BASE, ethHolders, ebHolders, armGolden);
         vm.etch(address(game), realCode);
         vm.deal(address(game), 10_000 ether);
     }

@@ -29,7 +29,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         that level's keys — the paid cohort would strand permanently.
 contract DailyRngStallRecovery is DeployProtocol {
     bytes32 private constant DAILY_TRAITS_SIG =
-        keccak256("DailyWinningTraits(uint24,uint32,uint32,uint24)");
+        keccak256("DailyWinningTraits(uint24,uint32)");
 
     address private buyer = address(0xB4A1);
     address private keeper = address(0xC4A9);

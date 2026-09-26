@@ -1238,13 +1238,20 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      supplies its original ETH budget; whole passes consume at most 25%,
     ///      with the exact cost credited to futurePrizePool. JackpotModule includes
     ///      that spend in its matching current-pool debit, and pays all remaining ETH.
+    /// @param soloQuadrant Early bird: the board's solo quadrant, which the winner is drawn
+    ///        outside of. Unused by a quadrant conversion.
     /// @return spent Award value credited (early bird ignores this return).
-    function awardWhalePass(uint24 lvl, uint32 traits, uint256 amount, uint256 randWord, bool earlyBird)
-        external returns (uint256 spent)
-    {
+    function awardWhalePass(
+        uint24 lvl,
+        uint32 traits,
+        uint256 amount,
+        uint256 randWord,
+        bool earlyBird,
+        uint8 soloQuadrant
+    ) external returns (uint256 spent) {
         uint256 halfPasses = earlyBird ? amount : (amount / (8 * HALF_WHALE_PASS_PRICE)) * 2;
         if (halfPasses == 0) return 0;
-        address winner = _drawWhalePassWinner(lvl, traits, randWord, earlyBird);
+        address winner = _drawWhalePassWinner(lvl, traits, randWord, earlyBird, soloQuadrant);
         if (winner == address(0)) return 0;
         whalePassClaims[winner] += halfPasses;
         spent = halfPasses * HALF_WHALE_PASS_PRICE;
@@ -1262,13 +1269,20 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         return deityBySymbol[(trait >> 6) * 8 + (trait & 7)];
     }
 
-    /// @dev Fresh recipient from frozen GAME inventory. Early bird supplies the
-    ///      official bonus board and prefers eligible gold buckets. Quadrant ETH
-    ///      conversion supplies one trait in the low byte and its bucket entropy.
-    ///      Both preserve real/deity entry weights and exclude award sizes from seeds.
-    function _drawWhalePassWinner(uint24 lvl, uint32 traits, uint256 randWord, bool earlyBird)
-        private view returns (address)
-    {
+    /// @dev Fresh recipient from frozen GAME inventory. Early bird supplies the day's
+    ///      main board and its solo quadrant: the winner comes from the three other
+    ///      quadrants, preferring eligible gold buckets, and from the solo quadrant only
+    ///      when it is the one active bucket (as the early-bird tickets fall back).
+    ///      Quadrant ETH conversion supplies one trait in the low byte and its bucket
+    ///      entropy. Both preserve real/deity entry weights and exclude award sizes from
+    ///      seeds.
+    function _drawWhalePassWinner(
+        uint24 lvl,
+        uint32 traits,
+        uint256 randWord,
+        bool earlyBird,
+        uint8 soloQuadrant
+    ) private view returns (address) {
         uint256 entropy = EntropyLib.hash4(
             randWord, uint256(earlyBird ? EARLY_BIRD_WHALE_TAG : QUADRANT_WHALE_TAG), dailyIdx, lvl
         );
@@ -1277,10 +1291,15 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             uint256 candidates;
             uint256 count;
             bool goldOnly;
+            bool soloActive;
             for (uint8 q; q < 4; ++q) {
                 uint8 trait = uint8(traits >> (q * 8));
                 address deity = _deityOfTrait(trait);
                 if (lvlTraitEntry[lvl][trait].length == 0 && deity == address(0)) continue;
+                if (q == soloQuadrant) {
+                    soloActive = true;
+                    continue;
+                }
                 bool gold = ((trait >> 3) & 7) == 7;
                 if (gold && !goldOnly) {
                     candidates = 0;
@@ -1292,8 +1311,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     ++count;
                 }
             }
-            if (count == 0) return address(0);
-            selectedTrait = uint8(candidates >> ((entropy % count) * 8));
+            if (count != 0) {
+                selectedTrait = uint8(candidates >> ((entropy % count) * 8));
+            } else if (soloActive) {
+                selectedTrait = uint8(traits >> (soloQuadrant * 8));
+            } else {
+                return address(0);
+            }
         }
         uint256 len = lvlTraitEntry[lvl][selectedTrait].length;
         address deity = _deityOfTrait(selectedTrait);

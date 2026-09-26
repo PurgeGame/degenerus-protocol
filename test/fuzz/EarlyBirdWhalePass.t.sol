@@ -47,6 +47,9 @@ contract EarlyBirdWhaleHarness is DegenerusGameJackpotModule, BucketSeed {
         uint24 key = target > _mintCeiling() ? _tqFarFutureKey(target) : _tqWriteKey(target);
         return uint32(_entriesOwed(key, who) >> 8);
     }
+    function pickSoloQuadrant(uint8[4] memory traits, uint256 entropy) external pure returns (uint8) {
+        return _pickSoloQuadrant(traits, entropy);
+    }
 }
 
 contract EarlyBirdWhalePassTest is Test {
@@ -72,7 +75,7 @@ contract EarlyBirdWhalePassTest is Test {
     }
 
     function _traits(uint256 word) private pure returns (uint8[4] memory) {
-        return JackpotBucketLib.getRandomTraits(EntropyLib.hash2(word, uint256(keccak256("BONUS_TRAITS"))));
+        return JackpotBucketLib.getRandomTraits(word);
     }
 
     function _seed(uint256 word, uint8 active, bool oneWallet) private {
@@ -125,7 +128,7 @@ contract EarlyBirdWhalePassTest is Test {
     }
 
     function test_thresholdsAtEveryPriceTier() public {
-        uint24[7] memory targets = [uint24(1), 5, 10, 30, 60, 90, 100];
+        uint24[7] memory targets = [uint24(2), 5, 10, 30, 60, 90, 100];
         for (uint256 i; i < targets.length; ++i) {
             uint256 p = PriceLookupLib.priceForLevel(targets[i]);
             uint256 threshold = 46 * 128 * p;
@@ -142,16 +145,18 @@ contract EarlyBirdWhalePassTest is Test {
     }
 
     function testFuzz_exactBudgetAndPoolConservation(uint8 tier, uint96 amount) public {
-        uint24[7] memory targets = [uint24(1), 5, 10, 30, 60, 90, 100];
+        uint24[7] memory targets = [uint24(2), 5, 10, 30, 60, 90, 100];
         _checkPrice(targets[tier % 7], bound(uint256(amount), 0, 1_000_000 ether));
     }
 
     function test_surplusUsesExactWeiIncludingOriginalDust() public {
-        // At the intro price, 62.10 ETH buys one pass after reserving 45 per slot;
-        // the old equal-slot awards used only 61.44 ETH (48 tickets each).
-        _checkPrice(1, 62.10 ether);
+        // Target 2 (live `level` = 1, the smallest level that ever reaches its own jackpot
+        // phase) still sits in the 0.01 ETH intro tier. At that price, 62.10 ETH buys one
+        // pass after reserving 45 per slot; the old equal-slot awards used only 61.44 ETH
+        // (48 tickets each).
+        _checkPrice(2, 62.10 ether);
         assertEq(h.pending(), 2);
-        _checkPrice(1, 62.10 ether - 1);
+        _checkPrice(2, 62.10 ether - 1);
         assertEq(h.pending(), 0, "retain 48 tickets until a whole pass fits");
         _checkPrice(TARGET, 234.90 ether);
         assertEq(h.pending(), 0, "rounding dust alone cannot trigger at 45 each");
@@ -198,6 +203,7 @@ contract EarlyBirdWhalePassTest is Test {
     function testFuzz_goldPreferenceAndEmptyFallback(uint256 word, uint8 mask) public {
         mask &= 15;
         uint8[4] memory traits = _traits(word);
+        uint8 solo = _soloQuadrant(word);
         _seed(word, mask, false);
         h.price(TARGET, 256 ether, word, false);
         Awards memory a = _draw(word, 180);
@@ -212,10 +218,18 @@ contract EarlyBirdWhalePassTest is Test {
         uint256 chosen = uint160(a.winner) - 0xA000;
         assertLt(chosen, 4);
         assertTrue(mask & (1 << chosen) != 0, "selected bucket is active");
+        // The solo quadrant is skipped by the draw entirely, gold or not, unless it is the
+        // only active bucket (the mask has no other bit set).
+        uint8 nonSoloMask = mask & ~uint8(1 << solo);
+        if (nonSoloMask == 0) {
+            assertEq(chosen, solo, "the solo quadrant is the only active bucket, so it still wins");
+            return;
+        }
+        assertTrue(chosen != solo, "the solo quadrant never wins while another bucket is active");
         uint8 activeGold;
-        for (uint8 q; q < 4; ++q) if (mask & (1 << q) != 0 && ((traits[q] >> 3) & 7) == 7) activeGold |= uint8(1 << q);
+        for (uint8 q; q < 4; ++q) if (nonSoloMask & (1 << q) != 0 && ((traits[q] >> 3) & 7) == 7) activeGold |= uint8(1 << q);
         if (activeGold != 0) assertTrue(activeGold & (1 << chosen) != 0, "eligible gold always wins");
-        uint8 candidates = activeGold != 0 ? activeGold : mask;
+        uint8 candidates = activeGold != 0 ? activeGold : nonSoloMask;
         uint8[] memory quadrants = new uint8[](4);
         uint256 count;
         for (uint8 q; q < 4; ++q) if (candidates & (1 << q) != 0) quadrants[count++] = q;
@@ -227,11 +241,24 @@ contract EarlyBirdWhalePassTest is Test {
         uint256 word;
         uint8[4] memory traits;
         uint8 goldQ;
+        // _pickSoloQuadrant always prefers a gold quadrant when one exists, so a board with
+        // exactly ONE gold quadrant always has that quadrant AS the solo pick (covered
+        // separately by test_surplusWhalePassSkipsSoloEvenWhenItIsTheOnlyGoldQuadrant): a
+        // deity-only-gold fixture needs a SECOND gold quadrant, so the non-solo one is still
+        // an eligible (and the only eligible) gold candidate.
         while (true) {
             traits = _traits(word);
             uint8 goldCount;
-            for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) { ++goldCount; goldQ = q; }
-            if (goldCount == 1) break;
+            uint8[4] memory golds;
+            for (uint8 q; q < 4; ++q) {
+                if (((traits[q] >> 3) & 7) == 7) { golds[goldCount] = q; ++goldCount; }
+            }
+            if (goldCount == 2) {
+                // Gold is always preferred, so the solo pick is one of these two.
+                uint8 solo = _soloQuadrant(word);
+                goldQ = golds[0] == solo ? golds[1] : golds[0];
+                break;
+            }
             ++word;
         }
         _seed(word, uint8(15 ^ (1 << goldQ)), false);
@@ -269,6 +296,97 @@ contract EarlyBirdWhalePassTest is Test {
         assertEq(a.winner, expected, "fresh entry-weighted sample including virtual deity entries");
         assertEq(a.passEvents, 1);
         assertEq(a.halves, 10);
+    }
+
+    // -- solo-quadrant exclusion (main board) ----------------------------------
+
+    /// @dev The ETH leg's own solo-quadrant pick, off the day's main board and the storage
+    ///      level (not lvl + 1): the same value payEarlyBirdTickets feeds both the ticket
+    ///      draw's exclusion and the surplus whale pass.
+    function _soloQuadrant(uint256 word) private view returns (uint8) {
+        return h.pickSoloQuadrant(_traits(word), EntropyLib.hash2(word, uint256(TARGET - 1)));
+    }
+
+    function test_earlyBirdTicketsNeverLandInTheSoloQuadrantUnlessItIsTheOnlyActiveBucket() public {
+        uint256 word = 1337;
+        uint8 solo = _soloQuadrant(word);
+        _seed(word, 15, false);
+        h.price(TARGET, 256 ether, word, false);
+        vm.recordLogs();
+        h.payEarlyBirdTickets(word);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 n;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != TICKET) continue;
+            uint256 q = uint256(logs[i].topics[3]) >> 6;
+            assertTrue(q != solo, "early-bird tickets exclude the day's solo ETH quadrant");
+            ++n;
+        }
+        assertGt(n, 0, "tickets were actually drawn");
+    }
+
+    function test_earlyBirdTicketsUseTheSoloQuadrantWhenItIsTheOnlyActiveBucket() public {
+        uint256 word = 1337;
+        uint8 solo = _soloQuadrant(word);
+        _seed(word, uint8(1 << solo), false);
+        h.price(TARGET, 256 ether, word, false);
+        vm.recordLogs();
+        h.payEarlyBirdTickets(word);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 n;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != TICKET) continue;
+            uint256 q = uint256(logs[i].topics[3]) >> 6;
+            assertEq(q, solo, "the only active bucket is the solo quadrant, so it still wins");
+            ++n;
+        }
+        assertGt(n, 0, "tickets were actually drawn from the fallback bucket");
+    }
+
+    function test_surplusWhalePassNeverLandsInSoloQuadrantUnlessItIsTheOnlyActiveBucket() public {
+        uint256 word = 1337;
+        uint8 solo = _soloQuadrant(word);
+        _seed(word, 15, false);
+        h.price(TARGET, 256 ether, word, false);
+        Awards memory a = _draw(word, 180);
+        assertEq(a.passEvents, 1, "surplus pass still awarded");
+        uint256 chosen = uint160(a.winner) - 0xA000;
+        assertLt(chosen, 4, "winner drawn from a seeded quadrant wallet");
+        assertTrue(chosen != solo, "the pass winner is never the solo quadrant when others are active");
+    }
+
+    function test_surplusWhalePassFallsBackToSoloQuadrantWhenItIsTheOnlyActiveBucket() public {
+        uint256 word = 1337;
+        uint8 solo = _soloQuadrant(word);
+        _seed(word, uint8(1 << solo), false);
+        h.price(TARGET, 256 ether, word, false);
+        Awards memory a = _draw(word, 180);
+        assertEq(a.passEvents, 1, "the pass still pays when the solo bucket is the only one active");
+        assertEq(a.winner, address(uint160(0xA000 + solo)), "falls back to the solo quadrant");
+    }
+
+    /// @dev Gold preference must not pull the winner into the solo quadrant even when the solo
+    ///      quadrant is the board's ONLY gold one: the solo skip in _drawWhalePassWinner runs
+    ///      before the gold-preference reset, so the other three (non-gold) quadrants remain
+    ///      the candidate pool.
+    function test_surplusWhalePassSkipsSoloEvenWhenItIsTheOnlyGoldQuadrant() public {
+        uint256 word;
+        uint8[4] memory traits;
+        uint8 solo;
+        uint8 goldQ;
+        while (true) {
+            traits = _traits(word);
+            uint8 goldCount;
+            for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) { ++goldCount; goldQ = q; }
+            solo = _soloQuadrant(word);
+            if (goldCount == 1 && goldQ == solo) break;
+            ++word;
+        }
+        _seed(word, 15, false);
+        h.price(TARGET, 256 ether, word, false);
+        Awards memory a = _draw(word, 180);
+        uint256 chosen = uint160(a.winner) - 0xA000;
+        assertTrue(chosen != solo, "gold preference does not pull the winner into the solo quadrant");
     }
 
     function test_turboAndDeferredClaimAggregatesExistingPasses() public {

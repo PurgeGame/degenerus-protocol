@@ -41,15 +41,15 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @author Burnie Degenerus
  * @notice Delegate-called module for the foil pack: a 10x-priced four-ticket SKU
  *         whose boost multiplier and activity score freeze at buy (the match lines resolve later), a
- *         per-(day, ticket, drawKind) match claim that reads the day's sealed
- *         winning sets and pays an isolated 40/40/20 spin, and a per-pack gold route
+ *         per-(day, ticket) match claim that reads the day's sealed winning set
+ *         and pays an isolated 40/40/20 spin, and a per-pack gold route
  *         on how much gold the pack's own sixteen quadrants came out holding — pulled
  *         as a claim, except the grand, which the drain pushes where it is decided.
  * @dev All storage reads/writes operate on the inherited DegenerusGameStorage.
  *      The buy keys on the active ticket level (the cycle the pack bets into), so
  *      a pack and the draws it bets against share one cycle key. The claim never
- *      re-derives the winning sets — it reads dailyFoilDraw[day], which the
- *      jackpot sealed, so the foil numbers equal the coin jackpot's.
+ *      re-derives the winning set — it reads dailyFoilDraw[day], which the
+ *      jackpot sealed, so the foil numbers equal the jackpot's.
  */
 interface IFoilWwxrp {
     /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
@@ -126,8 +126,8 @@ contract DegenerusGameFoilPackModule is
     // error E() — inherited from DegenerusGameStorage
     /// @notice Thrown when the buyer already holds a foil pack for this cycle level.
     error FoilAlreadyBought();
-    /// @notice Thrown when the given (player, day, ticketIndex, drawKind) tuple does not
-    ///         resolve to a claimable foil match.
+    /// @notice Thrown when the given (player, day, ticketIndex) tuple does not resolve to
+    ///         a claimable foil match.
     error NoClaimableMatch();
     /// @notice Thrown when the batch's opening tuple is not claimable because the list has
     ///         already been swept.
@@ -156,20 +156,20 @@ contract DegenerusGameFoilPackModule is
 
     // Per-score face counts for the graded match (see _tryClaimFoilMatch).
     // One face stakes 1,000 FLIP or priceForLevel(L) ETH — one ticket of value either
-    // way (WWXRP, the third currency, is worthless). E[faces/comparison] = 0.043887.
-    // A pack compares its four lines against ONE set on each purchase day (the day rolls
-    // no bonus set) and TWO on each jackpot day, so its match value grows with how long
-    // its level runs: FOIL IS A BET ON THE LEVEL SLOWING DOWN. Valued at ~0.8 tickets a
-    // face (the ETH and FLIP lanes, 40% each), a pack bought on the first purchase day
-    // returns ~8% of its ten-ticket cost on a one-day purchase phase, ~14% at five days,
-    // ~21% at ten and ~49% at the full thirty; a fast level pays mostly to high-score
-    // buyers through the gold ladder. Score T (0..8) pays from T=4; T=8 (all four full
-    // doubles) also grants a half whale pass.
-    uint256 private constant FOIL_FACES_T4 = 8;
-    uint256 private constant FOIL_FACES_T5 = 24;
-    uint256 private constant FOIL_FACES_T6 = 140;
-    uint256 private constant FOIL_FACES_T7 = 1_600;
-    uint256 private constant FOIL_FACES_T8 = 40_000;
+    // way (WWXRP, the third currency, is worthless). E[faces/comparison] = 0.087774.
+    // A pack compares its four lines against the day's one board every day, purchase and
+    // jackpot days alike, so its match value grows with how long its level runs: FOIL IS A
+    // BET ON THE LEVEL SLOWING DOWN. Valued at ~0.8 tickets a face (the ETH and FLIP lanes,
+    // 40% each), a pack bought on the first purchase day of a level with a three-day
+    // jackpot phase returns ~8% of its ten-ticket cost on a one-day purchase phase, ~20% at
+    // five days, ~34% at ten and ~90% at the full thirty; a fast level pays mostly to
+    // high-score buyers through the gold ladder. Score T (0..8) pays from T=4; T=8 (all four
+    // full doubles) also grants a half whale pass.
+    uint256 private constant FOIL_FACES_T4 = 16;
+    uint256 private constant FOIL_FACES_T5 = 48;
+    uint256 private constant FOIL_FACES_T6 = 280;
+    uint256 private constant FOIL_FACES_T7 = 3_200;
+    uint256 private constant FOIL_FACES_T8 = 80_000;
 
     // The gold ladder: FLIP on the pack's TOTAL gold count, its sixteen quadrants read
     // as one pool. This is the rung players actually meet — the boost sets a per-quadrant
@@ -205,10 +205,10 @@ contract DegenerusGameFoilPackModule is
     uint32 private constant GRAND_DRAIN_UNITS = 14;
 
     /// @dev Domain tag for the golden-ticket claim's double-claim marker, which shares
-    ///      the foilMatchClaimed map with the per-draw match markers. Those fold five
-    ///      fields (player, level, day, drawKind, ticketIndex) against this key's three,
-    ///      so the preimages differ in length as well as in this tag — the two claim
-    ///      families can never mint the same marker.
+    ///      the foilMatchClaimed map with the per-draw match markers. Those fold four
+    ///      fields (player, level, day, ticketIndex) against this key's three, so the
+    ///      preimages differ in length as well as in this tag — the two claim families
+    ///      can never mint the same marker.
     bytes32 private constant GOLDEN_TICKET_TAG = keccak256("foil-golden-ticket");
 
     /// @dev Per-settled-claim keeper bounty target (ETH-equivalent wei) for the
@@ -238,7 +238,6 @@ contract DegenerusGameFoilPackModule is
     /// @param player The claimant.
     /// @param day The draw day claimed against.
     /// @param ticketIndex Which of the pack's four tickets matched the board (0-3).
-    /// @param drawKind 0 = main set, 1 = bonus set.
     /// @param tier The matched score T (4..8): the graded symbol/color axis match; T=8
     ///        is the moonshot (all four full doubles). Field name retained for the indexer.
     /// @param faces The face count paid for the score.
@@ -246,7 +245,6 @@ contract DegenerusGameFoilPackModule is
         address indexed player,
         uint24 indexed day,
         uint256 ticketIndex,
-        uint8 drawKind,
         uint8 tier,
         uint256 faces
     );
@@ -505,12 +503,10 @@ contract DegenerusGameFoilPackModule is
     /// @param player Pack owner the win credits to.
     /// @param day The draw day to claim against.
     /// @param ticketIndex Which of the pack's four tickets to claim (0-3).
-    /// @param drawKind 0 = main set, 1 = bonus set.
     function claimFoilMatch(
         address player,
         uint256 day,
-        uint256 ticketIndex,
-        uint8 drawKind
+        uint256 ticketIndex
     ) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         // Closed from the liveness trigger on. The ETH lane recirculates its over-cap
@@ -522,7 +518,7 @@ contract DegenerusGameFoilPackModule is
         // them into the terminal cohort. The batch variant self-calls this entrypoint
         // under try/catch, so it inherits the gate and skips instead of reverting.
         if (_livenessTriggered()) revert GameOver();
-        if (!_tryClaimFoilMatch(player, day, ticketIndex, drawKind)) revert NoClaimableMatch();
+        if (!_tryClaimFoilMatch(player, day, ticketIndex)) revert NoClaimableMatch();
     }
 
     /// @notice Claim a foil pack's gold: the ladder on its total gold count, plus a
@@ -601,24 +597,18 @@ contract DegenerusGameFoilPackModule is
     ///      cheap revert is what a wallet's pre-flight simulation shows a second sender.
     ///      Put a tuple expected to settle first. Each settled win credits its own
     ///      `player`. The arrays are parallel: claim i is (players[i], drawDays[i],
-    ///      ticketIndexes[i], drawKinds[i]).
+    ///      ticketIndexes[i]).
     /// @param players Pack owners the wins credit to.
     /// @param drawDays Draw days to claim against.
     /// @param ticketIndexes Which pack ticket (0-3) per claim.
-    /// @param drawKinds 0 = main, 1 = bonus, per claim.
     function claimFoilMatchMany(
         address[] calldata players,
         uint24[] calldata drawDays,
-        uint8[] calldata ticketIndexes,
-        uint8[] calldata drawKinds
+        uint8[] calldata ticketIndexes
     ) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         uint256 n = players.length;
-        if (
-            drawDays.length != n ||
-            ticketIndexes.length != n ||
-            drawKinds.length != n
-        ) revert LengthMismatch();
+        if (drawDays.length != n || ticketIndexes.length != n) revert LengthMismatch();
 
         uint256 settled;
         for (uint256 i; i < n; ) {
@@ -631,8 +621,7 @@ contract DegenerusGameFoilPackModule is
                 this.claimFoilMatch(
                     players[i],
                     drawDays[i],
-                    ticketIndexes[i],
-                    drawKinds[i]
+                    ticketIndexes[i]
                 )
             {
                 unchecked {
@@ -677,24 +666,19 @@ contract DegenerusGameFoilPackModule is
     function _tryClaimFoilMatch(
         address player,
         uint256 day,
-        uint256 ticketIndex,
-        uint8 drawKind
+        uint256 ticketIndex
     ) private returns (bool) {
         if (ticketIndex >= 4) return false;
-        if (drawKind >= 2) return false;
         // Bind `day` to the uint24 domain every lookup truncates to (dailyFoilDraw,
         // rngWordByDay). Without this the double-claim marker — which folds the full
         // uint256 `day` — would alias: day, day + 2^24, ... resolve to the SAME
         // draw/level/line/tier but mint DISTINCT markers, re-paying the win.
         if (day > type(uint24).max) return false;
 
-        // The day's sealed winning sets + the cycle level active that day.
-        (bool drawPresent, uint32 mainSet, uint32 bonusSet, uint24 L) =
-            _foilDrawFor(day);
+        // The day's sealed winning set, whether it pays double, and the cycle level
+        // active that day.
+        (bool drawPresent, uint32 winSet, uint24 L) = _foilDrawFor(day);
         if (!drawPresent) return false;
-        // A purchase day rolls no bonus set and stores zero, which no real set can equal
-        // (quadrant 1's byte is at least 64): there is nothing to match against.
-        if (drawKind == 1 && bonusSet == 0) return false;
 
         // The player's frozen record for that cycle: the boost, the resolveDay the lines
         // derive from, and the activity score frozen at buy (the spin's RTP). present is
@@ -710,9 +694,7 @@ contract DegenerusGameFoilPackModule is
 
         // Double-claim marker. The level binding keeps a player's wins at different
         // cycles separable.
-        bytes32 mk = keccak256(
-            abi.encode(player, uint256(L), day, uint256(drawKind), ticketIndex)
-        );
+        bytes32 mk = keccak256(abi.encode(player, uint256(L), day, ticketIndex));
         if (foilMatchClaimed[mk]) return false;
 
         // Re-derive the selected ticket's four-quadrant line from the SAME word +
@@ -731,7 +713,6 @@ contract DegenerusGameFoilPackModule is
         // Score T in {0..8}. Color (bits 5-3) is boosted on the foil line but the
         // winning set is uniform, so P(symbol) = P(color) = 1/8 — both boost-invariant,
         // so the faces calibration holds at any multBps.
-        uint32 winSet = drawKind == 1 ? bonusSet : mainSet;
         uint256 score;
         for (uint256 q; q < 4; ++q) {
             uint8 selByte = uint8(sel >> (8 * q));
@@ -760,16 +741,16 @@ contract DegenerusGameFoilPackModule is
             faces = FOIL_FACES_T8; // score == 8 (all four full doubles)
         }
 
-        emit FoilMatchClaimed(player, uint24(day), ticketIndex, drawKind, tier, faces);
+        emit FoilMatchClaimed(player, uint24(day), ticketIndex, tier, faces);
 
-        _payFoilTier(player, day, ticketIndex, drawKind, L, sel, tier, faces, activityScore);
+        _payFoilTier(player, day, ticketIndex, L, sel, tier, faces, activityScore);
         return true;
     }
 
     /// @dev Re-derive a pack's four four-quadrant match lines — the single shared
     ///      producer called by BOTH the drain (to file the sixteen boosted entries
     ///      into the jackpot trait buckets) and the claim (to compare against the
-    ///      day's winning sets). Identical inputs (buyer, cycle level, the resolveDay
+    ///      day's winning set). Identical inputs (buyer, cycle level, the resolveDay
     ///      word, the frozen boost) give identical lines, so the jackpot samples
     ///      exactly what is claimable. Each line packs four 8-bit [QQ][CCC][SSS]
     ///      quadrant traits (A|B|C|D in bytes 0..3); the boost color ladder depends
@@ -807,8 +788,8 @@ contract DegenerusGameFoilPackModule is
     ///      word. Spins use the buyer's activity score frozen at buy, and regenerate
     ///      all colors, so the foil's boosted gold mix does not tilt spin EV. FLIP stakes split into
     ///      thirds across three spins under one survival flip; ETH and WWXRP are single
-    ///      spins. The T=8 tier (all four full doubles) also grants a half whale pass. All effects run after
-    ///      the double-claim marker is set (CEI). The matched signature `sel` is the
+    ///      spins. The T=8 tier (all four full doubles) also grants a half whale pass. All
+    ///      effects run after the double-claim marker is set (CEI). The matched signature `sel` is the
     ///      source of one seed-selected hero symbol; the remaining ticket is generated.
     ///
     ///      Snap valve: NO foil payout carries the exponent. The buy still pays 2^s
@@ -825,7 +806,6 @@ contract DegenerusGameFoilPackModule is
         address player,
         uint256 day,
         uint256 ticketIndex,
-        uint8 drawKind,
         uint24 L,
         uint32 sel,
         uint8 tier,
@@ -842,10 +822,10 @@ contract DegenerusGameFoilPackModule is
         uint256 rw = rngWordByDay[uint24(day)];
         if (rw == 0) revert Invariant();
         uint256 c = uint256(
-            keccak256(abi.encode(rw, day, drawKind, ticketIndex, FOIL_CCY_TAG))
+            keccak256(abi.encode(rw, day, ticketIndex, FOIL_CCY_TAG))
         ) % 100;
         uint256 seed = uint256(
-            keccak256(abi.encode(rw, day, drawKind, ticketIndex, FOIL_SPIN_TAG))
+            keccak256(abi.encode(rw, day, ticketIndex, FOIL_SPIN_TAG))
         );
 
         // activityScore is the buyer's score frozen at buy (passed in), not a live read:
@@ -1617,10 +1597,9 @@ contract DegenerusGameFoilPackModule is
     }
 
     /// @dev The pack's golden-ticket claim marker key. Shares the foilMatchClaimed map
-    ///      with the per-draw match markers: those fold five fields (player, level, day,
-    ///      drawKind, ticketIndex) against this key's three, so the preimages differ in
-    ///      length as well as in the tag — the two claim families can never mint the
-    ///      same marker.
+    ///      with the per-draw match markers: those fold four fields (player, level, day,
+    ///      ticketIndex) against this key's three, so the preimages differ in length as
+    ///      well as in the tag — the two claim families can never mint the same marker.
     function _goldenTicketKey(
         address player,
         uint24 lvl

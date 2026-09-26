@@ -80,10 +80,10 @@ PAIRED-CREDIT	_creditClaimable	_payGoldenTicket	modules/DegenerusGameJackpotModu
 VALUE-IN	_creditClaimable	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	READ	recognized stETH yield surplus: runs only when balance+stETH exceeds the full obligation set; three sink credits
 VALUE-IN	claimablePool	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	aggregate for the three sink credits (23% x3)
 VALUE-IN	yieldAccumulator	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	23% surplus share retained as the yield buffer
-POOL-TO-POOL	_addNextPrizePool	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	daily lootbox budget -> next pool
+POOL-TO-POOL	_addNextPrizePool	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	every jackpot day: the daily ticket budget carved from the current pool backs the queued tickets in the next pool
 POOL-TO-POOL	_addFuturePrizePool	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	unpaid daily ETH returns to future
 POOL-TO-POOL	_setCurrentPrizePool	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	daily ETH/lootbox budgets carved from the current pool (three call sites, one function)
-POOL-TO-POOL	_setPrizePools	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	jackpot-day pool recomposition, and the purchase-phase drip merge (future debit + ticket-leg next credit + insurance skim debit) — one packed write each
+POOL-TO-POOL	_setPrizePools	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	the purchase-phase drip merge (future debit + ticket-leg next credit + insurance skim debit) — one packed write
 POOL-TO-POOL	_setPrizePools	_priceEarlyBirdTickets	modules/DegenerusGameJackpotModule.sol	READ	day-1 early-bird budget: future funds the 3% budget, next backs the queued tickets - single net move on the packed slot; the leg's tickets are queued from payEarlyBirdTickets
 POOL-TO-POOL	yieldAccumulator	payDailyJackpot	modules/DegenerusGameJackpotModule.sol	WRITE	purchase-phase drip insurance skim (2% of the 4% slice, the 75/23/2 split): credited here and debited from future in the same packed write above — intra-set, obligation sum preserved
 PRE-COUNTED	_creditClaimable	runBafJackpot	modules/DegenerusGameJackpotModule.sol	READ	BAF winner credits; the summed claimed returns to AdvanceModule and enters claimablePool via claimableDelta

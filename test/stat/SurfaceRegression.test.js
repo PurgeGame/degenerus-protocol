@@ -82,26 +82,22 @@ describe("SURF-01 — hero-override gold-color byte-layout spot-check", function
   });
 
   it("hero color path does NOT route through weightedColorBucket (colour bits preserved)", function () {
-    // RE-EXPRESSED (2026-08-06). The PROPERTY is unchanged and still load-bearing:
-    // the hero override must never derive a colour through `weightedColorBucket`,
-    // whose /256 ladder is heavy-tailed and would bias hero colours.
+    // The PROPERTY is load-bearing: the hero override must never derive a
+    // colour through `weightedColorBucket`, whose /256 ladder is heavy-tailed
+    // and would bias hero colours.
     //
-    // The MECHANISM that guarantees it changed, so the old positive evidence went
-    // stale and this gate had been failing unnoticed (`test/stat/` is not run by
-    // `make test-hardhat`). It used to build the whole trait byte from four literal
-    // slices of `randomWord` (& 7, >> 3, >> 6, >> 9). `_applyHeroOverride` now takes
-    // `heroEntropy`, delegates to `_rollHeroSymbol`, and applies the result through
-    // `_applyHeroResult`, which does:
-    //     w[heroQuadrant] = (w[heroQuadrant] & 0xF8) | heroSymbol;
-    // i.e. it PRESERVES the existing colour bits outright and replaces only the low
-    // 3 symbol bits. That satisfies the property more strongly than the literal
-    // slices did — no colour is derived on this path at all.
+    // `_rollMainTraits` delegates to `_rollBoard`, which rolls the base board
+    // off `JackpotBucketLib.getRandomTraits`, rolls the hero via
+    // `_rollHeroSymbol`, and applies it inline:
+    //     traits[heroQuadrant] = (traits[heroQuadrant] & 0xF8) | heroSymbol;
+    // i.e. it PRESERVES the existing colour bits outright and replaces only the
+    // low 3 symbol bits — no colour is derived on this path at all.
     //
-    // So the negation is asserted over the whole hero call chain (not just the one
-    // body), and the positive evidence is now the 0xF8 colour-preserving mask.
+    // So the negation is asserted over the whole hero call chain, and the
+    // positive evidence is the 0xF8 colour-preserving mask in `_rollBoard`.
     const source = fs.readFileSync(JACKPOT_MODULE_PATH, "utf8");
-    const start = source.indexOf("function _applyHeroOverride(");
-    expect(start, "could not locate _applyHeroOverride in module source").to.be.gte(0);
+    const start = source.indexOf("function _rollBoard(");
+    expect(start, "could not locate _rollBoard in module source").to.be.gte(0);
 
     let depth = 0;
     let bodyEnd = -1;
@@ -119,15 +115,14 @@ describe("SURF-01 — hero-override gold-color byte-layout spot-check", function
         }
       }
     }
-    expect(bodyEnd, "could not locate end of _applyHeroOverride body").to.be.gte(0);
+    expect(bodyEnd, "could not locate end of _rollBoard body").to.be.gte(0);
 
     const body = source.slice(start, bodyEnd);
 
-    // Negation, over the whole hero call chain: none of the three functions that
-    // make up the hero override may reach weightedColorBucket.
+    // Negation, over the whole hero call chain: neither function that makes up
+    // the hero override may reach weightedColorBucket.
     for (const fn of [
-      "function _applyHeroOverride(",
-      "function _applyHeroResult(",
+      "function _rollBoard(",
       "function _rollHeroSymbol(",
     ]) {
       const fnStart = source.indexOf(fn);
@@ -147,22 +142,23 @@ describe("SURF-01 — hero-override gold-color byte-layout spot-check", function
     // Positive evidence: the override preserves the existing colour bits and
     // replaces only the low 3 symbol bits. If this mask ever widens past 0xF8 the
     // hero path starts writing colour, and this gate must fail.
-    const resultStart = source.indexOf("function _applyHeroResult(");
-    let rd = 0, rseen = false, rend = -1;
-    for (let i = resultStart; i < source.length; i++) {
-      if (source[i] === "{") { rd++; rseen = true; }
-      else if (source[i] === "}") { rd--; if (rseen && rd === 0) { rend = i + 1; break; } }
-    }
-    const resultBody = source.slice(resultStart, rend);
     expect(
-      /w\[heroQuadrant\]\s*=\s*\(\s*w\[heroQuadrant\]\s*&\s*0xF8\s*\)\s*\|\s*heroSymbol\s*;/.test(
-        resultBody,
+      /traits\[heroQuadrant\]\s*=\s*\(\s*traits\[heroQuadrant\]\s*&\s*0xF8\s*\)\s*\|\s*heroSymbol\s*;/.test(
+        body,
       ),
-      "the hero result must preserve the colour bits via the 0xF8 mask and write only the symbol",
+      "_rollBoard must preserve the colour bits via the 0xF8 mask and write only the symbol",
     ).to.equal(true);
 
-    // The override itself must still be the sole entry point that applies it.
-    expect(body).to.include("_applyHeroResult(");
+    // `_rollMainTraits` must still delegate to `_rollBoard`, the sole function
+    // that applies the hero override onto the base board.
+    const mainStart = source.indexOf("function _rollMainTraits(");
+    expect(mainStart, "could not locate _rollMainTraits in module source").to.be.gte(0);
+    let md = 0, mseen = false, mend = -1;
+    for (let i = mainStart; i < source.length; i++) {
+      if (source[i] === "{") { md++; mseen = true; }
+      else if (source[i] === "}") { md--; if (mseen && md === 0) { mend = i + 1; break; } }
+    }
+    expect(source.slice(mainStart, mend)).to.include("_rollBoard(");
   });
 });
 

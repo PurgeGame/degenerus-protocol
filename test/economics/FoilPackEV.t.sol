@@ -122,12 +122,10 @@ contract FoilPackEV is DeployProtocol {
             for (uint24 day = buyDay + 1; day <= endDay; day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint256 ti = 0; ti < 4; ti++) {
-                    for (uint8 dk = 0; dk < 2; dk++) {
-                        vm.prank(fb[i]);
-                        try game.claimFoilMatch(fb[i], day, ti, dk) {
-                            r.claims++;
-                        } catch {}
-                    }
+                    vm.prank(fb[i]);
+                    try game.claimFoilMatch(fb[i], day, ti) {
+                        r.claims++;
+                    } catch {}
                 }
             }
         }
@@ -175,5 +173,36 @@ contract FoilPackEV is DeployProtocol {
 
     function test_foilEV_N30() public {
         _report("FOIL EV: N=30", 30);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Stat: the analytic expected faces per foil comparison
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @notice Exact analytic E[faces] per foil comparison: enumerating the 3^4 = 81
+    ///         per-quadrant outcome combinations (each quadrant independently worth 0/1/2
+    ///         points, weights 56/7/1 out of 64) against the face table gives
+    ///         E[faces] = 1,472,608 / 2^24 = 0.0877742..., matching the module's documented
+    ///         "E[faces/comparison] = 0.087774".
+    function test_expectedFacesPerComparisonMatchesFaceTable() public pure {
+        uint256[9] memory faceTable = [uint256(0), 0, 0, 0, 16, 48, 280, 3_200, 80_000];
+        uint256[3] memory wgt = [uint256(56), 7, 1];
+        uint256 analyticNumer;
+        for (uint256 a; a < 3; ++a) {
+            for (uint256 b; b < 3; ++b) {
+                for (uint256 c; c < 3; ++c) {
+                    for (uint256 d; d < 3; ++d) {
+                        analyticNumer += wgt[a] * wgt[b] * wgt[c] * wgt[d] * faceTable[a + b + c + d];
+                    }
+                }
+            }
+        }
+        uint256 analyticDenom = 64 ** 4; // 2^24 = 16,777,216
+        assertEq(analyticNumer, 1_472_608, "exact P(score) enumeration drifted from the documented face table");
+
+        uint256 micro = 1e6;
+        uint256 analyticMeanMicro = (analyticNumer * micro) / analyticDenom;
+        // 87,774 micro-units == 0.087774, the module doc comment's own stated constant.
+        assertApproxEqAbs(analyticMeanMicro, 87_774, 1, "analytic E[faces] drifted from the documented 0.087774");
     }
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// CoinDrawCrapsSeats.t.sol tests actual payouts. These checks pin the bounded
-// level walk and handoff of the purchase-day future draw.
+// LevelOneFlipDraw.t.sol tests actual payouts. These checks pin the bounded
+// level walk and handoff of the daily future fill draw.
 import { expect } from "chai";
 import fs from "node:fs";
 

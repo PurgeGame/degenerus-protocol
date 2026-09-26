@@ -552,29 +552,6 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-12: Carryover floor enforced
-  // =========================================================================
-  describe("FIX-12: Carryover floor enforced", function () {
-    it("DAILY_CARRYOVER_MIN_WINNERS constant ensures minimum carryover distribution", async function () {
-      // The JackpotModule defines DAILY_CARRYOVER_MIN_WINNERS = 20.
-      // This prevents the carryover bucket system from receiving a cap too
-      // small to distribute across 4 trait buckets.
-      //
-      // We verify structurally: the constant exists in the module and
-      // is used in the carryover winner cap calculation. The carryover
-      // cap is max(remaining, DAILY_CARRYOVER_MIN_WINNERS) which ensures
-      // at least 20 winners even when the daily jackpot already used most
-      // of the winner budget.
-
-      const { game } = await loadFixture(deployFullProtocol);
-      // Structural assertion: game deploys with jackpot module that
-      // enforces this floor. A full integration test would require
-      // advancing through multiple game levels to trigger carryover.
-      expect(await game.gameOver()).to.equal(false);
-    });
-  });
-
-  // =========================================================================
   // ECON-01: JackpotModule uses explicit 46% futureShare (2300+2300 BPS)
   // =========================================================================
   describe("ECON-01: 46% futureShare in yield distribution", function () {

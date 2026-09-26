@@ -641,42 +641,70 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(flip.burned(alice), spent, "the holder paid twice for one day");
     }
 
-    // ── The credit door's return values ─────────────────────────────────────
+    // ── The credit door's banked amounts ────────────────────────────────────
 
-    /// @dev The door reports what actually banked, lane by lane — `(normal, high)` on a clear
+    /// @dev The door banks what it actually can, lane by lane — the whole request on a clear
     ///      lane, only the remaining capacity against a nearly full one, zero against a full one.
-    ///      The jackpot's comp lane prices spent value off this pair, so the pair and the
-    ///      adjacent `CrapsPassesCredited` logs must agree exactly.
-    function test_creditPassesReturnsWhatActuallyBanked() public {
+    ///      Each lane's `CrapsPassesCredited` log carries exactly what it banked, and the balance
+    ///      afterward agrees with the sum of its logs.
+    function test_creditPassesBanksExactlyWhatItLogs() public {
         vm.startPrank(ContractAddresses.GAME);
-        assertEq(craps.creditPasses(alice, 3, 0), 3, "a clear normal lane did not bank the whole request");
-        assertEq(craps.creditPasses(alice, 0, 2), 0, "a high-only call reported a normal credit");
-        assertEq(craps.creditPasses(alice, 5, 7), 5, "a mixed call shorted the normal lane");
-        assertEq(craps.creditPasses(alice, 0, 0), 0, "an empty call reported a credit");
+
+        vm.recordLogs();
+        craps.creditPasses(alice, 3, 0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 1, "a normal-only call did not log exactly once");
+        (bool wasHigh0, uint256 c0) = abi.decode(logs[0].data, (bool, uint256));
+        assertFalse(wasHigh0, "a normal-only call logged the high lane");
+        assertEq(c0, 3, "a clear normal lane did not bank the whole request");
+
+        vm.recordLogs();
+        craps.creditPasses(alice, 0, 2);
+        logs = vm.getRecordedLogs();
+        assertEq(logs.length, 1, "a high-only call did not log exactly once");
+        (bool wasHigh1, uint256 c1) = abi.decode(logs[0].data, (bool, uint256));
+        assertTrue(wasHigh1, "a high-only call logged the normal lane");
+        assertEq(c1, 2, "a clear high lane did not bank the whole request");
+
+        vm.recordLogs();
+        craps.creditPasses(alice, 5, 7);
+        logs = vm.getRecordedLogs();
+        assertEq(logs.length, 2, "a mixed call did not log both lanes");
+        (, uint256 c2) = abi.decode(logs[0].data, (bool, uint256));
+        (, uint256 c3) = abi.decode(logs[1].data, (bool, uint256));
+        assertEq(c2, 5, "a mixed call shorted the normal lane's log");
+        assertEq(c3, 7, "a mixed call shorted the high lane's log");
+
+        vm.recordLogs();
+        craps.creditPasses(alice, 0, 0);
+        logs = vm.getRecordedLogs();
+        assertEq(logs.length, 0, "an empty call logged a credit");
         vm.stopPrank();
-        // The high lane still banked in full — its record is the credit log and the balance.
+
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
-        assertEq(n, 8, "the normal lane balance disagrees with the returns");
-        assertEq(h, 9, "the unreported high lane did not bank");
+        assertEq(n, 8, "the normal lane balance disagrees with its logged credits");
+        assertEq(h, 9, "the high lane balance disagrees with its logged credits");
     }
 
-    function test_creditPassesReturnsOnlyTheCapacityASaturatedLaneHad() public {
+    /// @dev Against a nearly full normal lane and an already-saturated high lane, each lane's
+    ///      log — and the balance it leaves behind — reports only the capacity that lane had left.
+    function test_creditPassesBanksOnlyTheCapacityASaturatedLaneHad() public {
         craps.setPassCredits(alice, type(uint32).max - 2, type(uint32).max);
         vm.recordLogs();
         vm.prank(ContractAddresses.GAME);
-        assertEq(
-            craps.creditPasses(alice, 9, 9),
-            2,
-            "a nearly full normal lane did not report just its remaining capacity"
-        );
+        craps.creditPasses(alice, 9, 9);
 
-        // The returns and the logs are the same figures.
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 2, "the two lane credits did not log once each");
         (, uint256 c0) = abi.decode(logs[0].data, (bool, uint256));
         (, uint256 c1) = abi.decode(logs[1].data, (bool, uint256));
-        assertEq(c0, 2, "the normal log disagrees with the return");
-        assertEq(c1, 0, "the high log disagrees with the return");
+        assertEq(c0, 2, "a nearly full normal lane did not report just its remaining capacity");
+        assertEq(c1, 0, "an already-saturated high lane reported a credit");
+
+        // The balances land exactly where the logs said they would: at the cap, not past it.
+        (uint256 n, uint256 h) = craps.passCreditsOf(alice);
+        assertEq(n, type(uint32).max, "the normal lane balance disagrees with its logged credit");
+        assertEq(h, type(uint32).max, "the high lane balance moved past saturation");
     }
 
     // ── Normal-to-high conversion ───────────────────────────────────────────

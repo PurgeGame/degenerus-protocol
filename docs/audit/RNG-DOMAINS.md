@@ -44,16 +44,18 @@ in that quadrant's official winning trait. The separate root excludes allocation
 and pass quantity, and never selects from the ETH recipient list. The solo ETH
 winner remains the golden-ticket candidate. `WhaleModule.awardWhalePass` uses
 this domain for quadrant mode and the existing early-bird domain below for its
-bonus-board mode; the caller fixes the mode.
+early-bird mode; the caller fixes the mode.
 
 The early-bird surplus pass draw uses
 `H(word, keccak256("early-bird-whale"), dailyIdx, level + 1)` to select among
-eligible gold bonus traits, or all eligible bonus traits when none is gold.
-Entry selection uses `H(root, 1) % (realLength + virtualDeityCount)` directly,
-then resolves the packed owner or deity. A single recipient needs no grouped
-word cursor. It reads the same frozen source inventory and official
-hero-adjusted bonus board as the ticket leg. Pool size, pass quantity and
-previous ticket winners are excluded.
+the eligible gold traits of the day's board outside its solo quadrant, or all
+eligible traits there when none is gold; the solo quadrant serves only when it is
+the one eligible bucket. The solo quadrant is the ETH leg's pick, from
+`H(word, level)`, passed in by the caller. Entry selection uses
+`H(root, 1) % (realLength + virtualDeityCount)` directly, then resolves the packed
+owner or deity. A single recipient needs no grouped word cursor. It reads the same
+frozen source inventory and official hero-adjusted board as the ticket leg. Pool
+size, pass quantity and previous ticket winners are excluded.
 The existing early-bird ticket salts 239–242 remain unchanged. There is no
 additional VRF request, and an empty eligible set consumes the pending award.
 
@@ -80,9 +82,10 @@ named constants in the consumer; full string hashes are constant expressions.
 | Craps bounty boost | `H(word, bound, BOOST_TAG)` | Window identity; battle financial key excluded |
 | Craps schedule | `H(word, SCHEDULE_TAG, period)` | Fixed scheduled period |
 | Craps ties / rounding | `H(word, TIE_TAG, bound<<64 | seat)` / `H(word, CRAPS_ROUND_TAG, betId)` | Fixed window and entry; separate domains |
-| Daily trait board | `H(word, TRAIT_BOARD_TAG)` | Four disjoint six-bit slices of a tagged word; bonus board additionally uses `BONUS_TRAITS_TAG` |
+| Daily trait board | `H(word, TRAIT_BOARD_TAG)` | Four disjoint six-bit slices of a tagged word; one board per day, re-rolled identically by the day's later legs |
 | Hero symbol | `H(heroEntropy, HERO_SYMBOL_TAG, day)` | Committed day and effective distribution |
-| Jackpot recipient sampling | bucket root + trait + source salt + pull | Source salts distinguish ETH/current/carryover/purchase/far-future draws; prize size excluded |
+| Jackpot recipient sampling | bucket root + trait + source salt + pull | Source salts distinguish ETH/current/early-bird/purchase draws; prize size excluded |
+| Fill draw | `H(word', level, FAR_FUTURE_FLIP_TAG)` | `word'` is the day word, or on level 1's purchase days `H(word, LEVEL_ONE_FILL_SALT)` (the salt keeps it apart from that day's trait-matched FLIP draw); `level` is the highest minted level (the purchase level, or level + 1 on a jackpot day) |
 | BAF winner list | `H(word, BAF_WINNERS_TAG)` then ordinal chain | Fixed qualified cohorts |
 | BAF ticket award | `H(word, level, BAF_TICKET_TAG, winnerOrdinal)` | Previous awards cannot move this root |
 | Daily / level quests | `H(word, DAILY_QUEST_TAG)` / `H(word, LEVEL_QUEST_TAG)` | Global quests; forced-type policy unchanged |

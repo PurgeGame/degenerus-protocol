@@ -169,8 +169,8 @@ contract FoilSnapPayout is DeployProtocol {
         }
     }
 
-    /// @dev Settle every claimable (buyer, day, ticketIndex, drawKind) tuple and return the
-    ///      value each lane produced as a DELTA over the pre-claim tally. Deltas matter: a
+    /// @dev Settle every claimable (buyer, day, ticketIndex) tuple and return the value each
+    ///      lane produced as a DELTA over the pre-claim tally. Deltas matter: a
     ///      foil buyer's 16 jackpot entries can win a daily jackpot and the purchase itself
     ///      can complete a quest, so the standing balances carry a non-match baseline that
     ///      would otherwise swamp the comparison. The baseline is identical across both
@@ -185,11 +185,9 @@ contract FoilSnapPayout is DeployProtocol {
             for (uint24 day = _buyDay + 1; day <= _endDay; day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint256 ti = 0; ti < 4; ti++) {
-                    for (uint8 dk = 0; dk < 2; dk++) {
-                        try game.claimFoilMatch(_fb[i], day, ti, dk) {
-                            claims++;
-                        } catch {}
-                    }
+                    try game.claimFoilMatch(_fb[i], day, ti) {
+                        claims++;
+                    } catch {}
                 }
             }
         }

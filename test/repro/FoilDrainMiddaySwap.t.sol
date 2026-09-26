@@ -240,7 +240,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             "TraitsGenerated(address,uint256,uint32)"
         );
         bytes32 drawSig = keccak256(
-            "DailyWinningTraits(uint24,uint32,uint32,uint24)"
+            "DailyWinningTraits(uint24,uint32)"
         );
 
         int256 foilAt = -1;

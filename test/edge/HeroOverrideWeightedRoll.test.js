@@ -15,8 +15,8 @@
 //
 // (i)  Mechanic covered: the v42 HRROLL weighted-roll hero-override selector
 //      at `contracts/modules/DegenerusGameJackpotModule.sol:1630-1700`,
-//      consumed by `_applyHeroOverride` at the same file's L1600-L1628 with
-//      the production callsite at L1988 from `_rollWinningTraits`.
+//      consumed by `_rollBoard` at the same file's L1600-L1628 with
+//      the production callsite at L1988 from `_rollMainTraits`.
 //
 // (ii) JS-replay oracle + cross-attestation strategy per D-293-INVOKE-01:
 //      `_rollHeroSymbol` is `private view` so no inheritance-style harness can
@@ -29,7 +29,7 @@
 //      `advanceGame()` through the natural jackpot resolution chain that
 //      fires `DailyWinningTraits`; the event's `mainTraitsPacked` byte
 //      decodes to the on-chain hero `(quadrant, symbol)` per
-//      `_applyHeroOverride` L1623-L1627, asserted byte-equal to the JS oracle
+//      `_rollBoard` L1623-L1627, asserted byte-equal to the JS oracle
 //      output for the same `(dailyHeroWagers, randWord, day)` triple.
 //
 // (iii) D-293-GAS-01 RELAX posture (user disposition 2026-05-17,
@@ -44,7 +44,7 @@
 //       NOT asserted against any soft/hard window. Rationale: the
 //       worst-case-seeded path triggers downstream JackpotFlipWin /
 //       coin-jackpot cascades that fire differently from the all-zero-
-//       seeded path (the trait-byte rewrite at `_applyHeroOverride`
+//       seeded path (the trait-byte rewrite at `_rollBoard`
 //       L1623 affects bucket selection downstream); the observed delta
 //       is dominated by those downstream cascades rather than the
 //       `_rollHeroSymbol` body's ~+431 gas contribution. Theoretical
@@ -54,7 +54,7 @@
 //       the D-42N-GAS-01 soft +500 / hard +750 thresholds). Positive-path
 //       coverage IS asserted: the test verifies `DailyWinningTraits`
 //       fires under both worst-case-seeded and all-zero-seeded paths so
-//       the production-path arrival at `_applyHeroOverride` is
+//       the production-path arrival at `_rollBoard` is
 //       structurally exercised. Mirrors the Phase 291 D-291-GAS-01
 //       SKIP-GAS posture.
 //
@@ -375,7 +375,7 @@ async function pinDailyEntropy(game, deployer, mockVRF, word) {
 }
 
 // Decode one trait byte at `mainTraitsPacked[heroQuadrant]` per
-// _applyHeroOverride L1623-1627: trait byte = (quadrant << 6) | (color << 3)
+// _rollBoard L1623-1627: trait byte = (quadrant << 6) | (color << 3)
 // | symbol. The hero override writes the SAME byte to all 4 quadrant slots
 // (per L1623), so byte 0 suffices for cross-attestation — but reading
 // `heroQuadrant`'s own byte index is equivalent and self-documenting.
@@ -1004,10 +1004,10 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   // total == 0) is captured + logged for traceability but NOT asserted
   // against any soft/hard window. The production path
   //   `advanceGame()` → state machine → _emitDailyWinningTraits →
-  //   _rollWinningTraits → _applyHeroOverride → _rollHeroSymbol
+  //   _rollMainTraits → _rollBoard → _rollHeroSymbol
   // triggers downstream JackpotFlipWin / coin-jackpot cascades that fire
   // differently between the two seeded states (the trait-byte rewrite at
-  // _applyHeroOverride L1623 affects bucket selection downstream); the
+  // _rollBoard L1623 affects bucket selection downstream); the
   // observed delta is dominated by those downstream cascades rather than
   // the _rollHeroSymbol body's ~+431 gas contribution. Production-path
   // granularity cannot isolate the body cost from these downstream
@@ -1022,7 +1022,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   // Positive-path coverage IS asserted: the test verifies that
   // `DailyWinningTraits` fires under both worst-case-seeded AND
   // all-zero-seeded paths so the production-path arrival at
-  // _applyHeroOverride is structurally exercised. Mirrors the Phase 291
+  // _rollBoard is structurally exercised. Mirrors the Phase 291
   // D-291-GAS-01 SKIP-GAS posture.
   // ---------------------------------------------------------------------------
   describe(
@@ -1058,7 +1058,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           //   5. (Optional) seed dailyHeroWagers[dailyIdx] with raw32 RIGHT
           //      BEFORE the final advance so _rollHeroSymbol reads the
           //      seeded state. dailyIdx is the dailyHeroWagers key that
-          //      _applyHeroOverride passes to _rollHeroSymbol per L1609.
+          //      _rollBoard passes to _rollHeroSymbol per L1609.
           //
           // Returns { gasUsed, dailyWinningTraitsFired } — gasUsed is null
           // and dailyWinningTraitsFired is false when the state machine
@@ -1169,7 +1169,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // DailyWinningTraits. The RELAX posture drops the soft/hard
             // window assertion on the delta, but the event-firing check
             // remains the load-bearing structural assertion that the
-            // production path reaches _applyHeroOverride → _rollHeroSymbol.
+            // production path reaches _rollBoard → _rollHeroSymbol.
             expect(
               worstResult.dailyWinningTraitsFired,
               `worst-case-seeded path did not emit DailyWinningTraits (sample attempt ${totalAttempts}); advanceGame drain never reached _emitDailyWinningTraits`
@@ -1227,7 +1227,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             )} gas; theoretical anchor = +${GAS_DELTA_THEORETICAL} gas (292-01-MEASUREMENT.md §3.c — load-bearing acceptance evidence; production-path delta is NOT asserted against this anchor under the RELAX disposition)`
           );
           console.log(
-            `      [TST-HRROLL-06] PASS — DailyWinningTraits fired under both worst-case-seeded and all-zero-seeded paths across all ${N_GAS_SAMPLES} samples; production-path delta is dominated by downstream JackpotFlipWin / coin-jackpot branch-cost cascades (the trait-byte rewrite at _applyHeroOverride L1623 changes downstream bucket selection), not the _rollHeroSymbol body's ~+${GAS_DELTA_THEORETICAL} gas contribution`
+            `      [TST-HRROLL-06] PASS — DailyWinningTraits fired under both worst-case-seeded and all-zero-seeded paths across all ${N_GAS_SAMPLES} samples; production-path delta is dominated by downstream JackpotFlipWin / coin-jackpot branch-cost cascades (the trait-byte rewrite at _rollBoard L1623 changes downstream bucket selection), not the _rollHeroSymbol body's ~+${GAS_DELTA_THEORETICAL} gas contribution`
           );
         }
       );
@@ -1247,7 +1247,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   // hero (q, s) and is asserted byte-equal to the JS oracle's
   // (winQuadrant, winSymbol) output for the same inputs.
   //
-  // Decode rules (from _applyHeroOverride L1623-1627):
+  // Decode rules (from _rollBoard L1623-1627):
   //   trait byte = (heroQuadrant << 6) | (heroColor << 3) | heroSymbol
   //   The hero override writes the SAME byte to ALL 4 quadrant slots in
   //   `mainTraitsPacked`, so byte 0 suffices (we read byte at heroQuadrant
@@ -1402,43 +1402,24 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               );
             }
 
-            // Drive the JS oracle on the captured state. emitDailyWinningTraits
-            // emits the BONUS-draw traits as mainTraitsPacked:
-            //   mainTraitsPacked = _rollWinningTraits(randWord, isBonus=true)
-            //     → r = hash2(randWord, BONUS_TRAITS_TAG)         (salted word)
-            //     → mainHero = _rollHeroSymbol(dailyIdx, randWord, NO_EXCLUDE)
-            //     → excl = mainHero idx
-            //     → bonusHero = _rollHeroSymbol(dailyIdx, r, excl) (off salted
-            //                   word, main hero's slot excluded)
-            //     → _applyHeroResult(traits, r, bonusHero)
-            // So the hero in mainTraitsPacked is the BONUS hero, rolled off the
-            // salted word with the main hero excluded. The keccak `day` is the
-            // storage `dailyIdx` (= finalDailyIdx), NOT the event's questDay
-            // (_simulatedDayIndex). Model both rolls.
+            // Drive the JS oracle on the captured state. Level 1's
+            // emitDailyWinningTraits emits the day's MAIN board as
+            // mainTraitsPacked:
+            //   mainTraitsPacked = _rollMainTraits(randWord)
+            //     → _rollBoard(randWord, _goldenTicketBanQuadrant(...))
+            //     → base traits = JackpotBucketLib.getRandomTraits(randWord)
+            //                     (the unsalted word — no BONUS_TRAITS_TAG salt)
+            //     → hero = _rollHeroSymbol(dailyIdx, randWord, banQuadrant)
+            //       (banQuadrant is _NO_QUADRANT_BAN here: the fixture never
+            //       arms a golden ticket, so no quadrant is banned)
+            // The keccak `day` is the storage `dailyIdx` (= finalDailyIdx), NOT
+            // the event's questDay (_simulatedDayIndex).
             const U256_MASK_LOCAL = (1n << 256n) - 1n;
             const randWord = entropy & U256_MASK_LOCAL;
-            const mainHero = rollHeroSymbolRef({
+            const oracleOut = rollHeroSymbolRef({
               day: Number(finalDailyIdx),
               entropy: randWord,
               dailyHeroWagers: capturedSlots,
-            });
-            const excl = mainHero.hasWinner
-              ? (mainHero.winQuadrant << 3) | mainHero.winSymbol
-              : 0xff; // _NO_HERO_EXCLUDE
-            const BONUS_TRAITS_TAG = BigInt(
-              hre.ethers.keccak256(hre.ethers.toUtf8Bytes("BONUS_TRAITS"))
-            );
-            const saltedRng = BigInt(
-              hre.ethers.solidityPackedKeccak256(
-                ["uint256", "uint256"],
-                [randWord, BONUS_TRAITS_TAG]
-              )
-            );
-            const oracleOut = rollHeroSymbolRef({
-              day: Number(finalDailyIdx),
-              entropy: saltedRng,
-              dailyHeroWagers: capturedSlots,
-              excludeIdx: excl,
             });
 
             // Assert hasWinner=true (seed has 3 non-zero amounts, so total
@@ -1450,11 +1431,11 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             ).to.equal(true);
 
             // Decode the on-chain hero byte at position `oracleOut.winQuadrant`.
-            // Rationale: _applyHeroOverride L1623 writes
-            //   `w[heroQuadrant] = (heroQuadrant << 6) | (heroColor << 3) | heroSymbol`
+            // Rationale: `_rollBoard` writes
+            //   `traits[heroQuadrant] = (traits[heroQuadrant] & 0xF8) | heroSymbol`
             // — so ONLY the byte at index `heroQuadrant` in mainTraitsPacked
             // carries the override-injected `heroSymbol`. The other three
-            // bytes carry JackpotBucketLib.getRandomTraits(r)'s random
+            // bytes carry JackpotBucketLib.getRandomTraits(randWord)'s random
             // per-quadrant symbols (each with `quadrant_bits == position`).
             //
             // The quadrant_bits of EVERY byte position N in mainTraitsPacked
@@ -1475,7 +1456,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
             // Sanity invariant: byte at position N always has quadrant
             // bits == N (verified for every byte position; getRandomTraits
-            // and _applyHeroOverride both encode position into the top 2
+            // and the hero override both encode position into the top 2
             // bits of the byte at that position).
             expect(
               decoded.quadrant,

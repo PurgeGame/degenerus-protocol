@@ -87,11 +87,12 @@
 //
 // Heavy MC + lifecycle drive — runs ONLY under `npm run test:stat`.
 //
-// The current purchase-day draw no longer has a second trait draw over [2, 5].
-// It uses a future-queue fill draw instead, and the trait draw splits into up
-// to 25 Craps awards plus 25 FLIP shares. This historical 50-trait-pull
-// measurement cannot be applied to that path. Current empty-pull conservation
-// and sparse-fill behavior are covered by CoinDrawCrapsSeats.t.sol.
+// The purchase-day draw has no second trait draw over [2, 5]. The day's FLIP
+// budget plays as a separate future-queue fill draw (its own closed craps
+// battle), and level 1's own trait-matched draw pays up to COIN_DRAW_SHARES
+// (50) equal FLIP shares with no craps split. This historical 50-trait-pull
+// measurement does not apply to either path. Current empty-pull conservation
+// and sparse-fill behavior are covered by LevelOneFlipDraw.t.sol.
 
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";

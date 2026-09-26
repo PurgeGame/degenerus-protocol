@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 /// @title FoilClaimBatch — behavioural coverage for claimFoilMatchMany
@@ -28,7 +29,6 @@ contract FoilClaimBatch is DeployProtocol {
         address player;
         uint24 day;
         uint8 ticketIndex;
-        uint8 drawKind;
     }
 
     address[FOIL_BUYERS] private _fb;
@@ -36,7 +36,7 @@ contract FoilClaimBatch is DeployProtocol {
     uint24 private _endDay;
 
     bytes32 private constant FOIL_CLAIMED_SIG =
-        keccak256("FoilMatchClaimed(address,uint24,uint256,uint8,uint8,uint256)");
+        keccak256("FoilMatchClaimed(address,uint24,uint256,uint8,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -130,11 +130,9 @@ contract FoilClaimBatch is DeployProtocol {
             for (uint24 day = _buyDay + 1; day <= _endDay && n < want; day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint8 ti = 0; ti < 4 && n < want; ti++) {
-                    for (uint8 dk = 0; dk < 2 && n < want; dk++) {
-                        try game.claimFoilMatch(_fb[i], day, ti, dk) {
-                            buf[n++] = Tuple(_fb[i], day, ti, dk);
-                        } catch {}
-                    }
+                    try game.claimFoilMatch(_fb[i], day, ti) {
+                        buf[n++] = Tuple(_fb[i], day, ti);
+                    } catch {}
                 }
             }
         }
@@ -147,23 +145,21 @@ contract FoilClaimBatch is DeployProtocol {
     function _explode(Tuple[] memory t)
         internal
         pure
-        returns (address[] memory p, uint24[] memory d, uint8[] memory ti, uint8[] memory dk)
+        returns (address[] memory p, uint24[] memory d, uint8[] memory ti)
     {
         p = new address[](t.length);
         d = new uint24[](t.length);
         ti = new uint8[](t.length);
-        dk = new uint8[](t.length);
         for (uint256 i = 0; i < t.length; i++) {
             p[i] = t[i].player;
             d[i] = t[i].day;
             ti[i] = t[i].ticketIndex;
-            dk[i] = t[i].drawKind;
         }
     }
 
     /// @dev A tuple that can never settle: ticketIndex is out of the 0-3 domain.
     function _deadTuple(address player) internal pure returns (Tuple memory) {
-        return Tuple(player, 1, 9, 0);
+        return Tuple(player, 1, 9);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -175,9 +171,8 @@ contract FoilClaimBatch is DeployProtocol {
         address[] memory p = new address[](2);
         uint24[] memory d = new uint24[](1);
         uint8[] memory ti = new uint8[](2);
-        uint8[] memory dk = new uint8[](2);
         vm.expectRevert(LengthMismatch.selector);
-        game.claimFoilMatchMany(p, d, ti, dk);
+        game.claimFoilMatchMany(p, d, ti);
     }
 
     /// @notice A non-claimable opening tuple reverts the whole call, so a sender handed an
@@ -191,9 +186,9 @@ contract FoilClaimBatch is DeployProtocol {
         batch[1] = good[0];
         batch[2] = good[1];
 
-        (address[] memory p, uint24[] memory d, uint8[] memory ti, uint8[] memory dk) = _explode(batch);
+        (address[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(batch);
         vm.expectRevert(StaleBatch.selector);
-        game.claimFoilMatchMany(p, d, ti, dk);
+        game.claimFoilMatchMany(p, d, ti);
     }
 
     /// @notice Re-submitting an already-swept list reverts: the opener's marker is set, so
@@ -202,14 +197,14 @@ contract FoilClaimBatch is DeployProtocol {
         Tuple[] memory good = _findClaimable(3);
         require(good.length >= 2, "scenario produced too few claimable tuples");
 
-        (address[] memory p, uint24[] memory d, uint8[] memory ti, uint8[] memory dk) = _explode(good);
+        (address[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(good);
 
         // First sender settles the list.
-        game.claimFoilMatchMany(p, d, ti, dk);
+        game.claimFoilMatchMany(p, d, ti);
 
         // Second sender, same calldata: opener is spent.
         vm.expectRevert(StaleBatch.selector);
-        game.claimFoilMatchMany(p, d, ti, dk);
+        game.claimFoilMatchMany(p, d, ti);
     }
 
     /// @notice A dead tuple PAST the opener is skipped, not fatal: the tuples after it
@@ -223,95 +218,275 @@ contract FoilClaimBatch is DeployProtocol {
         batch[1] = _deadTuple(_fb[0]); // dead in the middle
         batch[2] = good[1];
 
-        (address[] memory p, uint24[] memory d, uint8[] memory ti, uint8[] memory dk) = _explode(batch);
-        game.claimFoilMatchMany(p, d, ti, dk); // must not revert
+        (address[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(batch);
+        game.claimFoilMatchMany(p, d, ti); // must not revert
 
         // Both good tuples are consumed: re-claiming either now fails.
         vm.expectRevert();
-        game.claimFoilMatch(good[0].player, good[0].day, good[0].ticketIndex, good[0].drawKind);
+        game.claimFoilMatch(good[0].player, good[0].day, good[0].ticketIndex);
         vm.expectRevert();
-        game.claimFoilMatch(good[1].player, good[1].day, good[1].ticketIndex, good[1].drawKind);
+        game.claimFoilMatch(good[1].player, good[1].day, good[1].ticketIndex);
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Purchase days roll no bonus set; the face table
+    // Day-shape storage probes and the face table
     // ──────────────────────────────────────────────────────────────────────
 
     /// @dev Storage slots (scripts/layout/golden/DegenerusGame.json): `dailyFoilDraw` packs a
-    ///      day's main set [0..31], bonus set [32..63] and level [64..]; `foilRecord[L][player]`
-    ///      holds the pack's resolveDay in its low 24 bits; `rngWordByDay` is what the pack's
-    ///      four lines derive from.
+    ///      day's main set [0..31] and level [64..] (bits [32..63] reserved, always zero);
+    ///      `foilRecord[L][player]` holds the pack's resolveDay in its low 24 bits and multBps
+    ///      at [24..39]; `rngWordByDay` is what the pack's four lines derive from.
     uint256 private constant FOIL_DRAW_SLOT = 60;
     uint256 private constant FOIL_RECORD_SLOT = 58;
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
+    uint256 private constant PRIZE_POOLS_SLOT = 2;
 
-    /// @dev A purchase day past level 1 stores bonus zero (it rolls no bonus set), and the
-    ///      claim must read that as "no bonus draw", never as a set to match. To make that
-    ///      bite, both of a day's sets are cleared to zero and the pack's line word is varied
-    ///      until a MAIN-set claim pays against the all-zero main set: that line would score
-    ///      against a zero bonus set too, so only the guard can refuse the bonus claim.
-    function test_aDayWithoutABonusSetPaysNoBonusClaim() public {
-        address player = _fb[0];
-        uint24 day;
-        uint24 lvl;
-        uint24 resolveDay;
-        for (uint24 d = _buyDay + 1; d <= _endDay; d++) {
-            if (game.rngWordForDay(d) == 0) continue;
-            uint256 draw = uint256(vm.load(address(game), keccak256(abi.encode(uint256(d), FOIL_DRAW_SLOT))));
-            uint24 L = uint24(draw >> 64);
-            bytes32 inner = keccak256(abi.encode(uint256(L), FOIL_RECORD_SLOT));
-            uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(player, inner))));
-            if (rec == 0 || d < uint24(rec)) continue;
-            (day, lvl, resolveDay) = (d, L, uint24(rec));
-            break;
-        }
-        assertTrue(day != 0, "no sealed day the pack can claim");
+    bytes32 private constant FOIL_SEED_TAG = keccak256("foil-seed");
+    uint256 private constant FOIL_FACES_T8 = 80_000;
 
-        vm.store(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT)), bytes32(uint256(lvl) << 64));
-        bytes32 wordKey = keccak256(abi.encode(uint256(resolveDay), RNG_WORD_BY_DAY_SLOT));
-
-        bool found;
-        uint8 ticket;
-        for (uint256 k; k < 1_500 && !found; ++k) {
-            vm.store(address(game), wordKey, keccak256(abi.encode("zero-set line", k)));
-            for (uint8 ti; ti < 4 && !found; ++ti) {
-                uint256 snap = vm.snapshotState();
-                try game.claimFoilMatch(player, day, ti, 0) {
-                    found = true;
-                    ticket = ti;
-                } catch {}
-                vm.revertToState(snap);
-            }
-        }
-        assertTrue(found, "no line word scored against an all-zero set");
-
-        game.claimFoilMatch(player, day, ticket, 0); // the main set of zero pays: the line matches zero
-        vm.expectRevert();
-        game.claimFoilMatch(player, day, ticket, 1); // the bonus set of zero never does
+    /// @dev dailyFoilDraw[day]: main set [0..31], level [64..87]. Bits [32..63] are reserved
+    ///      and always read zero.
+    function _foilDraw(uint24 day) internal view returns (uint32 mainSet, uint24 lvl) {
+        uint256 draw = uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT))));
+        mainSet = uint32(draw);
+        lvl = uint24(draw >> 64);
     }
 
-    /// @dev Every real win pays the table's faces for its score: 8 / 24 / 140 / 1,600 / 40,000.
+    /// @dev Every real win pays the table's faces for its score: 16 / 48 / 280 / 3,200 / 80,000.
     function test_winsPayTheFaceTable() public {
         Tuple[] memory t = _findClaimable(12);
         assertGt(t.length, 0, "the scenario produced no claimable win");
         uint256[9] memory faces;
-        faces[4] = 8;
-        faces[5] = 24;
-        faces[6] = 140;
-        faces[7] = 1_600;
-        faces[8] = 40_000;
+        faces[4] = 16;
+        faces[5] = 48;
+        faces[6] = 280;
+        faces[7] = 3_200;
+        faces[8] = 80_000;
         for (uint256 i; i < t.length; ++i) {
             vm.recordLogs();
-            game.claimFoilMatch(t[i].player, t[i].day, t[i].ticketIndex, t[i].drawKind);
+            game.claimFoilMatch(t[i].player, t[i].day, t[i].ticketIndex);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool seen;
             for (uint256 k; k < logs.length; ++k) {
                 if (logs[k].topics.length == 0 || logs[k].topics[0] != FOIL_CLAIMED_SIG) continue;
-                (,, uint8 tier, uint256 paid) = abi.decode(logs[k].data, (uint256, uint8, uint8, uint256));
+                (, uint8 tier, uint256 paid) = abi.decode(logs[k].data, (uint256, uint8, uint256));
                 assertEq(paid, faces[tier], "a win paid off the face table");
                 seen = true;
             }
             assertTrue(seen, "a settled claim logged no FoilMatchClaimed");
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Every day shape pays the flat face table (and a T=8 whale-pass credit)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// @dev The SAME derivation `_deriveFoilLines` performs for one ticket index: four
+    ///      boosted [QQ][CCC][SSS] quadrant bytes off (entropy, buyer, level,
+    ///      FOIL_SEED_TAG, ticketIndex).
+    function _deriveFoilLine(
+        address buyer,
+        uint24 lvl,
+        uint256 entropy,
+        uint16 multBps,
+        uint256 ticketIndex
+    ) internal pure returns (uint32) {
+        uint256[7] memory cut = DegenerusTraitUtils.foilCuts(multBps);
+        uint256 seed = uint256(keccak256(abi.encode(entropy, buyer, lvl, FOIL_SEED_TAG, ticketIndex)));
+        uint8 tA = DegenerusTraitUtils.foilTrait(uint64(seed), cut);
+        uint8 tB = DegenerusTraitUtils.foilTrait(uint64(seed >> 64), cut) | 64;
+        uint8 tC = DegenerusTraitUtils.foilTrait(uint64(seed >> 128), cut) | 128;
+        uint8 tD = DegenerusTraitUtils.foilTrait(uint64(seed >> 192), cut) | 192;
+        return uint32(tA) | (uint32(tB) << 8) | (uint32(tC) << 16) | (uint32(tD) << 24);
+    }
+
+    /// @dev Force dailyFoilDraw[day]'s main set to `sel`, preserving the level bits the REAL
+    ///      writer (emitDailyWinningTraits / payDailyJackpot) set. Every quadrant byte then
+    ///      equals the claimant's own line byte-for-byte, so the match scores a guaranteed
+    ///      tier 8 (symbol AND color both match every quadrant) regardless of what the day's
+    ///      real board actually rolled — only the win set is forced, never the level.
+    function _forceWinSetToLine(uint24 day, uint32 sel) internal {
+        (, uint24 lvl) = _foilDraw(day);
+        vm.store(
+            address(game),
+            keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT)),
+            bytes32(uint256(sel) | (uint256(lvl) << 64))
+        );
+    }
+
+    /// @dev Buy one foil pack for `p` at whichever level is active right now (mirrors
+    ///      `_activeTicketLevel()`'s purchase-phase / jackpot-phase split), and read back
+    ///      the record the buy froze.
+    function _buyFoilPackNow(address p) internal returns (uint24 lvl, uint24 resolveDay, uint16 multBps) {
+        vm.deal(p, 1_000 ether);
+        (, , , , uint256 priceWei) = game.purchaseInfo();
+        lvl = game.jackpotPhase() ? game.level() : game.level() + 1;
+        vm.prank(p);
+        game.purchase{value: 10 * priceWei}(p, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        bytes32 inner = keccak256(abi.encode(uint256(lvl), FOIL_RECORD_SLOT));
+        uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(p, inner))));
+        resolveDay = uint24(rec);
+        multBps = uint16(rec >> 24);
+    }
+
+    /// @dev Seed the live next-pool half (slot 2, low 128 bits) up to targetNext, mirroring
+    ///      DailyRngStallRecovery's harness shortcut for crossing a level's pool target
+    ///      without a slow organic purchase ramp.
+    function _seedNextPrizePool(uint256 targetNext) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_SLOT)));
+        uint256 currentNext = packed & ((uint256(1) << 128) - 1);
+        if (currentNext >= targetNext) return;
+        vm.store(
+            address(game),
+            bytes32(PRIZE_POOLS_SLOT),
+            bytes32((packed & ~((uint256(1) << 128) - 1)) | targetNext)
+        );
+    }
+
+    function _fulfillPendingVrf() internal {
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId == 0 || reqId == _lastFulfilledReqId) return;
+        (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+        if (fulfilled) return;
+        try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("flat-face", reqId)))) {
+            _lastFulfilledReqId = reqId;
+        } catch {}
+    }
+
+    /// @dev One advance tick: fulfill whatever VRF request is pending, then call
+    ///      advanceGame(). A failing call (nothing due yet) warps a day so the next tick
+    ///      has something to do. Single-step (unlike `_completeDay`'s bounded drain loop)
+    ///      so a caller can observe a one-tick state flip — e.g. `jackpotPhase()` going
+    ///      true the instant the level-1 -> level-1's-own-jackpot-phase transition lands —
+    ///      instead of the drain loop running straight through it.
+    function _tick() internal {
+        _fulfillPendingVrf();
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        if (!ok) vm.warp(vm.getBlockTimestamp() + 1 days);
+    }
+
+    /// @dev Gates on dailyFoilDraw itself, not rngWordForDay: inside the jackpot phase the
+    ///      day's RNG word can seal (and even unlock the NEXT day's request) across several
+    ///      single-step ticks before the jackpot-daily stage that actually writes
+    ///      dailyFoilDraw[day] runs — gating on the word alone would force-write a win set
+    ///      onto a still-empty record (level 0: the zero value, not a real day shape).
+    function _tickUntilSealed(uint24 day, uint256 maxTicks) internal {
+        for (uint256 i; i < maxTicks; ++i) {
+            if (uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT)))) != 0) return;
+            _tick();
+        }
+        revert("harness: day never sealed within the bound");
+    }
+
+    function _tickUntilJackpotPhase(uint256 maxTicks) internal {
+        for (uint256 i; i < maxTicks; ++i) {
+            if (game.jackpotPhase()) return;
+            _tick();
+        }
+        revert("harness: level 1 never entered its own jackpot phase");
+    }
+
+    function _tickUntilPurchasePhase(uint256 maxTicks) internal {
+        for (uint256 i; i < maxTicks; ++i) {
+            if (!game.jackpotPhase()) return;
+            _tick();
+        }
+        revert("harness: level 1's jackpot phase never ended");
+    }
+
+    /// @dev Force the day's win set to `player`'s own ticket-0 line (a guaranteed tier 8),
+    ///      claim it, and assert the flat rule: the event's `faces` (which is also the
+    ///      magnitude staked into the spin — see `_payFoilTier`) equals the plain T=8 face
+    ///      table entry, the whale-pass credit is exactly one, and dailyFoilDraw's reserved
+    ///      bits [32..63] read zero.
+    function _assertFlatFaceTable(
+        address player,
+        uint24 day,
+        uint24 lvl,
+        uint16 multBps,
+        string memory tag
+    ) internal {
+        bytes32 slot = keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT));
+        (, uint24 recordedLvl) = _foilDraw(day);
+        assertEq(uint256(recordedLvl), uint256(lvl), string.concat(tag, ": dailyFoilDraw level mismatch"));
+        uint256 reserved = (uint256(vm.load(address(game), slot)) >> 32) & type(uint32).max;
+        assertEq(reserved, 0, string.concat(tag, ": dailyFoilDraw bits 32..63 must read zero"));
+
+        uint32 sel = _deriveFoilLine(player, lvl, game.rngWordForDay(day), multBps, 0);
+        _forceWinSetToLine(day, sel);
+
+        uint256 passesBefore = game.whalePassClaimAmount(player);
+        vm.recordLogs();
+        game.claimFoilMatch(player, day, 0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bool seen;
+        for (uint256 k; k < logs.length; ++k) {
+            if (logs[k].topics.length == 0 || logs[k].topics[0] != FOIL_CLAIMED_SIG) continue;
+            (, uint8 tier, uint256 paid) = abi.decode(logs[k].data, (uint256, uint8, uint256));
+            assertEq(uint256(tier), 8, string.concat(tag, ": forced line did not score tier 8"));
+            assertEq(paid, FOIL_FACES_T8, string.concat(tag, ": faces did not match the face table"));
+            seen = true;
+        }
+        assertTrue(seen, string.concat(tag, ": forced claim logged no FoilMatchClaimed"));
+
+        uint256 gained = game.whalePassClaimAmount(player) - passesBefore;
+        assertEq(gained, 1, string.concat(tag, ": T=8 whale-pass credit must be exactly one"));
+    }
+
+    /// @notice Every day shape — level 1's purchase day, level 1's own jackpot day, and a
+    ///         level >= 2 purchase day — pays a foil match at exactly the face table and
+    ///         grants exactly one whale-pass credit on a T=8. All three dailyFoilDraw records
+    ///         below are written by the real advance chain — emitDailyWinningTraits (level 1)
+    ///         and payDailyJackpot (the jackpot day and level 2) — never by the harness; only
+    ///         the WIN SET is forced, to a guaranteed tier-8 line, so RNG luck cannot leave any
+    ///         of the three shapes untested.
+    function test_faceTablePaysFlatAcrossDayShapes() public {
+        // ---- Level-1 purchase day.
+        address p1 = makeAddr("flat-lvl1");
+        (uint24 lvl1, uint24 resolve1, uint16 mult1) = _buyFoilPackNow(p1);
+        assertEq(uint256(lvl1), 1, "harness: must buy during level 1's purchase phase");
+        _driveUntilSealedByWarp(resolve1, 10);
+        _assertFlatFaceTable(p1, resolve1, lvl1, mult1, "level-1 purchase day");
+
+        // ---- Trip level 1's own pool target (BOOTSTRAP_PRIZE_POOL = 50 ether) and step,
+        // one advance at a time, to the exact tick the transition lands — so a foil pack
+        // bought right after is bought BEFORE that jackpot cycle's own daily jackpot call,
+        // landing its resolveDay squarely inside the still-open jackpot phase.
+        _seedNextPrizePool(60 ether);
+        _tickUntilJackpotPhase(20);
+        assertTrue(game.jackpotPhase(), "harness: must have entered level 1's own jackpot phase");
+
+        // ---- Jackpot day. `level` is bumped at the transition's own RNG request (ahead of
+        // `_endPhase`), so jackpot-phase foil buys already route to the post-increment level —
+        // the same L a level-1 purchase day recorded.
+        address p2 = makeAddr("flat-jkpt");
+        (uint24 lvl2, uint24 resolve2, uint16 mult2) = _buyFoilPackNow(p2);
+        assertEq(uint256(lvl2), 1, "harness: jackpot-phase foil buys route to the current level");
+        _tickUntilSealed(resolve2, 30);
+        _assertFlatFaceTable(p2, resolve2, lvl2, mult2, "jackpot day");
+
+        // ---- Ride out the rest of level 1's jackpot phase into level 2's purchase phase.
+        _tickUntilPurchasePhase(30);
+        assertFalse(game.jackpotPhase(), "harness: level 1's jackpot phase must have ended");
+
+        // ---- Level >= 2 purchase day.
+        address p3 = makeAddr("flat-lvl2");
+        (uint24 lvl3, uint24 resolve3, uint16 mult3) = _buyFoilPackNow(p3);
+        assertGe(uint256(lvl3), 2, "harness: must buy during a level >= 2 purchase phase");
+        _driveUntilSealedByWarp(resolve3, 10);
+        _assertFlatFaceTable(p3, resolve3, lvl3, mult3, "level >= 2 purchase day");
+    }
+
+    /// @dev Ordinary-purchase-phase day driver (no phase-transition risk): warp a day, run
+    ///      `_completeDay`'s bounded drain, repeat until `day` seals. Distinct from `_tick`
+    ///      because here overshoot cannot skip a shape we care about.
+    function _driveUntilSealedByWarp(uint24 day, uint256 maxDays) internal {
+        for (uint256 i; i < maxDays; ++i) {
+            if (game.rngWordForDay(day) != 0) return;
+            _completeDay(uint256(keccak256(abi.encode("flat-face-day", day, i))));
+            vm.warp(vm.getBlockTimestamp() + 1 days);
+        }
+        revert("harness: day never sealed within the bound");
     }
 }

@@ -94,14 +94,13 @@ interface IDegenerusGameJackpotModule {
         uint256 randWord
     ) external;
 
-    /// @notice Pays the daily coin jackpot and the day's own ticket leg
+    /// @notice Pays the day's own ticket leg and completes the daily
     /// @param randWord Random word for distribution
-    /// @return carryoverPending True when a carryover ticket leg waits for the next advance
-    function payDailyJackpotCoinAndTickets(uint256 randWord) external returns (bool carryoverPending);
+    function payDailyJackpotCoinAndTickets(uint256 randWord) external;
 
-    /// @notice Pays the carryover ticket leg the coin+tickets stage left pending
+    /// @notice Plays a jackpot-phase daily's fill draw from its own advance stage
     /// @param randWord Random word for distribution (the same day's word)
-    function payCarryoverTickets(uint256 randWord) external;
+    function payJackpotFill(uint256 randWord) external;
 
     /// @notice Pay the purchase-phase daily's priced ticket leg from its own advance stage.
     /// @param randWord The day's recorded VRF word.
@@ -123,24 +122,23 @@ interface IDegenerusGameJackpotModule {
         uint8 golds
     ) external;
 
-    /// @notice Pays daily coin jackpot rewards
-    /// @param lvl The current game level
-    /// @param randWord Random word for winner selection
+    /// @notice Pays level 1's trait-matched FLIP draw on the day's main board
+    /// @param lvl Level keying the prize pool snapshot for the budget
+    /// @param randWord Random word for the board and winner selection
     /// @param minLevel Minimum target level for the coin distribution (inclusive)
     /// @param maxLevel Maximum target level for the coin distribution (inclusive)
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
 
     /// @notice Pays the purchase-day FLIP fill draw over unminted future levels as one closed
-    ///         craps battle (CoinDrawBattle)
+    ///         craps battle (CoinDrawBattle); jackpot days run the same draw from
+    ///         payJackpotFill
     /// @param lvl The purchase level
     /// @param randWord Random word for level picks and walks
     function payDailyFutureFlipJackpot(uint24 lvl, uint256 randWord) external;
 
-    /// @notice Emit DailyWinningTraits without running distribution.
-    /// @param lvl Current level.
-    /// @param randWord VRF entropy for trait derivation.
-    /// @param bonusTargetLevel Target level for the primary bonus coin distribution.
-    function emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel) external;
+    /// @notice Roll, record and emit level 1's purchase-day board without running distribution.
+    /// @param randWord VRF entropy for the board.
+    function emitDailyWinningTraits(uint256 randWord) external;
 
     /// @notice Game-over terminal jackpot: Final-day bucket distribution to the final ticket cohort.
     /// @param poolWei Total ETH to distribute.
@@ -243,12 +241,20 @@ interface IDegenerusGameWhaleModule {
 
     /// @notice Awards early-bird or quadrant passes to one fresh recipient.
     /// @dev Nested delegatecall from JackpotModule against frozen GAME inventory.
-    ///      Early bird supplies a packed bonus board and amount in half-pass units.
-    ///      Otherwise traits holds one quadrant's trait, amount is its ETH allocation,
-    ///      and randWord is its bucket entropy. Quadrant pass cost credits future;
-    ///      early bird moves no pools. Returns award value (zero for an empty draw).
-    function awardWhalePass(uint24 lvl, uint32 traits, uint256 amount, uint256 randWord, bool earlyBird)
-        external returns (uint256 spent);
+    ///      Early bird supplies the day's packed main board, its solo quadrant (the winner
+    ///      is drawn outside it unless it is the one active bucket) and amount in half-pass
+    ///      units. Otherwise traits holds one quadrant's trait, amount is its ETH allocation,
+    ///      randWord is its bucket entropy and soloQuadrant is unused. Quadrant pass cost
+    ///      credits future; early bird moves no pools. Returns award value (zero for an
+    ///      empty draw).
+    function awardWhalePass(
+        uint24 lvl,
+        uint32 traits,
+        uint256 amount,
+        uint256 randWord,
+        bool earlyBird,
+        uint8 soloQuadrant
+    ) external returns (uint256 spent);
 
     /// @notice sDGNRS's once-per-level automatic whale purchase (afking process STAGE only).
     /// @dev Delegatecall-only, nested from GameAfkingModule.processSubscriberStage; no facade
@@ -825,12 +831,10 @@ interface IDegenerusGameFoilPackModule {
     /// @param player Pack owner the win credits to.
     /// @param day The draw day to claim against.
     /// @param ticketIndex Which of the pack's four tickets to claim (0-3).
-    /// @param drawKind 0 = main set, 1 = bonus set.
     function claimFoilMatch(
         address player,
         uint256 day,
-        uint256 ticketIndex,
-        uint8 drawKind
+        uint256 ticketIndex
     ) external;
 
     /// @notice Claim a foil pack's gold (permissionless).
@@ -848,17 +852,15 @@ interface IDegenerusGameFoilPackModule {
     /// @dev Non-claimable tuples past index 0 are skipped (not reverted); each settled
     ///      win credits its own player and the caller earns a small per-settled-claim
     ///      FLIP bounty during a live game. A non-claimable tuple AT index 0 reverts the
-    ///      whole call (StaleBatch), marking an already-swept list. The four arrays are
+    ///      whole call (StaleBatch), marking an already-swept list. The three arrays are
     ///      parallel.
     /// @param players Pack owners the wins credit to.
     /// @param drawDays Draw days to claim against.
     /// @param ticketIndexes Which pack ticket (0-3) per claim.
-    /// @param drawKinds 0 = main, 1 = bonus, per claim.
     function claimFoilMatchMany(
         address[] calldata players,
         uint24[] calldata drawDays,
-        uint8[] calldata ticketIndexes,
-        uint8[] calldata drawKinds
+        uint8[] calldata ticketIndexes
     ) external;
 
     /// @notice Drain the per-buy-day foil buckets on the leftover write budget.

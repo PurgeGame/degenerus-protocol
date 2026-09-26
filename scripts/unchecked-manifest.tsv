@@ -61,8 +61,7 @@ BOUNDED	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	4	--units	Guarded b
 NO-OVERFLOW-OP	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	5	++traits	Counts non-empty buckets among 256, so at most 256.
 NO-OVERFLOW-OP	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf	6	++t	Loop counter bounded by `t < 256`.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	payDailyJackpot	1	++i	Loop counter of `for (uint8 i; i < 4; )` at :696 building the rotated bucketCounts; i is bounded by the literal 4.
-BOUNDED	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets	1	jackpotCounter = counterCached + 1	Physical draw counter increments once per day; the advance ends the phase at 1 (turbo) or 3 (standard), far below uint8 overflow.
-BOUNDED	modules/DegenerusGameJackpotModule.sol	payCarryoverTickets	1	++jackpotCounter	Physical draw counter increments once per day; the advance ends the phase at 1 (turbo) or 3 (standard), far below uint8 overflow.
+BOUNDED	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets	1	jackpotCounter += 1	Physical draw counter increments once per day; the advance ends the phase at 1 (turbo) or 3 (standard), far below uint8 overflow.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_distributeTicketsToBuckets	1	++traitIdx	Loop counter of `for (uint8 traitIdx; traitIdx < 4; )` at :1054; bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_distributeTicketsToBucket	1	++i	Loop counter of `for (uint256 i; i < len; )` at :1102 where len = winners.length from _randTraitTicket (<= numWinners, a uint8); array-length bounded.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_computeBucketCounts	1	++activeCount	uint8 incremented at most once per iteration of the 4-iteration loop at :1149, so activeCount <= 4.
@@ -84,13 +83,9 @@ NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	3	++s	Loop
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	4	++q	Tail increment of `for (uint8 q; q < 4; )` at :1815; bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	5	++idx	Loop counter of `for (uint8 idx; idx < 32; )` at :1856; bounded by the literal 32.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_randTraitTicket	1	++i	Loop counter of `for (uint256 i; i < numWinners; )` at :1954 with numWinners a uint8 parameter (<= 255).
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	1	++t	Loop counter of `for (uint8 t; t < 4; )` at :2063; bounded by the literal 4.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	2	++n	n counts found craps winners and is incremented at most once per pull of `for (uint256 i; i < pulls; )` at :2139, pulls <= COIN_DRAW_HALF_SLOTS = 25 = the craps arrays' length.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	3	++i	Loop counter of `for (uint256 i; i < pulls; )` at :2139; pulls <= 25.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	4	++paid	paid is incremented at most once per pull of `for (i = 25; i < 25 + cap; )` at :2158, so paid <= cap = coin.length <= 25.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	5	++i	Loop counter of `for (i = 25; i < 25 + cap; )` at :2158; cap <= 25, so i <= 50.
-BOUNDED	modules/DegenerusGameJackpotModule.sol	_coinDrawPlan	1	uint256 left = (budget >> 1) - n * CRAPS_OPENER_SEAT_VALUE	n <= _crapsPulls(budget) = min(25, (budget >> 1) / CRAPS_OPENER_SEAT_VALUE), so n * SEAT <= budget >> 1 (no underflow, n <= 25 so no overflow); fullDays * UPGRADE <= left, so the units subtraction cannot underflow; units / cap with cap != 0.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_finishCoinDraw	1	for (	k < paid + n = the batch arrays' length at every write (paid coin rows, then at most one row per craps winner i < n); coinOff + k < coin.length (the trait draw's only caller passes coinOff 0, paid <= cap = coin.length); dayCode day index +1 cannot wrap a uint24 day.
+NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	1	++t	Loop counter of `for (uint8 t; t < 4; )`; bounded by the literal 4.
+NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	2	++paid	paid is incremented at most once per pull of `for (uint256 i; i < cap; )`, so paid <= cap = the batch arrays' length <= COIN_DRAW_SHARES = 50.
+NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardDailyCoinToTraitWinners	3	++i	Loop counter of `for (uint256 i; i < cap; )`; cap <= COIN_DRAW_SHARES = 50.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardFutureCoinFill	1	++found	found < FILL_BATTLE_ENTRANTS = 50 at every increment: take = min(len, FILL_BATTLE_ENTRANTS - found) bounds the walk; k < take and idx < len (wrapped to 0 at len) index one queue.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_awardFutureCoinFill	2	++pick	Loop counter of the level-pick loop, bounded by FUTURE_FLIP_LEVEL_PICKS = 16.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	runBafJackpot	1	++i	Loop counter of `for (uint256 i; i < winnersLen; )` at :2568 with winnersLen = winnersArr.length returned by jackpots.runBafJackpot; array-length bounded.

@@ -5,27 +5,24 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
-import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 contract EightWinnerHarness is DegenerusGameJackpotModule, BucketSeed {
-    // kind: 0 early bird, 1 main daily, 2 carryover.
+    // kind: 0 early bird, 1 main daily. Both draw off the day's main board now.
     function seed(uint256 word, uint256 tickets, uint8 mask, uint8 kind) external {
         level = 41;
         uint24 source = kind == 1 ? 41 : 42;
-        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(
-            kind == 1 ? word : EntropyLib.hash2(word, uint256(keccak256("BONUS_TRAITS")))
-        );
+        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         for (uint8 q; q < 4; ++q) {
             if ((mask & (1 << q)) != 0) {
                 _seedBucketDistinct(source, traits[q], 64, uint160(0x10000 + uint256(q) * 0x1000));
             }
         }
         if (kind == 0) dailyTicketBudgetsPacked = (tickets * 4) << 144;
-        else if (kind == 1) {
+        else {
             dailyJackpotCoinTicketsPending = true;
             dailyTicketBudgetsPacked = 1 | ((tickets * 4) << 8);
-        } else dailyTicketBudgetsPacked = 1 | ((tickets * 4) << 72) | (uint256(1) << 136);
+        }
     }
 }
 
@@ -37,8 +34,7 @@ contract JackpotEightWinnerGroupsTest is Test {
         h.seed(word, tickets, 15, kind);
         vm.recordLogs();
         if (kind == 0) h.payEarlyBirdTickets(word);
-        else if (kind == 1) h.payDailyJackpotCoinAndTickets(word);
-        else h.payCarryoverTickets(word);
+        else h.payDailyJackpotCoinAndTickets(word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
@@ -51,7 +47,7 @@ contract JackpotEightWinnerGroupsTest is Test {
     }
 
     function testFuzz_AwardSizeCannotChangeTicketWinners(uint256 word, uint8 kindSeed) public {
-        uint8 kind = kindSeed % 3;
+        uint8 kind = kindSeed % 2;
         assertEq(_winnerFingerprint(word, 1024, kind), _winnerFingerprint(word, 2048, kind),
             "changing each prize's size must preserve the selected ticket occurrences");
     }
@@ -63,8 +59,7 @@ contract JackpotEightWinnerGroupsTest is Test {
         h.seed(word, tickets, mask, kind);
         vm.recordLogs();
         if (kind == 0) h.payEarlyBirdTickets(word);
-        else if (kind == 1) h.payDailyJackpotCoinAndTickets(word);
-        else h.payCarryoverTickets(word);
+        else h.payDailyJackpotCoinAndTickets(word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 cap = tickets < (kind == 0 ? 128 : 96) ? tickets : (kind == 0 ? 128 : 96);
         if (cap >= 8) cap = (cap / 8) * 8;
@@ -99,7 +94,7 @@ contract JackpotEightWinnerGroupsTest is Test {
     }
 
     function testFuzz_TicketGroupsAcrossBudgetsAndEmptyQuadrants(uint256 word, uint16 budget, uint8 mask, uint8 kind) public {
-        _draw(word, uint256(budget) % 401, mask & 15, kind % 3);
+        _draw(word, uint256(budget) % 401, mask & 15, kind % 2);
     }
 
     function test_NormalTicketTables() public {
@@ -110,10 +105,22 @@ contract JackpotEightWinnerGroupsTest is Test {
             else assertEq(counts[q], 32);
         }
         assertEq(solo, 1, "main-board solo ETH quadrant stays excluded");
-        counts = _draw(123, 1000, 15, 2);
-        for (uint256 q; q < 4; ++q) assertEq(counts[q], 24);
+
+        // Early bird excludes the same solo quadrant now, but its 128-slot cap does not
+        // split evenly across the three remaining buckets: groups of eight rotate 40/40/48.
         counts = _draw(123, 1000, 15, 0);
-        for (uint256 q; q < 4; ++q) assertEq(counts[q], 32);
+        solo = 0;
+        uint256 total;
+        for (uint256 q; q < 4; ++q) {
+            if (counts[q] == 0) {
+                ++solo;
+            } else {
+                assertTrue(counts[q] == 40 || counts[q] == 48, "early bird splits 40/40/48 across the three active quadrants");
+                total += counts[q];
+            }
+        }
+        assertEq(solo, 1, "early bird excludes the day's solo ETH quadrant too");
+        assertEq(total, 128, "the full early-bird cap is distributed across the three active quadrants");
     }
 
     function test_BudgetEdgesAndSingleActiveQuadrant() public {

@@ -8,7 +8,7 @@
 | `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Jackpot to Whale for early-bird and quadrant pass awards; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Decimator, Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
 | `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
 | `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip` and `settleRanked` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls `settleRanked`, which also returns the battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder), so the comparator lives in the engine, not the table |
-| `CoinDrawBattle` | `CoinDrawBattle is Craps`, storage-free and GAME-only, deployed after `CrapsEngine`: plays the purchase-day fill draw's closed battle in memory and returns what each wallet is owed; the Game credits it |
+| `CoinDrawBattle` | `CoinDrawBattle is Craps`, storage-free and GAME-only, deployed after `CrapsEngine`: plays the daily fill draw's closed battle in memory and returns what each wallet is owed; the Game credits it |
 | `DegenerusVault` | DGVE/DGVF share classes, vault-owned positions and comp distribution authority |
 | `sDGNRS` / `DGNRS` / `GNRUS` | Reserve backing, transferable wrapper and charity rights |
 | Affiliate, Quests, Jackpots | Referral rewards, activity state and jackpot support |
@@ -130,8 +130,8 @@ first RNG request after it: typically a craps battle's mid-day request, otherwis
 last-purchase daily request (or, after a same-day turbo latch, that same request). The
 frozen pool mints inside the unified sweep with that first cohort, on its word, before the
 sweep counts as finished; keepers see it through `advanceDue`. Either way it is fully
-minted before the last-purchase consolidation, so the BAF, the day-1 early-bird and the
-jackpot-phase bonus draws read every L+1 ticket queued before the last-purchase request.
+minted before the last-purchase consolidation, so the BAF and the day-1 early-bird draw
+read every L+1 ticket queued before the last-purchase request.
 
 Unminted levels are drawn by wallet, one queue lane per wallet registration. Under the RNG
 lock, a player far-future append reverts when it is a new registration (it would add a
@@ -139,30 +139,31 @@ lane); a top-up only raises an owed count and is allowed. Lootbox resolutions th
 Decimator claims, sDGNRS redemption claims, foil claims) revert in those cases; the player
 can retry once the word lands.
 
-Coin jackpot: purchase days pay the ETH drip on the active level and a coin fill draw
-over unminted levels; jackpot days run the coin draw on the bonus traits of level + 1, and
-the carryover board also draws from level + 1. Every trait coin draw splits its daily budget in
-half. The craps half pays up to 25 winners, one per 2,400 FLIP: each gets a seat on
-tomorrow's opener, and what is left of the half upgrades gifts, from the front, to a whole
-day at 20,400 FLIP more (the 22,800 day-pass value less the seat). A whole-day gift banks
-one normal craps pass, spendable only on a future day whose word does not exist yet. If the
-pass bank is saturated, the winner receives its 22,800 FLIP value instead. The coin half,
-plus whatever the craps half left, pays up to 25 winners equal whole-100-FLIP shares; the
-sub-share remainder is not minted. An opener winner the table cannot seat (one already
-holding tomorrow, or the vault or sDGNRS, which `openBonusDay` seats for the whole day) is
-paid the opener's expected cost, 2,400 FLIP. Opener seats go through the craps comp door
-(`vaultComp` kind 5), which burns nothing for the Game (the draw mints that much less FLIP
-instead), after the Game vets the winner with an `extsload` of the table's day claims.
-Every seat the Game writes (these and lootbox pass reservations) carries a fixed standing
-of 100 rather than a read of the holder's activity score: above the boost floor and most
-casual wallets, below a dedicated player; `amendSlip` re-reads the real score. The trait
-draw's craps pulls come first.
+Daily board: every day rolls one winning board (four traits plus the day's hero), which
+the ETH, ticket and early-bird legs, the golden ticket and the foil claim all read. The
+board's solo quadrant pays the day's headline ETH prize to one winner, and every ticket leg
+on that board (purchase tickets, jackpot daily tickets, early-bird tickets) skips it unless
+it is the only active bucket.
 
-The purchase-day fill draw pays no seats, passes or shares: its whole budget is one closed
-craps battle, played and paid in the draw's own transaction. It walks up to 50 wallets: it
-picks an unvisited level in `[purchaseLevel + 1, purchaseLevel + 99]`, walks its queue from
-a random lane, taking each wallet at most once, until it has its wallets or the level is
-exhausted, then picks again (at most 16 picks). `CoinDrawBattle` (a storage-free, GAME-only
+Coin jackpot: every day's FLIP budget (0.25% of the previous level's recorded prize pool,
+at the current ticket price) is the fill draw over unminted levels: on purchase days after
+the ETH drip, on jackpot days from its own advance stage (16), after the ETH stage and the
+day-1 early-bird stage and ahead of the coin+tickets stage that pays the day's tickets and
+seals the day. Level
+1's purchase days, which pay no ETH jackpot, also run a trait-matched FLIP draw on the
+day's board over level 1: up to 50 winners, one equal whole-100-FLIP share each; the
+sub-share remainder and any unfilled share are not minted. Every seat the Game writes on the
+craps table (the lootbox pass reservations) carries a fixed standing of 100 rather than a
+read of the holder's activity score: above the boost floor and most casual wallets, below a
+dedicated player; `amendSlip` re-reads the real score.
+
+The fill draw pays no seats, passes or shares: its whole budget is one closed craps battle,
+played and paid in the draw's own transaction. It walks up to 50 wallets: it picks an
+unvisited level among the 99 unminted levels above the mint ceiling (`[purchaseLevel + 1,
+purchaseLevel + 99]` on a purchase day, `[level + 2, level + 100]` on a jackpot day, when
+level + 1 is already minted), walks its queue from a random lane, taking each wallet at most
+once, until it has its wallets or the level is exhausted, then picks again (at most 16
+picks). `CoinDrawBattle` (a storage-free, GAME-only
 contract at `COIN_DRAW_BATTLE`) plays the field on the day's word: two thirds of the budget
 are the stakes, split into equal units, each a whole multiple of 300 FLIP (at least 300,
 exactly five boards deep; a wallet walked twice holds two units but plays one run, and the
@@ -178,8 +179,9 @@ the battle is a jackpot result, not an entry window. A roll budget under one han
 exact in `Craps._settleSlip`: the last hand is cut where it runs out and refunds its live
 stakes; the table's 8,192 budget keeps its between-shooters meaning. The two caps bound
 `resolve` at 7.31M gas for a full field whatever the dice do (test/craps/CoinDrawBattle.t.sol),
-and every purchase-day fixture that runs the battle must clear the 16.7M transaction cap with
-that whole bound added to its measured gas. The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
+and every fixture that runs the battle (the purchase daily, level 1's daily and the jackpot
+fill stage) must clear the 16.7M transaction cap with that whole bound added to its measured
+gas. The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
 second) over 48 rounds of four samples: 12 each at the BAF level, level + 1, level + 2..5
 and level + 6..99 (centuries: 8, 8, 8, 8, and 16 on the previous 99 levels). The two
 unminted ranges sample one queue lane per wallet.
@@ -245,7 +247,7 @@ uses ordinary balances and burns. Standard ERC20 approvals and the trusted
 minter registry remain available.
 
 
-Purchase-phase ticket awards, early-bird tickets and carryover tickets are separate
+Purchase-phase ticket awards, early-bird tickets and the jackpot-day fill draw are separate
 bounded stages. The packed queue holds eight owner indices per word and must use
 its codec helpers; Solidity array operations do not express its logical length.
 `PackedTicketSampleLib` samples eight lanes from one selected word, with explicit
@@ -264,11 +266,12 @@ Early-bird pricing still moves the entire 3% future-pool slice to nextPrizePool.
 When the ordinary payout exceeds 45 whole tickets per winning slot and the pooled
 surplus after reserving 45 per slot covers at least one full prize pass (4.5 ETH
 of award value), it caps the immediate awards and latches even half-pass claim
-units. The early-bird settlement stage distributes those tickets and draws one
-additional recipient from the official bonus board, preferring eligible gold
-buckets, with uniform eligible-bucket selection
-and normal entry/deity weights within the selected bucket. Empty gold buckets
-fall back to eligible non-gold buckets. All full passes go to that one player,
+units. The early-bird settlement stage distributes those tickets over the day's
+board at level + 1, across its three non-solo quadrants, and draws one additional
+recipient from those quadrants, preferring eligible gold buckets, with uniform
+eligible-bucket selection and normal entry/deity weights within the selected bucket.
+Empty gold buckets fall back to eligible non-gold buckets, and the solo quadrant
+serves only when it is the one active bucket. All full passes go to that one player,
 who need not have won immediate tickets. Pass selection uses separate tagged
 entropy from the day's committed word; award amounts do not reroll recipients.
 Settlement moves no ETH and the sub-pass remainder also stays in next. Below
@@ -277,7 +280,8 @@ the conversion conditions, the ordinary ticket payout remains intact. See the
 
 Protocol deity grants occur after the deployment sequence. Their perpetual entries
 and protocol boon cohorts have their own pre-request scheduling and closure rules.
-Foil packs resolve tomorrow's committed draw. A VRF stall skips missed days on
+Foil packs resolve tomorrow's committed draw, then compare their four lines against each
+day's board once a day, purchase and jackpot days alike, at the same face table. A VRF stall skips missed days on
 recovery and freezes auto-rebuy arming; a request unanswered for 14 days ends the game
 deterministically. `VRF-STALL-AND-DEADMAN-PLAN.md` is an earlier design; the NatSpec of `_livenessTriggered`,
 `_vrfDead` and `_handleGameOverPath` states the implemented behavior.

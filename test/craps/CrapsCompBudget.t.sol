@@ -610,6 +610,21 @@ contract CrapsCompBudgetTest is CrapsPins {
         assertEq(_comp(9, dave, false, 1, 0), 0, "an unknown kind charged");
     }
 
+    /// @dev The comp door is the vault's alone: the GAME is refused like any other caller. The
+    ///      vault's own comp of the same window-ahead seat burns its full price from the lane,
+    ///      exactly as any other comp kind does.
+    function test_theGameCanNoLongerComp() public {
+        uint24 day = craps.currentDayIndex() + 1;
+        vm.prank(ContractAddresses.GAME);
+        vm.expectRevert(CrapsBattle.NotVaultOwner.selector);
+        craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, day, 1));
+
+        uint256 laneBefore = flip.compLane();
+        uint256 charged = _ahead(dave, false, day, 0, 1);
+        assertEq(charged, 2_433 ether, "the vault's own comp did not price the opener seat");
+        assertEq(laneBefore - flip.compLane(), charged, "the vault's comp did not burn from the lane");
+    }
+
     function test_aLaneThatCannotCoverItRefusesTheWholeSeat() public {
         uint24 day = _openDay(10);
         uint64 slot = _slotAt(day, 1);

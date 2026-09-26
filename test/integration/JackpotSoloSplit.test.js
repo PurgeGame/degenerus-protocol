@@ -25,15 +25,15 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
  * the canonical quartet into the same shape used at L349):
  *
  *     uint256 entropy            = EntropyLib.hash2(randWord, lvl);
- *     uint8[4] memory traitIds   = JackpotBucketLib.unpackWinningTraits(_rollWinningTraits(randWord, false));
+ *     uint8[4] memory traitIds   = JackpotBucketLib.unpackWinningTraits(_rollMainTraits(randWord));
  *     uint8 soloQuadrant         = _pickSoloQuadrant(traitIds, entropy);
  *     uint256 effectiveEntropy   = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
  *
  * `_pickSoloQuadrant` is `internal pure` — no state, deterministic. `EntropyLib.hash2`
- * is `internal pure`. `unpackWinningTraits` and `_rollWinningTraits(_, false)` are
- * deterministic in `randWord` (no state-dependent branch when no hero is configured —
- * `_applyHeroOverride` is a no-op against a freshly-deployed `JackpotSoloTester`,
- * which is what this test uses).
+ * is `internal pure`. `unpackWinningTraits` and `_rollMainTraits` are deterministic in
+ * `randWord` (no state-dependent branch when no hero is configured — the hero override
+ * is a no-op against a freshly-deployed `JackpotSoloTester`, which is what this test
+ * uses).
  *
  * Strategy
  * ========
@@ -72,7 +72,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
  *
  *   1. Crafted GOLD_RANDWORD produces ≥ 1 gold (color==7) winning trait through
  *      the actual production path `JackpotBucketLib.getRandomTraits(r)` (raw
- *      6-bit-per-quadrant masking — same as `_rollWinningTraits` at runtime when
+ *      6-bit-per-quadrant masking — same as `_rollMainTraits` at runtime when
  *      no hero is configured). Caught by the explicit gold-trait assertion.
  *
  *   2. effectiveEntropy parity: invoking `_pickSoloQuadrant` twice with identical
@@ -144,10 +144,10 @@ function soloBucketIndex(entropy) {
  *   w[2] = 128 + uint8((rw >> 12) & 0x3F);
  *   w[3] = 192 + uint8((rw >> 18) & 0x3F);
  *
- * NOTE: This is the actual production path called from `_rollWinningTraits` —
+ * NOTE: This is the actual production path called from `_rollMainTraits` —
  * NOT the Phase-259 `DegenerusTraitUtils.packedTraitsFromSeed` path
- * (which uses `weightedColorBucket` lane composition). `_rollWinningTraits`
- * still calls `JackpotBucketLib.getRandomTraits(r)` directly (line 1915 of
+ * (which uses `weightedColorBucket` lane composition). `_rollMainTraits`
+ * still calls `JackpotBucketLib.getRandomTraits(randWord)` directly (via `_rollBoard`,
  * `DegenerusGameJackpotModule.sol`).
  */
 function getRandomTraits(rw) {
@@ -165,14 +165,14 @@ function colorOf(traitId) {
 }
 
 /**
- * Returns the v33.0-equivalent `_rollWinningTraits(randWord, false)` output —
+ * Returns the `_rollMainTraits(randWord)` output —
  * skipping `_applyHeroOverride` since a freshly-deployed `JackpotSoloTester`
  * inherits empty storage and `_applyHeroOverride` short-circuits when there
  * is no hero configured (no state writes have happened in the harness).
  *
  * This is the same `traitIds` array that L349 and L1147 will compute on-chain
  * for the same `randWord` — by construction they MUST agree, since both sites
- * call the identical `_rollWinningTraits(randWord, false) → unpackWinningTraits`
+ * call the identical `_rollMainTraits(randWord) → unpackWinningTraits`
  * pipeline.
  */
 function rollWinningTraitsFalse(randWord) {
@@ -259,7 +259,7 @@ describe("JackpotSoloSplit (SOLO-09 — daily jackpot ETH split-mode coherence)"
         // The L349 and L1147 sites both compute this exact site-local block:
         //   uint256 entropy           = EntropyLib.hash2(randWord, lvl);
         //   uint8[4] memory traitIds  = JackpotBucketLib.unpackWinningTraits(
-        //                                _rollWinningTraits(randWord, false));
+        //                                _rollMainTraits(randWord));
         //   uint8 soloQuadrant        = _pickSoloQuadrant(traitIds, entropy);
         //   uint256 effectiveEntropy  = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
         //

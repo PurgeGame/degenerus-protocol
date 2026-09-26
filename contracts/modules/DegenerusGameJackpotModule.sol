@@ -42,23 +42,7 @@ interface IWwxrpMintPrize {
     function mintPrize(address to, uint256 amount) external;
 }
 
-/// @dev The craps doors a coin draw pays its craps half through, called BARE — no stipend, no
-///      try/catch — on the daily advance: a whole day banks one pass (`creditPasses`, revert-free
-///      and saturating); an opener seat goes through the comp door's window-ahead kind, which
-///      burns nothing for the Game, and the Game vets the winner first (`extsload` of the
-///      table's day claims, and never the vault or sDGNRS) so it cannot revert.
-interface ICrapsCoinDrawSeat {
-    /// @notice Read a raw CrapsBattle storage slot.
-    function extsload(bytes32 slot) external view returns (bytes32 value);
-
-    /// @notice GAME: bank pass credits, revert-free and saturating.
-    function creditPasses(address player, uint32 normal, uint32 high) external returns (uint32 normalCredited);
-
-    /// @notice Seat or reserve per the packed `code` (kind 5 = one window ahead).
-    function vaultComp(uint256 code) external returns (uint256 charged);
-}
-
-/// @dev The purchase-day fill draw's battle (CoinDrawBattle), called BARE: GAME-gated, it plays
+/// @dev The daily fill draw's battle (CoinDrawBattle), called BARE: GAME-gated, it plays
 ///      and ranks the drawn field in memory and returns what each wallet is owed.
 interface ICoinDrawBattle {
     /// @notice Play the fill draw's battle; see CoinDrawBattle.resolve.
@@ -82,7 +66,9 @@ interface ICoinDrawBattle {
  *      JACKPOT FLOW OVERVIEW:
  *      1. Pool consolidation at level transition (prize pool splits and merges).
  *      2. `payDailyJackpot` — Handles purchase phase jackpots and rolling dailies at EOL.
- *      3. `payDailyFlipJackpot` — FLIP jackpot distribution to near-future ticket holders.
+ *      3. The daily fill draw — the day's FLIP budget played as one closed craps battle among
+ *         wallets drawn from unminted future levels; level 1's purchase days also run
+ *         `payDailyFlipJackpot`, a trait-matched FLIP draw over level 1.
  *
  *      FUND ACCOUNTING:
  *      - ETH flows through `futurePrizePool` (unified reserve), `currentPrizePool`,
@@ -144,24 +130,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 entryIndex
     );
 
-    /// @notice A coin draw's craps-half winner. `fullDay` requests one banked normal craps pass
-    ///         (see `CrapsPassesCredited`); otherwise the award seats tomorrow's opener.
-    ///         `refused` means the winner received the award's FLIP value instead: an opener
-    ///         could not be seated, or a full-day pass bank was saturated.
-    ///         `winnerLevel` is the level the winner was drawn from.
-    event CoinDrawCrapsWin(address indexed winner, uint24 indexed winnerLevel, bool fullDay, bool refused);
-
-    /// @dev Emitted once per daily drawing with both main and bonus winning traits.
-    ///      bonusTargetLevel is the level the bonus-trait coin draw reads (level + 1 on
-    ///      jackpot days); 0 on purchase days, which roll no bonus set at all:
-    ///      bonusTraitsPacked is 0 there and foil claims only the main set. (Level 1's
-    ///      purchase days roll both, for their own coin draws.)
-    event DailyWinningTraits(
-        uint24 indexed day,
-        uint32 mainTraitsPacked,
-        uint32 bonusTraitsPacked,
-        uint24 bonusTargetLevel
-    );
+    /// @dev Emitted once per daily drawing with the day's one winning board.
+    event DailyWinningTraits(uint24 indexed day, uint32 mainTraitsPacked);
 
     /// @dev Yield surplus split three ways at the level transition. `perRecipientShare` is
     ///      credited to each of VAULT, sDGNRS and GNRUS — equal shares to pinned addresses,
@@ -262,27 +232,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint256 private constant BAF_TICKET_TAG = 0x4261665469636b6574; // "BafTicket"
     bytes32 private constant HERO_SYMBOL_TAG = keccak256("degenerus.jackpot.hero-symbol");
 
-    /// @dev Domain separator for per-pull level sampling in the daily coin jackpot.
+    /// @dev Domain separator for per-pull level sampling in level 1's trait-matched FLIP draw.
     bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");
 
     /// @dev Domain separator for rolling current-pool daily jackpot percentage.
     bytes32 private constant DAILY_CURRENT_BPS_TAG =
         keccak256("daily-current-bps");
 
-    /// @dev Domain separator for bonus trait derivation from same VRF word.
-    bytes32 private constant BONUS_TRAITS_TAG = keccak256("BONUS_TRAITS");
-
-    /// @dev Sentinel `excludeIdx` for `_rollHeroSymbol` meaning "no slot excluded":
-    ///      any value >= 32 matches no real `(quadrant << 3) | symbol` slot, so the
-    ///      roll runs over the full wager pool. The bonus draw instead passes the
-    ///      main hero's packed slot to force a distinct hero.
-    uint8 private constant _NO_HERO_EXCLUDE = 0xFF;
-
     /// @dev Sentinel for _rollHeroSymbol's banQuadrant param: no quadrant banned.
     uint8 private constant _NO_QUADRANT_BAN = 0xFF;
 
-    /// @dev Sentinel for _computeBucketCounts' excludeIdx param: every bucket eligible.
-    ///      Any value >= 4 matches no bucket index.
+    /// @dev Sentinel quadrant for a whale-pass award that skips none (the quadrant
+    ///      conversion, which names its one trait). Any value >= 4 matches no quadrant.
     uint8 private constant _NO_QUADRANT_EXCLUDE = 0xFF;
 
 
@@ -314,37 +275,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// Higher than ETH winners because ticket distribution is cheaper per winner.
     uint16 private constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
 
-    /// @dev Level picks the purchase-day fill draw may spend. A pick lands on an unvisited
+    /// @dev Level picks the daily fill draw may spend. A pick lands on an unvisited
     ///      level or is spent on a revisit, so empty levels cannot stretch the draw's gas.
     uint256 private constant FUTURE_FLIP_LEVEL_PICKS = 16;
 
-    /// @dev Domain separator for the purchase-day future fill draw's entropy derivation.
+    /// @dev Domain separator for the daily future fill draw's entropy derivation.
     bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
 
-    /// @dev Most wallets the purchase-day fill draw enters in its craps battle.
+    /// @dev Most wallets the daily fill draw enters in its craps battle.
     uint256 private constant FILL_BATTLE_ENTRANTS = 50;
 
-    /// @dev Winners in each half of a coin draw: up to this many craps seats, and up to this many
-    ///      equal FLIP shares.
-    uint256 private constant COIN_DRAW_HALF_SLOTS = 25;
+    /// @dev Most winners of level 1's trait-matched FLIP draw, each paid one equal share.
+    uint256 private constant COIN_DRAW_SHARES = 50;
 
-    /// @dev What one coin-draw seat on tomorrow's opener costs the craps half — the opener's
-    ///      expected bankroll plus bounty (2,433 FLIP), rounded to the draw's 100-FLIP unit.
-    uint256 private constant CRAPS_OPENER_SEAT_VALUE = 2_400 ether;
-
-    /// @dev CrapsBattle's `_daySeated` mapping slot (scripts/layout/golden/CrapsBattle.json; the
-    ///      layout oracle fails the build on a move). A day's claims live under day * 8.
-    uint256 private constant CRAPS_DAY_SEATED_SLOT = 8;
-
-    /// @dev What turning an opener seat into tomorrow's whole day costs on top: the day pass's
-    ///      value less the seat already paid for.
-    uint256 private constant CRAPS_DAY_UPGRADE_VALUE = NORMAL_DAY_PASS_VALUE - CRAPS_OPENER_SEAT_VALUE;
-
-    /// @dev Daily: 32 per non-solo quadrant. Carryover: 24 per quadrant.
-    ///      Empty buckets redistribute the cap in whole groups of eight.
+    /// @dev Daily: 32 per non-solo quadrant. Empty buckets redistribute the cap in whole
+    ///      groups of eight.
     uint16 private constant TICKET_JACKPOT_MAX_WINNERS = 96;
 
-    /// @dev Early-bird cap: 32 winners per quadrant when all four buckets are active.
+    /// @dev Early-bird cap, split in groups of eight across the three non-solo quadrants
+    ///      (40, 40 and 48 when all three are active).
     uint16 private constant EARLY_BIRD_MAX_WINNERS = 128;
 
     /// @dev Large early-bird prizes retain 45 whole tickets per slot. Only a surplus
@@ -378,7 +327,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) external returns (uint256 paidWei) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
 
-        uint32 winningTraitsPacked = _rollWinningTraits(rngWord, false);
+        // The gold rush never arms, resolves, or bans on a terminal board.
+        uint32 winningTraitsPacked = _rollBoard(rngWord, _NO_QUADRANT_BAN);
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
         );
@@ -425,9 +375,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Three-day schedule: 6%-14% of remaining currentPrizePool on day 1, 12%-28% on day 2.
     ///      - Final physical day (day 3, or day 1 for turbo): distributes the remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird ticket jackpot (from futurePrizePool).
-    ///      - On every non-early-bird day, takes 0.5% of futurePrizePool and buys tickets
-    ///        at the current level (next level on the final day) for winners from level + 1, credited to nextPool.
-    ///      - Increments jackpotCounter on completion.
+    ///      - Latches the day's fill draw (payJackpotFill) for its own stage.
+    ///      - The coin+tickets stage increments jackpotCounter on completion.
     ///
     ///      PURCHASE PHASE PATH (isJackpotPhase=false):
     ///      - Triggered during purchase phase when burns occur.
@@ -451,14 +400,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // advance clamps to the logical day, and a wall-day key here would write the foil
         // board (and the traits event) under the WRONG day, stranding that day's claims.
         uint24 questDay = dailyIdx + 1;
-        // One VRF word drives both rolls; each rolls its OWN hero — the bonus hero is
-        // forced distinct from the main hero (main slot excluded from the bonus roll).
-        // A PURCHASE day rolls the main set alone: its bonus set would only have fed foil
-        // claims, so the day stores bonus zero and foil claims the main set only.
-        (
-            uint32 winningTraitsPacked,
-            uint32 bonusTraitsPacked
-        ) = _rollWinningTraitsPair(randWord, isJackpotPhase);
+        uint32 winningTraitsPacked = _rollMainTraits(randWord);
 
         // An armed golden ticket resolves against the first main board rolled after the
         // arm draw — this draw, whenever dailyIdx has advanced past the arm draw's
@@ -509,58 +451,17 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                     lvl + 1
                 );
                 // dailyEntries is always >= 1 in jackpot phase (the currentPrizePool floor dwarfs
-                // the ticket price), so the daily-ticket credit is unconditional. Deduct from the
-                // current pool to back the tickets; the matching next-pool credit is folded into the
-                // carryover packed write below (or applied on its own in the early-bird branch), so
-                // the daily add and the future->next move share one prizePoolsPacked RMW. curPool is
-                // still exact: nothing above writes currentPrizePool.
+                // the ticket price), so the daily-ticket credit is unconditional: the budget moves
+                // current -> next to back the tickets Phase 2 queues. curPool is still exact:
+                // nothing above writes currentPrizePool.
                 curPool -= dailyTicketBudget;
                 _setCurrentPrizePool(curPool);
+                _addNextPrizePool(dailyTicketBudget);
 
-                uint8 sourceLevelOffset;
-                uint24 sourceLevel;
-                uint256 reserveSlice;
-                uint256 carryoverEntries;
-                if (!isEarlyBirdDay) {
-                    // The bonus board reads level + 1, the one future level already minted.
-                    sourceLevelOffset = 1;
-                    sourceLevel = lvl + 1;
-
-                    // 0.5% of futurePrizePool reserved for carryover tickets, moved future -> next
-                    // in one packed-slot read/write that also folds in the daily-ticket next credit
-                    // (checked uint128 adds: both addends are < 2^128 and the sum reverts on overflow
-                    // exactly as the two separate writes did).
-                    (uint128 nextBal, uint128 futPool) = _getPrizePools();
-                    reserveSlice = uint256(futPool) / 200;
-                    _setPrizePools(
-                        nextBal +
-                            uint128(dailyTicketBudget) +
-                            uint128(reserveSlice),
-                        futPool - uint128(reserveSlice)
-                    );
-                    // Priced at the level these entries are queued at, the same basis the
-                    // daily leg above uses: Phase 2 sends the final physical day's carryover
-                    // to lvl + 1 because this level ends tonight. Pricing off the other level
-                    // would size the award by the boundary price ratio instead of by the
-                    // reserveSlice that backs it.
-                    (carryoverEntries, ) = _budgetToEntries(
-                        reserveSlice,
-                        isFinalPhysicalDay ? lvl + 1 : lvl
-                    );
-                } else {
-                    // Early-bird day skips the carryover move, so apply the daily-ticket next
-                    // credit on its own here.
-                    _addNextPrizePool(dailyTicketBudget);
-                }
-
-                // Store ticket units for Phase 2 distribution
-                // Packing: [reserved (8 bits)] [dailyEntries (64 bits @ 8)]
-                // [carryoverEntries (64 bits @ 72)] [carryoverSourceOffset (8 bits @ 136)]
-                dailyTicketBudgetsPacked = _packDailyTicketBudgets(
-                    dailyEntries,
-                    carryoverEntries,
-                    sourceLevelOffset
-                );
+                // Store ticket units for Phase 2 distribution (dailyEntries at bits 8..71) and
+                // latch the day's fill draw for its own stage when the day has a FLIP budget.
+                dailyTicketBudgetsPacked = (dailyEntries << 8)
+                    | (_calcDailyCoinBudget(lvl, lvl) != 0 ? _JACKPOT_FILL_PENDING : 0);
 
                 // Day 1 only: price the early-bird ticket jackpot (3% of futurePrizePool, moved
                 // future -> next now) and latch its entries at bits 144..207 of the same word.
@@ -623,32 +524,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
             }
 
-            _emitDailyWinningTraits(
-                questDay,
-                winningTraitsPacked,
-                bonusTraitsPacked,
-                lvl,
-                lvl + 1
-            );
+            _emitDailyWinningTraits(questDay, winningTraitsPacked, lvl);
 
             dailyJackpotCoinTicketsPending = true;
             return;
         }
 
-        // Purchase phase path - FLIP and ETH bonuses
+        // Purchase phase path - ETH and ticket legs
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(winningTraitsPacked);
         uint256 effectiveEntropy = _soloAdjustedEntropy(
             traitIds,
             EntropyLib.hash2(randWord, lvl)
         );
 
-        _emitDailyWinningTraits(
-            questDay,
-            winningTraitsPacked,
-            bonusTraitsPacked,
-            lvl,
-            0
-        );
+        _emitDailyWinningTraits(questDay, winningTraitsPacked, lvl);
 
         // Daily 4% drip from futurePrizePool every ordinary purchase day.
         uint256 futureBal = _getFuturePrizePool();
@@ -752,125 +641,77 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 packed = dailyTicketBudgetsPacked;
         uint256 entries = packed >> 208;
         uint24 lvl = level + 1;
-        (, uint32 winningTraitsPacked, , ) = _foilDrawFor(uint256(dailyIdx) + 1);
+        (, uint32 winningTraitsPacked, ) = _foilDrawFor(uint256(dailyIdx) + 1);
+        uint256 entropy = EntropyLib.hash2(randWord, lvl);
         _distributeTicketJackpot(
             lvl,
             lvl,
             winningTraitsPacked,
             entries,
-            EntropyLib.hash2(randWord, lvl),
+            entropy,
             PURCHASE_PHASE_TICKET_MAX_WINNERS,
             242,
-            true // main board: solo quadrant took the ETH remainder
+            entropy // the ETH leg's own entropy picks the solo quadrant
         );
         dailyTicketBudgetsPacked = packed & ((uint256(1) << 208) - 1);
     }
 
-    /// @notice Phase 2 of the daily jackpot: the coin jackpot and the day's own ticket leg.
+    /// @notice The fill draw of a jackpot-phase daily, from its own advance stage.
+    /// @dev Called by advanceGame on the advance after Phase 1 latched it (and after the day-1
+    ///      early-bird stage), with the same day's word, ahead of the coin+tickets stage that
+    ///      seals the day: the fill battle and the day's ticket leg never share a tx. Plays the
+    ///      day's FLIP budget as the fill draw's craps battle over the far-future queues from
+    ///      level + 2 (level + 1 was minted on the last-purchase word before this phase). The
+    ///      lock held since the request keeps every input frozen. Clears its own latch.
+    /// @param randWord VRF entropy (the day's recorded word).
+    function payJackpotFill(uint256 randWord) external {
+        dailyTicketBudgetsPacked &= ~_JACKPOT_FILL_PENDING;
+        uint24 lvl = level;
+        _awardFutureCoinFill(lvl + 1, _calcDailyCoinBudget(lvl, lvl), randWord);
+    }
+
+    /// @notice Phase 2 of the daily jackpot: the day's own ticket leg.
     /// @dev Called by advanceGame when dailyJackpotCoinTicketsPending is true. The daily is a
     ///      chain of advance txs so each stays under the per-tx gas cap: Phase 1 pays the ETH,
     ///      on day 1 the early-bird ticket leg (up to 128 winners) runs from its own stage
-    ///      before this one (payEarlyBirdTickets), this stage pays FLIP and the main-board
-    ///      tickets, and the carryover ticket leg (up to another 96 winners) runs from its own
-    ///      stage on the next advance (payCarryoverTickets). Phase 1's packed budgets stay in
-    ///      place for that stage when a carryover was priced; otherwise they are cleared here.
+    ///      (payEarlyBirdTickets), the fill draw runs from its own stage (payJackpotFill), and
+    ///      this stage, the last, pays the main-board tickets. It advances the counter and the
+    ///      caller seals the day (or ends the level) in the same tx.
     ///
-    ///      Traits are derived inline from randWord (main via isBonus=false, bonus via isBonus=true).
-    ///      Uses stored values from Phase 1:
-    ///      - rngWordCurrent: VRF entropy for deterministic winner selection
-    ///      - dailyTicketBudgetsPacked: Packed ticket units and carryover source offset
-    ///
-    /// @param randWord VRF entropy (must match rngWordCurrent from Phase 1).
-    /// @return carryoverPending True when a carryover leg was priced and waits for the next advance.
-    function payDailyJackpotCoinAndTickets(uint256 randWord) external returns (bool carryoverPending) {
-        if (!dailyJackpotCoinTicketsPending) return false;
+    ///      The main board is re-rolled from the word exactly as Phase 1 rolled it (see
+    ///      `_rollMainTraits`).
+    /// @param randWord VRF entropy (the day's recorded word, the one Phase 1 used).
+    function payDailyJackpotCoinAndTickets(uint256 randWord) external {
+        if (!dailyJackpotCoinTicketsPending) return;
 
-        // Unpack stored values
-        (
-            uint256 dailyEntries,
-            uint256 carryoverEntries,
-
-        ) = _unpackDailyTicketBudgets(dailyTicketBudgetsPacked);
-
-        // Derive traits inline from randWord; main and bonus each roll a distinct hero.
+        uint256 dailyEntries = uint64(dailyTicketBudgetsPacked >> 8);
         uint24 lvl = level;
-        (
-            uint32 mainTraitsPacked,
-            uint32 bonusTraitsPacked
-        ) = _rollWinningTraitsPair(randWord, true);
-
-        // --- Coin Jackpot ---
-        // Bonus traits on level + 1, minted on the last-purchase word before this phase.
-        _runFlipJackpot(lvl, lvl, lvl + 1, lvl + 1, bonusTraitsPacked, randWord);
+        uint32 mainTraitsPacked = _rollMainTraits(randWord);
 
         // --- Ticket Distribution ---
         // Distribute daily tickets to current level trait winners (main traits)
         if (dailyEntries != 0) {
+            uint256 entropy = EntropyLib.hash2(randWord, lvl);
             _distributeTicketJackpot(
                 lvl,
                 lvl + 1,
                 mainTraitsPacked,
                 dailyEntries,
-                EntropyLib.hash2(randWord, lvl),
+                entropy,
                 TICKET_JACKPOT_MAX_WINNERS,
                 241,
-                true // main board: solo quadrant took the ETH remainder
+                entropy // the ETH leg's own entropy picks the solo quadrant
             );
         }
 
-        // Complete the daily jackpot cycle. The counter advances with the day seal: here when
-        // this stage seals the day (no carryover) or ends the level, otherwise in
-        // payCarryoverTickets, which seals the day. The ticket-routing predicate keys off the
-        // counter under the lock to spot the final daily's request, and the lock spans the
-        // carryover stage, so a counter advanced ahead of its seal would route buys to the
-        // next level for one advance.
-        uint8 counterCached = jackpotCounter;
-        carryoverPending = carryoverEntries != 0;
-        if (!carryoverPending || _isFinalJackpotDay(counterCached, jackpotFlags)) {
-            unchecked {
-                jackpotCounter = counterCached + 1;
-            }
+        // Complete the daily jackpot cycle: the counter advances in the tx that seals the day
+        // or ends the level, so the ticket-routing predicate (which keys off the counter under
+        // the lock) never sees it ahead of its seal.
+        unchecked {
+            jackpotCounter += 1;
         }
-
-        // Clear pending state. A priced carryover keeps Phase 1's budgets for its own stage.
         dailyJackpotCoinTicketsPending = false;
-        if (!carryoverPending) dailyTicketBudgetsPacked = 0;
-    }
-
-    /// @notice The carryover ticket leg of the daily jackpot, from its own advance stage.
-    /// @dev Called by advanceGame on the advance after payDailyJackpotCoinAndTickets left it
-    ///      pending, with the same day's word from rngGate. Winners come from the source level's
-    ///      buckets on the day's bonus traits (re-rolled from the word: the hero pool and the
-    ///      golden-ticket ban read the same on every roll of a board, as Phase 2's re-roll of
-    ///      Phase 1's board already relies on); tickets queue at the current level, or lvl+1
-    ///      once _endPhase has closed the level. The lock held since the request keeps every
-    ///      input frozen until the day seals after this leg.
-    /// @param randWord VRF entropy (the day's recorded word).
-    function payCarryoverTickets(uint256 randWord) external {
-        (, uint256 carryoverEntries, uint8 carryoverSourceOffset) = _unpackDailyTicketBudgets(
-            dailyTicketBudgetsPacked
-        );
-        uint24 lvl = level;
-        uint24 sourceLevel = lvl + uint24(carryoverSourceOffset);
-        (, uint32 bonusTraitsPacked) = _rollWinningTraitsPair(randWord, true);
-        _distributeTicketJackpot(
-            sourceLevel,
-            phaseTransitionActive ? lvl + 1 : lvl,
-            bonusTraitsPacked,
-            carryoverEntries,
-            EntropyLib.hash2(randWord, sourceLevel),
-            TICKET_JACKPOT_MAX_WINNERS,
-            240,
-            false // bonus board: no ETH distribution, no solo quadrant
-        );
         dailyTicketBudgetsPacked = 0;
-        // A non-final daily advances the counter here, with its seal; the final daily advanced
-        // it in the coin+tickets stage so _endPhase could fire there (which then zeroed it).
-        if (!phaseTransitionActive) {
-            unchecked {
-                ++jackpotCounter;
-            }
-        }
     }
 
     /// @dev Prices the early-bird ticket jackpot from the unified future pool: the full 3%
@@ -914,17 +755,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      `cap = min(wholeTickets, 128)`, floored to eight unless below eight:
     ///      every drawn winner takes the same `tickets / cap` whole tickets, the `tickets % cap`
     ///      leftover is not queued, and leftover groups rotate between active buckets.
-    ///      Winners come from `lvlTraitEntry[level + 1]` on the day's bonus traits, re-rolled
-    ///      from the word exactly as the carryover stage re-rolls its board; tickets queue at
-    ///      level + 1. A capped draw also awards all surplus full passes to one fresh
-    ///      bonus-trait winner, preferring eligible gold. No pool moves in this stage.
-    ///      Clears its own field and leaves the rest of the packed budgets for the
-    ///      coin+tickets stage. The lock held since the request keeps every input frozen.
+    ///      Winners come from `lvlTraitEntry[level + 1]` on the day's main board, re-rolled
+    ///      from the word exactly as Phase 1 rolled it, across its three non-solo quadrants:
+    ///      the solo quadrant is the one the ETH leg picked (from its own entropy,
+    ///      hash2(word, level)), and it carries only the solo ETH prize. Tickets queue at
+    ///      level + 1. A capped draw also awards all surplus full passes to one fresh winner
+    ///      outside the solo quadrant, preferring eligible gold. No pool moves in this stage.
+    ///      Clears its own field and leaves the rest of the packed budgets for the fill and
+    ///      coin+tickets stages. The lock held since the request keeps every input frozen.
     /// @param randWord VRF entropy (the day's recorded word).
     function payEarlyBirdTickets(uint256 randWord) external {
         uint256 packed = dailyTicketBudgetsPacked;
         uint24 lvl = level + 1;
-        uint32 traits = _rollWinningTraits(randWord, true);
+        uint32 traits = _rollMainTraits(randWord);
+        uint256 soloEntropy = EntropyLib.hash2(randWord, level);
         _distributeTicketJackpot(
             lvl,
             lvl,
@@ -933,25 +777,33 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             EntropyLib.hash2(randWord, lvl),
             EARLY_BIRD_MAX_WINNERS,
             239,
-            false // bonus board: no ETH distribution, no solo quadrant
+            soloEntropy
         );
         dailyTicketBudgetsPacked = packed & ((uint256(1) << 144) - 1);
         uint256 halfPasses = earlyBirdWhalePasses;
         if (halfPasses != 0) {
             earlyBirdWhalePasses = 0;
-            _awardWhalePass(lvl, traits, halfPasses, randWord, true);
+            _awardWhalePass(
+                lvl,
+                traits,
+                halfPasses,
+                randWord,
+                true,
+                _pickSoloQuadrant(JackpotBucketLib.unpackWinningTraits(traits), soloEntropy)
+            );
         }
     }
 
-    /// @dev Bounded sibling-module award. Early bird passes latched claim units;
-    ///      quadrant conversion passes its original ETH share and gets the spend back.
+    /// @dev Bounded sibling-module award. Early bird passes latched claim units and the
+    ///      board's solo quadrant, which its winner is drawn outside of; quadrant conversion
+    ///      passes its original ETH share (and no quadrant to skip) and gets the spend back.
     function _awardWhalePass(
-        uint24 lvl, uint32 traits, uint256 amount, uint256 randWord, bool earlyBird
+        uint24 lvl, uint32 traits, uint256 amount, uint256 randWord, bool earlyBird, uint8 soloQuadrant
     ) private returns (uint256 spent) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameWhaleModule.awardWhalePass.selector,
-                lvl, traits, amount, randWord, earlyBird
+                lvl, traits, amount, randWord, earlyBird, soloQuadrant
             )
         );
         if (!ok) {
@@ -1051,12 +903,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param maxWinners Cap on the draw's total winner count (lowered to the whole tickets the
     ///        budget covers, rounded down to eight, then split across active buckets).
     /// @param saltBase Base salt for per-bucket entropy derivation.
-    /// @param excludeSolo True on main-board legs, where the solo quadrant already
-    ///        pays the day's headline ETH prize to a single winner: that quadrant is
-    ///        dropped from the ticket draw so matching it means the big prize or
-    ///        nothing, never a consolation trickle. `entropy` is the pre-splice value
-    ///        the ETH leg fed `_soloAdjustedEntropy`, so the pick reproduces exactly.
-    ///        False on bonus-board legs, which run no ETH distribution.
+    /// @param soloEntropy The pre-splice value the day's ETH leg fed `_soloAdjustedEntropy`,
+    ///        so the solo pick reproduces exactly. The solo quadrant already pays the day's
+    ///        headline ETH prize to a single winner, so it is dropped from every ticket draw
+    ///        on the board: matching it means the big prize or nothing, never a consolation
+    ///        trickle.
     function _distributeTicketJackpot(
         uint24 sourceLvl,
         uint24 queueLvl,
@@ -1065,7 +916,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 entropy,
         uint16 maxWinners,
         uint8 saltBase,
-        bool excludeSolo
+        uint256 soloEntropy
     ) private {
         if (entries == 0) return;
 
@@ -1094,9 +945,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 traitIds,
                 cap,
                 entropy,
-                excludeSolo
-                    ? _pickSoloQuadrant(traitIds, entropy)
-                    : _NO_QUADRANT_EXCLUDE
+                _pickSoloQuadrant(traitIds, soloEntropy)
             );
         if (activeCount == 0) return;
 
@@ -1213,7 +1062,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param maxWinners Total slots, a multiple of eight or fewer than eight. Split full
     ///        groups across active buckets; rotate leftover groups from an entropy-picked start.
     /// @param entropy RNG state for rotation and scaling.
-    /// @param excludeIdx Bucket dropped from the draw, or `_NO_QUADRANT_EXCLUDE`.
+    /// @param excludeIdx Bucket dropped from the draw (the board's solo quadrant).
     ///        Dropping is skipped when it would leave no active bucket, so the
     ///        award is never stranded against backing already moved to nextPrizePool.
     function _computeBucketCounts(
@@ -1258,7 +1107,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         // below keys off activeMask, so the base split and the remainder rotation
         // both route its winners to the surviving buckets; maxWinners is unchanged,
         // so the same total entries go out across fewer quadrants.
-        if (excludeIdx < 4 && (activeMask & uint8(1 << excludeIdx)) != 0) {
+        if ((activeMask & uint8(1 << excludeIdx)) != 0) {
             uint8 kept = activeMask & ~uint8(1 << excludeIdx);
             if (kept != 0) {
                 activeMask = kept;
@@ -1584,7 +1433,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
         uint256 passSpent;
         if (isJackpotPhase && share >= 8 * HALF_WHALE_PASS_PRICE) {
-            passSpent = _awardWhalePass(lvl, traitId, share, entropy, false);
+            passSpent = _awardWhalePass(lvl, traitId, share, entropy, false, _NO_QUADRANT_EXCLUDE);
         }
         (paidDelta, claimDelta) = _payNormalBucket(
             winners, ticketIndexes, (share - passSpent) / totalCount, lvl, traitId
@@ -1722,52 +1571,36 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @dev Replaces the winning quadrant's trait with a hero-symbol override sampled by
-    ///      `_rollHeroSymbol` from the prior day's settled wager pool. Applied to all jackpot
-    ///      paths (purchase phase + jackpot phase). Reads `dailyHeroWagers[dailyIdx]`:
-    ///      `dailyIdx` moves only at `_unlockRng` and at rngGate's gap skip (AdvanceModule),
-    ///      both outside jackpot processing, so here it is frozen at the previous day's
-    ///      index — every consumer in a single
-    ///      jackpot resolution therefore reads the same wager pool. Bets placed on day D
-    ///      write to `dailyHeroWagers[D]`; day D+1's jackpot reads slot[D] via
+    /// @dev Rolls a board off one VRF word: fully random base traits (6 bits per quadrant),
+    ///      then the hero sampled by `_rollHeroSymbol` from the prior day's settled wager
+    ///      pool replaces the winning quadrant's symbol bits only. The quadrant keeps its
+    ///      base-rolled color, so all four colors stay independent 1/8 draws regardless of
+    ///      where (or whether) a hero lands. Reads `dailyHeroWagers[dailyIdx]`: `dailyIdx`
+    ///      moves only at `_unlockRng` and at rngGate's gap skip (AdvanceModule), both outside
+    ///      jackpot processing, so here it is frozen at the previous day's index. Bets placed
+    ///      on day D write to `dailyHeroWagers[D]`; day D+1's jackpot reads slot[D] via
     ///      `dailyIdx == D` (set by day D's `_unlockRng`).
-    ///
-    ///      `heroEntropy` is the raw VRF entropy word for the day. This applies the main draw's
-    ///      hero; the bonus draw rolls a SEPARATE hero (main slot excluded) in
-    ///      `_rollWinningTraitsPair`, so the two heroes never coincide. The symbol roll
-    ///      consumes `keccak256(abi.encode(heroEntropy, HERO_SYMBOL_TAG, day))`; colors are untouched by
-    ///      the hero — each quadrant keeps its base-rolled color.
-    function _applyHeroOverride(
-        uint8[4] memory w,
-        uint256 heroEntropy
-    ) private view {
-        (
-            bool hasHeroWinner,
-            uint8 heroQuadrant,
-            uint8 heroSymbol
-        ) = _rollHeroSymbol(
-                dailyIdx,
-                heroEntropy,
-                _NO_HERO_EXCLUDE,
-                // Terminal-only path (sole _applyHeroOverride caller): the gold
-                // rush never arms, resolves, or bans on a terminal board.
-                _NO_QUADRANT_BAN
-            );
-        _applyHeroResult(w, hasHeroWinner, heroQuadrant, heroSymbol);
+    /// @param banQuadrant Quadrant the hero may not land in, or `_NO_QUADRANT_BAN`.
+    function _rollBoard(uint256 randWord, uint8 banQuadrant) private view returns (uint32) {
+        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
+        (bool hasHero, uint8 heroQuadrant, uint8 heroSymbol) = _rollHeroSymbol(
+            dailyIdx,
+            randWord,
+            banQuadrant
+        );
+        if (hasHero) {
+            traits[heroQuadrant] = (traits[heroQuadrant] & 0xF8) | heroSymbol;
+        }
+        return JackpotBucketLib.packWinningTraits(traits);
     }
 
-    /// @dev Applies a resolved hero (quadrant, symbol) to a trait set: the hero symbol
-    ///      replaces the winning quadrant's symbol bits only. The quadrant keeps its
-    ///      base-rolled color, so all four colors stay independent 1/8 draws
-    ///      regardless of where (or whether) a hero lands.
-    function _applyHeroResult(
-        uint8[4] memory w,
-        bool hasHeroWinner,
-        uint8 heroQuadrant,
-        uint8 heroSymbol
-    ) private pure {
-        if (!hasHeroWinner) return;
-        w[heroQuadrant] = (w[heroQuadrant] & 0xF8) | heroSymbol;
+    /// @dev The day's one winning board. The hero is banned from the golden ticket's armed
+    ///      quadrant on its resolve draw (see `_goldenTicketBanQuadrant`). A day's later legs
+    ///      re-roll it from the same word and get the same board: the hero pool and the ban
+    ///      read the same on every roll of a day, the resolve-day ban fields holding the ban
+    ///      after the resolve clears the armed ones.
+    function _rollMainTraits(uint256 randWord) private view returns (uint32) {
+        return _rollBoard(randWord, _goldenTicketBanQuadrant(goldenTicket, dailyIdx));
     }
 
     /// @dev Samples the day's hero `(quadrant, symbol)` via a weighted random roll across
@@ -1780,21 +1613,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      effective ×1.5 weight on the leader, no min-wager floor on any other slot.
     ///      Returns `(false, 0, 0)` when no slot has any wagers.
     ///
-    ///      `excludeIdx` zeroes one slot's weight before the roll so the result can
-    ///      never land on it and the leader is recomputed over the remaining slots:
-    ///      the bonus draw passes the main hero's packed slot `(quadrant << 3) |
-    ///      symbol` to force a distinct hero. Pass `_NO_HERO_EXCLUDE` (>= 32, matching
-    ///      no real slot) for an unconstrained roll; when zeroing empties the pool the
-    ///      result is `(false, 0, 0)` and the caller applies no hero (a pure-VRF set).
-    ///
-    ///      `banQuadrant` zeroes an entire quadrant's 8 slots the same way — main
+    ///      `banQuadrant` zeroes an entire quadrant's 8 slots before the roll, so the
+    ///      result can never land there and the leader is recomputed over the rest — main
     ///      rolls pass `_goldenTicketBanQuadrant()` so on a golden-ticket resolve day the
-    ///      armed quadrant keeps its base-rolled symbol (hero wagers can neither
-    ///      boost nor block the grand match). Pass `_NO_QUADRANT_BAN` otherwise.
+    ///      armed quadrant keeps its base-rolled symbol (hero wagers can neither boost nor
+    ///      block the grand match). Pass `_NO_QUADRANT_BAN` otherwise; when the ban empties
+    ///      the pool the result is `(false, 0, 0)` and the caller applies no hero.
     function _rollHeroSymbol(
         uint24 day,
         uint256 entropy,
-        uint8 excludeIdx,
         uint8 banQuadrant
     )
         private
@@ -1819,9 +1646,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 unchecked {
                     idx = (q << 3) | s;
                 }
-                uint32 amount = idx == excludeIdx
-                    ? 0
-                    : uint32((packed >> (uint256(s) * 32)) & 0xFFFFFFFF);
+                uint32 amount = uint32((packed >> (uint256(s) * 32)) & 0xFFFFFFFF);
                 weights[idx] = amount;
                 total += uint64(amount);
                 if (amount > maxAmount) {
@@ -1965,84 +1790,56 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         winner = _bucketOwnerFromWord(lvl, word, index);
     }
 
-    /// @notice Pays daily FLIP jackpot to random ticket holders.
-    /// @dev Runs in the purchase-phase daily advance, in the same transaction as the daily
-    ///      jackpot. Awards 0.25% of the previous level's recorded prize pool
-    ///      (`levelPrizePool[lvl - 1]`, the ratchet target before any century floor), converted
-    ///      to FLIP at the current level's ticket price.
-    ///      Winners are trait-matched ticket holders in [minLevel, maxLevel], which must be
-    ///      minted levels: half the budget seats winners on tomorrow's craps opener or whole
-    ///      day, the rest (and whatever the seats leave) pays equal FLIP shares.
-    /// @param lvl Current level.
-    /// @param randWord VRF entropy for winner selection.
+    /// @notice Level 1's trait-matched FLIP draw over level-1 ticket holders.
+    /// @dev Runs in level 1's purchase-day advance, after emitDailyWinningTraits rolled and
+    ///      recorded the day's main board, which it re-rolls from the same word. Awards 0.25% of
+    ///      the previous level's recorded prize pool (`levelPrizePool[lvl - 1]`, the ratchet
+    ///      target before any century floor), converted to FLIP at the current level's ticket
+    ///      price, as up to COIN_DRAW_SHARES equal whole-unit shares to trait-matched ticket
+    ///      holders in [minLevel, maxLevel], which must be minted levels.
+    /// @param lvl Level keying the prize pool snapshot for the budget.
+    /// @param randWord VRF entropy for the board and winner selection.
     /// @param minLevel Minimum target level for the coin distribution (inclusive).
     /// @param maxLevel Maximum target level for the coin distribution (inclusive).
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external {
-        uint32 bonusTraitsPacked = _rollWinningTraits(randWord, true);
-        _runFlipJackpot(lvl, level, minLevel, maxLevel, bonusTraitsPacked, randWord);
+        _awardDailyCoinToTraitWinners(
+            minLevel,
+            maxLevel,
+            _rollMainTraits(randWord),
+            _calcDailyCoinBudget(lvl, level),
+            randWord
+        );
     }
 
     /// @notice Purchase-day FLIP fill draw: the daily coin budget over unminted future levels.
     /// @dev Budget as payDailyFlipJackpot; winners come from the far-future queues of
-    ///      [lvl + 1, lvl + 99] (see _awardFutureCoinFill).
+    ///      [lvl + 1, lvl + 99] (see _awardFutureCoinFill). Jackpot days run the same draw from
+    ///      payJackpotFill.
     /// @param lvl Purchase level (the minted level whose day this is).
     /// @param randWord VRF entropy for level picks and walk starts.
     function payDailyFutureFlipJackpot(uint24 lvl, uint256 randWord) external {
         _awardFutureCoinFill(lvl, _calcDailyCoinBudget(lvl, level), randWord);
     }
 
-    /// @dev Daily coin draw core over trait-matched winners in [minLevel, maxLevel].
-    /// @param lvl Level keying the prize pool snapshot for the budget.
-    /// @param currLevel Current game level (storage `level` at call time), used
-    ///        for FLIP pricing.
-    /// @param minLevel Minimum target level for the coin distribution (inclusive).
-    /// @param maxLevel Maximum target level for the coin distribution (inclusive).
-    /// @param bonusTraitsPacked Packed winning trait IDs for the draw.
-    /// @param randWord VRF entropy for winner selection.
-    function _runFlipJackpot(
-        uint24 lvl,
-        uint24 currLevel,
-        uint24 minLevel,
-        uint24 maxLevel,
-        uint32 bonusTraitsPacked,
-        uint256 randWord
-    ) private {
-        _awardDailyCoinToTraitWinners(
-            minLevel,
-            maxLevel,
-            bonusTraitsPacked,
-            _calcDailyCoinBudget(lvl, currLevel),
-            randWord
-        );
-    }
-
-    /// @dev Emit DailyWinningTraits without running any distribution.
-    ///      Used at purchaseLevel==1 where payDailyJackpot is skipped and two coin
-    ///      jackpots replace the ETH jackpot. First coin call (the "main") uses
-    ///      bonus-derived traits from randWord. Second coin call uses traits from
-    ///      a salted randWord (keccak256(randWord, BONUS_TRAITS_TAG)).
-    /// @param randWord VRF entropy for both trait rolls.
-    /// @param bonusTargetLevel Target level for the first (main-equivalent) coin distribution.
-    function emitDailyWinningTraits(uint24, uint256 randWord, uint24 bonusTargetLevel) external {
+    /// @notice Roll, record and emit level 1's purchase-day board without running any
+    ///         distribution.
+    /// @dev Used at purchaseLevel == 1, where payDailyJackpot is skipped: the day's coin budget
+    ///      pays level 1's trait-matched FLIP draw and the fill draw instead. Records the board
+    ///      for foil claims.
+    /// @param randWord VRF entropy for the board.
+    function emitDailyWinningTraits(uint256 randWord) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         // The sealed day, matching payDailyJackpot: dailyIdx + 1, never the wall clock.
-        uint24 questDay = dailyIdx + 1;
-        uint32 mainTraitsPacked = _rollWinningTraits(randWord, true);
-        uint256 saltedRng = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
-        uint32 bonusTraitsPacked = _rollWinningTraits(saltedRng, true);
-        // Level-1 path: persist the two day-1 sets (level 1) so day-1 foil packs
-        // can claim against the sets the day-1 coin jackpots actually used.
-        dailyFoilDraw[questDay] = _packFoilDraw(mainTraitsPacked, bonusTraitsPacked, 1);
-        emit DailyWinningTraits(questDay, mainTraitsPacked, bonusTraitsPacked, bonusTargetLevel);
+        _emitDailyWinningTraits(dailyIdx + 1, _rollMainTraits(randWord), 1);
     }
 
-    /// @dev Awards a coin draw over trait-matched ticket holders across [minLevel, maxLevel].
-    ///      Each pull samples its own random level via keccak256(randomWord, FLIP_LEVEL_TAG, i)
-    ///      and rotates trait deterministically via i % 4. The CRAPS half runs first, on pulls
-    ///      0 .. _crapsPulls(budget) - 1; the COIN half on pulls COIN_DRAW_HALF_SLOTS onward,
-    ///      as many as it has whole equal shares for (_coinDrawPlan). Empty (lvl', trait_i)
-    ///      buckets skip; an unfilled coin share is not minted. Per-trait deity addresses are
-    ///      cached at loop entry. Each (level, trait) owns an independent eight-lane cursor.
+    /// @dev Awards a FLIP draw over trait-matched ticket holders across [minLevel, maxLevel]:
+    ///      up to COIN_DRAW_SHARES winners, one equal whole-unit share each. Each pull samples
+    ///      its own random level via keccak256(randomWord, FLIP_LEVEL_TAG, i) and rotates trait
+    ///      deterministically via i % 4. Empty (lvl', trait_i) buckets skip, and neither an
+    ///      unfilled share nor the sub-share remainder is minted, so no share can be short.
+    ///      Per-trait deity addresses are cached at loop entry. Each (level, trait) owns an
+    ///      independent eight-lane cursor.
     function _awardDailyCoinToTraitWinners(
         uint24 minLevel,
         uint24 maxLevel,
@@ -2050,7 +1847,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 coinBudget,
         uint256 randomWord
     ) private {
-        if (coinBudget == 0) return;
+        uint256 units = coinBudget / FlipRoundLib.FLIP_ROUND_UNIT;
+        if (units == 0) return;
+        uint256 cap = units < COIN_DRAW_SHARES ? units : COIN_DRAW_SHARES;
+        uint256 amount = (units / cap) * FlipRoundLib.FLIP_ROUND_UNIT;
 
         uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
             winningTraitsPacked
@@ -2071,30 +1871,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint24 range = maxLevel - minLevel + 1;
         PackedTicketSampleLib.Cursor[] memory cursors = new PackedTicketSampleLib.Cursor[](uint256(range) * 4);
 
-        uint256 pulls = _crapsPulls(coinBudget);
-        address[] memory craps = new address[](pulls);
-        uint24[] memory crapsLvls = new uint24[](pulls);
-        uint256 n;
-        for (uint256 i; i < pulls; ) {
-            (address winner, uint24 lvlPrime, ) = _drawCoinEntry(
-                minLevel, range, traitIds[i & 3], deityCache[i & 3], randomWord, i, cursors
-            );
-            if (winner != address(0)) {
-                craps[n] = winner;
-                crapsLvls[n] = lvlPrime;
-                unchecked { ++n; }
-            }
-            unchecked { ++i; }
-        }
-        assembly ("memory-safe") {
-            mstore(craps, n)
-            mstore(crapsLvls, n)
-        }
-
-        (uint256 fullDays, uint256 amount, uint256 cap) = _coinDrawPlan(coinBudget, n);
-        address[] memory coin = new address[](cap);
+        address[] memory players = new address[](cap);
+        uint256[] memory amounts = new uint256[](cap);
         uint256 paid;
-        for (uint256 i = COIN_DRAW_HALF_SLOTS; i < COIN_DRAW_HALF_SLOTS + cap; ) {
+        for (uint256 i; i < cap; ) {
             uint8 traitIdx = uint8(i & 3);
             uint8 trait_i = traitIds[traitIdx];
             (address winner, uint24 lvlPrime, uint256 ticketIdx) = _drawCoinEntry(
@@ -2102,111 +1882,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             );
             if (winner != address(0)) {
                 emit JackpotFlipWin(winner, lvlPrime, trait_i, amount, ticketIdx);
-                coin[paid] = winner;
+                players[paid] = winner;
+                amounts[paid] = amount;
                 unchecked { ++paid; }
             }
             unchecked { ++i; }
         }
-        _finishCoinDraw(craps, crapsLvls, fullDays, coin, 0, paid, amount);
-    }
-
-    /// @dev How many craps-half pulls a budget draws: one per whole opener seat its craps half
-    ///      covers, at most COIN_DRAW_HALF_SLOTS.
-    function _crapsPulls(uint256 budget) private pure returns (uint256 pulls) {
-        pulls = (budget >> 1) / CRAPS_OPENER_SEAT_VALUE;
-        if (pulls > COIN_DRAW_HALF_SLOTS) pulls = COIN_DRAW_HALF_SLOTS;
-    }
-
-    /// @dev Split a coin draw once its `n` craps winners are known. The craps half seats every
-    ///      one of them on tomorrow's opener (n never exceeds what the half covers) and spends
-    ///      what is left upgrading seats to tomorrow's whole day, CRAPS_DAY_UPGRADE_VALUE each.
-    ///      Whatever the craps half does not spend joins the coin half, which pays up to
-    ///      COIN_DRAW_HALF_SLOTS winners one equal whole-unit share each; the sub-share remainder
-    ///      is not minted, so no share can be short.
-    /// @return fullDays Seats upgraded to the whole day, taken from the front.
-    /// @return amount   One coin winner's share, in whole FLIP_ROUND_UNITs.
-    /// @return cap      How many coin shares the budget funds.
-    function _coinDrawPlan(uint256 budget, uint256 n)
-        private
-        pure
-        returns (uint256 fullDays, uint256 amount, uint256 cap)
-    {
-        unchecked {
-            uint256 left = (budget >> 1) - n * CRAPS_OPENER_SEAT_VALUE;
-            fullDays = left / CRAPS_DAY_UPGRADE_VALUE;
-            if (fullDays > n) fullDays = n;
-            uint256 units = (budget - n * CRAPS_OPENER_SEAT_VALUE - fullDays * CRAPS_DAY_UPGRADE_VALUE)
-                / FlipRoundLib.FLIP_ROUND_UNIT;
-            cap = units < COIN_DRAW_HALF_SLOTS ? units : COIN_DRAW_HALF_SLOTS;
-            if (cap != 0) amount = (units / cap) * FlipRoundLib.FLIP_ROUND_UNIT;
-        }
-    }
-
-    /// @dev Pay a drawn coin draw: seat each craps winner on tomorrow (the first `fullDays` for
-    ///      the whole day, the rest on its opener), then credit, in one batch, the `paid` coin
-    ///      winners at coin[coinOff ..] their share and every refused Craps winner the award's
-    ///      value (a full-day award normally banks a pass, see _seatOnTable) — a refusal
-    ///      changes the form the winner holds the value in, not how much the draw pays.
-    function _finishCoinDraw(
-        address[] memory craps,
-        uint24[] memory crapsLvls,
-        uint256 fullDays,
-        address[] memory coin,
-        uint256 coinOff,
-        uint256 paid,
-        uint256 amount
-    ) private {
-        uint256 n = craps.length;
-        address[] memory players = new address[](paid + n);
-        uint256[] memory amounts = new uint256[](paid + n);
-        uint256 k;
-        unchecked {
-            for (; k < paid; ++k) {
-                players[k] = coin[coinOff + k];
-                amounts[k] = amount;
-            }
-            for (uint256 i; i < n; ++i) {
-                address w = craps[i];
-                bool day = i < fullDays;
-                uint256 flipOwed = _seatOnTable(w, day);
-                emit CoinDrawCrapsWin(w, crapsLvls[i], day, flipOwed != 0);
-                if (flipOwed != 0) {
-                    players[k] = w;
-                    amounts[k] = flipOwed;
-                    ++k;
-                }
-            }
-        }
-        if (k != 0) {
+        if (paid != 0) {
             assembly ("memory-safe") {
-                mstore(players, k)
-                mstore(amounts, k)
+                mstore(players, paid)
+                mstore(amounts, paid)
             }
             coinflip.creditFlipBatch(players, amounts);
         }
-    }
-
-    /// @dev Pay one craps winner. A whole day banks one normal pass (spendable only
-    ///      on a future day whose word does not exist yet); if its bank is saturated,
-    ///      the winner takes its full value in FLIP. An opener is a seat on tomorrow's opener — the first
-    ///      window no word has drawn — through the comp door as kind 5, period 0, count one; it
-    ///      is refused, and owed CRAPS_OPENER_SEAT_VALUE (the opener's expected cost) in FLIP,
-    ///      for the vault or sDGNRS (`openBonusDay` seats both for the whole day, which an opener
-    ///      claim would stand down) and for any claim on tomorrow in the table's
-    ///      `_daySeated[tomorrow * 8]`, including a seat this same draw just wrote.
-    /// @return flipOwed Zero if delivered; the refused award's value otherwise.
-    function _seatOnTable(address w, bool day) private returns (uint256 flipOwed) {
-        ICrapsCoinDrawSeat table = ICrapsCoinDrawSeat(ContractAddresses.CRAPS);
-        if (day) {
-            return table.creditPasses(w, 1, 0) == 0 ? NORMAL_DAY_PASS_VALUE : 0;
-        }
-        uint256 tomorrow = uint256(_simulatedDayIndex()) + 1;
-        bytes32 claims = keccak256(abi.encode(tomorrow * 8, CRAPS_DAY_SEATED_SLOT));
-        if (
-            w == ContractAddresses.VAULT || w == ContractAddresses.SDGNRS
-                || table.extsload(keccak256(abi.encode(w, claims))) != 0
-        ) return CRAPS_OPENER_SEAT_VALUE;
-        table.vaultComp(uint256(uint160(w)) | (tomorrow << 176) | (uint256(1) << 200) | (uint256(5) << 160));
     }
 
     /// @dev Keep the existing independent level draw for each pull. Only repeated draws
@@ -2232,7 +1920,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Purchase-day coin draw over unminted future levels, paid as one closed craps battle.
+    /// @dev The daily fill draw over unminted future levels, paid as one closed craps battle.
     ///      Wallets are drawn level by level: pick an unvisited level in [lvl + 1, lvl + 99], walk
     ///      its far-future queue from a random lane (one lane per wallet registration, each taken at
     ///      most once) until the draw has FILL_BATTLE_ENTRANTS wallets or the level is exhausted,
@@ -2286,118 +1974,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (players.length != 0) coinflip.creditFlipBatch(players, owed);
     }
 
-    /// @dev Roll winning traits with hero symbol override.
-    ///      All paths use fully random traits (6 bits per quadrant).
-    ///      Hero override replaces the winning quadrant's trait if a top hero symbol exists.
-    /// @param randWord VRF entropy.
-    /// @param isBonus When true, applies keccak256 domain separation for independent bonus traits.
-    function _rollWinningTraits(
-        uint256 randWord,
-        bool isBonus
-    ) private view returns (uint32 packed) {
-        if (!isBonus) {
-            // Main draw — unchanged: base + hero both off the unsalted word.
-            uint8[4] memory mTraits = JackpotBucketLib.getRandomTraits(randWord);
-            _applyHeroOverride(mTraits, randWord);
-            return JackpotBucketLib.packWinningTraits(mTraits);
-        }
-        // Bonus draw — base off the salted word, with its own hero rolled off the
-        // salted word excluding the main hero's slot (main hero off the unsalted
-        // word, matching _rollWinningTraitsPair so both producers agree).
-        uint256 r = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
-        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(r);
-        // dailyIdx is frozen for this whole view (no writes/external calls between the reads),
-        // so cache it once for both hero rolls and the ban-quadrant derivation.
-        uint24 dIdx = dailyIdx;
-        (bool mHas, uint8 mQ, uint8 mS) = _rollHeroSymbol(
-            dIdx,
-            randWord,
-            _NO_HERO_EXCLUDE,
-            _goldenTicketBanQuadrant(goldenTicket, dIdx)
-        );
-        uint8 excl = mHas ? ((mQ << 3) | mS) : _NO_HERO_EXCLUDE;
-        (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(
-            dIdx,
-            r,
-            excl,
-            _NO_QUADRANT_BAN
-        );
-        _applyHeroResult(traits, bHas, bQ, bS);
-        packed = JackpotBucketLib.packWinningTraits(traits);
-    }
-
-    /// @dev Rolls main and bonus winning traits from one VRF word. The main draw
-    ///      rolls its hero off the unsalted word; the bonus draw rolls its OWN hero
-    ///      off the salted word with the main hero's slot excluded, so the two
-    ///      heroes never coincide (an empty post-exclusion pool yields no bonus
-    ///      hero). Base traits derive from each roll's own word (main: randWord;
-    ///      bonus: keccak-salted with BONUS_TRAITS_TAG); heroes override symbol
-    ///      bits only, leaving every quadrant's base-rolled color intact.
-    ///      `withBonus` false skips the bonus roll and returns bonus zero, which no real set
-    ///      can equal (quadrant 1's byte is at least 64): the foil claim reads it as "no
-    ///      bonus draw this day". The main set is identical either way.
-    function _rollWinningTraitsPair(
-        uint256 randWord,
-        bool withBonus
-    ) private view returns (uint32 mainPacked, uint32 bonusPacked) {
-        // dailyIdx is frozen for this whole view (no writes/external calls between the reads),
-        // so cache it once for both hero rolls and the ban-quadrant derivation.
-        uint24 dIdx = dailyIdx;
-        (
-            bool hasHeroWinner,
-            uint8 heroQuadrant,
-            uint8 heroSymbol
-        ) = _rollHeroSymbol(
-                dIdx,
-                randWord,
-                _NO_HERO_EXCLUDE,
-                _goldenTicketBanQuadrant(goldenTicket, dIdx)
-            );
-
-        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
-        _applyHeroResult(traits, hasHeroWinner, heroQuadrant, heroSymbol);
-        mainPacked = JackpotBucketLib.packWinningTraits(traits);
-        if (!withBonus) return (mainPacked, 0);
-
-        uint256 rBonus = EntropyLib.hash2(randWord, uint256(BONUS_TRAITS_TAG));
-        traits = JackpotBucketLib.getRandomTraits(rBonus);
-        // The bonus draw rolls its own hero off the salted word, excluding the
-        // main hero's slot so the two heroes can never coincide. An empty pool
-        // (the main had no hero) yields no bonus hero either.
-        uint8 excl = hasHeroWinner
-            ? ((heroQuadrant << 3) | heroSymbol)
-            : _NO_HERO_EXCLUDE;
-        (bool bHas, uint8 bQ, uint8 bS) = _rollHeroSymbol(
-            dIdx,
-            rBonus,
-            excl,
-            _NO_QUADRANT_BAN
-        );
-        _applyHeroResult(traits, bHas, bQ, bS);
-        bonusPacked = JackpotBucketLib.packWinningTraits(traits);
-    }
-
-    /// @dev Emits the daily winning-traits event (bonusTargetLevel: see DailyWinningTraits).
-    function _emitDailyWinningTraits(
-        uint24 questDay,
-        uint32 mainTraitsPacked,
-        uint32 bonusTraitsPacked,
-        uint24 lvl,
-        uint24 bonusTargetLevel
-    ) private {
-        // Persist the day's two winning sets + cycle level for the foil claim to
-        // read (foil == jackpot by construction). One write per day.
-        dailyFoilDraw[questDay] = _packFoilDraw(
-            mainTraitsPacked,
-            bonusTraitsPacked,
-            lvl
-        );
-        emit DailyWinningTraits(
-            questDay,
-            mainTraitsPacked,
-            bonusTraitsPacked,
-            bonusTargetLevel
-        );
+    /// @dev Records the day's board for the foil claim to read (foil == jackpot by
+    ///      construction; one write per day) and emits it.
+    function _emitDailyWinningTraits(uint24 questDay, uint32 mainTraitsPacked, uint24 lvl) private {
+        dailyFoilDraw[questDay] = _packFoilDraw(mainTraitsPacked, lvl);
+        emit DailyWinningTraits(questDay, mainTraitsPacked);
     }
 
     /// @dev Calculate 0.25% of the previous level's recorded prize pool (`levelPrizePool[lvl - 1]`,
@@ -2429,35 +2010,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             )
         );
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
-    }
-
-    /// @dev The day-1 early-bird entries ride bits 144..207 of the same word; payDailyJackpot
-    ///      ORs them in after this pack and payEarlyBirdTickets reads and clears them.
-    function _packDailyTicketBudgets(
-        uint256 dailyEntries,
-        uint256 carryoverEntries,
-        uint8 carryoverSourceOffset
-    ) private pure returns (uint256) {
-        return
-            (dailyEntries << 8) |
-            (carryoverEntries << 72) |
-            (uint256(carryoverSourceOffset) << 136);
-    }
-
-    function _unpackDailyTicketBudgets(
-        uint256 packed
-    )
-        private
-        pure
-        returns (
-            uint256 dailyEntries,
-            uint256 carryoverEntries,
-            uint8 carryoverSourceOffset
-        )
-    {
-        dailyEntries = uint64(packed >> 8);
-        carryoverEntries = uint64(packed >> 72);
-        carryoverSourceOffset = uint8(packed >> 136);
     }
 
     // -------------------------------------------------------------------------

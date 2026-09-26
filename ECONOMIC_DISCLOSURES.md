@@ -86,13 +86,16 @@ pass cost goes to futurePrizePool. The solo quadrant follows this same full-pass
 rule. These awards concentrate part of the quadrant's prize in one longer-term
 participation claim; they do not create a cash withdrawal claim for that value.
 
-The early-bird jackpot converts large ticket prizes into a mixed award: once its
-ordinary payout exceeds 45 tickets per winning slot and the pooled surplus can
-cover a full prize pass at the 4.5 ETH accounting rate, every slot receives 45
-tickets and one separate winner receives all surplus full passes. The pass draw
-prefers eligible gold winning traits, including deity virtual entries; otherwise
-it draws from the other eligible winning traits. The recipient need not have won
-an immediate ticket prize. All early-bird ETH and rounding remainder still go to
+The early-bird jackpot pays tickets to holders of the day's winning traits in the
+board's three non-solo quadrants (the solo quadrant already pays the day's solo ETH
+prize; it serves only when it is the one quadrant with holders). It converts large
+ticket prizes into a mixed award: once its ordinary payout exceeds 45 tickets per
+winning slot and the pooled surplus can cover a full prize pass at the 4.5 ETH
+accounting rate, every slot receives 45 tickets and one separate winner receives all
+surplus full passes. The pass draw uses the same three quadrants and prefers eligible
+gold winning traits, including deity virtual entries; otherwise it draws from the
+other eligible winning traits. The recipient need not have won an immediate ticket
+prize. All early-bird ETH and rounding remainder still go to
 nextPrizePool; these passes confer future participation, not a segregated ETH
 reserve or cash claim. They must be claimed under the existing pass rules and
 depend on continued play. Repeated ticket wins each retain their 45-ticket award;

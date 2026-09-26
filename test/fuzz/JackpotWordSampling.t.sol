@@ -30,7 +30,6 @@ contract WordScatterHarness is DegenerusGame, BucketSeed {
 
 contract JackpotWordSamplingTest is Test {
     bytes32 private constant WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
-    bytes32 private constant BONUS = keccak256("BONUS_TRAITS");
     WordJackpotHarness private h;
     WordScatterHarness private scatter;
 
@@ -81,7 +80,7 @@ contract JackpotWordSamplingTest is Test {
     function _checkJackpot(uint256 word, uint256 len, uint256 awards, bool withDeity) private {
         ExpectedDraw memory expected;
         expected.length = len;
-        expected.trait = JackpotBucketLib.getRandomTraits(uint256(keccak256(abi.encode(word, BONUS))))[0];
+        expected.trait = JackpotBucketLib.getRandomTraits(word)[0];
         expected.deity = withDeity ? address(0xD00D) : address(0);
         expected.effectiveLength = len;
         if (withDeity) {

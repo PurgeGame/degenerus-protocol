@@ -9,14 +9,13 @@
 // its own suite is deleted:
 //
 //   §3a BUDGET-SPLIT (exact integer unit math, no probabilistic rounding)
-//     1. `_awardDailyCoinToTraitWinners`  — JackpotModule (uses shared plan)
+//     1. `_awardDailyCoinToTraitWinners`  — JackpotModule (its own inline unit split)
 //
-//   MOVED OUT OF §3a — the purchase-day fill draw (`_awardFutureCoinFill`) no longer splits
-//   its budget through `_coinDrawPlan`/`_finishCoinDraw` at all: it hands its whole walked
-//   field and its raw `coinBudget` to the standalone `CoinDrawBattle.resolve`, which lands
-//   each wallet's run payout and the pot on the §3c threshold-gated collapse (`_award`:
-//   whole-FLIP floor up to 1,000 FLIP, EV-preserving 100-FLIP granule above, keyed per
-//   wallet off the word). See [01b] / [01e] below.
+//   MOVED OUT OF §3a — the daily fill draw (`_awardFutureCoinFill`) splits no budget at
+//   all: it hands its whole walked field and its raw `coinBudget` to the standalone
+//   `CoinDrawBattle.resolve`, which lands each wallet's run payout and the pot on the §3c
+//   threshold-gated collapse (`_award`: whole-FLIP floor up to 1,000 FLIP, EV-preserving
+//   100-FLIP granule above, keyed per wallet off the word). See [01b] / [01e] below.
 //
 //   §3b BIG-LEG TRUNCATE (no RNG at all)
 //     3. `_payGoldenTicket`               — JackpotModule
@@ -161,16 +160,32 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
   });
 
   describe("§3a budget-split sites carry the exact integer unit math", function () {
-    it("[01a] site 1 `_awardDailyCoinToTraitWinners` uses the shared plan", function () {
+    it("[01a] site 1 `_awardDailyCoinToTraitWinners` rounds its own budget to whole 100-FLIP shares", function () {
       const body = bodyOf(JACKPOT, "function _awardDailyCoinToTraitWinners(");
       expect(
-        /_coinDrawPlan\s*\(\s*coinBudget\s*,\s*n\s*\)/.test(body),
-        "site 1 must use the shared coin/Craps plan"
+        /uint256\s+units\s*=\s*coinBudget\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(body),
+        "site 1 must reduce its budget to whole FLIP_ROUND_UNIT shares"
       ).to.equal(true);
       expect(
-        /_finishCoinDraw\s*\(/.test(body),
-        "site 1 must settle through the shared coin/Craps payout"
+        /uint256\s+cap\s*=\s*units\s*<\s*COIN_DRAW_SHARES\s*\?\s*units\s*:\s*COIN_DRAW_SHARES\s*;/.test(body),
+        "site 1 must cap its winner count at COIN_DRAW_SHARES"
       ).to.equal(true);
+      expect(
+        /uint256\s+amount\s*=\s*\(\s*units\s*\/\s*cap\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(body),
+        "site 1 must pay each winner the same whole-unit share"
+      ).to.equal(true);
+      expect(
+        /\bextra\b|\bextraStart\b|\bbaseUnits\b/.test(body),
+        "site 1 must carry no extra-unit machinery"
+      ).to.equal(false);
+      expect(
+        /_coinDrawPlan\s*\(/.test(body),
+        "site 1 runs its own split — no shared coin/Craps plan remains to defer to"
+      ).to.equal(false);
+      expect(
+        /_finishCoinDraw\s*\(/.test(body),
+        "site 1 credits winners directly — no shared coin/Craps payout remains to settle through"
+      ).to.equal(false);
     });
 
     it("[01b] `_awardFutureCoinFill` no longer uses the shared plan — it hands the raw budget to CoinDrawBattle", function () {
@@ -191,20 +206,6 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         /battle\.resolve\s*\(\s*lvl\s*,\s*winners\s*,\s*coinBudget\s*,\s*battleWord\s*\)/.test(body),
         "the fill draw must hand its raw, unrounded coinBudget to CoinDrawBattle.resolve"
       ).to.equal(true);
-    });
-
-    it("[01d] the shared plan rounds shares down to whole 100-FLIP units", function () {
-      const body = bodyOf(JACKPOT, "function _coinDrawPlan(");
-      expect(
-        /amount\s*=\s*\(\s*units\s*\/\s*cap\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
-          body
-        ),
-        "the plan must pay each coin winner the same whole-unit share"
-      ).to.equal(true);
-      expect(
-        /\bextra\b|\bextraStart\b|\bbaseUnits\b/.test(body),
-        "the plan must carry no extra-unit machinery"
-      ).to.equal(false);
     });
 
     it("[01e] CoinDrawBattle lands every run payout and the pot on the threshold-gated collapse", function () {
@@ -420,7 +421,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       };
       for (let k = 0; k < N; k++) {
         const budget = ONE_FLIP * (next(2_000_000n) + 1n);
-        const maxWinners = 25n; // each draw's coin half has at most 25 shares
+        const maxWinners = 50n; // COIN_DRAW_SHARES — each draw has at most 50 shares
         const { units, cap, amount, leftover } = splitUnits(budget, maxWinners);
         if (cap === 0n) {
           expect(budget < UNIT).to.equal(

@@ -167,8 +167,9 @@ contract AdvanceStageWorstCaseGas is Test {
 
     /// @dev Produce the 4 winning trait ids `runTerminalJackpot` will roll for THIS rngWord, plus the
     ///      effective entropy `bucketCountsForPool` keys off. We mirror the module's derivation exactly:
-    ///      `_rollWinningTraits(rngWord,false)` packs 4 traits; we unpack them and seed those 4 buckets so
-    ///      every selected winner resolves to a real holder. Exact trait values do not affect gas (the
+    ///      `_rollBoard(rngWord, _NO_QUADRANT_BAN)` packs 4 traits (no hero wagers are seeded here, so
+    ///      the roll is the unmodified base board); we unpack them and seed those 4 buckets so every
+    ///      selected winner resolves to a real holder. Exact trait values do not affect gas (the
     ///      bucket SIZES are pinned by bucketCountsForPool at max scale).
     function _deriveTraits(uint256 rngWord)
         internal

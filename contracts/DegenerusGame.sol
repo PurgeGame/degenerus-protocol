@@ -900,18 +900,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Permissionlessly resolve `player`'s foil match claim (value credits to player).
-    /// @dev Signature: claimFoilMatch(address player, uint256 day, uint256 ticketIndex,
-    ///      uint8 drawKind). The eligible cycle level is read inside the module from the
-    ///      day's sealed draw. The win credits to `player`, never the caller, and a tuple
-    ///      pays at most once (CEI marker), so anyone may trigger it. Two draws
-    ///      (main/bonus) x four tickets give 8 independent claimables per day. The
-    ///      signature matches the module function exactly (identical selector), so the
-    ///      calldata forwards as-is — re-encoding would cost size headroom for no change.
+    /// @dev Signature: claimFoilMatch(address player, uint256 day, uint256 ticketIndex). The
+    ///      eligible cycle level is read inside the module from the day's sealed draw. The win
+    ///      credits to `player`, never the caller, and a tuple pays at most once (CEI marker),
+    ///      so anyone may trigger it. The day's one board x four tickets give 4 independent
+    ///      claimables per day. The signature matches the module function exactly (identical
+    ///      selector), so the calldata forwards as-is — re-encoding would cost size headroom for
+    ///      no change.
     function claimFoilMatch(
         address,
         uint256,
-        uint256,
-        uint8
+        uint256
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_FOILPACK_MODULE
@@ -920,7 +919,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Permissionlessly resolve a batch of foil match claims (address[] players,
-    ///         uint24[] days, uint8[] ticketIndexes, uint8[] drawKinds).
+    ///         uint24[] days, uint8[] ticketIndexes).
     /// @dev Non-claimable tuples past index 0 are skipped, not reverted; each settled win
     ///      credits its own player and the caller earns a per-settled-claim FLIP bounty
     ///      during a live game. A non-claimable tuple AT index 0 reverts the whole call
@@ -930,7 +929,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function claimFoilMatchMany(
         address[] calldata,
         uint24[] calldata,
-        uint8[] calldata,
         uint8[] calldata
     ) external {
         (bool ok, bytes memory data) = ContractAddresses
@@ -1383,19 +1381,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    /// @notice Emit DailyWinningTraits via jackpot module.
+    /// @notice Roll, record and emit level 1's purchase-day board via jackpot module.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
     ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
-    ///      Signature: emitDailyWinningTraits(uint24 lvl, uint256 randWord, uint24 bonusTargetLevel)
-    ///      — lvl is unused (preserved for signature compatibility), then the VRF entropy seed and
-    ///      the target level for the first coin distribution. The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
-    ///      here would cost contract-size headroom for no behavior change.
-    function emitDailyWinningTraits(
-        uint24,
-        uint256,
-        uint24
-    ) external {
+    ///      Signature: emitDailyWinningTraits(uint256 randWord). The signature matches the
+    ///      module function exactly (identical selector), so the calldata forwards as-is —
+    ///      re-encoding here would cost contract-size headroom for no behavior change.
+    function emitDailyWinningTraits(uint256) external {
         if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE

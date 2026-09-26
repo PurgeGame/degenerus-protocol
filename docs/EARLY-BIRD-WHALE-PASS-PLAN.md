@@ -3,6 +3,12 @@
 September 24, 2026. Implemented in the working tree from base `3a9bbe9c`.
 Implementation and verification results are recorded below.
 
+> Amended September 26, 2026: every day now rolls one board. The early-bird
+> tickets and its pass draw read that board at level + 1 across its three
+> non-solo quadrants (the solo quadrant serves only when it is the one active
+> bucket); references below to the "bonus-trait board" describe the design as
+> built on September 24. Current behavior: [ARCHITECTURE](ARCHITECTURE.md).
+
 ## Agreed direction
 
 The user selected **45 tickets per winning slot**, explicitly allowing a wallet

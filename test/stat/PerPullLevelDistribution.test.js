@@ -15,11 +15,12 @@
 //          per-i strict-shape check below).
 //
 // D-IMPL-01 boundary cross-validation: at fixed seeds, drive a real level-1
-//          daily VRF cycle. The trait draw's coin half emits 25 shares from
-//          pull indexes 25..49, all at minted level 1. Assert their exact
-//          trait rotation and target level, and confirm the second (fill)
-//          draw's CoinDrawBattle emits CoinDrawBattleRun from the unminted
-//          queue's walked field.
+//          daily VRF cycle. Level 1's trait-matched FLIP draw emits up to
+//          COIN_DRAW_SHARES=50 equal shares from pull indexes 0..cap-1, all
+//          at minted level 1. Assert their exact trait rotation and target
+//          level, and confirm the separately-salted future-queue fill draw's
+//          CoinDrawBattle emits CoinDrawBattleRun from the unminted queue's
+//          walked field.
 //
 // STAT-04 Phase 261 infra reuse: `makeRng`, `CHI2_CRIT_05`, and `wilsonHilfertyZ`
 //          are re-declared verbatim from test/stat/TraitDistribution.test.js
@@ -59,7 +60,7 @@ import {
 // asserts equality with the recomputed digest as a structural pin.
 const FLIP_LEVEL_TAG = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("coin-level"));
 
-const PULLS_PER_CALL = 50; // 25 Craps pull positions plus 25 coin-share positions.
+const PULLS_PER_CALL = 50; // Up to COIN_DRAW_SHARES=50 equal-share pull positions.
 
 // ---------------------------------------------------------------------------
 // STAT-04 Phase 261 infra reuse — re-declared verbatim from
@@ -122,24 +123,18 @@ function jsLvlPrime(randomWord, minLevel, maxLevel, i) {
 
 // ---------------------------------------------------------------------------
 // JS replica of JackpotBucketLib.getRandomTraits + packWinningTraits +
-// _rollWinningTraits, used by the boundary harness to know which trait IDs
-// the contract derived from a given `randomWord`.
+// _rollMainTraits, used by the boundary harness to know which trait IDs the
+// contract derived from a given `randomWord`.
 //
-// _rollWinningTraits in DegenerusGameJackpotModule.sol composes the entropy
-// for the bonus-traits roll as keccak256(abi.encodePacked(randomWord,
-// keccak256("BONUS_TRAITS"))) when isBonus=true.
+// _rollMainTraits rolls the day's board directly off `randomWord` (no salt).
+// LEVEL_ONE_FILL_SALT keeps level 1's separate future-queue fill draw's
+// entropy apart from the trait draw's — the advance module salts the word
+// with it before calling the fill draw, so the two draws never share a seed.
 // ---------------------------------------------------------------------------
 
-const BONUS_TRAITS_TAG = hre.ethers.keccak256(
+const LEVEL_ONE_FILL_SALT = hre.ethers.keccak256(
   hre.ethers.toUtf8Bytes("BONUS_TRAITS"),
 );
-
-function jsBonusEntropy(randomWord) {
-  // abi.encodePacked(uint256, bytes32) = 32-byte word || 32-byte tag = 64 bytes.
-  const wordHex = BigInt(randomWord).toString(16).padStart(64, "0");
-  const tagHex = BONUS_TRAITS_TAG.slice(2); // strip 0x
-  return BigInt(hre.ethers.keccak256("0x" + wordHex + tagHex));
-}
 
 // Mirrors JackpotBucketLib.getRandomTraits(uint256 rw):
 //   w[0] = uint8(rw & 0x3F)              // 0..63
@@ -194,11 +189,11 @@ describe("STAT-04 — Phase 261 infrastructure reuse + FLIP_LEVEL_TAG sanity", f
     expect(a).to.equal(b);
   });
 
-  it("BONUS_TRAITS_TAG matches keccak256('BONUS_TRAITS')", function () {
+  it("LEVEL_ONE_FILL_SALT matches keccak256('BONUS_TRAITS')", function () {
     const recomputed = hre.ethers.keccak256(
       hre.ethers.toUtf8Bytes("BONUS_TRAITS"),
     );
-    expect(BONUS_TRAITS_TAG).to.equal(recomputed);
+    expect(LEVEL_ONE_FILL_SALT).to.equal(recomputed);
   });
 
   it("jsGetRandomTraits returns 4 distinct trait IDs across distinct quadrants (0-63, 64-127, 128-191, 192-255)", function () {
@@ -280,8 +275,8 @@ describe("STAT-01 — per-pull level distribution chi² uniformity over 10K samp
 
 describe("STAT-02 — per-trait share under deterministic `i % 4` rotation", function () {
   it("i % 4 rotation produces exactly 13/13/12/12 hits per trait per call (degenerate chi² ≈ 0)", function () {
-    // The combined 25 Craps and 25 coin positions still rotate traits by i % 4.
-    // Across 50 pulls per call:
+    // The up-to-50 equal-share pull positions rotate traits by i % 4. Across
+    // the full 50-pull domain:
     //   trait 0 → i ∈ {0, 4, 8, ..., 48}  → 13 pulls
     //   trait 1 → i ∈ {1, 5, 9, ..., 49}  → 13 pulls
     //   trait 2 → i ∈ {2, 6, 10, ..., 46} → 12 pulls
@@ -427,21 +422,23 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
   ];
 
   for (const seed of SEEDS) {
-    it(`seed=0x${seed.toString(16)}: 25 level-1 coin shares match the current trait rotation`, async function () {
+    it(`seed=0x${seed.toString(16)}: level-1 coin shares match the current trait rotation`, async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, deployer, mockVRF, advanceModule, jackpotModule, others } =
         fixture;
 
-      // The level-1 trait draw rolls its bonus traits from the daily word.
-      // The other purchase-day draw now walks unminted future queues.
-      const traitIds = jsGetRandomTraits(jsBonusEntropy(seed));
+      // Level 1's trait-matched FLIP draw rolls the day's main board directly
+      // off the daily word (no salt). The other purchase-day draw walks
+      // unminted future queues from a separately-salted word.
+      const traitIds = jsGetRandomTraits(seed);
       const fullSymIds = traitIds.map((t) => (t >> 6) * 8 + (t & 0x07));
 
       // Quadrant decomposition guarantees fullSymId in [0, 32) for every
       // quadrant — every trait_i in any quadrant consults the deity cache.
       // Register one deity per quadrant (4 distinct fullSymIds) so the
-      // helper's deity-cache lookup populates each level-1 trait bucket. The
-      // coin half can then emit all 25 shares with no empty-bucket skips.
+      // helper's deity-cache lookup populates each level-1 trait bucket: every
+      // pull finds a deity-backed winner, so no pull is skipped and the
+      // emitted events land in pull order starting at index 0.
       //
       // Each deity pass costs DEITY_PASS_BASE + k*(k+1)/2 ether (k = prior
       // owners count). Symbol IDs are user-chosen; we register the four
@@ -490,20 +487,28 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
         `— totalFlipReversals nudge unexpected; check fixture state`,
       ).to.equal(seed);
 
-      // The trait call's coin half uses pulls 25..49. Its level range is
-      // [1, 1]; the future-queue fill draw emits a different event.
+      // The trait call is FLIP-only, up to COIN_DRAW_SHARES=50 equal shares
+      // over pulls 0..cap-1. Its level range is [1, 1]; the future-queue fill
+      // draw emits a different event, from a separately-salted word. Every
+      // pull is deity-backed (no skips), so the emitted events land in pull
+      // order starting at index 0 — cap is read from the emitted count.
       const jackpotInterface = jackpotModule.interface;
       const callGroups = await harvestJackpotFlipWinByCall(
         receipts,
         jackpotInterface,
       );
       const traitEvents = callGroups.flat();
-      expect(traitEvents.length, "every coin-half pull should find its deity-backed bucket").to.equal(25);
+      expect(
+        traitEvents.length,
+        "every pull should find its deity-backed bucket, capped at COIN_DRAW_SHARES=50",
+      ).to.be.within(1, 50);
       expect(traitEvents.map((e) => e.args.lvl)).to.deep.equal(
-        Array.from({ length: 25 }, (_, j) => jsLvlPrime(finalWord, 1, 1, 25 + j)),
+        Array.from({ length: traitEvents.length }, (_, j) =>
+          jsLvlPrime(finalWord, 1, 1, j),
+        ),
       );
       expect(traitEvents.map((e) => e.args.traitId)).to.deep.equal(
-        Array.from({ length: 25 }, (_, j) => traitIds[(25 + j) % 4]),
+        Array.from({ length: traitEvents.length }, (_, j) => traitIds[j % 4]),
       );
 
       // The fill draw no longer emits a per-winner event from the jackpot module: it hands its

@@ -5,9 +5,6 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {BoundaryGasFixture, PhaseEndSeeder} from "./Lvl100PhaseEndAdvanceGas.t.sol";
-import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
-import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
 contract ColdSubscriberSeeder is DegenerusGame {
     function useMatureLevel() external {
@@ -207,38 +204,5 @@ contract AdvanceColdSplitTicketSubscriptions is ColdSubscriberFixture {
 
     function test_ColdSplitTicketsAndRngRequest() public {
         _check(DELIVERED_EVENT, 86, 86);
-    }
-}
-
-contract AdvanceColdCarryover is BoundaryGasFixture {
-    function setUp() public {
-        _deployProtocol();
-        uint256 word = uint256(keccak256("lvl100-phase-end")) | 1;
-        uint8[4] memory mainTraits = JackpotBucketLib.getRandomTraits(word);
-        uint8[4] memory bonusTraits =
-            JackpotBucketLib.getRandomTraits(EntropyLib.hash2(word, uint256(keccak256("BONUS_TRAITS"))));
-        bytes memory original = address(game).code;
-        PhaseEndSeeder seeder = _etchSeedRestore();
-        seeder.seedPhaseEnd(LVL, word, mainTraits, bonusTraits, uint160(0x1000000000));
-        _restore(original);
-        game.advanceGame();
-    }
-
-    function test_CarryoverInItsOwnColdTransaction() public {
-        vm.recordLogs();
-        uint256 before = gasleft();
-        game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
-        uint256 used = before - gasleft() + 21_064;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 tickets;
-        uint8 stage = 255;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == TICKET_WIN_SIG) ++tickets;
-            if (logs[i].topics[0] == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
-        }
-        emit log_named_uint("cold_carryover_including_intrinsic", used);
-        assertEq(stage, 13, "carryover must run alone");
-        assertEq(tickets, 96, "full carryover winner cap");
-        assertLt(used, EIP7825_TX_GAS_CAP, "complete transaction exceeds cap");
     }
 }
