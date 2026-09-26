@@ -10,11 +10,10 @@ of these contracts accepts them.
 simply by being unlucky. That is the software working exactly as intended. Do not commit
 funds you are not prepared to lose entirely.
 
-**The deployed bytecode is the entire agreement.** It controls over every comment, name,
-document and statement made about it — including this one. Where any description of the
-protocol disagrees with what the deployed code does, the code is what governs. It has been
-audited but is not proven correct: it may contain defects the author did not find, and by
-interacting with it you accept that risk in full.
+**The deployed bytecode is the entire agreement and the exclusive source of truth.** Any
+comment, name, document or statement that disagrees with it — including this one — is in
+error. It has been audited but is not proven correct: it may contain defects the author did
+not find, and by interacting with it you accept that risk in full.
 
 **Any state transition the code permits is authorised.** That includes a transaction which
 exploits a defect, and it includes sequences the author did not intend or foresee. A bug is

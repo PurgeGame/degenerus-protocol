@@ -8,10 +8,10 @@ pragma solidity 0.8.34;
  * simply by being unlucky. That is the software working exactly as intended. Do not
  * commit funds you are not prepared to lose entirely.
  *
- * The deployed bytecode is the entire agreement, and controls over every comment, name,
- * document and statement made about it. It has been audited but is not proven correct:
- * it may contain defects the author did not find, and by interacting with it you accept
- * that risk in full.
+ * The deployed bytecode is the entire agreement and the exclusive source of truth; any
+ * comment, name, document or statement that disagrees with it is in error. It has been
+ * audited but is not proven correct: it may contain defects the author did not find, and
+ * by interacting with it you accept that risk in full.
  *
  * Any state transition the code permits is authorised — including one that exploits a
  * defect, and including sequences the author did not intend or foresee. A bug is not a
