@@ -124,9 +124,9 @@ interface IDegenerusGame {
         );
 
     /// @notice Consume the caller's boon lane for the next stake bonus.
-    /// @dev Access: COIN or COINFLIP. The caller names the lane — COINFLIP grants the bonus to the
-    ///      next coinflip deposit, COIN (FLIP) grants it to the paid craps burn in flight. The two
-    ///      lanes are disjoint and neither caller can reach the other's.
+    /// @dev Access: COINFLIP, COIN or WWXRP. The caller selects its own lane: coinflip,
+    ///      craps or WWXRP respectively. WWXRP exposes a separate consumption hook to
+    ///      its trusted-minter applications; those applications cannot call this directly.
     /// @param player The player consuming the boon.
     /// @return boostBps Boost amount in basis points.
     function consumeCoinflipBoon(address player) external returns (uint16 boostBps);
@@ -327,9 +327,9 @@ interface IDegenerusGame {
 
     /// @notice Place single-symbol Degenerette bets.
     /// @param player The betting player (address(0) = msg.sender).
-    /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
+    /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported).
     /// @param amountPerSpin Bet amount per ticket.
-    /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP, 1..5 WWXRP). Each spin resolves independently.
+    /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP). Each spin resolves independently.
     /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,

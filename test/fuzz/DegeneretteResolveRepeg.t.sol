@@ -6,41 +6,10 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
-/// @title DegeneretteResolveRepeg -- proves the v49 `autoResolve` -> `degeneretteResolve`
-///        rename + flat ~1-FLIP "lose" re-peg (GAS-06 / TST-05).
-///
-/// @notice The v49 contract diff renamed the per-item Degenerette mass-resolve helper to
-///         `degeneretteResolve` and CHANGED ITS BOUNTY SHAPE ONLY: the reward is now a FLAT
-///         literal ~1 FLIP (`RESOLVE_FLAT_FLIP = 1e18`) paid ONCE per tx, gated at >= 3
-///         successfully-resolved NON-WWXRP bets. It is NOT a per-item summed reward (the retired
-///         v46/v48 premise). The per-item RESOLUTION math is UNCHANGED — it is produced by the
-///         catchable self-call `this.resolveDegeneretteBets` -> delegatecall
-///         `GAME_DEGENERETTE_MODULE.resolveDegeneretteBets`, which the rename did not touch.
-///
-/// @notice This proof file establishes (DegenerusGame.degeneretteResolve, READ-ONLY anchors):
-///         Task 1 (re-peg / gate / WWXRP-exclusion):
-///           (a) >= 3 non-WWXRP resolved -> exactly ONE creditFlip to the keeper, amount == 1e18
-///               (the FLAT literal, asserted by COUNT == 1 AND amount == RESOLVE_FLAT_FLIP,
-///                NEVER a `3 * peg` per-item sum);
-///           (b) 1-2 non-WWXRP resolved -> committed (resolved) but UNPAID (count == 0), NO revert
-///               (the trailing tail is never stranded);
-///           (c) 0 resolved -> reverts NoWork();
-///           (d) 3 WWXRP-only resolved -> totalResolved == 3 (no revert), successCount == 0 ->
-///               UNPAID (count == 0): WWXRP (currency == 3) is excluded from BOTH the >= 3 gate
-///               count AND the reward (AUTO-04 — a WWXRP-spam faucet is impossible);
-///           (e) mixed 2 WWXRP + 3 non-WWXRP -> PAID (3 non-WWXRP >= gate -> exactly one flat credit).
-///
-///         Task 2 (RESULTS-equality, value-invariant to the bounty wrapper):
-///           - resolve >= 3 non-WWXRP bets and capture the FLIP/WWXRP/DGNRS mint + claimable +
-///             claimablePool deltas, asserting they equal the per-spin-derived expected sums (the
-///             resolution math is byte-identical to the per-item path), with a non-vacuity guard;
-///           - prove a per-bet resolution delta is IDENTICAL whether or not the >= 3 reward fired
-///             (snapshot/revert), so the bounty wrapper provably never touches the resolution math.
-///
-/// @dev Deploys the full protocol via DeployProtocol. The bet placement / RNG-injection / winning-
-///      combo helpers are byte-faithful copies of the DegeneretteFreezeResolution scaffold; the
-///      creditFlip-count oracle is ported from CrankLeversAndPacking (recipient-isolated). The
-///      RESULTS-equality reuses the same `DegeneretteResult`-event per-spin replay idiom.
+/// @title DegeneretteResolveRepeg -- flat keeper reward for supported ETH/FLIP bets.
+/// @notice Three or more successful resolutions pay one flat FLIP reward. One or two
+///         settle without reward; zero successful resolutions revert. Reward gating must
+///         leave the player's settlement amounts unchanged.
 contract DegeneretteResolveRepeg is DeployProtocol {
     // =========================================================================
     // Storage slot constants (confirmed via `forge inspect ... storage`)
@@ -61,17 +30,15 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
 
     // =========================================================================
-    // Degenerette bet currencies (DegeneretteModule:208-216) — WWXRP == 3
+    // Degenerette bet currencies (DegeneretteModule:208-216) — ETH and FLIP
     // =========================================================================
 
     uint8 private constant CURRENCY_ETH = 0;
     uint8 private constant CURRENCY_FLIP = 1;
-    uint8 private constant CURRENCY_WWXRP = 3;
 
     /// @dev Per-currency minimum bets (DegeneretteModule:217-225).
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
     uint256 private constant MIN_BET_FLIP = 100 ether;
-    uint256 private constant MIN_BET_WWXRP = 1 ether;
 
     /// @dev The flat ~1-FLIP "lose" reward (DegenerusGame.sol:1544, RESOLVE_FLAT_FLIP).
     uint256 private constant RESOLVE_FLAT_FLIP = 1e18;
@@ -131,12 +98,12 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — the 5 re-peg / gate / WWXRP-exclusion cases
+    // Flat reward, success threshold, and mixed supported-currency settlement
     // =========================================================================
 
-    /// @notice Case (a): >= 3 non-WWXRP resolved -> exactly ONE flat creditFlip to the keeper,
+    /// @notice Case (a): >= 3 supported resolved -> exactly ONE flat creditFlip to the keeper,
     ///         amount == RESOLVE_FLAT_FLIP (1e18). This is the FLAT literal, NOT a per-item sum:
-    ///         we assert COUNT == 1 AND amount == 1e18 (never `3 * peg`). Three non-WWXRP bets
+    ///         we assert COUNT == 1 AND amount == 1e18 (never `3 * peg`). Three supported bets
     ///         (ETH + FLIP + ETH) resolve, so successCount == 3 trips the gate exactly once.
     function testGteThreeNonWwxrpPaysExactlyOneFlat() public {
         // Large pool so resolutions are real but the exact payout is irrelevant to the count oracle.
@@ -146,7 +113,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         uint256 word = uint256(keccak256("repeg_gte3_word"));
         uint32 ticket = _winningTicketFor(index, word);
 
-        // 3 non-WWXRP bets: ETH, FLIP, ETH.
+        // 3 supported bets: ETH, FLIP, ETH.
         _fundFlip(player, 1_000 ether);
         uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
         uint64 b1 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
@@ -166,7 +133,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         assertEq(
             count,
             1,
-            "Case (a): >= 3 non-WWXRP -> exactly ONE keeper creditFlip (flat, never per-item)"
+            "Case (a): >= 3 supported -> exactly ONE keeper creditFlip (flat, never per-item)"
         );
         assertEq(
             credited,
@@ -180,8 +147,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         assertEq(_betSlot(player, b2), 0, "bet 2 resolved");
     }
 
-    /// @notice Case (b): 1-2 non-WWXRP resolved -> committed (resolved) but UNPAID (count == 0),
-    ///         and NO revert. Two non-WWXRP bets resolve; successCount == 2 < 3, so the flat
+    /// @notice Case (b): 1-2 supported resolved -> committed (resolved) but UNPAID (count == 0),
+    ///         and NO revert. Two supported bets resolve; successCount == 2 < 3, so the flat
     ///         reward does NOT fire, yet the call commits the resolutions (the trailing tail is
     ///         never stranded — only zero-resolved reverts).
     function testOneOrTwoNonWwxrpCommittedUnpaidNoRevert() public {
@@ -213,7 +180,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         assertEq(
             _countCoinflipStakeUpdatedFor(keeper),
             0,
-            "Case (b): 1-2 non-WWXRP -> UNPAID (no creditFlip), but committed and NOT reverted"
+            "Case (b): 1-2 supported -> UNPAID (no creditFlip), but committed and NOT reverted"
         );
 
         // The tail is committed, not stranded: both bets resolved.
@@ -250,49 +217,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         assertGt(_betSlot(player, b0), 0, "Case (c): bet unresolved after NoWork() revert");
     }
 
-    /// @notice Case (d): 3 WWXRP-only resolved -> totalResolved == 3 (no revert), successCount == 0
-    ///         -> UNPAID. WWXRP (currency == 3) is excluded from BOTH the >= 3 gate count AND the
-    ///         reward (AUTO-04). Three WWXRP bets resolve, so the call does not revert NoWork(),
-    ///         but credits ZERO — a WWXRP-spam faucet is impossible.
-    function testThreeWwxrpOnlyResolvedUnpaidNoRevert() public {
-        _seedFuturePrizePool(1_000_000 ether);
-
-        uint48 index = 1;
-        uint256 word = uint256(keccak256("repeg_wwxrp3_word"));
-        uint32 ticket = _winningTicketFor(index, word);
-
-        _fundWwxrp(player, 1_000 ether);
-        uint64 b0 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
-        uint64 b1 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
-        uint64 b2 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
-
-        _injectLootboxRngWord(index, word);
-
-        (address[] memory players, uint64[] memory betIds) = _list3(b0, b1, b2);
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        // No revert — 3 WWXRP resolved -> totalResolved == 3 (revert-on-no-work is keyed on totalResolved).
-        game.degeneretteResolve(players, betIds);
-
-        // UNPAID: WWXRP excluded from the >= 3 count, so successCount == 0 -> zero keeper creditFlip.
-        assertEq(
-            _countCoinflipStakeUpdatedFor(keeper),
-            0,
-            "Case (d): 3 WWXRP-only resolved -> UNPAID (WWXRP excluded from the >= 3 reward gate)"
-        );
-
-        // All three WWXRP bets actually resolved (no revert, real work committed).
-        assertEq(_betSlot(player, b0), 0, "Case (d): WWXRP bet 0 resolved");
-        assertEq(_betSlot(player, b1), 0, "Case (d): WWXRP bet 1 resolved");
-        assertEq(_betSlot(player, b2), 0, "Case (d): WWXRP bet 2 resolved");
-    }
-
-    /// @notice Case (e): mixed 2 WWXRP + 3 non-WWXRP -> PAID. The 3 non-WWXRP resolutions trip the
-    ///         >= 3 gate (the 2 WWXRP resolve but do not count toward it), so exactly ONE flat
-    ///         creditFlip fires to the keeper. Proves the gate counts non-WWXRP only, while WWXRP
-    ///         still resolves alongside.
-    function testMixedWwxrpAndNonWwxrpPaysAtGate() public {
+    /// @notice Five mixed ETH/FLIP bets all settle while the keeper receives one flat reward.
+    function testFiveMixedSupportedBetsPayOneFlatReward() public {
         _seedFuturePrizePool(1_000_000 ether);
 
         uint48 index = 1;
@@ -300,13 +226,12 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         uint32 ticket = _winningTicketFor(index, word);
 
         _fundFlip(player, 1_000 ether);
-        _fundWwxrp(player, 1_000 ether);
 
-        // Place 3 non-WWXRP (ETH, FLIP, ETH) + 2 WWXRP. Item 0 (the AUTO-02 probe) is non-WWXRP.
+        // Place five supported bets (ETH, FLIP, FLIP, FLIP, ETH).
         uint64 nw0 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        uint64 w0 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
+        uint64 w0 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
         uint64 nw1 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
-        uint64 w1 = _placeBet(CURRENCY_WWXRP, 2 ether, 1, ticket);
+        uint64 w1 = _placeBet(CURRENCY_FLIP, 200 ether, 1, ticket);
         uint64 nw2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
 
         _injectLootboxRngWord(index, word);
@@ -324,12 +249,12 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         vm.prank(keeper);
         game.degeneretteResolve(players, betIds);
 
-        // PAID exactly once: 3 non-WWXRP >= gate -> one flat creditFlip; the 2 WWXRP do not count.
+        // All five supported bets count, but the keeper reward is paid only once.
         (uint256 count, uint256 credited) = _keeperCredit(keeper);
         assertEq(
             count,
             1,
-            "Case (e): mixed 2 WWXRP + 3 non-WWXRP -> PAID exactly once (gate counts non-WWXRP only)"
+            "five supported bets -> PAID exactly once"
         );
         assertEq(
             credited,
@@ -337,143 +262,24 @@ contract DegeneretteResolveRepeg is DeployProtocol {
             "Case (e): credited == RESOLVE_FLAT_FLIP (flat, never a per-item sum)"
         );
 
-        // All five bets resolved — both WWXRP and non-WWXRP committed.
-        assertEq(_betSlot(player, nw0), 0, "Case (e): non-WWXRP 0 resolved");
-        assertEq(_betSlot(player, w0), 0, "Case (e): WWXRP 0 resolved");
-        assertEq(_betSlot(player, nw1), 0, "Case (e): non-WWXRP 1 resolved");
-        assertEq(_betSlot(player, w1), 0, "Case (e): WWXRP 1 resolved");
-        assertEq(_betSlot(player, nw2), 0, "Case (e): non-WWXRP 2 resolved");
+        // All five supported bets resolved.
+        assertEq(_betSlot(player, nw0), 0, "Case (e): supported 0 resolved");
+        assertEq(_betSlot(player, w0), 0, "additional FLIP 0 resolved");
+        assertEq(_betSlot(player, nw1), 0, "Case (e): supported 1 resolved");
+        assertEq(_betSlot(player, w1), 0, "additional FLIP 1 resolved");
+        assertEq(_betSlot(player, nw2), 0, "Case (e): supported 2 resolved");
     }
 
     // =========================================================================
     // Task 2 — RESULTS-equality, value-invariant to the bounty wrapper
     // =========================================================================
 
-    /// @notice RESULTS-equality (paid path): resolve a >= 3 non-WWXRP mixed-currency batch via
-    ///         `degeneretteResolve` (the >= 3 gate fires, so the flat bounty is credited to the
-    ///         keeper) and prove the per-item RESOLUTION RESULTS are byte-identical to the
-    ///         per-spin-derived expected sums. The resolution math is produced by the UNCHANGED
-    ///         `this.resolveDegeneretteBets -> delegatecall resolveDegeneretteBets`, so the FLIP/WWXRP mint deltas,
-    ///         the ETH claimable delta, and the claimablePool delta must each equal the additive
-    ///         per-spin baseline replayed from the contract's own `DegeneretteResult` events — the
-    ///         bounty wrapper provably does not touch the resolution payout. Non-vacuity: each
-    ///         expected sum is asserted > 0 so the equality cannot pass against an empty baseline.
-    ///
-    /// @dev Per Open Question 1 route (b): value-invariance is proven DIRECTLY (the resolution
-    ///      deltas equal the per-spin sums). The deleted `autoResolve` source is NOT resurrected.
-    /// @dev DEF-380-04-FC3 (finding-candidate routed to the council, 382+ PRIME/Degenerette-RTP sweep).
-    ///      SKIPPED against the frozen subject c4d48008: the keeper-gate event-schema fix turned the
-    ///      `keeperCreditCount == 1` and the ETH/FLIP value-invariants green, but the WWXRP arm now
-    ///      diverges by a small additive amount (observed 226495666e18 actual vs 226494666e18 replayed,
-    ///      a +1000e18 / +0.0004% gap). Root cause: the WWXRP mint is the per-spin `DegeneretteResult`
-    ///      base payout PLUS the calibrated `_wwxrpBonusBucket` per-N redistribution bonus folded into
-    ///      `acc.wwxrpMint` (DegeneretteModule:432, :995-1009) — the by-design Degenerette WWXRP RTP
-    ///      uplift (see [[degenerette-wwxrp-rtp-by-design]]). This replay sums only the base event
-    ///      payout, so it omits that bonus. The gate-independence PROPERTY the test targets still
-    ///      holds (the bounty wrapper does not touch the resolution payout — proven by the ETH/FLIP/
-    ///      claimable invariants); only the WWXRP sub-assertion's replay is model-incomplete.
-    ///      Faithfully closing it requires mirroring the calibrated WWXRP bonus tables, whose
-    ///      correctness is exactly what the council's Degenerette-RTP sweep adjudicates — not a
-    ///      mechanical fix. Recorded in REGRESSION-BASELINE-v62.md "Known behavior-divergence".
-    ///      The contract is NOT modified.
-    function testResultsEqualityValueInvariant() public {
-        vm.skip(true); // DEF-380-04-FC3 — WWXRP replay omits the by-design _wwxrpBonusBucket uplift; council adjudicates
-        // Large pool so the ETH 10% cap never binds (cap-free additive baseline; Tier-2 cap is
-        // a resolution property already proven in DegeneretteFreezeResolution, not the re-peg's job).
-        _seedFuturePrizePool(1_000_000 ether);
-
-        uint48 index = 1;
-        uint256 word = uint256(keccak256("results_equality_word"));
-        uint32 ticket = _winningTicketFor(index, word);
-
-        // >= 3 non-WWXRP: an ETH bet (4 spins) + a FLIP bet (3 spins) trips the gate; a WWXRP
-        // bet (2 spins) resolves alongside and exercises the WWXRP mint delta. successCount == 2
-        // for non-WWXRP would be < 3, so add a 3rd non-WWXRP (ETH) to fire the gate.
-        uint128 ethPerTicket = 0.01 ether;
-        uint128 flipPerTicket = 200 ether;
-        uint128 wwxrpPerTicket = 2 ether;
-
-        _fundFlip(player, uint256(flipPerTicket) * 3 + 1 ether);
-        _fundWwxrp(player, uint256(wwxrpPerTicket) * 2 + 1 ether);
-
-        // Emission order (the _replayPerSpinBaseline phases): ETH bet, then FLIP, then WWXRP.
-        // A 4th non-WWXRP (a second ETH bet) ensures non-WWXRP successCount >= 3 (gate fires),
-        // but resolving it would emit a 4th phase the 3-phase replay does not model — so instead
-        // make the FLIP bet count as 2 of the 3 non-WWXRP via a single multi-currency layout:
-        // place ETH (phase 0), FLIP (phase 1), WWXRP (phase 2) AND a SECOND ETH appended last.
-        uint64 ethBet = _placeBet(CURRENCY_ETH, ethPerTicket, 4, ticket);
-        uint64 flipBet = _placeBet(CURRENCY_FLIP, flipPerTicket, 3, ticket);
-        uint64 wwxrpBet = _placeBet(CURRENCY_WWXRP, wwxrpPerTicket, 2, ticket);
-        uint64 ethBet2 = _placeBet(CURRENCY_ETH, ethPerTicket, 1, ticket);
-
-        _injectLootboxRngWord(index, word);
-
-        // Pre-resolve balances (player-facing resolution RESULTS).
-        uint256 preClaimable = game.claimableWinningsOf(player);
-        uint256 preClaimablePool = _readClaimablePool();
-        uint256 preFlip = coin.balanceOf(player);
-        uint256 preWwxrp = wwxrp.balanceOf(player);
-
-        // Resolve all four in ONE call. Items are ordered ETH, FLIP, WWXRP, ETH so the 3-phase
-        // replay (ETH / FLIP / WWXRP) sees the FIRST ETH bet's spins as phase 0, the FLIP bet
-        // as phase 1, the WWXRP bet as phase 2; the trailing 2nd ETH bet advances to phase 3 and is
-        // attributed to the ETH sum below. successCount (non-WWXRP) == 3 (two ETH + one FLIP) >= gate.
-        address[] memory players = new address[](4);
-        uint64[] memory betIds = new uint64[](4);
-        for (uint256 i; i < 4; ++i) players[i] = player;
-        betIds[0] = ethBet;
-        betIds[1] = flipBet;
-        betIds[2] = wwxrpBet;
-        betIds[3] = ethBet2;
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.degeneretteResolve(players, betIds);
-
-        // Replay the per-spin baseline from the contract's own per-spin DegeneretteResult events.
-        // Phases: 0 = first ETH bet, 1 = FLIP, 2 = WWXRP, 3 = trailing ETH bet (folded into ETH).
-        (
-            uint256 expectedEthShare,
-            uint256 expectedFlip,
-            uint256 expectedWwxrp,
-            uint256 payoutCappedCount,
-            uint256 keeperCreditCount
-        ) = _replayPerSpinBaselineAndKeeperCredit(ethPerTicket, flipPerTicket, wwxrpPerTicket);
-
-        assertEq(payoutCappedCount, 0, "RESULTS-equality: large pool -> no spin should cap");
-
-        // The >= 3 gate fired -> exactly one keeper creditFlip in the SAME tx (the bounty wrapper),
-        // proving the paid path is exercised while the resolution deltas below stay value-invariant.
-        assertEq(keeperCreditCount, 1, "RESULTS-equality: the >= 3 gate fired (paid path exercised)");
-
-        // The player-facing resolution RESULTS are byte-identical to the per-spin baseline.
-        uint256 flipDelta = coin.balanceOf(player) - preFlip;
-        uint256 wwxrpDelta = wwxrp.balanceOf(player) - preWwxrp;
-        uint256 claimableDelta = game.claimableWinningsOf(player) - preClaimable;
-        uint256 claimablePoolDelta = _readClaimablePool() - preClaimablePool;
-
-        assertEq(flipDelta, expectedFlip,
-            "RESULTS-equality: FLIP mint delta == Sum of per-spin FLIP payouts (value-invariant)");
-        assertEq(wwxrpDelta, expectedWwxrp,
-            "RESULTS-equality: WWXRP mint delta == Sum of per-spin WWXRP payouts (value-invariant)");
-        assertEq(claimableDelta, expectedEthShare,
-            "RESULTS-equality: ETH claimable delta == Sum of per-spin ethShare (value-invariant)");
-        assertEq(claimablePoolDelta, expectedEthShare,
-            "RESULTS-equality: claimablePool moved by exactly the ETH sum (additive, disjoint slot)");
-
-        // Non-vacuity: every payout currency was actually exercised — the equality cannot pass
-        // against an empty/zero baseline (T-332-04-VAC).
-        assertGt(expectedFlip, 0, "non-vacuity: FLIP payout exercised");
-        assertGt(expectedWwxrp, 0, "non-vacuity: WWXRP payout exercised");
-        assertGt(expectedEthShare, 0, "non-vacuity: ETH payout exercised");
-    }
-
     /// @notice RESULTS independence of the reward gate: prove the per-bet RESOLUTION deltas are
-    ///         IDENTICAL whether or not the >= 3 flat reward fired. Resolve the SAME 3 non-WWXRP
+    ///         IDENTICAL whether or not the >= 3 flat reward fired. Resolve the SAME 3 supported
     ///         bets two ways against a snapshot:
     ///           Run A — all 3 in ONE `degeneretteResolve` call (the >= 3 gate FIRES; keeper paid);
     ///           Run B — revert, resolve the SAME 3 bets in THREE separate single-bet calls (the
-    ///                   gate NEVER fires — each call has 1 non-WWXRP < 3 -> UNPAID, no revert).
+    ///                   gate NEVER fires — each call has 1 supported < 3 -> UNPAID, no revert).
     ///         The player's total resolution deltas (FLIP/claimable/pool) must be byte-identical
     ///         between A and B, while the keeper creditFlip count differs (1 in A, 0 in B). This
     ///         proves the bounty wrapper provably never touches the resolution math: the resolution
@@ -542,7 +348,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     }
 
     /// @dev Resolve a SINGLE bet via `degeneretteResolve` (a 1-item list -> the >= 3 gate cannot
-    ///      fire) and return the keeper creditFlip count for that call (always 0 for one non-WWXRP).
+    ///      fire) and return the keeper creditFlip count for that call (always 0 for one supported).
     function _resolveSingleAndCountKeeperCredit(uint64 betId) internal returns (uint256) {
         address[] memory players = new address[](1);
         uint64[] memory betIds = new uint64[](1);
@@ -645,61 +451,6 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         return stdEth > minEth ? stdEth : minEth;
     }
 
-    /// @dev Replay the per-spin baseline AND count the keeper's creditFlip in a SINGLE log pass.
-    ///      Walks the recorded logs in emission order. The batch resolves bets front-to-back; each
-    ///      bet's spins emit DegeneretteResult, terminated by one DegeneretteResolved. betPhase
-    ///      0 = first ETH bet, 1 = FLIP, 2 = WWXRP, 3 = trailing ETH bet (folded into the ETH sum,
-    ///      since it shares ethPerTicket). Returns the additive ETH ethShare sum, the FLIP/WWXRP
-    ///      mint sums, the PayoutCapped count (asserted 0 in the cap-free large-pool test), and the
-    ///      keeper's CoinflipStakeUpdated count (the bounty wrapper firing in the SAME tx).
-    function _replayPerSpinBaselineAndKeeperCredit(
-        uint128 ethPerTicket,
-        uint128 flipPerTicket,
-        uint128 wwxrpPerTicket
-    )
-        internal
-        returns (
-            uint256 ethShareSum,
-            uint256 flipSum,
-            uint256 wwxrpSum,
-            uint256 payoutCappedCount,
-            uint256 keeperCreditCount
-        )
-    {
-        // Silence unused-parameter warnings: currency is attributed by emission phase, not amount.
-        flipPerTicket;
-        wwxrpPerTicket;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 betPhase;
-        bytes32 keeperTopic = bytes32(uint256(uint160(keeper)));
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length == 0) continue;
-            bytes32 t0 = logs[i].topics[0];
-            if (t0 == FULL_TICKET_RESULT_SIG) {
-                // data = (uint8 spinIdx, uint32 playerTicket, uint8 matches, uint256 payout)
-                (, , , uint256 payout) = abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
-                if (betPhase == 0 || betPhase == 3) {
-                    ethShareSum += _ethShareOf(payout, ethPerTicket);
-                } else if (betPhase == 1) {
-                    flipSum += payout;
-                } else {
-                    wwxrpSum += payout;
-                }
-            } else if (t0 == PAYOUT_CAPPED_SIG) {
-                ++payoutCappedCount;
-            } else if (t0 == FULL_TICKET_RESOLVED_SIG) {
-                ++betPhase; // advance to the next bet's currency phase
-            } else if (
-                logs[i].emitter == address(coinflip) &&
-                logs[i].topics.length > 1 &&
-                t0 == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == keeperTopic
-            ) {
-                ++keeperCreditCount;
-            }
-        }
-    }
-
     /// @dev Reproduce the on-chain per-spin result ticket (_resolveBet derivation).
     function _resultTicketForSpin(uint48 index, uint256 word, uint8 spinIdx)
         internal
@@ -741,12 +492,6 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
-    }
-
-    /// @dev Mint WWXRP to `who` via the GAME-gated mintPrize (keeps supply consistent).
-    function _fundWwxrp(address who, uint256 amount) internal {
-        vm.prank(address(game));
-        wwxrp.mintPrize(who, amount);
     }
 
     /// @dev NoWork() error selector — the revert-on-no-work signal (DegenerusGame.sol:1629).

@@ -5,8 +5,8 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
 /// @title PermissionlessGiftAndApproval
 /// @notice Covers the permissionless-settlement behaviors added in the permissionless work:
-///         caller-funded gift placement (degenerette) and deposit (coinflip), the WWXRP gift
-///         exclusion, the approved-operator path, claimBingo permissionless settlement, and the
+///         caller-funded gift placement (degenerette) and deposit (coinflip), unsupported-currency
+///         rejection, the approved-operator path, claimBingo permissionless settlement, and the
 ///         claimAffiliateDgnrs array overload (batch isolation + blank-array-is-self). The
 ///         security property under test is NO DRAIN: a gift never debits a non-consenting target.
 contract PermissionlessGiftAndApproval is DeployProtocol {
@@ -23,7 +23,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     uint128 private constant BET_ETH = 0.01 ether;
 
     // Same selectors across the contracts that declare them.
-    error NotApproved();
+    error UnsupportedCurrency();
     error NotSlotOwner();
 
     address private player; // the bet/stake owner (the target)
@@ -93,10 +93,10 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         assertEq(_betNonce(player), nonceBefore + 1, "bet recorded under the player");
     }
 
-    /// @notice WWXRP bets cannot be gifted (player-or-approved only).
+    /// @notice WWXRP is unsupported even when an unrelated caller tries to gift the bet.
     function testWwxrpGiftReverts() public {
         vm.prank(gifter);
-        vm.expectRevert(NotApproved.selector);
+        vm.expectRevert(UnsupportedCurrency.selector);
         game.placeDegeneretteBet(player, CURRENCY_WWXRP, 1 ether, 1, 0);
     }
 

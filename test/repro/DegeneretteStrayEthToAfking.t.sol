@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 
-/// @notice Regression: ETH sent alongside a token (FLIP/WWXRP) Degenerette bet — which consumes no
+/// @notice Regression: ETH sent alongside a FLIP Degenerette bet — which consumes no
 ///         ETH — is credited to the funder's withdrawable afking balance (solvency-preserving via
 ///         claimablePool), not stranded in the contract. A zero-value token bet is unaffected.
 contract DegeneretteStrayEthToAfking is DeployProtocol {
@@ -48,20 +48,22 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
         );
     }
 
-    function test_wwxrp_bet_strayEth_creditsAfking() public {
-        uint128 perTicket = 1 ether;
+    /// @notice Rejected WWXRP placement cannot trap ETH or create afking credit.
+    function test_wwxrp_bet_strayEth_revertsAtomically() public {
         vm.prank(address(game));
-        wwxrp.mintPrize(player, perTicket);
-
+        wwxrp.mintPrize(player, 1 ether);
         uint256 afkingBefore = game.afkingFundingOf(player);
         uint256 poolBefore = game.claimablePoolView();
-        uint256 stray = 3 ether;
-
+        uint256 ethBefore = player.balance;
+        uint256 gameBefore = address(game).balance;
+        vm.expectRevert(bytes4(keccak256("UnsupportedCurrency()")));
         vm.prank(player);
-        game.placeDegeneretteBet{value: stray}(address(0), CURRENCY_WWXRP, perTicket, 1, uint8(TICKET & 7));
-
-        assertEq(game.afkingFundingOf(player), afkingBefore + stray, "WWXRP stray ETH not credited to afking");
-        assertEq(game.claimablePoolView(), poolBefore + stray, "claimablePool must rise by the credited afking");
+        game.placeDegeneretteBet{value: 3 ether}(address(0), CURRENCY_WWXRP, 1 ether, 1, uint8(TICKET & 7));
+        assertEq(player.balance, ethBefore, "rejected bet retained the payment");
+        assertEq(address(game).balance, gameBefore, "rejected bet funded the game");
+        assertEq(wwxrp.balanceOf(player), 1 ether, "rejected bet burned WWXRP");
+        assertEq(game.afkingFundingOf(player), afkingBefore, "rejected bet credited afking");
+        assertEq(game.claimablePoolView(), poolBefore, "rejected bet changed claimable pool");
     }
 
     function test_flip_bet_noEth_afkingUnchanged() public {

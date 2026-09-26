@@ -43,7 +43,9 @@ price tables and reward curves.
   top-4 leaderboard and its 10% top-bettor and 5% third/fourth-place slices, but retains
   BAF score for eligible ticket-based awards.
 - The vault owner (>50.1% of DGVE) can register any address as a WWXRP minter and burner
-  (`WWXRP.setTrustedMinter`), with no cap on what a trusted address may mint or burn. This is
+  (`WWXRP.setTrustedMinter`), with no cap on what a trusted address may mint or burn. A trusted
+  address may also spend any player's WWXRP boon through `WWXRP.consumeBoon`, without that
+  player's approval. This is
   deliberate: WWXRP is the inflationary side coin, future games are meant to pay and take it, and
   the vault is its sovereign. Treat WWXRP's supply as fully at the vault owner's discretion.
 - The vault owner can mint **unlimited WWXRP for free** to any nonzero recipient through

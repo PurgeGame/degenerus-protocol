@@ -86,9 +86,9 @@ contract DeityBoonViewer {
     uint8 private constant DEITY_BOON_DEGEN_FLIP_4 = 35;
     uint8 private constant DEITY_BOON_DEGEN_FLIP_8 = 36;
     uint8 private constant DEITY_BOON_DEGEN_FLIP_12 = 37;
-    uint8 private constant DEITY_BOON_DEGEN_WWXRP_4 = 38;
-    uint8 private constant DEITY_BOON_DEGEN_WWXRP_8 = 39;
-    uint8 private constant DEITY_BOON_DEGEN_WWXRP_12 = 40;
+    uint8 private constant DEITY_BOON_WWXRP_4 = 38;
+    uint8 private constant DEITY_BOON_WWXRP_8 = 39;
+    uint8 private constant DEITY_BOON_WWXRP_12 = 40;
     uint8 private constant DEITY_BOON_CRAPS_5 = 41;
     uint8 private constant DEITY_BOON_CRAPS_10 = 42;
     uint8 private constant DEITY_BOON_CRAPS_15 = 43;
@@ -126,9 +126,9 @@ contract DeityBoonViewer {
     uint16 private constant W_DEGEN_FLIP_4 = 200;
     uint16 private constant W_DEGEN_FLIP_8 = 50;
     uint16 private constant W_DEGEN_FLIP_12 = 10;
-    uint16 private constant W_DEGEN_WWXRP_4 = 200;
-    uint16 private constant W_DEGEN_WWXRP_8 = 200;
-    uint16 private constant W_DEGEN_WWXRP_12 = 200;
+    uint16 private constant W_WWXRP_4 = 200;
+    uint16 private constant W_WWXRP_8 = 200;
+    uint16 private constant W_WWXRP_12 = 200;
     uint16 private constant W_CRAPS_5 = 200;
     uint16 private constant W_CRAPS_10 = 40;
     uint16 private constant W_CRAPS_15 = 8;
@@ -265,11 +265,11 @@ contract DeityBoonViewer {
                 if (roll < 1998) return DEITY_BOON_DEGEN_FLIP_8;
                 return DEITY_BOON_DEGEN_FLIP_12;
             }
-            return DEITY_BOON_DEGEN_WWXRP_4;
+            return DEITY_BOON_WWXRP_4;
         }
         if (roll < 2608) {
-            if (roll < 2408) return DEITY_BOON_DEGEN_WWXRP_8;
-            return DEITY_BOON_DEGEN_WWXRP_12;
+            if (roll < 2408) return DEITY_BOON_WWXRP_8;
+            return DEITY_BOON_WWXRP_12;
         }
         if (roll < 2808) return DEITY_BOON_CRAPS_5;
         if (roll < 2848) return DEITY_BOON_CRAPS_10;

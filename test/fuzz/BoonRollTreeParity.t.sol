@@ -28,7 +28,8 @@ contract BoonRollTreeParity is Test {
 
     function testEveryReachableWeightedRollMatchesCanonicalReference() public view {
         for (uint256 roll; roll < 2856; ++roll) {
-            assertEq(harness.tree(roll), _reference(roll), "boon boundary drift");
+            uint8 boonType = harness.tree(roll);
+            assertEq(boonType, _reference(roll), "boon boundary drift");
         }
     }
 
@@ -36,7 +37,8 @@ contract BoonRollTreeParity is Test {
     ///      this is what holds the two statements together on every reachable roll.
     function testViewerTreeMatchesCanonicalReferenceEverywhere() public view {
         for (uint256 roll; roll < 2856; ++roll) {
-            assertEq(viewerHarness.tree(roll), _reference(roll), "viewer boundary drift");
+            uint8 boonType = viewerHarness.tree(roll);
+            assertEq(boonType, _reference(roll), "viewer boundary drift");
         }
     }
 

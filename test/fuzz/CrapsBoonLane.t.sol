@@ -41,8 +41,8 @@ contract CrapsBoonViewerHarness is DeityBoonViewer {
 /// @title CrapsBoonLane -- the craps stake boon's table position and its slot1 low lane
 /// @notice Four things this owns, none of which another suite covers:
 ///
-///         1. TREE PARITY. The module walks a balanced comparison tree and the viewer walks a
-///            cumulative cursor. They are independent transcriptions of one table, and a deity's
+///         1. TREE PARITY. The module and viewer walk separately maintained comparison trees.
+///            They are independent transcriptions of one table, and a deity's
 ///            published menu must be the menu that gets issued, so they are compared exhaustively
 ///            rather than sampled.
 ///         2. DEITY BAND COMPOSITION. The deity roll skips the decimator and deity-pass bands
@@ -52,8 +52,8 @@ contract CrapsBoonViewerHarness is DeityBoonViewer {
 ///         3. LANE DECODE. The lane shares its 24-bit encoding with a degenerette lane but decodes
 /// 5/10/15% off the coinflip table, not tier x 400. A slip here silently pays the wrong
 ///            bonus, which no weight-table test would catch.
-///         4. LANE DISJOINTNESS. One selector serves two lanes and the caller names which. COINFLIP
-///            must never reach the craps lane and COIN must never reach the coinflip lane.
+///         4. LANE DISJOINTNESS. One selector serves three lanes and the caller names which.
+///            COINFLIP, COIN and WWXRP each reach only the coinflip, craps and WWXRP lane.
 contract CrapsBoonLane is Test {
     CrapsBoonModuleHarness private module_;
     CrapsBoonViewerHarness private viewer;
@@ -111,6 +111,7 @@ contract CrapsBoonLane is Test {
     function testDeityCompositionSkipsLootboxOnlyBandsAndReachesCraps() public view {
         uint256 reduced = W_TOTAL - W_DECIMATOR_ALL - W_DEITY_PASS_ALL;
         bool sawCraps;
+        bool sawWwxrp;
         for (uint256 r; r < reduced; ++r) {
             uint256 roll = r;
             if (roll >= W_PRE_DECIMATOR) roll += W_DECIMATOR_ALL;
@@ -118,9 +119,11 @@ contract CrapsBoonLane is Test {
             uint8 t = module_.tree(roll);
             assertTrue(t < 13 || t > 15, "deity roll reached a decimator tier");
             assertTrue(t < 25 || t > 27, "deity roll reached a deity-pass tier");
+            if (t >= 38 && t <= 40) sawWwxrp = true;
             if (t >= BOON_CRAPS_5 && t <= BOON_CRAPS_15) sawCraps = true;
         }
         assertTrue(sawCraps, "craps unreachable as a deity gift");
+        assertTrue(sawWwxrp, "WWXRP unreachable as a deity gift");
     }
 
     // ---------------------------------------------------------------------
@@ -197,5 +200,74 @@ contract CrapsBoonLane is Test {
         vm.prank(ContractAddresses.COIN);
         assertEq(module_.consumeCoinflipBoon(PLAYER), 0, "craps caller paid off the coinflip lane");
         assertEq(module_.slot0Of(PLAYER), s0, "craps caller spent the coinflip lane");
+    }
+
+    function testWwxrpLaneIsLiveAndOnlyWwxrpSpendsIt() public {
+        vm.etch(ContractAddresses.GAME, type(CrapsBoonModuleHarness).runtimeCode);
+        CrapsBoonModuleHarness gameModule = CrapsBoonModuleHarness(ContractAddresses.GAME);
+        uint24 d = gameModule.today();
+        uint256 wwxrpLane = _lane(3, false, d) << 232;
+        gameModule.writeSlot1(PLAYER, wwxrpLane);
+
+        assertTrue(gameModule.checkAndClearExpiredBoon(PLAYER), "live WWXRP lane was ignored");
+        assertEq(gameModule.slot1Of(PLAYER), wwxrpLane, "live WWXRP lane was cleared");
+
+        // The coinflip and craps callers cannot reach the WWXRP lane.
+        vm.prank(ContractAddresses.COINFLIP);
+        assertEq(gameModule.consumeCoinflipBoon(PLAYER), 0, "coinflip caller paid off the WWXRP lane");
+        vm.prank(ContractAddresses.COIN);
+        assertEq(gameModule.consumeCoinflipBoon(PLAYER), 0, "craps caller paid off the WWXRP lane");
+        assertEq(gameModule.slot1Of(PLAYER), wwxrpLane, "another caller spent the WWXRP lane");
+
+        // An ETH bet spends only its own lane; the WWXRP boon stays live beside it.
+        gameModule.writeSlot1(PLAYER, wwxrpLane | (_lane(1, false, d) << 184));
+        assertEq(gameModule.consumeDegeneretteBoon(PLAYER, 0), 400);
+        assertTrue(gameModule.checkAndClearExpiredBoon(PLAYER), "WWXRP lane lost after ETH consume");
+        assertEq(gameModule.slot1Of(PLAYER), wwxrpLane);
+
+        // The WWXRP caller spends it once at tier x 400.
+        vm.prank(ContractAddresses.WWXRP);
+        assertEq(gameModule.consumeCoinflipBoon(PLAYER), 1200, "WWXRP caller missed its lane");
+        assertEq(gameModule.slot1Of(PLAYER), 0, "WWXRP lane not spent");
+        assertFalse(gameModule.checkAndClearExpiredBoon(PLAYER), "spent WWXRP lane still live");
+    }
+
+    /// @dev WWXRP reaches only slot1 bits 232..255: every other boon (all of slot0 and the
+    ///      craps/ETH/FLIP lanes in slot1) is left bit-for-bit, with or without a WWXRP boon.
+    function testFuzz_WwxrpCallerTouchesOnlyItsOwnLane(uint256 s0, uint256 s1, uint8 tier) public {
+        vm.etch(ContractAddresses.GAME, type(CrapsBoonModuleHarness).runtimeCode);
+        CrapsBoonModuleHarness gameModule = CrapsBoonModuleHarness(ContractAddresses.GAME);
+        uint256 others = s1 & ((uint256(1) << 232) - 1);
+        tier = uint8(bound(tier, 0, 3));
+        uint256 wwxrpLane = _lane(tier, false, gameModule.today()) << 232;
+        gameModule.writeSlot0(PLAYER, s0);
+        gameModule.writeSlot1(PLAYER, others | (tier == 0 ? 0 : wwxrpLane));
+
+        vm.prank(ContractAddresses.WWXRP);
+        assertEq(gameModule.consumeCoinflipBoon(PLAYER), uint16(tier) * 400, "WWXRP lane bps");
+        assertEq(gameModule.slot0Of(PLAYER), s0, "WWXRP caller touched slot0 boons");
+        assertEq(gameModule.slot1Of(PLAYER), others, "WWXRP caller touched another slot1 lane");
+
+        vm.prank(ContractAddresses.WWXRP);
+        assertEq(gameModule.consumeCoinflipBoon(PLAYER), 0, "WWXRP boon spent twice");
+        assertEq(gameModule.slot0Of(PLAYER), s0, "empty WWXRP lane touched slot0 boons");
+        assertEq(gameModule.slot1Of(PLAYER), others, "empty WWXRP lane touched another slot1 lane");
+    }
+
+    function testUnsupportedCurrenciesCannotConsumeAnyBoonLane() public {
+        vm.etch(ContractAddresses.GAME, type(CrapsBoonModuleHarness).runtimeCode);
+        CrapsBoonModuleHarness gameModule = CrapsBoonModuleHarness(ContractAddresses.GAME);
+        uint24 d = gameModule.today();
+        uint256 wwxrpLane = _lane(3, false, d) << 232;
+        uint256 allLanes = wwxrpLane | (_lane(1, false, d) << 184) | (_lane(2, false, d) << 208);
+        gameModule.writeSlot1(PLAYER, allLanes);
+        for (uint256 currency = 2; currency <= type(uint8).max; ++currency) {
+            assertEq(gameModule.consumeDegeneretteBoon(PLAYER, uint8(currency)), 0);
+            assertEq(gameModule.slot1Of(PLAYER), allLanes, "unsupported currency spent a boon");
+        }
+
+        assertEq(gameModule.consumeDegeneretteBoon(PLAYER, 0), 400);
+        assertEq(gameModule.consumeDegeneretteBoon(PLAYER, 1), 800);
+        assertEq(gameModule.slot1Of(PLAYER), wwxrpLane, "ETH/FLIP consume disturbed the WWXRP lane");
     }
 }

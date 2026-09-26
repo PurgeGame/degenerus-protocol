@@ -40,7 +40,6 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     ///      structural spin-loop ceiling for the DSPIN-02 worst case — 2.5x the old 10-spin bound.
     uint8 internal constant MAX_SPINS_ETH = 25;
     uint8 internal constant MAX_SPINS_FLIP = 15;
-    uint8 internal constant MAX_SPINS_WWXRP = 5;
 
     /// @dev The Phase-319 GAS-01 reference spin count (the OLD MAX_SPINS_PER_BET). Kept so the
     ///      per-1-spin-item marginal (the CRANK_RESOLVE_BET_GAS_UNITS calibration target) and the
@@ -336,31 +335,16 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // DSPIN-02 Test D — mixed-currency batch up to the per-currency caps
     // =========================================================================
 
-    /// @notice DSPIN-02 cross-bet flush at MAXIMUM accumulation: a mixed-currency multi-bet batch
-    ///         packed to the per-currency caps in ONE resolveBets call — one ETH bet @ 25 spins, one
-    ///         FLIP bet @ 15 spins, one WWXRP bet @ 5 spins (45 spins total across 3 betIds). This
-    ///         exercises the cross-bet ResolveAcc accumulation at full width (ETH claimable sum +
-    ///         FLIP mint sum + WWXRP mint sum, three single flushes). DERIVE: the worst mixed batch
-    ///         is one bet per currency at its cap, all spins winning; MEASURE: assert it fits the 30M
-    ///         block limit. (Resolved directly via resolveDegeneretteBets — the full batch path — since
-    ///         degeneretteResolve resolves one item at a time; this test measures the resolveBets flush itself.)
+    /// @notice Exercise both supported currencies at their caps in one settlement:
+    ///         25 ETH spins and 15 FLIP spins, with the ETH lootbox work retained.
     function testWorstCaseMixedCurrencyBatchGas() public {
-        // All three bets share index 1 (one committed word = worstCaseWord25). FLIP spins are
-        // spins 0..14 and WWXRP spins are spins 0..4 — both SUBSETS of the 25 ETH spins that
-        // worstCaseTicket25 already wins (matches >= 2) on, so all 45 spins win on this one word.
-        // Even a losing spin still runs the full spin-loop iteration (the gas driver), and the
-        // per-spin DegeneretteResult fires regardless — the 45-spin count is asserted below.
-
-        // Fund FLIP + WWXRP for the player (game-gated mints; ETH comes from msg.value).
+        // Both bets use one committed word; every spin executes its full resolution.
         uint128 flipPerTicket = 200 ether;  // >= MIN_BET_FLIP (100 ether)
-        uint128 wwxrpPerTicket = 2 ether;      // >= MIN_BET_WWXRP (1 ether)
         _fundFlip(player, uint256(flipPerTicket) * MAX_SPINS_FLIP + 1 ether);
-        _fundWwxrp(player, uint256(wwxrpPerTicket) * MAX_SPINS_WWXRP + 1 ether);
 
         // Place one bet per currency at its cap, all using worstCaseTicket25 (wins on the ETH word).
         uint64 ethBet = _placeWorstCaseBetN(player, MAX_SPINS_ETH, worstCaseTicket25);
         uint64 flipBet = _placeCurrencyBet(player, 1, flipPerTicket, MAX_SPINS_FLIP, worstCaseTicket25);
-        uint64 wwxrpBet = _placeCurrencyBet(player, 3, wwxrpPerTicket, MAX_SPINS_WWXRP, worstCaseTicket25);
 
         // Small pool so the ETH spins flip into the lootbox branch (max ETH-side work).
         _setFuturePool(SMALL_POOL_WEI);
@@ -368,10 +352,9 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
         // Resolve the whole mixed batch in ONE call (the cross-bet flush under measurement). The crank
         // resolve relaxation isn't needed here — player resolves their own bets.
-        uint64[] memory betIds = new uint64[](3);
+        uint64[] memory betIds = new uint64[](2);
         betIds[0] = ethBet;
         betIds[1] = flipBet;
-        betIds[2] = wwxrpBet;
 
         vm.recordLogs();
         vm.prank(player);
@@ -379,19 +362,18 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         game.resolveDegeneretteBets(address(0), betIds);
         uint256 gasUsed = gasBefore - gasleft();
 
-        // Non-vacuity: all three bets resolved (slots deleted) and all 45 spins ran.
+        // Non-vacuity: both bets resolved and all 40 spins ran.
         (uint256 spinResults, ) = _countResolveEffects(betIds);
-        assertEq(spinResults, uint256(MAX_SPINS_ETH) + MAX_SPINS_FLIP + MAX_SPINS_WWXRP,
-            "mixed batch: all 45 spins resolved (ETH 25 + FLIP 15 + WWXRP 5)");
+        assertEq(spinResults, uint256(MAX_SPINS_ETH) + MAX_SPINS_FLIP,
+            "mixed batch: all 40 spins resolved (ETH 25 + FLIP 15)");
         assertEq(_readBetPacked(player, ethBet), 0, "non-vacuity: ETH bet resolved");
         assertEq(_readBetPacked(player, flipBet), 0, "non-vacuity: FLIP bet resolved");
-        assertEq(_readBetPacked(player, wwxrpBet), 0, "non-vacuity: WWXRP bet resolved");
 
         // DSPIN-02: the maximum mixed-currency batch fits the 30M mainnet block gas limit.
         assertLt(
             gasUsed,
             MAINNET_BLOCK_GAS_LIMIT,
-            "DSPIN-02: max mixed-currency batch (45 spins, 3 currencies) fits under the 30M block limit"
+            "DSPIN-02: max mixed-currency batch (40 spins, 2 currencies) fits under the 30M block limit"
         );
 
         emit log_named_uint("worst_case_mixed_currency_batch_gas", gasUsed);
@@ -421,7 +403,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         betId = _placeWorstCaseBetN(better, LEGACY_WORST_SPINS, worstCaseTicket);
     }
 
-    /// @dev Place a non-ETH (FLIP=1 / WWXRP=3) bet at `spins` tickets. No msg.value; funds
+    /// @dev Place a FLIP bet at `spins` tickets. No msg.value; funds
     ///      are burned from the player's seeded token balance.
     function _placeCurrencyBet(
         address better,
@@ -439,12 +421,6 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
-    }
-
-    /// @dev Mint WWXRP to `who` via the GAME-gated mintPrize (keeps supply consistent).
-    function _fundWwxrp(address who, uint256 amount) internal {
-        vm.prank(address(game));
-        wwxrp.mintPrize(who, amount);
     }
 
     /// @dev Place a single 1-spin winning bet (the typical item the marginal calibrates against).

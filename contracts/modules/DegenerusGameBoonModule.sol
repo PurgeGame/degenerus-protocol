@@ -122,18 +122,18 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     // Boon Consumption Functions
     // =========================================================================
 
-    /// @notice Consume a player's coinflip OR craps boon and return the bonus BPS.
-    /// @dev ONE trusted selector, two lanes, named by the caller. The Game façade authorizes
-    ///      exactly COIN and COINFLIP on this selector and delegatecall preserves the original
-    ///      caller, so COINFLIP spends the coinflip boon on a manual deposit and COIN (FLIP)
-    ///      spends the craps boon on a paid craps burn. The lanes are disjoint and neither
-    ///      caller can reach the other's. Sharing the selector is what lets the craps family
-    ///      ship without a byte of new code in the size-critical Game façade.
+    /// @notice Consume the caller's coinflip, craps or WWXRP boon lane.
+    /// @dev The Game facade authorizes COINFLIP, COIN and WWXRP. Delegatecall keeps
+    ///      the original caller: COINFLIP spends the coinflip boon, COIN spends the
+    ///      craps boon, and WWXRP spends its ecosystem boon. Each caller reaches
+    ///      only its own lane through this shared selector.
     /// @param player The player address to consume boon for
-    /// @return boonBps The bonus in basis points (0 if no boon, 500/1000/2500 otherwise)
+    /// @return boonBps Bonus BPS: WWXRP uses 400/800/1200; the other lanes use
+    ///      500/1000/2500. Zero means no live boon.
     function consumeCoinflipBoon(address player) external returns (uint16 boonBps) {
         if (player == address(0)) return 0;
         if (msg.sender == ContractAddresses.COIN) return _consumeCrapsBoon(player);
+        if (msg.sender == ContractAddresses.WWXRP) return _consumeWwxrpBoon(player);
         BoonPacked storage bp = boonPacked[player];
         uint256 s0 = bp.slot0;
         uint8 tier = uint8(s0 >> BP_COINFLIP_TIER_SHIFT);
@@ -172,6 +172,20 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         boonBps = _coinflipTierToBps(tier);
         bp.slot1 = s1 & ~BP_LANE_MASK;
         emit BoonConsumed(player, 6, boonBps);
+    }
+
+    /// @dev Spend the WWXRP ecosystem lane. The token applies the returned bonus
+    ///      to its consuming action; the boon module only owns the one-use tier.
+    function _consumeWwxrpBoon(address player) private returns (uint16 boonBps) {
+        BoonPacked storage bp = boonPacked[player];
+        uint256 s1 = bp.slot1;
+        uint256 lane = (s1 >> BP_WWXRP_LANE_SHIFT) & BP_LANE_MASK;
+        uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
+        if (tier == 0) return 0;
+        bp.slot1 = s1 & ~(BP_LANE_MASK << BP_WWXRP_LANE_SHIFT);
+        if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) return 0;
+        boonBps = uint16(tier) * 400;
+        emit BoonConsumed(player, 7, boonBps);
     }
 
     /// @notice Consume a player's purchase boost and return the bonus BPS
@@ -232,12 +246,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      Payable: an ETH bet carries its stake as msg.value, which delegatecall keeps in
     ///      flight through this nested dispatch.
     ///
-    ///      Each currency has its own independent lane; a bet reads and spends ONLY its own
-    ///      currency's lane, so a WWXRP bet can never burn a held ETH boon — boons for the
-    ///      other currencies are untouched by construction. An expired lane pays nothing
-    ///      and is cleared here.
+    ///      ETH and FLIP have independent lanes; a bet reads and spends its own lane.
+    ///      An expired lane pays nothing and is cleared here. Unsupported currencies
+    ///      return no bonus and leave every lane untouched.
     /// @param player The player placing the bet
-    /// @param currency The bet's currency (0=ETH, 1=FLIP, 3=WWXRP)
+    /// @param currency The bet's currency (0=ETH, 1=FLIP)
     /// @return boostBps The stake bonus in basis points (0 if none, else 400/800/1200)
     function consumeDegeneretteBoon(
         address player,
@@ -246,7 +259,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (empty local state returns silently).
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (player == address(0)) return 0;
+        if (player == address(0) || currency > 1) return 0;
         BoonPacked storage bp = boonPacked[player];
         uint256 s1 = bp.slot1;
         uint256 shift = _degeneretteLaneShift(currency);
@@ -427,14 +440,14 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             }
         }
 
-        // --- Slot 1: Degenerette lanes (one independent boon per bet currency) ---
-        bool degeneretteLive;
+        // --- Slot 1: ETH / FLIP degenerette lanes and the WWXRP ecosystem lane. ---
+        bool currencyBoonLive;
         for (uint256 i; i < 3; ++i) {
             uint256 laneShift = BP_DEGEN_LANE0_SHIFT + i * 24;
             uint256 lane = (s1 >> laneShift) & BP_LANE_MASK;
             if (lane & BP_LANE_TIER_MASK == 0) continue;
             if (_boonLaneLive(lane, currentDay)) {
-                degeneretteLive = true;
+                currencyBoonLive = true;
             } else {
                 s1 = s1 & ~(BP_LANE_MASK << laneShift);
                 changed1 = true;
@@ -451,7 +464,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             lootboxTierLocal != 0 ||
             purchaseTierLocal != 0 ||
             decimatorTierLocal != 0 ||
-            degeneretteLive ||
+            currencyBoonLive ||
             crapsLive ||
             deityPassTierLocal != 0);
     }
@@ -613,7 +626,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint8 private constant BOON_LAZY_PASS_25 = 30;
     /// @dev Boon type: 50% lazy pass discount
     uint8 private constant BOON_LAZY_PASS_50 = 31;
-    /// @dev Degenerette stake boons, contiguous 32-40 (ids 10-12 and 20-21 stay free).
+    /// @dev Degenerette stake boons, contiguous 32-37.
     ///      Each targets ONE bet currency; the tier byte written to `boonPacked` re-orders
     ///      them by value (see `_degeneretteTierToBps`).
     uint8 private constant BOON_DEGEN_ETH_4 = 32;
@@ -622,9 +635,10 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint8 private constant BOON_DEGEN_FLIP_4 = 35;
     uint8 private constant BOON_DEGEN_FLIP_8 = 36;
     uint8 private constant BOON_DEGEN_FLIP_12 = 37;
-    uint8 private constant BOON_DEGEN_WWXRP_4 = 38;
-    uint8 private constant BOON_DEGEN_WWXRP_8 = 39;
-    uint8 private constant BOON_DEGEN_WWXRP_12 = 40;
+    /// @dev WWXRP ecosystem boons, consumed through the token for its supported actions.
+    uint8 private constant BOON_WWXRP_4 = 38;
+    uint8 private constant BOON_WWXRP_8 = 39;
+    uint8 private constant BOON_WWXRP_12 = 40;
     /// @dev Craps stake boons. A successful self-funded craps purchase burns in full and carries
     ///      the boon onto its slip; the tier then boosts that slip's BANKROLL RETURN by 5/10/15%
     ///      when it settles, off a base capped at 60,000 FLIP. Nothing is credited at entry, and a
@@ -686,18 +700,17 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint16 private constant BOON_WEIGHT_LAZY_PASS_50 = 2;
     /// @dev Combined weight of deity pass discount boons (10% + 20% + 35%)
     uint16 private constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
-    /// @dev Weights for the degenerette stake boons. ETH and FLIP taper hard (200/50/10)
-    ///      because their stake bonus is real value; WWXRP sits flat at 200 across all three
-    ///      tiers — it is worthless by design, so a bigger WWXRP boon costs the game nothing.
+    /// @dev ETH and FLIP stake-boon weights taper by bonus size (200/50/10).
     uint16 private constant BOON_WEIGHT_DEGEN_ETH_4 = 200;
     uint16 private constant BOON_WEIGHT_DEGEN_ETH_8 = 50;
     uint16 private constant BOON_WEIGHT_DEGEN_ETH_12 = 10;
     uint16 private constant BOON_WEIGHT_DEGEN_FLIP_4 = 200;
     uint16 private constant BOON_WEIGHT_DEGEN_FLIP_8 = 50;
     uint16 private constant BOON_WEIGHT_DEGEN_FLIP_12 = 10;
-    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_4 = 200;
-    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_8 = 200;
-    uint16 private constant BOON_WEIGHT_DEGEN_WWXRP_12 = 200;
+    /// @dev WWXRP tiers keep equal draw weight and zero nominal box-budget value.
+    uint16 private constant BOON_WEIGHT_WWXRP_4 = 200;
+    uint16 private constant BOON_WEIGHT_WWXRP_8 = 200;
+    uint16 private constant BOON_WEIGHT_WWXRP_12 = 200;
     /// @dev Craps stake-boon weights, taken from the coinflip family they mirror.
     uint16 private constant BOON_WEIGHT_CRAPS_5 = 200;
     uint16 private constant BOON_WEIGHT_CRAPS_10 = 40;
@@ -706,16 +719,15 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      figure BOON_FIXED_WEIGHTED_MAX was derived from, not read at runtime.
     uint256 private constant DEITY_PASS_NOMINAL_PRICE = DEITY_PASS_BASE + 136 ether;
     /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
-    ///      The three craps families are appended at the TAIL of the walk (band 2608..2855), so
-    ///      every boundary below them is unmoved and the deity roll's two skip bands
-    ///      (pre-decimator, pre-deity-pass) need no adjustment.
+    ///      WWXRP occupies 2008..2607 and craps occupies the tail 2608..2855.
+    ///      The deity roll's decimator and deity-pass skip bands are unchanged.
     uint16 private constant BOON_WEIGHT_TOTAL = 2856;
     /// @dev Exact closed form of the weighted max-value table used to normalize boon frequency.
     ///      Every fixed-price family contributes 1568 ETH of weight*value; the FLIP-priced
     ///      families collapse to BOON_PRICE_WEIGHT = 4182 times the live ticket price (3270
     ///      coinflip/whale-pass/degenerette + 912 craps); lazy discounts collapse to
-    ///      6 times the ten-level lazy-pass value. Activity, quest-shield and WWXRP boons carry
-    ///      weight but intentionally contribute zero value.
+    ///      6 times the ten-level lazy-pass value. Activity, quest-shield and WWXRP boons
+    ///      carry weight but contribute zero nominal value to this box-budget model.
     ///
     ///      The craps bankroll-payout family contributes the 912 of it: `200 x 3,000 + 40 x 6,000
     ///      + 8 x 9,000 = 912,000`, over the 1,000-FLIP ticket unit. Its top tier pays 15% of a
@@ -1181,12 +1193,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             return;
         }
 
-        // Degenerette stake boons (types 32-40) — slot1, one independent 24-bit lane per
-        // bet currency (ETH / FLIP / WWXRP). A roll competes ONLY within its own currency's
-        // lane, so boons for different currencies coexist and a held boon is never displaced
-        // by one of another currency. The boon is spent by the next bet in ITS OWN currency.
-        if (boonType >= BOON_DEGEN_ETH_4 && boonType <= BOON_DEGEN_WWXRP_12) {
-            // 32/33/34 -> ETH lane, 35/36/37 -> FLIP lane, 38/39/40 -> WWXRP lane;
+        // ETH / FLIP stake boons (32-37) and WWXRP ecosystem boons (38-40) use
+        // independent 24-bit lanes. A roll competes only within its own lane.
+        // ETH / FLIP consume on a bet; WWXRP consumes through the token's actions.
+        if (boonType >= BOON_DEGEN_ETH_4 && boonType <= BOON_WWXRP_12) {
+            // 32/33/34 -> ETH, 35/36/37 -> FLIP, 38/39/40 -> WWXRP.
             // within a lane the three types map to tier 1/2/3 (+4/8/12%).
             uint8 offset = boonType - BOON_DEGEN_ETH_4;
             uint8 newTier = (offset % 3) + 1;
@@ -1368,11 +1379,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 if (roll < 1998) return BOON_DEGEN_FLIP_8;
                 return BOON_DEGEN_FLIP_12;
             }
-            return BOON_DEGEN_WWXRP_4;
+            return BOON_WWXRP_4;
         }
         if (roll < 2608) {
-            if (roll < 2408) return BOON_DEGEN_WWXRP_8;
-            return BOON_DEGEN_WWXRP_12;
+            if (roll < 2408) return BOON_WWXRP_8;
+            return BOON_WWXRP_12;
         }
         if (roll < 2808) return BOON_CRAPS_5;
         if (roll < 2848) return BOON_CRAPS_10;

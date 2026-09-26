@@ -143,12 +143,10 @@ OWNER	vrfRequestId	modules/DegenerusGameGameOverModule.sol	updateVrfCoordinatorA
 INIT	vrfSubscriptionId	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
 OWNER	whalePassClaims	modules/DegenerusGameBoonModule.sol	_activateWhalePass adds two half-passes with a checked add (an overflow reverts rather than drops, unreachable at the 100-box cap); the whale module drains
 OWNER	whalePassClaims	modules/DegenerusGameDecimatorModule.sol	_awardDecimatorLootbox += deferred half-passes; accrual-only
-OWNER	whalePassClaims	modules/DegenerusGameDegeneretteModule.sol	WWXRP jackpot += 1 per level/10 bracket (guarded by the bracket flag); accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameFoilPackModule.sol	_payFoilTier += 1 on tier 8; accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameJackpotModule.sol	golden ticket += half-passes; accrual-only
 OWNER	whalePassClaims	modules/DegenerusGamePayoutUtils.sol	_queueWhalePassClaimCore += full half-passes (shared utility); accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameWhaleModule.sol	awardWhalePass accrues early-bird and quadrant prizes; claimWhalePass reads then zeroes before queueing; the sole drain of every accrual site
-OWNER	wwxrpJackpotWhalePassBracketAwarded	modules/DegenerusGameDegeneretteModule.sol	_resolveBet/resolveWwxrpSpinFromBox set the per-bracket one-shot flag; sole writer
 OWNER	yieldAccumulator	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots stores the settled accumulator at transition
 OWNER	yieldAccumulator	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain zeroes at terminal drain
 OWNER	yieldAccumulator	modules/DegenerusGameJackpotModule.sol	payDailyJackpot adds the insurance cut; distributeYieldSurplus adds the quarter share

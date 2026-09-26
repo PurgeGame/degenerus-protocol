@@ -689,10 +689,10 @@ contract DegenerusVault {
         gamePlayer.claimWinningsStethFirst();
     }
 
-    /// @notice Place a Degenerette bet for the vault in ETH, FLIP or WWXRP.
+    /// @notice Place a Degenerette bet for the vault in ETH or FLIP.
     /// @dev ETH bets fund from msg.value + ethValue from the vault balance, falling back to
     ///      claimable winnings when underfunded; other currencies send no value.
-    /// @param currency Bet currency (0 = ETH, 1 = FLIP, 3 = WWXRP)
+    /// @param currency Bet currency (0 = ETH, 1 = FLIP; other values unsupported)
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of tickets (must satisfy game rules)
     /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.

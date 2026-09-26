@@ -305,8 +305,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
         // G5 — double-crank short-circuit BatchAlreadyTaken (degeneretteResolve).
         assertGt(_countOccurrences(game_, "revert BatchAlreadyTaken();"), 0, "G5: double-crank short-circuit BatchAlreadyTaken");
-        assertGt(_countOccurrences(game_, "uint256 betPacked = degeneretteBets[players[0]][betIds[0]];"), 0, "G5: item-0 probe read");
-        assertGt(_countOccurrences(game_, "if (betPacked == 0) revert BatchAlreadyTaken();"), 0, "G5: item-0 probe short-circuit");
+        assertGt(_countOccurrences(game_, "if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();"), 0, "G5: item-0 probe read and short-circuit");
 
         // G6 — (v49 batchPurchase per-player slice try/catch) DROPPED, D-351-02 (removed surface). The
         // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.
@@ -336,8 +335,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(afking, "lastAutoBoughtDay"), 0, "G11: per-entry lastAutoBoughtDay day-stamp byte-present");
         assertGt(_countOccurrences(afking, "sub.lastAutoBoughtDay >= processDay"), 0, "G11 (v55): the STAGE same-day idempotency self-partition byte-present");
 
-        // G12 — WWXRP excluded from the reward gate (currency == 3 does NOT count toward the >=3 gate).
-        assertGt(_countOccurrences(game_, "if (currency != 3) ++successCount;"), 0, "G12: WWXRP (currency==3) excluded from the >=3 reward gate");
+        // G12 — every successfully settled supported bet counts toward the >=3 gate.
+        assertGt(_countOccurrences(game_, "++successCount;"), 0, "G12: successful supported bets count toward keeper reward");
+        assertEq(_countOccurrences(game_, "currency != 3"), 0, "G12: retired WWXRP filter removed");
 
         // G13 — rngLocked / gameOver freeze guards. The open path no-ops during the freeze (RD-3).
         assertGt(_countOccurrences(game_, "if (rngLockedFlag) revert RngLocked();"), 0, "G13: rngLocked pre-check byte-present");

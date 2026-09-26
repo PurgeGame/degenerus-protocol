@@ -282,12 +282,11 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       }
     });
 
-    it("[03b] tester mirror floors at one whole token so the smallest box still clears MIN_BET_WWXRP", async function () {
+    it("[03b] tester mirror preserves the one-token minimum spin stake", async function () {
       const tester = await deployTester();
       const oneEther = hre.ethers.parseEther("1");
       // Below 0.002 ETH the ×500 scaling would fall under one token; the floor holds
-      // it at exactly one, which is MIN_BET_WWXRP and keeps the spin whale-halfpass
-      // eligible (`s == 9 && betAmount >= MIN_BET_WWXRP` in resolveWwxrpSpinFromBox).
+      // it at exactly one WWXRP. The floor sizes the token spin; it grants no whale pass.
       for (const eth of ["0", "0.0000001", "0.0005", "0.001", "0.0019"]) {
         expect(
           await tester.boxWwxrpStake(hre.ethers.parseEther(eth)),
@@ -312,7 +311,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         "LOOTBOX_WWXRP_PER_ETH = 500 declaration missing"
       ).to.not.be.null;
       // The helper must both scale and floor — dropping either half is the drift
-      // this catches (an unfloored stake silently loses whale-halfpass eligibility).
+      // this catches (an unfloored stake changes the smallest boxes' token payouts).
       expect(
         source.includes("stake = amount * LOOTBOX_WWXRP_PER_ETH;"),
         "`_boxWwxrpStake` must scale by LOOTBOX_WWXRP_PER_ETH"

@@ -314,11 +314,11 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
     it("[03e] site 6 carries the collapse delta into `acc.flipMint` so the single flush mints exactly the rounded payout", function () {
       const body = bodyOf(DEGENERETTE, "function _resolveBet(");
       expect(
-        /acc\.flipMint\s*\+=\s*rounded\s*-\s*totalPayout\s*;/.test(body),
+        /acc\.flipMint\s*\+=\s*rounded\s*-\s*(?:totals\.)?totalPayout\s*;/.test(body),
         "an upward round must add its delta to the accumulator"
       ).to.equal(true);
       expect(
-        /acc\.flipMint\s*-=\s*totalPayout\s*-\s*rounded\s*;/.test(body),
+        /acc\.flipMint\s*-=\s*(?:totals\.)?totalPayout\s*-\s*rounded\s*;/.test(body),
         "a downward round must subtract its delta from the accumulator"
       ).to.equal(true);
       // Ordering: the survival flip settles first, so the threshold reads against the

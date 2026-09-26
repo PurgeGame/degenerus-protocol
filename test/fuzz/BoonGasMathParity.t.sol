@@ -90,7 +90,7 @@ contract BoonGasMathParity is Test {
         weighted += 8 * ((lazyPassValue * 2500) / 10_000);
         weighted += 2 * ((lazyPassValue * 5000) / 10_000);
 
-        // Degenerette ETH and FLIP stake boons. WWXRP/activity/quest carry zero value.
+        // Degenerette ETH and FLIP stake boons. WWXRP/activity/quest carry zero nominal value.
         weighted += 200 * 0.4 ether + 50 * 0.8 ether + 10 * 1.2 ether;
         weighted += 200 * _flipValue(4000 ether, priceWei);
         weighted += 50 * _flipValue(8000 ether, priceWei);

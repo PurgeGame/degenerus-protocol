@@ -104,8 +104,9 @@ follow the advance path's skip/saturate policy rather than reverting.
 
 An ordinary ETH Degenerette bet on **symbol 0 (WWXRP)** enters the Vault deity's
 pool; a bet on **symbol 6 (ETH)** enters sDGNRS's pool. The corresponding genesis
-pass must be initialized. Other symbols, FLIP bets, WWXRP bets, generated lootbox
-spins and record bounty spins never create entries.
+pass must be initialized. Other symbols, FLIP bets, generated lootbox spins
+(including WWXRP box and foil spins) and record bounty spins never create entries.
+WWXRP is not a bet currency.
 
 The entry belongs to the bet recipient, including gifted bets and approved
 operator placements. Its paid amount is `amountPerSpin * spinCount`, before any

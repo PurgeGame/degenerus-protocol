@@ -2377,9 +2377,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev The WWXRP magnitude a roll works with: `LOOTBOX_WWXRP_PER_ETH` scaled off the
     ///      roll's main amount — the same basis the ticket, FLIP and DGNRS legs use, so every
-    ///      box path stakes in proportion to its size. Floored at
-    ///      one whole token so the smallest box still clears `MIN_BET_WWXRP`, which is what
-    ///      keeps its spin eligible for the S=9 whale-halfpass award.
+    ///      box path stakes in proportion to its size, with a one-token minimum stake.
     function _boxWwxrpStake(uint256 amount) private pure returns (uint256 stake) {
         stake = amount * LOOTBOX_WWXRP_PER_ETH;
         if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;

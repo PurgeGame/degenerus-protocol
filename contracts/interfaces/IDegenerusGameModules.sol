@@ -536,10 +536,9 @@ interface IDegenerusGameBoonModule {
     /// @notice Automatically award both protocol owners' three closed daily draws. Advance-only delegate target.
     function resolveProtocolBoonDraws(uint24 awardDay) external;
 
-    /// @notice Consumes a player's coinflip OR craps boon and returns its value
-    /// @dev ONE selector, two disjoint lanes, named by the caller: COINFLIP spends the coinflip
-    ///      boon, COIN (FLIP) spends the craps boon. The Game façade authorizes exactly those two
-    ///      and delegatecall preserves the original caller, so the module reads it directly.
+    /// @notice Consumes a player's coinflip, craps or WWXRP boon and returns its value
+    /// @dev The Game façade authorizes COINFLIP, COIN and WWXRP. Each caller selects only
+    ///      its own lane; delegatecall preserves the caller for the module's dispatch.
     /// @param player Address of the player
     /// @return boonBps Boon value in basis points
     function consumeCoinflipBoon(address player) external returns (uint16 boonBps);
@@ -558,7 +557,7 @@ interface IDegenerusGameBoonModule {
     /// @dev Each currency has its own independent boon lane; only the bet currency's
     ///      lane is read and spent.
     /// @param player Address of the player
-    /// @param currency Bet currency (0=ETH, 1=FLIP, 3=WWXRP)
+    /// @param currency Bet currency (0=ETH, 1=FLIP)
     /// @return boostBps Stake bonus in basis points (0 if the lane is empty or expired)
     function consumeDegeneretteBoon(
         address player,
@@ -576,9 +575,9 @@ interface IDegenerusGameBoonModule {
 interface IDegenerusGameDegeneretteModule {
     /// @notice Places single-symbol bets
     /// @param player The player address (use zero address for msg.sender)
-    /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP)
+    /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported)
     /// @param amountPerSpin Bet amount per ticket
-    /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP, 1..5 WWXRP). Each spin resolves independently.
+    /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP). Each spin resolves independently.
     /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,

@@ -33,10 +33,6 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             vm.prank(address(game));
             coin.mintForGame(who, uint256(stake) * spins);
         }
-        if (currency == 3) {
-            vm.prank(address(game));
-            wwxrp.mintPrize(who, uint256(stake) * spins);
-        }
         vm.prank(who);
         game.placeDegeneretteBet{value: currency == 0 ? uint256(stake) * spins : 0}(
             address(0), currency, stake, spins, symbol
@@ -48,7 +44,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.store(address(game), keccak256(abi.encode(uint48(1), uint256(34))), bytes32(word));
     }
 
-    function _resolve(address who, uint64 id, uint8 symbol, bool isWwxrp, uint256 word)
+    function _resolve(address who, uint64 id, uint8 symbol, uint256 word)
         private
         returns (uint32[] memory tickets, uint32 firstHouse)
     {
@@ -67,25 +63,12 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 (uint8 spin, uint32 ticket, uint8 score,) = abi.decode(logs[i].data, (uint8, uint32, uint8, uint256));
                 tickets[spin] = ticket;
                 assertEq(
-                    ticket, Ref.player(word, 1, symbol, spin, isWwxrp), "generated ticket differs from public stream"
+                    ticket, Ref.player(word, 1, symbol, spin, false), "generated ticket differs from public stream"
                 );
                 assertEq((ticket >> ((symbol >> 3) * 8)) & 7, symbol & 7, "hero pick was lost");
-                uint32 house = Ref.house(word, 1, spin, isWwxrp);
+                uint32 house = Ref.house(word, 1, spin, false);
                 (uint8 natural,) = Ref.score(ticket, house, symbol >> 3);
-                if (isWwxrp) {
-                    uint256 spinSeed = uint256(
-                        keccak256(abi.encode(Ref.drawWord(word, true), uint256(1), uint256(symbol), uint256(spin)))
-                    );
-                    uint32 rigged = math.rig(
-                        ticket, house, symbol >> 3, uint256(keccak256(abi.encode(spinSeed, uint256(0x52494721))))
-                    );
-                    (uint8 expected,) = Ref.score(ticket, rigged, symbol >> 3);
-                    assertEq(score, expected, "WWXRP rig result differs across the shared stream");
-                    assertGe(score, natural);
-                    assertLe(score, natural + 1);
-                } else {
-                    assertEq(score, natural, "independent color score mismatch");
-                }
+                assertEq(score, natural, "independent color score mismatch");
             } else if (logs[i].topics[0] == RESOLVED) {
                 (,, firstHouse) = abi.decode(logs[i].data, (uint8, uint256, uint32));
             }
@@ -99,9 +82,9 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         uint64 b = _place(bob, 1, 5, symbol, 100 ether);
         uint256 word = uint256(keccak256("shared prefix"));
         _land(word);
-        (uint32[] memory longRun, uint32 houseA) = _resolve(alice, a, symbol, false, word);
-        (uint32[] memory shortRun, uint32 houseA2) = _resolve(alice, a2, symbol, false, word);
-        (uint32[] memory otherPlayer, uint32 houseB) = _resolve(bob, b, symbol, false, word);
+        (uint32[] memory longRun, uint32 houseA) = _resolve(alice, a, symbol, word);
+        (uint32[] memory shortRun, uint32 houseA2) = _resolve(alice, a2, symbol, word);
+        (uint32[] memory otherPlayer, uint32 houseB) = _resolve(bob, b, symbol, word);
         assertEq(longRun.length, 10);
         assertEq(shortRun.length, 5);
         assertEq(otherPlayer.length, 5);
@@ -118,8 +101,8 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         uint64 b = _place(bob, 0, 10, 1, 0.005 ether);
         uint256 word = uint256(keccak256("different heroes"));
         _land(word);
-        (uint32[] memory first, uint32 houseA) = _resolve(alice, a, 0, false, word);
-        (uint32[] memory second, uint32 houseB) = _resolve(bob, b, 1, false, word);
+        (uint32[] memory first, uint32 houseA) = _resolve(alice, a, 0, word);
+        (uint32[] memory second, uint32 houseB) = _resolve(bob, b, 1, word);
         assertEq(houseA, houseB);
         for (uint8 i; i < 10; ++i) {
             // Same quadrant, different hero symbols: all OTHER bits must use
@@ -128,26 +111,43 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         }
     }
 
-    function testWwxrpDrawSeparatedButSharedWithinCurrency() public {
-        uint8 symbol = 7;
-        uint64 a = _place(alice, 0, 5, symbol, 0.005 ether);
-        uint64 b = _place(alice, 3, 5, symbol, 1 ether);
-        uint64 c = _place(bob, 3, 3, symbol, 2 ether);
-        bytes32 leaf = keccak256(abi.encode(c, keccak256(abi.encode(bob, uint256(37)))));
-        uint256 packedBet = uint256(vm.load(address(game), leaf));
-        packedBet = (packedBet & ~(uint256(0xffff) << 202)) | (uint256(30_000) << 202);
-        vm.store(address(game), leaf, bytes32(packedBet));
-        uint256 word = uint256(keccak256("wwxrp segregation"));
-        _land(word);
-        (uint32[] memory ethRun, uint32 ethHouse) = _resolve(alice, a, symbol, false, word);
-        (uint32[] memory wwRun, uint32 wwHouse) = _resolve(alice, b, symbol, true, word);
-        (uint32[] memory wwOther, uint32 wwOtherHouse) = _resolve(bob, c, symbol, true, word);
-        assertTrue(ethHouse != wwHouse);
-        assertEq(wwHouse, wwOtherHouse);
-        for (uint8 i; i < 3; ++i) {
-            assertEq(wwRun[i], wwOther[i]);
-            assertTrue(ethRun[i] != wwRun[i]);
+    /// @notice Unsupported currencies fail before funding, nonce, pool, or boon changes,
+    ///         for self-funded bets, approved operators, and permissionless gifts alike.
+    function testUnsupportedCurrenciesRejectAtomicallyForEveryFundingRoute() public {
+        address gifter = address(0xC0FFEE);
+        vm.deal(gifter, 100 ether);
+        vm.prank(alice);
+        game.setOperatorApproval(bob, true);
+        vm.prank(address(game));
+        wwxrp.mintPrize(alice, 123 ether);
+        vm.prank(address(game));
+        coin.mintForGame(alice, 456 ether);
+        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(alice, uint256(50)))) + 1);
+        uint256 lane = (uint256(game.currentDayView()) << 3) | 3;
+        vm.store(address(game), boonSlot, bytes32((lane << 184) | (lane << 208)));
+        uint8[3] memory currencies = [uint8(2), 3, 255];
+        address[3] memory callers = [alice, bob, gifter];
+        for (uint256 route; route < callers.length; ++route) {
+            for (uint256 c; c < currencies.length; ++c) {
+                bytes32 beforeState = _rejectionState(callers[route], boonSlot);
+                vm.expectRevert(bytes4(keccak256("UnsupportedCurrency()")));
+                vm.prank(callers[route]);
+                game.placeDegeneretteBet{value: 0.01 ether}(alice, currencies[c], 1 ether, 1, 7);
+                assertEq(_rejectionState(callers[route], boonSlot), beforeState,
+                    "unsupported bet mutated funding, nonce, pool or boon state");
+            }
         }
+    }
+
+    function _rejectionState(address caller, bytes32 boonSlot) private view returns (bytes32) {
+        return keccak256(abi.encode(
+            address(game).balance, alice.balance, caller.balance,
+            coin.balanceOf(alice), wwxrp.balanceOf(alice), wwxrp.totalSupply(),
+            vm.load(address(game), bytes32(uint256(1))),
+            vm.load(address(game), bytes32(uint256(2))),
+            vm.load(address(game), keccak256(abi.encode(alice, uint256(38)))),
+            vm.load(address(game), boonSlot)
+        ));
     }
 
     function testInvalidSymbolAndRevealedRoundRejected() public {
@@ -320,6 +320,48 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         }
     }
 
+    /// @notice A natural WWXRP jackpot keeps its token payout and cannot create a whale pass.
+    /// @dev Pinned from an off-chain Keccak search: seed 729121, hero 7 produces identical
+    ///      player and natural house tickets 0xd3a34927 (score 9, zero matched gold).
+    function testNaturalWwxrpJackpotPaysTokensWithoutWhalePass() public {
+        uint256 seed = 729_121;
+        uint8 symbol = 7;
+        uint256 drawSeed = Ref.drawWord(seed, true);
+        uint32 ticket = math.ticket(drawSeed, symbol);
+        uint32 natural = Ref.traits(
+            uint256(keccak256(abi.encode(drawSeed, uint256(0x446567656e526573756c74))))
+        );
+        (uint8 naturalScore, uint8 gold) = Ref.score(ticket, natural, symbol >> 3);
+        assertEq(ticket, 0xd3a34927, "pinned player ticket");
+        assertEq(ticket, natural, "jackpot must be natural, before the rig");
+        assertEq(naturalScore, 9, "must exercise the removed whale-pass award branch");
+        assertEq(gold, 0);
+
+        // These mappings retain their layout even though the WWXRP award is removed.
+        bytes32 claimsSlot = keccak256(abi.encode(alice, uint256(20)));
+        bytes32 bracketSlot = keccak256(abi.encode(uint256(game.level()) / 10, uint256(21)));
+        // The retired increment would also revert at this claim balance.
+        vm.store(address(game), claimsSlot, bytes32(type(uint256).max));
+        assertEq(vm.load(address(game), bracketSlot), bytes32(0), "fresh award bracket");
+
+        (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
+            abi.encodeCall(
+                IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox,
+                (alice, 1 ether, uint16(0), seed, symbol)
+            )
+        );
+        (uint256 packed, uint256 payout) = _boxRecord(logs);
+        assertEq(uint8(packed >> 64), 9, "production spin kept the natural jackpot");
+        assertEq(payout, 58_399.07998 ether, "WWXRP jackpot payout changed");
+        assertEq(abi.decode(returned, (uint256)), payout, "caller receives the token payout");
+        assertEq(vm.load(address(game), claimsSlot), bytes32(type(uint256).max), "WWXRP changed whale-pass claims");
+        assertEq(vm.load(address(game), bracketSlot), bytes32(0), "WWXRP consumed a whale-pass bracket");
+        bytes32 retiredAward = keccak256("WwxrpJackpotWhalePass(address,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0) assertTrue(logs[i].topics[0] != retiredAward, "retired award emitted");
+        }
+    }
+
     function testHeroIsStoredOnlyInTheSelectedSymbol() public {
         uint64 id = _place(alice, 0, 1, 31, 0.005 ether);
         bytes32 leaf = keccak256(abi.encode(id, keccak256(abi.encode(alice, uint256(37)))));
@@ -328,7 +370,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         assertEq((packed >> 218) & 3, 0, "redundant hero field must remain reserved");
         uint256 word = uint256(keccak256("last hero quadrant"));
         _land(word);
-        _resolve(alice, id, 31, false, word);
+        _resolve(alice, id, 31, word);
     }
 
     function testAutomaticFlipRejectsOversizedPerSpinStakeWithoutTruncation() public {

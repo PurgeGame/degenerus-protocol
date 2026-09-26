@@ -71,9 +71,9 @@ named constants in the consumer; full string hashes are constant expressions.
 | Decimator claim box | `H(roundWord, DECIMATOR_BOX_TAG, level)` then direct box resolver | Full 256-bit snapshot in the second round slot; no truncated seed or cross-round reuse |
 | Direct reward box | `H(callerDerivedWord, player)` | Decimator/ETH bet caller binds the relevant level or bet; this is not an independent raw-word consumer |
 | Box secondary draws | `BOX_*_SPIN_TAG`, `BOX_PASS_ROUND_TAG`, `FLIP_ROUND_TAG` | Derive from that box's root; stake only sizes payout |
-| Degenerette result board | packed `H(word, uint32(index), QUICK_PLAY_SALT)` for spin 0; add `uint8(spin)` for later spins | **Shared by all ETH/FLIP players and bets in an RNG period**, including different stakes, hero symbols and currencies; WWXRP uses the same house formula on its segregated draw word |
-| Degenerette player ticket | `H(H(drawWord, index, heroSymbol, spin), PLAYER_TICKET_TAG)` | Shared across owners, nonces, stakes and spin counts for the same hero; different heroes regenerate the other cells; no settlement inputs |
-| Degenerette WWXRP stream | `drawWord = H(word, WWXRP_DRAW_TAG)` | Separate player and natural-house stream from ETH/FLIP; rig `H(spinSeed, WWXRP_RIG_SALT)` is shared for the same hero/round/spin |
+| Degenerette result board | packed `H(word, uint32(index), QUICK_PLAY_SALT)` for spin 0; add `uint8(spin)` for later spins | **Shared by all ETH/FLIP players and bets in an RNG period**, including different stakes, hero symbols and currencies. Only ETH/FLIP bets use it; WWXRP is not a bet currency |
+| Degenerette player ticket | `H(H(word, index, heroSymbol, spin), PLAYER_TICKET_TAG)` | Shared across owners, nonces, stakes and spin counts for the same hero; different heroes regenerate the other cells; no settlement inputs |
+| WWXRP box/foil spin | `H(boxSpinSeed, WWXRP_DRAW_TAG)`, result `H(that, RESULT_TICKET_TAG)` | Internal box and foil reward spins only (no player-funded WWXRP bets); derived from that box's root, separate from the ETH/FLIP board; rig `H(spinSeed, WWXRP_RIG_SALT)` |
 | Degenerette survival / rounding / record | `H(word, player, betId, respectiveTag)` | Owner + per-owner bet nonce; tags `BET_SURVIVAL_TAG`, `FLIP_ROUND_TAG`, `RECORD_SPIN_TAG`; settlement batch excluded |
 | Craps dice | `_crapsSeed(word, bound)` | Shared table sequence; existing engine domains and rotating shooter retained |
 | Craps scatter | `H(word, SCATTER_TAG, player)` | Per-owner board, distinct from lootbox boon |

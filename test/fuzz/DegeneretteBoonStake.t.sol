@@ -14,7 +14,7 @@ import {Vm} from "forge-std/Vm.sol";
 ///            the boosted figure -- or the boon would mint an unfunded ETH obligation.
 ///         2. LANE ISOLATION. Each currency has its own independent boon lane; lanes
 ///            coexist, and a bet reads and spends ONLY its own currency's lane, so a
-///            worthless WWXRP spin can never burn a held ETH boon.
+///            FLIP bet can never burn a held ETH boon.
 ///         3. LANE ENCODING. Each 24-bit lane packs [day:21 | isDeity:1 | tier:2] with
 ///            bps = tier x 400. A slip here silently pays the wrong bonus or reads the
 ///            wrong lane, which no weight-table test would catch.
@@ -31,8 +31,8 @@ contract DegeneretteBoonStake is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
-    // --- BoonPacked slot1 degenerette lanes (DegenerusGameStorage): three independent
-    // per-currency 24-bit lanes at 184/208/232, each [day:21 | isDeity:1 | tier:2].
+    // --- BoonPacked slot1: ETH and FLIP use independent 24-bit lanes at 184/208.
+    // The WWXRP ecosystem lane at 232 is spent through the token, never by a bet.
     uint256 private constant BP_DEGEN_LANE0_SHIFT = 184;
     uint256 private constant BP_DEGEN_LANE_MASK = 0xFFFFFF;
     uint256 private constant BP_DEGEN_LANE_DAY_SHIFT = 3;
@@ -44,9 +44,8 @@ contract DegeneretteBoonStake is DeployProtocol {
 
     uint8 private constant CURRENCY_ETH = 0;
     uint8 private constant CURRENCY_FLIP = 1;
-    uint8 private constant CURRENCY_WWXRP = 3;
 
-    /// @dev Enforcement-site caps (DegeneretteModule). WWXRP is deliberately uncapped.
+    /// @dev Enforcement-site caps for the two supported betting currencies.
     uint256 private constant CAP_ETH = 10 ether;
     uint256 private constant CAP_FLIP = 100_000 ether;
 
@@ -88,7 +87,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     function _laneShift(uint8 currency) internal pure returns (uint256) {
         return
             BP_DEGEN_LANE0_SHIFT +
-            uint256(currency == CURRENCY_WWXRP ? 2 : currency) *
+            uint256(currency) *
             24;
     }
 
@@ -122,11 +121,6 @@ contract DegeneretteBoonStake is DeployProtocol {
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
-    }
-
-    function _fundWwxrp(address who, uint256 amount) internal {
-        vm.prank(address(game));
-        wwxrp.mintPrize(who, amount);
     }
 
     /// @dev Place a bet and return the per-spin stake the module actually PACKED (the payout
@@ -223,8 +217,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     // =========================================================================
 
     /// @notice A bet in a different currency neither consumes nor sweeps the boon: it waits
-    ///         for a bet in its own currency. Without this a 1-token WWXRP spin would burn a
-    ///         held ETH +12%.
+    ///         for a bet in its own currency.
     function test_mismatchedCurrencyLeavesBoonIntactForItsOwnBet() public {
         uint24 today = game.currentDayView();
         _grantBoon(player, CURRENCY_ETH, 3, today, false); // ETH +12%
@@ -233,11 +226,6 @@ contract DegeneretteBoonStake is DeployProtocol {
         uint256 flipStake = _placeAndReadPackedStake(CURRENCY_FLIP, 100 ether, 1);
         assertEq(flipStake, 100 ether, "FLIP bet took an ETH boon's bonus");
         assertEq(_readTier(player, CURRENCY_ETH), 3, "FLIP bet consumed a boon it could not use");
-
-        _fundWwxrp(player, 1_000 ether);
-        uint256 wwxrpStake = _placeAndReadPackedStake(CURRENCY_WWXRP, 10 ether, 1);
-        assertEq(wwxrpStake, 10 ether, "WWXRP bet took an ETH boon's bonus");
-        assertEq(_readTier(player, CURRENCY_ETH), 3, "WWXRP bet consumed a boon it could not use");
 
         // The ETH bet it was actually for still gets it.
         uint256 ethStake = _placeAndReadPackedStake(CURRENCY_ETH, 1 ether, 1);
@@ -255,13 +243,13 @@ contract DegeneretteBoonStake is DeployProtocol {
     }
 
     // =========================================================================
-    // 3. Tier encoding -- all nine draws round-trip to the right currency AND size
+    // 3. Tier encoding -- all six draws round-trip to the right currency AND size
     // =========================================================================
 
     /// @notice Sweep tier 1-3 in every lane and assert it pays the documented bonus on
     ///         the documented currency. This is the encode/decode round trip that the
     ///         weight walk cannot check: a mis-shifted lane pays FLIP money on an ETH boon.
-    function test_allNineTiersDecodeToTheirCurrencyAndBps() public {
+    function test_allSixTiersDecodeToTheirCurrencyAndBps() public {
         uint24 today = game.currentDayView();
         uint256[3] memory bps = [uint256(400), uint256(800), uint256(1200)];
 
@@ -282,26 +270,15 @@ contract DegeneretteBoonStake is DeployProtocol {
                 "FLIP tier bps"
             );
 
-            // --- WWXRP ---
-            _grantBoon(player, CURRENCY_WWXRP, uint8(1 + step), today, false);
-            _fundWwxrp(player, 10_000 ether);
-            got = _placeAndReadPackedStake(CURRENCY_WWXRP, 1_000 ether, 1);
-            assertEq(
-                got,
-                uint256(1_000 ether) + (uint256(1_000 ether) * bps[step]) / 10_000,
-                "WWXRP tier bps"
-            );
         }
     }
 
-    /// @notice The three currency lanes are INDEPENDENT: all three boons coexist, and each
-    ///         bet consumes only its own currency's lane, leaving the other two in place.
+    /// @notice ETH and FLIP boons coexist; each bet consumes only its own lane.
     ///         No currency can displace or spend another's boon.
     function test_currencyLanesCoexistAndConsumeIndependently() public {
         uint24 today = game.currentDayView();
         _grantBoon(player, CURRENCY_ETH, 1, today, false); // ETH +4%
         _grantBoon(player, CURRENCY_FLIP, 3, today, false); // FLIP +12%
-        _grantBoon(player, CURRENCY_WWXRP, 2, today, false); // WWXRP +8%
 
         // The FLIP bet spends the FLIP lane alone.
         _fundFlip(player, 10_000 ether);
@@ -312,7 +289,6 @@ contract DegeneretteBoonStake is DeployProtocol {
         );
         assertEq(_readTier(player, CURRENCY_FLIP), 0, "FLIP lane not spent");
         assertEq(_readTier(player, CURRENCY_ETH), 1, "ETH lane touched by a FLIP bet");
-        assertEq(_readTier(player, CURRENCY_WWXRP), 2, "WWXRP lane touched by a FLIP bet");
 
         // The remaining lanes still pay their own bets.
         assertEq(
@@ -320,12 +296,7 @@ contract DegeneretteBoonStake is DeployProtocol {
             1.04 ether,
             "ETH lane did not survive the FLIP consume"
         );
-        _fundWwxrp(player, 10_000 ether);
-        assertEq(
-            _placeAndReadPackedStake(CURRENCY_WWXRP, 1_000 ether, 1),
-            1_080 ether,
-            "WWXRP lane did not survive the other consumes"
-        );
+
     }
 
     // =========================================================================
@@ -359,20 +330,6 @@ contract DegeneretteBoonStake is DeployProtocol {
 
         uint256 expectedBonus = (CAP_FLIP * 1200) / 10_000; // 12k FLIP, not 36k
         assertEq(stake, perSpin + expectedBonus, "FLIP cap did not bind");
-    }
-
-    /// @notice WWXRP is deliberately UNCAPPED -- it is worthless by design, so a percentage
-    ///         of an arbitrarily large WWXRP bet moves no real value. A cap appearing here
-    ///         would be an unintended behaviour change.
-    function test_wwxrpHasNoCap() public {
-        uint24 today = game.currentDayView();
-        _grantBoon(player, CURRENCY_WWXRP, 3, today, false); // WWXRP +12%
-
-        uint128 perSpin = 500_000 ether; // far past both sibling caps
-        _fundWwxrp(player, 1_000_000 ether);
-        uint256 stake = _placeAndReadPackedStake(CURRENCY_WWXRP, perSpin, 1);
-
-        assertEq(stake, perSpin + (uint256(perSpin) * 1200) / 10_000, "WWXRP was capped");
     }
 
     // =========================================================================
@@ -429,8 +386,6 @@ contract DegeneretteBoonStake is DeployProtocol {
         _fundFlip(player, 10_000 ether);
         assertEq(_placeAndReadPackedStake(CURRENCY_FLIP, 1_000 ether, 1), 1_000 ether, "FLIP");
 
-        _fundWwxrp(player, 10_000 ether);
-        assertEq(_placeAndReadPackedStake(CURRENCY_WWXRP, 1_000 ether, 1), 1_000 ether, "WWXRP");
     }
 
     // =========================================================================

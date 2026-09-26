@@ -55,8 +55,9 @@ pragma solidity 0.8.34;
  *      - Every address maps to exactly one of 10 buckets for day d:
  *        bucket = keccak(domain, chainid, this, d, player) % 10. All of an
  *        address's burns on a day share that bucket; the player cannot pick it.
- *      - Each burn snapshots the player's activity score and records
- *        effectiveScore = amount * multBps / (10_000 * 1e18) — whole-WWXRP
+ *      - Each burn snapshots the player's activity score, consumes any live
+ *        WWXRP boon (+4/8/12%), and records
+ *        effectiveScore = amount * multBps * (10_000 + boonBps) / (1e8 * 1e18) — whole-WWXRP
  *        units, where multBps rescales the shared Decimator curve
  *        (1.0x-1.7833x) to 1.0x-3.0x. Activity affects only winner weight
  *        within a bucket — never prize odds or size.
@@ -102,8 +103,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
-/// @dev Minimal Game surface consumed by the daily draw (views only; the
-///      draw never mutates game state).
+/// @dev Minimal Game surface consumed by the daily draw and generic WWXRP boon hook.
 interface IDrawGame {
     /// @notice DegenerusGame's recorded VRF word for `day` (0 if none recorded yet).
     function rngWordForDay(uint24 day) external view returns (uint256);
@@ -115,6 +115,9 @@ interface IDrawGame {
 
     /// @notice DegenerusGame's current level.
     function level() external view returns (uint24);
+
+    /// @notice Consume the player's WWXRP boon through the caller-specific Game dispatch.
+    function consumeCoinflipBoon(address player) external returns (uint16);
 }
 
 /// @dev Vault ownership check (>50.1% of DGVE) for the trusted-minter registry.
@@ -164,7 +167,7 @@ contract WWXRP {
     /// @param bucket Deterministic bucket for (day, player)
     /// @param entryIndex Index of this entry within the bucket
     /// @param burnAmount WWXRP burned (18 decimals)
-    /// @param effectiveScore Activity-weighted score recorded for this burn
+    /// @param effectiveScore Activity- and boon-weighted score recorded for this burn
     ///        (whole-WWXRP units)
     /// @param cumulativeScore Bucket cumulative score endpoint after this burn
     ///        (whole-WWXRP units)
@@ -199,7 +202,7 @@ contract WWXRP {
     /// @param player Entrant (always msg.sender of the burn)
     /// @param entryIndex Index of this entry within the bracket
     /// @param burnAmount WWXRP burned (18 decimals)
-    /// @param effectiveScore Activity-weighted score recorded for this burn
+    /// @param effectiveScore Activity- and boon-weighted score recorded for this burn
     ///        (wei units — full precision)
     /// @param cumulativeScore Bracket cumulative score endpoint after this
     ///        burn (wei units)
@@ -321,8 +324,7 @@ contract WWXRP {
     /// @dev Vault contract address authorized to mint without a reserve limit
     address internal constant MINTER_VAULT = ContractAddresses.VAULT;
 
-    /// @dev Game views consumed by the draws: the day's RNG word, activity score
-    ///      and level (day indexing is computed locally)
+    /// @dev Draw views and WWXRP boon consumption (day indexing is computed locally).
     IDrawGame private constant game = IDrawGame(ContractAddresses.GAME);
     IDrawVaultOwner private constant vaultOwner = IDrawVaultOwner(ContractAddresses.VAULT);
 
@@ -564,8 +566,9 @@ contract WWXRP {
 
     /// @notice Register or revoke a trusted minter/burner (vault owner only).
     /// @dev Total by design: a trusted address may mint any amount to anyone through
-    ///      mintPrize and burn any balance through burnForGame, exactly as the pinned
-    ///      game contracts can. The vault owner is whoever holds >50.1% of DGVE.
+    ///      mintPrize, burn any balance through burnForGame, and consume any player's
+    ///      WWXRP boon through consumeBoon, exactly as the pinned game contracts can.
+    ///      The vault owner is whoever holds >50.1% of DGVE.
     /// @param account The address to trust or revoke.
     /// @param trusted True to register, false to revoke.
     /// @custom:reverts NotVaultOwner When the caller is not the vault owner.
@@ -575,6 +578,18 @@ contract WWXRP {
         if (account == address(0)) revert ZeroAddress();
         trustedMinter[account] = trusted;
         emit TrustedMinterSet(account, trusted);
+    }
+
+    /// @notice Consume a player's WWXRP boon for a trusted app action and return its bonus BPS.
+    /// @dev The app decides how to apply the bonus and must consume it in the same transaction
+    ///      as the action. Reverting that action restores the boon. This hook does not burn
+    ///      tokens and does not call the app; mintPrize and burnForGame never consume boons.
+    ///      Trusted-minter status is the whole permission: no per-player approval, since
+    ///      a trusted minter can already burn any balance through burnForGame.
+    /// @custom:reverts OnlyMinter When the caller is not currently a trusted minter.
+    function consumeBoon(address player) external returns (uint16 boonBps) {
+        if (!trustedMinter[msg.sender]) revert OnlyMinter();
+        return game.consumeCoinflipBoon(player);
     }
 
     /// @notice Mint any amount of WWXRP for free (a zero recipient mints nothing).
@@ -607,7 +622,8 @@ contract WWXRP {
     /// @dev The burned balance and the entry belong to msg.sender only — no
     ///      beneficiary parameter, so nobody can burn another player's balance
     ///      or attach another player's activity score. Multiple burns per day
-    ///      are allowed; each records its own activity snapshot and interval.
+    ///      are allowed; each records its own activity snapshot and interval. One live
+    ///      WWXRP boon boosts both draw weights from that burn; the token burn is unchanged.
     ///      Entry stays open during the daily RNG lock (like flip deposits):
     ///      the lock covers TODAY's word while this entry settles on
     ///      TOMORROW's, which cannot exist yet — structurally, since the game
@@ -629,10 +645,12 @@ contract WWXRP {
         // records words for days <= the current wall day.
         uint24 day = GameTimeLib.currentDayIndex();
         uint8 bucket = bucketOf(day, msg.sender);
-        // Activity snapshot at burn time; never re-read at claim. Score is
-        // whole-WWXRP-denominated (one truncation, after the bps weighting).
+        // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
+        // daily weight truncates to whole WWXRP, while the century keeps full wei precision.
+        uint16 boonBps = game.consumeCoinflipBoon(msg.sender);
         uint256 multBps = drawMultBps(game.playerActivityScore(msg.sender));
-        uint256 effective = (amount * multBps) / (BPS * SCORE_UNIT);
+        uint256 fullWeight = _entryWeight(amount, multBps, boonBps);
+        uint256 effective = fullWeight / SCORE_UNIT;
 
         uint256 hKey = _drawHeaderKey(day, bucket);
         uint256 header = _drawHeader[hKey];
@@ -655,11 +673,11 @@ contract WWXRP {
             (uint256(uint160(msg.sender)) << 96);
 
         // Level-x99 burns double as century BAF-incinerator entries: the same
-        // burn and activity multiplier also arm the next x00 bracket's skip
+        // burn and activity/boon multipliers also arm the next x00 bracket's skip
         // draw (at full wei precision there — no whole-token truncation).
         uint24 lvl = game.level();
         if (lvl % 100 == 99) {
-            _recordIncineratorEntry(lvl + 1, amount, multBps);
+            _recordIncineratorEntry(lvl + 1, amount, fullWeight);
         }
 
         _burn(msg.sender, amount);
@@ -673,6 +691,17 @@ contract WWXRP {
             effective,
             newTotal
         );
+    }
+
+    /// @dev Both multipliers are at least 1x. Amounts above the century's uint192 cap can
+    ///      return that cap immediately; all other products fit uint256 (192 amount bits,
+    ///      <=15 activity bits and <=17 boon-factor bits). Clamp before adding to either
+    ///      accumulator so even an admin-minted uint256.max balance can enter safely.
+    function _entryWeight(uint256 amount, uint256 multBps, uint16 boonBps) private pure returns (uint256) {
+        uint256 cap = type(uint192).max;
+        if (amount > cap) return cap;
+        uint256 effective = (amount * multBps * (BPS + boonBps)) / (BPS * BPS);
+        return effective > cap ? cap : effective;
     }
 
     /*+======================================================================+
@@ -755,7 +784,7 @@ contract WWXRP {
 
     /// @notice Draw bucket totals for a (day, bucket).
     /// @return rawBurned Whole WWXRP burned into the bucket (dust excluded).
-    /// @return totalScore Total effective (activity-weighted) score in
+    /// @return totalScore Total effective (activity/boon-weighted) score in
     ///         whole-WWXRP units.
     /// @return entryCount Number of entries recorded.
     function bucketInfo(
@@ -884,7 +913,7 @@ contract WWXRP {
     /// @dev Record an incinerator entry riding a daily-draw burn during a
     ///      level x99. The burn itself happened in enter(); this only appends
     ///      the bracket-keyed interval entry, weighting the FULL 18-decimal
-    ///      amount by the same activity multiplier the carrying entry
+    ///      amount by the same activity/boon multipliers the carrying entry
     ///      snapshotted (no whole-token truncation). The level increments to
     ///      x00 in the same transaction that requests the VRF word whose
     ///      bit 0 decides the BAF fire gate, so enter()'s level check alone
@@ -895,15 +924,13 @@ contract WWXRP {
     ///      normally).
     /// @param bracket Century bracket being armed (level x00).
     /// @param amount WWXRP burned by the carrying enter() (18 decimals).
-    /// @param multBps Activity multiplier snapshotted by the carrying entry.
+    /// @param effective Full-wei activity/boon weight computed by the carrying entry.
     /// @custom:reverts ScoreOverflow When the bracket entry count would overflow.
     function _recordIncineratorEntry(
         uint24 bracket,
         uint256 amount,
-        uint256 multBps
+        uint256 effective
     ) private {
-        uint256 effective = (amount * multBps) / BPS;
-
         uint256 header = _incinHeader[bracket];
         uint256 total = header & type(uint192).max;
         uint256 count = header >> 192;
@@ -999,7 +1026,7 @@ contract WWXRP {
     }
 
     /// @notice Incinerator bracket totals.
-    /// @return totalScore Total effective (activity-weighted) score in wei
+    /// @return totalScore Total effective (activity/boon-weighted) score in wei
     ///         units.
     /// @return entryCount Number of entries recorded.
     function incineratorInfo(

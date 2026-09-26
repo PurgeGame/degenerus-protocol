@@ -1111,7 +1111,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Place single-symbol Degenerette bets.
     /// @dev The bet belongs to `player`; the player or an approved operator spends the player's
-    ///      funds, any other caller funds the bet itself (a permissionless gift — WWXRP excluded).
+    ///      funds, any other caller funds the bet itself (a permissionless gift).
+    ///      Player-funded bets accept ETH and FLIP only.
     ///      The module resolves the player/funder split, so `player` forwards raw. Signature:
     ///      placeDegeneretteBet(address player, uint8 currency, uint128 amountPerSpin,
     ///      uint8 spinCount, uint8 symbol). The signature matches the
@@ -1146,23 +1147,23 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Consume coinflip boon for next coinflip stake bonus.
-    /// @dev Access: COIN or COINFLIP contract only. The CALLER NAMES THE LANE inside the module:
-    ///      COINFLIP spends the coinflip boon, COIN (FLIP) spends the craps boon. Both are already
-    ///      authorized here, and delegatecall preserves the original caller, so the craps family
-    ///      needs no second wrapper on this size-critical façade.
+    /// @notice Consume the trusted caller's bonus lane for a player's next action.
+    /// @dev COINFLIP spends the coinflip boon, COIN spends the craps boon, and WWXRP spends
+    ///      the WWXRP boon. Delegatecall preserves the caller and the module keeps the lanes
+    ///      separate. Future WWXRP applications go through WWXRP.consumeBoon (trusted minters only).
     ///      Signature: consumeCoinflipBoon(address player) — the player whose boon to consume.
     ///      The signature matches the module function exactly (identical selector), so the
     ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for
     ///      no behavior change.
     /// @return boostBps The boost in basis points to apply.
-    /// @custom:reverts Unauthorized If caller is not COIN or COINFLIP contract.
+    /// @custom:reverts Unauthorized If caller is not COIN, COINFLIP or WWXRP.
     function consumeCoinflipBoon(
         address
     ) external returns (uint16 boostBps) {
         if (
             msg.sender != ContractAddresses.COIN &&
-            msg.sender != ContractAddresses.COINFLIP
+            msg.sender != ContractAddresses.COINFLIP &&
+            msg.sender != ContractAddresses.WWXRP
         ) revert Unauthorized();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BOON_MODULE
@@ -1637,7 +1638,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @dev Flat ~1-FLIP "lose" reward for the Degenerette resolve helper, paid ONCE per tx
-    ///      at >=3 non-WWXRP resolutions. A count-independent consolation flip-credit;
+    ///      at >=3 resolutions. A count-independent consolation flip-credit;
     ///      the bet-stake gate (>=3 placed bets at the house edge) makes every self-resolve
     ///      farm net-negative, so it is intentionally NOT pegged to the per-resolve marginal.
     uint256 private constant RESOLVE_FLAT_FLIP = 1e18;
@@ -1649,8 +1650,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      whole list reverts with BatchAlreadyTaken (a loser-gas cap, reusing the SLOAD
     ///      item 0 needs anyway). Items 1..N are isolated per-item (a stale/reverting item
     ///      skips). The reward is a FLAT ~1-FLIP creditFlip granted ONCE at >=3
-    ///      successfully-resolved NON-WWXRP bets; WWXRP (currency == 3) resolves but
-    ///      never counts toward the gate. Zero resolutions revert NoWork(); 1-2
+    ///      successfully-resolved bets. Zero resolutions revert NoWork(); 1-2
     ///      resolved commit UNPAID (never strand the trailing tail). Any caller including a
     ///      self-resolver (no caller restriction).
     /// @param players Bet owners, grouped/ordered by the caller (item 0 is the probe).
@@ -1664,42 +1664,30 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
         // Short-circuit: probe item 0 (the caller's own choice). A resolved
         // bet is deleted (slot == 0), so a zero slot means a competitor got ahead.
-        // The probe read doubles as iteration 0's bet read (do-while; len >= 1 here),
-        // so later items load their slot at the loop bottom instead of re-reading item 0.
-        uint256 betPacked = degeneretteBets[players[0]][betIds[0]];
-        if (betPacked == 0) revert BatchAlreadyTaken();
+        if (degeneretteBets[players[0]][betIds[0]] == 0) revert BatchAlreadyTaken();
 
         uint256 successCount;
-        uint256 totalResolved;
         uint256 i;
         // Single-bet array reused each iteration: resolveDegeneretteBets is the
         // catchable external boundary that gives per-item isolation (try/catch needs
         // an external call), so no dedicated self-call wrapper is required.
         uint64[] memory ids = new uint64[](1);
         do {
-            // currency bits [40..41]: WWXRP is the most +EV currency, so it is excluded
-            // from the >=3 reward gate to keep the faucet closed.
-            uint8 currency = uint8((betPacked >> 40) & 0x3);
             ids[0] = betIds[i];
             // Per-item isolation: a stale/reverting/not-ready bet skips, never bricks.
             try this.resolveDegeneretteBets(players[i], ids) {
-                // Any resolution counts toward the no-work gate; only non-WWXRP
-                // resolutions count toward the >=3 flat-reward gate.
                 unchecked {
-                    ++totalResolved;
-                    if (currency != 3) ++successCount;
+                    ++successCount;
                 }
             } catch {}
             unchecked {
                 ++i;
             }
-            if (i == len) break;
-            betPacked = degeneretteBets[players[i]][betIds[i]];
-        } while (true);
+        } while (i < len);
 
-        // Flat ~1-FLIP "lose": pay ONCE at >=3 non-WWXRP resolutions; revert
+        // Flat ~1-FLIP "lose": pay ONCE at >=3 resolutions; revert
         // NoWork() if nothing resolved; 1-2 resolved commit UNPAID (never strand the tail).
-        if (totalResolved == 0) revert NoWork();
+        if (successCount == 0) revert NoWork();
         if (successCount >= 3) {
             coinflip.creditFlip(msg.sender, RESOLVE_FLAT_FLIP);
             emit MinerBounty(
@@ -1815,7 +1803,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Claim deferred whale pass rewards. `whalePassClaims` is fed in half-pass units by
     ///         large lootbox wins (>5 ETH), the solo jackpot bucket, golden tickets, the lootbox
-    ///         whale-pass boon, foil tier 8 and the WWXRP bracket jackpot.
+    ///         whale-pass boon and foil tier 8.
     /// @dev Thin, PERMISSIONLESS delegatecall dispatch stub into the whale module — forwards
     ///      `msg.data` verbatim (msg.sender preserved). No approval gate and no address(0)
     ///      self-resolution: the claim only awards the passed player their own deferred

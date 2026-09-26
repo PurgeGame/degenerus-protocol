@@ -4,10 +4,13 @@ Implemented in the working tree, 2026-09-22. Score 2 pays **0.5×**, before
 activity scaling and matched-gold bonuses. One score table serves all currencies.
 Gold is as common as every other color. Base return, including gold, remains
 approximately **90–99.9%**; ETH keeps its extra **5 percentage points**.
-WWXRP keeps its **5% help gate**, but its rigged/gold-adjusted base is calibrated
+Player-funded bets accept **ETH (currency 0) and FLIP (currency 1)** only. WWXRP
+remains available through internal box and foil reward spins. Those spins keep
+the **5% help gate**, with their rigged/gold-adjusted base calibrated
 to **70% EV at activity 0**, rising to **130% at maximum activity**. Activity's
 extra return is paid only on winning scores **6–9**, in a 10/30/30/30 budget split.
-WWXRP is negative EV through activity **169**, before separate rewards and boons.
+WWXRP's scheduled token return is below 100% through activity **169**. WWXRP
+reward spins pay only WWXRP tokens. Stake boons apply only to ETH and FLIP bets.
 
 ## Ticket generation and shared draws
 
@@ -16,7 +19,7 @@ The only ticket input is a hero symbol `0..31`: `quadrant = symbol >> 3`,
 Each random symbol and color is uniform among eight possibilities, including gold.
 There is no full-ticket selection or separate hero-quadrant parameter.
 
-For ordinary bets:
+For ordinary ETH and FLIP bets:
 
 - Same RNG round, hero and spin index means the same player ticket, regardless
   of wallet, bet nonce, stake or requested spin count. Five spins are exactly the
@@ -26,21 +29,25 @@ For ordinary bets:
 - ETH and FLIP share the player and house streams. The house stream is also
   shared across different hero selections, so ETH and Bitcoin heroes face the
   same house board on a given spin.
-- WWXRP hashes the RNG word into a separate domain. It shares draws among its
-  own users under the same rules. Its natural house board is shared across hero
-  choices; the subsequent rig can adjust that board differently for each hero.
 - Placement rejects an already revealed RNG index. Draws cannot be rerolled by
   changing settlement order or batching.
 
 Using `H` for keccak256 over 32-byte ABI words and `packedH` for packed ABI:
 
 ```text
-drawWord = currency == WWXRP ? H(rngWord, WWXRP_DRAW_TAG) : rngWord
-spinSeed = H(drawWord, uint256(index), uint256(symbol), uint256(spinIndex))
+spinSeed = H(rngWord, uint256(index), uint256(symbol), uint256(spinIndex))
 player   = uniformTraits(H(spinSeed, PLAYER_TICKET_TAG)), overwrite hero icon
-house0   = uniformTraits(packedH(drawWord, uint32(index), bytes1(0x51)))
-houseN   = uniformTraits(packedH(drawWord, uint32(index), uint8(spinIndex), bytes1(0x51)))
-rigSeed  = H(spinSeed, WWXRP_RIG_SALT)
+house0   = uniformTraits(packedH(rngWord, uint32(index), bytes1(0x51)))
+houseN   = uniformTraits(packedH(rngWord, uint32(index), uint8(spinIndex), bytes1(0x51)))
+```
+
+Internal WWXRP reward spins use the box or foil award's committed seed in their
+own domain. They never create a player-funded bet or burn the player's WWXRP:
+
+```text
+rewardSeed = H(committedAwardSeed, WWXRP_DRAW_TAG)
+houseSeed  = H(rewardSeed, RESULT_TICKET_TAG)
+rigSeed    = H(rewardSeed, WWXRP_RIG_SALT)
 ```
 
 FLIP survival and award rounding retain their separate owner/bet-nonce domains.
@@ -212,18 +219,22 @@ Scheduled WWXRP return is **69.9999999905%** at activity 0 and
 percentage points of shortfall across the entire uint16 activity range. Activity
 169 pays approximately 99.92%; activity 170 pays approximately 100.09%.
 Gold and the rig are included in these returns. Activity never affects the
-tickets, rig eligibility or rig choice, preserving identical shared draws for
-players with different activity scores.
+tickets, rig eligibility or rig choice: the same committed reward seed produces
+the same reels at every activity score.
 
 ## Other rewards, automatic spins and compatibility
 
-- Stake boons raise effective stake versus paid stake under their existing caps.
+- ETH and FLIP stake boons raise effective stake versus paid stake under their
+  existing caps. WWXRP boons retain their +4% / +8% / +12% tiers and now boost
+  daily burn and century incinerator entry weights. They do not boost automatic
+  reward spins. See [WWXRP boons](WWXRP-BOONS.md) for the ecosystem consumption hook.
 - FLIP retains its 50/50 double-or-nothing survival flip, EV-neutral before
   whole-token flooring and stochastic hundred-FLIP rounding.
 - ETH retains its payout split, pool caps and downstream boxes. Scheduled
   return is not all immediately withdrawable ETH.
-- sDGNRS, quests, records and WWXRP whale-halfpass rewards are extra. At the
-  existing sDGNRS rates, the new score distribution increases instantaneous
+- sDGNRS, quests and records are extra rewards on their eligible bet paths.
+  Internal WWXRP reward spins pay their token payout, including at score 9. At
+  the existing sDGNRS rates, the new score distribution increases instantaneous
   expected Reward-pool outflow per one-ETH spin to 0.0000027126073837280272 of
   the pool, approximately **1.883×** the historical N0 rate. Those reward rates
   are unchanged; their EV is outside the requested base-return target.
@@ -237,6 +248,8 @@ players with different activity scores.
   225–230; the earlier reel, count and survival fields keep their positions.
 - The public bet ABI is now
   `placeDegeneretteBet(address,uint8,uint128,uint8,uint8)`.
+  Its currency argument accepts only `0` (ETH) and `1` (FLIP); all other values,
+  including `3` (WWXRP), revert. ETH permits up to 25 spins and FLIP up to 15.
   The vault wrapper and module callers use the new symbol argument. Packed bet
   bits 0–4 contain the symbol; bits 5–31 and 218–219 are reserved. The redundant
   hero-quadrant copy has been removed; the quadrant is always `symbol >> 3`.
@@ -254,7 +267,7 @@ normalization and target-curve constants. Every uint16 activity value is checked
 for monotonicity and deviation from the WWXRP target.
 
 `DegeneretteSingleSymbol.t.sol` tests the public shared streams, prefix invariance,
-separate WWXRP draws, placement commitment, scoring, gold and payout bounds.
+placement commitment, scoring, gold and payout bounds.
 The production math harness also supports exhaustive score/rig/trait tests and
 the four Degenerette statistical suites. Existing settlement, boon, record,
 freeze, gas and automatic-award suites cover integration with the rest of the game.

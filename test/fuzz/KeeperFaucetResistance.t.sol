@@ -26,9 +26,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         to chase a higher submission price, and the credit lands as illiquid coinflip stake (not liquid
 ///         FLIP), so it cannot be immediately round-tripped to a profit.
 ///
-///         Also asserts WWXRP (currency==3) earns exactly zero reward, the one-reward-per-item lock
+///         Also asserts the one-reward-per-item lock
 ///         (re-resolve of a committed bet reverts BatchAlreadyTaken at item 0), the degeneretteResolve
-///         below-gate-unpaid / zero-reverts-NoWork / WWXRP-excluded-from-gate shape, and the pre-RNG-word
+///         below-gate-unpaid / zero-reverts-NoWork shape, and the pre-RNG-word
 ///         block (an attempt before the word lands skips, no reward).
 ///
 /// @dev The five call-site deltas applied (D-351-01):
@@ -62,12 +62,6 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev degeneretteBetNonce mapping root slot.
     uint256 private constant DEGENERETTE_BET_NONCE_SLOT = 38;
-
-    /// @dev WWXRP balanceOf mapping root slot.
-    uint256 private constant WWXRP_BALANCEOF_SLOT = 1;
-
-    /// @dev WWXRP totalSupply slot.
-    uint256 private constant WWXRP_TOTAL_SUPPLY_SLOT = 0;
 
     // -------------------------------------------------------------------------
     // Router reward peg mirror (the contract's own FIXED constants, REW-03)
@@ -408,46 +402,17 @@ contract KeeperFaucetResistance is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 2 — WWXRP zero reward + one-creditFlip-per-tx + zero-success no-credit
-    // =========================================================================
-
-    /// @notice CRANK-04: cranking a WWXRP-denominated bet (currency == 3) resolves the work but credits
-    ///         exactly ZERO reward — the currency==3 fork takes the zero-reward branch. Uses a LOSING WWXRP
-    ///         ticket so no winnings creditFlip occurs either: the player's stake is unchanged, end to end.
-    function testWwxrpKeeperEarnsZeroReward() public {
-        uint64 betId = _placeLosingWwxrpBet(player);
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
-
-        address[] memory players = new address[](1);
-        uint64[] memory betIds = new uint64[](1);
-        players[0] = player;
-        betIds[0] = betId;
-
-        uint256 preStake = coinflip.coinflipAmount(player);
-
-        vm.recordLogs();
-        vm.prank(player);
-        game.degeneretteResolve(players, betIds);
-
-        // The WWXRP bet WAS resolved (its slot is now deleted) ...
-        assertEq(_readBetPacked(player, betId), 0, "WWXRP bet is resolved (work done)");
-        // ... but earned ZERO crank reward (currency==3 zero fork), so no creditFlip fired.
-        assertEq(_countCoinflipStakeUpdated(), 0, "WWXRP work earns no creditFlip (CRANK-04)");
-        assertEq(coinflip.coinflipAmount(player), preStake, "WWXRP reward is exactly zero");
-    }
-
-    // =========================================================================
-    // GAS-06 degeneretteResolve flat ~1-FLIP round-trip guard + the >=3 non-WWXRP gate /
-    //          1-2-unpaid / 0-reverts / WWXRP-excl.
+    // GAS-06 degeneretteResolve flat ~1-FLIP round-trip guard + the >=3 supported gate /
+    //          1-2-unpaid / 0-reverts / supported currencies only
     //
     // The degeneretteResolve (DegenerusGame.sol) pays a count-independent flat RESOLVE_FLAT_FLIP
-    // flip-credit ONCE per tx at >=3 successfully-resolved NON-WWXRP bets (D-05b). The anti-exploit basis
+    // flip-credit ONCE per tx at >=3 successfully-resolved supported bets (D-05b). The anti-exploit basis
     // (D-05c, NOT the 0.5-gwei peg ref): ~1 FLIP is illiquid flip-credit worth <= mintPrice/1000 ETH,
     // while the keeper pays REAL prevailing gas on every qualifying tx -> a net loss at any realistic price;
     // the >=3 gate widens the margin. The reward is read off the keeper's credit delta (NOT hardcoded 1e18).
     // =========================================================================
 
-    /// @notice GAS-06 round-trip: a self-cranker resolves exactly 3 non-WWXRP bets (the minimum paid case),
+    /// @notice GAS-06 round-trip: a self-cranker resolves exactly 3 supported bets (the minimum paid case),
     ///         earns the flat ~1-FLIP flip-credit ONCE. That credit valued back at the level price is <=
     ///         mintPrice/1000 ETH (the D-05c illiquid-credit ceiling), and the REAL measured
     ///         degeneretteResolve gas * realPrice strictly exceeds it at 1 gwei and 20 gwei -> net loss.
@@ -463,7 +428,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 stakeDelta = coinflip.coinflipAmount(player) - preStake;
 
         // The >=3 gate fired exactly once (count-independent flat reward).
-        assertGt(stakeDelta, 0, "3 non-WWXRP resolutions earn the flat reward once (>=3 gate)");
+        assertGt(stakeDelta, 0, "3 supported resolutions earn the flat reward once (>=3 gate)");
 
         // (a) The credit valued at the level price is at most the D-05c illiquid-credit ceiling.
         uint256 creditEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
@@ -504,7 +469,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         game.degeneretteResolve(players, betIds);
         uint256 gasUsed = gasBefore - gasleft();
         uint256 stakeDelta = coinflip.coinflipAmount(player) - preStake;
-        assertGt(stakeDelta, 0, "the >=3 non-WWXRP gate paid the flat reward");
+        assertGt(stakeDelta, 0, "the >=3 supported gate paid the flat reward");
 
         uint256 creditEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
         assertLt(
@@ -514,7 +479,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         );
     }
 
-    /// @notice GAS-06 below-gate unpaid: resolving 1 or 2 non-WWXRP bets COMMITS the resolution but pays
+    /// @notice GAS-06 below-gate unpaid: resolving 1 or 2 supported bets COMMITS the resolution but pays
     ///         ZERO (the keeper's flip-credit delta is exactly 0) — the bet slots are deleted (work done,
     ///         tail never stranded) yet successCount < 3 so the flat reward is withheld. Trivially -EV.
     function testDegeneretteResolveBelowGateUnpaid() public {
@@ -565,45 +530,6 @@ contract KeeperFaucetResistance is DeployProtocol {
         assertGt(_readBetPacked(player, betId), 0, "zero-work revert leaves the unresolved bet intact");
     }
 
-    /// @notice GAS-06 / AUTO-04 WWXRP exclusion from the gate: 3 WWXRP (currency==3) resolutions resolve
-    ///         the work (slots deleted) but never count toward the >=3 non-WWXRP gate, so the flat reward
-    ///         is WITHHELD (credit delta 0). Adding 3 non-WWXRP bets to the SAME batch then meets the gate
-    ///         and pays the flat reward ONCE — proving WWXRP is excluded from the count, not from the work.
-    function testDegeneretteResolveWwxrpExcludedFromGate() public {
-        uint64 w1 = _placeLosingWwxrpBet(player);
-        uint64 w2 = _placeLosingWwxrpBet(player);
-        uint64 w3 = _placeLosingWwxrpBet(player);
-        uint64 n1 = _placeLosingBet(player);
-        uint64 n2 = _placeLosingBet(player);
-        uint64 n3 = _placeLosingBet(player);
-        _injectLootboxRngWord(INDEX, FIXED_WORD);
-
-        // ---- 3 WWXRP only: resolves but earns nothing (WWXRP excluded from the gate count) ----
-        address[] memory wps = new address[](3);
-        uint64[] memory wbs = new uint64[](3);
-        wps[0] = player; wbs[0] = w1;
-        wps[1] = player; wbs[1] = w2;
-        wps[2] = player; wbs[2] = w3;
-
-        uint256 preW = coinflip.coinflipAmount(player);
-        vm.prank(player);
-        game.degeneretteResolve(wps, wbs);
-        assertEq(coinflip.coinflipAmount(player) - preW, 0, "3 WWXRP resolutions earn no reward (excluded from gate)");
-        assertEq(_readBetPacked(player, w1), 0, "WWXRP work still done (slot deleted), just unrewarded");
-
-        // ---- 3 non-WWXRP: now the gate is met (WWXRP did not count), reward paid once ----
-        address[] memory nps = new address[](3);
-        uint64[] memory nbs = new uint64[](3);
-        nps[0] = player; nbs[0] = n1;
-        nps[1] = player; nbs[1] = n2;
-        nps[2] = player; nbs[2] = n3;
-        uint256 preN = coinflip.coinflipAmount(player);
-        vm.prank(player);
-        game.degeneretteResolve(nps, nbs);
-        uint256 deltaN = coinflip.coinflipAmount(player) - preN;
-        assertGt(deltaN, 0, "3 non-WWXRP resolutions meet the >=3 gate and pay the flat reward once");
-    }
-
     // =========================================================================
     // Internal helpers
     // =========================================================================
@@ -640,31 +566,6 @@ contract KeeperFaucetResistance is DeployProtocol {
             players[i] = player;
             betIds[i] = _placeLosingBet(player);
         }
-    }
-
-    /// @dev Place a LOSING WWXRP (currency==3) degenerette bet. Seeds the better's WWXRP balance via
-    ///      storage write so burnForGame succeeds, then places through the public API.
-    function _placeLosingWwxrpBet(address better) internal returns (uint64 betId) {
-        uint128 betAmount = 1 ether; // >= MIN_BET_WWXRP (1 ether)
-        _seedWwxrpBalance(better, uint256(betAmount) + 1 ether);
-
-        uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
-        vm.prank(better);
-        game.placeDegeneretteBet(address(0), 3, betAmount, 1, uint8(customTraits & 7));
-        betId = _betNonce(better);
-    }
-
-    /// @dev Seed a WWXRP balance for `who` (balanceOf slot 1) and bump totalSupply to match.
-    function _seedWwxrpBalance(address who, uint256 amount) internal {
-        bytes32 balSlot = keccak256(abi.encode(who, uint256(WWXRP_BALANCEOF_SLOT)));
-        uint256 prevBal = uint256(vm.load(address(wwxrp), balSlot));
-        vm.store(address(wwxrp), balSlot, bytes32(amount));
-        uint256 ts = uint256(vm.load(address(wwxrp), bytes32(uint256(WWXRP_TOTAL_SUPPLY_SLOT))));
-        vm.store(
-            address(wwxrp),
-            bytes32(uint256(WWXRP_TOTAL_SUPPLY_SLOT)),
-            bytes32(ts + amount - prevBal)
-        );
     }
 
     /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).

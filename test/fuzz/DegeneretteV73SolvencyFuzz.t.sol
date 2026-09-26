@@ -4,11 +4,13 @@ pragma solidity ^0.8.26;
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 /// @title DegeneretteV73SolvencyFuzz — stateless property fuzz over single-symbol bets.
 ///
-/// @notice Sweeps random (hero symbol, rngWord, currency) and resolves one live spin,
+/// @notice Sweeps random heroes and words through manual FLIP bets and automatic WWXRP spins,
 ///         asserting the protocol-pillar invariants hold for EVERY reachable input — the coverage the
 ///         analytical EV proof and the single-config 3000-spin parity test sampled only narrowly:
 ///           SOLVENCY  — score S in {0..9}; the honest base payout never exceeds the shared S=9 payout with four gold matches
@@ -29,7 +31,6 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51;
     uint8 private constant CURRENCY_FLIP = 1;
-    uint8 private constant CURRENCY_WWXRP = 3;
 
     bytes32 private constant FULL_TICKET_RESULT_SIG =
         keccak256("DegeneretteResult(address,uint64,uint8,uint32,uint8,uint256)");
@@ -59,59 +60,60 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     }
 
     /// forge-config: default.fuzz.runs = 400
-    function testFuzz_v73_solvency_and_rig(uint8 symbol, uint256 word, bool useWwxrp)
-        public
-    {
-        word = bound(word, 1, type(uint256).max); // rngWord must be nonzero
+    function testFuzz_v73_manualFlipSolvency(uint8 symbol, uint256 word) public {
+        word = bound(word, 1, type(uint256).max);
         symbol %= 32;
-        uint8 hero = symbol >> 3;
-        uint8 currency = useWwxrp ? CURRENCY_WWXRP : CURRENCY_FLIP;
-        uint128 perTicket = useWwxrp ? uint128(1 ether) : uint128(100 ether);
-
-        // Fund + place (self-funded per run for robustness).
-        if (useWwxrp) {
-            vm.prank(address(game));
-            wwxrp.mintPrize(player, uint256(perTicket) + 1 ether);
-        } else {
-            vm.prank(address(game));
-            coin.mintForGame(player, uint256(perTicket) + 1 ether);
-        }
+        uint128 perTicket = 100 ether;
+        vm.prank(address(game));
+        coin.mintForGame(player, uint256(perTicket) + 1 ether);
         vm.prank(player);
-        game.placeDegeneretteBet(address(0), currency, perTicket, 1, symbol);
+        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, perTicket, 1, symbol);
         uint64 betId = _betNonce(player);
         uint256 roiBps = _roiBpsOfBet(betId);
-
         _injectLootboxRngWord(1, word);
         vm.recordLogs();
         vm.prank(player);
-        game.resolveDegeneretteBets(address(0), _one(betId)); // LIVENESS: must not revert
-        (uint8 s, uint256 payout) = _firstSpinScoreAndPayout();
-        _injectLootboxRngWord(1, 0);
+        game.resolveDegeneretteBets(address(0), _one(betId));
+        (uint8 score, uint256 payout) = _firstSpinScoreAndPayout();
+        assertLe(score, 9, "score must be in {0..9}");
+        uint256 base = (payout * 1_000_000) / (uint256(perTicket) * roiBps);
+        assertLe(base, 20_000_000, "honest base exceeds S=9 with four gold matches");
+        if (score < 2) assertEq(payout, 0, "pay floor: S<2 must pay 0");
+    }
 
-        // SOLVENCY: score in range.
-        assertLe(s, 9, "score must be in {0..9}");
-
-        uint32 ticket = Ref.player(word, 1, symbol, 0, useWwxrp);
-
-        if (!useWwxrp) {
-            // FLIP honest lane: payout = perTicket * base * roiBps / 1e6 exactly (no bonus/cap/DGNRS).
-            // SOLVENCY: the decoded base never exceeds the shared S=9 payout with four gold matches (the table's max entry).
-            uint256 base = (payout * 1_000_000) / (uint256(perTicket) * roiBps);
-            assertLe(base, 20_000_000, "honest base payout exceeds the shared S=9 payout with four gold matches (inflated/OOB table read)");
-            // Pay floor S>=2.
-            if (s < 2) assertEq(payout, 0, "pay floor: S<2 must pay 0");
-        } else {
-            // WWXRP: compare against the honest (pre-rig) reel.
-            uint32 honestReel = Ref.house(word, 1, 0, true);
-            (uint8 honestS, uint8 honestM) = _scoreAndM(ticket, honestReel, hero);
-            // RNG: the rig only lifts (0..+1), never below honest.
-            assertGe(s, honestS, "rig lowered the score below honest");
-            assertLe(s, honestS + 1, "rig lifted the score by more than +1");
-            // RNG: the rig can NEVER fabricate the S=9 jackpot.
-            if (s == 9) {
-                assertEq(honestM, 8, "rig manufactured S=9 (honest reel was not a full 8-axis match)");
-            }
+    /// @notice WWXRP keeps its rig through the production automatic-spin resolver.
+    /// forge-config: default.fuzz.runs = 400
+    function testFuzz_v73_automaticWwxrpRig(uint8 symbol, uint256 word) public {
+        symbol %= 32;
+        bytes memory facade = address(game).code;
+        vm.etch(address(game), ContractAddresses.GAME_DEGENERETTE_MODULE.code);
+        vm.recordLogs();
+        (bool ok, bytes memory result) = address(game).call(abi.encodeCall(
+            IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox,
+            (player, 1 ether, uint16(305), word, symbol)
+        ));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        vm.etch(address(game), facade);
+        assertTrue(ok, "automatic WWXRP resolution must remain live");
+        bytes32 spinTopic = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+        bool found;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0 || logs[i].topics[0] != spinTopic) continue;
+            (, uint256 packed, uint256 payout,) = abi.decode(logs[i].data, (uint64,uint256,uint256,uint256));
+            uint8 score = uint8(packed >> 64);
+            uint32 ticket = uint32(packed);
+            uint256 drawSeed = Ref.drawWord(word, true);
+            uint32 honestReel = Ref.traits(uint256(keccak256(abi.encode(drawSeed, uint256(0x446567656e526573756c74)))));
+            (uint8 honestScore, uint8 honestMatches) = _scoreAndM(ticket, honestReel, symbol >> 3);
+            assertLe(score, 9, "score outside valid range");
+            assertGe(score, honestScore, "rig lowered honest score");
+            assertLe(score, honestScore + 1, "rig lifted score by more than one");
+            if (score == 9) assertEq(honestMatches, 8, "rig manufactured the jackpot");
+            if (score < 2) assertEq(payout, 0, "automatic payout below score floor");
+            assertEq(abi.decode(result, (uint256)), payout, "returned payout differs from event");
+            found = true;
         }
+        assertTrue(found, "automatic WWXRP resolver emitted no spin");
     }
 
     // ---- helpers ----

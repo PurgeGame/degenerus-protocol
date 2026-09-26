@@ -39,25 +39,13 @@ import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
-/// @notice Minimal interface for WWXRP game burn/mint operations.
-interface IWWXRP {
-    /// @notice Mints WWXRP tokens as a prize to the recipient.
-    /// @param to The address to receive the minted tokens.
-    /// @param amount The amount of tokens to mint.
-    function mintPrize(address to, uint256 amount) external;
-
-    /// @notice Burns WWXRP tokens from a player for game participation.
-    /// @param from The address to burn tokens from.
-    /// @param amount The amount of tokens to burn.
-    function burnForGame(address from, uint256 amount) external;
-}
-
 /**
  * @title DegenerusGameDegeneretteModule
  * @author Burnie Degenerus
  * @notice Delegate-called module handling Degenerette symbol-roll bets.
  * @dev Uses lootbox RNG index/word for randomness. All storage reads/writes operate
- *      on the inherited DegenerusGameStorage. Supports ETH, FLIP, and WWXRP currencies.
+ *      on the inherited DegenerusGameStorage. Player-funded bets support ETH and FLIP;
+ *      internal box and foil reward spins also support WWXRP.
  *      FLIP payouts face a per-bet survival flip (double-or-nothing) at resolution,
  *      so all FLIP entering existence survives at least one coinflip.
  */
@@ -75,9 +63,6 @@ contract DegenerusGameDegeneretteModule is
     ///         already landed at placement (a bet binds to a still-unrevealed index), or
     ///         still absent at a strict resolution.
     error RngNotReady();
-
-    /// @notice Thrown when caller is not approved to act on behalf of player.
-    error NotApproved();
 
     /// @notice Thrown when bet parameters are invalid (zero amount, below minimum, invalid spec, etc.).
     error InvalidBet();
@@ -155,11 +140,6 @@ contract DegenerusGameDegeneretteModule is
         uint256 excessConverted
     );
 
-    /// @notice Emitted when a WWXRP jackpot awards the bracket's whale halfpass.
-    /// @param player The bettor who landed the jackpot (the award recipient).
-    /// @param bracket The level/10 bracket whose one halfpass is now claimed.
-    event WwxrpJackpotWhalePass(address indexed player, uint256 indexed bracket);
-
     /// @notice A stake resolved as a Degenerette spin outside the ordinary bet flow — a lootbox
     ///         roll (WWXRP / FLIP×3 / ETH) or a biggest-spin record bounty (FLIP×3) — the single
     ///         self-contained record of that outcome (replaces the per-spin DegeneretteResult /
@@ -198,14 +178,6 @@ contract DegenerusGameDegeneretteModule is
             revert(add(32, reason), mload(reason))
         }
     }
-
-    // -------------------------------------------------------------------------
-    // External Contract References (compile-time constants)
-    // -------------------------------------------------------------------------
-
-    /// @dev Reference to the WWXRP token contract for burn/mint operations.
-    IWWXRP internal constant wwxrp =
-        IWWXRP(ContractAddresses.WWXRP);
 
     // -------------------------------------------------------------------------
     // Constants
@@ -248,7 +220,7 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Currency type identifier for FLIP token.
     uint8 private constant CURRENCY_FLIP = 1;
 
-    /// @dev Currency type identifier for WWXRP token.
+    /// @dev Internal reward-spin currency; unavailable to player-funded bets.
     uint8 private constant CURRENCY_WWXRP = 3;
 
     /// @dev Minimum bet amount for ETH (0.005 ETH on mainnet).
@@ -256,9 +228,6 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev Minimum bet amount for FLIP (100 tokens with 18 decimals).
     uint256 private constant MIN_BET_FLIP = 100 ether;
-
-    /// @dev Minimum bet amount for WWXRP (1 token with 18 decimals).
-    uint256 private constant MIN_BET_WWXRP = 1 ether;
 
     // -------------------------------------------------------------------------
     // Biggest-Spin Record Bonus (ETH only)
@@ -289,7 +258,6 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Maximum spins per bet, per currency (encoded as ticketCount in the packed bet).
     uint8 private constant MAX_SPINS_ETH = 25;
     uint8 private constant MAX_SPINS_FLIP = 15;
-    uint8 private constant MAX_SPINS_WWXRP = 5;
 
     // -------------------------------------------------------------------------
     // Quick Play Constants
@@ -330,8 +298,8 @@ contract DegenerusGameDegeneretteModule is
     //
     // A bet packs into one uint256 (one symbol, score-based payouts):
     // [0..4]     symbol (5 bits): selected hero symbol (0..31); [5..31] reserved
-    // [32..39]   spinCount (8 bits): per-currency cap (ETH 25 / FLIP 15 / WWXRP 5)
-    // [40..41]   currency (2 bits)
+    // [32..39]   spinCount (8 bits): per-currency cap (ETH 25 / FLIP 15)
+    // [40..41]   currency (2 bits): ETH=0, FLIP=1; other values unsupported
     // [42..169]  amountPerSpin (128 bits)
     // [170..201] index (32 bits): lootbox RNG index
     // [202..217] activityScore (16 bits)
@@ -339,7 +307,7 @@ contract DegenerusGameDegeneretteModule is
     //
     /// Every symbol choice has the same distribution. Fresh uniform colors,
     /// independent color scoring, and matched-gold boosts share one payout table.
-    /// WWXRP adds a 5% help gate and a 70–130% activity target, with surplus on scores 6–9.
+    /// Internal WWXRP reward spins add a 5% help gate and a 70–130% activity target.
     //
     // -------------------------------------------------------------------------
 
@@ -377,11 +345,11 @@ contract DegenerusGameDegeneretteModule is
     ///      The bet always belongs to `player` (zero address = caller). Funding source: the
     ///      player or an approved operator spends the player's funds; any other caller funds the
     ///      bet itself — a permissionless gift (the caller pays, the player receives the bet and
-    ///      its winnings). WWXRP is excluded from gifting (player-or-approved only).
+    ///      its winnings).
     /// @param player The player the bet belongs to (use zero address for msg.sender).
-    /// @param currency Currency type (0=ETH, 1=FLIP, 2=unsupported, 3=WWXRP).
+    /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported).
     /// @param amountPerSpin Bet amount per ticket.
-    /// @param spinCount Number of spins (per-currency cap: ETH 25 / FLIP 15 / WWXRP 5).
+    /// @param spinCount Number of spins (per-currency cap: ETH 25 / FLIP 15).
     /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,
@@ -402,9 +370,7 @@ contract DegenerusGameDegeneretteModule is
             // The player or an approved operator spends the player's own funds.
             funder = player;
         } else {
-            // Permissionless gift: the caller funds, the player receives the bet. WWXRP is
-            // scarce/whale-pass-grade, so its bets stay player-or-approved only.
-            if (currency == CURRENCY_WWXRP) revert NotApproved();
+            // Permissionless gift: the caller funds, the player receives the bet.
             funder = msg.sender;
         }
         _placeDegeneretteBet(
@@ -430,7 +396,6 @@ contract DegenerusGameDegeneretteModule is
     struct ResolveAcc {
         uint256 ethClaimable; // summed ETH claimable across all bets
         uint256 flipMint; // summed FLIP mint across all bets
-        uint256 wwxrpMint; // summed WWXRP mint across all bets
         bool poolFrozen; // prizePoolFrozen snapshot (loaded with the pool locals)
         bool poolLoaded; // running pool locals initialized?
         uint256 runningFuture; // unfrozen: running futurePrizePool
@@ -438,10 +403,18 @@ contract DegenerusGameDegeneretteModule is
         uint128 pendingFuture; // frozen: running pending future pool
     }
 
+    /// @dev Per-bet results kept together to bound stack use across the payout calls.
+    struct BetTotals {
+        uint256 totalPayout;
+        uint256 betLootboxShare;
+        uint256 affiliateBoxShare;
+        uint32 firstResultTraits;
+    }
+
     /// @notice Resolves one or more pending bets for a player.
     /// @dev Permissionless: payouts always credit the bet owner, so any caller may settle
     ///      any player's bets. Requires RNG word to be available. Processes wins by minting
-    ///      tokens or crediting ETH. ETH/FLIP/WWXRP payouts are accumulated across the whole
+    ///      tokens or crediting ETH. ETH/FLIP payouts are accumulated across the whole
     ///      call and flushed once per currency (one mint per currency, one claimable +
     ///      claimablePool write, one prize-pool write); lootbox-share is summed per betId and
     ///      resolved per bet.
@@ -474,7 +447,6 @@ contract DegenerusGameDegeneretteModule is
 
         // Single per-currency flush (additive → byte-identical to the per-spin writes).
         if (acc.flipMint != 0) coin.mintForGame(player, acc.flipMint);
-        if (acc.wwxrpMint != 0) wwxrp.mintPrize(player, acc.wwxrpMint);
         if (acc.ethClaimable != 0) _addClaimableEth(player, acc.ethClaimable);
 
         // Single prize-pool write reflecting the running decrement (only if any ETH
@@ -519,16 +491,14 @@ contract DegenerusGameDegeneretteModule is
 
         // Quest progress for Degenerette bets (slot 1 only) — credited to the funder (the
         // spender earns the quest, e.g. a gifter advancing their own streak).
-        if (currency == CURRENCY_ETH || currency == CURRENCY_FLIP) {
-            quests.handleDegenerette(
-                funder,
-                totalBet,
-                currency == CURRENCY_ETH,
-                currency == CURRENCY_ETH
-                    ? PriceLookupLib.priceForLevel(lvl + 1)
-                    : 0
-            );
-        }
+        quests.handleDegenerette(
+            funder,
+            totalBet,
+            currency == CURRENCY_ETH,
+            currency == CURRENCY_ETH
+                ? PriceLookupLib.priceForLevel(lvl + 1)
+                : 0
+        );
     }
 
     function _placeDegeneretteBetCore(
@@ -540,9 +510,8 @@ contract DegenerusGameDegeneretteModule is
         uint24 lvl,
         bool selfFunded
     ) private returns (uint256 totalBet) {
-        // Single per-currency dispatch: spin cap + min bet together. The explicit
-        // WWXRP arm keeps any unknown currency out of the WWXRP bounds — unsupported
-        // values reject here, the only currency-validation point.
+        // Only ETH and FLIP may fund a player bet. WWXRP remains an internal
+        // reward-spin currency and never enters the bet book.
         uint8 maxSpins;
         uint256 minBet;
         if (currency == CURRENCY_ETH) {
@@ -551,9 +520,6 @@ contract DegenerusGameDegeneretteModule is
         } else if (currency == CURRENCY_FLIP) {
             maxSpins = MAX_SPINS_FLIP;
             minBet = MIN_BET_FLIP;
-        } else if (currency == CURRENCY_WWXRP) {
-            maxSpins = MAX_SPINS_WWXRP;
-            minBet = MIN_BET_WWXRP;
         } else {
             revert UnsupportedCurrency();
         }
@@ -570,8 +536,7 @@ contract DegenerusGameDegeneretteModule is
         // Decay-aware effective quest streak: a streak
         // lapsed past its shields reads 0, so a returning-inactive player can't snapshot a
         // stale-high streak into the bet's activityScore (which scales the ETH ROI and the
-        // lootbox-share EV multiplier). WWXRP bets never sync via handleDegenerette, so a raw
-        // playerQuestStates read would let the zombie streak persist indefinitely.
+        // lootbox-share EV multiplier). This snapshot precedes the new bet's quest credit.
         uint32 questStreak = _effectiveQuestStreak(player);
         uint16 activityScore = uint16(
             _playerActivityScore(player, questStreak, lvl + 1)
@@ -742,9 +707,6 @@ contract DegenerusGameDegeneretteModule is
             // withdrawable afking balance (solvency-preserving) rather than stranded in the pool.
             // Zero-value is a no-op, so a normal token bet pays no extra gas.
             _creditAfkingValue(player, msg.value);
-        } else if (currency == CURRENCY_WWXRP) {
-            wwxrp.burnForGame(player, totalBet);
-            _creditAfkingValue(player, msg.value);
         }
     }
 
@@ -771,6 +733,7 @@ contract DegenerusGameDegeneretteModule is
         uint8 symbol = uint8(packed >> DEGEN_SYMBOL_SHIFT);
         uint8 spinCount = uint8((packed >> DEGEN_COUNT_SHIFT) & MASK_8);
         uint8 currency = uint8((packed >> DEGEN_CURRENCY_SHIFT) & MASK_2);
+        if (currency > CURRENCY_FLIP) revert UnsupportedCurrency();
         uint128 amountPerSpin = uint128(
             (packed >> DEGEN_AMOUNT_SHIFT) & MASK_128
         );
@@ -790,45 +753,11 @@ contract DegenerusGameDegeneretteModule is
 
         delete degeneretteBets[player][betId];
 
-        uint256 drawWord = currency == CURRENCY_WWXRP ? EntropyLib.hash2(rngWord, WWXRP_DRAW_TAG) : rngWord;
-
-        uint256 totalPayout;
-        uint32 firstResultTraits;
-        // Lootbox-share summed across THIS bet's spins → one box per betId.
-        uint256 betLootboxShare;
-        // Box value from high-match (s>=5) ETH spins only → affiliate reward basis.
-        uint256 affiliateBoxShare;
+        BetTotals memory totals;
 
         for (uint8 spinIdx; spinIdx < spinCount; ) {
-            // Spin results are derived deterministically from the lootbox RNG word + index.
-            // Spin 0 uses a shorter preimage (no spinIdx mixed in) to produce a distinct seed.
-            // Scratch-space keccak of the packed preimage — byte-identical layout to the
-            // abi.encodePacked form: rngWord[32] | index[4] | (spinIdx[1], spin>0 only) | salt[1].
-            // index is uint32 (shl 224 lands its 4 bytes at 0x20..0x23); QUICK_PLAY_SALT is bytes1
-            // (left-aligned) so byte(0,·) lifts its single byte into the low lane for mstore8.
-            // Writes only scratch (0x00..0x25); the free-memory pointer at 0x40 is untouched.
-            uint256 resultSeed;
-            if (spinIdx == 0) {
-                assembly ("memory-safe") {
-                    mstore(0x00, drawWord)
-                    mstore(0x20, shl(224, index))
-                    mstore8(0x24, byte(0, QUICK_PLAY_SALT))
-                    resultSeed := keccak256(0x00, 37)
-                }
-            } else {
-                assembly ("memory-safe") {
-                    mstore(0x00, drawWord)
-                    mstore(0x20, shl(224, index))
-                    mstore8(0x24, spinIdx)
-                    mstore8(0x25, byte(0, QUICK_PLAY_SALT))
-                    resultSeed := keccak256(0x00, 38)
-                }
-            }
-            // All bettors choosing this symbol share the same prefix of player tickets.
-            // The house sequence above is shared across symbols; WWXRP has its own draw domain.
-            uint256 spinSeed = EntropyLib.hash4(drawWord, index, symbol, spinIdx);
-            SpinResult memory spin = _rollSpin(spinSeed, resultSeed, symbol, currency);
-            if (spinIdx == 0) firstResultTraits = spin.resultTraits;
+            SpinResult memory spin = _rollBetSpin(rngWord, index, symbol, spinIdx, currency);
+            if (spinIdx == 0) totals.firstResultTraits = spin.resultTraits;
             uint8 s = spin.score;
             uint256 payout = _degenerettePayout(spin, currency, amountPerSpin, activityScore);
 
@@ -858,12 +787,12 @@ contract DegenerusGameDegeneretteModule is
                 // Bounded by maxSpins * amountPerSpin(uint128) * max payout factor —
                 // ~15.7M below 2^256, so the per-spin accumulation cannot overflow.
                 unchecked {
-                    totalPayout += paid;
+                    totals.totalPayout += paid;
                 }
-                betLootboxShare += spinLootboxShare;
+                totals.betLootboxShare += spinLootboxShare;
                 // Only a high-match (s>=5) spin's box value earns the affiliate reward;
-                // the share is 0 for FLIP/WWXRP, so this stays ETH-only implicitly.
-                if (s >= 5) affiliateBoxShare += spinLootboxShare;
+                // the share is 0 for FLIP, so this stays ETH-only implicitly.
+                if (s >= 5) totals.affiliateBoxShare += spinLootboxShare;
             }
 
             // Award sDGNRS from Reward pool on S>=7 ETH bets. Stays per-spin:
@@ -871,23 +800,6 @@ contract DegenerusGameDegeneretteModule is
             // off a stale balance would change the payout.
             if (currency == CURRENCY_ETH && s >= 7) {
                 _awardDegeneretteDgnrs(player, amountPerSpin, s);
-            }
-
-            // First WWXRP jackpot in this level/10 bracket grants the bettor one
-            // whale halfpass (deferred via whalePassClaims, no ETH/pool touch).
-            // The s == 9 check short-circuits first, so non-jackpot spins read no
-            // new state. The award always credits the bet owner `player`.
-            if (
-                s == 9 &&
-                currency == CURRENCY_WWXRP &&
-                amountPerSpin >= MIN_BET_WWXRP
-            ) {
-                uint256 bracket = uint256(level) / 10;
-                if (!wwxrpJackpotWhalePassBracketAwarded[bracket]) {
-                    whalePassClaims[player] += 1;
-                    wwxrpJackpotWhalePassBracketAwarded[bracket] = true;
-                    emit WwxrpJackpotWhalePass(player, bracket);
-                }
             }
 
             unchecked {
@@ -903,14 +815,14 @@ contract DegenerusGameDegeneretteModule is
         // a losing bet pays zero whether resolved or abandoned, so selective resolution
         // earns nothing. The accumulator holds exactly this bet's payout once (added per
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
-        // reads off DegeneretteResolved: totalPayout vs the per-spin DegeneretteResult sums.
-        if (currency == CURRENCY_FLIP && totalPayout != 0) {
+        // reads off DegeneretteResolved: totals.totalPayout vs the per-spin DegeneretteResult sums.
+        if (currency == CURRENCY_FLIP && totals.totalPayout != 0) {
             if (EntropyLib.hash4(rngWord, uint160(player), betId, BET_SURVIVAL_TAG) & 1 == 1) {
-                acc.flipMint += totalPayout;
-                totalPayout *= 2;
+                acc.flipMint += totals.totalPayout;
+                totals.totalPayout *= 2;
             } else {
-                acc.flipMint -= totalPayout;
-                totalPayout = 0;
+                acc.flipMint -= totals.totalPayout;
+                totals.totalPayout = 0;
             }
 
             // Collapse what the player actually receives onto a whole 100-FLIP multiple,
@@ -926,29 +838,29 @@ contract DegenerusGameDegeneretteModule is
             // partitions against the already-committed word and take the split with the
             // most round-ups. Keyed per bet, the outcome is fixed at fulfillment however the
             // bets are batched.
-            uint256 rounded = totalPayout > FlipRoundLib.FLIP_ROUND_THRESHOLD
+            uint256 rounded = totals.totalPayout > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(
-                    totalPayout,
+                    totals.totalPayout,
                     EntropyLib.hash4(rngWord, uint160(player), betId, FLIP_ROUND_TAG)
                 )
-                : FlipRoundLib.floorWholeFlip(totalPayout);
-            if (rounded > totalPayout) {
-                acc.flipMint += rounded - totalPayout;
-            } else if (rounded < totalPayout) {
-                acc.flipMint -= totalPayout - rounded;
+                : FlipRoundLib.floorWholeFlip(totals.totalPayout);
+            if (rounded > totals.totalPayout) {
+                acc.flipMint += rounded - totals.totalPayout;
+            } else if (rounded < totals.totalPayout) {
+                acc.flipMint -= totals.totalPayout - rounded;
             }
-            totalPayout = rounded;
+            totals.totalPayout = rounded;
         }
 
         // One lootbox per betId, on the summed lootbox-share. The box seed binds the immutable
         // betId (keccak'd with the index word) so each of a player's bets at the same index rolls
         // independently; the live lootbox-share is NOT a seed input. Never summed across betIds.
-        if (betLootboxShare > 0) {
+        if (totals.betLootboxShare > 0) {
             // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
             // so the per-box FLIP datum is recoverable.
             _resolveLootboxDirect(
                 player,
-                betLootboxShare,
+                totals.betLootboxShare,
                 EntropyLib.hash2(rngWord, betId),
                 activityScore
             );
@@ -956,8 +868,8 @@ contract DegenerusGameDegeneretteModule is
 
         // Affiliate reward: 7% of the box value from high-match (s>=5) ETH spins, as FLIP
         // to the player's referrer (getReferrer returns VAULT when unreferred).
-        if (affiliateBoxShare > 0) {
-            uint256 refFlip = (affiliateBoxShare * PRICE_COIN_UNIT) /
+        if (totals.affiliateBoxShare > 0) {
+            uint256 refFlip = (totals.affiliateBoxShare * PRICE_COIN_UNIT) /
                 PriceLookupLib.priceForLevel(level + 1);
             coinflip.creditFlip(affiliate.getReferrer(player), (refFlip * 7) / 100);
         }
@@ -966,8 +878,8 @@ contract DegenerusGameDegeneretteModule is
             player,
             betId,
             spinCount,
-            totalPayout,
-            firstResultTraits
+            totals.totalPayout,
+            totals.firstResultTraits
         );
 
         // Biggest-spin record bounty: the claim this bet armed at placement, staked as
@@ -1008,17 +920,16 @@ contract DegenerusGameDegeneretteModule is
     ///
     ///      CURRENCY_FLIP accumulates toward the coin mint (the per-bet survival
     ///      flip in _resolveBet then doubles or zeroes the bet's total
-    ///      before the flush); CURRENCY_WWXRP pays directly via the wwxrp mint.
-    ///      Neither honors the 3-tier split (which applies only to the
+    ///      before the flush). FLIP does not use the 3-tier split (which applies only to the
     ///      lootbox-convertible ETH path).
     /// @param player The player to receive the payout.
-    /// @param currency The currency type (0=ETH, 1=FLIP, 3=WWXRP).
+    /// @param currency The currency type (0=ETH, 1=FLIP).
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
     /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
-    ///        local accumulate here (flushed once by resolveDegeneretteBets); FLIP/WWXRP
+    ///        local accumulate here (flushed once by resolveDegeneretteBets); FLIP
     ///        mint totals accumulate here too.
-    /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP/WWXRP),
+    /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP),
     ///         summed by the caller into the per-bet box.
     /// @return paid What this spin actually pays out across both legs.
     function _distributePayout(
@@ -1098,11 +1009,43 @@ contract DegenerusGameDegeneretteModule is
             unchecked {
                 acc.flipMint += payout;
             }
-        } else if (currency == CURRENCY_WWXRP) {
-            unchecked {
-                acc.wwxrpMint += payout;
+        }
+    }
+
+    /// @dev Manual ETH/FLIP reel and player ticket, with the same shared round seeds.
+    function _rollBetSpin(uint256 rngWord, uint32 index, uint8 symbol, uint8 spinIdx, uint8 currency)
+        private
+        pure
+        returns (SpinResult memory)
+    {
+        // Spin results are derived deterministically from the lootbox RNG word + index.
+        // Spin 0 uses a shorter preimage (no spinIdx mixed in) to produce a distinct seed.
+        // Scratch-space keccak of the packed preimage — byte-identical layout to the
+        // abi.encodePacked form: rngWord[32] | index[4] | (spinIdx[1], spin>0 only) | salt[1].
+        // index is uint32 (shl 224 lands its 4 bytes at 0x20..0x23); QUICK_PLAY_SALT is bytes1
+        // (left-aligned) so byte(0,·) lifts its single byte into the low lane for mstore8.
+        // Writes only scratch (0x00..0x25); the free-memory pointer at 0x40 is untouched.
+        uint256 resultSeed;
+        if (spinIdx == 0) {
+            assembly ("memory-safe") {
+                mstore(0x00, rngWord)
+                mstore(0x20, shl(224, index))
+                mstore8(0x24, byte(0, QUICK_PLAY_SALT))
+                resultSeed := keccak256(0x00, 37)
+            }
+        } else {
+            assembly ("memory-safe") {
+                mstore(0x00, rngWord)
+                mstore(0x20, shl(224, index))
+                mstore8(0x24, spinIdx)
+                mstore8(0x25, byte(0, QUICK_PLAY_SALT))
+                resultSeed := keccak256(0x00, 38)
             }
         }
+        // All bettors choosing this symbol share the same prefix of player tickets.
+        // The house sequence above is shared across symbols.
+        uint256 spinSeed = EntropyLib.hash4(rngWord, index, symbol, spinIdx);
+        return _rollSpin(spinSeed, resultSeed, symbol, currency);
     }
 
     /// @dev Delegates to the boon module to consume the degenerette stake boon in this
@@ -1413,9 +1356,8 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @notice One WWXRP Degenerette spin staking a lootbox WWXRP roll (replaces the flat mint).
-    /// @dev Mirrors a regular WWXRP bet spin: the same 5% reel rig, shared table and 70–130% activity target, and the S==9 bracket whale-halfpass award (deduped
-    ///      one-per-10-level-bracket, shared with ordinary WWXRP jackpots). No pool / ETH touch —
-    ///      the payout is returned and the calling box entry mints its WWXRP lane once.
+    /// @dev Uses the 5% reel rig, shared table and 70–130% activity target. The payout is
+    ///      WWXRP only, returned for the calling box entry to mint its WWXRP lane once.
     function resolveWwxrpSpinFromBox(
         address player,
         uint256 stake,
@@ -1430,22 +1372,10 @@ contract DegenerusGameDegeneretteModule is
         uint128 betAmount = uint128(stake);
 
         SpinResult memory spin = _rollSpin(seed, EntropyLib.hash2(seed, RESULT_TICKET_TAG), symbol, CURRENCY_WWXRP);
-        uint8 s = spin.score;
         uint256 payout = _degenerettePayout(spin, CURRENCY_WWXRP, betAmount, activityScore);
 
         // Returned, not minted: the caller sums every WWXRP lane in the entry and mints once.
         wwxrpOut = payout;
-
-        // S==9 jackpot grants the bracket's one whale halfpass (identical to a regular
-        // WWXRP bet jackpot; the per-bracket flag is shared, so still one award per bracket).
-        if (s == 9 && betAmount >= MIN_BET_WWXRP) {
-            uint256 bracket = uint256(level) / 10;
-            if (!wwxrpJackpotWhalePassBracketAwarded[bracket]) {
-                whalePassClaims[player] += 1;
-                wwxrpJackpotWhalePassBracketAwarded[bracket] = true;
-                emit WwxrpJackpotWhalePass(player, bracket);
-            }
-        }
 
         // One self-contained record: the single reel + WWXRP-minted payout (no ETH split).
         emit BoxSpin(

@@ -503,6 +503,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         for (uint8 i; i < 2; ++i) {
             uint8 symbol = i == 0 ? 0 : 6;
             vm.prank(bettor); game.placeDegeneretteBet(address(0), 1, 100 ether, 1, symbol);
+            vm.expectRevert(bytes4(keccak256("UnsupportedCurrency()")));
             vm.prank(bettor); game.placeDegeneretteBet(address(0), 3, 1 ether, 1, symbol);
         }
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 1);
