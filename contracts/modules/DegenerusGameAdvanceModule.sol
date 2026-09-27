@@ -184,14 +184,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     ///      after STAGE_JACKPOT_DAILY_STARTED priced it and ahead of the coin+tickets stage,
     ///      so the 305-winner ETH leg and the 128-winner early-bird leg never share a tx.
     uint8 private constant STAGE_JACKPOT_EARLY_BIRD_TICKETS = 14;
-    /// @dev The ticket leg of a purchase-phase daily, paid from the advance after the one
-    ///      that priced it (STAGE_PURCHASE_DAILY) on the same recorded word; seals the day.
+    /// @dev The purchase daily's ticket leg, after its pricing and battle stages on the same
+    ///      recorded word; seals the day.
     uint8 private constant STAGE_PURCHASE_DAILY_TICKETS = 15;
-    /// @dev The fill draw of a jackpot-phase daily, paid on the advance after
+    /// @dev The jackpot battle of a jackpot-phase daily, paid on the advance after
     ///      STAGE_JACKPOT_DAILY_STARTED latched it (after the day-1 early-bird stage) and ahead
-    ///      of the coin+tickets stage that seals the day, so the fill battle and the 96-winner
+    ///      of the coin+tickets stage that seals the day, so the jackpot battle and the 96-winner
     ///      ticket leg never share a tx.
-    uint8 private constant STAGE_JACKPOT_FILL = 16;
+    uint8 private constant STAGE_JACKPOT_BATTLE = 16;
+    /// @dev Purchase-phase jackpot battle, after the daily ETH/trait draw and before tickets. Keeping
+    ///      this separate prevents fresh-RNG housekeeping and the battle sharing a transaction.
+    uint8 private constant STAGE_PURCHASE_BATTLE = 17;
     // No deferred-composition stage is left: the subscriber STAGE is entry-gated on
     // !rngLockedFlag, so it can never complete in a tx that also has a buffered word /
     // pending backfill.
@@ -272,9 +275,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
     bytes32 private constant SKIM_BPS_TAG = keccak256("degenerus.skim.bps");
     bytes32 private constant SKIM_VARIANCE_TAG = keccak256("degenerus.skim.variance");
-    /// @dev Salt for level 1's fill-draw word, keeping its entropy apart from the same day's
+    /// @dev Salt for level 1's jackpot battle word, keeping its entropy apart from the same day's
     ///      trait-matched FLIP draw.
-    bytes32 private constant LEVEL_ONE_FILL_SALT = keccak256("BONUS_TRAITS");
+    bytes32 private constant LEVEL_ONE_BATTLE_SALT = keccak256("BONUS_TRAITS");
     uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
     /// @dev The same floor for the craps table, set to the reserve the never-gated daily word
     ///      actually needs rather than a comfortable multiple of it. At MIDDAY_RNG_BILLED_GAS,
@@ -691,8 +694,24 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
 
             // === PURCHASE PHASE ===
             if (!inJackpot) {
+                // The battle runs alone on the committed word. Its inputs remain frozen by
+                // the held lock, including across midnight; rngGate's recorded-word return
+                // prevents fresh-RNG housekeeping from running again. Clear before the call
+                // (a revert restores the latch), and seal only when no ticket leg remains.
+                if (_jackpotBattlePending()) {
+                    dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
+                    uint256 jackpotBattleWord = purchaseLevel == 1
+                        ? uint256(keccak256(abi.encodePacked(rngWord, LEVEL_ONE_BATTLE_SALT)))
+                        : rngWord;
+                    _payPurchaseJackpotBattle(purchaseLevel, jackpotBattleWord);
+                    if (!_purchaseTicketLegPending()) _sealPurchaseDay(purchaseLevel, day, wallDay, psd);
+                    stage = STAGE_PURCHASE_BATTLE;
+                    break;
+                }
+
                 // Ticket leg of the purchase-phase daily: the stage after the one that
-                // priced it, on the same recorded word. The lock has held since the request,
+                // played its jackpot battle (or priced it when none was due), on the same word.
+                // The lock has held since the request,
                 // so the purchase level is still un-promoted and nothing sits between the
                 // halves. This stage seals the day, so the last-purchase latch it may set
                 // never coexists with a held lock across transactions.
@@ -713,14 +732,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                         // module's OnlyGame check.
                         IDegenerusGame(address(this)).emitDailyWinningTraits(rngWord);
                         _payDailyCoinJackpot(1, rngWord, 1, 1);
-                        uint256 saltedRng = uint256(keccak256(abi.encodePacked(rngWord, LEVEL_ONE_FILL_SALT)));
-                        _payDailyFutureCoinJackpot(1, saltedRng);
                     } else {
                         payDailyJackpot(false, purchaseLevel, rngWord);
-                        _payDailyFutureCoinJackpot(purchaseLevel, rngWord);
                     }
-                    // A priced ticket leg seals the day from its own stage instead.
-                    if (!_purchaseTicketLegPending()) _sealPurchaseDay(purchaseLevel, day, wallDay, psd);
+                    // A zero previous pool funds no jackpot battle. Otherwise defer the complete draw
+                    // (selection, boards, battle, credits and jackpots) to its own advance.
+                    if (levelPrizePool[purchaseLevel - 1] != 0) dailyTicketBudgetsPacked |= _JACKPOT_BATTLE_PENDING;
+                    if (!_jackpotBattlePending() && !_purchaseTicketLegPending()) {
+                        _sealPurchaseDay(purchaseLevel, day, wallDay, psd);
+                    }
                     stage = STAGE_PURCHASE_DAILY;
                     break;
                 }
@@ -776,11 +796,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                 break;
             }
 
-            // Fill draw of the daily: its own stage on the same recorded word, ahead of the
+            // Jackpot battle of the daily: its own stage on the same recorded word, ahead of the
             // coin+tickets stage that seals the day. The lock has held since the request.
-            if (_jackpotFillPending()) {
-                _payJackpotFill(rngWord);
-                stage = STAGE_JACKPOT_FILL;
+            if (_jackpotBattlePending()) {
+                _payJackpotPhaseBattle(rngWord);
+                stage = STAGE_JACKPOT_BATTLE;
                 break;
             }
 
@@ -1364,11 +1384,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         _unlockRng(day);
     }
 
-    /// @dev Play the pending jackpot-day fill draw via jackpot module delegatecall.
+    /// @dev Play the pending jackpot-day jackpot battle via jackpot module delegatecall.
     /// @param randWord The day's recorded VRF word.
-    function _payJackpotFill(uint256 randWord) private {
+    function _payJackpotPhaseBattle(uint256 randWord) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
-            .delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payJackpotFill.selector, randWord));
+            .delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.payJackpotPhaseBattle.selector, randWord));
         if (!ok) _revertDelegate(data);
     }
 
@@ -1398,15 +1418,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @dev Pay the purchase-day FLIP fill draw over unminted future levels via jackpot module
+    /// @dev Pay the purchase-day FLIP jackpot battle over unminted future levels via jackpot module
     ///      delegatecall: the same daily coin budget, played as one craps battle among wallets
     ///      drawn from the far-future queues of [lvl + 1, lvl + 99].
     /// @param lvl Purchase level.
     /// @param randWord VRF random word for level picks and walks.
-    function _payDailyFutureCoinJackpot(uint24 lvl, uint256 randWord) private {
+    function _payPurchaseJackpotBattle(uint24 lvl, uint256 randWord) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
             .delegatecall(
-                abi.encodeWithSelector(IDegenerusGameJackpotModule.payDailyFutureFlipJackpot.selector, lvl, randWord)
+                abi.encodeWithSelector(IDegenerusGameJackpotModule.payPurchaseJackpotBattle.selector, lvl, randWord)
             );
         if (!ok) _revertDelegate(data);
     }

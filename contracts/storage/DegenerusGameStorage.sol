@@ -588,15 +588,16 @@ abstract contract DegenerusGameStorage {
     uint48 internal lastVrfProcessedTimestamp;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
-    ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)] [fillPending (1 bit @ 72)]
+    ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)] [battlePending (1 bit @ 72)]
     ///              [unused (71 bits @ 73)] [earlyBirdEntries (64 bits @ 144)]
     ///              [purchaseEntries (48 bits @ 208)]
     ///      Jackpot phase: set by the ETH stage; on the early-bird day the early-bird stage
-    ///      consumes the earlyBird field and clears it; the fill stage clears fillPending; the
+    ///      consumes the earlyBird field and clears it; the battle stage clears battlePending; the
     ///      coin+tickets stage consumes dailyEntries and zeroes the word. Purchase phase: the
     ///      daily prices its ticket leg into the top field and the purchase ticket stage consumes
-    ///      and clears it. The two phases never hold fields at once, and every predicate masks
-    ///      its own field.
+    ///      and clears it after the purchase battle stage consumes battlePending. Both phases use
+    ///      the same battle bit and keep the RNG lock until their final stage. Every predicate
+    ///      masks its own field.
     uint256 internal dailyTicketBudgetsPacked;
 
     // =========================================================================
@@ -1010,14 +1011,13 @@ abstract contract DegenerusGameStorage {
         return uint64(dailyTicketBudgetsPacked >> 144) != 0;
     }
 
-    /// @dev The fill-pending bit of dailyTicketBudgetsPacked (see its layout).
-    uint256 internal constant _JACKPOT_FILL_PENDING = uint256(1) << 72;
+    /// @dev The battle-pending bit of dailyTicketBudgetsPacked (see its layout).
+    uint256 internal constant _JACKPOT_BATTLE_PENDING = uint256(1) << 72;
 
-    /// @dev True while the fill draw of a jackpot-phase daily waits for its own advance stage:
-    ///      the ETH stage latched it, and the coin+tickets stage that seals the day is not
-    ///      reached until the fill stage clears it.
-    function _jackpotFillPending() internal view returns (bool) {
-        return (dailyTicketBudgetsPacked & _JACKPOT_FILL_PENDING) != 0;
+    /// @dev True while either phase's jackpot battle waits for its own advance. The first daily
+    ///      stage latches it; the battle stage clears it before any ticket stage seals the day.
+    function _jackpotBattlePending() internal view returns (bool) {
+        return (dailyTicketBudgetsPacked & _JACKPOT_BATTLE_PENDING) != 0;
     }
 
     /// @dev True while the ticket leg of a purchase-phase daily waits for its own advance

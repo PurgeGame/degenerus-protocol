@@ -38,9 +38,9 @@ describe("JackpotNearFutureCoinUnits — trait-matched FLIP share plan", functio
     expect(draw).to.include("(units / cap) * FlipRoundLib.FLIP_ROUND_UNIT");
     expect(draw).to.match(/for\s*\(uint256 i;\s*i\s*<\s*cap;/);
     expect(draw).to.include("uint8 traitIdx = uint8(i & 3)");
-    // The daily fill draw's craps battle is a separate call; this draw never touches CrapsBattle.
+    // The daily jackpot battle is a separate call; this draw never touches CrapsBattle.
     expect(draw).not.to.include("ICrapsCoinDrawSeat");
-    expect(draw).not.to.include("_finishCoinDraw");
+    expect(draw).not.to.include("_finishJackpotBattle");
   });
 
   it("pays one JackpotFlipWin per drawn winner and one creditFlipBatch for the whole cap", function () {

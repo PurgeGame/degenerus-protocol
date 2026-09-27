@@ -88,7 +88,7 @@
 // Heavy MC + lifecycle drive — runs ONLY under `npm run test:stat`.
 //
 // The purchase-day draw has no second trait draw over [2, 5]. The day's FLIP
-// budget plays as a separate future-queue fill draw (its own closed craps
+// budget plays as a separate future-queue jackpot battle (its own closed craps
 // battle), and level 1's own trait-matched draw pays up to COIN_DRAW_SHARES
 // (50) equal FLIP shares with no craps split. This historical 50-trait-pull
 // measurement does not apply to either path. Current empty-pull conservation
@@ -244,7 +244,7 @@ function reverseEngineerCallBudget(callEvents, cap) {
 describe("STAT-03 — empty-bucket skip rate and cumulative underspend over N>=50 lifecycle calls", function () {
   this.timeout(1_800_000); // 30 min — heavy player setup x N lifecycle iterations
 
-  it.skip("legacy 50-trait-pull skip rate (superseded by the Craps/FLIP split and future fill draw)", async function () {
+  it.skip("legacy 50-trait-pull skip rate (superseded by the Craps/FLIP split and future jackpot battle)", async function () {
     const fixture = await loadFixture(deployFullProtocol);
     const { game, deployer, advanceModule, jackpotModule, mockVRF } = fixture;
 

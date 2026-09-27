@@ -6,12 +6,12 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {CoinDrawBattle} from "../../contracts/CoinDrawBattle.sol";
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
+import {CrapsPreferenceStore} from "../craps/CrapsPreferenceStore.sol";
 import {CrapsViews} from "../craps/CrapsViews.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
-/// @dev The production jackpot module in its own storage, plus seeders and the two Game reads the
-///      real CoinDrawBattle makes back into the GAME address (extsload, playerActivityScore). NO
+/// @dev The production jackpot module in its own storage, plus seeders and test state readers. NO
 ///      production logic is overridden.
 contract FlipDrawHarness is DegenerusGameJackpotModule, BucketSeed {
     /// @dev Mirror of `_calcDailyCoinBudget` solved for the pool at storage level 0 (0.01 ETH):
@@ -55,7 +55,7 @@ contract FlipDrawHarness is DegenerusGameJackpotModule, BucketSeed {
         return _simulatedDayIndex();
     }
 
-    /// @dev The real CoinDrawBattle reads the Game's storage (daily words) through this.
+    /// @dev The real JackpotBattle reads the Game's storage (daily words) through this.
     function extsload(bytes32 slot) external view returns (bytes32 value) {
         assembly {
             value := sload(slot)
@@ -90,10 +90,8 @@ contract FlipDrawCoinflipDouble {
     }
 }
 
-/// @dev The table's double: records any call it receives. The trait-matched FLIP draw and the
-///      fill draw never reach CrapsBattle any more, so every test here expects both counters to
-///      stay zero.
-contract NoCrapsCallsDouble {
+/// @dev The table's double: records any call it receives. Neither draw seats a ticket or directly banks passes; qualifying battle winners use rewardJackpotBattle.
+contract NoCrapsCallsDouble is CrapsPreferenceStore {
     uint256 public creditPassesCalls;
     uint256 public vaultCompCalls;
 
@@ -107,12 +105,25 @@ contract NoCrapsCallsDouble {
     }
 }
 
-/// @title LevelOneFlipDraw — level 1's trait-matched FLIP draw and the daily fill draw
+/// @dev Controlled battle outcome to test the production Game's award handoff at each boundary.
+contract JackpotBattleResultDouble {
+    uint256 public score;
+    function setScore(uint256 s) external { score = s; }
+    function resolve(uint24, uint256[] calldata entrants, uint256, uint256) external view
+        returns (address[] memory players, uint256[] memory owed, address winner, uint256 peakFlip, uint256 resultScore)
+    {
+        players = new address[](1); owed = new uint256[](1);
+        winner = address(uint160(entrants[0])); players[0] = winner;
+        return (players, owed, winner, score * 300 / 10_000, score);
+    }
+}
+
+/// @title LevelOneFlipDraw — level 1's trait-matched FLIP draw and the daily jackpot battle
 /// @notice `payDailyFlipJackpot` pays 0.25% of the previous level's recorded pool as up to 50
 ///         equal whole-100-FLIP shares to trait-matched level-1 ticket holders on the day's main
 ///         board — FLIP only, no craps seat, reservation or pass ever touches CrapsBattle. The
-///         fill draw (`payDailyFutureFlipJackpot`) still plays the same budget as one closed
-///         CoinDrawBattle over far-future wallets.
+///         jackpot battle (`payPurchaseJackpotBattle`) still plays the same budget as one closed
+///         JackpotBattle over far-future wallets.
 contract LevelOneFlipDrawTest is Test {
     FlipDrawHarness internal h;
     FlipDrawCoinflipDouble internal coinflip;
@@ -125,8 +136,8 @@ contract LevelOneFlipDrawTest is Test {
 
     bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
     bytes32 internal constant BATTLE_RUN_SIG =
-        keccak256("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
-    bytes32 internal constant BATTLE_POT_SIG = keccak256("CoinDrawBattlePot(uint24,address,uint256)");
+        keccak256("JackpotBattleRun(uint24,address,uint256,uint256,uint256,uint256,uint32)");
+    bytes32 internal constant BATTLE_POT_SIG = keccak256("JackpotBattlePot(uint24,address,uint256)");
     bytes32 internal constant CRAPS_PASSES_CREDITED_SIG = keccak256("CrapsPassesCredited(address,bool,uint256)");
     bytes32 internal constant CRAPS_SLIP_PLACED_SIG = keccak256("CrapsSlipPlaced(address,uint256)");
 
@@ -218,7 +229,7 @@ contract LevelOneFlipDrawTest is Test {
         assertLt(coinflip.total(), CAP_MAX * amount, "the skipped shares were minted anyway");
     }
 
-    /// @dev The real CrapsBattle at CRAPS never sees a call, never emits a pass credit or a slip
+    /// @dev The real CrapsBattle at CRAPS sees only preference reads, never emits a pass credit or a slip
     ///      placement, and never logs anything at all — the trait-matched draw is FLIP-only.
     function test_realCrapsTableStaysUntouched() public {
         vm.etch(ContractAddresses.CRAPS, address(new CrapsViews()).code);
@@ -252,14 +263,14 @@ contract LevelOneFlipDrawTest is Test {
         assertEq(craps.vaultCompCalls(), 0, "the draw seated or reserved a craps window");
     }
 
-    // ── The daily fill draw ─────────────────────────────────────────────────
+    // ── The daily jackpot battle ─────────────────────────────────────────────────
 
-    /// @dev The fill draw's jackpot module etched onto GAME (CoinDrawBattle's `resolve` is
-    ///      GAME-gated, so the caller must sit at that address), plus the real CoinDrawBattle at
-    ///      COIN_DRAW_BATTLE. CRAPS stays the double from `setUp` — the fill draw never calls it.
+    /// @dev The jackpot battle's jackpot module etched onto GAME (JackpotBattle's `resolve` is
+    ///      GAME-gated, so the caller must sit at that address), plus the real JackpotBattle at
+    ///      JACKPOT_BATTLE. CRAPS stays the double from `setUp` — preferences and award requests use the double.
     function _fillReal() internal returns (FlipDrawHarness g) {
         vm.etch(ContractAddresses.GAME, address(new FlipDrawHarness()).code);
-        vm.etch(ContractAddresses.COIN_DRAW_BATTLE, address(new CoinDrawBattle()).code);
+        vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattle()).code);
         g = FlipDrawHarness(ContractAddresses.GAME);
     }
 
@@ -276,48 +287,66 @@ contract LevelOneFlipDrawTest is Test {
         }
     }
 
-    /// @dev Fill draw: a full future walks one level (64 seeded wallets) to its 50-entrant cap in
-    ///      a single pick, so the battle runs exactly FILL_BATTLE_ENTRANTS wallets, all from
-    ///      COIN_DRAW_BATTLE — never CrapsBattle — and the Game credits exactly what the battle's
+    /// @dev Jackpot battle: a full future walks one level (64 seeded wallets) to its 50-entrant cap in
+    ///      a single pick, so the battle runs exactly JACKPOT_BATTLE_ENTRANTS wallets, all from
+    ///      JACKPOT_BATTLE, reading preferences from CrapsBattle, and the Game credits exactly what the battle's
     ///      own events say it owes, in one batch.
-    function test_theFillDrawRunsOneBattleOverItsWalkedWallets() public {
+    function test_theJackpotBattleRunsOverItsWalkedWallets() public {
         FlipDrawHarness g = _fillReal();
         for (uint24 d = 2; d <= 100; ++d) g.seedFarQueue(d, 64, uint160(uint256(d) << 32));
         g.seedBudgetFor(LVL, 125_000 ether);
         vm.recordLogs();
-        g.payDailyFutureFlipJackpot(LVL, WORD);
+        g.payPurchaseJackpotBattle(LVL, WORD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         uint256 runs = _countSig(logs, BATTLE_RUN_SIG);
         assertEq(runs, 50, "one level alone should have filled all 50 entrants");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == BATTLE_RUN_SIG || logs[i].topics[0] == BATTLE_POT_SIG) {
-                assertEq(logs[i].emitter, ContractAddresses.COIN_DRAW_BATTLE, "battle event off the battle contract");
+                assertEq(logs[i].emitter, ContractAddresses.JACKPOT_BATTLE, "battle event off the battle contract");
             }
         }
-        assertEq(craps.vaultCompCalls(), 0, "the fill draw touched the craps table");
-        assertEq(craps.creditPassesCalls(), 0, "the fill draw touched the craps table");
-        assertEq(coinflip.batches(), 1, "the fill draw's credit was not one batch");
+        assertEq(craps.vaultCompCalls(), 0, "the jackpot battle touched the craps table");
+        assertEq(craps.creditPassesCalls(), 0, "the jackpot battle touched the craps table");
+        assertEq(coinflip.batches(), 1, "the jackpot battle's credit was not one batch");
         assertEq(coinflip.total(), _battleTotal(logs), "credited FLIP does not match the battle's own events");
     }
 
+    function test_fillDrawForwardsOnlyQualifiedWinnerToAwards() public {
+        FlipDrawHarness g = _fillReal();
+        address player = address(0xBEEF);
+        for (uint24 d = 2; d <= 100; ++d) g.seedFarQueue(d, 1, uint160(player) - 1);
+        g.seedBudgetFor(LVL, 125_000 ether);
+        vm.etch(ContractAddresses.JACKPOT_BATTLE, type(JackpotBattleResultDouble).runtimeCode);
+        JackpotBattleResultDouble result = JackpotBattleResultDouble(ContractAddresses.JACKPOT_BATTLE);
+        bytes32 key = keccak256(abi.encode(WORD, LVL, keccak256("far-future-coin")));
+        uint256[4] memory scores = [uint256(249_999), 250_000, 1_000_000, 1_200_000];
+        for (uint256 i; i < scores.length; ++i) {
+            result.setScore(scores[i]);
+            bytes memory callData = abi.encodeWithSignature("rewardJackpotBattle(bytes32,address,uint256,uint256)",
+                key, player, scores[i] * 300 / 10_000, scores[i]);
+            vm.expectCall(ContractAddresses.CRAPS, callData, uint64(i == 0 ? 0 : 1));
+            g.payPurchaseJackpotBattle(LVL, WORD);
+        }
+    }
+
     /// @dev A thin future (two wallets on every level) still runs the battle over whatever it
-    ///      walked — bounded by FILL_BATTLE_ENTRANTS, still never touching CrapsBattle, still
+    ///      walked — bounded by JACKPOT_BATTLE_ENTRANTS, still
     ///      crediting exactly the battle's own payout.
-    function test_aThinFillDrawStillRunsTheBattle() public {
+    function test_aThinJackpotBattleStillRuns() public {
         FlipDrawHarness g = _fillReal();
         for (uint24 d = 2; d <= 100; ++d) g.seedFarQueue(d, 2, uint160(uint256(d) << 32));
         g.seedBudgetFor(LVL, 125_000 ether);
         vm.recordLogs();
-        g.payDailyFutureFlipJackpot(LVL, WORD);
+        g.payPurchaseJackpotBattle(LVL, WORD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         uint256 runs = _countSig(logs, BATTLE_RUN_SIG);
         assertGt(runs, 0, "a thin future still found wallets to draw");
-        assertLe(runs, 50, "more runs than FILL_BATTLE_ENTRANTS");
-        assertEq(craps.vaultCompCalls(), 0, "the fill draw touched the craps table");
-        assertEq(craps.creditPassesCalls(), 0, "the fill draw touched the craps table");
-        assertEq(coinflip.batches(), 1, "the fill draw's credit was not one batch");
+        assertLe(runs, 50, "more runs than JACKPOT_BATTLE_ENTRANTS");
+        assertEq(craps.vaultCompCalls(), 0, "the jackpot battle touched the craps table");
+        assertEq(craps.creditPassesCalls(), 0, "the jackpot battle touched the craps table");
+        assertEq(coinflip.batches(), 1, "the jackpot battle's credit was not one batch");
         assertEq(coinflip.total(), _battleTotal(logs), "credited FLIP does not match the battle's own events");
     }
 }

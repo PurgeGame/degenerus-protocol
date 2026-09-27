@@ -864,6 +864,24 @@ contract Craps {
         }
     }
 
+    /// @dev THE SCHEDULED SHOOTER-PROFIT TERMS, indexed by how many of the ten chips the ticket
+    ///      placed itself. The low byte is the eligible-shooter percentage and the byte above is
+    ///      the percent added to an eligible shooter's PROFIT:
+    ///
+    ///        placed       0       1       2       3       4       5       6       7
+    ///        chance      15%     14%     12%     11%      9%      8%      6%      5%
+    ///        uplift     +32%    +29%    +29%    +29%    +29%    +24%    +23%    +18%
+    ///
+    ///      The uplifts sit one to two points under what a field with no rotation would carry:
+    ///      the difference funds the rotating shooter's +5% at forty seats.
+    ///
+    ///      Packed into one constant so the continuum costs one indexed shift instead of eight
+    ///      branches. Scheduled windows and the jackpot battle use this row: custom battles always pass
+    ///      zero and play the bare engine, while still accepting every placed-chip count.
+    function _shooterBoostTerms(uint256 placed) internal pure returns (uint256) {
+        return (0x1205170618081D091D0B1D0C1D0E200F >> (placed << 4)) & 0xFFFF;
+    }
+
     /// @dev Where the dark side sits in a packed board: ten three-bit legs, the don't-pass leg
     ///      last, so a whole legal board occupies thirty bits.
     uint256 internal constant _CHIP_DONT_SHIFT = 27;

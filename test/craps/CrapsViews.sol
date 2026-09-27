@@ -279,8 +279,13 @@ contract CrapsViews is CrapsBattle {
     ///      passes to sDGNRS and the Vault, which is production state every suite inherits — so a
     ///      test whose claim is about the FLIP leg of the funding ladder says here that the bank
     ///      is empty, rather than leaving the reader to wonder which leg actually paid.
+    function passCreditsSlot() external pure returns (uint256 slot) {
+        assembly ("memory-safe") { slot := _passCredits.slot }
+    }
+
     function setPassCredits(address player, uint32 normal, uint32 high) external {
-        _passCredits[player] = uint256(normal) | (uint256(high) << _PASS_HIGH_SHIFT);
+        _passCredits[player] = (_passCredits[player] & ~uint256(type(uint64).max))
+            | uint256(normal) | (uint256(high) << _PASS_HIGH_SHIFT);
     }
 
     /// @dev The deployment seed, so a suite can state the figure rather than repeat the literal.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -62,6 +63,31 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     }
 
     // ==================== Tests ====================
+
+    function test_PreferredBoardFrozenAcrossPendingBattleAndMidnight() public {
+        vm.prank(buyer); crapsBattle.setPreferredBoard(3);
+        uint24 day = _driveToJackpotPendingSet();
+        _assertPreferenceFrozen();
+        vm.warp(block.timestamp + 2 days + 1);
+        _assertPreferenceFrozen();
+        _drainUntilUnlocked();
+        assertFalse(game.rngLocked());
+        vm.prank(buyer); crapsBattle.setPreferredBoard(0);
+        assertEq(crapsBattle.preferredBoardOf(buyer), 0);
+        // The unprocessed wall day must not inherit the revealed pending-battle word.
+        assertEq(game.rngWordForDay(day + 1), 0);
+    }
+
+    function _assertPreferenceFrozen() private {
+        assertTrue(game.rngLocked());
+        uint32 saved = crapsBattle.preferredBoardOf(buyer);
+        vm.prank(buyer); vm.expectRevert(CrapsBattle.BetLocked.selector);
+        crapsBattle.setPreferredBoard(saved == 0 ? 3 : 0);
+        // A fresh wallet cannot initialize even the random board during the commitment.
+        vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattle.BetLocked.selector);
+        crapsBattle.setPreferredBoard(0);
+    }
+
 
     function testControl_PendingCompletedSameDay_FreshWordNextDay() public {
         uint24 D = _driveToJackpotPendingSet();
@@ -233,6 +259,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     /// @dev Fulfill the latest pending VRF request with a UNIQUE word per request
     ///      (so distinct days legitimately get distinct words — keyed on reqId+nonce).
     function _fulfillVrf() internal {
+        if (game.rngLocked()) _assertPreferenceFrozen();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId == 0 || reqId == lastFulfilledReqId) return;
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -244,6 +271,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         uint256 w = uint256(keccak256(abi.encode("v60-rngreuse-vrf", reqId, vrfNonce)));
         if (w == 0) w = 1;
         mockVRF.fulfillRandomWords(reqId, w);
+        if (game.rngLocked()) _assertPreferenceFrozen();
         lastFulfilledReqId = reqId;
     }
 

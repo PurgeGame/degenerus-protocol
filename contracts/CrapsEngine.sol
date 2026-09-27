@@ -2,16 +2,24 @@
 pragma solidity 0.8.34;
 
 import {Craps} from "./Craps.sol";
+import {CrapsCustomTerms} from "./CrapsCustomTerms.sol";
 
 /// @title CrapsEngine
-/// @notice The craps table's dice, deployed on their own. Two pure entry points return a
-///         settled run from a slip's packed chips and terms; the table uses `settleRanked`.
+/// @notice The table's stateless computations: custom-definition validation and two pure
+///         dice entry points. The table uses `settleRanked` to resolve runs.
 /// @dev Holds no storage, takes no constructor arguments, has no owner and no upgrade path.
 ///      `CrapsBattle` reaches it by STATICCALL at the pinned `ContractAddresses.CRAPS_ENGINE`,
 ///      which is what keeps the table itself under the EIP-170 ceiling: the engine's whole
 ///      closure — board, scatter, shooter loop — compiles here and nowhere else. Anyone may call
-///      it; it can only compute.
-contract CrapsEngine is Craps {
+///      it; it can only compute. Custom validation also reads the close-time deadline against the clock.
+contract CrapsEngine is Craps, CrapsCustomTerms {
+    /// @notice Validate and pack a custom table's immutable definition.
+    function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits,
+        uint16 minScore, uint40 closeTime, bool multiEntry, uint16 highRollerMult) external view returns (uint256)
+    {
+        return _customDefinition(played, bankMult, goalMult, stakeUnits, minScore, closeTime, multiEntry, highRollerMult);
+    }
+
     /// @notice Play one slip to its stop.
     /// @param packedChips  The slip's named chips, ten three-bit legs, the dark side last.
     /// @param chipFlip     Whole FLIP per chip at this slot.

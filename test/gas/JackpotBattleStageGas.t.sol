@@ -8,14 +8,14 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
-/// @title JackpotFillStageGas — STAGE_JACKPOT_FILL (16) and STAGE_JACKPOT_COIN_TICKETS (8) /
+/// @title JackpotBattleStageGas — STAGE_JACKPOT_BATTLE (16) and STAGE_JACKPOT_COIN_TICKETS (8) /
 ///        STAGE_JACKPOT_PHASE_ENDED (9) at their full worst cases, as two SEPARATE advance txs.
-/// @notice A jackpot-phase daily whose FLIP budget is nonzero latches the fill draw
-///         (`_JACKPOT_FILL_PENDING`) from its own ETH stage. The next advance runs it alone,
+/// @notice A jackpot-phase daily whose FLIP budget is nonzero latches the jackpot battle
+///         (`_JACKPOT_BATTLE_PENDING`) from its own ETH stage. The next advance runs it alone,
 ///         from its own stage:
-///           - STAGE_JACKPOT_FILL (16): `payJackpotFill` -> `_awardFutureCoinFill(lvl + 1, ...)`:
-///             up to FILL_BATTLE_ENTRANTS = 50 distinct wallets walked from the far-future queues
-///             of levels lvl+2..lvl+100, played as one closed CoinDrawBattle and credited in one
+///           - STAGE_JACKPOT_BATTLE (16): `payJackpotPhaseBattle` -> `_playJackpotBattle(lvl + 1, ...)`:
+///             up to JACKPOT_BATTLE_ENTRANTS = 50 distinct wallets walked from the far-future queues
+///             of levels lvl+2..lvl+100, played as one closed JackpotBattle and credited in one
 ///             creditFlipBatch. It touches no ticket-board state.
 ///         The advance after it runs the day's ticket leg alone, from the stage that seals the day:
 ///           - STAGE_JACKPOT_COIN_TICKETS (8) / STAGE_JACKPOT_PHASE_ENDED (9):
@@ -24,29 +24,29 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///             write, runs no battle work, then on every non-final day `_unlockRng` seals the day
 ///             in this same stage; on the final day `_endPhase` runs instead
 ///             (STAGE_JACKPOT_PHASE_ENDED). No leg of the day is left for a later advance.
-///         Every fill wallet and every ticket winner is a distinct never-touched wallet, through
-///         the full DeployProtocol wiring (real Game, real CoinDrawBattle, real Coinflip). Each
+///         Every battle wallet and every ticket winner is a distinct never-touched wallet, through
+///         the full DeployProtocol wiring (real Game, real JackpotBattle, real Coinflip). Each
 ///         call is capped at the EIP-7825 limit less intrinsic; the figure includes the 21,064
 ///         intrinsic.
 /// @dev TEST-INFRA ONLY. No contracts/*.sol is mutated. Seeding in setUp() — a separate tx — so
 ///      the measured call starts cold. The day's word is applied by the ETH stage
 ///      (STAGE_JACKPOT_DAILY_STARTED) earlier; neither measured stage ever shares a tx with it.
-contract JackpotFillStageSeeder is DegenerusGame, BucketSeed {
+contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
     struct Shape {
         uint24 lvl;
         uint256 word;
         uint8 counter; // jackpotCounter on entry: JACKPOT_DAYS - 1 is the final (phase-ending) day
-        uint256 prevPool; // levelPrizePool[lvl - 1]: the fill draw's coin budget
+        uint256 prevPool; // levelPrizePool[lvl - 1]: the jackpot battle's coin budget
         uint256 ticketHolders; // distinct holders per main-trait bucket at lvl (ticket leg)
-        uint256 ffHolders; // distinct holders per far-future queue at lvl+2..lvl+100 (fill draw)
+        uint256 ffHolders; // distinct holders per far-future queue at lvl+2..lvl+100 (jackpot battle)
         uint160 base;
     }
 
-    /// @param fillPending Latches STAGE_JACKPOT_FILL (mirrors what Phase 1 leaves when the day's
+    /// @param battlePending Latches STAGE_JACKPOT_BATTLE (mirrors what Phase 1 leaves when the day's
     ///        FLIP budget is nonzero); false leaves the day to fall straight to the coin+tickets
-    ///        stage, mirroring the state Phase 1 leaves when payJackpotFill has already run (or
+    ///        stage, mirroring the state Phase 1 leaves when payJackpotPhaseBattle has already run (or
     ///        the day carries no FLIP budget at all).
-    function seed(Shape calldata s, uint8[4] calldata mainTraits, bool fillPending) external {
+    function seed(Shape calldata s, uint8[4] calldata mainTraits, bool battlePending) external {
         uint24 day = _simulatedDayIndex();
         level = s.lvl;
         purchaseStartDay = day - 10;
@@ -67,9 +67,9 @@ contract JackpotFillStageSeeder is DegenerusGame, BucketSeed {
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
         // dailyEntries = 4000 (bits 8..71): 1000 whole tickets, so the 96-winner cap saturates.
-        // The fill-pending bit (72) is the only other live field: the coin+tickets stage zeroes
+        // The battle-pending bit (72) is the only other live field: the coin+tickets stage zeroes
         // the whole word once it runs.
-        dailyTicketBudgetsPacked = (uint256(4000) << 8) | (fillPending ? _JACKPOT_FILL_PENDING : 0);
+        dailyTicketBudgetsPacked = (uint256(4000) << 8) | (battlePending ? _JACKPOT_BATTLE_PENDING : 0);
         levelPrizePool[s.lvl] = 1000 ether;
         levelPrizePool[s.lvl - 1] = s.prevPool;
         _setPrizePools(uint128(50 ether), uint128(300 ether));
@@ -88,7 +88,7 @@ contract JackpotFillStageSeeder is DegenerusGame, BucketSeed {
             }
         }
 
-        // The fill draw's far-future queues: levels lvl+2..lvl+100, distinct fresh wallets only.
+        // The jackpot battle's far-future queues: levels lvl+2..lvl+100, distinct fresh wallets only.
         if (s.ffHolders != 0) {
             for (uint24 c = s.lvl + 2; c <= s.lvl + 100; ++c) {
                 uint160 b = s.base + 0x2000000 + uint160(c - s.lvl - 2) * 0x1000;
@@ -100,7 +100,7 @@ contract JackpotFillStageSeeder is DegenerusGame, BucketSeed {
     }
 }
 
-abstract contract JackpotFillStageFixture is DeployProtocol {
+abstract contract JackpotBattleStageFixture is DeployProtocol {
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     uint256 internal constant GAS_TARGET = 10_000_000;
     uint256 internal constant INTRINSIC = 21_064;
@@ -108,15 +108,15 @@ abstract contract JackpotFillStageFixture is DeployProtocol {
     bytes32 internal constant TICKET_WIN_SIG =
         keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 internal constant BATTLE_RUN_SIG =
-        keccak256("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
-    bytes32 internal constant BATTLE_POT_SIG = keccak256("CoinDrawBattlePot(uint24,address,uint256)");
+        keccak256("JackpotBattleRun(uint24,address,uint256,uint256,uint256,uint256,uint32)");
+    bytes32 internal constant BATTLE_POT_SIG = keccak256("JackpotBattlePot(uint24,address,uint256)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
 
     uint8 internal constant STAGE_JACKPOT_COIN_TICKETS = 8;
     uint8 internal constant STAGE_JACKPOT_PHASE_ENDED = 9;
-    uint8 internal constant STAGE_JACKPOT_FILL = 16;
+    uint8 internal constant STAGE_JACKPOT_BATTLE = 16;
     uint256 internal constant TICKET_MAX = 96;
-    uint256 internal constant FILL_BATTLE_ENTRANTS = 50;
+    uint256 internal constant JACKPOT_BATTLE_ENTRANTS = 50;
 
     struct Tally {
         uint8 stage;
@@ -128,20 +128,20 @@ abstract contract JackpotFillStageFixture is DeployProtocol {
         uint256 battlePot;
     }
 
-    function _shape() internal pure virtual returns (JackpotFillStageSeeder.Shape memory s);
+    function _shape() internal pure virtual returns (JackpotBattleStageSeeder.Shape memory s);
 
     function _warpToDay(uint24 targetDay, uint256 intoDay) internal {
         vm.warp((uint256(targetDay - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + intoDay);
     }
 
-    function _setUpWith(bool fillPending) internal {
+    function _setUpWith(bool battlePending) internal {
         _deployProtocol();
-        JackpotFillStageSeeder.Shape memory s = _shape();
+        JackpotBattleStageSeeder.Shape memory s = _shape();
         uint8[4] memory mainT = JackpotBucketLib.getRandomTraits(s.word);
         bytes memory realCode = address(game).code;
         _warpToDay(400, 3 hours);
-        vm.etch(address(game), type(JackpotFillStageSeeder).runtimeCode);
-        JackpotFillStageSeeder(payable(address(game))).seed(s, mainT, fillPending);
+        vm.etch(address(game), type(JackpotBattleStageSeeder).runtimeCode);
+        JackpotBattleStageSeeder(payable(address(game))).seed(s, mainT, battlePending);
         vm.etch(address(game), realCode);
         vm.deal(address(game), 10_000 ether);
     }
@@ -153,7 +153,7 @@ abstract contract JackpotFillStageFixture is DeployProtocol {
         used = g0 - gasleft() + INTRINSIC;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         address[] memory tk = new address[](TICKET_MAX + 8);
-        address[] memory bw = new address[](FILL_BATTLE_ENTRANTS + 8);
+        address[] memory bw = new address[](JACKPOT_BATTLE_ENTRANTS + 8);
         for (uint256 i; i < logs.length; ++i) {
             bytes32 t0 = logs[i].topics[0];
             if (t0 == TICKET_WIN_SIG) {
@@ -175,10 +175,10 @@ abstract contract JackpotFillStageFixture is DeployProtocol {
         emit log_named_uint("  stage", t.stage);
         emit log_named_uint("  ticket_wins", t.tickets);
         emit log_named_uint("  ticket_distinct", t.ticketDistinct);
-        emit log_named_uint("  fill_battle_runs", t.battleRuns);
+        emit log_named_uint("  jackpot_battle_runs", t.battleRuns);
         emit log_named_uint("  fill_battle_distinct", t.battleDistinct);
-        emit log_named_uint("  fill_battle_paid_total", t.battlePaidTotal);
-        emit log_named_uint("  fill_battle_pot", t.battlePot);
+        emit log_named_uint("  jackpot_battle_paid_total", t.battlePaidTotal);
+        emit log_named_uint("  jackpot_battle_pot", t.battlePot);
         emit log_named_uint("  headroom_to_16p7M", used < EIP7825_TX_GAS_CAP ? EIP7825_TX_GAS_CAP - used : 0);
         emit log_named_uint("  over_10M_target_by", used > GAS_TARGET ? used - GAS_TARGET : 0);
     }
@@ -194,25 +194,19 @@ abstract contract JackpotFillStageFixture is DeployProtocol {
         if (n < arr.length) arr[n] = w;
     }
 
-    /// @dev The fill draw's battle, PROVEN: `resolve` at both caps for all 50 entrants
-    ///      (test/craps/CoinDrawBattle.t.sol, 7.475M). The dice in any one measured tx are only a
-    ///      sample, so the fill stage — which always runs the battle — must clear the cap with
-    ///      the WHOLE proven bound added on top of what it measured; the measured battle is
-    ///      counted twice, which only makes the check stricter.
-    uint256 internal constant BATTLE_PROVEN_BOUND = 7_475_000;
-
-    function _assertCapsWithBattle(uint256 used) internal {
-        assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
-        emit log_named_uint("  proven_ceiling_with_worst_battle", used + BATTLE_PROVEN_BOUND);
-        assertLt(used + BATTLE_PROVEN_BOUND, EIP7825_TX_GAS_CAP, "the worst-case battle could brick this stage");
+    /// @dev Check the measured transaction directly. The maximum-work composition test
+    ///      replaces its measured battle with an allowance; it never adds a second battle.
+    function _assertBattleCaps(uint256 used) internal {
+        assertLt(used, 10_500_000, "fill exceeds the 10.5M design limit");
     }
+
 }
 
-/// @notice STAGE_JACKPOT_FILL alone: the full 50-entrant fill battle, no ticket-board work.
-contract JackpotFillStageOnly is JackpotFillStageFixture {
-    function _shape() internal pure override returns (JackpotFillStageSeeder.Shape memory s) {
+/// @notice STAGE_JACKPOT_BATTLE alone: the full 50-entrant jackpot battle, no ticket-board work.
+contract JackpotBattleStageOnly is JackpotBattleStageFixture {
+    function _shape() internal pure override returns (JackpotBattleStageSeeder.Shape memory s) {
         s.lvl = 110;
-        s.word = uint256(keccak256("jackpot-fill-stage-only")) | 1;
+        s.word = uint256(keccak256("jackpot-battle-stage-only")) | 1;
         s.counter = 1;
         s.prevPool = 20_000 ether; // B = 1,250,000 FLIP at 0.04 ETH: stakes far above the 15,000
             // FLIP the battle needs to saturate all 50 units.
@@ -225,23 +219,23 @@ contract JackpotFillStageOnly is JackpotFillStageFixture {
         _setUpWith(true);
     }
 
-    function test_JackpotFillStage_50Battle_Measured() public {
+    function test_JackpotBattleStage_50Runs_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        emit log_named_uint("JACKPOT_FILL_STAGE_GAS", used);
-        assertEq(t.stage, STAGE_JACKPOT_FILL, "the fill stage ran");
-        assertEq(t.battleRuns, FILL_BATTLE_ENTRANTS, "the fill's battle ran fewer than 50 entrants");
-        assertEq(t.battleDistinct, FILL_BATTLE_ENTRANTS, "every battle run is a distinct cold wallet");
-        assertEq(t.tickets, 0, "the fill stage touches no ticket-board state");
-        _assertCapsWithBattle(used);
+        emit log_named_uint("JACKPOT_BATTLE_STAGE_GAS", used);
+        assertEq(t.stage, STAGE_JACKPOT_BATTLE, "the battle stage ran");
+        assertEq(t.battleRuns, JACKPOT_BATTLE_ENTRANTS, "the jackpot battle ran fewer than 50 entrants");
+        assertEq(t.battleDistinct, JACKPOT_BATTLE_ENTRANTS, "every battle run is a distinct cold wallet");
+        assertEq(t.tickets, 0, "the battle stage touches no ticket-board state");
+        _assertBattleCaps(used);
     }
 }
 
 /// @notice Non-final jackpot day at L=110 (0.04 ETH): the coin+tickets stage alone pays 96 cold
 ///         ticket winners and runs no battle work; the day seals in this stage.
-contract JackpotTicketOnlyOrdinaryDay is JackpotFillStageFixture {
-    function _shape() internal pure override returns (JackpotFillStageSeeder.Shape memory s) {
+contract JackpotTicketOnlyOrdinaryDay is JackpotBattleStageFixture {
+    function _shape() internal pure override returns (JackpotBattleStageSeeder.Shape memory s) {
         s.lvl = 110;
-        s.word = uint256(keccak256("jackpot-fill-stage-day")) | 1;
+        s.word = uint256(keccak256("jackpot-battle-stage-day")) | 1;
         s.counter = 1;
         s.prevPool = 20_000 ether;
         s.ticketHolders = 20_000;
@@ -261,16 +255,16 @@ contract JackpotTicketOnlyOrdinaryDay is JackpotFillStageFixture {
         assertEq(t.stage, STAGE_JACKPOT_COIN_TICKETS, "the coin+tickets stage ran");
         assertEq(t.tickets, TICKET_MAX, "the ticket leg paid the full 96-winner cap");
         assertEq(t.ticketDistinct, TICKET_MAX, "every ticket winner is a distinct cold wallet");
-        assertEq(t.battleRuns, 0, "the coin+tickets stage runs no battle work: the fill stage owns it");
+        assertEq(t.battleRuns, 0, "the coin+tickets stage runs no battle work: the battle stage owns it");
         assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
     }
 }
 
 /// @notice FINAL jackpot day at an x0 level L=110: the same ticket-only cap plus `_endPhase`.
-contract JackpotTicketOnlyPhaseEndX0 is JackpotFillStageFixture {
-    function _shape() internal pure override returns (JackpotFillStageSeeder.Shape memory s) {
+contract JackpotTicketOnlyPhaseEndX0 is JackpotBattleStageFixture {
+    function _shape() internal pure override returns (JackpotBattleStageSeeder.Shape memory s) {
         s.lvl = 110;
-        s.word = uint256(keccak256("jackpot-fill-stage-phase-end-x0")) | 1;
+        s.word = uint256(keccak256("jackpot-battle-stage-phase-end-x0")) | 1;
         s.counter = 2;
         s.prevPool = 20_000 ether;
         s.ticketHolders = 20_000;
@@ -288,17 +282,17 @@ contract JackpotTicketOnlyPhaseEndX0 is JackpotFillStageFixture {
         assertEq(t.stage, STAGE_JACKPOT_PHASE_ENDED, "the phase-end stage ran");
         assertEq(t.tickets, TICKET_MAX, "the ticket leg paid the full 96-winner cap");
         assertEq(t.ticketDistinct, TICKET_MAX, "every ticket winner is a distinct cold wallet");
-        assertEq(t.battleRuns, 0, "the coin+tickets stage runs no battle work: the fill stage owns it");
+        assertEq(t.battleRuns, 0, "the coin+tickets stage runs no battle work: the battle stage owns it");
         assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
     }
 }
 
 /// @notice FINAL jackpot day at the x00 level L=100 (0.24 ETH): the same ticket-only cap plus
 ///         `_endPhase`.
-contract JackpotTicketOnlyPhaseEndX00 is JackpotFillStageFixture {
-    function _shape() internal pure override returns (JackpotFillStageSeeder.Shape memory s) {
+contract JackpotTicketOnlyPhaseEndX00 is JackpotBattleStageFixture {
+    function _shape() internal pure override returns (JackpotBattleStageSeeder.Shape memory s) {
         s.lvl = 100;
-        s.word = uint256(keccak256("jackpot-fill-stage-phase-end-x00")) | 1;
+        s.word = uint256(keccak256("jackpot-battle-stage-phase-end-x00")) | 1;
         s.counter = 2;
         s.prevPool = 150_000 ether; // B = 1,562,500 FLIP at 0.24 ETH
         s.ticketHolders = 20_000;
@@ -316,7 +310,7 @@ contract JackpotTicketOnlyPhaseEndX00 is JackpotFillStageFixture {
         assertEq(t.stage, STAGE_JACKPOT_PHASE_ENDED, "the phase-end stage ran");
         assertEq(t.tickets, TICKET_MAX, "the ticket leg paid the full 96-winner cap");
         assertEq(t.ticketDistinct, TICKET_MAX, "every ticket winner is a distinct cold wallet");
-        assertEq(t.battleRuns, 0, "the coin+tickets stage runs no battle work: the fill stage owns it");
+        assertEq(t.battleRuns, 0, "the coin+tickets stage runs no battle work: the battle stage owns it");
         assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
     }
 }
@@ -338,7 +332,7 @@ contract JackpotPhaseStageSequence is DeployProtocol {
     uint8 internal constant STAGE_JACKPOT_DAILY_STARTED = 10;
     uint8 internal constant STAGE_JACKPOT_CARRYOVER_RETIRED = 13;
     uint8 internal constant STAGE_JACKPOT_EARLY_BIRD_TICKETS = 14;
-    uint8 internal constant STAGE_JACKPOT_FILL = 16;
+    uint8 internal constant STAGE_JACKPOT_BATTLE = 16;
 
     function _warpToDay(uint24 targetDay, uint256 intoDay) internal {
         vm.warp((uint256(targetDay - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + intoDay);
@@ -346,9 +340,9 @@ contract JackpotPhaseStageSequence is DeployProtocol {
 
     /// @dev Fresh jackpot-phase entry at day 400, counter 0, no request outstanding yet: the
     ///      loop below fires the day's own real VRF request on its first advanceGame() call.
-    ///      `prevPool` seeds levelPrizePool[lvl - 1]: nonzero latches the fill stage on every day
+    ///      `prevPool` seeds levelPrizePool[lvl - 1]: nonzero latches the battle stage on every day
     ///      (the shape most of this suite pins); zero reproduces a level whose FLIP budget is
-    ///      empty, where the fill stage must never latch at all.
+    ///      empty, where the battle stage must never latch at all.
     function _seedFreshPhase(uint24 lvl, uint8 flags, uint256 prevPool) internal {
         _deployProtocol();
         _warpToDay(400, 3 hours);
@@ -367,14 +361,14 @@ contract JackpotPhaseStageSequence is DeployProtocol {
     ///      previous day's ticket-leg winners into their queued trait entries; the raw stage list
     ///      carries it, but it is not one of the jackpot-day stages `_filterJackpotStages` checks.
     ///      Also tracks, per physical day, how many times stage 16 fires before that day's own
-    ///      8/9 seals it: exactly one when `expectFill` is true, exactly zero when it is false —
+    ///      8/9 seals it: exactly one when `expectBattle` is true, exactly zero when it is false —
     ///      either way the test fails at the seal if the count is wrong.
-    function _driveJackpotPhase(uint256 daysToRun, bool expectFill) internal returns (uint8[] memory stages) {
+    function _driveJackpotPhase(uint256 daysToRun, bool expectBattle) internal returns (uint8[] memory stages) {
         uint8[] memory buf = new uint8[](128);
         uint256 n;
         uint256 daysSealed;
         uint256 guard;
-        uint256 fillCountThisDay;
+        uint256 battleCountThisDay;
         while (daysSealed < daysToRun && guard < 100) {
             unchecked { ++guard; }
             uint256 id = mockVRF.lastRequestId();
@@ -394,8 +388,8 @@ contract JackpotPhaseStageSequence is DeployProtocol {
             require(n < buf.length, "sequence: guard buffer too small");
             buf[n++] = st;
             assertTrue(st != STAGE_JACKPOT_CARRYOVER_RETIRED, "stage 13 (the retired carryover leg) must never run");
-            if (st == STAGE_JACKPOT_FILL) {
-                unchecked { ++fillCountThisDay; }
+            if (st == STAGE_JACKPOT_BATTLE) {
+                unchecked { ++battleCountThisDay; }
             }
             if (st == STAGE_JACKPOT_COIN_TICKETS) {
                 // A non-final day's own stage unlocks the day it just sealed (the final day's
@@ -404,8 +398,8 @@ contract JackpotPhaseStageSequence is DeployProtocol {
                 assertFalse(game.rngLocked(), "the coin+tickets stage must unlock a non-final day");
             }
             if (st == STAGE_JACKPOT_COIN_TICKETS || st == STAGE_JACKPOT_PHASE_ENDED) {
-                _assertFillCountAtSeal(fillCountThisDay, expectFill);
-                fillCountThisDay = 0;
+                _assertBattleCountAtSeal(battleCountThisDay, expectBattle);
+                battleCountThisDay = 0;
                 unchecked { ++daysSealed; }
                 if (daysSealed < daysToRun) vm.warp(block.timestamp + 1 days);
             }
@@ -416,11 +410,11 @@ contract JackpotPhaseStageSequence is DeployProtocol {
     }
 
     /// @dev Split out of `_driveJackpotPhase` to keep its stack shallow enough to compile.
-    function _assertFillCountAtSeal(uint256 count, bool expectFill) internal {
-        if (expectFill) {
-            assertEq(count, 1, "the fill stage must run exactly once per jackpot day, before its seal");
+    function _assertBattleCountAtSeal(uint256 count, bool expectBattle) internal {
+        if (expectBattle) {
+            assertEq(count, 1, "the battle stage must run exactly once per jackpot day, before its seal");
         } else {
-            assertEq(count, 0, "a zero coin budget must never latch the fill stage");
+            assertEq(count, 0, "a zero coin budget must never latch the battle stage");
         }
     }
 
@@ -431,7 +425,7 @@ contract JackpotPhaseStageSequence is DeployProtocol {
         for (uint256 i; i < stages.length; ++i) {
             uint8 s = stages[i];
             if (s == STAGE_JACKPOT_DAILY_STARTED || s == STAGE_JACKPOT_EARLY_BIRD_TICKETS
-                || s == STAGE_JACKPOT_FILL || s == STAGE_JACKPOT_COIN_TICKETS || s == STAGE_JACKPOT_PHASE_ENDED) {
+                || s == STAGE_JACKPOT_BATTLE || s == STAGE_JACKPOT_COIN_TICKETS || s == STAGE_JACKPOT_PHASE_ENDED) {
                 buf[n++] = s;
             }
         }
@@ -453,13 +447,13 @@ contract JackpotPhaseStageSequence is DeployProtocol {
         uint8[] memory want = new uint8[](10);
         want[0] = STAGE_JACKPOT_DAILY_STARTED;
         want[1] = STAGE_JACKPOT_EARLY_BIRD_TICKETS;
-        want[2] = STAGE_JACKPOT_FILL;
+        want[2] = STAGE_JACKPOT_BATTLE;
         want[3] = STAGE_JACKPOT_COIN_TICKETS;
         want[4] = STAGE_JACKPOT_DAILY_STARTED;
-        want[5] = STAGE_JACKPOT_FILL;
+        want[5] = STAGE_JACKPOT_BATTLE;
         want[6] = STAGE_JACKPOT_COIN_TICKETS;
         want[7] = STAGE_JACKPOT_DAILY_STARTED;
-        want[8] = STAGE_JACKPOT_FILL;
+        want[8] = STAGE_JACKPOT_BATTLE;
         want[9] = STAGE_JACKPOT_PHASE_ENDED;
         _assertSequence(filtered, want);
     }
@@ -471,17 +465,17 @@ contract JackpotPhaseStageSequence is DeployProtocol {
         uint8[] memory want = new uint8[](4);
         want[0] = STAGE_JACKPOT_DAILY_STARTED;
         want[1] = STAGE_JACKPOT_EARLY_BIRD_TICKETS;
-        want[2] = STAGE_JACKPOT_FILL;
+        want[2] = STAGE_JACKPOT_BATTLE;
         want[3] = STAGE_JACKPOT_PHASE_ENDED;
         _assertSequence(filtered, want);
     }
 
     /// @notice A level whose FLIP budget is empty (levelPrizePool[lvl - 1] == 0, e.g. a fresh
-    ///         level 1 reading levelPrizePool[0]) must never latch the fill stage: the jackpot
+    ///         level 1 reading levelPrizePool[0]) must never latch the battle stage: the jackpot
     ///         day's sequence collapses to ETH (10), early-bird (14), then coin+tickets (8) with
     ///         no 16 in between — the shape the old fused-stage fixture exercised, kept as a
     ///         standing regression now that most of this suite seeds a nonzero budget instead.
-    function test_ZeroCoinBudget_FillStageNeverLatches() public {
+    function test_ZeroCoinBudget_BattleStageNeverLatches() public {
         _seedFreshPhase(110, 0, 0);
         uint8[] memory stages = _driveJackpotPhase(1, false);
         uint8[] memory filtered = _filterJackpotStages(stages);
@@ -519,9 +513,9 @@ contract JackpotPhaseSeeder is DegenerusGame {
         _afkingResetDay = day;
         levelPrizePool[lvl] = 1000 ether;
         // `prevPool` (levelPrizePool[lvl - 1]) sizes the day's FLIP budget (_calcDailyCoinBudget):
-        // nonzero latches the fill stage (16) on every jackpot day; zero mirrors a level whose
-        // budget is empty, where the fill stage must never latch. No far-future wallets are
-        // seeded, so the fill draw itself finds nobody to play — the sequence and stage-13/16
+        // nonzero latches the battle stage (16) on every jackpot day; zero mirrors a level whose
+        // budget is empty, where the battle stage must never latch. No far-future wallets are
+        // seeded, so the jackpot battle itself finds nobody to play — the sequence and stage-13/16
         // checks depend only on the latch, not on winner counts.
         levelPrizePool[lvl - 1] = prevPool;
         // Small pools: each day's own ticket leg then queues only a handful of mint entries

@@ -36,6 +36,7 @@ pragma solidity ^0.8.26;
 // ZERO contracts/ mutation per D-43N-AUDIT-ONLY-01.
 // ============================================================================
 
+import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -176,11 +177,19 @@ contract RngLockRotationDeterminism is DeployProtocol {
 
     /// @dev Fulfil `word` on the ACTIVE coordinator's `reqId` (if not already
     ///      fulfilled), then drain the lock window. Mirrors the v43 _deliverMockVrf.
+    function _assertPreferredBoardFrozen() private {
+        if (!game.rngLocked()) return;
+        vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattle.BetLocked.selector);
+        crapsBattle.setPreferredBoard(3);
+    }
+
     function _deliverMockVrf(uint256 reqId, uint256 word) internal {
+        _assertPreferredBoardFrozen();
         MockVRFCoordinator c = _coord();
         (, , bool fulfilled) = c.pendingRequests(reqId);
         if (!fulfilled) {
             c.fulfillRandomWords(reqId, word);
+            _assertPreferredBoardFrozen();
             _lastFulfilledReqId = reqId;
         }
         for (uint256 i = 0; i < DRAIN_MAX_ITERATIONS; i++) {
@@ -326,7 +335,9 @@ contract RngLockRotationDeterminism is DeployProtocol {
 
         // Rotate the coordinator while the daily request is in flight. The
         // rngWordCurrent==0 re-issue branch fires a fresh request on the new coord.
+        _assertPreferredBoardFrozen();
         MockVRFCoordinator newVRF = _rotateMidWindow(rotSeed);
+        _assertPreferredBoardFrozen();
         uint256 reissueReqId = newVRF.lastRequestId();
         // The re-issue must exist on the NEW coordinator -- deliver on it, NOT the
         // abandoned old request (which the :1793 requestId guard rejects).
@@ -408,7 +419,9 @@ contract RngLockRotationDeterminism is DeployProtocol {
         // Rotate while the mid-day request is in flight: the LR_MID_DAY==1 branch
         // (:1726) re-issues on the new coordinator and PRESERVES LR_INDEX so the
         // new word lands in the SAME reserved slot N (:1804).
+        _assertPreferredBoardFrozen();
         MockVRFCoordinator newVRF = _rotateMidWindow(rotSeed);
+        _assertPreferredBoardFrozen();
         uint256 reissueReqId = newVRF.lastRequestId();
         if (reissueReqId == 0) {
             vm.assume(false);

@@ -49,7 +49,7 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
     }
 
     function setUp() public {
-        // `_comps()` = the heaviest coin budget: the fill's battle saturates at all 50 walked
+        // `_comps()` = the heaviest coin budget: the jackpot battle saturates at all 50 walked
         // wallets (see PurchaseDailyWorstCase). `false` uses a lighter budget that still finds 50
         // wallets but only affords 47 of them a run — the entrants-array truncation path.
         uint256 previousPool = _comps() ? PREV_POOL_OPEN25 : PREV_POOL_PARTIAL;
@@ -101,10 +101,9 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
             abi.encodeWithSignature("mintPrize(address,uint256)", ContractAddresses.VAULT, 1 ether)
         );
         vm.recordLogs();
-        uint256 before = gasleft();
         if (_router()) game.mineFlip{gas: EIP7825_TX_GAS_CAP - 21_064}();
         else game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
-        uint256 used = before - gasleft() + 21_064;
+        uint256 used = _transactionGas();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 ethWins;
         uint256 ticketWins;
@@ -134,19 +133,17 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
         emit log_named_uint("full_daily_plus_vault_history_including_intrinsic", used);
         emit log_named_uint("vault_claim_cursor_after", settled);
         emit log_named_uint("trait_FLIP_awards", nearWins);
-        emit log_named_uint("fill_battle_runs", battleRuns);
+        emit log_named_uint("jackpot_battle_runs", battleRuns);
         emit log_named_uint("craps_seat_awards", compWins);
         assertEq(stage, STAGE_PURCHASE_DAILY, "daily must finish in the RNG-apply transaction");
         assertEq(ethWins, PURCHASE_ETH_WINNERS, "all ETH awards must execute");
         assertEq(ticketWins, 0, "the ticket leg waits for its own stage");
-        // The purchase coin draw is the fill draw alone, and it no longer touches CrapsBattle at
-        // all: its whole budget plays out as one CoinDrawBattle over the 50 walked wallets, 50 of
-        // them at PREV_POOL_OPEN25 (saturated) or 47 of them at PREV_POOL_PARTIAL (truncated).
-        assertEq(compWins, 0, "the fill draw no longer touches CrapsBattle");
+        // The purchase battle waits for stage 17: daily RNG/history and ETH never share its tx.
+        assertEq(compWins, 0, "the daily stage creates no comp awards");
         assertEq(goldenWins, _extras() ? 1 : 0, "golden resolution must execute when armed");
         assertEq(goldenGrand, _extras(), "golden grand branch must execute when armed");
         assertEq(nearWins, 0, "a purchase day past level 1 runs no trait coin draw");
-        assertEq(battleRuns, _comps() ? FILL_BATTLE_ENTRANTS : 47, "the fill's battle ran the wrong number of entrants");
+        assertEq(battleRuns, 0, "fill cannot run with fresh RNG/history/ETH");
         if (_extras()) {
             assertEq(
                 uint24(uint256(vm.load(ContractAddresses.SDGNRS, bytes32(0))) >> 224),
@@ -155,12 +152,14 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
             );
         }
         assertEq(settled, _sufficient() ? 399 : 34, "funded settlement commits; failed seat funding rolls back");
+        assertLt(used, 10_500_000, "daily stage exceeds design limit");
+
+        _measureBattleStage(_comps() ? JACKPOT_BATTLE_ENTRANTS : 47);
 
         // The priced ticket leg pays from the next advance on the same recorded word.
         vm.recordLogs();
-        before = gasleft();
         game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
-        used = before - gasleft() + 21_064;
+        used = _transactionGas();
         logs = vm.getRecordedLogs();
         ticketWins = 0;
         stage = 255;

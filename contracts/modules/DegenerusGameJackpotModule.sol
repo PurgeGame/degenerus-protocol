@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {JackpotBattleFieldLib} from "../libraries/JackpotBattleFieldLib.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -42,13 +44,17 @@ interface IWwxrpMintPrize {
     function mintPrize(address to, uint256 amount) external;
 }
 
-/// @dev The daily fill draw's battle (CoinDrawBattle), called BARE: GAME-gated, it plays
+/// @dev The daily jackpot battle (JackpotBattle), called BARE: GAME-gated, it plays
 ///      and ranks the drawn field in memory and returns what each wallet is owed.
-interface ICoinDrawBattle {
-    /// @notice Play the fill draw's battle; see CoinDrawBattle.resolve.
-    function resolve(uint24 level, address[] calldata entrants, uint256 amount, uint256 word)
+interface IJackpotBattle {
+    /// @notice Play the jackpot battle; see JackpotBattle.resolve.
+    function resolve(uint24 level, uint256[] calldata entrants, uint256 amount, uint256 word)
         external
-        returns (address[] memory players, uint256[] memory owed);
+        returns (address[] memory players, uint256[] memory owed, address jackpotWinner, uint256 peakFlip, uint256 score);
+}
+
+interface ICrapsJackpotBattleAwards {
+    function rewardJackpotBattle(bytes32 key, address winner, uint256 peakFlip, uint256 score) external;
 }
 
 /**
@@ -66,7 +72,7 @@ interface ICoinDrawBattle {
  *      JACKPOT FLOW OVERVIEW:
  *      1. Pool consolidation at level transition (prize pool splits and merges).
  *      2. `payDailyJackpot` — Handles purchase phase jackpots and rolling dailies at EOL.
- *      3. The daily fill draw — the day's FLIP budget played as one closed craps battle among
+ *      3. The daily jackpot battle — the day's FLIP budget played as one closed craps battle among
  *         wallets drawn from unminted future levels; level 1's purchase days also run
  *         `payDailyFlipJackpot`, a trait-matched FLIP draw over level 1.
  *
@@ -275,15 +281,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// Higher than ETH winners because ticket distribution is cheaper per winner.
     uint16 private constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
 
-    /// @dev Level picks the daily fill draw may spend. A pick lands on an unvisited
+    /// @dev Level picks the daily jackpot battle may spend. A pick lands on an unvisited
     ///      level or is spent on a revisit, so empty levels cannot stretch the draw's gas.
     uint256 private constant FUTURE_FLIP_LEVEL_PICKS = 16;
 
-    /// @dev Domain separator for the daily future fill draw's entropy derivation.
+    /// @dev Domain separator for the daily future jackpot battle's entropy derivation.
     bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
 
-    /// @dev Most wallets the daily fill draw enters in its craps battle.
-    uint256 private constant FILL_BATTLE_ENTRANTS = 50;
+    /// @dev Most wallets the daily jackpot battle enters in its craps battle.
+    uint256 private constant JACKPOT_BATTLE_ENTRANTS = 50;
 
     /// @dev Most winners of level 1's trait-matched FLIP draw, each paid one equal share.
     uint256 private constant COIN_DRAW_SHARES = 50;
@@ -375,7 +381,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Three-day schedule: 6%-14% of remaining currentPrizePool on day 1, 12%-28% on day 2.
     ///      - Final physical day (day 3, or day 1 for turbo): distributes the remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird ticket jackpot (from futurePrizePool).
-    ///      - Latches the day's fill draw (payJackpotFill) for its own stage.
+    ///      - Latches the day's jackpot battle (payJackpotPhaseBattle) for its own stage.
     ///      - The coin+tickets stage increments jackpotCounter on completion.
     ///
     ///      PURCHASE PHASE PATH (isJackpotPhase=false):
@@ -459,9 +465,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 _addNextPrizePool(dailyTicketBudget);
 
                 // Store ticket units for Phase 2 distribution (dailyEntries at bits 8..71) and
-                // latch the day's fill draw for its own stage when the day has a FLIP budget.
+                // latch the day's jackpot battle for its own stage when the day has a FLIP budget.
                 dailyTicketBudgetsPacked = (dailyEntries << 8)
-                    | (_calcDailyCoinBudget(lvl, lvl) != 0 ? _JACKPOT_FILL_PENDING : 0);
+                    | (_calcDailyCoinBudget(lvl, lvl) != 0 ? _JACKPOT_BATTLE_PENDING : 0);
 
                 // Day 1 only: price the early-bird ticket jackpot (3% of futurePrizePool, moved
                 // future -> next now) and latch its entries at bits 144..207 of the same word.
@@ -629,7 +635,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     }
 
     /// @notice The ticket leg of the purchase-phase daily, from its own advance stage.
-    /// @dev Called by advanceGame on the advance after payDailyJackpot(false) priced it, with
+    /// @dev Called by advanceGame after the pricing and battle advances, with
     ///      the same day's recorded word. The main board is the one the pricing stage rolled
     ///      and recorded in dailyFoilDraw for the day it priced (dailyIdx has not moved: the
     ///      pricing stage does not seal while this leg is pending), and the winner entropy is
@@ -656,25 +662,25 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         dailyTicketBudgetsPacked = packed & ((uint256(1) << 208) - 1);
     }
 
-    /// @notice The fill draw of a jackpot-phase daily, from its own advance stage.
+    /// @notice The jackpot battle of a jackpot-phase daily, from its own advance stage.
     /// @dev Called by advanceGame on the advance after Phase 1 latched it (and after the day-1
     ///      early-bird stage), with the same day's word, ahead of the coin+tickets stage that
-    ///      seals the day: the fill battle and the day's ticket leg never share a tx. Plays the
-    ///      day's FLIP budget as the fill draw's craps battle over the far-future queues from
+    ///      seals the day: the jackpot battle and the day's ticket leg never share a tx. Plays the
+    ///      day's FLIP budget as the jackpot battle, a closed craps field over the far-future queues from
     ///      level + 2 (level + 1 was minted on the last-purchase word before this phase). The
     ///      lock held since the request keeps every input frozen. Clears its own latch.
     /// @param randWord VRF entropy (the day's recorded word).
-    function payJackpotFill(uint256 randWord) external {
-        dailyTicketBudgetsPacked &= ~_JACKPOT_FILL_PENDING;
+    function payJackpotPhaseBattle(uint256 randWord) external {
+        dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
         uint24 lvl = level;
-        _awardFutureCoinFill(lvl + 1, _calcDailyCoinBudget(lvl, lvl), randWord);
+        _playJackpotBattle(lvl + 1, _calcDailyCoinBudget(lvl, lvl), randWord);
     }
 
     /// @notice Phase 2 of the daily jackpot: the day's own ticket leg.
     /// @dev Called by advanceGame when dailyJackpotCoinTicketsPending is true. The daily is a
     ///      chain of advance txs so each stays under the per-tx gas cap: Phase 1 pays the ETH,
     ///      on day 1 the early-bird ticket leg (up to 128 winners) runs from its own stage
-    ///      (payEarlyBirdTickets), the fill draw runs from its own stage (payJackpotFill), and
+    ///      (payEarlyBirdTickets), the jackpot battle runs from its own stage (payJackpotPhaseBattle), and
     ///      this stage, the last, pays the main-board tickets. It advances the counter and the
     ///      caller seals the day (or ends the level) in the same tx.
     ///
@@ -761,7 +767,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      hash2(word, level)), and it carries only the solo ETH prize. Tickets queue at
     ///      level + 1. A capped draw also awards all surplus full passes to one fresh winner
     ///      outside the solo quadrant, preferring eligible gold. No pool moves in this stage.
-    ///      Clears its own field and leaves the rest of the packed budgets for the fill and
+    ///      Clears its own field and leaves the rest of the packed budgets for the battle and
     ///      coin+tickets stages. The lock held since the request keeps every input frozen.
     /// @param randWord VRF entropy (the day's recorded word).
     function payEarlyBirdTickets(uint256 randWord) external {
@@ -1811,20 +1817,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         );
     }
 
-    /// @notice Purchase-day FLIP fill draw: the daily coin budget over unminted future levels.
+    /// @notice Purchase-day FLIP jackpot battle: the daily coin budget over unminted future levels.
     /// @dev Budget as payDailyFlipJackpot; winners come from the far-future queues of
-    ///      [lvl + 1, lvl + 99] (see _awardFutureCoinFill). Jackpot days run the same draw from
-    ///      payJackpotFill.
+    ///      [lvl + 1, lvl + 99] (see _playJackpotBattle). Jackpot days run the same draw from
+    ///      payJackpotPhaseBattle.
     /// @param lvl Purchase level (the minted level whose day this is).
     /// @param randWord VRF entropy for level picks and walk starts.
-    function payDailyFutureFlipJackpot(uint24 lvl, uint256 randWord) external {
-        _awardFutureCoinFill(lvl, _calcDailyCoinBudget(lvl, level), randWord);
+    function payPurchaseJackpotBattle(uint24 lvl, uint256 randWord) external {
+        _playJackpotBattle(lvl, _calcDailyCoinBudget(lvl, level), randWord);
     }
 
     /// @notice Roll, record and emit level 1's purchase-day board without running any
     ///         distribution.
     /// @dev Used at purchaseLevel == 1, where payDailyJackpot is skipped: the day's coin budget
-    ///      pays level 1's trait-matched FLIP draw and the fill draw instead. Records the board
+    ///      pays level 1's trait-matched FLIP draw and the jackpot battle instead. Records the board
     ///      for foil claims.
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external {
@@ -1920,23 +1926,23 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev The daily fill draw over unminted future levels, paid as one closed craps battle.
+    /// @dev The daily jackpot battle over unminted future levels, paid as one closed craps battle.
     ///      Wallets are drawn level by level: pick an unvisited level in [lvl + 1, lvl + 99], walk
     ///      its far-future queue from a random lane (one lane per wallet registration, each taken at
-    ///      most once) until the draw has FILL_BATTLE_ENTRANTS wallets or the level is exhausted,
+    ///      most once) until the draw has JACKPOT_BATTLE_ENTRANTS wallets or the level is exhausted,
     ///      then pick again. Every wallet on a walked level is equally likely to be included. At
-    ///      most FUTURE_FLIP_LEVEL_PICKS picks, so empty levels bound the gas. The drawn wallets and
-    ///      the whole budget go to CoinDrawBattle, which plays and ranks every run on this word in
+    ///      most FUTURE_FLIP_LEVEL_PICKS picks, so empty levels bound the gas. The game groups repeated wallets and reads their saved boards in one batch. The field and
+    ///      the whole budget go to JackpotBattle, which plays and ranks every run on this word in
     ///      this call; its result is credited in one batch.
-    function _awardFutureCoinFill(uint24 lvl, uint256 coinBudget, uint256 rngWord) private {
+    function _playJackpotBattle(uint24 lvl, uint256 coinBudget, uint256 rngWord) private {
         if (coinBudget == 0) return;
         uint256 battleWord = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
         uint256 entropy = battleWord;
 
-        address[] memory winners = new address[](FILL_BATTLE_ENTRANTS);
+        address[] memory winners = new address[](JACKPOT_BATTLE_ENTRANTS);
         uint256 found;
         uint256 visited;
-        for (uint256 pick; pick < FUTURE_FLIP_LEVEL_PICKS && found < FILL_BATTLE_ENTRANTS; ) {
+        for (uint256 pick; pick < FUTURE_FLIP_LEVEL_PICKS && found < JACKPOT_BATTLE_ENTRANTS; ) {
             entropy = EntropyLib.hash2(entropy, pick);
             uint256 offset = entropy % 99;
             if ((visited >> offset) & 1 == 0) {
@@ -1945,7 +1951,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 uint256[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
                 uint256 len = queue.length;
                 if (len != 0) {
-                    uint256 take = FILL_BATTLE_ENTRANTS - found;
+                    uint256 take = JACKPOT_BATTLE_ENTRANTS - found;
                     if (take > len) take = len;
                     uint256 idx = (entropy >> 128) % len;
                     uint256 word = _tqWordAt(queue, idx);
@@ -1969,9 +1975,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         assembly ("memory-safe") {
             mstore(winners, found)
         }
-        ICoinDrawBattle battle = ICoinDrawBattle(ContractAddresses.COIN_DRAW_BATTLE);
-        (address[] memory players, uint256[] memory owed) = battle.resolve(lvl, winners, coinBudget, battleWord);
+        uint256[] memory field = JackpotBattleFieldLib.prepare(winners, coinBudget);
+        IJackpotBattle battle = IJackpotBattle(ContractAddresses.JACKPOT_BATTLE);
+        (address[] memory players, uint256[] memory owed, address winner, uint256 peakFlip, uint256 score) =
+            battle.resolve(lvl, field, coinBudget, battleWord);
         if (players.length != 0) coinflip.creditFlipBatch(players, owed);
+        // Routine RIU eligibility starts at 25x; the 100x record floor is checked inside Craps.
+        // One winner, one check, and no award-side call for the usual below-threshold field.
+        if (score >= 250_000) {
+            ICrapsJackpotBattleAwards(ContractAddresses.CRAPS).rewardJackpotBattle(bytes32(battleWord), winner, peakFlip, score);
+        }
     }
 
     /// @dev Records the day's board for the foil claim to read (foil == jackpot by

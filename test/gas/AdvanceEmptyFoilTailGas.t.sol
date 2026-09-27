@@ -44,9 +44,8 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
 
     function test_EmptyFoilWalkAndCompleteCachedDailyShareOneTransaction() public {
         vm.recordLogs();
-        uint256 before = gasleft();
         game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
-        uint256 used = before - gasleft() + 21_064;
+        uint256 used = _transactionGas();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 ethAwards;
         uint256 tickets;
@@ -69,11 +68,12 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
         );
         assertLt(used, EIP7825_TX_GAS_CAP, "composed empty scan and payout exceed cap");
 
+        _measureBattleStage(JACKPOT_BATTLE_ENTRANTS);
+
         // The priced ticket leg pays from the next advance on the same recorded word.
         vm.recordLogs();
-        before = gasleft();
         game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
-        used = before - gasleft() + 21_064;
+        used = _transactionGas();
         logs = vm.getRecordedLogs();
         tickets = 0;
         stage = 255;

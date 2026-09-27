@@ -7,7 +7,8 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
-import {CoinDrawBattle} from "../../contracts/CoinDrawBattle.sol";
+import {CrapsPreferenceStore} from "../craps/CrapsPreferenceStore.sol";
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 
 /// @dev The golden-ticket harness plus a read of the packed daily ticket budgets Phase 1 leaves
@@ -28,17 +29,17 @@ contract DayShapeHarness is GoldenTicketHarness {
     function earlyBirdPasses() external view returns (uint256) { return earlyBirdWhalePasses; }
     function coinTicketsPending() external view returns (bool) { return dailyJackpotCoinTicketsPending; }
     function setJackpotFlags(uint8 v) external { jackpotFlags = v; }
-    function fillPending() external view returns (bool) { return _jackpotFillPending(); }
+    function battlePending() external view returns (bool) { return _jackpotBattlePending(); }
     function setLevelPrizePool(uint24 lvl, uint256 v) external { levelPrizePool[lvl] = v; }
 }
 
-/// @dev Adds the far-future entry registration the daily fill draw reads. Deployed by
-///      `runtimeCode` directly onto ContractAddresses.GAME so the fill draw's
-///      CoinDrawBattle.resolve call (OnlyGame-gated) runs with msg.sender == GAME.
-contract FillDrawHarness is DayShapeHarness {
+/// @dev Adds the far-future entry registration the daily jackpot battle reads. Deployed by
+///      `runtimeCode` directly onto ContractAddresses.GAME so the jackpot battle's
+///      JackpotBattle.resolve call (OnlyGame-gated) runs with msg.sender == GAME.
+contract JackpotBattleHarness is DayShapeHarness {
     /// @dev Registers `who` at `targetLevel` and appends it to that level's far-future
     ///      queue lane, exactly as a far-future purchase does (owed balance is irrelevant
-    ///      to the fill draw, which only reads the registry's owner address).
+    ///      to the jackpot battle, which only reads the registry's owner address).
     function seedFarFutureWallet(uint24 targetLevel, address who) external {
         uint80 packed = _registerEntryOwner(who, targetLevel);
         _tqAppend(_tqFarFutureKey(targetLevel), uint32(packed >> OWNER_IDX_SHIFT));
@@ -332,23 +333,23 @@ contract DailyJackpotDayShapes is Test {
         _checkDailyTicketBudgetReconciliation(0, 1, 20 ether);
     }
 
-    // -- jackpot-day fill stage: the fill draw, not a trait-matched FLIP draw, and never Phase 2 ---
+    // -- jackpot-day battle stage: the jackpot battle, not a trait-matched FLIP draw, and never Phase 2 ---
 
-    bytes32 private constant COIN_DRAW_RUN =
-        keccak256("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
-    bytes32 private constant COIN_DRAW_POT = keccak256("CoinDrawBattlePot(uint24,address,uint256)");
+    bytes32 private constant JACKPOT_BATTLE_RUN =
+        keccak256("JackpotBattleRun(uint24,address,uint256,uint256,uint256,uint256,uint32)");
+    bytes32 private constant JACKPOT_BATTLE_POT = keccak256("JackpotBattlePot(uint24,address,uint256)");
     bytes32 private constant FLIP_WIN = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
 
-    /// @dev Runs a full jackpot-phase daily (ETH stage, then the fill stage, then the coin+tickets
+    /// @dev Runs a full jackpot-phase daily (ETH stage, then the battle stage, then the coin+tickets
     ///      stage, as three separate calls exactly as advanceGame sequences them) with the REAL
-    ///      CoinDrawBattle etched at its pinned address and the jackpot module's code hosted
-    ///      directly at ContractAddresses.GAME (so the fill draw's OnlyGame-gated `resolve` call
-    ///      sees msg.sender == GAME), and reports what the fill stage emitted. Along the way it
-    ///      pins three behaviors that hold regardless of `seedFarFuture`: Phase 1 latches the fill
+    ///      JackpotBattle etched at its pinned address and the jackpot module's code hosted
+    ///      directly at ContractAddresses.GAME (so the jackpot battle's OnlyGame-gated `resolve` call
+    ///      sees msg.sender == GAME), and reports what the battle stage emitted. Along the way it
+    ///      pins three behaviors that hold regardless of `seedFarFuture`: Phase 1 latches the battle
     ///      stage whenever the day's FLIP budget is nonzero (set here via setLevelPrizePool), the
-    ///      fill stage clears only that latch (the ticket-budget entries it shares the packed word
+    ///      battle stage clears only that latch (the ticket-budget entries it shares the packed word
     ///      with survive for the coin+tickets stage), and the coin+tickets stage itself never
-    ///      touches CoinDrawBattle. Reuses `setUp`'s COINFLIP/WWXRP/STETH/JACKPOTS sinks (already
+    ///      touches JackpotBattle. Reuses `setUp`'s COINFLIP/WWXRP/STETH/JACKPOTS sinks (already
     ///      etched there) and etches the two new targets straight from `runtimeCode` rather than
     ///      via `new`: extra `new` calls here would push this contract's deploy nonce onto one of
     ///      the OTHER pinned ContractAddresses, which are precomputed CREATE addresses for this
@@ -358,15 +359,16 @@ contract DailyJackpotDayShapes is Test {
         internal
         returns (uint256 runs, uint256 pots, uint256 flipWins, uint256 ticketWins)
     {
-        vm.etch(ContractAddresses.COIN_DRAW_BATTLE, type(CoinDrawBattle).runtimeCode);
-        vm.etch(ContractAddresses.GAME, type(FillDrawHarness).runtimeCode);
-        FillDrawHarness g = FillDrawHarness(payable(ContractAddresses.GAME));
+        vm.etch(ContractAddresses.JACKPOT_BATTLE, type(JackpotBattle).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS, type(CrapsPreferenceStore).runtimeCode);
+        vm.etch(ContractAddresses.GAME, type(JackpotBattleHarness).runtimeCode);
+        JackpotBattleHarness g = JackpotBattleHarness(payable(ContractAddresses.GAME));
 
         g.setLevel(LVL);
         g.setDailyIdx(10);
         g.setJackpotCounter(1); // an ordinary jackpot day: no early-bird leg to run first
         g.setJackpotFlags(0);
-        g.setLevelPrizePool(LVL - 1, 1000 ether); // backs the fill draw's own FLIP budget
+        g.setLevelPrizePool(LVL - 1, 1000 ether); // backs the jackpot battle's own FLIP budget
         g.setCurrentPool(CUR_POOL);
         g.setPools(NEXT_POOL, FUT_POOL);
 
@@ -392,55 +394,55 @@ contract DailyJackpotDayShapes is Test {
 
         g.payDailyJackpot(true, LVL, word);
         assertTrue(g.coinTicketsPending(), "fixture: the coin+tickets stage is queued");
-        assertTrue(g.fillPending(), "a nonzero coin budget latches the fill stage");
-        uint256 entriesBeforeFill = g.ticketBudgets();
+        assertTrue(g.battlePending(), "a nonzero coin budget latches the battle stage");
+        uint256 entriesBeforeBattle = g.ticketBudgets();
 
         vm.recordLogs();
-        g.payJackpotFill(word);
-        Vm.Log[] memory fillLogs = vm.getRecordedLogs();
-        for (uint256 i; i < fillLogs.length; ++i) {
-            if (fillLogs[i].topics[0] == COIN_DRAW_RUN) ++runs;
-            else if (fillLogs[i].topics[0] == COIN_DRAW_POT) ++pots;
+        g.payJackpotPhaseBattle(word);
+        Vm.Log[] memory battleLogs = vm.getRecordedLogs();
+        for (uint256 i; i < battleLogs.length; ++i) {
+            if (battleLogs[i].topics[0] == JACKPOT_BATTLE_RUN) ++runs;
+            else if (battleLogs[i].topics[0] == JACKPOT_BATTLE_POT) ++pots;
         }
-        assertFalse(g.fillPending(), "the fill stage clears its own latch");
-        assertEq(g.ticketBudgets(), entriesBeforeFill, "the fill stage clears only the latch: dailyEntries survives for Phase 2");
-        assertTrue(g.coinTicketsPending(), "the coin+tickets stage is still queued after the fill stage");
+        assertFalse(g.battlePending(), "the battle stage clears its own latch");
+        assertEq(g.ticketBudgets(), entriesBeforeBattle, "the battle stage clears only the latch: dailyEntries survives for Phase 2");
+        assertTrue(g.coinTicketsPending(), "the coin+tickets stage is still queued after the battle stage");
 
         vm.recordLogs();
         g.payDailyJackpotCoinAndTickets(word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             bytes32 t0 = logs[i].topics[0];
-            assertTrue(t0 != COIN_DRAW_RUN, "Phase 2 must never run the fill battle");
-            assertTrue(t0 != COIN_DRAW_POT, "Phase 2 must never pay a fill-battle pot");
+            assertTrue(t0 != JACKPOT_BATTLE_RUN, "Phase 2 must never run the jackpot battle");
+            assertTrue(t0 != JACKPOT_BATTLE_POT, "Phase 2 must never pay a jackpot battle pot");
             if (t0 == FLIP_WIN) ++flipWins;
         }
         ticketWins = _ticketWins(logs, LVL + 1);
     }
 
-    function test_jackpotDayPhase2RunsTheFillBattleAndNoTraitMatchedFlipDraw() public {
+    function test_jackpotDayPhase2RunsTheJackpotBattleAndNoTraitMatchedFlipDraw() public {
         (uint256 runs, uint256 pots, uint256 flipWins, uint256 ticketWins) = _runJackpotDayPhase2(true);
-        assertGt(runs, 0, "the fill draw plays at least one run against the seeded far-future wallets");
+        assertGt(runs, 0, "the jackpot battle plays at least one run against the seeded far-future wallets");
         assertLe(pots, 1, "at most one pot winner");
         assertEq(flipWins, 0, "a jackpot day never runs the trait-matched FLIP draw");
         assertGt(ticketWins, 0, "the day's own ticket leg still pays");
     }
 
-    function test_jackpotDayPhase2WithNoFarFutureWalletsSkipsTheFillBattleButStillPaysTickets() public {
+    function test_jackpotDayPhase2WithNoFarFutureWalletsSkipsTheJackpotBattleButStillPaysTickets() public {
         (uint256 runs, uint256 pots, uint256 flipWins, uint256 ticketWins) = _runJackpotDayPhase2(false);
-        assertEq(runs, 0, "no far-future wallets: the fill draw finds nobody to play");
+        assertEq(runs, 0, "no far-future wallets: the jackpot battle finds nobody to play");
         assertEq(pots, 0, "no run means no pot either");
         assertEq(flipWins, 0, "a jackpot day never runs the trait-matched FLIP draw");
         assertGt(ticketWins, 0, "the day's own ticket leg still pays");
     }
 
     /// @dev Without a coin budget (levelPrizePool[LVL - 1] left at setUp's default zero), Phase 1
-    ///      never latches the fill stage: the very next advance falls straight to the coin+tickets
+    ///      never latches the battle stage: the very next advance falls straight to the coin+tickets
     ///      stage, exactly as a day with no FLIP budget at all does.
-    function test_phase1DoesNotLatchFillWhenCoinBudgetIsZero() public {
+    function test_phase1DoesNotLatchBattleWhenCoinBudgetIsZero() public {
         uint256 word = _board(0xB0D9E7);
         h.payDailyJackpot(true, LVL, word);
-        assertFalse(h.fillPending(), "no coin budget: the fill stage never latches");
+        assertFalse(h.battlePending(), "no coin budget: the battle stage never latches");
         assertTrue(h.coinTicketsPending(), "the coin+tickets stage is still queued");
     }
 }

@@ -4,10 +4,12 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Craps} from "../../contracts/Craps.sol";
-import {CoinDrawBattle} from "../../contracts/CoinDrawBattle.sol";
+import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
-import {BattleRef} from "../craps/CoinDrawBattle.t.sol";
+import {BattleRef} from "../craps/JackpotBattle.t.sol";
 import {JackpotBoardFixtures} from "../fuzz/helpers/JackpotBoardFixtures.sol";
 import {NestedSettlementFixture} from "./AdvanceNestedSettlementGas.t.sol";
 
@@ -20,13 +22,32 @@ contract FullRollBudgetSeeder is DegenerusGame {
         uint256[] storage queue = ticketQueue[_tqFarFutureKey(level)];
         uint256 packed = _tqWordAt(queue, lane);
         uint32 pos = uint32(packed >> ((lane & 7) << 5));
+        uint24 key = _tqFarFutureKey(level);
+        address previous = lvlEntryOwner[level][pos - 1].owner;
         lvlEntryOwner[level][pos - 1].owner = owner;
+        delete entryOwnerPosition[key][previous];
+        entryOwnerPosition[key][owner] = pos;
     }
 }
 
-/// @notice The costly purchase-day legs together: fresh VRF word, 365 days of failed vault
-///         settlement, golden grand, redemption, 49 ETH awards, and all 50 fill-battle runs.
-///         The keeper router is used to include its overhead in the measured transaction.
+/// @dev Make the replay a nested CALL even under --isolate. This yields the battle's own
+///      execution cost without a top-level transaction's calldata intrinsic or the test's
+///      memory/ABI wrapper, exactly the component replaced in the battle transaction.
+contract JackpotBattleReplayMeter {
+    Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+
+    function replay(uint24 level, uint256[] calldata field, uint256 budget, uint256 word)
+        external returns (uint256)
+    {
+        vm.prank(ContractAddresses.GAME);
+        JackpotBattle(ContractAddresses.JACKPOT_BATTLE).resolve(level, field, budget, word);
+        return vm.lastCallGas().gasTotalUsed;
+    }
+}
+
+/// @notice Split-stage stress: fresh VRF, 365 days of failed vault settlement, golden grand,
+///         redemption and 49 ETH awards in the daily transaction; 50 paying max-chip battle
+///         runs in the next. Router overhead is included. Run with FOUNDRY_ISOLATE=true.
 contract AdvanceNestedFullCompositionGas is NestedSettlementFixture {
     function _sufficient() internal pure override returns (bool) {
         return false;
@@ -58,9 +79,9 @@ contract AdvanceNestedFullCompositionGas is NestedSettlementFixture {
             // The field shares its dice, so a wallet's seat decides only its rotation turn: keep a
             // wallet whose run pays from every seat of a full field.
             bool pays = true;
-            for (uint256 seat; seat < FILL_BATTLE_ENTRANTS && pays; ++seat) {
+            for (uint256 seat; seat < JACKPOT_BATTLE_ENTRANTS && pays; ++seat) {
                 Craps.SlipResult memory r =
-                    probe.run(battleWord, candidate, (type(uint24).max / 10 / 6) * 6, seat, FILL_BATTLE_ENTRANTS);
+                    probe.run(battleWord, candidate, (type(uint24).max / 10 / 6) * 6, seat, JACKPOT_BATTLE_ENTRANTS);
                 pays = r.stop == Craps.SlipStop.Goal || r.totalRolls == 200 || r.handsPlayed == 22;
             }
             if (pays) paying[found++] = candidate;
@@ -86,15 +107,14 @@ contract AdvanceNestedFullCompositionGas is NestedSettlementFixture {
         assertEq(assigned, paying.length, "not enough distinct future levels were sampled");
     }
 
-    function test_AllPurchaseDayLegsFit15M() public {
+    function test_DailyAndBattleAreSeparateTransactions() public {
         vm.expectCall(
             ContractAddresses.WWXRP,
             abi.encodeWithSignature("mintPrize(address,uint256)", ContractAddresses.VAULT, 1 ether)
         );
         vm.recordLogs();
-        uint256 beforeGas = gasleft();
         game.mineFlip{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
-        uint256 used = beforeGas - gasleft() + INTRINSIC;
+        uint256 used = _transactionGas();
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 ethWins;
@@ -113,29 +133,49 @@ contract AdvanceNestedFullCompositionGas is NestedSettlementFixture {
         }
         assertEq(stage, STAGE_PURCHASE_DAILY, "purchase daily stage did not finish");
         assertEq(ethWins, PURCHASE_ETH_WINNERS, "ETH leg was not saturated");
-        assertEq(battleRuns, FILL_BATTLE_ENTRANTS, "battle did not play all 50 wallets");
+        assertEq(battleRuns, 0, "battle must wait for the battle transaction");
         assertEq(goldenWins, 1, "golden grand was not resolved");
         emit log_named_uint("all_purchase_day_legs_including_intrinsic", used);
-        assertLt(used, 15_000_000, "all composed legs exceed the 15M audit target");
+        assertLt(used, 10_500_000, "daily stage exceeds the 10.5M design limit");
+        _measureBattleStage(JACKPOT_BATTLE_ENTRANTS);
     }
 
-    /// @notice A huge recorded pool caps each board chip; the fixture preselects 50 distinct
+    /// @notice The minimum recorded pool that caps each board chip; the fixture preselects 50 distinct
     ///         wallets whose real runs all pay and receive cold FLIP credits. The field shares
-    ///         one set of dice, which no single word throws to both caps for every run, so the
-    ///         battle's measured gas is swapped for resolve's proven bound: the same battle is
-    ///         replayed alone and its cost taken out of the transaction before the bound goes in.
-    function test_AllLegsPlusFullBattleWorkEnvelopeFit15M() public {
+    ///         one set of dice; this sample does not hit both caps for every run. Its measured
+    ///         battle gas is replaced by the tested work-model allowance: the same battle is
+    ///         replayed alone and its callee cost taken out before the allowance goes in.
+    function test_EachStageWithMaxChipBattleFits10p5M() public {
         bytes memory realCode = address(game).code;
         vm.etch(address(game), type(FullRollBudgetSeeder).runtimeCode);
-        FullRollBudgetSeeder(payable(address(game))).setPreviousPool(LVL, 160_000_000_000_000 ether);
+        uint256 cappedBankroll = ((uint256(type(uint24).max) / 10 / 6) * 6) * 50 ether;
+        uint256 cappedBudget = cappedBankroll * JACKPOT_BATTLE_ENTRANTS * 3 / 2;
+        uint256 previousPool = cappedBudget * PriceLookupLib.priceForLevel(LVL) * 400 / (1000 ether);
+        FullRollBudgetSeeder(payable(address(game))).setPreviousPool(LVL, previousPool);
         vm.etch(address(game), realCode);
         uint256 battleWord = _seedPayingFutureWallets(JackpotBoardFixtures.wordFor([7, 7, 7, 7], [1, 2, 3, 4], false));
 
         vm.recordLogs();
-        uint256 beforeGas = gasleft();
         game.mineFlip{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
-        uint256 used = beforeGas - gasleft() + INTRINSIC;
+        uint256 used = _transactionGas();
 
+        Vm.Log[] memory dailyLogs = vm.getRecordedLogs();
+        uint256 dailyEthWins;
+        uint256 dailyGoldenWins;
+        for (uint256 i; i < dailyLogs.length; ++i) {
+            assertTrue(dailyLogs[i].topics[0] != BATTLE_RUN_SIG, "battle ran in the daily transaction");
+            if (dailyLogs[i].topics[0] == ETH_WIN_SIG) ++dailyEthWins;
+            if (dailyLogs[i].topics[0] == keccak256("GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)")) ++dailyGoldenWins;
+        }
+        assertEq(dailyEthWins, PURCHASE_ETH_WINNERS);
+        assertEq(dailyGoldenWins, 1);
+        assertTrue(game.rngLocked(), "daily stage must hold the lock for fill");
+        emit log_named_uint("daily_stage_including_intrinsic", used);
+        assertLt(used, 10_500_000, "daily stage exceeds design limit");
+
+        vm.recordLogs();
+        game.mineFlip{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
+        used = _transactionGas();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 ethWins;
         uint256 battleRuns;
@@ -159,32 +199,44 @@ contract AdvanceNestedFullCompositionGas is NestedSettlementFixture {
             if (topic == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
         }
         // All 50 real runs paid distinct cold wallets, so the credits are measured at their
-        // worst. The dice are not: take the battle's own cost out and put resolve's proven bound
-        // (both caps for all 50 runs, test/craps/CoinDrawBattle.t.sol) in its place.
-        uint256 battleGas = _replayBattleGas(logs, battleWord, totalRolls);
-        uint256 upperBound = used - battleGas + BATTLE_PROVEN_BOUND;
-        emit log_named_uint("all_legs_measured_including_intrinsic", used);
+        // full cold-credit shape. Replace the measured dice with the tested model allowance
+        // (both caps for all 50 runs, test/craps/JackpotBattle.t.sol). This is a conservative
+        // composition check, not an exhaustive maximum over all words and reachable states.
+        uint256 battleGas = _replayBattleGas(logs, battleWord, totalRolls, cappedBudget);
+        // Also reserve the separate RIU + record path even if this sample did not qualify.
+        // The production component test measures a first record, cold recipient and high-pass award.
+        uint256 upperBound = used - battleGas + BATTLE_MODEL_ALLOWANCE + 400_000;
+        emit log_named_uint("fill_stage_including_intrinsic", used);
         emit log_named_uint("battle_rolls_measured", totalRolls);
         emit log_named_uint("battle_gas_replayed", battleGas);
-        emit log_named_uint("all_legs_with_proven_battle", upperBound);
-        assertEq(stage, STAGE_PURCHASE_DAILY, "purchase daily stage did not finish");
-        assertEq(ethWins, PURCHASE_ETH_WINNERS, "ETH leg was not saturated");
-        assertEq(battleRuns, FILL_BATTLE_ENTRANTS, "battle did not play all 50 wallets");
-        assertEq(paidRuns, FILL_BATTLE_ENTRANTS, "every run must pay its cold wallet");
-        assertEq(goldenWins, 1, "golden grand was not resolved");
-        assertLt(upperBound, 15_000_000, "legs with the proven battle exceed the 15M audit target");
+        emit log_named_uint("fill_stage_with_battle_and_award_allowances", upperBound);
+        assertEq(stage, STAGE_PURCHASE_BATTLE, "purchase battle stage did not finish");
+        assertEq(ethWins, 0, "ETH leg must not repeat in battle stage");
+        assertEq(battleRuns, JACKPOT_BATTLE_ENTRANTS, "battle did not play all 50 wallets");
+        assertEq(paidRuns, JACKPOT_BATTLE_ENTRANTS, "every run must pay its cold wallet");
+        assertEq(goldenWins, 0, "golden resolution must not repeat in battle stage");
+        assertLt(upperBound, 10_500_000, "fill model exceeds the 10.5M design limit");
     }
 
     /// @dev The battle's own gas in the measured transaction: its logged field (each wallet in
     ///      first-drawn order, repeated for its units), level and word, replayed alone at the
     ///      capped chip. The replay must throw the same rolls, which pins it to that battle.
-    function _replayBattleGas(Vm.Log[] memory logs, uint256 battleWord, uint256 wantRolls)
+    function _replayBattleGas(Vm.Log[] memory logs, uint256 battleWord, uint256 wantRolls, uint256 budget)
         private
         returns (uint256 g)
     {
-        address[] memory entrants = new address[](FILL_BATTLE_ENTRANTS);
+        (address[] memory entrants, uint24 level) = _loggedField(logs);
+        uint256[] memory field = JackpotBattleFieldLib.prepare(entrants, budget);
+        JackpotBattleReplayMeter meter = new JackpotBattleReplayMeter();
+        vm.recordLogs();
+        g = meter.replay(level, field, budget, battleWord);
+        assertEq(_loggedRolls(vm.getRecordedLogs()), wantRolls, "the replay is not the measured battle");
+    }
+
+    /// @dev The battle's logged field: each wallet in first-drawn order, repeated for its units.
+    function _loggedField(Vm.Log[] memory logs) private pure returns (address[] memory entrants, uint24 level) {
+        entrants = new address[](JACKPOT_BATTLE_ENTRANTS);
         uint256 n;
-        uint24 level;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != BATTLE_RUN_SIG) continue;
             level = uint24(uint256(logs[i].topics[1]));
@@ -194,18 +246,14 @@ contract AdvanceNestedFullCompositionGas is NestedSettlementFixture {
         assembly ("memory-safe") {
             mstore(entrants, n)
         }
-        vm.recordLogs();
-        vm.prank(ContractAddresses.GAME);
-        g = gasleft();
-        CoinDrawBattle(ContractAddresses.COIN_DRAW_BATTLE).resolve(level, entrants, 1e30, battleWord);
-        g -= gasleft();
-        Vm.Log[] memory replay = vm.getRecordedLogs();
-        uint256 rolls;
-        for (uint256 i; i < replay.length; ++i) {
-            if (replay[i].topics[0] != BATTLE_RUN_SIG) continue;
-            (,, uint256 r,) = abi.decode(replay[i].data, (uint256, uint256, uint256, uint256));
+    }
+
+    /// @dev Total dice rolls across the battle runs in `logs`.
+    function _loggedRolls(Vm.Log[] memory logs) private pure returns (uint256 rolls) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != BATTLE_RUN_SIG) continue;
+            (,, uint256 r,) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
             rolls += r;
         }
-        assertEq(rolls, wantRolls, "the replay is not the measured battle");
     }
 }

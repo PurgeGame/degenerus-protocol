@@ -1,20 +1,20 @@
 // JackpotCompAdvanceGas.test.js — the level-1 purchase-day advance carrying both the
-// trait-matched FLIP draw and the future fill draw, measured as one complete advanceGame
+// trait-matched FLIP draw and the future jackpot battle, measured as one complete advanceGame
 // transaction through the REAL deployFixture wiring: real Game delegatecalls, the real
-// CoinDrawBattle playing the fill draw's battle, the real Coinflip credits. CrapsBattle is
+// JackpotBattle playing the jackpot battle, the real Coinflip credits. CrapsBattle is
 // never touched by either draw.
 //
 // Level 1 (storage level 0) has no ETH leg; its daily instead runs TWO FLIP draws in the same tx:
 //   - the trait draw over lvlTraitEntry[1] on the day's main board (`payDailyFlipJackpot`) — pays
 //     up to COIN_DRAW_SHARES = 50 equal whole-unit shares, one `JackpotFlipWin` per winner;
-//   - the fill draw over the unminted far-future queues [2, 100] (`payDailyFutureFlipJackpot`) —
-//     walks up to FILL_BATTLE_ENTRANTS = 50 wallets (independent of budget) and hands them all,
-//     with the whole budget, to CoinDrawBattle.resolve in one call: two thirds of the budget stake
+//   - the jackpot battle over the unminted far-future queues [2, 100] (`payPurchaseJackpotBattle`) —
+//     walks up to JACKPOT_BATTLE_ENTRANTS = 50 wallets (independent of budget) and hands them all,
+//     with the whole budget, to JackpotBattle.resolve in one call: two thirds of the budget stake
 //     one run per distinct wallet (dropped from the back if the budget affords fewer than 50 x
 //     300-FLIP bankrolls), one third is the pot to the highest surviving run.
 // Both budgets tested here comfortably saturate both draws — the trait draw at all 50 shares, the
 // fill's battle at all 50 walked wallets — so the two scenarios differ only in the FLIP amount each
-// trait share and each fill run pays:
+// trait share and each battle run pays:
 //   - B = 130,000 FLIP (520 ETH): 50 trait shares of 2,600 FLIP each;
 //   - B = 1,250,000 FLIP (5,000 ETH): 50 trait shares of 25,000 FLIP each.
 // Asserted under the EIP-7825 cap; logged against the 10M soft target.
@@ -34,8 +34,8 @@ const { ethers } = hre;
 const WORD = BigInt(ethers.keccak256(ethers.toUtf8Bytes("comp-advance-gas-word")));
 const TRAIT_BOARD_TAG = ethers.keccak256(ethers.toUtf8Bytes("degenerus.jackpot.trait-board"));
 const FLIP_WIN_TOPIC = ethers.id("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
-const BATTLE_RUN_TOPIC = ethers.id("CoinDrawBattleRun(uint24,address,uint256,uint256,uint256,uint256)");
-const BATTLE_POT_TOPIC = ethers.id("CoinDrawBattlePot(uint24,address,uint256)");
+const BATTLE_RUN_TOPIC = ethers.id("JackpotBattleRun(uint24,address,uint256,uint256,uint256,uint256,uint32)");
+const BATTLE_POT_TOPIC = ethers.id("JackpotBattlePot(uint24,address,uint256)");
 const RNG_APPLIED_TOPIC = ethers.id("DailyRngApplied(uint24,uint256,uint256,uint256)");
 
 const EIP7825_TX_GAS_CAP = 16_777_216n;
@@ -137,7 +137,7 @@ async function measureLevelOneAdvance(prevPoolEth) {
     await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions);
   }
 
-  // Fill draw: replace every unminted queue [2, 100] (genesis lanes included) with fresh wallets.
+  // Jackpot battle: replace every unminted queue [2, 100] (genesis lanes included) with fresh wallets.
   for (let lvl = 2n; lvl <= 100n; ++lvl) {
     const holders = Array.from({ length: FF_HOLDERS }, (_, i) => holder(0xb00000000n + lvl * 0x100n + BigInt(i + 1)));
     const positions = await registerOwners(gameAddr, ownerRoot, lvl, holders);
@@ -160,18 +160,19 @@ async function measureLevelOneAdvance(prevPoolEth) {
     // advanceGame may consume the fulfillment in-line.
   }
 
+  let traitReceipt = null;
   let receipt = null;
   for (let step = 0; step < 30 && receipt === null; ++step) {
-    let tx;
-    try {
-      tx = await game.connect(deployer).advanceGame({ gasLimit: EIP7825_TX_GAS_CAP });
-    } catch {
-      break;
-    }
+    const tx = await game.connect(deployer).advanceGame({ gasLimit: EIP7825_TX_GAS_CAP });
     const r = await tx.wait();
-    if (r.logs.some((l) => l.topics[0] === FLIP_WIN_TOPIC || l.topics[0] === BATTLE_RUN_TOPIC)) receipt = r;
+    if (r.logs.some((l) => l.topics[0] === FLIP_WIN_TOPIC)) traitReceipt = r;
+    if (r.logs.some((l) => l.topics[0] === BATTLE_RUN_TOPIC)) receipt = r;
   }
-  expect(receipt, "the advance chain never reached the level-1 coin draws").to.not.equal(null);
+  expect(traitReceipt, "the advance chain never reached the trait draw").to.not.equal(null);
+  expect(receipt, "the advance chain never reached the jackpot battle").to.not.equal(null);
+  expect(receipt.hash, "trait draw and fill must use separate transactions").not.to.equal(traitReceipt.hash);
+  expect(receipt.logs.some((l) => l.topics[0] === FLIP_WIN_TOPIC)).to.equal(false);
+  expect(receipt.logs.some((l) => l.topics[0] === RNG_APPLIED_TOPIC)).to.equal(false);
 
   const coder = ethers.AbiCoder.defaultAbiCoder();
   const battleRuns = receipt.logs.filter((l) => l.topics[0] === BATTLE_RUN_TOPIC);
@@ -182,14 +183,15 @@ async function measureLevelOneAdvance(prevPoolEth) {
   ).to.equal(true);
   const tally = {
     gas: receipt.gasUsed,
-    traitShares: receipt.logs.filter((l) => l.topics[0] === FLIP_WIN_TOPIC).length,
+    traitGas: traitReceipt.gasUsed,
+    traitShares: traitReceipt.logs.filter((l) => l.topics[0] === FLIP_WIN_TOPIC).length,
     battleRuns: battleRuns.length,
     battlePaidTotal: battleRuns.reduce((sum, l) => sum + coder.decode(["uint256", "uint256", "uint256", "uint256"], l.data)[3], 0n),
     battlePot: battlePots.length ? coder.decode(["uint256"], battlePots[0].data)[0] : 0n,
     rngApplied: receipt.logs.some((l) => l.topics[0] === RNG_APPLIED_TOPIC),
   };
   const recipients = new Set([
-    ...receipt.logs.filter((l) => l.topics[0] === FLIP_WIN_TOPIC).map((l) => l.topics[1]),
+    ...traitReceipt.logs.filter((l) => l.topics[0] === FLIP_WIN_TOPIC).map((l) => l.topics[1]),
     ...receipt.logs.filter((l) => l.topics[0] === BATTLE_RUN_TOPIC || l.topics[0] === BATTLE_POT_TOPIC).map((l) => l.topics[2]),
   ]);
   tally.distinct = recipients.size;
@@ -199,8 +201,8 @@ async function measureLevelOneAdvance(prevPoolEth) {
 function report(label, t) {
   const soft = t.gas < SOFT_TARGET ? `under 10M by ${SOFT_TARGET - t.gas}` : `OVER 10M by ${t.gas - SOFT_TARGET}`;
   console.log(
-    `      [COIN-ADV ${label}] trait shares=${t.traitShares}, fill battle runs=${t.battleRuns}, ` +
-      `fill battle paid total=${t.battlePaidTotal}, fill battle pot=${t.battlePot}, ` +
+    `      [COIN-ADV ${label}] trait shares=${t.traitShares}, jackpot battle runs=${t.battleRuns}, ` +
+      `jackpot battle paid total=${t.battlePaidTotal}, jackpot battle pot=${t.battlePot}, ` +
       `distinct recipients=${t.distinct}, word applied in this tx=${t.rngApplied}`
   );
   console.log(
@@ -211,24 +213,25 @@ function report(label, t) {
 
 function expectTraitDrawAndSaturatedBattle(t) {
   expect(t.traitShares, "the trait draw paid all 50 shares").to.equal(SHARES);
-  expect(t.battleRuns, "the fill's battle ran fewer than all 50 walked wallets").to.equal(SHARES);
-  // The trait draw samples with replacement (a stray repeat is allowed); the fill's walk is exact.
+  expect(t.battleRuns, "the jackpot battle ran fewer than all 50 walked wallets").to.equal(SHARES);
+  // The trait draw samples with replacement (a stray repeat is allowed); the battle's walk is exact.
   expect(t.distinct, "coin-draw recipients are distinct cold wallets").to.be.gte(98);
-  expect(t.gas < EIP7825_TX_GAS_CAP, "the two-draw advance tx broke the EIP-7825 ceiling").to.equal(true);
+  expect(t.traitGas < EIP7825_TX_GAS_CAP, "trait stage exceeds cap").to.equal(true);
+  expect(t.gas < EIP7825_TX_GAS_CAP, "battle stage broke the EIP-7825 ceiling").to.equal(true);
 }
 
-describe("JackpotCoinAdvanceGas — both level-1 FLIP draws inside a real advanceGame tx", function () {
+describe("JackpotCoinAdvanceGas — level-1 FLIP draws in separate advanceGame transactions", function () {
   after(function () {
     restoreAddresses();
   });
 
-  it("50 trait shares + the fill's saturated 50-run battle (B = 130,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
+  it("50 trait shares + the battle's saturated 50-run battle (B = 130,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
     const t = await measureLevelOneAdvance("520");
     report("130,000 FLIP", t);
     expectTraitDrawAndSaturatedBattle(t);
   });
 
-  it("50 trait shares + the fill's saturated 50-run battle (B = 1,250,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
+  it("50 trait shares + the battle's saturated 50-run battle (B = 1,250,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
     const t = await measureLevelOneAdvance("5000");
     report("1,250,000 FLIP", t);
     expectTraitDrawAndSaturatedBattle(t);

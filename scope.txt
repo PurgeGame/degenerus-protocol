@@ -1,13 +1,13 @@
 # Audit source scope — working-tree snapshot in docs/audit/snapshot.json
 # Game-logic scope, including interfaces, libraries, lenses and inherited code.
 # Deploy set: scripts/lib/predictAddresses.js; counts below are files, not deployments.
-# 60 source files. Deployment constants and artwork data are supporting build inputs.
+# 63 source files. Deployment constants and artwork data are supporting build inputs.
 
 contracts/AFKingSubscriptionToken.sol
-contracts/CoinDrawBattle.sol
 contracts/Coinflip.sol
 contracts/Craps.sol
 contracts/CrapsBattle.sol
+contracts/CrapsCustomTerms.sol
 contracts/CrapsEngine.sol
 contracts/DGNRS.sol
 contracts/DegenerusAdmin.sol
@@ -24,8 +24,10 @@ contracts/DegenerusVault.sol
 contracts/DeityBoonViewer.sol
 contracts/FLIP.sol
 contracts/GNRUS.sol
+contracts/JackpotBattle.sol
 contracts/LootboxCraps.sol
 contracts/WWXRP.sol
+contracts/sDGNRS.sol
 contracts/interfaces/ICoinflip.sol
 contracts/interfaces/IDegenerusAffiliate.sol
 contracts/interfaces/IDegenerusCoin.sol
@@ -40,9 +42,11 @@ contracts/interfaces/IVaultCoin.sol
 contracts/interfaces/IsDGNRS.sol
 contracts/libraries/ActivityCurveLib.sol
 contracts/libraries/BitPackingLib.sol
+contracts/libraries/CrapsPreferenceLib.sol
 contracts/libraries/EntropyLib.sol
 contracts/libraries/FlipRoundLib.sol
 contracts/libraries/GameTimeLib.sol
+contracts/libraries/JackpotBattleFieldLib.sol
 contracts/libraries/JackpotBucketLib.sol
 contracts/libraries/PackedTicketSampleLib.sol
 contracts/libraries/PriceLookupLib.sol
@@ -61,5 +65,4 @@ contracts/modules/DegenerusGameMintStreakUtils.sol
 contracts/modules/DegenerusGamePayoutUtils.sol
 contracts/modules/DegenerusGameWhaleModule.sol
 contracts/modules/GameAfkingModule.sol
-contracts/sDGNRS.sol
 contracts/storage/DegenerusGameStorage.sol

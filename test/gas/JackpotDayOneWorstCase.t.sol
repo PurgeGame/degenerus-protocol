@@ -21,7 +21,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///             EARLY_BIRD_MAX_WINNERS = 128 cap (32 per bonus quadrant of lvl+1, once the 3%
 ///             covers 128 tickets at priceForLevel(lvl+1)).
 ///         The daily's other 96-winner ticket leg likewise runs from its own stage
-///         (payDailyJackpotCoinAndTickets, alongside the fill draw). This suite measures BOTH txs on the
+///         (payDailyJackpotCoinAndTickets, alongside the jackpot battle). This suite measures BOTH txs on the
 ///         REAL advanceGame bytecode at every cap, with every winner a distinct address holding no
 ///         claimable / no queued entries (cold SSTOREs), on the worst ETH-leg branch (all-gold board
 ///         -> golden-ticket arm on the solo ETH winner + four fresh whale-pass draws) with an armed golden

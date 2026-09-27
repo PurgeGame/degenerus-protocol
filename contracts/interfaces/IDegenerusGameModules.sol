@@ -98,9 +98,9 @@ interface IDegenerusGameJackpotModule {
     /// @param randWord Random word for distribution
     function payDailyJackpotCoinAndTickets(uint256 randWord) external;
 
-    /// @notice Plays a jackpot-phase daily's fill draw from its own advance stage
+    /// @notice Plays a jackpot-phase daily's jackpot battle from its own advance stage
     /// @param randWord Random word for distribution (the same day's word)
-    function payJackpotFill(uint256 randWord) external;
+    function payJackpotPhaseBattle(uint256 randWord) external;
 
     /// @notice Pay the purchase-phase daily's priced ticket leg from its own advance stage.
     /// @param randWord The day's recorded VRF word.
@@ -129,12 +129,12 @@ interface IDegenerusGameJackpotModule {
     /// @param maxLevel Maximum target level for the coin distribution (inclusive)
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
 
-    /// @notice Pays the purchase-day FLIP fill draw over unminted future levels as one closed
-    ///         craps battle (CoinDrawBattle); jackpot days run the same draw from
-    ///         payJackpotFill
+    /// @notice Pays the purchase-day FLIP jackpot battle over unminted future levels as one closed
+    ///         craps battle (JackpotBattle); jackpot days run the same draw from
+    ///         payJackpotPhaseBattle
     /// @param lvl The purchase level
     /// @param randWord Random word for level picks and walks
-    function payDailyFutureFlipJackpot(uint24 lvl, uint256 randWord) external;
+    function payPurchaseJackpotBattle(uint24 lvl, uint256 randWord) external;
 
     /// @notice Roll, record and emit level 1's purchase-day board without running distribution.
     /// @param randWord VRF entropy for the board.

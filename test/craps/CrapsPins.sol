@@ -15,6 +15,9 @@ import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 contract MockGame {
     mapping(bytes32 => bytes32) public slots;
     mapping(address => uint256) public score;
+    bool public rngLocked;
+
+    function setRngLocked(bool locked) external { rngLocked = locked; }
 
     function set(bytes32 slot, bytes32 value) external {
         slots[slot] = value;

@@ -18,7 +18,7 @@ contract TicketStageGasSeeder is PhaseEndSeeder {
 ///      ticket-board bucket (20,000 holders/quadrant) than Lvl100PhaseEndAdvanceGas's 130 — the
 ///      cursor/queue depth stress. Large disjoint buckets exercise fresh recipient writes;
 ///      assertions prevent repeat winners reducing the result. The stage runs no battle work of
-///      its own (the far-future queues `seedPhaseEnd` seeds go unread here — the fill stage owns
+///      its own (the far-future queues `seedPhaseEnd` seeds go unread here — the battle stage owns
 ///      them, from its own earlier tx).
 contract DailyTicketStageGas is BoundaryGasFixture {
     function setUp() public {
@@ -67,7 +67,7 @@ contract DailyTicketStageGas is BoundaryGasFixture {
             } else if (sig == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
         }
         assertEq(tickets, 96, "the ticket leg paid the full 96-winner cap");
-        assertEq(battleRuns, 0, "the coin+tickets stage runs no battle work: the fill stage owns it");
+        assertEq(battleRuns, 0, "the coin+tickets stage runs no battle work: the battle stage owns it");
         assertEq(battleDistinct, 0);
         assertEq(stage, STAGE_JACKPOT_PHASE_ENDED);
         emit log_named_uint("DAILY_96_TICKETS_DEEP_BUCKET_COLD_INCLUDING_INTRINSIC", used);
