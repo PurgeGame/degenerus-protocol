@@ -168,9 +168,12 @@ contract at `COIN_DRAW_BATTLE`) plays the field on the day's word: two thirds of
 are the stakes, split into equal units, each a whole multiple of 300 FLIP (at least 300,
 exactly five boards deep; a wallet walked twice holds two units but plays one run, and the
 units multiply only what that run pays), and the pot is everything else: the remaining third
-plus whatever the 300-FLIP floor leaves unstaked. Each run is the scheduled Dice Run shape (five rounds deep, all ten chips thrown by
-the dice, goal at five times the bankroll, no shooter boost) capped at exactly 200 rolls and
-22 shooters (the longest of 200,000 simulated runs; 0.004% reach it): a bust pays nothing, a run stopped
+plus whatever the 300-FLIP floor leaves unstaked. The field plays as a scheduled window's seats
+do: one set of dice off the word for everyone, each wallet's own scattered board, the zero-placed
+shooter-profit row (15% of shooters, +32%) and the rotating shooter's +5% turn, passed seat by seat
+in first-drawn order. Each run is the scheduled Dice Run shape (five rounds deep, all ten chips thrown by
+the dice, goal at five times the bankroll) capped at exactly 200 rolls and
+22 shooters (0.01% of 200,000 simulated runs reach it): a bust pays nothing, a run stopped
 by either cap or latched at the goal pays its bankroll per unit, and the pot goes to the paid run with the highest ending bankroll (the earlier-drawn
 wallet on a tie; with no paid run it is not minted). Each run payout and the pot land on
 the protocol's award figures (whole FLIP up to 1,000, the EV-preserving 100-FLIP granule
@@ -178,7 +181,7 @@ above). The Game credits the result in one batch. The field, the budget and the 
 the battle is a jackpot result, not an entry window. A roll budget under one hand's 512 is
 exact in `Craps._settleSlip`: the last hand is cut where it runs out and refunds its live
 stakes; the table's 8,192 budget keeps its between-shooters meaning. The two caps bound
-`resolve` at 7.31M gas for a full field whatever the dice do (test/craps/CoinDrawBattle.t.sol),
+`resolve` at 7.475M gas for a full field whatever the dice do (test/craps/CoinDrawBattle.t.sol),
 and every fixture that runs the battle (the purchase daily, level 1's daily and the jackpot
 fill stage) must clear the 16.7M transaction cap with that whole bound added to its measured
 gas. The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the

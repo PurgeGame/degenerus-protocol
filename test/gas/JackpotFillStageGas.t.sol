@@ -195,11 +195,11 @@ abstract contract JackpotFillStageFixture is DeployProtocol {
     }
 
     /// @dev The fill draw's battle, PROVEN: `resolve` at both caps for all 50 entrants
-    ///      (test/craps/CoinDrawBattle.t.sol, 7.31M). The dice in any one measured tx are only a
+    ///      (test/craps/CoinDrawBattle.t.sol, 7.475M). The dice in any one measured tx are only a
     ///      sample, so the fill stage — which always runs the battle — must clear the cap with
     ///      the WHOLE proven bound added on top of what it measured; the measured battle is
     ///      counted twice, which only makes the check stricter.
-    uint256 internal constant BATTLE_PROVEN_BOUND = 7_310_000;
+    uint256 internal constant BATTLE_PROVEN_BOUND = 7_475_000;
 
     function _assertCapsWithBattle(uint256 used) internal {
         assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");

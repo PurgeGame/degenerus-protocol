@@ -15,30 +15,32 @@ contract BattleRef is Craps {
     uint256 internal constant DICE_TAG = 0x436f696e4472617744696365; // "CoinDrawDice"
     uint256 internal constant SCATTER_TAG = 0x436f696e4472617753636174746572; // "CoinDrawScatter"
 
-    function run(uint256 word, address p, uint256 chipFlip) external pure returns (SlipResult memory r) {
+    /// @dev The scheduled row for a board the dice threw whole: 15% of shooters, +32% profit.
+    uint256 internal constant BOOST_ROW = 15 | (32 << 8);
+
+    /// @dev One run at 0-based seat `j` of an `n`-wallet field, its turn in CrapsBattle's form.
+    function run(uint256 word, address p, uint256 chipFlip, uint256 j, uint256 n)
+        external
+        pure
+        returns (SlipResult memory r)
+    {
         uint256 bankroll = chipFlip * 50 ether;
         Bets memory b;
         _scatterInto(b, uint256(keccak256(abi.encode(word, SCATTER_TAG, uint256(uint160(p))))), chipFlip, 10);
-        r = _settleSlip(
-            b,
-            keccak256(abi.encode(word, DICE_TAG, uint256(uint160(p)))),
-            bankroll,
-            bankroll * 5,
-            22,
-            200,
-            p,
-            0
-        );
+        bytes32 seed = keccak256(abi.encode(word, DICE_TAG));
+        uint256 start = uint256(keccak256(abi.encode(ROTATING_SHOOTER_TAG, seed))) % n;
+        uint256 offset = ((j + 1) + n - 1 - start) % n;
+        r = _settleSlip(b, seed, bankroll, bankroll * 5, 22, 200, p, BOOST_ROW | ((offset + 1) << 16));
     }
 
     /// @dev A raw slip with a caller-chosen hand cap, returning its shape for the gas envelope.
-    function capped(uint256 packed, bytes32 seed, uint256 hands, uint256 budget)
+    function capped(uint256 packed, bytes32 seed, uint256 hands, uint256 budget, uint256 turn)
         external
         pure
         returns (uint256 h, uint256 rolls)
     {
         Bets memory b = _boardFrom(packed, 1);
-        SlipResult memory r = _settleSlip(b, seed, 1e30, 0, hands, budget, address(0xBEEF), 0);
+        SlipResult memory r = _settleSlip(b, seed, 1e30, 0, hands, budget, address(0xBEEF), BOOST_ROW | (turn << 16));
         return (r.handsPlayed, r.totalRolls);
     }
 
@@ -152,7 +154,7 @@ contract CoinDrawBattleTest is Test {
         gasBound[1] = RESOLVE_BASE;
         for (uint256 j; j < n; ++j) {
             assertEq(players[j], want[j], "draw order");
-            Craps.SlipResult memory r = ref.run(word, want[j], chipFlip);
+            Craps.SlipResult memory r = ref.run(word, want[j], chipFlip, j, n);
             gasBound[1] += FIXED + RUN_EXTRA + PER_HAND * r.handsPlayed + PER_ROLL * r.totalRolls;
             assertLe(r.totalRolls, 200, "a run passed the exact roll cap");
             assertLe(r.handsPlayed, 22, "a run passed the hand cap");
@@ -225,7 +227,7 @@ contract CoinDrawBattleTest is Test {
             uint256 modelled = RESOLVE_BASE;
             uint256 chip = ((amount * 2) / 3 / 50 / 300 ether) * 6;
             for (uint256 i; i < 50; ++i) {
-                Craps.SlipResult memory r = ref.run(word, e[i], chip);
+                Craps.SlipResult memory r = ref.run(word, e[i], chip, i, 50);
                 modelled += FIXED + RUN_EXTRA + PER_HAND * r.handsPlayed + PER_ROLL * r.totalRolls;
             }
             vm.prank(ContractAddresses.GAME);
@@ -240,7 +242,7 @@ contract CoinDrawBattleTest is Test {
         emit log_named_uint("mean gas, 50 entrants", sum / N);
         emit log_named_uint("worst gas, 50 entrants", worst);
         emit log_named_uint("PROVEN resolve bound, 50 entrants at both caps", proven);
-        assertLe(proven, 7_350_000, "the proven resolve bound moved");
+        assertLe(proven, 7_475_000, "the proven resolve bound moved");
     }
 
     /// @dev Gas model of one run: FIXED + PER_HAND x hands + PER_ROLL x rolls, fitted as an upper
@@ -250,7 +252,7 @@ contract CoinDrawBattleTest is Test {
     ///      (both hand machines), on a bankroll deep enough that only the caps stop it, and on
     ///      battle-shaped runs (survival coin, goal latch), so samples span every per-roll path.
     uint256 internal constant FIXED = 10_000;
-    uint256 internal constant PER_HAND = 1_100;
+    uint256 internal constant PER_HAND = 1_250;
     uint256 internal constant PER_ROLL = 480;
 
     function test_GasEnvelopeProvesTheField() public {
@@ -261,7 +263,7 @@ contract CoinDrawBattleTest is Test {
             uint256 hands = 1 + (i % 22);
             uint256 budget = 1 + ((i * 7) % 200);
             uint256 g = gasleft();
-            (uint256 h, uint256 r) = ref.capped(board, keccak256(abi.encode("envelope", i)), hands, budget);
+            (uint256 h, uint256 r) = ref.capped(board, keccak256(abi.encode("envelope", i)), hands, budget, 1 + i % 22);
             g -= gasleft();
             assertLe(g, FIXED + PER_HAND * h + PER_ROLL * r, "a run cost more than the gas model");
             if (h > maxHands) maxHands = h;
@@ -274,14 +276,14 @@ contract CoinDrawBattleTest is Test {
             uint256 packed = uint256(keccak256(abi.encode("board", i))) & ((1 << 30) - 1);
             if (packed == 0) packed = 1 << 27;
             uint256 g = gasleft();
-            (uint256 h, uint256 r) = ref.capped(packed, keccak256(abi.encode("side", i)), 22, 200);
+            (uint256 h, uint256 r) = ref.capped(packed, keccak256(abi.encode("side", i)), 22, 200, 1 + i % 22);
             g -= gasleft();
             assertLe(g, FIXED + PER_HAND * h + PER_ROLL * r, "a random board cost more than the gas model");
         }
         for (uint256 i; i < 1_500; ++i) {
             uint256 g = gasleft();
             Craps.SlipResult memory r =
-                ref.run(uint256(keccak256(abi.encode("shape", i))), address(uint160(i + 1)), 100);
+                ref.run(uint256(keccak256(abi.encode("shape", i))), address(uint160(i + 1)), 100, i % 50, 50);
             g -= gasleft();
             // `run` also scatters the board and derives both seeds: the work RUN_EXTRA carries in
             // the composed bound, so these samples are held to the per-run figure it charges.
@@ -293,17 +295,17 @@ contract CoinDrawBattleTest is Test {
         }
         uint256 field = 50 * (FIXED + PER_HAND * 22 + PER_ROLL * 200);
         emit log_named_uint("proven dice bound, 50 entrants", field);
-        assertLe(field, 6_600_000, "the proven field bound moved");
+        assertLe(field, 6_675_000, "the proven field bound moved");
     }
 
     /// @dev The hand cap almost never binds: under the battle's own terms, fewer than 0.05% of
-    ///      runs reach it (measured 0.004% at 200,000 runs with no cap below 512).
+    ///      runs reach it (measured 0.0095% at 200,000 runs with no cap below 512).
     function test_HandCapAlmostNeverBinds() public {
         uint256 N = 60_000;
         uint256 hit;
         for (uint256 i; i < N; ++i) {
             address p = address(uint160(i + 1));
-            Craps.SlipResult memory r = ref.run(uint256(keccak256(abi.encode("tail", i / 50))), p, 60);
+            Craps.SlipResult memory r = ref.run(uint256(keccak256(abi.encode("tail", i / 50))), p, 60, i % 50, 50);
             if (r.handsPlayed == 22) ++hit;
         }
         emit log_named_uint("runs reaching the hand cap, per 100k", (hit * 100_000) / N);
