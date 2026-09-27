@@ -18,37 +18,31 @@ function body(signature) {
   throw new Error(`unclosed ${signature}`);
 }
 
-describe("JackpotFarFutureCoinUnits — purchase-day future fill", function () {
-  it("picks at most 16 distinct levels in the unminted +1 through +99 band", function () {
-    expect(source).to.match(/FUTURE_FLIP_LEVEL_PICKS\s*=\s*16\s*;/);
-    expect(source).to.match(/JACKPOT_BATTLE_ENTRANTS\s*=\s*50\s*;/);
-    const draw = body("function _playJackpotBattle(");
-    expect(draw).to.include("pick < FUTURE_FLIP_LEVEL_PICKS && found < JACKPOT_BATTLE_ENTRANTS");
-    expect(draw).to.include("uint256 offset = entropy % 99");
-    expect(draw).to.include("(visited >> offset) & 1 == 0");
-    expect(draw).to.include("visited |= uint256(1) << offset");
-    expect(draw).to.include("lvl + 1 + uint24(offset)");
+describe("JackpotFarFutureCoinUnits — the daily jackpot battle's award draw", function () {
+  it("snapshots the eligible unminted +1 through +99 levels and draws at most one chunk", function () {
+    expect(source).to.match(/JACKPOT_BATTLE_ENTRANTS\s*=\s*JackpotBattleFieldLib\.MAX_CHUNK\s*;/);
+    const draw = body("function _collectJackpotChunk(");
+    expect(draw).to.include("for (uint256 offset; offset < 99; ++offset)");
+    expect(draw).to.include("uint24 candidate = lvl + 1 + uint24(offset)");
+    expect(draw).to.include("remaining < JACKPOT_BATTLE_ENTRANTS ? remaining : JACKPOT_BATTLE_ENTRANTS");
   });
 
-  it("reads the far-future queues from a random starting lane without mutating them", function () {
-    const draw = body("function _playJackpotBattle(");
+  it("reads the far-future queues without mutating them", function () {
+    const draw = body("function _collectJackpotChunk(");
     expect(draw).to.include("ticketQueue[_tqFarFutureKey(candidate)]");
     expect(draw).to.include("(entropy >> 128) % len");
     expect(draw).to.include("_tqWordAt(queue, idx)");
-    expect(draw).to.include("if (idx == len) idx = 0");
+    expect(draw).to.include("if (len == 0) continue;");
     expect(draw).not.to.match(/queue\s*\[[^\]]+\]\s*=|queue\.push|queue\.pop|delete\s+queue/);
   });
 
-  it("hands the prepared field and the whole budget to JackpotBattle, then credits its result", function () {
-    const draw = body("function _playJackpotBattle(");
-    expect(draw).to.include("if (found == 0) return;");
-    expect(draw).to.include("mstore(winners, found)");
-    expect(draw).to.include("IJackpotBattle battle = IJackpotBattle(ContractAddresses.JACKPOT_BATTLE)");
-    expect(draw).to.include("JackpotBattleFieldLib.prepare(winners, coinBudget)");
-    expect(draw).to.include("battle.resolve(lvl, field, coinBudget, battleWord)");
-    expect(draw).to.include("if (players.length != 0) coinflip.creditFlipBatch(players, owed)");
-    // Craps supplies preferences only; the whole pot still goes to one immediate battle.
-    expect(draw).not.to.include("ICrapsCoinDrawSeat");
-    expect(draw).not.to.include("_finishJackpotBattle");
+  it("appends each chunk to the table, and the sealing chunk settles on the budget its draw left", function () {
+    const play = body("function _playJackpotBattle(");
+    expect(play).to.include("IJackpotBattle battle = IJackpotBattle(ContractAddresses.CRAPS)");
+    expect(play).to.include("JackpotBattleFieldLib.prepare(winners)");
+    expect(play).to.include("battle.appendJackpotBattle(field, next, last)");
+    expect(play).to.include("battle.advanceJackpotBattle(JACKPOT_BATTLE_SETTLE_UNITS)");
+    expect(play).to.include("JACKPOT_DRAW_BASE_UNITS + winners.length * JACKPOT_DRAW_ENTRY_UNITS");
+    expect(play).to.include("battle.advanceJackpotBattle(uint64(JACKPOT_BATTLE_SETTLE_UNITS - drawUnits))");
   });
 });

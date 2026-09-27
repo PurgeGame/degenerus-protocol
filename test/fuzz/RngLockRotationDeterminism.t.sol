@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 // ============================================================================
 // RngLockRotationDeterminism.t.sol -- Phase 313 VTST-03 (proves VRF-03)
 // ----------------------------------------------------------------------------
@@ -179,7 +181,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///      fulfilled), then drain the lock window. Mirrors the v43 _deliverMockVrf.
     function _assertPreferredBoardFrozen() private {
         if (!game.rngLocked()) return;
-        vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattle.BetLocked.selector);
+        vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
         crapsBattle.setPreferredBoard(3);
     }
 

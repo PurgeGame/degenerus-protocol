@@ -7,8 +7,8 @@
 | `DegenerusGame` + 12 game modules | Purchases, ticket materialization, advance/VRF, jackpots, lootboxes, side-games and terminal distribution. The twelve delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, FoilPack, GameOver, Jackpot, Lootbox, Mint and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
 | `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Jackpot to Whale for early-bird and quadrant pass awards; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Decimator, Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
 | `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
-| `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip` and `settleRanked` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls `settleRanked`, which also returns the battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder), so the comparator lives in the engine, not the table |
-| `JackpotBattle` | `JackpotBattle is Craps`, storage-free and GAME-only, deployed after `CrapsEngine`: plays the daily jackpot battle's closed battle in memory and returns what each wallet is owed; the Game credits it |
+| `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip`, `settleRanked` and `settleBattle` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls `settleBattle`, which plays a seat's whole run (board, scatter, shooter boost and rotation) under the shared 1,000-roll budget and also returns the battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder), so the comparator lives in the engine, not the table |
+| `JackpotBattle` | `JackpotBattle is CrapsBattleStorage`, deployed after `CrapsEngine` and reached only by `CrapsBattle`'s fallback delegatecall, so it runs in the table's storage: it locks the daily jackpot battle's field at the RNG request, draws and appends its awarded entries, seals the field and serves its views. The table's normal resolver settles and pays every seat |
 | `DegenerusVault` | DGVE/DGVF share classes, vault-owned positions and comp distribution authority |
 | `sDGNRS` / `DGNRS` / `GNRUS` | Reserve backing, transferable wrapper and charity rights |
 | Affiliate, Quests, Jackpots | Referral rewards, activity state and jackpot support |
@@ -145,16 +145,15 @@ board's solo quadrant pays the day's headline ETH prize to one winner, and every
 on that board (purchase tickets, jackpot daily tickets, early-bird tickets) skips it unless
 it is the only active bucket.
 
-Coin jackpot: every day's FLIP budget (0.25% of the previous level's recorded prize pool,
-at the current ticket price) is the jackpot battle over unminted levels. It has its own advance
-transaction in both phases: stage 17 on purchase days after the ETH/trait draw, and stage 16
-on jackpot days after the ETH stage and the
-day-1 early-bird stage and ahead of the coin+tickets stage that pays the day's tickets and
-seals the day. Purchase days run stages 6 → 17 → 15 when all legs are funded. With no
-ticket leg, stage 17 seals the day; with a zero previous pool, no battle stage is queued.
-The existing packed battle-pending bit is shared across the mutually exclusive phases.
-The RNG lock stays held across all stages, including across midnight, so preferences,
-queues and the committed day word cannot change. Level
+Jackpot battle: the day's sixth window (period 5) is one craps battle of paid seats (an
+8,000-FLIP entry, direct or on a day ticket) and awarded seats drawn from the far-future
+queues. The daily RNG request locks the paid field and the Added allocation (0.5% of the
+recorded prize pool at the level's ticket price, at least 150,000 FLIP while `level` is 0 or 1
+and 50,000 after), and latches the battle's pending bit. Stage 18 applies the fresh word and
+does nothing else. Every later advance runs one battle step, stage 16 on jackpot days and 17 on
+purchase days, until the field completes; only then does the day's ETH, ticket and
+transition work run. The RNG lock stays held across all of it, including across midnight, so
+the paid field, preferences, queues and the committed word cannot change. Level
 1's purchase days, which pay no ETH jackpot, also run a trait-matched FLIP draw on the
 day's board over level 1: up to 50 winners, one equal whole-100-FLIP share each; the
 sub-share remainder and any unfilled share are not minted. Every seat the Game writes on the
@@ -162,44 +161,27 @@ craps table (the lootbox pass reservations) carries a fixed standing of 100 rath
 read of the holder's activity score: above the boost floor and most casual wallets, below a
 dedicated player; `amendSlip` re-reads the real score.
 
-The jackpot battle uses its whole daily budget for one closed craps battle,
-played and paid in the draw's own transaction. It walks up to 50 wallets: it picks an
-unvisited level among the 99 unminted levels above the mint ceiling (`[purchaseLevel + 1,
-purchaseLevel + 99]` on a purchase day, `[level + 2, level + 100]` on a jackpot day, when
-level + 1 is already minted), walks its queue from a random lane, taking each wallet at most
-once, until it has its wallets or the level is exhausted, then picks again (at most 16
-picks). `JackpotBattle` (a storage-free, GAME-only
-contract at `JACKPOT_BATTLE`) plays the field on the day's word: two thirds of the budget
-are the stakes, split into equal units, each a whole multiple of 300 FLIP (at least 300,
-exactly five boards deep; a wallet walked twice holds two units but plays one run, and the
-units multiply only what that run pays), and the pot is everything else: the remaining third
-plus whatever the 300-FLIP floor leaves unstaked. The field plays as a scheduled window's seats
-do: one set of dice off the word for everyone, each wallet's saved board plus scatter to ten chips, the scheduled
-shooter-profit row for its named-chip count (zero: 15% of shooters, +32%) and the rotating shooter's +5% turn, passed seat by seat
-in first-drawn order. Each run is the scheduled Dice Run shape (five rounds deep, up to seven chosen chips, goal at five times the bankroll) capped at exactly 200 rolls and
-22 shooters (0.01% of 200,000 simulated runs reach it): a bust pays nothing, a run stopped
-by either cap or latched at the goal pays its bankroll per unit, and the pot goes to the paid run with the highest ending bankroll (the earlier-drawn
-wallet on a tie; with no paid run it is not minted). A separately salted roll multiplies
-every ordinary run payout and the pot: 90% at 0.5x, 9% at 3x, 0.9% at 20x and 0.1% at
-100x, for a 1x mean before rounding. The base budget, field, simulations and jackpot scores
-remain unscaled. `JackpotBattleMultiplier` reports the base budget and multiplier in basis
-points; the existing run/pot events report the final payouts. Each multiplied payout lands on
-the protocol's award figures (whole FLIP up to 1,000, the EV-preserving 100-FLIP granule
-above). The Game groups the entries and batch-reads saved boards before sending a packed
-wallet/board/unit field into the battle; the battle makes no storage callbacks. The Game credits the result in one batch.
-The pot winner can also claim routine RIU shares (5% at a 25x peak, 10% at 120x) and the existing
-biggest Dice Run record (100x floor, strict improvement). These use the winner's Goal-qualified
-peak per unit, draw from the existing pools, and retain RIU's pass/liquid split; they do not
-activate the event's repeat-win doubling. Saved boards live in the existing craps pass-credit slot, and edits freeze while `Game.rngLocked()` is true.
-`JackpotBattleRun` includes the canonical board used. See [the UI and storage interface](CRAPS-PREFERENCES.md).
-The field, saved boards, budget and entrants' queues are fixed before the word exists, so
-the battle is a jackpot result, not an entry window. A roll budget under one hand's 512 is
-exact in `Craps._settleSlip`: the last hand is cut where it runs out and refunds its live
-stakes; the table's 8,192 budget keeps its between-shooters meaning. The two caps limit the amount of dice work. Tests check an empirical
-7.475M battle allowance (test/craps/JackpotBattle.t.sol), which is not an exhaustive
-worst-case proof. Stage gas tests enforce 10.5M on measured battle transactions. The
-max-chip composition test substitutes the allowance for the measured battle cost once
-and reserves a separate jackpot-award allowance; it does not add the battle twice. The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
+The word rolls one multiplier for the whole pool, `(paid units x 8,000 + Added) x m`: 90% at
+0.5x, 9% at 3x, 0.9% at 20x and 0.1% at 100x, a 1x mean. Awards come from Added alone, one per
+10,000 FLIP, at most 500. The Game draws them in chunks of up to 150: each draw picks an eligible
+level uniformly among the 99 unminted levels above the mint ceiling, then an entry uniformly in
+its queue, with replacement, so a wallet drawn twice holds two seats. It batch-reads the
+distinct wallets' saved boards and appends one packed word per entry; the battle makes no
+storage callbacks. The chunk that reaches the target seals the field: each unit's bankroll is
+half its share of the pool, rounded down to 300 FLIP (at least 1,800), the rest of the share is
+its bounty, and the dust stays in the pot. Only the fee-funded bankroll is booked as craps
+action and comped 2%, once, at seal. Every seat throws the same dice; an award keys its scatter,
+survival coin and shooter boost to its own bet id. Seats settle through the table's normal
+resolver, paid then day tickets then awards, on 1,500 work units per call; the sealing call
+first charges its draw (110 units plus 10 per entry) and settles on the rest. The last seat
+finalizes the field once: the best run takes the pot, a contested high lane pays its winner,
+and the pot winner can claim RIU (5% of the progressive at a 25x peak, 10% at 120x, with the
+pass/liquid split) and the biggest Dice Run record (100x floor, strict improvement). Warm-up
+and skipped days have no paid field; their award-only battle uses the day's otherwise unused
+remainder-seven slot, which the lapse sweep never walks. The worst settle call is bounded near
+8.6M gas and a full draw chunk measures up to 7.2M; see
+[the preferences and jackpot battle interface](CRAPS-PREFERENCES.md) and
+[the gas derivation](JACKPOT-BATTLE-GAS-HANDOFF.md). The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
 second) over 48 rounds of four samples: 12 each at the BAF level, level + 1, level + 2..5
 and level + 6..99 (centuries: 8, 8, 8, 8, and 16 on the previous 99 levels). The two
 unminted ranges sample one queue lane per wallet.
@@ -265,7 +247,7 @@ uses ordinary balances and burns. Standard ERC20 approvals and the trusted
 minter registry remain available.
 
 
-Purchase-phase ticket awards, early-bird tickets and the jackpot-day jackpot battle are separate
+Purchase-phase ticket awards, early-bird tickets and the jackpot battle's steps are separate
 bounded stages. The packed queue holds eight owner indices per word and must use
 its codec helpers; Solidity array operations do not express its logical length.
 `PackedTicketSampleLib` samples eight lanes from one selected word, with explicit

@@ -197,10 +197,10 @@ contract CrapsProgressiveTest is CrapsPins {
     ///      `day * 8 + period + 1`, so 9 is day 1 period 0 — a ROUTINE window.
     uint64 internal constant TAP_SLOT = 9;
     /// @dev The EVENT of TAP_SLOT's own day: day 1, period 6, remainder 7.
-    uint64 internal constant TAP_EVENT_SLOT = 15;
+    uint64 internal constant TAP_EVENT_SLOT = 14;
     /// @dev A routine window and an event on a DIFFERENT day (day 2), for the staleness cases.
     uint64 internal constant TAP_SLOT_DAY2 = 17;
-    uint64 internal constant TAP_EVENT_SLOT_DAY2 = 23;
+    uint64 internal constant TAP_EVENT_SLOT_DAY2 = 22;
 
     /// @dev The bankroll every award tap runs at, in whole FLIP. Its 25x common cutoff is 75,000
     ///      FLIP and its 120x rare cutoff is 360,000 — both exact.
@@ -306,7 +306,7 @@ contract CrapsProgressiveTest is CrapsPins {
 
         // Arming every window of the day, in any order, adds nothing either.
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        for (uint256 p = 0; p < craps.BONUS_PERIODS_PER_DAY(); ++p) {
+        for (uint256 p = 0; p + 1 < craps.BONUS_PERIODS_PER_DAY(); ++p) {
             craps.armBonusWindow(uint64(uint256(today) * craps.BONUS_SLOTS_PER_DAY() + p + 1));
         }
         assertEq(craps.progressivePool(), once, "arming funded the pool");
@@ -547,7 +547,7 @@ contract CrapsProgressiveTest is CrapsPins {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // B2. THE RUNG SCHEDULE — which share of the pool, and when it doubles.
+    // B2. THE RUNG SCHEDULE — which share of the pool.
     // ════════════════════════════════════════════════════════════════════════
 
     /// @dev A peak that clears the scheduled target's COMMON cutoff and nothing more, and one
@@ -562,48 +562,20 @@ contract CrapsProgressiveTest is CrapsPins {
         return craps.awardAt(slot, TAP_BANKROLL, true, peakFlip, craps.SYBIL_SCORE_FLOOR(), alice);
     }
 
-    /// @dev ALL FOUR BASE RUNGS, against the published schedule stated as literals rather than as
-    ///      the constants the award reads — so the schedule is graded, not restated.
-    ///
-    ///        routine (periods 0..5)   5% common   10% rare
-    ///        event   (period 6)      20% common   40% rare
+    /// @dev THE RUNGS, against the published schedule stated as literals rather than as the
+    ///      constants the award reads — so the schedule is graded, not restated. A routine window
+    ///      and the day's jackpot slot pay the same 5% common and 10% rare.
     function test_allFourBaseRungsAreTheirPublishedShares() public {
         uint256 pool = 1_000_000 ether;
-        assertEq(_rungAt(TAP_SLOT, pool, COMMON_PEAK), 50_000 ether, "a routine common rung is not 5%");
-        assertEq(_rungAt(TAP_SLOT, pool, RARE_PEAK), 100_000 ether, "a routine rare rung is not 10%");
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, COMMON_PEAK), 200_000 ether, "an event common rung is not 20%");
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, RARE_PEAK), 400_000 ether, "an event rare rung is not 40%");
-
-        // And the constants agree with the literals above, so a reader of either finds the same
-        // schedule.
-        assertEq(craps.PROG_ROUTINE_COMMON_BPS(), 500, "the routine common constant moved");
-        assertEq(craps.PROG_ROUTINE_RARE_BPS(), 1000, "the routine rare constant moved");
-        assertEq(craps.PROG_EVENT_COMMON_BPS(), 2000, "the event common constant moved");
-        assertEq(craps.PROG_EVENT_RARE_BPS(), 4000, "the event rare constant moved");
-
-        // THE TWO STATEMENTS OF THE SCHEDULE, HELD TOGETHER. The award computes
-        // `_PROG_ROUTINE_COMMON_BPS << shift`; the four named rungs are the same table written
-        // out, and the parity gate greps THOSE. A shift form that drifted from the names would
-        // leave the gate green and the award paying something else.
-        uint256 base = craps.PROG_ROUTINE_COMMON_BPS();
-        uint256 rd = craps.PROG_RARE_DOUBLINGS();
-        uint256 ed = craps.PROG_EVENT_DOUBLINGS();
-        assertEq(base << rd, craps.PROG_ROUTINE_RARE_BPS(), "rare is not its named rung by doubling");
-        assertEq(base << ed, craps.PROG_EVENT_COMMON_BPS(), "the event is not its named rung by doubling");
-        assertEq(base << (rd + ed), craps.PROG_EVENT_RARE_BPS(), "the event rare rung is not its named one");
+        assertEq(_rungAt(TAP_SLOT,pool,COMMON_PEAK),50_000 ether);
+        assertEq(_rungAt(TAP_SLOT,pool,RARE_PEAK),100_000 ether);
+        assertEq(_rungAt(TAP_EVENT_SLOT,pool,COMMON_PEAK),50_000 ether);
+        assertEq(_rungAt(TAP_EVENT_SLOT,pool,RARE_PEAK),100_000 ether);
     }
 
-    /// @dev THE REPEAT DOUBLE, at BOTH event rungs: 20% becomes 40% and 40% becomes 80%. The
-    ///      qualifying win is a routine field on the SAME day, taken as Goal by the same address.
-    function test_theEventDoublesOnARepeatVictoryAtBothRungs() public {
+    /// @dev The jackpot slot's award log carries the rung it applied: 500 bps, not rare, at 25x.
+    function test_theJackpotSlotLogsTheRungItApplies() public {
         uint256 pool = 1_000_000 ether;
-        craps.noteRoutineVictory(TAP_SLOT, true, alice);
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, COMMON_PEAK), 400_000 ether, "a doubled common event rung is not 40%");
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, RARE_PEAK), 800_000 ether, "a doubled rare event rung is not 80%");
-
-        // AND THE DOUBLING IS OBSERVABLE. `poolBps` carries the rung actually applied, so an
-        // indexer reads the repeat status straight off the award — and read WITH `rare` it is
-        // unambiguous, which is the case a bare 4,000 could not settle on its own.
         craps.seedProgressive(pool);
         vm.recordLogs();
         craps.awardAt(TAP_EVENT_SLOT, TAP_BANKROLL, true, COMMON_PEAK, craps.SYBIL_SCORE_FLOOR(), alice);
@@ -614,124 +586,16 @@ contract CrapsProgressiveTest is CrapsPins {
             (bool rare, uint16 poolBps,,, uint256 candidate,,) =
                 abi.decode(logs[i].data, (bool, uint16, uint256, uint256, uint256, uint256, uint256));
             assertFalse(rare, "a 25x high point is not rare");
-            assertEq(poolBps, 4000, "a doubled COMMON event rung did not log 4,000 bps");
-            assertEq(candidate, 400_000 ether, "the logged candidate is not the doubled rung");
+            assertEq(poolBps, 500, "the common rung did not log 500 bps");
+            assertEq(candidate, 50_000 ether, "the logged candidate is not the common rung");
             seen = true;
         }
-        assertTrue(seen, "the doubled award was not logged");
-    }
-
-    /// @dev A ROUTINE WINDOW NEVER DOUBLES, and that is the rule most easily got wrong: the 5%
-    ///      and 10% rungs are the routine schedule, NOT a first-win rate that a repeat lifts. A
-    ///      winner sitting on a qualifying victory takes exactly the same routine rung as one
-    ///      who has never won anything.
-    function test_aRoutineWindowNeverDoublesHoweverItsWinnerCameToIt() public {
-        uint256 pool = 1_000_000 ether;
-        craps.noteRoutineVictory(TAP_SLOT, true, alice);
-        assertEq(craps.routineGoalDayOf(alice), 2, "the fixture did not stamp the day");
-        // A SECOND routine victory the same day, so the map is as set as it can be.
-        craps.noteRoutineVictory(TAP_SLOT + 1, true, alice);
-        assertEq(_rungAt(TAP_SLOT + 2, pool, COMMON_PEAK), 50_000 ether, "a routine common rung doubled");
-        assertEq(_rungAt(TAP_SLOT + 2, pool, RARE_PEAK), 100_000 ether, "a routine rare rung doubled");
-    }
-
-    /// @dev THE THREE WAYS A QUALIFYING VICTORY IS NOT ONE — each moved one step off a victory
-    ///      that WOULD qualify, so the fixture is a control and not a coincidence.
-    function test_aBustADifferentPlayerAndADifferentDayAllFailToQualify() public {
-        uint256 pool = 1_000_000 ether;
-
-        // A BUST, however far it ran. `noteRoutineVictory` is the shipped gate, so this is
-        // production's own stop test.
-        craps.noteRoutineVictory(TAP_SLOT, false, alice);
-        assertEq(craps.routineGoalDayOf(alice), 0, "a bust stamped the day");
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, RARE_PEAK), 400_000 ether, "a bust doubled the event");
-
-        // A DIFFERENT PLAYER. Bob's victory is real; alice's event is not doubled by it.
-        craps.noteRoutineVictory(TAP_SLOT, true, bob);
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, RARE_PEAK), 400_000 ether, "another player's win doubled the event");
-
-        // A DIFFERENT DAY. Alice wins a routine field on day 1 and reaches day 2's event, whose
-        // slot carries day 2 — the stamp is stale and reads as never having won.
-        craps.noteRoutineVictory(TAP_SLOT, true, alice);
-        assertEq(_rungAt(TAP_EVENT_SLOT_DAY2, pool, RARE_PEAK), 400_000 ether, "a stale day doubled the event");
-        // And on its OWN day it still doubles, so the fixture above failed on the day and on
-        // nothing else.
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, RARE_PEAK), 800_000 ether, "the control did not double");
-    }
-
-    /// @dev A QUALIFYING VICTORY NEED NOT HAVE TRIGGERED THE PROGRESSIVE. The stamp is written on
-    ///      the VICTORY and not on the award, so a routine winner whose own peak fell short of
-    ///      every cutoff — and which therefore paid nothing and left the pool alone — still
-    ///      doubles its day's event.
-    function test_anEarlierGoalVictoryThatPaidNothingStillQualifies() public {
-        uint256 pool = 1_000_000 ether;
-        craps.seedProgressive(pool);
-
-        // A Goal just BELOW the scheduled target's common cutoff: no award, no movement.
-        (uint256 c,) = craps.progressiveThresholds();
-        uint256 shortPeak = (TAP_BANKROLL * c) / craps.BPS_DENOMINATOR() - 1;
-        assertEq(
-            craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, shortPeak, craps.SYBIL_SCORE_FLOOR(), alice),
-            0,
-            "the fixture's earlier victory paid a rung"
-        );
-        assertEq(craps.progressivePool(), pool, "the fixture's earlier victory moved the pool");
-
-        // The victory is what qualifies, so the event still doubles.
-        craps.noteRoutineVictory(TAP_SLOT, true, alice);
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, RARE_PEAK), 800_000 ether, "a non-paying victory did not qualify");
-    }
-
-    /// @dev THE EVENT CANNOT QUALIFY ITSELF, and the gate is structural: only routine slots ever
-    ///      write the map, so an event finalization leaves it exactly as it found it.
-    function test_theEventCannotQualifyItself() public {
-        craps.noteRoutineVictory(TAP_EVENT_SLOT, true, alice);
-        assertEq(craps.routineGoalDayOf(alice), 0, "the event stamped its own winner");
-        assertEq(
-            _rungAt(TAP_EVENT_SLOT, 1_000_000 ether, RARE_PEAK), 400_000 ether, "the event doubled off its own win"
-        );
-    }
-
-    /// @dev REPEAT VICTORIES NEVER STACK. The rule is a DOUBLING, not a count: six routine wins
-    ///      pay the same doubled event rung one does, and 80% is the ceiling of the whole schedule.
-    function test_repeatVictoriesNeverStackPastADoubling() public {
-        uint256 pool = 1_000_000 ether;
-        for (uint256 p = 0; p < 6; ++p) {
-            craps.noteRoutineVictory(uint64(TAP_SLOT + p), true, alice);
-        }
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, RARE_PEAK), 800_000 ether, "six victories paid other than 80%");
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, COMMON_PEAK), 400_000 ether, "six victories paid other than 40%");
-    }
-
-    /// @dev RESOLUTION-TIME STATE. Settlement is permissionless once the words are public, so the
-    ///      ORDER windows are cranked in is a caller's choice — and the rule is read at the moment
-    ///      the event resolves. An event cranked ahead of the routine victory does not double, and
-    ///      the victory landing afterwards does not reach back.
-    function test_anEventResolvedBeforeItsRoutineVictoryDoesNotDouble() public {
-        uint256 pool = 1_000_000 ether;
-        assertEq(_rungAt(TAP_EVENT_SLOT, pool, RARE_PEAK), 400_000 ether, "an unqualified event doubled");
-        craps.noteRoutineVictory(TAP_SLOT, true, alice);
-        assertEq(craps.progressivePool(), pool - 400_000 ether, "the later victory moved the settled pool");
-    }
-
-    /// @dev THE DOUBLED RUNG IS STILL RATIONED. The double chooses the CANDIDATE; the standing
-    ///      curve then applies to it exactly as it does to an undoubled one, and what the curve
-    ///      denies never leaves the pool.
-    function test_aDoubledRungIsStillRationedByStanding() public {
-        uint256 pool = 1_000_000 ether;
-        craps.noteRoutineVictory(TAP_SLOT, true, alice);
-        craps.seedProgressive(pool);
-
-        uint256 candidate = 800_000 ether; // 80%, the doubled rare event rung
-        uint256 credited = craps.awardAt(TAP_EVENT_SLOT, TAP_BANKROLL, true, RARE_PEAK, 6, alice);
-        assertEq(credited, craps.boostShareOf(candidate, 6), "the doubled rung ignored the standing curve");
-        assertLt(credited, candidate, "the fixture's standing denied nothing");
-        assertEq(craps.progressivePool(), pool - credited, "the pool fell by other than the credit");
+        assertTrue(seen, "the award was not logged");
     }
 
     /// @dev A CUSTOM BATTLE IS OUTSIDE THE WHOLE SCHEDULE, and its slot arithmetic must not be
     ///      read as a period. Custom slots begin at a multiple of eight, so one of them lands on
-    ///      the remainder the day's EVENT uses — and it still pays nothing and stamps nobody.
+    ///      the remainder the day's EVENT uses — and it still pays nothing.
     function test_aCustomSlotOnTheEventsRemainderIsStillOutside() public {
         uint256 pool = 1_000_000 ether;
         uint64 customEventLike = uint64(craps.customSlotBase() + 7);
@@ -744,27 +608,17 @@ contract CrapsProgressiveTest is CrapsPins {
             "a custom battle drew on the pool"
         );
         assertEq(craps.progressivePool(), pool, "a custom battle moved the pool");
-
-        // And `_payout` never offers a custom field to the write at all — it is behind the same
-        // `scheduled` gate — so nothing a custom battle does can qualify a day.
-        assertEq(craps.routineGoalDayOf(alice), 0, "a custom battle stamped a day");
     }
 
     /// @dev EVERY RUNG IS A FLOORED SHARE AND THE POOL IS CONSERVED, at every rung of the
     ///      schedule and for any pool. The award is `floor(pool * bps / 10_000)` exactly, it never
-    ///      exceeds the pool, and the pool falls by exactly what was credited — which is what
-    ///      makes the 80% rung safe to compute without a wide multiplication.
+    ///      exceeds the pool, and the pool falls by exactly what was credited.
     function testFuzz_everyRungIsAFlooredShareAndConservesThePool(uint96 pool, uint8 pick) public {
         uint64[2] memory slots = [TAP_SLOT, TAP_EVENT_SLOT];
         uint64 slot = slots[pick % 2];
         bool rare = (pick >> 1) % 2 == 1;
-        bool repeat = (pick >> 2) % 2 == 1;
-        if (repeat) craps.noteRoutineVictory(TAP_SLOT, true, alice);
 
-        uint256 bps = slot == TAP_EVENT_SLOT
-            ? (rare ? craps.PROG_EVENT_RARE_BPS() : craps.PROG_EVENT_COMMON_BPS())
-            : (rare ? craps.PROG_ROUTINE_RARE_BPS() : craps.PROG_ROUTINE_COMMON_BPS());
-        if (repeat && slot == TAP_EVENT_SLOT) bps += bps;
+        uint256 bps = rare ? 1000 : 500;
 
         craps.seedProgressive(pool);
         uint256 credited =
@@ -774,108 +628,6 @@ contract CrapsProgressiveTest is CrapsPins {
         assertEq(credited, (uint256(pool) * bps) / craps.BPS_DENOMINATOR(), "the safe form is not the plain one");
         assertLe(credited, pool, "the award overdrew the pool");
         assertEq(craps.progressivePool(), uint256(pool) - credited, "the pool fell by other than the credit");
-    }
-
-    /// @dev END TO END, THROUGH A REAL FINALIZATION. Everything above taps the gate directly; this
-    ///      proves `_payout` is actually WIRED to it, that the day it stamps is the field's own,
-    ///      and — the rule most easily lost — that reaching Goal BEHIND the winner qualifies
-    ///      nobody. Winning the main bounty is the whole qualification.
-    ///
-    ///      Sweeps settlement words until it has a field in which somebody other than the winner
-    ///      also finished Goal, so the runner-up case is actually exercised rather than assumed.
-    ///      Every word it touches is held to the full claim on the way past.
-    function test_aRealRoutineFinalizationStampsItsWinnerAndNobodyElse() public {
-        _freshDay();
-        uint24 day = craps.currentDayIndex();
-        address[3] memory field = [alice, bob, carol];
-        for (uint256 i = 0; i < 3; ++i) _seat(field[i], PER, uint16(4 + i));
-
-        uint64 slot = _slotAt(PER);
-        bytes32 key = _keyOf(PER);
-        _warpPastClose(PER);
-        uint48 index = _armAt(PER);
-
-        bool sawRunnerUpGoal;
-        uint256 snap = vm.snapshotState();
-        for (uint256 i = 0; i < 128 && !sawRunnerUpGoal; ++i) {
-            _setWord(index, uint256(keccak256(abi.encode("stamp", i))));
-            craps.resolveSlot(slot, WHOLE_FIELD);
-            address won = craps.betOf(_idAt(slot, craps.battleOf(key).winnerId)).player;
-
-            for (uint256 n = 0; n < 3; ++n) {
-                uint256 id = _idAt(slot, uint64(n + 1));
-                bool goal = craps.settlementIn(id, slot).stop == Craps.SlipStop.Goal;
-                if (field[n] == won) {
-                    // THE WINNER, and only where it finished Goal: the day, stored plus one.
-                    assertEq(
-                        craps.routineGoalDayOf(field[n]),
-                        goal ? uint256(day) + 1 : 0,
-                        "the winner's stamp is not its field's own day"
-                    );
-                } else {
-                    assertEq(craps.routineGoalDayOf(field[n]), 0, "a seat that did not win the field was stamped");
-                    if (goal) sawRunnerUpGoal = true;
-                }
-            }
-            if (!sawRunnerUpGoal) {
-                vm.revertToState(snap);
-                snap = vm.snapshotState();
-            }
-        }
-        assertTrue(sawRunnerUpGoal, "no word produced a Goal behind the winner: the runner-up rule is untested");
-    }
-
-    /// @dev THE WHOLE LOOP, on one real day: a routine window is finalized for real, its winner's
-    ///      stamp is written by `_payout`, and THAT DAY'S OWN EVENT SLOT then reads it and doubles.
-    ///      The tests above hold the write and the read apart; this is the one that proves the
-    ///      figure the write leaves is the figure the read consumes.
-    function test_aRealRoutineVictoryDoublesItsOwnDaysEvent() public {
-        _freshDay();
-        uint24 day = craps.currentDayIndex();
-        _seat(alice, PER, 4);
-        uint64 slot = _slotAt(PER);
-        bytes32 key = _keyOf(PER);
-        _warpPastClose(PER);
-        uint48 index = _armAt(PER);
-
-        // A word on which ALICE takes the field as Goal. Both halves matter: a bust would not
-        // stamp, and another winner would stamp somebody else.
-        bool armed;
-        uint256 snap = vm.snapshotState();
-        for (uint256 i = 0; i < 256 && !armed; ++i) {
-            _setWord(index, uint256(keccak256(abi.encode("loop", i))));
-            craps.resolveSlot(slot, WHOLE_FIELD);
-            uint256 winnerId = _idAt(slot, craps.battleOf(key).winnerId);
-            armed = craps.betOf(winnerId).player == alice
-                && craps.settlementIn(winnerId, slot).stop == Craps.SlipStop.Goal;
-            if (!armed) {
-                vm.revertToState(snap);
-                snap = vm.snapshotState();
-            }
-        }
-        assertTrue(armed, "no word gave alice a routine Goal victory");
-        assertEq(craps.routineGoalDayOf(alice), uint256(day) + 1, "the real finalization did not stamp the day");
-
-        // THIS DAY'S OWN EVENT, at the slot the schedule puts it: `day * 8 + 7`.
-        uint64 eventSlot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + craps.BONUS_PERIODS_PER_DAY());
-        assertEq(eventSlot % craps.BONUS_SLOTS_PER_DAY(), 7, "the event slot is not on the event's remainder");
-
-        uint256 pool = 1_000_000 ether;
-        craps.seedProgressive(pool);
-        assertEq(
-            craps.awardAt(eventSlot, TAP_BANKROLL, true, RARE_PEAK, craps.SYBIL_SCORE_FLOOR(), alice),
-            800_000 ether,
-            "the day's event did not double off its own routine victory"
-        );
-
-        // And the NEXT day's event, which the same stamp cannot reach.
-        craps.seedProgressive(pool);
-        uint64 tomorrowEvent = eventSlot + uint64(craps.BONUS_SLOTS_PER_DAY());
-        assertEq(
-            craps.awardAt(tomorrowEvent, TAP_BANKROLL, true, RARE_PEAK, craps.SYBIL_SCORE_FLOOR(), alice),
-            400_000 ether,
-            "yesterday's victory doubled tomorrow's event"
-        );
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1149,7 +901,9 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev EVERY SCHEDULED PRESET DIVIDES EXACTLY. The depth and the one target stay fixed at
     ///      every window of every day the schedule can draw.
     function test_everyScheduledPresetIsFiveDeepAtFiveX() public {
-        uint256 periods = craps.BONUS_PERIODS_PER_DAY();
+        // The five ordinary windows. The last period is the jackpot battle, whose bankroll is
+        // sized only when its field seals.
+        uint256 periods = craps.BONUS_PERIODS_PER_DAY() - 1;
         for (uint24 d = 1; d <= 300; ++d) {
             _setDailyWord(d, uint256(keccak256(abi.encode("presets", d))));
             for (uint256 p = 0; p < periods; ++p) {
@@ -1724,7 +1478,8 @@ contract CrapsProgressiveTest is CrapsPins {
 
     /// @dev When `period` stops taking bets, measured from the day's start.
     function _closeOf(uint256 period) internal view returns (uint256) {
-        if (period + 1 == craps.BONUS_PERIODS_PER_DAY()) return 1 days - craps.EVENT_LEAD();
+        if (period == 4) return 1 days - craps.EVENT_LEAD();
+        if (period == 0) return 20 minutes;
         uint256 base = period == 0 ? craps.BONUS_EVENT_CLOSE() : period * craps.BONUS_PERIOD();
         return base + craps.BONUS_CLOCK_ALIGN();
     }
@@ -1904,7 +1659,8 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev A HUGE PROGRESSIVE AWARD CAPS AT THIRTY HIGHS, and the cap deletes nothing: the pool
     ///      still falls by the whole gross, and everything the cap refused pays out liquid.
     function test_aHugeProgressiveAwardCapsAtThirtyHighs() public {
-        uint256 pool = 600_000_000 ether;
+        // Big enough that half the 5% award buys more than thirty 520,800-FLIP high passes.
+        uint256 pool = 700_000_000 ether;
         craps.seedProgressive(pool);
         uint256 candidate = craps.poolShareOf(pool, craps.PROG_ROUTINE_COMMON_BPS());
         uint256 before = coinflip.staked(alice);

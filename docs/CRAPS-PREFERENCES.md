@@ -47,29 +47,29 @@ The sentinel is set on the first successful manual or automatic save, including 
 
 The **20-bit storage encoding differs from the 30-bit API encoding**. Use `preferredBoardOf` for UI reads. Raw readers use `extsload(keccak256(abi.encode(player, uint256(15))))` and extract each two-bit count. Do not pass that compact field directly to a paid-entry API.
 
-## Automatic entries and events
+## Automatic entries
 
-`deliverPasses` and vault comp kinds 0, 1, 2 and 5 snapshot the recipient's preference. Kind 3 upgrades the existing ticket without changing its board; kind 4 banks passes. Window-ahead batches reserve before the future day’s terms are known. Protocol house/vault seats retain their existing house-random and vault-board/opt-out policies.
+`deliverPasses` and vault comp kinds 0, 1, 2 and 5 snapshot the recipient's preference. Kind 3 upgrades the existing ticket without changing its board; kind 4 banks passes. Window-ahead batches reserve before the future day's terms are known. Protocol house/vault seats retain their existing house-random and vault-board/opt-out policies.
 
-The Game truncates the draw to its affordable entry count, groups repeated wallets in first-drawn order, and reads all distinct played wallets in one `extsload(bytes32[])` call. It passes one packed word per wallet into `JackpotBattle`: address in bits 0–159, compact board in 160–179, and entry count starting at bit 180. The battle makes no storage callbacks. It uses the normal scheduled shooter-boost row for the number of named chips. With zero preference, the existing dice, scatter and boost are unchanged.
+## The jackpot battle
 
-The complete jackpot battle has its own advance transaction in both phases. Purchase days run **6 → 17 → 15**: RNG and ETH/level-one trait awards, then battle selection/play/credits/jackpots, then tickets and seal. If no ticket leg is pending, stage 17 seals the day itself. A zero previous prize pool skips the battle stage. Jackpot days retain their existing battle stage 16. This adds one advance on funded purchase days, with no new VRF request or storage slot; both phases reuse bit 72 of the existing daily budget word. The RNG lock stays held until the last stage, including across midnight. Advance clients should recognize stage 17 and continue while `advanceDue()` is true.
+The jackpot battle is the day's sixth window (period 5, slot `day * 8 + 6`). It is one craps battle with two kinds of seat:
 
-The run event appends the canonical board, so an indexer can reconstruct a run after the wallet changes its preference:
+- **Paid seats.** A direct entry or a day ticket costs a fixed 8,000 FLIP, burned at entry. The seat plays the board it was entered with, and a high seat counts as its day's high multiple of units.
+- **Awarded seats.** The Game draws these from the far-future ticket queues of the next 99 levels. Each award plays the wallet's saved preference, and a wallet drawn twice gets two separate seats.
 
-```solidity
-event JackpotBattleRun(
-    uint24 indexed level, address indexed player,
-    uint256 units, uint256 bankrollOut, uint256 rolls, uint256 paid,
-    uint32 chips
-);
-```
+Warm-up and skipped days have no paid field. Their award-only battle uses the otherwise unused slot `day * 8 + 7`.
 
-Update event subscriptions to this signature. `CrapsSlipPlaced` already records the board snapshotted into ticketed entries.
+### Lock and funding
 
-## Draw payout multiplier
+The daily RNG request locks the field before its word exists:
 
-Every nonempty jackpot battle rolls one multiplier from its existing word, shared by all run payouts and the winner's pot:
+- the paid entries and day tickets;
+- the **Added** allocation: 0.5% of the recorded prize pool at the level's ticket price, raised to 150,000 FLIP while the Game's `level` is 0 or 1 and to 50,000 after.
+
+Preference edits freeze with the lock. The lock stays held, across midnight too, until the battle has finished.
+
+When the word lands, one roll multiplies the whole pool, `(paid units × 8,000 + Added) × multiplier`:
 
 | Probability | Multiplier |
 | --- | ---: |
@@ -78,59 +78,79 @@ Every nonempty jackpot battle rolls one multiplier from its existing word, share
 | 0.9% | 20× |
 | 0.1% | 100× |
 
-The expected multiplier is `0.90 × 0.5 + 0.09 × 3 + 0.009 × 20 + 0.001 × 100 = 1`. This preserves pre-rounding expected ordinary payouts; existing award rounding still discards fractional-FLIP dust. The separate domain is `uint256(keccak256(abi.encode(battleWord, uint256(tag)))) % 1000`, where the numeric tag is `0x436f696e447261774d756c7469706c696572` ("CoinDrawMultiplier"). Buckets 0–899, 900–989, 990–998 and 999 map to the four tiers respectively.
+The expected multiplier is 1. The roll is `uint256(keccak256(abi.encode(battleWord, uint256(tag)))) % 1000` with tag `0x436f696e447261774d756c7469706c696572` ("CoinDrawMultiplier"). Buckets 0–899, 900–989, 990–998 and 999 map to the four tiers.
 
-The base budget still determines affordability, entry units, starting bankrolls and the base pot. Compute each raw run payout (`out × units`) and raw pot, multiply by the shared factor, then apply the existing two-band rounding. No paid run still means no pot. The multiplier adds no VRF request, storage write, participant or dice roll. Selection, dice and rounding retain their existing salts.
+Awards come from Added alone: one per 10,000 FLIP of Added, at most 500. Paid volume and the multiplier never change the count.
+
+### Draw and seal
+
+The Game draws awards in chunks of up to 150 entries, one chunk per advance.
+- Each draw picks a level uniformly among the eligible far-future queues, then an entry uniformly within that queue. Draws are with replacement.
+- The Game reads all distinct wallets' saved boards in one `extsload(bytes32[])` call. It passes one word per entry: address in bits 0–159, the compact board in 160–179, one unit at bit 180. The battle makes no storage callbacks, and a malformed or empty entry forfeits its award.
+
+The chunk that reaches the award target, or finds no eligible level, seals the field. Sealing sizes every seat from the rolled pool. With N paid plus awarded units:
+
+- each unit's bankroll is half the pool per unit, rounded down to a multiple of 300 FLIP (at least 1,800, and capped at the engine's chip limit);
+- the rest of each unit's share is its bounty, in 100-FLIP granules, never above its bankroll;
+- rounding dust stays in the pot.
+
+Only the fee-funded part of the bankroll is booked as the day's craps action, and the comp lane earns 2% of it, both once at seal. Added and any multiplier gain are never action.
+
+### Settlement
+
+Every seat throws the same dice. Seats settle through the table's normal resolver in one order: paid window seats, then day tickets, then awarded seats.
+- An awarded seat keys its scatter, survival coin and shooter boost to its own bet id rather than to the wallet. Repeat awards to one wallet are therefore separate runs.
+- Each advance settles seats on a 1,500-unit work budget. The call that seals the field first charges its own draw (110 units plus 10 per entry) against that budget and settles on the rest.
+- Every run has the shared 1,000-roll between-shooter budget (1,511-roll ceiling), like every slip.
+
+Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat finalizes the field once:
+- The best-ranked run takes the pot: the bounties plus the seal's remainder.
+- A contested high lane pays its winner.
+- The pot winner's high point can also claim RIU. At **25×** it pays **5%** of the live progressive pool; at **120×** it pays **10%** instead. RIU keeps its usual pass/liquid split and the fixed standing of 100.
+- At **100×** or more, a strict improvement claims the biggest Dice Run record, with its FLIP, sDGNRS and trophy awards.
+- Nothing doubles the jackpot's RIU shares.
+
+### Advance stages
+
+1. The daily request locks the field.
+2. Stage 18 applies the fresh word and does nothing else.
+3. Each later advance runs one battle step: stage 16 on jackpot days, 17 on purchase days. A step is a draw chunk (the sealing chunk also starts settling) or a settle batch.
+
+Once the field completes, the day continues with its usual stages. Advance clients should keep calling while `advanceDue()` is true.
+
+### Reads and events
+
+Call these at the **CRAPS address**; the table delegates their selectors to `JackpotBattle`:
 
 ```solidity
-event JackpotBattleMultiplier(
-    uint24 indexed level, uint256 baseBudget, uint256 multiplierBps
-);
+function jackpotEntryPrice() external pure returns (uint256);
+function jackpotProgress() external view returns (uint64 slot, uint256 added, bool started, bool complete);
+function jackpotBattleOf(uint64 slot) external view returns (JackpotRound memory round, uint256 board, uint64 cursor);
+
+event JackpotBattleLocked(uint64 indexed slot, uint24 requestDay, uint256 added, uint256 paidEntries);
+event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, address indexed player, uint256 units, uint32 chips);
+event JackpotBattleStarted(uint64 indexed slot, uint24 level, uint256 drawnEntries, uint256 drawnUnits, uint256 word);
 ```
 
-This event precedes the run events; empty fields emit none. Basis-point values are 5,000, 30,000, 200,000 or 1,000,000. `JackpotBattleRun.bankrollOut` remains the actual unscaled run result, while `paid` and `JackpotBattlePot.pot` include the multiplier and rounding. RIU awards and biggest-run scoring use the actual unscaled peak and starting bankroll; the payout multiplier cannot qualify a run for either award or multiply those separate pool awards.
+- `JackpotBattleEntry.chips` is the canonical 30-bit board the award plays. An indexer can replay a run after the wallet changes its preference.
+- `JackpotRound` carries the raw Added, the rolled pool, the multiplier in basis points, the unit bankroll and bounty, the pot remainder, paid and drawn counts, the award target, the draw cursor and the committed word.
+- Settlement and payment use the table's ordinary events: `CrapsBetSettled`, `CrapsBattleFinalized`, `CrapsBattlePaid`, `CrapsHighRollerPaid`, `CrapsProgressivePaid` and `CrapsProtocolAwardSplit`. Record claims appear as `BigRecordUpdated` and the trophy events.
+- `CrapsSlipPlaced` records the board of each paid ticket.
 
-## Jackpot battle RIU and biggest Dice Run awards
+## Measured cost
 
-The pot winner is the sole jackpot candidate. Its score is the completed-shooter peak of one run divided by that run's starting bankroll, in basis points. Extra entries multiply ordinary winnings only. A run that reaches a cap without latching Goal has no qualifying peak.
+Measured on the real protocol under `FOUNDRY_ISOLATE`, with intrinsic gas included:
 
-- At **25×**, RIU pays **5%** of the live progressive pool.
-- At **120×**, RIU pays **10%**, replacing the common share.
-- At **100×** or higher, a strict improvement can claim the existing biggest Dice Run record, including its FLIP, sDGNRS, and trophy awards.
-
-These awards draw from the existing pools in addition to the draw's normal budget. RIU uses the usual pass/liquid split and the fixed standing of 100 used by other Game-funded awards. A battle victory does not stamp a routine-window victory or activate the event's repeat-win doubling.
-
-The Game calls `CrapsBattle.rewardJackpotBattle` once for a qualifying winner, after crediting the battle's result. The function is Game-only; the Game's existing advance stages prevent replay. Ordinary fields below 25× make no award call. The progressive event uses bet ID zero and the domain-separated battle word as its key: `keccak256(abi.encode(dailyWord, level, keccak256("far-future-coin")))`. `BigRecordUpdated` and the existing trophy events describe any record claim.
-
-## Measured cost and deployment
-
-With solc 0.8.34, via IR, optimizer runs 1,000 and Osaka, the table runtime is 24,440 bytes (136 below EIP-170 and under the existing 24,450-byte rail). Custom-table definition validation now runs in the existing stateless `CrapsEngine`, sharing its bounds and packing constants through `CrapsCustomTerms`. This adds a call when creating a custom battle; scheduled advances keep their existing local preset calculation. No storage slots move.
-
-The controlled custom-entry fixture measures raw execution gas below. Each scenario restores the same entry state; this excludes transaction intrinsic gas and refunds. Named-board cases also include their board-handling work. These are examples, not fixed transaction quotes.
-
-| Preference state | Entry gas | Versus initialized random |
-| --- | ---: | ---: |
-| Initialized, unchanged random | 200,141 | — |
-| First save, random | 224,329 | +24,188 |
-| First save, named | 224,790 | +24,649 |
-| Changed to named | 207,690 | +7,549 |
-| Cleared to random | 207,229 | +7,088 |
-| Locked, save skipped | 203,306 | +3,165 |
-
-Both manual and paid initialized-equal paths are tested for no preference SSTORE, no preference event and no RNG lock query. The preference comparison still reads the existing pass-credit slot.
-
-Jackpot battle gas tests include Game-side grouping, the cold batch preference read, packing and resolution. The existing 7,475,000-gas model allowance is checked across saved boards, all eight boost rows, collisions and budget truncation. It is an empirically tested allowance, not an exhaustive proof over all possible words. Full purchase-day and jackpot-stage tests also retain their transaction-cap checks. `PreferredBoardAdvanceStress.t.sol` preserves a reachable expensive advance; `JackpotBattleAwardsGas.t.sol` measures the additional award path through the real contracts.
-
-Component measurements with the payout multiplier: 2,172,138 gas for the 50-distinct-wallet sample (+5,797) and 90,497 for 50 entries sharing one wallet (+1,938), including preparation, resolution and the multiplier event. The repeated-wallet test allowance increases from 90,000 to 92,000 specifically for this added work; the 7.475M battle allowance remains unchanged. These microbenchmarks run the preparation and battle in the same call context, as production does. The isolated full RIU-plus-record path, with a high-pass award, fresh record/recipient, maximum accrued record share, sDGNRS and trophy, uses 216,861 execution gas. These are measured cases, not a proven global maximum.
-
-`AdvanceNestedFullCompositionGas.t.sol` now measures fresh RNG, vault-history work, golden grand, redemption and 49 ETH awards separately from the 50-run battle, including mineFlip routing. `FOUNDRY_ISOLATE=true` gives successive calls separate transaction access lists. The measurement includes intrinsic gas once. The max-chip battle model removes the battle's nested execution cost, substitutes the 7,475,000 allowance, and adds 400,000 for jackpot awards. The nested replay excludes both test-wrapper memory expansion and top-level calldata intrinsic. Each measured battle stage and the modeled one must stay below 10.5M; this remains an empirical model, not an exhaustive maximum proof. The earlier combined-transaction 14.18M estimate is superseded.
-
-| Split-stage fixture | Gas including intrinsic |
+| Transaction | Gas |
 | --- | ---: |
-| Heavy daily stage: fresh RNG, vault history, golden grand, redemption, ETH | 5,035,459 |
-| Max-chip battle: 50 distinct paying wallets | 6,341,754 |
-| Saved-board battle: 50 wallets sharing a low address byte | 7,829,017 |
-| Separate 120-winner ticket stage, heavy fixture | 7,401,002 |
-| Max-chip battle model with battle and jackpot allowances | 9,676,284 |
+| Draw chunk, 150 entries, distinct wallets sharing one low address byte (the field library's full dedupe scan) | 6.9–7.2M |
+| Settle call, 1,500 units | 5.1–5.3M |
+| Sealing call, 50-entry chunk plus 890 units of settlement | 5.2–5.4M |
+| Whole battle in the sealing call (5 awards, 42 paid seats, payout included) | 4.2M |
 
-The model arithmetic is `6,341,754 - 4,540,470 + 7,475,000 + 400,000`. Splitting adds transaction overhead and one keeper advance on funded purchase days; its purpose is to lower the largest transaction, not the total work.
+The worst possible settle call is bounded at about 8.6M:
+- 1,499 units of earlier seats at the 4.7k-per-unit calibration (measured at most 4.27k);
+- one run at the 1,511-roll ceiling (at most 704 gas per roll);
+- the finalization, with every award branch forced (at most 254k).
+
+`test/fuzz/JackpotMergeAdvance.t.sol` drives full 150-entry chunks and asserts every jackpot transaction stays at or below 10M. The derivation is in `JACKPOT-BATTLE-GAS-HANDOFF.md`.

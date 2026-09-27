@@ -21,14 +21,15 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///             EARLY_BIRD_MAX_WINNERS = 128 cap (32 per bonus quadrant of lvl+1, once the 3%
 ///             covers 128 tickets at priceForLevel(lvl+1)).
 ///         The daily's other 96-winner ticket leg likewise runs from its own stage
-///         (payDailyJackpotCoinAndTickets, alongside the jackpot battle). This suite measures BOTH txs on the
+///         (payDailyJackpotCoinAndTickets). This suite measures BOTH txs on the
 ///         REAL advanceGame bytecode at every cap, with every winner a distinct address holding no
 ///         claimable / no queued entries (cold SSTOREs), on the worst ETH-leg branch (all-gold board
 ///         -> golden-ticket arm on the solo ETH winner + four fresh whale-pass draws) with an armed golden
 ///         ticket resolving as a GRAND in the same call, and asserts each tx under the EIP-7825 cap.
 /// @dev TEST-INFRA ONLY. No contracts/*.sol is mutated. Seeding happens in setUp() — a SEPARATE
 ///      transaction from the measured body — so the measured call starts on a cold EIP-2929 access
-///      list, as a real keeper tx would (the Lvl100PhaseEndAdvanceGas pattern). The winner sampler
+///      list, as a real keeper tx would (the Lvl100PhaseEndAdvanceGas pattern). The seeded day records
+///      its word directly, so no jackpot battle is locked ahead of its stages. The winner sampler
 ///      draws WITH replacement, so a handful of the 305 ETH draws may repeat a holder; the suite counts
 ///      distinct winners and reports the fully-cold top-up from the measured per-fresh-winner marginal.
 contract DayOneSeeder is DegenerusGame, BucketSeed {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -124,7 +126,7 @@ contract CrapsCompBudgetTest is CrapsPins {
     function _pastWindow(uint256 period) internal {
         uint256 ts = vm.getBlockTimestamp();
         uint256 dayStart = ts - ((ts - 82_620) % 1 days);
-        uint256 shut = dayStart + 1 hours + period * 4 hours;
+        uint256 shut = dayStart + 1 hours + period * 6 hours;
         if (ts < shut) vm.warp(shut);
     }
 
@@ -344,7 +346,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         _pastWindow(1);
         uint256 before = flip.compLane();
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.donate(false, 1, 10);
 
         uint256 ts = vm.getBlockTimestamp();
@@ -352,7 +354,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         // Rewind only the clock to prove the armed latch independently rejects the donation.
         vm.warp(ts - 1);
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.donate(false, 1, 10);
         assertEq(flip.compLane(), before);
     }
@@ -371,11 +373,11 @@ contract CrapsCompBudgetTest is CrapsPins {
         assertEq(flip.compLane(), 10 * GRANULE - 1);
 
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.SeedAboveMax.selector);
+        vm.expectRevert(CrapsBattleStorage.SeedAboveMax.selector);
         craps.donate(true, index, 0);
         craps.seedToCeiling(key);
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.SeedAboveMax.selector);
+        vm.expectRevert(CrapsBattleStorage.SeedAboveMax.selector);
         craps.donate(true, index, 1);
         assertEq(craps.battleOf(key).seed, uint256(0x7FFFFFFF) * GRANULE);
         assertEq(flip.compLane(), 10 * GRANULE - 1);
@@ -419,7 +421,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         uint24 day = _openDay(10);
         _seat(dave, 1, 1);
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.vaultComp(_code(KIND_WINDOW, dave, false, 1, 0));
         day;
     }
@@ -445,12 +447,14 @@ contract CrapsCompBudgetTest is CrapsPins {
         vm.prank(bob);
         craps.buyFutureCrapsDays(day + 1, 2, false);
         uint256 charged = _comp(KIND_FUTURE_DAYS, dave, false, day + 1, 2);
+        assertEq(charged, 2 * 25_000 ether, "normal future comps did not use the retail price");
         assertEq(charged, flip.burned(bob), "two comped days were priced other than two bought days");
         assertEq(flip.compFor(dave), charged, "the lane was charged other than the price");
         assertTrue(craps.dayStateOf(day + 1, dave) != 0 && craps.dayStateOf(day + 2, dave) != 0, "a day is not reserved");
         // High lane: anything above one.
         uint256 hi = _comp(KIND_FUTURE_DAYS, erin, true, day + 3, 1);
-        assertEq(hi, craps.HIGH_FUTURE_DAY_PRICE(), "a high reservation was priced other than the fixed high price");
+        assertEq(hi, 500_000 ether, "a high reservation was priced other than the fixed high price");
+        assertEq(flip.compFor(erin), hi, "the high reservation did not debit the comp lane");
     }
 
     function test_aCompedUpgradeChargesTheMissingCopies() public {
@@ -467,7 +471,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         assertEq(craps.daySeatHighMaskOf(day, dave), (1 << 2) | (1 << 5), "the upgrade bits were not written");
         // Already-high bits are not charged again; a mask of only those buys nothing.
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.NothingToUpgrade.selector);
+        vm.expectRevert(CrapsBattleStorage.NothingToUpgrade.selector);
         craps.vaultComp(_code(KIND_UPGRADE, dave, false, day, 1 << 2));
     }
 
@@ -492,19 +496,19 @@ contract CrapsCompBudgetTest is CrapsPins {
 
     function test_aWindowAheadIsPricedAtItsClassesExpectedSeat() public {
         uint24 day = craps.currentDayIndex() + 1;
-        assertEq(_ahead(dave, false, day, 0, 1), 2_433 ether, "the opener is not priced at its expected seat");
-        assertEq(_ahead(dave, false, day, 3, 2), 2 * 1_227 ether, "a routine window is not priced at its expected seat");
-        assertEq(_ahead(dave, false, day, 6, 1), 14_235 ether, "the tail is not priced at its expected seat");
-        assertEq(_ahead(erin, true, day, 6, 1), 19 * 14_235 ether, "a high seat is not nineteen expected seats");
-        assertEq(flip.compFor(dave), (2_433 + 2 * 1_227 + 14_235) * 1 ether, "the lane was charged other than the sum");
-        assertTrue(craps.seatedIn(_slotAt(day, 0), dave) && craps.seatedIn(_slotAt(day, 3), dave) && craps.seatedIn(_slotAt(day, 6), dave), "a window is not held");
+        assertEq(_ahead(dave, false, day, 0, 1), 4_520 ether, "the opener is not priced at its expected seat");
+        assertEq(_ahead(dave, false, day, 2, 2), 2 * 2_595 ether, "a routine window is not priced at its expected seat");
+        assertEq(_ahead(dave, false, day, 5, 1), 8_000 ether, "the tail is not priced at its expected seat");
+        assertEq(_ahead(erin, true, day, 5, 1), 21 * 8_000 ether, "a high seat is not twenty-one expected seats");
+        assertEq(flip.compFor(dave), (4_520 + 2 * 2_595 + 8_000) * 1 ether, "the lane was charged other than the sum");
+        assertTrue(craps.seatedIn(_slotAt(day, 0), dave) && craps.seatedIn(_slotAt(day, 2), dave) && craps.seatedIn(_slotAt(day, 5), dave), "a window is not held");
         assertTrue(!craps.seatedIn(_slotAt(day, 1), dave), "an unreserved window is held");
-        assertTrue(craps.seatedIn(_slotAt(day + 1, 3), dave), "the second day of the run is not reserved");
-        (uint256 n, uint256 h) = craps.windowReservedOf(_slotAt(day, 6));
+        assertTrue(craps.seatedIn(_slotAt(day + 1, 2), dave), "the second day of the run is not reserved");
+        (uint256 n, uint256 h) = craps.windowReservedOf(_slotAt(day, 5));
         assertEq(n, 2, "the tail has other than two reserved seats");
         assertEq(h, 1, "the tail has other than one high reservation");
-        assertEq(address(uint160(craps.betWordOf((uint256(_slotAt(day, 6)) << 64) | 1))), dave, "seat one is not dave's");
-        assertEq(address(uint160(craps.betWordOf((uint256(_slotAt(day, 6)) << 64) | 2))), erin, "seat two is not erin's");
+        assertEq(address(uint160(craps.betWordOf((uint256(_slotAt(day, 5)) << 64) | 1))), dave, "seat one is not dave's");
+        assertEq(address(uint160(craps.betWordOf((uint256(_slotAt(day, 5)) << 64) | 2))), erin, "seat two is not erin's");
         assertEq(craps.daySeatNumberOf(day, dave), 0, "a window reservation reads as a day ticket");
     }
 
@@ -516,32 +520,32 @@ contract CrapsCompBudgetTest is CrapsPins {
             _setDailyWord(day, uint256(keccak256(abi.encode("ev", i))));
             sum[0] += _priceOf(day, 0, 1);
             sum[1] += _priceOf(day, 3, 1);
-            sum[2] += _priceOf(day, 6, 1);
+            sum[2] += _priceOf(day, 5, 1);
         }
-        assertApproxEqRel(sum[0] / n, 2_433 ether, 0.03e18, "the opener's expected seat drifted from the table");
-        assertApproxEqRel(sum[1] / n, 1_227 ether, 0.03e18, "the routine expected seat drifted from the table");
-        assertApproxEqRel(sum[2] / n, 14_235 ether, 0.06e18, "the tail's expected seat drifted from the table");
+        assertApproxEqRel(sum[0] / n, 4_520 ether, 0.03e18, "the opener's expected seat drifted from the table");
+        assertApproxEqRel(sum[1] / n, 2_595 ether, 0.03e18, "the routine expected seat drifted from the table");
+        assertApproxEqRel(sum[2] / n, 8_000 ether, 0.06e18, "the tail's expected seat drifted from the table");
     }
 
     function test_aReservedWindowIsRefusedWhereItCannotSit() public {
         uint24 today = craps.currentDayIndex();
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, today, 1) | (2 << 208));
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, today + 1, 1) | (7 << 208));
         _ahead(dave, false, today + 1, 2, 1);
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, true, today + 1, 1) | (2 << 208));
         // A day ticket on that day is refused, and a reservation where a day ticket sits.
         _comp(KIND_FUTURE_DAYS, erin, false, today + 1, 1);
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.vaultComp(_code(KIND_WINDOW_AHEAD, erin, false, today + 1, 1) | (4 << 208));
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         craps.vaultComp(_code(KIND_FUTURE_DAYS, dave, false, today + 1, 1));
     }
 
@@ -558,14 +562,14 @@ contract CrapsCompBudgetTest is CrapsPins {
         assertEq(uint64(aliceId), 3, "the first live seat did not follow the two reserved ones");
         // The reserved holders may not take a second seat there, but may sit elsewhere.
         vm.prank(dave);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBonusBattle(1, _blank(), 1);
         _seat(dave, 3, 1);
         vm.prank(dave);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBonusDay(_blank(), 1);
         vm.prank(dave);
-        vm.expectRevert(CrapsBattle.NoSuchBet.selector);
+        vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
         craps.upgradeDayWindows(day, 1 << 1);
         bytes32 key = craps.battleKeyOf(aliceId);
         assertEq(craps.highSeatsOf(key), 1, "the reserved high seat is not in the lane");
@@ -604,7 +608,7 @@ contract CrapsCompBudgetTest is CrapsPins {
     function test_onlyTheVaultMayComp() public {
         _openDay(10);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.NotVaultOwner.selector);
+        vm.expectRevert(CrapsBattleStorage.NotVaultOwner.selector);
         craps.vaultComp(_code(KIND_WINDOW, dave, false, 1, 0));
         // An unknown kind is nothing: no seat, no charge.
         assertEq(_comp(9, dave, false, 1, 0), 0, "an unknown kind charged");
@@ -616,12 +620,12 @@ contract CrapsCompBudgetTest is CrapsPins {
     function test_theGameCanNoLongerComp() public {
         uint24 day = craps.currentDayIndex() + 1;
         vm.prank(ContractAddresses.GAME);
-        vm.expectRevert(CrapsBattle.NotVaultOwner.selector);
+        vm.expectRevert(CrapsBattleStorage.NotVaultOwner.selector);
         craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, day, 1));
 
         uint256 laneBefore = flip.compLane();
         uint256 charged = _ahead(dave, false, day, 0, 1);
-        assertEq(charged, 2_433 ether, "the vault's own comp did not price the opener seat");
+        assertEq(charged, 4_520 ether, "the vault's own comp did not price the opener seat");
         assertEq(laneBefore - flip.compLane(), charged, "the vault's comp did not burn from the lane");
     }
 

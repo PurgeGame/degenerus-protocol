@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {CrapsViews} from "./CrapsViews.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -452,7 +454,7 @@ contract CrapsBattleTest is CrapsPins {
         // The bounty rides alongside the bankroll rather than out of it, and may not exceed it —
         // proven once, at the door that fixes it for the whole field.
         vm.prank(vaultOwner);
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(
             uint32(LW / 1 ether), 2, 5, uint24((LW * 2) / GRANULE) + 1, 0, uint40(block.timestamp + 1 hours), false
         , 0);
@@ -951,7 +953,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // The fixture clock already sits past the opener's close, so the day is part-spent.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.enterBonusDay(_seven(), 1);
 
         // And the windows still open remain takeable one at a time.
@@ -969,18 +971,18 @@ contract CrapsBattleTest is CrapsPins {
         game.setScore(alice, craps.SYBIL_SCORE_FLOOR());
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
+        vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
         craps.enterBattle(slot, both, 1);
 
         _openDay();
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
+        vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
         craps.enterBonusBattle(PER, both, 1);
 
         // And an amendment cannot smuggle it in after the fact.
         uint256 betId = _placeBattle(bob, _boardA(), LW * 2, LW * 10, SU);
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
+        vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
         craps.amendSlip(betId, both);
 
         // Either side ALONE is fine — the rule is about naming both, not about the dark leg.
@@ -1069,7 +1071,7 @@ contract CrapsBattleTest is CrapsPins {
         Craps.Bets memory wider = _boardB();
         wider.passLine = 1;
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
         craps.amendSlip(betId, wider);
 
         // The endpoints remain ordinary amendments too.
@@ -1082,14 +1084,14 @@ contract CrapsBattleTest is CrapsPins {
 
         // Only the owner, and only while the slot is open.
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.NotYourBet.selector);
+        vm.expectRevert(CrapsBattleStorage.NotYourBet.selector);
         craps.amendSlip(betId, _boardA());
 
         _closeOn(craps, slot, 4, uint256(keccak256("amended")));
         // A shut slot refuses the amendment through the same joinability test its entry door
         // uses, so the two can never drift — hence its selector rather than `BetLocked`.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.amendSlip(betId, _boardA());
 
         craps.resolveSlot(slot, WHOLE_FIELD);
@@ -1171,16 +1173,16 @@ contract CrapsBattleTest is CrapsPins {
 
         // Nothing between one and the field's own multiple is an entry at all.
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+        vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), 0);
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+        vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), top + 1);
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+        vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), top - 1);
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+        vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), 2);
 
         _closeOn(craps, slot, 4, uint256(keccak256("stakes")));
@@ -1259,7 +1261,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(alice);
         craps.enterBattle(single, _boardA(), 1);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBattle(single, _boardA(), 1);
 
         // The same terms with the toggle on: as many seats as the caller pays for, each at the
@@ -1359,7 +1361,7 @@ contract CrapsBattleTest is CrapsPins {
         eight.place8 = 2;
         eight.hard8 = 3;
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
         craps.enterBattle(slot, eight, 1);
 
         // Amendments accept the same continuum and reject the same first out-of-range count.
@@ -1369,7 +1371,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.placedCountOf(betId), 6, "the six-chip amendment was not stored");
 
         vm.prank(carol);
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
         craps.amendSlip(betId, eight);
 
         // Seven remains the inclusive upper boundary and lands on the legs it named.
@@ -1391,19 +1393,19 @@ contract CrapsBattleTest is CrapsPins {
     ///      and 5/9 paying true odds there is no such minimum — a whole field may legally play a
     ///      fair board and hand the table nothing. The whole surface was deleted rather than left
     ///      returning a zero that reads like an answer.
-    /// @dev A window's share of its day is sized by the TABLE, not by a flat seventh. The day's
-    ///      EVENT takes half outright — its bankroll runs to 60,000 FLIP and a seventh priced it
-    ///      as though it were a 300-FLIP table — and the other half splits across the six routine
-    ///      windows 4:2:1 by size, so a large table draws four times the subsidy of a small one
-    ///      because it draws about ten times the action.
+    /// @dev A window's share of its day is sized by the TABLE, not by a flat sixth. The JACKPOT
+    ///      takes no ordinary share at all — its bankroll and pot are set only when its own field
+    ///      seals — and the whole ladder splits across the five ordinary windows 4:2:1 by size, so
+    ///      a large table draws four times the subsidy of a small one because it draws about ten
+    ///      times the action.
     function test_aWindowPutsUpItsOwnSizesShareOfItsDay() public {
         _openDay();
         uint24 day = craps.currentDayIndex();
         uint256 periods = craps.BONUS_PERIODS_PER_DAY();
-        uint256 half = craps.boostBudgetOf(day) / 2;
-        assertGt(half, 0, "the day drew no budget");
+        uint256 budget = craps.boostBudgetOf(day);
+        assertGt(budget, 0, "the day drew no budget");
 
-        assertEq(craps.boostBaseAt(_slotAt(periods - 1)), half, "the event window did not take half the day");
+        assertEq(craps.boostBaseAt(_slotAt(periods - 1)), 0, "the jackpot window drew an ordinary share");
 
         uint256 weight = _routineWeightAt(day);
         assertGt(weight, 0, "the day drew no routine windows");
@@ -1412,11 +1414,11 @@ contract CrapsBattleTest is CrapsPins {
         uint256 paid;
         for (uint256 p = 0; p + 1 < periods; ++p) {
             uint256 base = craps.boostBaseAt(_slotAt(p));
-            assertEq(base, half * _weightOf(day, p) / weight, "a window took other than its size's share");
+            assertEq(base, budget * _weightOf(day, p) / weight, "a window took other than its size's share");
             paid += base;
         }
-        // The routine half is spent whole, bar one wei of flooring per window.
-        assertApproxEqAbs(paid, half, periods, "the routine half did not add up");
+        // The whole ladder is spent, bar one wei of flooring per window.
+        assertApproxEqAbs(paid, budget, periods, "the ladder did not add up");
 
         // Turnout does not move what a window puts up.
         uint256 was = craps.boostBaseAt(_slotAt(PER));
@@ -1598,13 +1600,16 @@ contract CrapsBattleTest is CrapsPins {
         uint64 slot = _slotAt(PER);
         assertEq(craps.boostBudgetOf(today), ladder, "the day did not open on the drawn ladder half");
         assertEq(craps.progressivePool(), contribution, "the day did not bank the other half");
-        // The EVENT takes half the LADDER; the routine window under test takes its size's share
-        // of the other half of it.
-        uint256 half = ladder / 2;
-        assertEq(craps.boostBaseAt(_slotAt(days_ - 1)), half, "the event window did not take half");
+        // The JACKPOT takes no share of the LADDER; the routine window under test takes its
+        // size's share of the whole of it.
+        assertEq(
+            craps.boostBaseAt(_slotAt(craps.BONUS_PERIODS_PER_DAY() - 1)),
+            0,
+            "the jackpot window drew an ordinary share"
+        );
         assertEq(
             craps.boostBaseAt(slot),
-            half * _weightOf(today, PER) / _routineWeightAt(today),
+            ladder * _weightOf(today, PER) / _routineWeightAt(today),
             "a window took other than its size's share"
         );
     }
@@ -1854,7 +1859,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // The day seat is one per address per day, so the credit cannot be farmed by re-entering.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBonusDay(_seven(), 1);
         assertEq(quests.streakAwarded(alice), 1, "a refused re-entry still credited a streak");
 
@@ -1895,7 +1900,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // One per address per day either way: a refused re-entry credits nothing further.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBonusDay(_seven(), uint16(hm));
         assertEq(quests.streakAwarded(alice), 5, "a refused high re-entry credited a second streak");
     }
@@ -1952,9 +1957,10 @@ contract CrapsBattleTest is CrapsPins {
     /// @dev When `period` stops taking bets, measured from the day's start. The routine ladder
     ///      carries the clock alignment; the EVENT is measured backwards from the turnover.
     function _closeOf(uint256 period) internal view returns (uint256) {
-        if (period + 1 == craps.BONUS_PERIODS_PER_DAY()) return 1 days - craps.EVENT_LEAD();
-        uint256 base = period == 0 ? craps.BONUS_EVENT_CLOSE() : period * craps.BONUS_PERIOD();
-        return base + craps.BONUS_CLOCK_ALIGN();
+        if (period == 5) return 1 days;
+        if (period == 4) return 1 days - 20 minutes;
+        if (period == 0) return 20 minutes;
+        return period * 6 hours + 3 minutes;
     }
 
     /// @dev Past `period`'s close, still inside the same day, so its terms are still today's.
@@ -2112,7 +2118,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // Only the game opens it. This rides the daily advance, so a player can neither start it
         // nor make its work happen out from under the crank that feeds it.
-        vm.expectRevert(CrapsBattle.OnlyGame.selector);
+        vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
         craps.openBonusDay();
 
         vm.prank(ContractAddresses.GAME);
@@ -2139,7 +2145,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // A window still taking bets cannot be shut, by anyone.
         uint64 here = _slotAt(PER);
-        vm.expectRevert(CrapsBattle.BonusStillRunning.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusStillRunning.selector);
         craps.armBonusWindow(here);
 
         // Once it stops, it opens to whoever calls first — once — and it does NOT wait for the
@@ -2151,7 +2157,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(keeper);
         assertEq(craps.armBonusWindow(_slotAt(PER + 1)), live, "shut onto a table other than the live one");
         craps.armBonusWindow(here);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.armBonusWindow(here);
 
         // And the earlier one it skipped past is still perfectly shuttable afterwards.
@@ -2162,10 +2168,10 @@ contract CrapsBattleTest is CrapsPins {
         // the jackpot had already gone out. A quarter-hour before it, the event is still taking
         // bets; on the lead itself it is shut — which is what puts its table, and the lootbox
         // draw that comes with it, inside the run-up instead of after it.
-        uint64 eventSlot = _slotAt(periods - 1);
+        uint64 eventSlot = _slotAt(periods - 2);
         uint256 lead = craps.EVENT_LEAD();
         vm.warp(_dayStart() + 1 days - lead - 1);
-        vm.expectRevert(CrapsBattle.BonusStillRunning.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusStillRunning.selector);
         craps.armBonusWindow(eventSlot);
 
         vm.warp(_dayStart() + 1 days - lead);
@@ -2182,15 +2188,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      trips here, in the units the change would actually be felt in.
     function test_everyWindowShutsOnItsPublishedClockTime() public {
         // UTC minutes past midnight.
-        uint16[7] memory published = [
-            uint16(23 * 60 + 20), // 23:20  opener
-            uint16(3 * 60), //        03:00  routine
-            uint16(7 * 60), //        07:00  routine
-            uint16(11 * 60), //       11:00  routine
-            uint16(15 * 60), //       15:00  routine
-            uint16(19 * 60), //       19:00  routine
-            uint16(22 * 60 + 42) //   22:42  EVENT, a quarter-hour before the 22:57 jackpot
-        ];
+        uint16[5] memory published = [uint16(23 * 60 + 17), 5 * 60, 11 * 60, 17 * 60, 22 * 60 + 37];
         for (uint256 p = 0; p < published.length; ++p) {
             uint256 at = _dayStart() + _closeOf(p);
             assertEq((at % 1 days) / 60, published[p], "a window does not close on its published clock time");
@@ -2232,7 +2230,7 @@ contract CrapsBattleTest is CrapsPins {
     function test_theEventShutsIntoTheRunUpAndAsksForTheDraw() public {
         _openDay();
         uint256 periods = craps.BONUS_PERIODS_PER_DAY();
-        uint64 eventSlot = _slotAt(periods - 1);
+        uint64 eventSlot = _slotAt(periods - 2);
 
         // Still inside its own day, and still before the turnover.
         vm.warp(_dayStart() + 1 days - craps.EVENT_LEAD());
@@ -2247,7 +2245,7 @@ contract CrapsBattleTest is CrapsPins {
         // And nothing of the day is left taking bets once it has gone.
         for (uint256 p = 0; p < periods; ++p) {
             (,,, bool joinable) = craps.bonusWindowOf(p);
-            assertFalse(joinable, "a window was still taking bets past the event's close");
+            assertEq(joinable, p == 5, "only the jackpot stays open until the daily request");
         }
     }
 
@@ -2268,7 +2266,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      what removes the need for the opener to sweep anything or for a field to ask for its
     ///      money back.
     function test_aForgottenWindowIsStillShuttableDaysLater() public {
-        uint256 last = craps.BONUS_PERIODS_PER_DAY() - 1;
+        uint256 last = craps.BONUS_PERIODS_PER_DAY() - 2;
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
         uint24 dayOne = craps.currentDayIndex();
@@ -2291,11 +2289,14 @@ contract CrapsBattleTest is CrapsPins {
     ///      yet. Opening the day must produce exactly what the schedule advertised.
     function test_theWholeDaysScheduleIsKnownUpFront() public {
         (uint24 day,,) = craps.currentBonusSlot();
+        // `setUp`'s word is the deliberately flat, no-spread fixture most of this suite plays on;
+        // this test needs one that actually spreads across tiers to prove the windows differ.
+        _setDailyWord(day, uint256(keccak256("whole day schedule")));
         uint256 periods = craps.BONUS_PERIODS_PER_DAY();
 
         uint256 distinct;
         uint128 firstBank;
-        for (uint256 p = 0; p < periods; ++p) {
+        for (uint256 p = 0; p + 1 < periods; ++p) {
             (uint128 bank, uint128 goal, uint256 stack, uint256 bounty, uint256 seedOf, uint256 minScore) =
                 craps.bonusTermsFor(day, p);
             assertGt(bank, 0, "a window in a worded day had no terms");
@@ -2375,7 +2376,7 @@ contract CrapsBattleTest is CrapsPins {
         uint64 barred = _openBattle(craps, uint32(LW / 1 ether), 2, 5, SU, creatorBar);
         game.setScore(carol, creatorBar - 1);
         vm.prank(carol);
-        vm.expectRevert(CrapsBattle.ScoreRequiredForBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.ScoreRequiredForBonus.selector);
         craps.enterBattle(barred, _boardA(), 1);
         game.setScore(carol, creatorBar);
         vm.prank(carol);
@@ -2497,7 +2498,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      money is simply gone — there is no rollover and nothing to reclaim, which is what lets
     ///      the day's opener touch none of yesterday's seeds.
     function test_aDonationOntoAWindowNobodyJoinsIsForfeited() public {
-        uint256 last = craps.BONUS_PERIODS_PER_DAY() - 1;
+        uint256 last = craps.BONUS_PERIODS_PER_DAY() - 2;
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
         bytes32 stale = _keyOf(last);
@@ -2524,128 +2525,37 @@ contract CrapsBattleTest is CrapsPins {
     ///      it, and boosts one whole bankroll. Swept off the schedule view over many days, so this
     ///      pins the economics, not an implementation detail.
     function test_bonusTierMixMatchesTheAdvertisedOdds() public {
-        uint256 periods = craps.BONUS_PERIODS_PER_DAY();
-        uint256 last = periods - 1;
-        // Tier counts, indexed small/medium/large — held as arrays rather than six named counters
-        // so the sweep's locals stay clear of the stack ceiling.
-        uint256[3] memory drawn;
-        uint256[3] memory opened;
-        uint256 events;
-        uint256 tail30;
-        uint256 tail60;
-        uint256 eventTotal;
-        uint256 eventBankTotal;
-        uint256 seedTotal;
-        // Per-tier seed totals, indexed small/medium/large.
-        uint256[3] memory seedSum;
-
-        for (uint24 d = 1; d <= 400; ++d) {
-            _setDailyWord(d, uint256(keccak256(abi.encode("mix", d))));
-            // The LADDER is half the day's allocation; the day's EVENT takes half of that, and the
-            // six routine windows split the rest 4:2:1 by size. The denominator is rebuilt out of
-            // the bankrolls the schedule actually drew.
-            uint256 half = craps.ladderBudgetFor(d) / 2;
-            uint256 weight = _routineWeightAt(d);
-            for (uint256 p = 0; p < periods; ++p) {
-                uint256 base = p == last ? half : half * _weightOf(d, p) / weight;
-                (uint128 bank,,, uint256 bounty, uint256 seed,) = craps.bonusTermsFor(d, p);
-                uint256 bankFlip = uint256(bank) / 1 ether;
-                assertGt(bounty, 0, "a scheduled window carries no bounty");
-                assertLe(bounty, bank, "bounty over the bankroll");
-                seedTotal += seed / 1 ether;
-
-                // EVERY window quotes the same shape: its share of the day, the ceiling it can
-                // reach and the floor it can never fall below. The terms view and the band view
-                // have to agree on all of it.
-                (uint256 lo,, uint256 hi) = craps.bonusBoostBand(d, p);
-                assertEq(seed, hi, "the terms and the band quote different figures");
-                assertEq(hi, base * craps.BOOST_MAX_MULT(), "the ceiling is off the ladder");
-                // A quarter of the base, floored — so `lo * 4` is up to three wei short of it.
-                assertEq(lo, base / 4, "the floor is not the bottom rung");
-
-                if (p == last) {
-                    ++events;
-                    uint256 bountyFlip = bounty / 1 ether;
-                    eventBankTotal += bankFlip;
-                    eventTotal += bankFlip + bountyFlip;
-                    if (bankFlip == 30_000) ++tail30;
-                    if (bankFlip == 60_000) ++tail60;
-                    // The BANKROLL is what the ladder names — the bounty is charged on top of it,
-                    // so the entry cost is deliberately NOT a ladder step.
-                    if (bankFlip < 30_000) {
-                        assertEq(bankFlip % 1500, 0, "event bankroll was off the 1,500 ladder");
-                        assertLe(bankFlip, 15_000, "event bankroll over the ladder's top step");
-                    }
-                    // A quarter to a half of the bankroll, on the 100-FLIP granule. Flooring only
-                    // ever moves it DOWN, so the lower edge carries one granule of slack.
-                    assertEq(bountyFlip % 100, 0, "event bounty off the granule");
-                    assertLe(bountyFlip * 2, bankFlip, "event bounty over half the bankroll");
-                    assertGe(bountyFlip * 4 + 400, bankFlip, "event bounty under a quarter of the bankroll");
-                } else {
-                    uint256 seedFlip = seed / 1 ether;
-                    // The day's OPENER draws its tier flat; every window after it is weighted, so
-                    // the two schedules are counted apart and each is held to its own.
-                    if (bankFlip == craps.BONUS_SMALL_BANKROLL()) {
-                        seedSum[0] += seedFlip;
-                        if (p == 0) ++opened[0];
-                        else ++drawn[0];
-                    } else if (bankFlip == craps.BONUS_MED_BANKROLL()) {
-                        seedSum[1] += seedFlip;
-                        if (p == 0) ++opened[1];
-                        else ++drawn[1];
-                    } else if (bankFlip == craps.BONUS_LARGE_BANKROLL()) {
-                        seedSum[2] += seedFlip;
-                        if (p == 0) ++opened[2];
-                        else ++drawn[2];
-                    } else {
-                        revert("a routine window drew off the menu");
-                    }
-                }
+        uint256[3] memory routine;
+        uint256[3] memory bookends;
+        for (uint24 day = 1; day <= 400; ++day) {
+            _setDailyWord(day, uint256(keccak256(abi.encode("mix", day))));
+            uint256 weight = _routineWeightAt(day);
+            uint256 allocation;
+            for (uint256 p; p < 5; ++p) {
+                (uint128 bank,,,uint256 bounty,uint256 seed,) = craps.bonusTermsFor(day,p);
+                uint256 tier = bank == 600 ether ? 0 : bank == 1800 ether ? 1 : 2;
+                assertEq(bank, tier == 0 ? 600 ether : tier == 1 ? 1800 ether : 4500 ether);
+                assertLe(bounty,bank); assertEq(bounty % 100 ether,0);
+                uint256 share = craps.ladderBudgetFor(day) * _weightOf(day,p) / weight;
+                assertEq(seed,share * craps.BOOST_MAX_MULT());
+                allocation += share;
+                if (p == 0 || p == 4) ++bookends[tier]; else ++routine[tier];
             }
+            assertLe(allocation,craps.ladderBudgetFor(day));
+            assertLt(craps.ladderBudgetFor(day)-allocation,5);
+            (uint128 a,,,uint256 ab,,) = craps.bonusTermsFor(day,0);
+            (uint128 b,,,uint256 bb,,) = craps.bonusTermsFor(day,4);
+            assertEq(a,b); assertEq(ab,bb);
+            (uint128 pending,,,uint256 fee,,) = craps.bonusTermsFor(day,5);
+            assertEq(pending,0); assertEq(fee,8_000 ether);
         }
-
-        uint256 routine = drawn[0] + drawn[1] + drawn[2];
-        uint256 openers = opened[0] + opened[1] + opened[2];
-        emit log_named_uint("mean event bankroll (FLIP) ", eventBankTotal / events);
-        emit log_named_uint("mean event buy-in (FLIP)   ", eventTotal / events);
-        emit log_named_uint("mean seeded per day (FLIP) ", seedTotal / 400);
-
-        // Windows after the opener: 7:2:1. A mix check, not a chi-squared — the band is wide
-        // enough that only a real change to the odds trips it.
-        assertApproxEqAbs(drawn[0] * 10, routine * 7, routine / 2, "small tier off its advertised share");
-        assertApproxEqAbs(drawn[1] * 10, routine * 2, routine / 2, "medium tier off its advertised share");
-        assertApproxEqAbs(drawn[2] * 10, routine * 1, routine / 2, "large tier off its advertised share");
-
-        // The OPENER: a third each, so the day starts on a table whose size the schedule gives no
-        // hint of. Every tier has to actually turn up, or the draw is not flat at all.
-        assertApproxEqAbs(opened[0] * 3, openers, openers / 2, "the opener's small share is not flat");
-        assertApproxEqAbs(opened[1] * 3, openers, openers / 2, "the opener's medium share is not flat");
-        assertApproxEqAbs(opened[2] * 3, openers, openers / 2, "the opener's large share is not flat");
-
-        // The two event tails, at their own rates.
-        assertApproxEqAbs(tail30 * 20, events, events / 2, "the 30k event tail is off");
-        assertApproxEqAbs(tail60 * 50, events, events / 2, "the 60k event tail is off");
-        // The ladder's mean is 8,250 and the two tails carry 30k and 60k at 5% and 2%, so the
-        // draw's expectation — and therefore the day's expected boost from here — is ~10,370.
-        assertApproxEqAbs(eventBankTotal / events, 10_372, 1_500, "the event's mean bankroll moved");
-
-        // House money now DOES depend on the tier, by design: a window's share is 4:2:1 by size,
-        // and the exact figure is asserted per window in the loop above against `base`. What is
-        // left to say here is the direction, as means over 400 days.
-        //
-        // Deliberately an ORDERING and not a ratio. A large window contributes its own 4 to the
-        // day's denominator, so the days on which it is large are also the days with the biggest
-        // divisor — which pulls the realised spread well below the nominal 4:1 and makes any
-        // fixed multiple a fragile thing to assert.
-        assertGt(routine, 0, "no routine window was seen");
-        uint256 meanSmall = seedSum[0] / (opened[0] + drawn[0]);
-        uint256 meanMed = seedSum[1] / (opened[1] + drawn[1]);
-        uint256 meanLarge = seedSum[2] / (opened[2] + drawn[2]);
-        emit log_named_uint("mean quote, small (FLIP)   ", meanSmall);
-        emit log_named_uint("mean quote, medium (FLIP)  ", meanMed);
-        emit log_named_uint("mean quote, large (FLIP)   ", meanLarge);
-        assertGt(meanMed, meanSmall, "a medium table does not out-quote a small one");
-        assertGt(meanLarge, meanMed, "a large table does not out-quote a medium one");
+        // Routine odds are 55/25/20; bookend odds are 20/30/50.
+        assertApproxEqAbs(routine[0]*100,1200*55,6000);
+        assertApproxEqAbs(routine[1]*100,1200*25,6000);
+        assertApproxEqAbs(routine[2]*100,1200*20,6000);
+        assertApproxEqAbs(bookends[0]*100,800*20,6000);
+        assertApproxEqAbs(bookends[1]*100,800*30,6000);
+        assertApproxEqAbs(bookends[2]*100,800*50,6000);
     }
 
     /// @dev Opening a day sits two bodies down at every window of it: sDGNRS and the vault, so a
@@ -2908,7 +2818,7 @@ contract CrapsBattleTest is CrapsPins {
         craps.createBattle(widest, 1, 5, 0, 0, close, false, 0);
 
         vm.prank(vaultOwner);
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(widest + 10, 1, 5, 0, 0, close, false, 0);
     }
 
@@ -2920,7 +2830,7 @@ contract CrapsBattleTest is CrapsPins {
         _openDay();
         _enter(alice, 0);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBonusDay(_seven(), 1);
     }
 
@@ -2933,7 +2843,7 @@ contract CrapsBattleTest is CrapsPins {
         _warpPastClose(PER);
         assertFalse(craps.isShut(_slotAt(PER)), "the window was already armed");
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.amendSlip(betId, _boardB());
     }
 
@@ -2945,15 +2855,15 @@ contract CrapsBattleTest is CrapsPins {
         _openDay();
         uint256 house = _houseSeat(PER);
         uint256 periods = craps.BONUS_PERIODS_PER_DAY();
-        // Pinned: window six closes ON the next day's boundary, so `currentBonusSlot` has already
-        // rolled over by the time it is shut and cannot name the day these windows belong to.
         (uint24 theDay,,) = craps.currentBonusSlot();
 
-        // The pair sits in EVERY window of the day off the one pair of tickets. Shut each and the
-        // fold has to put them back at the head of that window's field — the same own-then-day
-        // mapping the `resolveSlot` walk uses. If it ever did not, the entrant count could
-        // never be matched by the resolved count and every pot in the day would be unclaimable.
-        for (uint256 p = 0; p < periods; ++p) {
+        // The pair sits in every ORDINARY window of the day off the one pair of tickets. Shut
+        // each and the fold has to put them back at the head of that window's field — the same
+        // own-then-day mapping the `resolveSlot` walk uses. If it ever did not, the entrant count
+        // could never be matched by the resolved count and every pot in the day would be
+        // unclaimable. The jackpot window is not armed through this door at all, so the walk
+        // stops short of it.
+        for (uint256 p = 0; p + 1 < periods; ++p) {
             _warpPastClose(p);
             uint64 slot = _slotOn(theDay, p);
             craps.armBonusWindow(slot);
@@ -2977,7 +2887,7 @@ contract CrapsBattleTest is CrapsPins {
         over.place6 = 4;
         over.place8 = 3;
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
+        vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
         craps.enterBonusBattle(PER, over, 1);
 
         // Three is the boundary, and a seven-chip board seats across three legs.
@@ -2995,7 +2905,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // And an amendment cannot smuggle a fourth chip onto a leg afterwards.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
+        vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
         craps.amendSlip(betId, over);
     }
 
@@ -3008,7 +2918,7 @@ contract CrapsBattleTest is CrapsPins {
         uint32 board = uint32((uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24));
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.NotVaultOwner.selector);
+        vm.expectRevert(CrapsBattleStorage.NotVaultOwner.selector);
         craps.setVaultBoard(board);
 
         vm.prank(vaultOwner);
@@ -3114,14 +3024,14 @@ contract CrapsBattleTest is CrapsPins {
         }
 
         // Eight is the first board-wide count outside the continuum.
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
         craps.setVaultBoard(uint32(3 | (uint256(3) << 9) | (uint256(2) << 12)));
 
         // And the cap itself, on a board that would otherwise be a legal seven.
-        vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
+        vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
         craps.setVaultBoard(uint32((uint256(4) << 9) | (uint256(3) << 12)));
 
-        vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
+        vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
         craps.setVaultBoard(uint32(uint256(3) | (uint256(1) << 9) | (uint256(3) << 27)));
 
         craps.setVaultBoard(uint32(SEVEN_PACKED));
@@ -3251,7 +3161,7 @@ contract CrapsBattleTest is CrapsPins {
         for (uint24 placed = 8; placed <= 14; ++placed) {
             address who = makeAddr(string(abi.encodePacked("scheduled-over", placed)));
             vm.prank(who);
-            vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+            vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
             craps.enterBonusBattle(PER, _spread(placed), 1);
         }
 
@@ -3312,7 +3222,7 @@ contract CrapsBattleTest is CrapsPins {
     function test_tournamentFormatIsChipsBaseFiveDeepAtFiveX() public {
         for (uint24 d = 1; d <= 120; ++d) {
             _setDailyWord(d, uint256(keccak256(abi.encode("format", d))));
-            for (uint256 p = 0; p < craps.BONUS_PERIODS_PER_DAY(); ++p) {
+            for (uint256 p = 0; p + 1 < craps.BONUS_PERIODS_PER_DAY(); ++p) {
                 (uint128 bank, uint128 goal, uint256 stack,,,) = craps.bonusTermsFor(d, p);
                 uint256 bankFlip = uint256(bank) / 1 ether;
                 uint256 stackFlip = stack / 1 ether;
@@ -3373,7 +3283,7 @@ contract CrapsBattleTest is CrapsPins {
         _enter(alice, PER);
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBonusBattle(PER, _seven(), 1);
 
         // Another player still gets theirs.
@@ -3444,19 +3354,19 @@ contract CrapsBattleTest is CrapsPins {
         // An unopened day is not a battle you could bet into, so it is not one you may seed
         // either — the joinability gate runs before the amount is even looked at.
         vm.prank(carol);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.donate(false, PER, 5);
 
         _openDay();
         vm.prank(carol);
-        vm.expectRevert(CrapsBattle.SeedAboveMax.selector);
+        vm.expectRevert(CrapsBattleStorage.SeedAboveMax.selector);
         craps.donate(false, PER, 0);
 
         // Hoisted: an inline `craps.BONUS_PERIODS_PER_DAY()` would be the call the prank and the
         // expectation land on, and the donation would run unpranked and unwatched.
         uint256 past = craps.BONUS_PERIODS_PER_DAY();
         vm.prank(carol);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.donate(false, past, 1);
     }
 }

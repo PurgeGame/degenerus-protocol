@@ -548,13 +548,16 @@ contract CrapsRngSealHandler is Test {
         uint64 slot = uint64(betId >> 64);
         bool armed = craps.slotIndexOf(slot) != 0;
         if (armed) ghost_postArmAmendAttempts++;
+        // A jackpot slot is locked by the daily request rather than by this handler's arm, so it
+        // has no recorded seal: measure it against the slip as it stood before the attempt.
+        bytes32 sealed_ = sealedHeader[betId] != 0 ? sealedHeader[betId] : _headerOf(betId);
         (bool open, bool midDay, bytes32 h0) = _before();
         vm.prank(b.player);
         try craps.amendSlip(betId, _board(boardSeed)) {
             if (armed) ghost_postArmAmendsAccepted++;
         } catch {}
         _after(open, midDay, h0);
-        if (armed && _headerOf(betId) != sealedHeader[betId]) ghost_postArmSlipMutations++;
+        if (armed && _headerOf(betId) != sealed_) ghost_postArmSlipMutations++;
     }
 
     /// @notice Shut a window that has stopped taking bets (permissionless door). Properties (1)

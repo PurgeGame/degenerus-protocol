@@ -18,8 +18,7 @@ contract TicketStageGasSeeder is PhaseEndSeeder {
 ///      ticket-board bucket (20,000 holders/quadrant) than Lvl100PhaseEndAdvanceGas's 130 — the
 ///      cursor/queue depth stress. Large disjoint buckets exercise fresh recipient writes;
 ///      assertions prevent repeat winners reducing the result. The stage runs no battle work of
-///      its own (the far-future queues `seedPhaseEnd` seeds go unread here — the battle stage owns
-///      them, from its own earlier tx).
+///      its own (the far-future queues `seedPhaseEnd` seeds go unread here).
 contract DailyTicketStageGas is BoundaryGasFixture {
     function setUp() public {
         _deployProtocol();
@@ -41,10 +40,8 @@ contract DailyTicketStageGas is BoundaryGasFixture {
         uint256 used = before - gasleft() + 21_064;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         address[96] memory recipients;
-        address[64] memory battleWallets;
         uint256 tickets;
-        uint256 battleRuns;
-        uint256 battleDistinct;
+        uint256 battleEntries;
         uint8 stage;
         for (uint256 i; i < logs.length; ++i) {
             bytes32 sig = logs[i].topics[0];
@@ -52,23 +49,12 @@ contract DailyTicketStageGas is BoundaryGasFixture {
                 address player = address(uint160(uint256(logs[i].topics[1])));
                 for (uint256 j; j < tickets; ++j) assertTrue(recipients[j] != player, "ticket recipients must be distinct");
                 recipients[tickets++] = player;
-            } else if (sig == BATTLE_RUN_SIG) {
-                address w = address(uint160(uint256(logs[i].topics[2])));
-                bool fresh = true;
-                for (uint256 j; j < battleRuns; ++j) {
-                    if (battleWallets[j] == w) {
-                        fresh = false;
-                        break;
-                    }
-                }
-                if (fresh) ++battleDistinct;
-                if (battleRuns < battleWallets.length) battleWallets[battleRuns] = w;
-                ++battleRuns;
+            } else if (sig == BATTLE_ENTRY_SIG) {
+                ++battleEntries;
             } else if (sig == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
         }
         assertEq(tickets, 96, "the ticket leg paid the full 96-winner cap");
-        assertEq(battleRuns, 0, "the coin+tickets stage runs no battle work: the battle stage owns it");
-        assertEq(battleDistinct, 0);
+        assertEq(battleEntries, 0, "the coin+tickets stage runs no battle work");
         assertEq(stage, STAGE_JACKPOT_PHASE_ENDED);
         emit log_named_uint("DAILY_96_TICKETS_DEEP_BUCKET_COLD_INCLUDING_INTRINSIC", used);
         assertLt(used, EIP7825_TX_GAS_CAP);

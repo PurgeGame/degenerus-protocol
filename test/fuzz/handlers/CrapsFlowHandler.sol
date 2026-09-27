@@ -7,6 +7,7 @@ import {MockFlip, MockCoinflip, MockGame} from "../../craps/CrapsPins.sol";
 import {Craps} from "../../../contracts/Craps.sol";
 import {CrapsBattle} from "../../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
+import {CrapsPriceLib} from "../../../contracts/libraries/CrapsPriceLib.sol";
 
 /// @title CrapsFlowHandler — the action surface CrapsConservation.inv drives.
 ///
@@ -277,18 +278,19 @@ contract CrapsFlowHandler {
         try craps.applyCrapsPasses(craps.currentDayIndex() + 1, 1, high) {} catch {}
     }
 
-    /// @dev Convert banked normal credits into high credits at the fixed 19:1. The rate is
+    /// @dev Convert banked normal credits into high credits at the fixed 21:1 (`HIGH_EV`). The rate is
     ///      re-measured against the balances after every success; a conversion that moved either
     ///      lane off-rate marks the ghost the invariant reads.
     function convert(uint256 actorSeed, uint256 countSeed) external {
         address who = _actor(actorSeed);
         (uint256 nB, uint256 hB) = craps.passCreditsOf(who);
-        if (nB < 19) return;
-        uint32 want = uint32(1 + (countSeed % (nB / 19)));
+        uint256 rate = CrapsPriceLib.HIGH_EV;
+        if (nB < rate) return;
+        uint32 want = uint32(1 + (countSeed % (nB / rate)));
         vm.prank(who);
         try craps.convertNormalToHigh(want) {
             (uint256 nA, uint256 hA) = craps.passCreditsOf(who);
-            if (nB - nA != 19 * uint256(want) || hA - hB != uint256(want)) ++ghost_conversionRateBreaks;
+            if (nB - nA != rate * uint256(want) || hA - hB != uint256(want)) ++ghost_conversionRateBreaks;
             ++ghost_conversions;
         } catch {}
     }
@@ -303,7 +305,7 @@ contract CrapsFlowHandler {
         if (craps.daySeatNumberOf(d, who) == 0) return;
         if (mask == 0) mask = 1;
         vm.prank(who);
-        try craps.upgradeDayWindows(d, mask & 0x7F) {} catch {}
+        try craps.upgradeDayWindows(d, mask & 0x3F) {} catch {}
     }
 
     /// @dev Open a custom battle as the authorized creator, seat one entrant, close it onto the

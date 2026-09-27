@@ -355,7 +355,8 @@ contract CrapsScheduledCursorTest is CrapsPins {
     /// @dev Settle every window of `day` through the cursor, feeding words as they are owed.
     function _settleWholeDay(uint24 day) internal {
         uint64 pastAll = uint64(craps._daySlotOfPub(day)) + uint64(craps.BONUS_SLOTS_PER_DAY());
-        vm.warp(_dayStart() + 1 days - 1); // inside the event lead: every window has closed
+        vm.warp(_dayStart() + 1 days - 1);
+        _startDailyBattle(craps, day + 1, uint256(keccak256(abi.encode("jackpot", day))), 100_000 ether);
         for (uint256 i = 0; i < 40; ++i) {
             if (craps.keeperSlot() >= pastAll) return;
             uint64 at = craps.keeperSlot();

@@ -29,11 +29,14 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant MAX_BANKROLL_MULT = _MAX_BANKROLL_MULT;
     uint256 public constant MIN_BATTLE_GOAL_MULT = _MIN_BATTLE_GOAL_MULT;
     uint256 public constant MAX_GOAL_MULT = _MAX_GOAL_MULT;
-    uint256 public constant BONUS_PERIOD = _BONUS_PERIOD;
+    /// @dev The schedule's close offsets, as `CrapsBattle._currentBonusSlot` writes them: routine
+    ///      closes every six hours plus the clock alignment, the opener 20 minutes in, and the last
+    ///      window 20 minutes before the turnover.
+    uint256 public constant BONUS_PERIOD = 6 hours;
     uint256 public constant BONUS_PERIODS_PER_DAY = _BONUS_PERIODS_PER_DAY;
     uint256 public constant BONUS_SLOTS_PER_DAY = _BONUS_SLOTS_PER_DAY;
     uint256 public constant CUSTOM_SLOT_BASE = _CUSTOM_SLOT_BASE;
-    uint256 public constant BONUS_EVENT_CLOSE = _BONUS_EVENT_CLOSE;
+    uint256 public constant BONUS_EVENT_CLOSE = 20 minutes;
     uint256 public constant BONUS_SMALL_BANKROLL = _BONUS_SMALL_BANKROLL;
     uint256 public constant BONUS_MED_BANKROLL = _BONUS_MED_BANKROLL;
     uint256 public constant BONUS_LARGE_BANKROLL = _BONUS_LARGE_BANKROLL;
@@ -399,12 +402,12 @@ contract CrapsViews is CrapsBattle {
 
     /// @dev The offset that puts every routine close on a round clock time.
     function BONUS_CLOCK_ALIGN() external pure returns (uint256) {
-        return _BONUS_CLOCK_ALIGN;
+        return 3 minutes;
     }
 
-    /// @dev How far ahead of the day's turnover the event window shuts.
+    /// @dev How far ahead of the day's turnover the last window shuts.
     function EVENT_LEAD() external pure returns (uint256) {
-        return _EVENT_LEAD;
+        return 20 minutes;
     }
 
     function highMultOfWord(uint256 word) external pure returns (uint256) {
@@ -545,20 +548,8 @@ contract CrapsViews is CrapsBattle {
         return _PROG_ROUTINE_RARE_BPS;
     }
 
-    function PROG_EVENT_COMMON_BPS() external pure returns (uint256) {
-        return _PROG_EVENT_COMMON_BPS;
-    }
-
-    function PROG_EVENT_RARE_BPS() external pure returns (uint256) {
-        return _PROG_EVENT_RARE_BPS;
-    }
-
     function PROG_RARE_DOUBLINGS() external pure returns (uint256) {
         return _PROG_RARE_DOUBLINGS;
-    }
-
-    function PROG_EVENT_DOUBLINGS() external pure returns (uint256) {
-        return _PROG_EVENT_DOUBLINGS;
     }
 
     /// @dev The exact share the contract takes of a pool at a rung, so a suite states the rung it
@@ -567,19 +558,12 @@ contract CrapsViews is CrapsBattle {
         return _poolShare(pool, bps);
     }
 
-    /// @dev The SHIPPED write rule, driven directly: what `_payout` calls for every finalized
-    ///      scheduled field, with that field's own winner. Taps the gate rather than restating it,
-    ///      so a suite grading "the event cannot qualify itself" or "a bust never qualifies" is
-    ///      grading production's own branch.
-    function noteRoutineVictory(uint64 slot, bool goal, address winner) external {
-        _noteRoutineVictory(slot, goal ? Craps.SlipStop.Goal : Craps.SlipStop.Bust, winner);
-    }
-
-    /// @dev The day (as stored, plus one) on which this address last won a ROUTINE field as Goal.
-    ///      Zero where it never has. Storage-internal on the contract, like the rest of the
-    ///      reader surface.
-    function routineGoalDayOf(address player) external view returns (uint256) {
-        return _routineGoalDay[player];
+    /// @dev The progressive award `_payout` makes to a finalized scheduled winner, driven
+    ///      directly for a winner at the Game-funded award standing (a jackpot-slot seat).
+    function payProgressiveAt(bytes32 key, address winner, uint256 peakFlip, uint256 score) external {
+        Window memory w;
+        w.key = key;
+        _payProgressive(w, peakFlip, score, 0, uint160(winner) | (_AWARD_STANDING << _BET_SCORE_SHIFT), winner);
     }
 
 

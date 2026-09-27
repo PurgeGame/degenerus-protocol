@@ -30,7 +30,7 @@ CONTRACTS=(
   DegenerusRecordBounty
   # Craps table. CrapsBattle is the only one of the three craps contracts with storage; Craps and
   # LootboxCraps are stateless and inherited, so pinning CrapsBattle pins the whole table.
-  CrapsBattle
+  CrapsBattle JackpotBattle
 )
 # Delegatecall modules — must share DegenerusGame's storage layout exactly (run in its context).
 MODULES=(
@@ -89,6 +89,11 @@ for m in mods:
 print("delegatecall shared-slot consistency (modules vs Game): " + ("FAIL" if bad else "OK"))
 sys.exit(bad)
 PY
+
+# JackpotBattle delegates in CrapsBattle's context, never in the Game's context.
+if ! diff -u <(inspect_norm CrapsBattle) <(inspect_norm JackpotBattle); then
+  echo "::error:: JackpotBattle delegate layout differs from CrapsBattle"; fail=1
+fi
 
 if [ $fail -eq 0 ]; then echo "STORAGE LAYOUT ORACLE: all goldens match ✓"; fi
 exit $fail

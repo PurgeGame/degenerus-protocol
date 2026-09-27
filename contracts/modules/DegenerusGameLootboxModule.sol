@@ -24,6 +24,7 @@ pragma solidity 0.8.34;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
@@ -1551,14 +1552,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // A committed coin toss decides the reward's denomination: half the boxes pay
             // the collapsed roll as coinflip credit untouched, the other half denominate
             // the WHOLE roll into Craps day passes at the regular box pass units —
-            // 22,800-FLIP normal passes, switching wholly to 19x high-roller passes above
-            // twenty normal units. The fractional pass is Bernoulli-rounded on its own
+            // 24,800-FLIP normal passes, switching wholly to 21x high-roller passes above
+            // twenty-two normal units. The fractional pass is Bernoulli-rounded on its own
             // extractor exactly like the box pass roll; from the twelve-high cap up the
             // count pins there and the rest of the roll stays coinflip credit. A sub-pass
             // roll whose fraction loses pays the box's WWXRP dud, so no box resolves to
             // nothing.
             if (flipOut != 0 && EntropyLib.hash2(seed, PRESALE_BOX_PASS_TAG) & 1 == 1) {
-                bool highPass = flipOut > 20 * NORMAL_DAY_PASS_VALUE;
+                bool highPass = flipOut > CrapsPriceLib.HIGH_SWITCH;
                 uint256 passUnit = highPass ? HIGH_ROLLER_DAY_PASS_VALUE : NORMAL_DAY_PASS_VALUE;
                 uint256 passCount = flipOut / passUnit;
                 uint256 flipRest;
@@ -2350,9 +2351,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Turn one box's flat-FLIP budget into whole day passes.
     ///
-    ///      ONE BOX PAYS ONE DENOMINATION. Under twenty normal passes' worth it pays normal ones;
+    ///      ONE BOX PAYS ONE DENOMINATION. Under twenty-two normal passes' worth it pays normal ones;
     ///      past that the WHOLE award becomes high-roller passes. Never a mixture — a box that
-    ///      would pay twenty-one normal instead pays a bit over one high, which is the same value
+    ///      would pay twenty-three normal instead pays a bit over one high, which is the same value
     ///      in the denomination that suits it, and the switch is evaluated per box rather than
     ///      over a batch so a big order cannot be split or merged to move the threshold.
     ///
@@ -2362,7 +2363,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///
     ///      A NORMAL BOX THAT ROUNDS TO ZERO is not a blank: it takes a WWXRP spin instead, so the
     ///      smallest pass-winning boxes still hand something over. The high branch cannot reach
-    ///      zero — it is only entered above twenty normal units, so its count is over one before
+    ///      zero — it is only entered above twenty-two normal units, so its count is over one before
     ///      the coin is even tossed.
     /// @return spun Whether the zero-pass fallback consumed a spin.
     function _rollCrapsPasses(
@@ -2373,7 +2374,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint16 activityScore,
         BoxAcc memory acc
     ) private returns (bool spun) {
-        bool high = budget > 20 * NORMAL_DAY_PASS_VALUE;
+        bool high = budget > CrapsPriceLib.HIGH_SWITCH;
         uint256 unit = high ? HIGH_ROLLER_DAY_PASS_VALUE : NORMAL_DAY_PASS_VALUE;
         uint256 count;
         unchecked {
@@ -2381,7 +2382,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 remainder = budget % unit;
             // The fractional pass, decided on its own extractor: the chance of the extra one is
             // exactly the fraction left over. The modulo bias from reducing a 256-bit uniform by
-            // a ~2.28e22 unit is far below any threshold that could matter here.
+            // a ~2.48e22 unit is far below any threshold that could matter here.
             if (remainder != 0 && EntropyLib.hash2(seed, BOX_PASS_ROUND_TAG) % unit < remainder) {
                 ++count;
             }

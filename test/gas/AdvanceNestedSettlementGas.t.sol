@@ -34,9 +34,15 @@ contract VaultHistorySeeder is Coinflip {
     }
 }
 
-/// @dev Stress the complete daily call with the maximum regular historical claim window.
-///      History is installed in setUp; the measured transaction begins with cold, committed slots.
+/// @dev Stress the fresh-word daily with the maximum regular historical claim window. History is
+///      installed in setUp; each measured transaction begins with cold, committed slots. The word
+///      applies alone (stage 18, with the vault's historical claim and any pending redemption), the
+///      battle its request locked runs its own steps, then stage 6 pays the ETH leg (and an armed
+///      golden ticket) and stage 15 the tickets.
 abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg {
+    bytes32 internal constant GOLDEN_WIN_SIG =
+        keccak256("GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)");
+
     function _sufficient() internal pure virtual returns (bool);
     function _comps() internal pure virtual returns (bool);
 
@@ -48,17 +54,20 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
         return false;
     }
 
+    /// @dev Runs after seeding, before the real request locks the battle's Added.
+    function _beforeRequest() internal virtual {}
+
     function setUp() public {
-        // `_comps()` = the heaviest coin budget: the jackpot battle saturates at all 50 walked
-        // wallets (see PurchaseDailyWorstCase). `false` uses a lighter budget that still finds 50
-        // wallets but only affords 47 of them a run — the entrants-array truncation path.
-        uint256 previousPool = _comps() ? PREV_POOL_OPEN25 : PREV_POOL_PARTIAL;
+        // `_comps()` = the larger recorded pool: a 26-award battle (see PurchaseDailyWorstCase).
+        // `false` sits under the Added floor: a 5-award battle.
+        uint256 previousPool = _comps() ? PREV_POOL_OPEN25 : PREV_POOL_FLOOR;
         uint128 nextPool = uint128(previousPool + 1 ether);
         PurchaseDailySeeder.Shape memory shape = _shape(MAIN_HOLDERS, BONUS_HOLDERS, FF_HOLDERS, nextPool, previousPool);
         if (_extras()) {
             shape.word = JackpotBoardFixtures.wordFor([7, 7, 7, 7], [1, 2, 3, 4], false);
         }
         _seedFresh(shape);
+        _beforeRequest();
         _armFreshWord(shape.word, 400);
         vm.deal(address(game), 30_000 ether);
 
@@ -95,55 +104,19 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
         vm.store(address(coin), bytes32(0), bytes32(uint256(uint128(supply))));
     }
 
-    function _checkNestedSettlement() internal {
+    /// @dev The word-apply transaction: the vault's 365-day claim commits or rolls back, and an
+    ///      armed redemption resolves, with no daily leg.
+    function _checkWordApply() internal {
         vm.expectCall(
             ContractAddresses.WWXRP,
             abi.encodeWithSignature("mintPrize(address,uint256)", ContractAddresses.VAULT, 1 ether)
         );
-        vm.recordLogs();
-        if (_router()) game.mineFlip{gas: EIP7825_TX_GAS_CAP - 21_064}();
-        else game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
-        uint256 used = _transactionGas();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 ethWins;
-        uint256 ticketWins;
-        uint256 compWins;
-        uint256 goldenWins;
-        uint256 nearWins;
-        uint256 battleRuns;
-        bool goldenGrand;
-        uint8 stage = 255;
-        for (uint256 i; i < logs.length; ++i) {
-            bytes32 topic = logs[i].topics[0];
-            if (topic == ETH_WIN_SIG) ++ethWins;
-            if (topic == TICKET_WIN_SIG) ++ticketWins;
-            if (topic == CRAPS_WIN_SIG) ++compWins;
-            if (topic == FLIP_WIN_SIG) ++nearWins;
-            if (topic == BATTLE_RUN_SIG) ++battleRuns;
-            if (topic == keccak256("GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"))
-            {
-                ++goldenWins;
-                (,, goldenGrand,,,,) =
-                    abi.decode(logs[i].data, (uint8, uint8, bool, uint256, uint256, uint256, uint256));
-            }
-            if (topic == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
-        }
+        (uint256 used,) = _applyWord(_router(), 10_500_000);
         bytes32 stateSlot = keccak256(abi.encode(ContractAddresses.VAULT, uint256(2)));
         uint24 settled = uint24(uint256(vm.load(address(coinflip), stateSlot)) >> 128);
-        emit log_named_uint("full_daily_plus_vault_history_including_intrinsic", used);
+        emit log_named_uint("word_apply_plus_vault_history_including_intrinsic", used);
         emit log_named_uint("vault_claim_cursor_after", settled);
-        emit log_named_uint("trait_FLIP_awards", nearWins);
-        emit log_named_uint("jackpot_battle_runs", battleRuns);
-        emit log_named_uint("craps_seat_awards", compWins);
-        assertEq(stage, STAGE_PURCHASE_DAILY, "daily must finish in the RNG-apply transaction");
-        assertEq(ethWins, PURCHASE_ETH_WINNERS, "all ETH awards must execute");
-        assertEq(ticketWins, 0, "the ticket leg waits for its own stage");
-        // The purchase battle waits for stage 17: daily RNG/history and ETH never share its tx.
-        assertEq(compWins, 0, "the daily stage creates no comp awards");
-        assertEq(goldenWins, _extras() ? 1 : 0, "golden resolution must execute when armed");
-        assertEq(goldenGrand, _extras(), "golden grand branch must execute when armed");
-        assertEq(nearWins, 0, "a purchase day past level 1 runs no trait coin draw");
-        assertEq(battleRuns, 0, "fill cannot run with fresh RNG/history/ETH");
+        assertEq(settled, _sufficient() ? 399 : 34, "funded settlement commits; failed seat funding rolls back");
         if (_extras()) {
             assertEq(
                 uint24(uint256(vm.load(ContractAddresses.SDGNRS, bytes32(0))) >> 224),
@@ -151,27 +124,44 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
                 "pending redemption must resolve"
             );
         }
-        assertEq(settled, _sufficient() ? 399 : 34, "funded settlement commits; failed seat funding rolls back");
-        assertLt(used, 10_500_000, "daily stage exceeds design limit");
+    }
 
-        _measureBattleStage(_comps() ? JACKPOT_BATTLE_ENTRANTS : 47);
+    /// @dev The daily stage after the battle: all 49 ETH awards, and the golden grand when armed.
+    function _checkDailyStage() internal {
+        (uint8 stage, uint256 used, Vm.Log[] memory logs) = _advanceTx(_router());
+        uint256 goldenWins;
+        bool goldenGrand;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0 || logs[i].topics[0] != GOLDEN_WIN_SIG) continue;
+            ++goldenWins;
+            (,, goldenGrand,,,,) = abi.decode(logs[i].data, (uint8, uint8, bool, uint256, uint256, uint256, uint256));
+        }
+        emit log_named_uint("daily_stage_including_intrinsic", used);
+        assertEq(stage, STAGE_PURCHASE_DAILY, "the daily stage follows the battle");
+        assertEq(_countTopic(logs, ETH_WIN_SIG), PURCHASE_ETH_WINNERS, "all ETH awards must execute");
+        assertEq(_countTopic(logs, TICKET_WIN_SIG), 0, "the ticket leg waits for its own stage");
+        assertEq(_countTopic(logs, FLIP_WIN_SIG), 0, "a purchase day past level 1 runs no trait coin draw");
+        assertEq(_countTopic(logs, BATTLE_ENTRY_SIG), 0, "the battle never rides the daily stage");
+        assertEq(goldenWins, _extras() ? 1 : 0, "golden resolution must execute when armed");
+        assertEq(goldenGrand, _extras(), "golden grand branch must execute when armed");
+        assertLt(used, 10_500_000, "daily stage exceeds design limit");
+    }
+
+    function _checkNestedSettlement() internal {
+        _checkWordApply();
+        _driveBattle(STAGE_PURCHASE_BATTLE);
+        _checkDailyStage();
 
         // The priced ticket leg pays from the next advance on the same recorded word.
-        vm.recordLogs();
-        game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
-        used = _transactionGas();
-        logs = vm.getRecordedLogs();
-        ticketWins = 0;
-        stage = 255;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == TICKET_WIN_SIG) ++ticketWins;
-            if (logs[i].topics[0] == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
-        }
+        (uint8 stage, uint256 used, Vm.Log[] memory logs) = _advanceTx(false);
         emit log_named_uint("ticket_stage_including_intrinsic", used);
-        assertEq(stage, 15, "the purchase ticket stage must follow");
-        assertEq(ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "all ticket awards must execute in the ticket stage");
+        assertEq(stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage must follow");
+        assertEq(
+            _countTopic(logs, TICKET_WIN_SIG),
+            PURCHASE_PHASE_TICKET_MAX_WINNERS,
+            "all ticket awards must execute in the ticket stage"
+        );
         assertLt(used, EIP7825_TX_GAS_CAP, "ticket stage exceeds cap");
-        assertLt(used, EIP7825_TX_GAS_CAP, "complete transaction exceeds cap");
     }
 }
 

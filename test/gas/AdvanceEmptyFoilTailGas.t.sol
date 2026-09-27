@@ -28,6 +28,8 @@ contract EmptyFoilTailSeeder is DegenerusGame {
     }
 }
 
+/// @dev The cached share's word is recorded directly rather than requested, so no jackpot battle
+///      was locked ahead of the day's stages.
 abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
     function _days() internal pure virtual returns (uint24);
 
@@ -68,8 +70,6 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
         );
         assertLt(used, EIP7825_TX_GAS_CAP, "composed empty scan and payout exceed cap");
 
-        _measureBattleStage(JACKPOT_BATTLE_ENTRANTS);
-
         // The priced ticket leg pays from the next advance on the same recorded word.
         vm.recordLogs();
         game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
@@ -82,7 +82,7 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
             if (logs[i].topics[0] == ADVANCE_SIG) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
         }
         emit log_named_uint("ticket_stage_including_intrinsic", used);
-        assertEq(stage, 15, "the purchase ticket stage must follow");
+        assertEq(stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage must follow");
         assertEq(tickets, PURCHASE_PHASE_TICKET_MAX_WINNERS, "all ticket awards must execute in the ticket stage");
         assertLt(used, EIP7825_TX_GAS_CAP, "ticket stage exceeds cap");
     }

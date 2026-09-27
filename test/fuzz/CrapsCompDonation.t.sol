@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusVault} from "../../contracts/DegenerusVault.sol";
@@ -58,9 +60,9 @@ contract CrapsCompDonationTest is DeployProtocol {
     function test_delegateSharesOneLimitAcrossPassGrantsAndDonations() public {
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, 23_800 ether);
+        vault.setCrapsCompAllowance(delegate, 25_800 ether);
         uint256[] memory codes = new uint256[](1);
-        // Bank one normal day pass for the player: 22,800 FLIP.
+        // Bank one normal day pass for the player: 24,800 FLIP.
         codes[0] = uint256(uint160(player)) | (uint256(4) << 160) | (uint256(1) << 200);
         vm.prank(delegate);
         vault.crapsComp(codes);
@@ -70,13 +72,13 @@ contract CrapsCompDonationTest is DeployProtocol {
         vm.expectRevert(DegenerusVault.Insufficient.selector);
         vault.crapsCompDonate(true, index, 11);
         assertEq(crapsBattle.battleOf(key).seed, 0, "failed donation left a seed");
-        assertEq(coin.crapsCompAllowance(), lane - 22_800 ether, "failed donation spent comp budget");
+        assertEq(coin.crapsCompAllowance(), lane - 24_800 ether, "failed donation spent comp budget");
         assertEq(vault.crapsCompAllowanceOf(delegate), 1_000 ether);
 
         vm.prank(delegate);
         vault.crapsCompDonate(true, index, 10);
         assertEq(crapsBattle.battleOf(key).seed, 1_000 ether);
-        assertEq(coin.crapsCompAllowance(), lane - 23_800 ether);
+        assertEq(coin.crapsCompAllowance(), lane - 25_800 ether);
         assertEq(vault.crapsCompAllowanceOf(delegate), 0);
         vm.prank(delegate);
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
@@ -117,7 +119,7 @@ contract CrapsCompDonationTest is DeployProtocol {
         vault.setCrapsCompAllowance(delegate, 1_000 ether);
         vm.warp(block.timestamp + 1 hours);
         vm.prank(delegate);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         vault.crapsCompDonate(true, index, 10);
         assertEq(vault.crapsCompAllowanceOf(delegate), 1_000 ether);
         assertEq(coin.crapsCompAllowance(), lane);

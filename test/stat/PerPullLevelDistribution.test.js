@@ -127,14 +127,7 @@ function jsLvlPrime(randomWord, minLevel, maxLevel, i) {
 // contract derived from a given `randomWord`.
 //
 // _rollMainTraits rolls the day's board directly off `randomWord` (no salt).
-// LEVEL_ONE_BATTLE_SALT keeps level 1's separate future-queue jackpot battle's
-// entropy apart from the trait draw's — the advance module salts the word
-// with it before calling the jackpot battle, so the two draws never share a seed.
 // ---------------------------------------------------------------------------
-
-const LEVEL_ONE_BATTLE_SALT = hre.ethers.keccak256(
-  hre.ethers.toUtf8Bytes("BONUS_TRAITS"),
-);
 
 // Mirrors JackpotBucketLib.getRandomTraits(uint256 rw):
 //   w[0] = uint8(rw & 0x3F)              // 0..63
@@ -187,13 +180,6 @@ describe("STAT-04 — Phase 261 infrastructure reuse + FLIP_LEVEL_TAG sanity", f
     const a = makeRng(0xC012_DEAD)();
     const b = makeRng(0xC012_DEAD)();
     expect(a).to.equal(b);
-  });
-
-  it("LEVEL_ONE_BATTLE_SALT matches keccak256('BONUS_TRAITS')", function () {
-    const recomputed = hre.ethers.keccak256(
-      hre.ethers.toUtf8Bytes("BONUS_TRAITS"),
-    );
-    expect(LEVEL_ONE_BATTLE_SALT).to.equal(recomputed);
   });
 
   it("jsGetRandomTraits returns 4 distinct trait IDs across distinct quadrants (0-63, 64-127, 128-191, 192-255)", function () {
@@ -511,12 +497,8 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
         Array.from({ length: traitEvents.length }, (_, j) => traitIds[j % 4]),
       );
 
-      // The jackpot battle no longer emits a per-winner event from the jackpot module: it hands its
-      // whole walked field to JackpotBattle.resolve in one call, which emits JackpotBattleRun
-      // per run (from the battle contract, not the Game/jackpot module).
-      const BATTLE_RUN_TOPIC = hre.ethers.id(
-        "JackpotBattleRun(uint24,address,uint256,uint256,uint256,uint256,uint32)",
-      );
+      // The jackpot battle's award draw appends its entries on the craps table, one event each.
+      const BATTLE_RUN_TOPIC = hre.ethers.id("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
       let battleRuns = 0;
       for (const { receipt } of receipts) {
         for (const log of receipt.logs) {

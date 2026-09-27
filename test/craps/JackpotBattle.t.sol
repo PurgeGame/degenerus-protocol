@@ -4,12 +4,19 @@ pragma solidity 0.8.34;
 import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
 import {CrapsPreferenceStore} from "./CrapsPreferenceStore.sol";
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
+import {CrapsPins} from "./CrapsPins.sol";
+import {CrapsViews} from "./CrapsViews.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
+import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
+import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 
 /// @dev An independent recomputation of one battle run: the same engine entry, driven with the
 ///      terms the battle's spec names, so the battle's orchestration (dedupe, units, the bust
@@ -79,447 +86,418 @@ contract BattleRef is Craps {
     }
 }
 
-contract JackpotBattleMultiplierHarness is JackpotBattle {
-    function multiplierBps(uint256 entropy) external pure returns (uint256) {
-        return _multiplierBps(entropy);
+contract JackpotTableHarness is CrapsViews {
+    function clearDayBodies(uint24 day) external {
+        uint256 d = uint256(day) * 8;
+        _dayTickets[d] = 0;
+        delete _daySeated[d][ContractAddresses.SDGNRS];
+        delete _daySeated[d][ContractAddresses.VAULT];
     }
+    function jackpotTerms(uint64 slot) external view returns (Window memory) { return _slotWindow(slot); }
+    /// @dev Unopen a day, so the next lock detaches its battle to remainder seven of that day.
+    function clearBoostBudget(uint24 day) external { _boostBudget[day] = 0; }
 }
 
-contract JackpotBattleMultiplierDistributionTest is Test {
-    function test_AllThousandBucketsHaveMeanOneAndExactTierCounts() public {
-        JackpotBattleMultiplierHarness h = new JackpotBattleMultiplierHarness();
-        uint256[4] memory counts;
-        uint256 sum;
-        for (uint256 i; i < 1_000; ++i) {
-            uint256 m = h.multiplierBps(i);
-            // An independent table pins the boundaries as well as the bucket totals.
-            uint256 want = i >= 999 ? 1_000_000 : i >= 990 ? 200_000 : i >= 900 ? 30_000 : 5_000;
-            assertEq(m, want);
-            ++counts[m == 5_000 ? 0 : m == 30_000 ? 1 : m == 200_000 ? 2 : 3];
-            sum += m;
-        }
-        assertEq(counts[0], 900); assertEq(counts[1], 90);
-        assertEq(counts[2], 9); assertEq(counts[3], 1);
-        assertEq(sum, 1_000 * 10_000, "expected multiplier must be 1x");
-    }
-}
-
-contract JackpotBattleTest is Test {
-    uint256 internal constant ROUND_TAG = 0x436f696e44726177526f756e64; // "CoinDrawRound"
-    uint256 internal constant MULTIPLIER_TAG = 0x436f696e447261774d756c7469706c696572;
-
-    function _multiplier(uint256 word) private pure returns (uint256) {
-        uint256 roll = uint256(keccak256(abi.encode(word, MULTIPLIER_TAG))) % 1_000;
-        return roll == 999 ? 1_000_000 : roll >= 990 ? 200_000 : roll >= 900 ? 30_000 : 5_000;
-    }
-
-    /// @dev The protocol's two-band award figure, restated.
-    function _award(uint256 amount, uint256 entropy) internal pure returns (uint256) {
-        if (amount <= 1_000 ether) return (amount / 1 ether) * 1 ether;
-        uint256 hundreds = amount / 100 ether;
-        uint256 remFlip = (amount % 100 ether) / 1 ether;
-        if (remFlip != 0 && uint32(entropy) % 100 < remFlip) ++hundreds;
-        return hundreds * 100 ether;
-    }
-
-    JackpotBattle internal battle;
-    BattleRef internal ref;
-    mapping(address => uint32) private selected;
+contract JackpotBattleTest is CrapsPins {
+    JackpotTableHarness internal table;
+    IJackpotBattle internal api;
+    JackpotBattle internal cold;
+    uint24 internal day;
+    uint64 internal slot;
+    uint256 internal dayStart;
+    address internal alice = address(0xA11CE);
+    address internal bob = address(0xB0B);
 
     function setUp() public {
-        vm.etch(ContractAddresses.CRAPS, address(new CrapsPreferenceStore()).code);
-        battle = new JackpotBattle();
-        ref = new BattleRef();
-    }
-
-    function _field(uint256 n, uint256 salt) internal pure returns (address[] memory e) {
-        e = new address[](n);
-        for (uint256 i; i < n; ++i) {
-            e[i] = address(uint160(uint256(keccak256(abi.encode(salt, i)))));
-        }
-    }
-
-    function _resolve(address[] memory e, uint256 amount, uint256 word)
-        internal
-        returns (address[] memory players, uint256[] memory owed)
-    {
-        uint256[] memory field = JackpotBattleFieldLib.prepare(e, amount);
+        _installPins();
+        table = new JackpotTableHarness();
+        api = IJackpotBattle(address(table));
+        cold = JackpotBattle(address(table));
+        uint256 elapsed = (vm.getBlockTimestamp() - 82_620) % 1 days;
+        dayStart = vm.getBlockTimestamp() + 1 days - elapsed;
+        vm.warp(dayStart);
+        day = table.currentDayIndex();
+        slot = uint64(uint256(day) * 8 + 6);
+        _setIndex(5);
+        _setDailyWord(day, 123456);
         vm.prank(ContractAddresses.GAME);
-        (players, owed,,,) = battle.resolve(7, field, amount, word);
+        table.openBonusDay();
+        table.clearDayBodies(day);
+        game.setScore(alice, 100);
+        game.setScore(bob, 100);
     }
 
-    function _select(address p, uint32 chips) private {
-        uint256 compact;
-        for (uint256 i; i < 10; ++i) compact |= uint256((chips >> (i * 3)) & 7) << (i * 2);
-        vm.store(ContractAddresses.CRAPS, keccak256(abi.encode(p, uint256(15))), bytes32((compact << 64) | (1 << 84)));
-        selected[p] = chips;
+    function _enter(address player, bool wholeDay) internal returns (uint256 id) {
+        game.setScore(player, 100);
+        vm.prank(player);
+        if (wholeDay) {
+            table.enterBonusDay(0, 1);
+            return (uint256(day) * 8 << 64) | table.daySeatNumberOf(day, player);
+        }
+        return table.enterBonusBattle(5, 0, 1);
+    }
+    function _lock(uint256 added) internal {
+        vm.warp(dayStart + 1 days);
+        game.setRngLocked(true);
+        // Level 2 prices at 0.01 ETH, so a pool of `added / 500` locks exactly `added` (floor 50,000).
+        vm.prank(ContractAddresses.GAME);
+        api.lockJackpotBattle(day + 1, added / 500, 2);
+    }
+    function _start(uint256 word, uint256 n, address base) internal {
+        uint256[] memory field = new uint256[](n);
+        for (uint256 i; i < n; ++i) field[i] = uint160(base) + i | (uint256(1) << 180);
+        vm.startPrank(ContractAddresses.GAME);
+        api.prepareJackpotBattle(7, word);
+        api.appendJackpotBattle(field, 0, true);
+        vm.stopPrank();
+    }
+    function _finish(uint64 budget) internal returns (uint256 calls) {
+        for (; calls < 200; ++calls) {
+            (,,, bool done) = api.jackpotProgress();
+            if (done) return calls;
+            vm.prank(ContractAddresses.GAME);
+            api.advanceJackpotBattle(budget);
+        }
+        revert("no progress");
+    }
+    function _round() internal view returns (CrapsBattleStorage.JackpotRound memory r) {
+        (r,,) = cold.jackpotBattleOf(slot);
     }
 
-    function _validBoard(uint256 entropy) private pure returns (uint32 chips) {
-        uint256 remaining = entropy % 8;
-        bool dark = entropy & 8 != 0;
-        for (uint256 i; i < 10; ++i) {
-            uint256 count = (entropy >> (8 + i * 2)) & 3;
-            if ((dark && i == 0) || (!dark && i == 9)) count = 0;
-            if (count > remaining) count = remaining;
-            remaining -= count;
-            chips |= uint32(count << (i * 3));
+    function test_EarlyFloorAwardsOnePerTenThousandAdded() public {
+        _lock(CrapsPriceLib.jackpotAdded(25_000 ether, 0));
+        vm.prank(ContractAddresses.GAME);
+        (,, uint256 remaining) = api.prepareJackpotBattle(7, 123);
+        assertEq(remaining, 15);
+        assertEq(_round().added, 150_000 ether);
+        _start(123, 15, alice);
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        assertEq(r.drawnCount, 15);
+        assertGe(r.bankroll, 1_800 ether);
+    }
+
+    function test_AwardCountIgnoresPaidVolumeAndPoolRoll() public {
+        _enter(alice, false);
+        _lock(259_999 ether);
+        uint256 snap = vm.snapshotState();
+        vm.prank(ContractAddresses.GAME);
+        (,, uint256 a) = api.prepareJackpotBattle(7, 123);
+        assertEq(a, 25);
+        assertTrue(vm.revertToState(snap));
+        vm.prank(ContractAddresses.GAME);
+        (,, uint256 b) = api.prepareJackpotBattle(7, 999);
+        assertEq(b, a);
+        assertEq(_round().paidUnits, 1);
+    }
+
+    function test_AwardTargetRetainsSafetyCap() public {
+        _lock(100_000_000 ether);
+        vm.prank(ContractAddresses.GAME);
+        (,, uint256 remaining) = api.prepareJackpotBattle(7, 123);
+        assertEq(remaining, 500);
+    }
+
+    function test_LargeAwardFieldCollectsBeforeAnyPaidSettlement() public {
+        _enter(alice, false);
+        _lock(1_000_000 ether);
+        vm.prank(ContractAddresses.GAME);
+        (,, uint256 remaining) = api.prepareJackpotBattle(7, 123);
+        assertEq(remaining, 100);
+        uint256[] memory field = new uint256[](50);
+        for (uint256 i; i < field.length; ++i) field[i] = uint160(bob) | (uint256(1) << 180);
+        vm.prank(ContractAddresses.GAME);
+        api.appendJackpotBattle(field, 50, false);
+        assertEq(_round().drawnCount, 50);
+        assertEq(_round().word, 0);
+        vm.prank(ContractAddresses.GAME);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        api.advanceJackpotBattle(300);
+        assertEq(table.bonusCursorOf(slot), 0);
+        vm.prank(ContractAddresses.GAME);
+        api.appendJackpotBattle(field, 100, true);
+        assertEq(_round().drawnCount, 100);
+        assertEq(_round().word, 123);
+        assertGe(_round().bankroll, 1_800 ether);
+        _finish(300);
+    }
+
+    function test_NewHighDrawAgreesWithJackpotPaidUnits() public {
+        uint256 tail;
+        for (uint256 word = 1; word < 1_000; ++word) {
+            if (table.highMultOfWord(word) == 100) { tail = word; break; }
+        }
+        assertGt(tail, 0);
+        _setDailyWord(day, tail);
+        vm.prank(alice);
+        table.enterBonusBattle(5, 0, 100);
+        assertEq(flip.burned(alice), 800_000 ether);
+        _lock(150_000 ether);
+        assertEq(_round().paidUnits, 100);
+        _start(123, 5, bob);
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        assertEq(r.totalPool, uint256(950_000 ether) * r.multiplierBps / 10_000);
+    }
+
+    function test_FixedFeeVariableStakeAndExactPoolConservation() public {
+        _enter(alice, false); _enter(bob, true);
+        assertEq(flip.burned(alice), 8_000 ether);
+        _lock(400_000 ether); _start(123, 50, address(0x1000));
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        assertEq(r.paidCount, 2); assertEq(r.paidUnits, 2);
+        uint256 n = r.paidUnits + r.drawnUnits;
+        assertEq(r.drawnUnits, 40);
+        assertEq(r.totalPool, (uint256(416_000 ether) * r.multiplierBps) / 10_000);
+        assertEq(uint256(r.bankroll) % 300 ether, 0);
+        assertEq(n * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100 ether) + r.potRemainder, r.totalPool);
+        assertLe(uint256(r.bankroll) * n, r.totalPool / 2);
+        assertLt(r.totalPool / 2 - uint256(r.bankroll) * n, n * 300 ether);
+        _finish(300);
+    }
+
+    function test_AwardedEntryThrowsTheFieldDiceUnderItsOwnKey() public view {
+        CrapsEngine engine = CrapsEngine(ContractAddresses.CRAPS_ENGINE);
+        uint256 word = 424_242;
+        uint256 betId = (uint256(slot) << 64) | 9;
+        uint256 chips = 1 | (1 << 9) | (1 << 12);
+        uint256 field = (uint256(20) << 64) | 9;
+        // The award's own key replaces its wallet for scatter, survival coin and boost; the dice
+        // seed is the field's. So it is exactly a paid seat played by that key on the same word.
+        uint256 key = uint160(uint256(keccak256(abi.encode(word, uint256(0x4a61636b706f7441776172646564), betId))));
+        Craps.SlipResult memory awarded = engine.settleBattle(
+            betId, uint160(bob) | (chips << 160) | (uint256(1) << 224), 30, 1_500 ether, 7_500 ether, uint48(slot), field, word);
+        Craps.SlipResult memory paid = engine.settleBattle(
+            betId, key | (chips << 160), 30, 1_500 ether, 7_500 ether, uint48(slot), field, word);
+        assertEq(keccak256(abi.encode(awarded)), keccak256(abi.encode(paid)));
+    }
+
+    /// @dev A bankroll no escalated round can drain: only a hard bound stops the run.
+    function _endlessRun(uint256 bound, uint256 goal, uint256 word) internal view returns (Craps.SlipResult memory) {
+        return CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle(
+            (bound << 64) | 1, uint160(alice), 1, 1e40, goal, uint48(bound), (uint256(1) << 64) | 1, word);
+    }
+
+    function testFuzz_JackpotRunStopsInsideItsRollCeiling(uint256 word, bool detached, bool latched) public view {
+        uint256 bound = uint256(day) * 8 + (detached ? 7 : 6);
+        Craps.SlipResult memory r = _endlessRun(bound, latched ? 5e39 : 5e40, word);
+        assertGe(r.totalRolls, 1_000, "stopped short of the budget");
+        assertLe(r.totalRolls, 1_511, "passed the budget plus one full hand");
+        if (latched) {
+            assertEq(uint8(r.stop), uint8(Craps.SlipStop.Goal), "latched run must keep its Goal");
+            assertGe(r.bankrollOut, 5e39, "reserve breached");
+            assertGt(r.bankrollIn, 0, "Goal pays what it holds");
+        } else {
+            assertEq(uint8(r.stop), uint8(Craps.SlipStop.Bust), "pre-goal bound is a bust");
+            assertEq(r.bankrollIn, 0, "a bust pays nothing");
         }
     }
 
-    function testFuzz_SavedBoardsPayByTheRules(uint256 word, uint8 repeat, uint256 amount) public {
-        address[] memory e = _field(50, word);
-        uint256 distinct = bound(repeat, 1, 50);
-        for (uint256 i; i < 50; ++i) {
-            e[i] = address(uint160((i % distinct) << 8));
-            _select(e[i], _validBoard(uint256(keccak256(abi.encode(word, i % distinct)))));
-        }
-        _assertFieldPaysByTheRules(e, bound(amount, 450, 1e12) * 1 ether, word);
+    /// forge-config: default.fuzz.runs = 64
+    function testFuzz_OrdinaryAndCustomRunsUseSharedRollCeiling(
+        uint256 word, uint8 period, bool custom, bool latched
+    ) public view {
+        uint256 bound = custom ? (uint256(1) << 40) + word % 1000 : uint256(day) * 8 + 1 + period % 5;
+        Craps.SlipResult memory r = _endlessRun(bound, latched ? 5e39 : 5e40, word);
+        assertGe(r.totalRolls, 1_000, "stopped short of the shared budget");
+        assertLe(r.totalRolls, 1_511, "passed the shared ceiling");
+        assertEq(uint8(r.stop), uint8(latched ? Craps.SlipStop.Goal : Craps.SlipStop.Bust));
+        if (latched) assertGe(r.bankrollIn, 5e39, "latched goal lost its reserve");
+        else assertEq(r.bankrollIn, 0, "a pre-goal bound paid a bust");
     }
 
-    function test_LookupsOnlyDistinctPlayedWalletsAndEventSnapshot() public {
-        address[] memory e = new address[](4);
-        e[0] = address(10); e[1] = e[0]; e[2] = address(20); e[3] = address(30);
-        uint32 board = (3 << 27) | (3 << 12) | (1 << 15);
-        _select(e[0], board);
-        bytes32[] memory slots = new bytes32[](1);
-        slots[0] = keccak256(abi.encode(e[0], uint256(15)));
-        vm.expectCall(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload(bytes32[])", slots), uint64(1));
-        vm.record();
+    /// @dev A detached battle sits at remainder seven of a day that never opened, which is exactly
+    ///      the day the keeper's lapse sweep refunds. The sweep must leave the battle's settle
+    ///      cursor alone and refund nothing for its awards, or the field could never complete.
+    function test_LapseSweepLeavesADetachedBattleToSettle() public {
+        table.clearBoostBudget(day);
+        _lock(400_000 ether);
+        uint64 detached = uint64(uint256(day) * 8 + 7);
+        (uint64 active,,,) = api.jackpotProgress();
+        assertEq(active, detached, "the lock did not detach");
+        _start(123, 40, address(0x1000));
+        vm.prank(ContractAddresses.GAME); api.advanceJackpotBattle(1);
+        assertEq(table.bonusCursorOf(detached), 1);
+        uint256 lane = flip.compLane();
+        uint64 daySlot = uint64(uint256(day) * 8);
+        for (uint256 i; i < 20 && table.keeperSlot() <= daySlot; ++i) table.keepScheduled(type(uint64).max);
+        assertGt(table.keeperSlot(), daySlot, "the keeper never swept the lapsed day");
+        assertEq(table.bonusCursorOf(detached), 1, "the sweep moved the battle's settle cursor");
+        assertEq(flip.compLane(), lane, "the sweep refunded awards as reservations");
+        _finish(300);
+        assertEq(table.battleOf(bytes32(uint256(detached))).resolved, 40);
+    }
+
+    function test_OnlyPaidFeesAreBookedAsActionAndComped() public {
+        _enter(alice, false); _enter(bob, true);
+        uint256 before = table.dayStaked(day);
+        uint256 lane = flip.compLane();
+        _lock(400_000 ether); _start(123, 50, address(0x1000));
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        uint256 n = r.paidUnits + r.drawnUnits;
+        uint256 bps = r.multiplierBps < 10_000 ? r.multiplierBps : 10_000;
+        uint256 staked = uint256(r.paidUnits) * 8_000 ether * bps / 10_000 * (n * r.bankroll) / r.totalPool;
+        assertGt(staked, 0);
+        assertLe(staked, uint256(r.paidUnits) * 4_000 ether, "more than the fees' bankroll half");
+        assertEq(table.dayStaked(day) - before, staked);
+        assertEq(flip.compLane() - lane, staked / 50, "creditCrapsComps paid other than the fee share");
+        _finish(300);
+        assertEq(table.dayStaked(day) - before, staked, "settlement booked the jackpot again");
+        assertEq(flip.compLane() - lane, staked / 50, "finalization comped the jackpot again");
+    }
+
+    function test_BadDrawsAreSkippedAndResumeKeepsFrozenDraw() public {
+        _enter(alice, false);
+        _lock(150_000 ether);
+        vm.prank(ContractAddresses.GAME);
+        (uint256 frozen,,) = api.prepareJackpotBattle(7, 123);
+        vm.prank(ContractAddresses.GAME);
+        (uint256 resumed,,) = api.prepareJackpotBattle(8, 456);
+        assertEq(resumed, frozen);
+        assertEq(_round().level, 7);
+        uint256[] memory f = new uint256[](3);
+        f[0] = uint160(bob) | (uint256(1) << 180);
+        f[1] = uint256(1) << 180;
+        f[2] = uint160(bob);
+        vm.prank(ContractAddresses.GAME);
+        api.appendJackpotBattle(f, 3, true);
+        assertEq(_round().drawnCount, 1);
+        assertEq(_round().word, 123);
+        _finish(300);
+    }
+
+    function test_AwardOnlyFieldBooksNothing() public {
+        uint256 before = table.dayStaked(day);
+        uint256 lane = flip.compLane();
+        _lock(150_000 ether); _start(123, 15, alice); _finish(300);
+        assertEq(table.dayStaked(day), before);
+        assertEq(flip.compLane(), lane);
+    }
+
+    function test_PaidOwnThenDayThenAwarded_OneWalkFinalizesOnce() public {
+        _enter(alice, false); _enter(bob, true);
+        _lock(1_000_000 ether); _start(17, 2, alice);
+        vm.prank(ContractAddresses.GAME); assertFalse(api.advanceJackpotBattle(1));
+        assertEq(table.bonusCursorOf(slot), 1);
         vm.recordLogs();
-        _resolve(e, 900 ether, 77); // two units, one distinct wallet
+        vm.prank(ContractAddresses.GAME); assertTrue(api.advanceJackpotBattle(type(uint64).max));
+        assertEq(table.bonusCursorOf(slot), 4, "the walk stopped at the paid boundary");
+        assertEq(table.battleOf(bytes32(uint256(slot))).resolved, 4);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 topic = keccak256("JackpotBattleRun(uint24,address,uint256,uint256,uint256,uint256,uint32)");
-        uint256 events;
-        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == topic) {
-            (uint256 units,,,,uint32 played) = abi.decode(logs[i].data, (uint256,uint256,uint256,uint256,uint32));
-            assertEq(units, 2); assertEq(played, board); ++events;
+        uint256 finals;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == CrapsBattleStorage.CrapsBattleFinalized.selector) ++finals;
         }
-        assertEq(events, 1);
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(ContractAddresses.CRAPS);
-        assertEq(writes.length, 0, "coin draw mutated preferences");
-        assertEq(reads.length, 1, "must only read the one distinct played wallet");
-        assertEq(reads[0], slots[0]);
+        assertEq(finals, 1, "one finalization, at the last awarded seat");
+        uint256 credited = coinflip.totalCredited();
+        vm.prank(ContractAddresses.GAME); assertTrue(api.advanceJackpotBattle(300));
+        assertEq(coinflip.totalCredited(), credited, "paid twice");
     }
 
-    function test_FieldPackingMasksOtherPassCreditFields() public {
-        address[] memory entrants = new address[](3);
-        entrants[1] = address(0x100); // same low-byte collision as address(0)
-        uint32 board = (3 << 27) | (3 << 12) | (1 << 15);
-        _select(address(0), board);
-        bytes32 slot = keccak256(abi.encode(address(0), uint256(15)));
-        uint256 noise = (type(uint256).max << 85) | type(uint64).max;
-        vm.store(ContractAddresses.CRAPS, slot, bytes32(uint256(vm.load(ContractAddresses.CRAPS, slot)) | noise));
-        uint256[] memory field = JackpotBattleFieldLib.prepare(entrants, 150_000 ether);
-        assertEq(field.length, 2);
-        assertEq(uint160(field[0]), 0); assertEq(field[0] >> 180, 2);
-        assertEq(uint160(field[1]), 0x100); assertEq(field[1] >> 180, 1);
-        uint256 compact = (field[0] >> 160) & 0xfffff;
-        uint256 canonical;
-        for (uint256 leg; leg < 10; ++leg) canonical |= ((compact >> (2 * leg)) & 3) << (3 * leg);
-        assertEq(canonical, board);
-        assertEq((field[1] >> 160) & 0xfffff, 0);
+    function test_DifferentBudgetsProduceSameWinnerAndPayments() public {
+        _enter(alice, false); _enter(bob, true);
+        for (uint160 i = 0x2000; i < 0x2008; ++i) _enter(address(i), false);
+        _lock(1_000_000 ether); _start(578, 12, address(0x3000));
+        uint256 snap = vm.snapshotState();
+        _finish(1);
+        uint256 credited = coinflip.totalCredited();
+        bytes32 digest = keccak256(abi.encode(table.battleOf(bytes32(uint256(slot)))));
+        assertTrue(vm.revertToState(snap));
+        _finish(300);
+        assertEq(coinflip.totalCredited(), credited);
+        assertEq(keccak256(abi.encode(table.battleOf(bytes32(uint256(slot))))), digest);
     }
 
-    function test_BattleUsesPassedSnapshotWithoutCallbacks() public {
-        address[] memory e = _field(3, 31);
-        _select(e[0], 3 | (3 << 12) | (1 << 15));
-        uint256[] memory field = JackpotBattleFieldLib.prepare(e, 150_000 ether);
-        // Once prepared, neither changed storage nor an unavailable reader can affect resolve.
-        _select(e[0], 0);
-        vm.mockCallRevert(ContractAddresses.CRAPS, bytes(""), "unexpected callback");
-        vm.record();
-        vm.prank(ContractAddresses.GAME);
-        (address[] memory players,,,,) = battle.resolve(7, field, 150_000 ether, 31);
-        assertEq(players, e);
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(ContractAddresses.CRAPS);
-        assertEq(reads.length, 0);
-        assertEq(writes.length, 0);
+    function test_LockPreventsEntryUpgradeAmendmentAndPreferenceChange() public {
+        uint256 id = _enter(alice, false); _enter(bob, true);
+        _lock(200_000 ether);
+        vm.prank(address(0x123)); vm.expectRevert(); table.enterBonusBattle(5, 0, 1);
+        vm.prank(alice); vm.expectRevert(); table.amendSlip(id, 1);
+        vm.prank(bob); vm.expectRevert(); table.upgradeDayWindows(day, 0x20);
+        _start(831, 1, alice); _finish(300);
     }
 
-    function test_NoAffordableEntriesSkipsReader() public {
-        vm.mockCallRevert(ContractAddresses.CRAPS, bytes(""), "unexpected read");
-        vm.recordLogs();
-        (address[] memory players,) = _resolve(_field(50, 1), 449 ether, 99);
-        assertEq(players.length, 0);
-        (players,) = _resolve(new address[](0), 150_000 ether, 99);
-        assertEq(players.length, 0);
-        assertEq(vm.getRecordedLogs().length, 0, "empty fields must not emit a multiplier");
+    function test_RetryCannotReplaceAllocationOrField() public {
+        _enter(alice, false); _lock(200_000 ether);
+        vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(day + 1, 999_000 ether / 500, 2);
+        assertEq(_round().added, 200_000 ether);
+        _start(99, 1, alice);
+        uint256[] memory f = new uint256[](3);
+        for (uint256 i; i < f.length; ++i) f[i] = uint160(bob) + i | (uint256(1) << 180);
+        vm.startPrank(ContractAddresses.GAME);
+        api.prepareJackpotBattle(7, 777);
+        vm.expectRevert(JackpotBattle.BadJackpotField.selector);
+        api.appendJackpotBattle(f, 0, true);
+        vm.stopPrank();
+        assertEq(_round().word, 99); assertEq(_round().drawnCount, 1);
+        _finish(300);
     }
 
-    function test_AllMultiplierTiersScaleRunsAndPotBeforeRounding() public {
-        uint256[4] memory tiers = [uint256(5_000), 30_000, 200_000, 1_000_000];
-        address[] memory e = _field(50, 123);
-        e[1] = e[0]; e[3] = e[2]; // the same roll also scales repeated entry units
-        for (uint256 i; i < 50; ++i) _select(e[i], _validBoard(i * 7919));
-        for (uint256 t; t < tiers.length; ++t) {
-            uint256 word;
-            while (_multiplier(word) != tiers[t]) ++word;
-            // Exercise both rounding bands, fractional-FLIP pot dust and the uint24 chip clamp.
-            _assertFieldPaysByTheRules(e, 451.75 ether, word);
-            _assertFieldPaysByTheRules(e, 150_001.75 ether, word);
-            _assertFieldPaysByTheRules(e, uint256(type(uint128).max), word);
+    function test_EmptyAwardFieldStillClosesPaidBattle() public {
+        _enter(alice, false); _lock(123_000 ether); _start(44, 0, bob);
+        assertEq(_finish(300), 1);
+        assertEq(table.battleOf(bytes32(uint256(slot))).winnerId, 1);
+    }
+    function test_NoEntrantsCompletesWithoutDivisionOrPayout() public {
+        _lock(123_000 ether); _start(44, 0, bob);
+        (,,, bool complete) = api.jackpotProgress(); assertTrue(complete);
+        assertEq(coinflip.totalCredited(), 0);
+    }
+    function test_LateAndNextDayProcessingDoesNotChangeFrozenTerms() public {
+        _enter(alice, false); _lock(500_000 ether);
+        vm.warp(dayStart + 5 days);
+        _setDailyWord(table.currentDayIndex(), 999);
+        vm.prank(ContractAddresses.GAME); table.openBonusDay();
+        _start(987, 3, bob); _finish(300);
+        assertEq(_round().paidCount, 1); assertEq(_round().added, 500_000 ether);
+    }
+    function test_HighCopiesAndRepeatedAwardsCountAsUnits() public {
+        uint16 h = uint16(table.highMultOfWord(123456));
+        vm.prank(alice); table.enterBonusBattle(5, 0, h);
+        _lock(500_000 ether);
+        uint256[] memory f = new uint256[](3);
+        for (uint256 i; i < f.length; ++i) f[i] = uint160(bob) | (uint256(1) << 180);
+        vm.startPrank(ContractAddresses.GAME);
+        api.prepareJackpotBattle(7, 999);
+        api.appendJackpotBattle(f, 0, true);
+        vm.stopPrank();
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        assertEq(r.paidUnits, h); assertEq(r.drawnUnits, 3); assertEq(r.drawnCount, 3);
+        assertEq(r.totalPool, (uint256(h) * 8_000 ether + r.added) * r.multiplierBps / 10_000);
+        _finish(300);
+    }
+    function test_OnlyGameCanLockOrSupplyField() public {
+        vm.expectRevert(); api.lockJackpotBattle(day + 1, 123 ether, 2);
+        uint256[] memory f = new uint256[](0);
+        vm.expectRevert(); api.prepareJackpotBattle(7, 123);
+        vm.expectRevert(); api.appendJackpotBattle(f, 0, true);
+    }
+    function test_SixDeadlinesAndUnusedSlot() public {
+        uint256[6] memory elapsed = [uint256(0),20 minutes,6 hours + 3 minutes,12 hours + 3 minutes,18 hours + 3 minutes,1 days - 20 minutes];
+        for (uint256 i; i < elapsed.length; ++i) {
+            vm.warp(dayStart + elapsed[i]);
+            (,uint256 period,) = table.currentBonusSlot(); assertEq(period, i);
         }
+        vm.expectRevert(); table.jackpotTerms(uint64(uint256(day) * 8 + 7));
     }
-
-    function test_GasSavedBoardFields() public {
-        for (uint256 count; count < 8; ++count) {
-            address[] memory e = _field(50, count);
-            // Cover all boost rows, both pass sides, late legs, and dense seven-chip boards.
-            for (uint256 i; i < 50; ++i) {
-                uint256 side = i % 2 == 0 ? 0 : 27;
-                uint32 chips = uint32((count > 3 ? 3 : count) << side);
-                if (count > 3) chips |= uint32((count > 6 ? 3 : count - 3) << 12);
-                if (count > 6) chips |= 1 << 24;
-                _select(e[i], chips);
-            }
-            // vm.store warms storage; cool it to measure the actual cold reader path.
-            vm.cool(ContractAddresses.CRAPS);
-            for (uint256 i; i < 50; ++i) vm.coolSlot(ContractAddresses.CRAPS, keccak256(abi.encode(e[i], uint256(15))));
-            _assertFieldPaysByTheRules(e, 150_000 ether, uint256(keccak256(abi.encode(count))));
+    function test_DayPriceUsesNewPresetsAndFixedJackpotFee() public {
+        uint256 total;
+        for (uint256 p; p < 6; ++p) {
+            (uint128 bank,,,uint256 bounty,,) = table.bonusTermsFor(day,p);
+            total += bank + bounty;
+            if (p == 5) assertEq(uint256(bank) + bounty, 8_000 ether);
         }
+        _enter(alice, true); assertEq(flip.burned(alice), total);
+        assertEq(table.BONUS_PERIODS_PER_DAY(), 6);
+        assertEq(table.daySeatHighMaskOf(day,alice),0);
     }
-
-    function test_OnlyGame() public {
-        uint256[] memory e = new uint256[](3);
-        vm.expectRevert(JackpotBattle.OnlyGame.selector);
-        battle.resolve(7, e, 100_000 ether, 1);
-    }
-
-    /// @dev Every rule against an independent recomputation: repeats fold into units in draw
-    ///      order, a bust pays nothing, a run stopped by either cap or latched at the goal pays its bankroll times its
-    ///      units on the two-band award figure, and the pot goes to the highest paid ending bankroll, the
-    ///      earlier-drawn wallet on a tie.
-    function testFuzz_FieldPaysByTheRules(uint256 word, uint256 amountFlip, uint8 dupEvery) public {
-        amountFlip = bound(amountFlip, 5_000, 1e12);
-        uint256 amount = amountFlip * 1 ether + (word % 1 ether);
-        address[] memory e = _field(50, word);
-        uint256 d = bound(dupEvery, 2, 9);
-        for (uint256 i = d; i < 50; i += d) e[i] = e[i - d / 2 - 1];
-
-        _assertFieldPaysByTheRules(e, amount, word);
-    }
-
-    function testFuzz_CollidingWalletsPayByTheRules(uint256 word, uint8 repetitions) public {
-        address[] memory e = new address[](50);
-        uint256 distinct = bound(repetitions, 1, 50);
-        for (uint256 i; i < e.length; ++i) e[i] = address(uint160((i % distinct) << 8));
-        _assertFieldPaysByTheRules(e, 150_000 ether, word);
-    }
-
-    function _assertFieldPaysByTheRules(address[] memory e, uint256 amount, uint256 word) private {
-        uint256[2] memory gasBound;
-        vm.recordLogs();
-        gasBound[0] = gasleft();
-        uint256[] memory field = JackpotBattleFieldLib.prepare(e, amount);
-        vm.prank(ContractAddresses.GAME);
-        (address[] memory players, uint256[] memory owed, address jackpotWinner, uint256 peak, uint256 score) =
-            battle.resolve(7, field, amount, word);
-        gasBound[0] -= gasleft();
-
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(logs[0].emitter, address(battle));
-        assertEq(logs[0].topics[0], keccak256("JackpotBattleMultiplier(uint24,uint256,uint256)"));
-        assertEq(uint256(logs[0].topics[1]), 7);
-        (uint256 baseBudget, uint256 rolledBps) = abi.decode(logs[0].data, (uint256,uint256));
-        assertEq(baseBudget, amount);
-        assertEq(rolledBps, _multiplier(word));
-
-        uint256 stakes = (amount * 2) / 3;
-        uint256 units = e.length;
-        if (units > stakes / 300 ether) units = stakes / 300 ether;
-        uint256 chipFlip = (stakes / units / 300 ether) * 6;
-        if (chipFlip > (type(uint24).max / 10 / 6) * 6) chipFlip = (type(uint24).max / 10 / 6) * 6;
-        assertEq((chipFlip * 50 ether) % 300 ether, 0, "a bankroll off the 300-FLIP granule");
-
-        // Rebuild the distinct field and its units from the truncated draw.
-        address[] memory want = new address[](units);
-        uint256[] memory held = new uint256[](units);
-        uint256 n;
-        for (uint256 i; i < units; ++i) {
-            uint256 j;
-            while (j < n && want[j] != e[i]) ++j;
-            if (j == n) want[n++] = e[i];
-            ++held[j];
-        }
-        assertEq(players.length, n, "distinct count");
-        assertEq(owed.length, n, "owed length");
-
-        uint256 best;
-        uint256 winner = type(uint256).max;
-        uint256[] memory expect = new uint256[](n);
-        uint256 wantPeak;
-        uint256 multiplier = _multiplier(word);
-        gasBound[1] = RESOLVE_BASE;
-        for (uint256 j; j < n; ++j) {
-            assertEq(players[j], want[j], "draw order");
-            Craps.SlipResult memory r = ref.runBoard(word, want[j], chipFlip, j, n, selected[want[j]]);
-            (uint256 loggedUnits, uint256 loggedBankroll, uint256 loggedRolls, uint256 loggedPaid,) =
-                abi.decode(logs[j + 1].data, (uint256,uint256,uint256,uint256,uint32));
-            assertEq(loggedUnits, held[j]);
-            assertEq(loggedBankroll, r.bankrollOut, "multiplier changed simulated bankroll");
-            assertEq(loggedRolls, r.totalRolls, "multiplier changed dice work");
-            gasBound[1] += FIXED + RUN_EXTRA + PER_HAND * r.handsPlayed + PER_ROLL * r.totalRolls;
-            assertLe(r.totalRolls, 200, "a run passed the exact roll cap");
-            assertLe(r.handsPlayed, 22, "a run passed the hand cap");
-            uint256 out = r.stop == Craps.SlipStop.Goal || r.totalRolls >= 200 || r.handsPlayed == 22
-                ? r.bankrollOut
-                : 0;
-            if (out > best) {
-                best = out;
-                winner = j;
-                wantPeak = r.stop == Craps.SlipStop.Goal ? r.peakBankroll / 1 ether : 0;
-            }
-            expect[j] = _award(out * held[j] * multiplier / 10_000, uint256(keccak256(abi.encode(word, ROUND_TAG, uint256(uint160(want[j]))))));
-            assertEq(loggedPaid, expect[j], "run event must report multiplied, rounded payment");
-        }
-        if (winner != type(uint256).max) {
-            uint256 pot = _award((amount - chipFlip * 50 ether * units) * multiplier / 10_000, uint256(keccak256(abi.encode(word, ROUND_TAG))));
-            expect[winner] += pot;
-            assertEq(logs[n + 1].topics[0], keccak256("JackpotBattlePot(uint24,address,uint256)"));
-            assertEq(abi.decode(logs[n + 1].data, (uint256)), pot);
-        }
-        assertEq(jackpotWinner, winner == type(uint256).max ? address(0) : want[winner], "jackpot candidate must be pot winner");
-        assertEq(peak, wantPeak, "winner's qualifying high point");
-        assertEq(score, wantPeak * 10_000 / (chipFlip * 50), "unmultiplied peak score");
-        for (uint256 j; j < n; ++j) assertEq(owed[j], expect[j], "owed");
-        assertLe(gasBound[0], gasBound[1], "field exceeds the gas model, including colliding wallets");
-    }
-
-    /// @dev A budget that cannot give every drawn unit the 300-FLIP floor plays fewer, from the
-    ///      front; one that cannot give even one pays nothing and returns empty.
-    function test_SmallBudgetPlaysFewerUnits() public {
-        address[] memory e = _field(50, 3);
-        (address[] memory players,) = _resolve(e, 4_500 ether, 11);
-        assertEq(players.length, 10, "3,000 FLIP of stakes (two thirds) seats ten 300-FLIP bankrolls");
-        (players,) = _resolve(e, 449 ether, 11);
-        assertEq(players.length, 0, "under one bankroll plays nobody");
-    }
-
-    /// @dev A roll budget under one hand is exact: no run passes it, whatever the board.
-    function testFuzz_SubHandBudgetIsExact(bytes32 seed, uint32 packed, uint256 budget) public view {
-        budget = bound(budget, 1, 511);
-        uint256 board = uint256(packed) & ((1 << 30) - 1);
-        if (ref.stake(board, 10) == 0) board = 1;
-        Craps.SlipResult memory r = ref.slip(board, 10, seed, 1_000_000 ether, 0, budget);
-        assertLe(r.totalRolls, budget, "rolls passed an exact budget");
-    }
-
-    /// @dev The shipped 8,192 budget is a between-shooters budget, as before: a hand it admits
-    ///      still runs whole, so its runs can pass the budget by up to one hand.
-    function test_FullBudgetKeepsItsMeaning() public view {
-        uint256 over;
-        for (uint256 i; i < 40 && over == 0; ++i) {
-            Craps.SlipResult memory r = ref.slip(1, 10, keccak256(abi.encode(i)), 1_000_000 ether, 0, 20);
-            // 20 < 512 is exact now; the between-shooters meaning is kept at >= _MAX_ROLLS.
-            assertLe(r.totalRolls, 20);
-            r = ref.slip(1, 10, keccak256(abi.encode(i)), 1e30, 0, 512);
-            if (r.totalRolls > 512) over = r.totalRolls;
-        }
-        assertGt(over, 512, "a 512 budget no longer lets its last hand finish");
-    }
-
-    /// @dev Everything `resolve` does beyond one run's dice (scatter, keys, event, award) and the
-    ///      field's own base (dedupe, arrays, the call). Checked below as an upper bound on every
-    ///      real field, alongside the per-run dice model, so the composition bounds `resolve`.
-    uint256 internal constant RESOLVE_BASE = 300_000;
-    uint256 internal constant RUN_EXTRA = 10_000;
-
-    /// @dev Real 50-wallet fields over many words: each costs no more than the composed model
-    ///      evaluated at its own hands and rolls, and the model at both caps is the model bound
-    ///      on `resolve` that the purchase-day advance's worst case is sized against.
-    function test_GasFiftyEntrants() public {
-        uint256 worst;
-        uint256 sum;
-        uint256 N = 150;
-        for (uint256 w; w < N; ++w) {
-            address[] memory e = _field(50, w + 1000);
-            uint256 word = uint256(keccak256(abi.encode("word", w)));
-            uint256 amount = (5_000 + (w * 7919) % 5_000_000) * 1 ether;
-            uint256 modelled = RESOLVE_BASE;
-            uint256 chip = ((amount * 2) / 3 / 50 / 300 ether) * 6;
-            for (uint256 i; i < 50; ++i) {
-                Craps.SlipResult memory r = ref.run(word, e[i], chip, i, 50);
-                modelled += FIXED + RUN_EXTRA + PER_HAND * r.handsPlayed + PER_ROLL * r.totalRolls;
-            }
-            uint256 g = gasleft();
-            _resolve(e, amount, word);
-            g -= gasleft();
-            assertLe(g, modelled, "a field cost more than the composed gas model");
-            sum += g;
-            if (g > worst) worst = g;
-        }
-        uint256 model = RESOLVE_BASE + 50 * (FIXED + RUN_EXTRA + PER_HAND * 22 + PER_ROLL * 200);
-        emit log_named_uint("mean gas, 50 entrants", sum / N);
-        emit log_named_uint("worst gas, 50 entrants", worst);
-        emit log_named_uint("MODEL resolve bound, 50 entrants at both caps", model);
-        assertLe(model, 7_475_000, "the model resolve bound moved");
-    }
-
-    /// @dev Gas model of one run: FIXED + PER_HAND x hands + PER_ROLL x rolls, fitted as an upper
-    ///      envelope over 3,000 capped runs (least squares plus the largest residual). The model
-    ///      field bound evaluates it at both caps for all 50 entrants; this test re-checks every
-    ///      sample against the model on the heaviest board (every leg live) and on random boards
-    ///      (both hand machines), on a bankroll deep enough that only the caps stop it, and on
-    ///      battle-shaped runs (survival coin, goal latch), so samples span every per-roll path.
-    uint256 internal constant FIXED = 10_000;
-    uint256 internal constant PER_HAND = 1_250;
-    uint256 internal constant PER_ROLL = 480;
-
-    function test_GasEnvelopeProvesTheField() public {
-        uint256 board;
-        for (uint256 l; l < 10; ++l) board |= uint256(1) << (3 * l);
-        uint256 maxHands;
-        for (uint256 i; i < 1_500; ++i) {
-            uint256 hands = 1 + (i % 22);
-            uint256 budget = 1 + ((i * 7) % 200);
-            uint256 g = gasleft();
-            (uint256 h, uint256 r) = ref.capped(board, keccak256(abi.encode("envelope", i)), hands, budget, 1 + i % 22);
-            g -= gasleft();
-            assertLe(g, FIXED + PER_HAND * h + PER_ROLL * r, "a run cost more than the gas model");
-            if (h > maxHands) maxHands = h;
-        }
-        assertEq(maxHands, 22, "the samples never reached the hand cap");
-        // Every other per-roll path: random boards (about a third have no pass line and run the
-        // side machine) on the deep bankroll, and battle-shaped runs on a real five-deep bankroll
-        // (the survival coin and the goal latch), all at both caps.
-        for (uint256 i; i < 1_500; ++i) {
-            uint256 packed = uint256(keccak256(abi.encode("board", i))) & ((1 << 30) - 1);
-            if (packed == 0) packed = 1 << 27;
-            uint256 g = gasleft();
-            (uint256 h, uint256 r) = ref.capped(packed, keccak256(abi.encode("side", i)), 22, 200, 1 + i % 22);
-            g -= gasleft();
-            assertLe(g, FIXED + PER_HAND * h + PER_ROLL * r, "a random board cost more than the gas model");
-        }
-        for (uint256 i; i < 1_500; ++i) {
-            uint256 g = gasleft();
-            Craps.SlipResult memory r =
-                ref.run(uint256(keccak256(abi.encode("shape", i))), address(uint160(i + 1)), 100, i % 50, 50);
-            g -= gasleft();
-            // `run` also scatters the board and derives both seeds: the work RUN_EXTRA carries in
-            // the composed bound, so these samples are held to the per-run figure it charges.
-            assertLe(
-                g,
-                FIXED + RUN_EXTRA + PER_HAND * r.handsPlayed + PER_ROLL * r.totalRolls,
-                "a battle run cost more than the gas model"
-            );
-        }
-        uint256 field = 50 * (FIXED + PER_HAND * 22 + PER_ROLL * 200);
-        emit log_named_uint("model dice bound, 50 entrants", field);
-        assertLe(field, 6_675_000, "the model field bound moved");
-    }
-
-    /// @dev The hand cap almost never binds: under the battle's own terms, fewer than 0.05% of
-    ///      runs reach it (measured 0.0095% at 200,000 runs with no cap below 512).
-    function test_HandCapAlmostNeverBinds() public {
-        uint256 N = 60_000;
-        uint256 hit;
-        for (uint256 i; i < N; ++i) {
-            address p = address(uint160(i + 1));
-            Craps.SlipResult memory r = ref.run(uint256(keccak256(abi.encode("tail", i / 50))), p, 60, i % 50, 50);
-            if (r.handsPlayed == 22) ++hit;
-        }
-        emit log_named_uint("runs reaching the hand cap, per 100k", (hit * 100_000) / N);
-        assertLt(hit * 10_000, N * 5, "the hand cap binds on 0.05% of runs or more");
+    function testFuzz_PoolSplitNeverOverallocates(uint96 added, uint16 rawPaid, uint8 rawDraw, uint256 word) public {
+        added = uint96(bound(added, 1 ether, 1e25));
+        uint256 paid = bound(rawPaid, 1, 12);
+        uint256 drawn = bound(rawDraw, 0, 50);
+        for (uint160 i; i < paid; ++i) _enter(address(0xA000 + i), false);
+        _lock(added); _start(word == 0 ? 1 : word, drawn, address(0xB000));
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        uint256 n = r.paidUnits + r.drawnUnits;
+        assertGe(r.bankroll, 300 ether);
+        assertEq(n * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100 ether) + r.potRemainder, r.totalPool);
     }
 }

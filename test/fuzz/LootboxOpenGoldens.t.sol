@@ -257,7 +257,7 @@ contract LootboxOpenGoldens is DeployProtocol {
     }
 
     /// @dev Second fixed word: eight plain parent boxes; the redesigned ETH spin creates no nested box,
-    ///      three flushed levels, and seven presale normal passes.
+    ///      three flushed levels, and six presale normal passes (24,800-FLIP units).
     function test_goldensUnderWordThree() public {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
@@ -325,7 +325,7 @@ contract LootboxOpenGoldens is DeployProtocol {
                 assertEq(dg, 0, "presale DGNRS branch not drawn");
                 assertEq(ww, 0, "presale WWXRP branch not drawn");
                 assertFalse(cl, "not the closing box");
-                assertEq(pn, 7, "seven presale normal passes");
+                assertEq(pn, 6, "six presale normal passes");
                 assertEq(ph, 0, "no presale high passes");
                 nPre++;
             }
@@ -381,14 +381,14 @@ contract LootboxOpenGoldens is DeployProtocol {
         assertEq(uint256(pn) + ph, 0, "no passes");
     }
 
-    /// @dev Word `("golden_word", 3)`: the presale box takes the craps-pass branch — seven normal
-    ///      day passes, nothing else.
+    /// @dev Word `("golden_word", 3)`: the presale box takes the craps-pass branch — six normal
+    ///      day passes (24,800-FLIP units), nothing else.
     function test_presaleGoldenPassBranch() public {
         (uint256 fl, uint256 dg, uint256 ww, uint32 pn, uint32 ph) = _presaleUnder(3);
         assertEq(fl, 0, "no FLIP");
         assertEq(dg, 0, "no DGNRS");
         assertEq(ww, 0, "no WWXRP");
-        assertEq(pn, 7, "seven normal passes");
+        assertEq(pn, 6, "six normal passes");
         assertEq(ph, 0, "no high passes");
     }
 }

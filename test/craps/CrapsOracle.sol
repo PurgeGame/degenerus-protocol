@@ -82,15 +82,9 @@ contract CrapsOracle {
     ///      per-hand data.
     uint256 public constant MAX_SESSION_HANDS = 1024;
 
-    /// @notice Total dice rolls a bet slip may consume, judged between shooters.
-    /// @dev This is what makes a slip settlement's gas a GUARANTEE instead of a probability. The
-    ///      shooter cap alone leaves a bounded-but-huge worst case (cap x MAX_ROLLS rolls); with
-    ///      this budget the hard ceiling is `SLIP_ROLL_BUDGET - 1 + MAX_ROLLS` rolls — under two
-    ///      million gas in the measured settlement engine — however the dice fall. Even a
-    ///      hypothetical 256-shooter slip averages ~2,200 rolls; legal terms stop much earlier,
-    ///      making 4,096 effectively unreachable. Hitting it is an ordinary bust between shooters;
-    ///      every shooter still settles whole, and the budget never cuts a hand mid-roll.
-    uint256 public constant SLIP_ROLL_BUDGET = 8192;
+    /// @notice Shared production roll budget, independently pinned for oracle comparisons.
+    /// @dev Judged between shooters: the last hand finishes whole, giving a 1,511-roll ceiling.
+    uint256 public constant SLIP_ROLL_BUDGET = 1_000;
 
     /// @notice THE ABSOLUTE TOTAL-ROLL CEILING: the budget is judged BETWEEN shooters, so the
     ///         last shooter it admits may still run a whole hand of its own.

@@ -19,7 +19,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
     uint256 private constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-    uint256 private constant HIGH_ROLLER_DAY_PASS_VALUE = 19 * 22_800 ether;
+    uint256 private constant HIGH_ROLLER_DAY_PASS_VALUE = 21 * 24_800 ether;
 
     bytes32 private constant POOLS_SETTLED_SIG =
         keccak256("PoolsSettled(uint24,uint24,uint24,uint256,uint256,uint256,uint256,uint256,uint256)");

@@ -35,6 +35,7 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
+import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
@@ -1014,8 +1015,9 @@ abstract contract DegenerusGameStorage {
     /// @dev The battle-pending bit of dailyTicketBudgetsPacked (see its layout).
     uint256 internal constant _JACKPOT_BATTLE_PENDING = uint256(1) << 72;
 
-    /// @dev True while either phase's jackpot battle waits for its own advance. The first daily
-    ///      stage latches it; the battle stage clears it before any ticket stage seals the day.
+    /// @dev True while either phase's jackpot battle still owes work. The daily RNG request latches
+    ///      it when it locks the field; the battle stage clears it once the field completes, before
+    ///      any other daily stage runs.
     function _jackpotBattlePending() internal view returns (bool) {
         return (dailyTicketBudgetsPacked & _JACKPOT_BATTLE_PENDING) != 0;
     }
@@ -3300,24 +3302,22 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant DEGENERETTE_BOON_FLIP_CAP = 100_000 ether;
 
     /// @dev What ONE Craps day pass is worth, as a lootbox denomination. This is the expected cost
-    ///      of entering all seven of a day's scheduled windows at 1x — bankroll plus bounty — under
-    ///      the shipped preset table, which comes to exactly 1,368,127/60 FLIP, rounded to the
-    ///      nearest 100.
+    ///      of entering all six scheduled windows at 1x: 24,825 FLIP, rounded to 24,800.
+    ///      The shared pricing library also supplies the table and FLIP comp allowance.
     ///
     ///      A DENOMINATION, NOT A QUOTE. The realised cost of any particular day is drawn from that
     ///      day's word and moves; the pass is committed before the word lands, and that is what
     ///      makes a fixed expected-value unit the honest way to price it.
     ///
     ///      ⚠ Tied to the preset table. Any edit to the scheduled bankroll or bounty distribution
-    ///      must recompute the expectation, re-round to the nearest 100, and update this — see the
-    ///      preset-change invariant in docs/LOOTBOX-CRAPS-DAY-PASS-SPEC.md.
-    uint256 internal constant NORMAL_DAY_PASS_VALUE = 22_800 ether;
+    ///      must recompute the expectation, re-round to the nearest 100, and update CrapsPriceLib.
+    ///      test/craps/CrapsPricing.t.sol exhausts the tier/bounty cycle to verify the mean.
+    uint256 internal constant NORMAL_DAY_PASS_VALUE = CrapsPriceLib.NORMAL_VALUE;
 
-    /// @dev And what a HIGH-ROLLER day pass is worth: exactly nineteen normal ones. The day's
-    ///      multiplier is 10 nine times in ten and 100 the tenth, so its expectation is 19 on the
-    ///      nose — defined as the multiple rather than as a separately rounded figure, so the two
-    ///      denominations can never drift out of proportion.
-    uint256 internal constant HIGH_ROLLER_DAY_PASS_VALUE = 19 * NORMAL_DAY_PASS_VALUE;
+    /// @dev And what a HIGH-ROLLER day pass is worth: exactly twenty-one normal ones. The day's
+    ///      multiplier is 10 in 79 of 90 buckets and 100 in 11, so its expectation is exactly 21. Defining
+    ///      the high value as a multiple keeps the denominations in proportion.
+    uint256 internal constant HIGH_ROLLER_DAY_PASS_VALUE = CrapsPriceLib.HIGH_VALUE;
 
     // ---- Masks ----
     uint256 internal constant BP_MASK_24 = 0xFFFFFF;

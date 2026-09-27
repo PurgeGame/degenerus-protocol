@@ -332,16 +332,16 @@ contract CrapsHighWaterTest is CrapsPins {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // D. THE HARD BOUNDS — 512 shooters, 8,192 rolls, an 8,703-roll ceiling.
+    // D. THE HARD BOUNDS — 512 shooters, 1,000 rolls, a 1,511-roll ceiling.
     // ════════════════════════════════════════════════════════════════════════
 
     /// @dev THE STATED CEILING IS NOT THE BUDGET. The budget is judged BETWEEN shooters, so the
     ///      last shooter it admits may still run a whole hand of its own: the absolute total is
-    ///      `8_192 - 1 + 512 = 8_703`.
+    ///      `1_000 - 1 + 512 = 1_511`.
     function test_theAbsoluteRollCeilingIsTheBudgetPlusOneWholeHand() public view {
-        assertEq(craps.SLIP_ROLL_BUDGET(), 8192, "the scheduled budget moved");
+        assertEq(craps.SLIP_ROLL_BUDGET(), 1_000, "the scheduled budget moved");
         assertEq(craps.MAX_ROLLS(), 512, "one hand's own cap moved");
-        assertEq(craps.SLIP_ROLL_CEILING(), 8703, "the absolute ceiling moved");
+        assertEq(craps.SLIP_ROLL_CEILING(), 1_511, "the absolute ceiling moved");
         assertEq(
             craps.SLIP_ROLL_CEILING(),
             craps.SLIP_ROLL_BUDGET() - 1 + craps.MAX_ROLLS(),
@@ -351,7 +351,8 @@ contract CrapsHighWaterTest is CrapsPins {
     }
 
     /// @dev THE SHOOTER CAP STOPS A RUN BOTH SIDES OF THE GOAL: reached before it, the run busts;
-    ///      reached after it, the run is the goal it already latched.
+    ///      reached after it, the run is the goal it already latched. This test-only harness
+    ///      bypasses the roll budget to exercise the separate shooter bound in isolation.
     function test_theShooterCapBustsBeforeTheGoalAndStopsAtItAfter() public view {
         Craps.Bets memory b = _line();
         uint256 stake = craps.stakeFor(b);
@@ -360,14 +361,14 @@ contract CrapsHighWaterTest is CrapsPins {
         uint256 deep = stake * 1_800_000_000_000;
 
         // NO GOAL: the cap is a plain bust, exactly as it always was.
-        Craps.SlipResult memory bust = craps.slipUnder(b, seed, deep, 0, craps.MAX_SLIP_HANDS(), craps.SLIP_ROLL_BUDGET(), alice, 0);
+        Craps.SlipResult memory bust = craps.slipUnder(b, seed, deep, 0, craps.MAX_SLIP_HANDS(), type(uint256).max, alice, 0);
         assertEq(bust.handsPlayed, craps.MAX_SLIP_HANDS(), "the run did not reach the shooter cap");
         assertEq(uint8(bust.stop), uint8(Craps.SlipStop.Bust), "a capped run with no goal is not a bust");
-        assertLe(bust.totalRolls, craps.SLIP_ROLL_CEILING(), "a capped run passed the roll ceiling");
+        assertLe(bust.totalRolls, craps.MAX_SLIP_HANDS() * craps.MAX_ROLLS(), "a shooter-capped run overran");
 
         // A GOAL IT CLEARS AT ONCE: the same cap now stops it AS the goal, and it is paid what it
         // holds rather than being deleted.
-        Craps.SlipResult memory won = craps.slipUnder(b, seed, deep, stake, craps.MAX_SLIP_HANDS(), craps.SLIP_ROLL_BUDGET(), alice, 0);
+        Craps.SlipResult memory won = craps.slipUnder(b, seed, deep, stake, craps.MAX_SLIP_HANDS(), type(uint256).max, alice, 0);
         assertEq(won.handsPlayed, craps.MAX_SLIP_HANDS(), "the latched run did not reach the cap");
         assertEq(uint8(won.stop), uint8(Craps.SlipStop.Goal), "a capped latched run lost its win");
         assertGt(won.bankrollOut, 0, "a capped latched run was deleted");
@@ -375,8 +376,7 @@ contract CrapsHighWaterTest is CrapsPins {
     }
 
     /// @dev THE ROLL BUDGET STOPS A RUN TOO, on both sides of the goal. Driven on a caller-chosen
-    ///      budget, because the shipped 8,192 is unreachable inside 512 shooters — which is the
-    ///      point of sizing it there.
+    ///      short test budget to also exercise the exact bound within a hand.
     function test_theRollBudgetStopsARunBothSidesOfTheGoal() public view {
         Craps.Bets memory b = _line();
         uint256 stake = craps.stakeFor(b);

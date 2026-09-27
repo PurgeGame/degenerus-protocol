@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -81,10 +83,10 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     function _assertPreferenceFrozen() private {
         assertTrue(game.rngLocked());
         uint32 saved = crapsBattle.preferredBoardOf(buyer);
-        vm.prank(buyer); vm.expectRevert(CrapsBattle.BetLocked.selector);
+        vm.prank(buyer); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
         crapsBattle.setPreferredBoard(saved == 0 ? 3 : 0);
         // A fresh wallet cannot initialize even the random board during the commitment.
-        vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattle.BetLocked.selector);
+        vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
         crapsBattle.setPreferredBoard(0);
     }
 

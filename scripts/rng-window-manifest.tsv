@@ -147,8 +147,7 @@ ACCESSOR	rngWordCurrent	isRngFulfilled	DegenerusGame.sol	READ
 ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
 ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
 CONSUMER-SEALED	_wordAt	_seedFor	LootboxCraps.sol	READ
-CONSUMER-SEALED	_wordAt	resolveSlot	CrapsBattle.sol	READ
-CONSUMER-SEALED	_wordAt	keepScheduled	CrapsBattle.sol	READ
+CONSUMER-SEALED	_wordAt	_slotWord	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_windowTerms	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_shareOf	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	openBonusDay	CrapsBattle.sol	READ
@@ -157,8 +156,9 @@ CONSUMER-SEALED	_dailyWordAt	vaultComp	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	keepScheduled	CrapsBattle.sol	READ
 GATE	_dailyWordAt	_reserveDay	CrapsBattle.sol	READ
 GATE	_dailyWordAt	_reserveWindow	CrapsBattle.sol	READ
-GATE	_dailyWordAt	upgradeReservedDay	CrapsBattle.sol	READ
+GATE	_dailyWordAt	upgradeReservedDay	JackpotBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusDayOf	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusBoostBand	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusTermsFor	CrapsBattle.sol	READ
 CONSUMER-SEALED	rngWordByDay	resolveProtocolBoonDraws	modules/DegenerusGameBoonModule.sol	READ	Menu word D (fallback D+1 when D is absent) and winner word D+1; ETH hero bet placement writes only current-day pools, so D intervals/paid-ETH/score snapshots are closed before D+1 requests. Menu and winners use separate hash domains. The two-day ring reuses a day's slots only from D+2 (after its only possible draw day) and the day tag keeps a stale slot from drawing. ProtocolBoonDraw verifies launch-day awards, pool immutability through the draw day, the stale-slot guard, and exact award-day gating.
+CONSUMER-SEALED	_dailyWordAt	lockJackpotBattle	JackpotBattle.sol	READ

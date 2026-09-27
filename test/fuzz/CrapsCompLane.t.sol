@@ -9,7 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      comp burn spends, that is never a balance, never supply and never the vault's mint
 ///      allowance.
 contract CrapsCompLane is DeployProtocol {
-    uint256 internal constant INITIAL = 4_560_000 ether;
+    uint256 internal constant INITIAL = 4_960_000 ether;
     uint256 internal constant COMP = 0x10;
 
     address internal player = makeAddr("player");
@@ -20,7 +20,7 @@ contract CrapsCompLane is DeployProtocol {
 
     function test_theLaneOpensOnTheConvertedPassAllowance() public view {
         assertEq(coin.crapsCompAllowance(), INITIAL, "the lane did not open on 200 passes' worth");
-        assertEq(coin.crapsCompAllowance(), 200 * 22_800 ether, "the conversion is not 200 x 22,800");
+        assertEq(coin.crapsCompAllowance(), 200 * 24_800 ether, "the conversion is not 200 x 24,800");
     }
 
     function test_onlyTheTableFeedsTheLane() public {

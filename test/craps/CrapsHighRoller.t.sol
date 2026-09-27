@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -105,7 +107,7 @@ contract CrapsHighRollerTest is CrapsPins {
 
     /// @dev Ten or a hundred, nothing else, at about one in ten. Not a chi-squared — the band is
     ///      wide enough that only a real change to the odds trips it.
-    function test_theDailyDrawIsTenOrAHundredAtOneInTen() public view {
+    function test_theDailyDrawIsTenOrAHundredAtElevenInNinety() public view {
         uint256 tails;
         uint256 n = 2000;
         for (uint256 i = 0; i < n; ++i) {
@@ -113,7 +115,7 @@ contract CrapsHighRollerTest is CrapsPins {
             assertTrue(h == 10 || h == 100, "the draw came off the menu");
             if (h == 100) ++tails;
         }
-        assertApproxEqAbs(tails * 10, n, n / 4, "the hundred-times day is off its advertised rate");
+        assertApproxEqAbs(tails * 90, 11 * n, 11 * n / 4, "the hundred-times day is off its advertised rate");
     }
 
     /// @dev No word, no lane. There is no fallback source — a day that cannot draw simply does not
@@ -160,7 +162,7 @@ contract CrapsHighRollerTest is CrapsPins {
         uint16[5] memory bad = [uint16(0), 2, 9, 11, 100];
         for (uint256 i = 0; i < bad.length; ++i) {
             vm.prank(carol);
-            vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+            vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
             craps.enterBattle(slot, _boardA(), bad[i]);
         }
     }
@@ -187,7 +189,7 @@ contract CrapsHighRollerTest is CrapsPins {
     function test_aStaleTenIsRefusedAgainstAHundredField() public {
         uint64 slot = _openHigh(craps, L, 2, 10, SU, 100);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+        vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), 10);
         assertEq(flip.burned(alice), 0, "a refused entry still burned");
     }
@@ -199,9 +201,9 @@ contract CrapsHighRollerTest is CrapsPins {
         craps.createBattle(L, 2, 10, SU, 0, close, true, 0);
         craps.createBattle(L, 2, 10, SU, 0, close, true, 2);
         craps.createBattle(L, 2, 10, SU, 0, close, true, 256);
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(L, 2, 10, SU, 0, close, true, 1);
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(L, 2, 10, SU, 0, close, true, 257);
         vm.stopPrank();
     }
@@ -212,7 +214,7 @@ contract CrapsHighRollerTest is CrapsPins {
         vm.prank(alice);
         craps.enterBattle(slot, _boardA(), 1);
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+        vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), 10);
         (uint32 heads,,,, bool done) = craps.highFieldOf(craps.battleKeyOf((uint256(slot) << 64) | 1));
         assertEq(heads, 0, "a disabled lane counted a seat");
@@ -281,7 +283,7 @@ contract CrapsHighRollerTest is CrapsPins {
         vm.prank(bob);
         craps.enterBonusBattle(1, _boardA(), 10);
 
-        vm.warp(vm.getBlockTimestamp() + 5 hours);
+        vm.warp(vm.getBlockTimestamp() + 7 hours);
         uint48 index = craps.armBonusWindow(slot);
         _setWord(index, uint256(keccak256("granule")));
         PaidOut[] memory lane = _resolveForLane(craps, slot, WHOLE_FIELD, false);

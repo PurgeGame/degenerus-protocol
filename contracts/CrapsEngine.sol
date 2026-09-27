@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {Craps} from "./Craps.sol";
+import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 import {CrapsCustomTerms} from "./CrapsCustomTerms.sol";
 
 /// @title CrapsEngine
@@ -62,6 +63,42 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     ) external pure returns (SlipResult memory r) {
         r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, player, boost);
         r.unitsPlayed = _rankOf(r);
+    }
+
+    /// @notice Full normal battle settlement, shared by paid and awarded entries.
+    /// @dev bankrollIn becomes the rounded payment; unitsPlayed becomes the unscaled merit rank.
+    ///      Every seat of a field throws the same dice. An awarded entry keys its board scatter,
+    ///      survival coin and shooter boost to its own bet id rather than its wallet, so repeat
+    ///      awards to one wallet stay separate runs. Every field uses the shared 1,000-roll
+    ///      between-shooter budget and 1,511-roll absolute ceiling.
+    function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
+        uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (SlipResult memory r)
+    {
+        uint256 key = header >> 224 == 0
+            ? uint160(header)
+            : uint160(_hash3(word, 0x4a61636b706f7441776172646564, betId));
+        uint256 chips = (header >> 160) & 0x3fffffff;
+        uint256 placed;
+        for (uint256 i; i < 30; i += 3) placed += (chips >> i) & 7;
+        bytes32 seed = bytes32(_hash3(uint256(keccak256("degenerus.lootbox.craps.v1")), word, bound));
+        uint256 boost;
+        if (bound < 1 << 40) {
+            boost = _shooterBoostTerms(placed);
+            uint256 n = field >> 64;
+            if (n != 0) {
+                uint256 seat = uint64(field);
+                if (seat == 0) seat = uint64(betId);
+                uint256 offset = (seat + n - 1 - (_hash2(ROTATING_SHOOTER_TAG, uint256(seed)) % n)) % n;
+                if (offset < _MAX_SLIP_HANDS) boost |= (offset + 1) << _BOOST_TURN_SHIFT;
+            }
+        }
+        r = _play(chips, chipFlip, _hash3(word, 0x437261707353636174746572, key),
+            10 - placed, seed, bankroll, goal, address(uint160(key)), boost);
+        r.unitsPlayed = _rankOf(r);
+        uint256 paid = r.stop == SlipStop.Bust ? 0 : r.bankrollOut;
+        r.bankrollIn = paid > FlipRoundLib.FLIP_ROUND_THRESHOLD
+            ? FlipRoundLib.roundFlipToHundreds(paid, _hash3(word, 0x4372617073526f756e64, betId))
+            : FlipRoundLib.floorWholeFlip(paid);
     }
 
     function _play(

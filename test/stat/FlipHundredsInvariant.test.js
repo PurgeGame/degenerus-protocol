@@ -55,6 +55,7 @@ const DEGENERETTE = SRC("contracts/modules/DegenerusGameDegeneretteModule.sol");
 const MINT = SRC("contracts/modules/DegenerusGameMintModule.sol");
 const LIB = SRC("contracts/libraries/FlipRoundLib.sol");
 const JACKPOT_BATTLE = SRC("contracts/JackpotBattle.sol");
+const CRAPS_ENGINE = SRC("contracts/CrapsEngine.sol");
 
 // Brace-match function-body extractor (copied from
 // test/unit/JackpotTicketRollSilentColdBust.test.js).
@@ -188,44 +189,24 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       ).to.equal(false);
     });
 
-    it("[01b] `_playJackpotBattle` no longer uses the shared plan — it hands the raw budget to JackpotBattle", function () {
+    it("[01b] `_playJackpotBattle` does no FLIP rounding of its own", function () {
       const body = bodyOf(JACKPOT, "function _playJackpotBattle(");
-      expect(
-        /_coinDrawPlan\s*\(/.test(body),
-        "the jackpot battle must not re-grow the shared coin/Craps plan"
-      ).to.equal(false);
-      expect(
-        /_finishJackpotBattle\s*\(/.test(body),
-        "the jackpot battle must not re-grow the shared coin/Craps payout"
-      ).to.equal(false);
-      expect(
-        /FlipRoundLib/.test(body),
-        "the jackpot battle performs no local FLIP rounding of its own"
-      ).to.equal(false);
-      expect(
-        /JackpotBattleFieldLib\.prepare\s*\(\s*winners\s*,\s*coinBudget\s*\)/.test(body),
-        "the field must be sized off the raw, unrounded coinBudget"
-      ).to.equal(true);
-      expect(
-        /battle\.resolve\s*\(\s*lvl\s*,\s*field\s*,\s*coinBudget\s*,\s*battleWord\s*\)/.test(body),
-        "the jackpot battle must hand its raw, unrounded coinBudget to JackpotBattle.resolve"
-      ).to.equal(true);
+      expect(/_coinDrawPlan\s*\(/.test(body), "the jackpot battle must not re-grow the shared coin/Craps plan").to.equal(false);
+      expect(/FlipRoundLib/.test(body), "the jackpot battle performs no local FLIP rounding of its own").to.equal(false);
+      expect(/JackpotBattleFieldLib\.prepare\s*\(\s*winners\s*\)/.test(body), "the draw passes its winners to the field library").to.equal(true);
     });
 
-    it("[01e] JackpotBattle lands every run payout and the pot on the threshold-gated collapse", function () {
-      const body = bodyOf(JACKPOT_BATTLE, "function resolve(");
+    it("[01e] every battle seat's payment lands on the threshold-gated collapse in the engine", function () {
+      const body = bodyOf(CRAPS_ENGINE, "function settleBattle(");
       expect(
-        /pay\s*=\s*_award\(\s*pay\s*\*\s*multiplierBps\s*\/\s*10_000\s*,\s*_hash3\(\s*word\s*,\s*JACKPOT_BATTLE_ROUND_TAG\s*,\s*uint160\(p\)\s*\)\s*\)/.test(body),
-        "a run's payout (all units, after the shared multiplier) must go through _award keyed per wallet"
+        /paid\s*>\s*FlipRoundLib\.FLIP_ROUND_THRESHOLD/.test(body),
+        "a seat's payment must be gated on the 1,000-FLIP threshold"
       ).to.equal(true);
       expect(
-        /uint256\s+pot\s*=\s*_award\(\s*\(\s*amount\s*-\s*bankroll\s*\*\s*units\s*\)\s*\*\s*multiplierBps\s*\/\s*10_000\s*,/.test(body),
-        "the pot (after the shared multiplier) must go through _award"
+        /FlipRoundLib\.roundFlipToHundreds\(\s*paid\s*,\s*_hash3\(\s*word\s*,\s*0x4372617073526f756e64\s*,\s*betId\s*\)\s*\)/.test(body),
+        "a seat's payment must go through the collapse keyed per bet id"
       ).to.equal(true);
-      const award = bodyOf(JACKPOT_BATTLE, "function _award(");
-      expect(/FlipRoundLib\.FLIP_ROUND_THRESHOLD/.test(award), "_award must gate on the shared threshold").to.equal(true);
-      expect(/FlipRoundLib\.roundFlipToHundreds/.test(award), "_award must collapse to hundreds above it").to.equal(true);
-      expect(/FlipRoundLib\.floorWholeFlip/.test(award), "_award must floor whole FLIP at or below it").to.equal(true);
+      expect(/FlipRoundLib\.floorWholeFlip\(\s*paid\s*\)/.test(body), "below the threshold the whole-FLIP floor applies").to.equal(true);
     });
   });
 

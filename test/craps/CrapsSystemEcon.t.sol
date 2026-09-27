@@ -6,8 +6,14 @@ import {CrapsPins} from "./CrapsPins.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 
-contract SysHarness is CrapsViews {}
+contract SysHarness is CrapsViews {
+    function fundedBounty(uint64 slot) external view returns (uint256) {
+        return _slotWindow(slot).stakeUnits * 100 ether;
+    }
+}
 
 /// @title The whole craps day, driven end to end on the SHIPPED contract, for its money.
 ///
@@ -32,7 +38,7 @@ contract CrapsSystemEconTest is CrapsPins {
 
     /// @dev Past any field these scenarios build, so one call settles a whole window.
 
-    uint256 internal constant PERIODS = 7;
+    uint256 internal constant PERIODS = 6;
 
     // ── The board catalogue ─────────────────────────────────────────────────
     // Seven-chip strategy families, restated as real tickets. Every one obeys the
@@ -148,7 +154,9 @@ contract CrapsSystemEconTest is CrapsPins {
     ///      than from the contract, so a driver that lands on it is landing on the published
     ///      clock time and not on whatever the contract happens to say.
     function _closeOf(uint256 period) internal view returns (uint256) {
-        if (period + 1 == PERIODS) return 1 days - craps.EVENT_LEAD();
+        if (period == 5) return 1 days - 1; // request fixture immediately before rollover
+        if (period == 4) return 1 days - 20 minutes;
+        if (period == 0) return 20 minutes;
         uint256 base = period == 0 ? craps.BONUS_EVENT_CLOSE() : period * craps.BONUS_PERIOD();
         return base + craps.BONUS_CLOCK_ALIGN();
     }
@@ -224,8 +232,9 @@ contract CrapsSystemEconTest is CrapsPins {
             for (uint256 p = 0; p < PERIODS; ++p) {
                 vm.warp(_dayStart() + _closeOf(p));
                 uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1);
-                uint48 idx = craps.armBonusWindow(slot);
-                _setWord(idx, uint256(keccak256(abi.encode("table", salt, d, p))));
+                uint256 word = uint256(keccak256(abi.encode("table", salt, d, p)));
+                if (p == 5) _startDailyBattle(craps,day + 1,word,100_000 ether);
+                else { uint48 idx = craps.armBonusWindow(slot); _setWord(idx,word); }
                 _settleAndSplit(L, slot, day, p);
                 ++L.fields;
             }
@@ -273,12 +282,32 @@ contract CrapsSystemEconTest is CrapsPins {
     ///      batch credited that is not one of those is a RUN coming home.
     function _settleAndSplit(Ledger memory L, uint64 slot, uint24 day, uint256 period) internal {
         (bytes32 key,,,) = craps.bonusWindowOf(period);
-        (,,, uint256 battleStake,,) = craps.bonusTermsFor(day, period);
+        uint256 battleStake = craps.fundedBounty(slot);
         uint256 entrants = craps.battleOf(key).entrants;
         // The lane's principal has to be read BEFORE the walk: settlement stamps the sideboard
         // done, and a claimed lane is what the payment is drawn from.
         (uint32 heads,,,,) = craps.highFieldOf(key);
+        uint256 fieldBounty = battleStake * entrants;
         uint256 laneStake = heads >= 2 ? heads * (craps.highMultOfSlot(slot) - 1) * battleStake : 0;
+
+        // THE JACKPOT RESHUFFLES ITS BOUNTY. Once its field seals, `stakeUnits` (so
+        // `fundedBounty`) is the pool's own per-seat payout, drawn from fees, Added and the
+        // pool's own multiplier all mixed together — not what a seat burned at the door, and its
+        // entrant count now includes the free, awarded seats that burned nothing. What actually
+        // cancels against the door's burn is the fee money the field's OWN `_bookFees` did not
+        // already book as action; the rest of the pot — Added, the multiplier's gain, every
+        // free seat's share — is house money like any other window's boost. Replayed here off
+        // the same round the contract sealed, since nothing else exposes that split.
+        if (period == 5) {
+            (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(craps)).jackpotBattleOf(slot);
+            uint256 price = JackpotBattle(address(craps)).jackpotEntryPrice();
+            uint256 totalUnits = uint256(round.paidUnits) + uint256(round.drawnUnits);
+            uint256 ranBankroll = totalUnits * uint256(round.bankroll);
+            uint256 bps = uint256(round.multiplierBps) < 10_000 ? uint256(round.multiplierBps) : 10_000;
+            uint256 staked = uint256(round.paidUnits) * price * bps / 10_000 * ranBankroll / round.totalPool;
+            fieldBounty = price * round.paidUnits - staked;
+            laneStake = 0;
+        }
 
         vm.recordLogs();
         craps.resolveSlot(slot, WHOLE_FIELD);
@@ -287,7 +316,7 @@ contract CrapsSystemEconTest is CrapsPins {
         PaidOut[] memory pots = _potsIn(logs);
         for (uint256 i = 0; i < pots.length; ++i) {
             L.potCredit += pots[i].amount;
-            L.bounty += battleStake * entrants;
+            L.bounty += fieldBounty;
             if (pots[i].player == ContractAddresses.SDGNRS) L.housePot += pots[i].amount;
             else if (pots[i].player == ContractAddresses.VAULT) L.vaultPot += pots[i].amount;
         }
@@ -704,7 +733,7 @@ contract CrapsSystemEconTest is CrapsPins {
             _setDailyWord(day, uint256(keccak256(abi.encode("day", uint256(0x81), d))));
             vm.prank(ContractAddresses.GAME);
             craps.openBonusDay();
-            for (uint256 p = 0; p < PERIODS; ++p) {
+            for (uint256 p = 0; p + 1 < PERIODS; ++p) {
                 (uint128 bankroll, uint128 goal, uint256 boardStake,,,) = craps.bonusTermsFor(day, p);
                 ++windows;
                 uint256 gm = goal / bankroll;

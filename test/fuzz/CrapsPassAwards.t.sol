@@ -14,7 +14,7 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 ///
 ///         The presale box's FLIP branch tosses a committed coin: half the boxes pay the
 ///         collapsed roll as coinflip credit untouched, half denominate the WHOLE roll into
-///         passes at the regular box units (22,800 normal, 19x high above twenty normal units,
+///         passes at the regular box units (24,800 normal, 21x high above twenty-two normal units,
 ///         fraction Bernoulli-rounded), capped at twelve high passes with the rest staying
 ///         coinflip credit; a sub-pass roll whose fraction loses pays the WWXRP dud.
 contract CrapsPassAwards is DeployProtocol {
@@ -183,8 +183,8 @@ contract CrapsPassAwards is DeployProtocol {
     uint256 private constant SLOT_PRESALE_BOX_CREDIT = 17;
     uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 33;
     uint256 private constant SLOT_LOOTBOX_RNG_WORD = 34;
-    uint256 private constant NORMAL_UNIT = 22_800 ether;
-    uint256 private constant HIGH_UNIT = 19 * 22_800 ether;
+    uint256 private constant NORMAL_UNIT = 24_800 ether;
+    uint256 private constant HIGH_UNIT = 21 * 24_800 ether;
     uint256 private constant HIGH_CAP = 12;
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
     uint256 private constant PASS_ROUND_TAG = 0x50617373526f756e64; // "PassRound"
@@ -257,7 +257,7 @@ contract CrapsPassAwards is DeployProtocol {
         pure
         returns (uint32 n, uint32 h, uint256 flipLeft)
     {
-        bool hp = flipOut > 20 * NORMAL_UNIT;
+        bool hp = flipOut > 22 * NORMAL_UNIT;
         uint256 unit = hp ? HIGH_UNIT : NORMAL_UNIT;
         uint256 cnt = flipOut / unit;
         if (hp && cnt >= HIGH_CAP) {

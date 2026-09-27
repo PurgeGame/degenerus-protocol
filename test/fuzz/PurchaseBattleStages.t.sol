@@ -2,79 +2,121 @@
 pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
-import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {PurchaseDailyFixture, PurchaseDailySeeder} from "../gas/PurchaseDailyWorstCase.t.sol";
+import {PurchaseDailyFixture, PurchaseDailySeeder, FreshWordLeg} from "../gas/PurchaseDailyWorstCase.t.sol";
 
-contract PurchaseBattleStagesTest is PurchaseDailyFixture {
-    function setUp() public {
-        _seed(_shape(128, 0, FF_HOLDERS, NEXT_POOL_QUIET, PREV_POOL_OPEN25));
+/// @notice The purchase day on a real request: the request locks the jackpot battle, the word applies
+///         alone (18), the battle's steps (17) run under the held lock, then the ETH leg (6) and the
+///         ticket leg (15), which seals and unlocks.
+abstract contract PurchaseBattleStagesBase is PurchaseDailyFixture, FreshWordLeg {
+    IJackpotBattle internal battle;
+
+    function _start(PurchaseDailySeeder.Shape memory s) internal {
+        _seedFresh(s);
+        _armFreshWord(s.word, 400);
+        battle = IJackpotBattle(address(crapsBattle));
+        (, uint256 added, bool started,) = battle.jackpotProgress();
+        assertGt(added, 0, "the request locked the battle");
+        assertFalse(started, "the field waits for the word");
     }
 
-    function _startDaily() private {
+    /// @dev The word applies alone and draws nothing.
+    function _apply() internal {
         (, Tally memory t) = _measure();
-        assertEq(t.stage, STAGE_PURCHASE_DAILY);
-        assertEq(t.ethWins, PURCHASE_ETH_WINNERS);
-        assertEq(t.battleRuns + t.ticketWins, 0);
+        assertEq(t.stage, STAGE_RNG_APPLIED_, "the word applies alone");
+        assertEq(t.ethWins + t.ticketWins + t.flipWins + t.battleEntries, 0);
         assertTrue(game.rngLocked());
         assertTrue(game.advanceDue());
     }
 
-    function _battleDigest() private view returns (bytes32 digest) {
+    /// @dev Runs the battle's steps to completion; returns its awarded entries and a digest of its
+    ///      draw logs and final round.
+    function _battle() internal returns (bytes32 digest, uint256 entries) {
+        (uint64 slot,,, bool complete) = battle.jackpotProgress();
+        for (uint256 i; !complete; ++i) {
+            assertLt(i, 40, "the battle stalled");
+            (, Tally memory t) = _measure();
+            assertEq(t.stage, STAGE_PURCHASE_BATTLE, "a battle step has its own stage");
+            assertEq(t.ethWins + t.ticketWins + t.flipWins, 0, "a battle step shares no daily leg");
+            assertTrue(game.rngLocked(), "the lock holds across battle steps");
+            _assertNoFreshRng();
+            entries += t.battleEntries;
+            digest = keccak256(abi.encode(digest, _drawDigest()));
+            (,,, complete) = battle.jackpotProgress();
+        }
+        (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 cursor) =
+            JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        digest = keccak256(abi.encode(digest, round, board, cursor));
+    }
+
+    function _drawDigest() private view returns (bytes32 digest) {
+        bytes32 started = keccak256("JackpotBattleStarted(uint64,uint24,uint256,uint256,uint256)");
         for (uint256 i; i < lastLogs.length; ++i) {
             Vm.Log storage l = lastLogs[i];
-            if (l.topics[0] == BATTLE_RUN_SIG || l.topics[0] == BATTLE_POT_SIG
-                || l.topics[0] == keccak256("JackpotBattleMultiplier(uint24,uint256,uint256)")) {
+            if (l.topics.length == 0) continue;
+            if (l.topics[0] == BATTLE_ENTRY_SIG || l.topics[0] == started) {
                 digest = keccak256(abi.encode(digest, l.topics, l.data));
             }
         }
     }
 
-    function _assertNoFreshRng() private view {
+    function _assertNoFreshRng() internal view {
         for (uint256 i; i < lastLogs.length; ++i) {
+            if (lastLogs[i].topics.length == 0) continue;
             bytes32 sig = lastLogs[i].topics[0];
             assertTrue(sig != keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)"));
             assertTrue(sig != keccak256("DailyWinningTraits(uint24,uint32)"));
         }
     }
+}
+
+contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
+    function setUp() public {
+        _start(_shape(128, 0, FF_HOLDERS, NEXT_POOL_QUIET, PREV_POOL_OPEN25));
+    }
 
     function test_SeparateStagesHoldLockAndDoNotReplayBattle() public {
-        _startDaily();
-        _measureBattleStage(50);
-        _assertNoFreshRng();
+        _apply();
+        (, uint256 entries) = _battle();
+        assertGt(entries, 0, "the award draw found the unminted queues");
+        (, Tally memory daily) = _measure();
+        assertEq(daily.stage, STAGE_PURCHASE_DAILY, "the ETH leg follows the battle");
+        assertEq(daily.ethWins, PURCHASE_ETH_WINNERS);
+        assertEq(daily.ticketWins + daily.battleEntries, 0);
         assertTrue(game.rngLocked(), "tickets still pending");
         (, Tally memory tickets) = _measure();
         assertEq(tickets.stage, STAGE_PURCHASE_DAILY_TICKETS);
         assertGt(tickets.ticketWins, 0);
-        assertEq(tickets.ethWins + tickets.battleRuns + tickets.flipWins, 0);
+        assertEq(tickets.ethWins + tickets.battleEntries + tickets.flipWins, 0);
         assertFalse(game.rngLocked());
         vm.recordLogs();
         (bool ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
         // A same-day no-work call may revert; either outcome must not replay the draw.
         ok;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != BATTLE_RUN_SIG);
+        assertEq(_countTopic(vm.getRecordedLogs(), BATTLE_ENTRY_SIG), 0, "the battle replayed");
     }
 
     function test_MidnightUsesSameFieldBoardsAndWord() public {
-        _startDaily();
+        _apply();
         uint24 day = game.currentDayView();
         uint256 word = game.rngWordForDay(day);
         uint256 snap = vm.snapshotState();
-        _measureBattleStage(50);
-        bytes32 sameDay = _battleDigest();
+        (bytes32 sameDay,) = _battle();
         vm.revertToState(snap);
         vm.warp(block.timestamp + 2 days);
         vm.prank(address(0xBEEF));
-        vm.expectRevert(CrapsBattle.BetLocked.selector);
+        vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
         crapsBattle.setPreferredBoard(3);
-        _measureBattleStage(50);
-        _assertNoFreshRng();
-        assertEq(_battleDigest(), sameDay, "deferred fill changed its result");
+        (bytes32 deferred,) = _battle();
+        assertEq(deferred, sameDay, "a deferred battle changed its result");
         assertEq(game.rngWordForDay(day), word);
         assertEq(game.rngWordForDay(day + 1), 0, "revealed word must not resolve a later day");
         assertTrue(game.rngLocked());
+        (, Tally memory daily) = _measure();
+        assertEq(daily.stage, STAGE_PURCHASE_DAILY);
         (, Tally memory tickets) = _measure();
         assertEq(tickets.stage, STAGE_PURCHASE_DAILY_TICKETS);
         assertFalse(game.rngLocked());
@@ -82,70 +124,83 @@ contract PurchaseBattleStagesTest is PurchaseDailyFixture {
         assertEq(crapsBattle.preferredBoardOf(address(0xBEEF)), 3);
     }
 
-    function test_FailedBattleRetainsPendingStageForRetry() public {
-        _startDaily();
-        vm.mockCallRevert(ContractAddresses.JACKPOT_BATTLE, abi.encodeWithSelector(JackpotBattle.resolve.selector), hex"deadbeef");
+    function test_FailedBattleStepRetainsLockAndRetries() public {
+        _apply();
+        vm.mockCallRevert(
+            ContractAddresses.CRAPS, abi.encodeWithSelector(IJackpotBattle.prepareJackpotBattle.selector), hex"deadbeef"
+        );
         vm.expectRevert(bytes4(0xdeadbeef));
         game.advanceGame();
         assertTrue(game.rngLocked());
         vm.clearMockedCalls();
-        _measureBattleStage(50);
+        _battle();
+        (, Tally memory daily) = _measure();
+        assertEq(daily.stage, STAGE_PURCHASE_DAILY, "the ETH leg waited for the battle");
         (, Tally memory tickets) = _measure();
         assertEq(tickets.stage, STAGE_PURCHASE_DAILY_TICKETS);
     }
 }
 
-contract PurchaseBattleWithoutTicketsTest is PurchaseDailyFixture {
+/// @notice Level one has no ticket leg: once the battle completes, the trait-draw stage seals the day.
+contract PurchaseBattleWithoutTicketsTest is PurchaseBattleStagesBase {
     function setUp() public {
         PurchaseDailySeeder.Shape memory s = _shapeLevelOne(PREV_POOL_L1_MAX, false);
         s.traitHolders = 4;
-        _seed(s);
+        _start(s);
     }
 
-    function test_BattleSealsDayWhenThereIsNoTicketLeg() public {
+    function test_TraitDrawSealsDayWhenThereIsNoTicketLeg() public {
+        _apply();
+        uint256 word = game.rngWordForDay(game.currentDayView());
+        vm.expectCall(
+            ContractAddresses.GAME_JACKPOT_MODULE,
+            abi.encodeWithSignature("payPurchaseJackpotBattle(uint24,uint256)", uint24(1), word)
+        );
+        _battle();
         (, Tally memory daily) = _measure();
         assertEq(daily.stage, STAGE_PURCHASE_DAILY);
         assertGt(daily.flipWins, 0);
-        assertEq(daily.battleRuns, 0);
-        assertTrue(game.rngLocked());
-        uint256 salted = uint256(keccak256(abi.encodePacked(
-            game.rngWordForDay(game.currentDayView()), keccak256("BONUS_TRAITS")
-        )));
-        vm.expectCall(ContractAddresses.GAME_JACKPOT_MODULE,
-            abi.encodeWithSignature("payPurchaseJackpotBattle(uint24,uint256)", uint24(1), salted));
-        _measureBattleStage(50);
-        assertFalse(game.rngLocked());
+        assertEq(daily.battleEntries, 0);
+        assertFalse(game.rngLocked(), "the trait-draw stage seals and unlocks");
     }
 }
 
-contract PurchaseZeroBattleBudgetTest is PurchaseDailyFixture {
+/// @notice A zero recorded pool still locks a battle, at level one's 150,000-FLIP floor.
+contract PurchaseZeroPoolBattleFloorTest is PurchaseBattleStagesBase {
     function setUp() public {
         PurchaseDailySeeder.Shape memory s = _shapeLevelOne(0, false);
         s.traitHolders = 4;
-        _seed(s);
+        _start(s);
     }
 
-    function test_ZeroBudgetSkipsBattleStageAndSealsImmediately() public {
+    function test_ZeroPoolLocksTheFloorBattleThenSeals() public {
+        (, uint256 added,,) = battle.jackpotProgress();
+        assertEq(added, 150_000 ether, "level-one floor");
+        _apply();
+        (, uint256 entries) = _battle();
+        assertEq(entries, 15, "one award per 10,000 of Added");
         (, Tally memory daily) = _measure();
         assertEq(daily.stage, STAGE_PURCHASE_DAILY);
-        assertEq(daily.flipWins + daily.battleRuns, 0);
+        assertEq(daily.flipWins, 0, "a zero pool pays no trait shares");
         assertFalse(game.rngLocked());
     }
 }
 
-contract PurchaseZeroBattleWithTicketsTest is PurchaseDailyFixture {
+/// @notice A zero recorded pool still pays the ticket leg before the seal. The seeded day records its
+///         word without a request, so it locks no battle.
+contract PurchaseZeroPoolWithTicketsTest is PurchaseDailyFixture {
     function setUp() public {
         _seed(_shape(128, 0, FF_HOLDERS, NEXT_POOL_QUIET, 0));
     }
 
-    function test_ZeroBattleBudgetStillPaysTicketsBeforeSeal() public {
+    function test_ZeroPoolStillPaysTicketsBeforeSeal() public {
         (, Tally memory daily) = _measure();
         assertEq(daily.stage, STAGE_PURCHASE_DAILY);
         assertTrue(game.rngLocked());
         (, Tally memory tickets) = _measure();
         assertEq(tickets.stage, STAGE_PURCHASE_DAILY_TICKETS);
         assertGt(tickets.ticketWins, 0);
-        assertEq(tickets.battleRuns, 0);
+        assertEq(tickets.battleEntries, 0);
         assertFalse(game.rngLocked());
     }
 }

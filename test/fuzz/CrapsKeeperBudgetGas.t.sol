@@ -110,7 +110,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
 
     /// @dev The one scheduled format, on the picked board the plan names.
     function test_theBudgetHoldsAcrossTheScheduledFormat() public {
-        uint256 dayWord = _findBankroll(3000);
+        uint256 dayWord = _findBankroll(4500);
         uint24 today = crapsBattle.currentDayIndex();
         _landDayWord(today, dayWord);
         (uint128 bank, uint128 goal, uint256 posted,,,) = crapsBattle.bonusTermsFor(today, 1);
@@ -126,8 +126,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     /// @dev The outcome-weighted allowance still walks a useful, bounded part of the fixed 5x
     ///      field across several shared settlement words.
     function test_theFixedFiveXFormatHasMeasuredSeatThroughput() public {
-        uint256 seats = _medianSeats(_findBankroll(3000));
-        emit log_named_uint("median seats, 3000 FLIP goal 5x", seats);
+        uint256 seats = _medianSeats(_findBankroll(4500));
+        emit log_named_uint("median seats, 4500 FLIP goal 5x", seats);
         assertGt(seats, 0, "one allowance walked no seats");
         assertLt(seats, FIELD, "the field ceiling, not the allowance, stopped settlement");
     }
@@ -155,7 +155,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     ///      subtracts a reserve before handing the allowance down. This is that reserve measured:
     ///      the same field settled through `game.mineFlip()` and through `resolveSlot` directly.
     function test_probe_theRouterTailOverTheResolver() public {
-        uint256 dayWord = _findBankroll(3000);
+        uint256 dayWord = _findBankroll(4500);
         uint256 word = uint256(keccak256("router-tail"));
 
         uint256 snap = vm.snapshotState();
@@ -212,7 +212,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     ///      carries the pot, progressive and lane), and a HIGH seat. This searches for it rather
     ///      than asserting it exists.
     function test_theHardBoundHoldsWithAWholeSeatOfOvershoot() public {
-        uint256 dayWord = _findBankroll(3000);
+        uint256 dayWord = _findBankroll(4500);
         uint256 worstSeat;
         uint256 worstFinal;
 
@@ -280,7 +280,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         }
 
         slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
-        vm.warp(vm.getBlockTimestamp() + 4 hours);
+        // Seated at +1h05m; period 1 shuts 6h03m into the day (05:00 UTC).
+        vm.warp(vm.getBlockTimestamp() + 5 hours);
         index = crapsBattle.armBonusWindow(slot);
     }
 
@@ -349,7 +350,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         }
 
         slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
-        vm.warp(vm.getBlockTimestamp() + 4 hours);
+        // Seated at +1h05m; period 1 shuts 6h03m into the day (05:00 UTC).
+        vm.warp(vm.getBlockTimestamp() + 5 hours);
         index = crapsBattle.armBonusWindow(slot);
     }
 

@@ -122,7 +122,7 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
 
 abstract contract CenturyConsolidationFixture is FreshWordLeg {
     uint256 internal constant CAP = 16_777_216;
-    uint256 internal constant INTRINSIC = 21_064;
+    uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint256 internal constant WORD = 0x0ee7fcb287531227df7efcfddb3f0151121ee9e59765e743a190d8e26ee417fd;
     bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
     bytes32 internal constant TICKET_SIG =
@@ -173,7 +173,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         mockStETH.mint(address(game), 50 ether);
         _armFreshWord(word, 400);
         assertEq(game.level(), 100, "real request must pre-increment the level");
-        assertEq(game.rngWordForDay(400), 0, "measured transaction must apply fresh RNG");
+        assertEq(game.rngWordForDay(400), 0, "the word-apply transaction must apply fresh RNG");
         assertFalse(game.decWindow(), "real century request closes the burn window");
 
         // Replays runBafJackpot's exact post-D/D2-removal sampling sequence: slice B
@@ -298,9 +298,18 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     }
 
     function test_CenturyConsolidationFullColdTransaction() public {
-        // No protocol reads before the call: setUp writes are committed, all accessed
-        // storage starts cold, and original-vs-current SSTORE pricing is realistic.
-        if (_vaultHistoryMode() != 0) {
+        // No protocol reads before each call: setUp writes are committed, all accessed storage
+        // starts cold, and original-vs-current SSTORE pricing is realistic.
+        _checkWordApply();
+        _driveBattle(STAGE_PURCHASE_BATTLE);
+        _checkConsolidation();
+    }
+
+    /// @dev The fresh word applies alone: the day's RNG record, the pending sDGNRS redemption, the
+    ///      craps day it opens and, in the history variants, the vault's 365-day claim.
+    function _checkWordApply() private {
+        uint8 historyMode = _vaultHistoryMode();
+        if (historyMode != 0) {
             // This post-walk loss mint is observable even when later seat funding
             // reverts; a rolled-back cursor alone would not exclude an early failure.
             vm.expectCall(
@@ -308,28 +317,39 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
                 abi.encodeWithSignature("mintPrize(address,uint256)", ContractAddresses.VAULT, 1 ether)
             );
         }
-        vm.recordLogs();
-        uint256 before = gasleft();
-        game.advanceGame{gas: CAP - INTRINSIC}();
-        uint256 used = before - gasleft() + INTRINSIC;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (uint256 used, Vm.Log[] memory logs) = _applyWord(false, CAP);
+        emit log_named_uint("century_word_apply_including_intrinsic", used);
+        assertEq(
+            _countTopic(logs, keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")),
+            1,
+            "fresh RNG must apply in the word-apply call"
+        );
+        assertEq(_countTopic(logs, keccak256("RedemptionResolved(uint24,uint16)")), 1, "pending redemption must resolve");
+        if (historyMode != 0) {
+            bytes32 stateSlot = keccak256(abi.encode(ContractAddresses.VAULT, uint256(2)));
+            uint24 cursor = uint24(uint256(vm.load(address(coinflip), stateSlot)) >> 128);
+            emit log_named_uint("vault_claim_cursor_after", cursor);
+            assertEq(cursor, historyMode == 1 ? 399 : 34, "365-day settlement must commit or roll back");
+        }
+    }
+
+    /// @dev The consolidation stage after the battle: BAF, decimator, yield surplus, growth round and
+    ///      level quest in one transaction.
+    function _checkConsolidation() private {
+        (uint8 stage, uint256 used, Vm.Log[] memory logs) = _advanceTx(false);
         uint256 ethAwards;
         uint256 ticketAwards;
         uint256 whaleAwards;
         uint256 decimator;
         uint256 yieldEvents;
-        uint256 applied;
-        uint256 redemption;
         uint256 growth;
         uint256 quest;
         uint256 highPasses;
-        uint256 crapsLogs;
         uint256 distinct;
         uint256 distinctTicketPairs;
         uint256 farRolls;
         bytes32[] memory ticketPairs = new bytes32[](108);
         address[] memory recipients = new address[](107);
-        uint8 stage = 255;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
             bytes32 topic = logs[i].topics[0];
@@ -370,11 +390,8 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
                 ++yieldEvents;
                 assertEq(abi.decode(logs[i].data, (uint256)), 23 ether, "100 ETH real surplus");
             }
-            if (topic == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++applied;
-            if (topic == keccak256("RedemptionResolved(uint24,uint16)")) ++redemption;
             if (topic == keccak256("GrowthRoundSealed(uint24,bool)")) ++growth;
             if (topic == keccak256("LevelQuestRolled(uint24,uint8,uint8,uint256)")) ++quest;
-            if (logs[i].emitter == address(crapsBattle)) ++crapsLogs;
             if (
                 topic == keccak256("CrapsPassesCredited(address,bool,uint256)")
                     && address(uint160(uint256(logs[i].topics[1]))) == ContractAddresses.SDGNRS
@@ -382,7 +399,6 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
                 (bool high, uint256 n) = abi.decode(logs[i].data, (bool, uint256));
                 if (high) highPasses += n;
             }
-            if (topic == keccak256("Advance(uint8,uint24)")) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
         }
         emit log_named_uint("century_consolidation_including_intrinsic", used);
         emit log_named_uint("BAF_pool_wei", expectedPool);
@@ -395,21 +411,12 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         emit log_named_uint("far_future_ticket_rolls", farRolls);
         if (_rngWord() != WORD) {
             // Destination-heavy variants retain at least the current fixture's pressure.
-            // The far-future queues are now uniformly-seeded, globally-unique holder
-            // pools (needed so BAF scatter winners are always distinct -- see
-            // CenturyConsolidationSeeder's far-future seeding loop) rather than the old
-            // per-round 254-wallet scheme, so the achieved spread (98 pairs / 14 far
-            // rolls) is somewhat lower than the prior fixture's 104 / 13; keep a small
-            // margin under the measured values.
+            // The far-future queues are uniformly-seeded, globally-unique holder pools (so BAF
+            // scatter winners are always distinct -- see CenturyConsolidationSeeder's
+            // far-future seeding loop); keep a small margin under the measured spread
+            // (98 pairs / 14 far rolls).
             assertGe(distinctTicketPairs, 95, "distinct cold destination pressure");
             assertGe(farRolls, 13, "far-future destination pressure");
-        }
-        uint8 historyMode = _vaultHistoryMode();
-        if (historyMode != 0) {
-            bytes32 stateSlot = keccak256(abi.encode(ContractAddresses.VAULT, uint256(2)));
-            uint24 cursor = uint24(uint256(vm.load(address(coinflip), stateSlot)) >> 128);
-            emit log_named_uint("vault_claim_cursor_after", cursor);
-            assertEq(cursor, historyMode == 1 ? 399 : 34, "365-day settlement must commit or roll back");
         }
         assertEq(stage, 7, "century consolidation must finish");
         assertEq(ethAwards, 51, "full distinct BAF ETH set");
@@ -418,11 +425,8 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(distinct, 99, "every logical recipient must be awarded");
         assertEq(decimator, 1, "nonempty decimator must resolve");
         assertEq(yieldEvents, 1, "surplus must distribute");
-        assertEq(applied, 1, "fresh RNG must apply in the measured call");
-        assertEq(redemption, 1, "pending redemption must resolve");
         assertEq(growth, 1, "growth round must seal");
         assertEq(quest, 1, "new level quest must roll");
-        assertGt(crapsLogs, 0, "fresh bonus-day external leg must run");
         if (expectHousePass) assertGt(highPasses, 0, "house pass credit must execute");
         assertLt(used, CAP, "full century transaction exceeds cap");
     }
@@ -480,7 +484,8 @@ contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
         // Retune future funding to preserve the destination-heavy award shape under
         // the 15% trough; raising this BAF pool crosses an amount-dependent threshold.
-        return Shape(3000 ether, 38_181_818_181_818_181_818, 157_001_039_980_229_350_166, 100, 1, true);
+        // This pool's level cut falls short of one whole high pass: no house pass.
+        return Shape(3000 ether, 38_181_818_181_818_181_818, 157_001_039_980_229_350_166, 100, 1, false);
     }
 }
 

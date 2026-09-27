@@ -48,6 +48,7 @@ pragma solidity 0.8.34;
  *      - CEI pattern: burns before external calls
  */
 
+import {CrapsPriceLib} from "./libraries/CrapsPriceLib.sol";
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
@@ -212,7 +213,7 @@ contract FLIP {
     ///         completed battle's eligible bankroll and a comp burn spends. Opens on the converted
     ///         lifetime pass allowance: two hundred normal day passes at their pass value. Packed
     ///         beside the tombstone latch, so it moves no slot.
-    uint128 private _crapsCompAllowance = 4_560_000 ether;
+    uint128 private _crapsCompAllowance = uint128(200 * CrapsPriceLib.NORMAL_VALUE);
 
     /// @notice Token balance for each address.
     /// @dev Standard ERC20 balance mapping.

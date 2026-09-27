@@ -3,12 +3,6 @@ pragma solidity 0.8.34;
 
 /// @dev Isolated jackpot battle fixtures retain the real reader's SLOAD and call cost.
 contract CrapsPreferenceStore {
-    event DrawAwardRequested(bytes32 key, address winner, uint256 peakFlip, uint256 score);
-
-    function rewardJackpotBattle(bytes32 key, address winner, uint256 peakFlip, uint256 score) external {
-        emit DrawAwardRequested(key, winner, peakFlip, score);
-    }
-
     function extsload(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }

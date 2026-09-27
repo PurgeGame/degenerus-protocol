@@ -516,7 +516,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         }
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
-        vm.warp(vm.getBlockTimestamp() + 5 hours);
+        vm.warp(vm.getBlockTimestamp() + 7 hours);
         uint48 index = craps.armBonusWindow(slot);
         _setWord(index, uint256(keccak256("all-boost-rows")));
 
@@ -696,7 +696,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         craps.enterBonusBattle(PER, _sevenChips(), uint16(hm));
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
-        vm.warp(vm.getBlockTimestamp() + 5 hours);
+        vm.warp(vm.getBlockTimestamp() + 7 hours);
         uint48 index = craps.armBonusWindow(slot);
         _setWord(index, uint256(keccak256("high-boost")));
 
@@ -878,7 +878,7 @@ contract CrapsShooterBoostTest is CrapsPins {
             ids[i] = craps.enterBonusBattle(PER, _placed(i % 8), 1);
         }
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
-        vm.warp(vm.getBlockTimestamp() + 5 hours);
+        vm.warp(vm.getBlockTimestamp() + 7 hours);
         uint48 index = craps.armBonusWindow(slot);
         _setWord(index, uint256(keccak256("rotation-field")));
         (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, PER);
@@ -1012,7 +1012,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         craps.enterBonusBattle(PER, blank, 1);
 
         slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
-        vm.warp(vm.getBlockTimestamp() + 5 hours);
+        vm.warp(vm.getBlockTimestamp() + 7 hours);
         index = craps.armBonusWindow(slot);
         _setWord(index, uint256(keccak256("boosted-table")));
     }

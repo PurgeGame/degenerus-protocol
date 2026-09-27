@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -114,7 +116,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
 
         game.setScore(dave, craps.SYBIL_SCORE_FLOOR());
         vm.prank(dave);
-        vm.expectRevert(CrapsBattle.NoSuchBattle.selector);
+        vm.expectRevert(CrapsBattleStorage.NoSuchBattle.selector);
         craps.enterBattle(alias_, _seven(), 1);
 
         assertEq(craps.battleOf(key).entrants, entrantsArmed, "entrants moved despite the revert");

@@ -129,7 +129,7 @@ contract CrapsConservationInv is CrapsPins {
         assertEq(
             handler.ghost_conversionRateBreaks(),
             0,
-            "a normal-to-high conversion moved a lane off the 19:1 rate"
+            "a normal-to-high conversion moved a lane off the 21:1 rate"
         );
     }
 

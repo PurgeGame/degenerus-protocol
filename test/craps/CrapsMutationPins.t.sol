@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {CrapsViews} from "./CrapsViews.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsPins} from "./CrapsPins.sol";
@@ -54,13 +56,13 @@ contract CrapsMutationPins is CrapsPins {
     ///         terms are read, not resolved as some neighbouring period.
     function test_gapSlotBetweenDaysIsNoBattle() public {
         uint64 gap = uint64(uint256(craps.currentDayIndex()) * 8);
-        vm.expectRevert(CrapsBattle.NoSuchBattle.selector);
+        vm.expectRevert(CrapsBattleStorage.NoSuchBattle.selector);
         craps.termsKeyOf(gap);
-        vm.expectRevert(CrapsBattle.NoSuchBattle.selector);
+        vm.expectRevert(CrapsBattleStorage.NoSuchBattle.selector);
         craps.termsKeyOf(0);
         // And through the permissionless door: the gap sits below the window taking bets, so the
         // only thing that refuses it is the terms read.
-        vm.expectRevert(CrapsBattle.NoSuchBattle.selector);
+        vm.expectRevert(CrapsBattleStorage.NoSuchBattle.selector);
         craps.armBonusWindow(gap);
         // The period right after the gap is a real window.
         assertTrue(craps.termsKeyOf(gap + 1) != bytes32(0), "period zero of the day is a window");
@@ -69,7 +71,7 @@ contract CrapsMutationPins is CrapsPins {
     /// @notice The custom slot base is not a battle: custom slots start one above it.
     function test_customSlotBaseIsNoBattle() public {
         uint256 base = craps.customSlotBase();
-        vm.expectRevert(CrapsBattle.NoSuchBattle.selector);
+        vm.expectRevert(CrapsBattleStorage.NoSuchBattle.selector);
         craps.termsKeyOf(base);
     }
 
@@ -95,7 +97,7 @@ contract CrapsMutationPins is CrapsPins {
         // Past the close the field is frozen, whatever the slot number looks like.
         vm.warp(close);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.amendSlip(betId, _boardA());
     }
 
@@ -122,10 +124,10 @@ contract CrapsMutationPins is CrapsPins {
         assertFalse(craps.isHighOf(normal), "a seat at one is the ordinary seat");
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+        vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), 3);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadEntryMultiple.selector);
+        vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), 0);
     }
 }

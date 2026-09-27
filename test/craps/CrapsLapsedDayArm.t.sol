@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -32,9 +34,9 @@ contract CrapsLapsedDayArmTest is CrapsPins {
     uint256 internal constant PLAIN_WORD = 40 << 8;
     uint256 internal constant GRANULE = 100e18;
     uint8 internal constant KIND_WINDOW_AHEAD = 5;
-    uint256 internal constant ROUTINE_WINDOW_PRICE = 1_227 ether;
-    uint256 internal constant OPENER_SEAT_VALUE = 2_433 ether;
-    uint256 internal constant TAIL_WINDOW_PRICE = 14_235 ether;
+    uint256 internal constant ROUTINE_WINDOW_PRICE = 2_595 ether;
+    uint256 internal constant OPENER_SEAT_VALUE = 4_520 ether;
+    uint256 internal constant TAIL_WINDOW_PRICE = 8_000 ether;
 
     address internal alice = makeAddr("alice");
     address internal dave = makeAddr("dave");
@@ -150,7 +152,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         uint256 aliceStakeBefore = coinflip.staked(alice);
         uint256 daveStakeBefore = coinflip.staked(dave);
         vm.recordLogs();
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.armBonusWindow(slot);
         Vm.Log[] memory armLogs = vm.getRecordedLogs();
         (, bool finalized) = _finalizedPot(armLogs);
@@ -185,7 +187,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         assertEq(craps.boostBudgetOf(dayG), 0, "the stalled day opened");
 
         // THE ARM, attempted before the sweep even runs.
-        vm.expectRevert(CrapsBattle.BonusPeriodSpent.selector);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.armBonusWindow(slot);
         assertEq(craps.slotIndexOf(slot), 0, "the refused arm bound a table anyway");
 
@@ -286,7 +288,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         address erin = makeAddr("erin");
         vm.startPrank(ContractAddresses.VAULT);
         craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, dayG, 1) | (uint256(1) << 208));
-        craps.vaultComp(_code(KIND_WINDOW_AHEAD, erin, true, dayG, 1) | (uint256(6) << 208));
+        craps.vaultComp(_code(KIND_WINDOW_AHEAD, erin, true, dayG, 1) | (uint256(5) << 208));
         vm.stopPrank();
 
         _lapse(dayG);
@@ -303,7 +305,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         assertEq(calls, 2, "two seats at one per call; the call that finishes the day crosses it");
         assertEq(
             flip.compLane() - laneBefore,
-            ROUTINE_WINDOW_PRICE + TAIL_WINDOW_PRICE * 19,
+            ROUTINE_WINDOW_PRICE + TAIL_WINDOW_PRICE * 21,
             "each comp refunded exactly once at its own price"
         );
     }

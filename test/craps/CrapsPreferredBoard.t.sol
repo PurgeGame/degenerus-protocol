@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsViews} from "./CrapsViews.sol";
@@ -109,16 +111,17 @@ contract CrapsPreferredBoardTest is CrapsPins {
         game.setRngLocked(true);
         _save(alice, BOARD);
         assertEq(c.preferredBoardOf(alice), BOARD);
-        vm.prank(alice); vm.expectRevert(CrapsBattle.BetLocked.selector); c.setPreferredBoard(0);
-        vm.prank(alice); vm.expectRevert(CrapsBattle.BetLocked.selector); c.setPreferredBoard(2);
-        vm.prank(bob); vm.expectRevert(CrapsBattle.BetLocked.selector); c.setPreferredBoard(0);
+        vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BetLocked.selector); c.setPreferredBoard(0);
+        vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BetLocked.selector); c.setPreferredBoard(2);
+        vm.prank(bob); vm.expectRevert(CrapsBattleStorage.BetLocked.selector); c.setPreferredBoard(0);
         assertEq(_word(bob), 0);
     }
 
     function test_CreditsConversionSpendingAndCapsPreservePreference() public {
         _save(alice, BOARD);
         uint256 saved = _word(alice);
-        vm.prank(ContractAddresses.GAME); c.creditPasses(alice, 20, 0);
+        // 21 normals per high credit, plus one spare so a normal reservation still has one to spend.
+        vm.prank(ContractAddresses.GAME); c.creditPasses(alice, 22, 0);
         vm.prank(alice); c.convertNormalToHigh(1);
         (uint256 n, uint256 h) = c.passCreditsOf(alice); assertEq(n, 1); assertEq(h, 1);
         uint24 day = c.currentDayIndex() + 1;
@@ -176,8 +179,8 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _save(alice, BOARD); _save(bob, BOARD);
         _openToday();
         // Current period is past zero; current window comp uses a later period.
-        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint160(alice) | (uint256(6) << 176));
-        uint256 slot = uint256(c.currentDayIndex()) * 8 + 7;
+        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint160(alice) | (uint256(5) << 176));
+        uint256 slot = uint256(c.currentDayIndex()) * 8 + 6;
         assertEq(c.betOf((slot << 64) | 1).chips, BOARD);
         uint24 day = c.currentDayIndex() + 1;
         vm.prank(ContractAddresses.VAULT); c.vaultComp(uint160(bob) | (uint256(2) << 160) | (uint256(day) << 176) | (uint256(2) << 200));
@@ -190,7 +193,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
 
     function test_PaidWindowAndCustomSaveExplicitBoard() public {
         _openToday();
-        vm.prank(alice); c.enterBonusBattle(6, BOARD, 1);
+        vm.prank(alice); c.enterBonusBattle(5, BOARD, 1);
         assertEq(c.preferredBoardOf(alice), BOARD);
         uint64 slot = _openFar(c, 300, 5, 1);
         vm.prank(alice); uint256 bet = c.enterBattle(slot, uint32(0), 1);

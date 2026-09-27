@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -62,7 +64,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      keeps no count of its own: what bounds the vault's comps is metered in the vault.
     function test_onlyTheGameOrTheVaultMayDeliverPasses() public {
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.OnlyGame.selector);
+        vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
         craps.deliverPasses(alice, 1, 0);
 
         vm.prank(ContractAddresses.GAME);
@@ -101,7 +103,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      skip the strictly-future, unworded test that makes every commitment blind.
     function test_theVaultCannotReachTheBareCreditLane() public {
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattle.OnlyGame.selector);
+        vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
         craps.creditPasses(alice, 1, 0);
     }
 
@@ -119,7 +121,7 @@ contract CrapsPassesTest is CrapsPins {
     }
 
     /// @dev A MIXED batch seats the high pass. Only one can be seated and the high one is worth
-    ///      nineteen of the other, so seating the cheaper one would hand the player the worse of
+    ///      twenty-one of the other, so seating the cheaper one would hand the player the worse of
     ///      the two outcomes for no reason.
     function test_aMixedBatchSeatsTheHighPassFirst() public {
         vm.prank(ContractAddresses.GAME);
@@ -267,18 +269,18 @@ contract CrapsPassesTest is CrapsPins {
 
         // Four on one leg breaks the per-leg cap even inside the seven-chip total ceiling.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.TooManyChipsOnALeg.selector);
+        vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
         craps.applyCrapsPasses(start + 1, 1, false, uint32(4 << 3) | 3);
 
         // Backing the shooter and fading them at once is refused at this door like every other.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BoardPlaysBothSides.selector);
+        vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
         craps.applyCrapsPasses(start + 1, 1, false, uint32(3 | (1 << 9) | (3 << 27)));
 
         // Eight is the first board-wide count the shared validator rejects.
         uint32 eight = uint32(3 | (3 << 9) | (2 << 12));
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
         craps.applyCrapsPasses(start + 1, 1, false, eight);
 
         (uint256 n,) = craps.passCreditsOf(alice);
@@ -294,7 +296,7 @@ contract CrapsPassesTest is CrapsPins {
         assertGt(burnedAfter, burnedBefore, "the legal bought reservation paid nothing");
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+        vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
         craps.buyFutureCrapsDays(start + 2, 1, false, eight);
         assertEq(flip.burned(alice), burnedAfter, "a refused board still burned the fixed price");
     }
@@ -351,7 +353,7 @@ contract CrapsPassesTest is CrapsPins {
 
         // Future or not, it is still nobody else's.
         vm.prank(bob);
-        vm.expectRevert(CrapsBattle.NotYourBet.selector);
+        vm.expectRevert(CrapsBattleStorage.NotYourBet.selector);
         craps.amendSlip(betId, PACKED_SEVEN);
 
         // The boundary itself — the target day's own period zero — still amends.
@@ -364,7 +366,7 @@ contract CrapsPassesTest is CrapsPins {
         // One period later the day's first window has shut its door, and so has the ticket's.
         vm.warp(vm.getBlockTimestamp() + craps.BONUS_EVENT_CLOSE() + craps.BONUS_CLOCK_ALIGN() + 1);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BetLocked.selector);
+        vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
         craps.amendSlip(betId, respread);
     }
 
@@ -418,7 +420,7 @@ contract CrapsPassesTest is CrapsPins {
         (uint256 before_,) = craps.passCreditsOf(alice);
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         craps.applyCrapsPasses(start, 5, false);
 
         (uint256 n,) = craps.passCreditsOf(alice);
@@ -436,17 +438,17 @@ contract CrapsPassesTest is CrapsPins {
         uint24 today = _today();
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         craps.applyCrapsPasses(today, 1, false);
 
         uint24 start = today + 3;
         _setDailyWord(start + 1, uint256(keccak256("leaked")));
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         craps.applyCrapsPasses(start, 3, false);
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadPassCount.selector);
+        vm.expectRevert(CrapsBattleStorage.BadPassCount.selector);
         craps.applyCrapsPasses(start, 0, false);
     }
 
@@ -484,7 +486,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(n + h, 0, "buying days touched the credit lanes");
     }
 
-    /// @dev A HIGH day costs its own price, and it is not nineteen normals — the two are
+    /// @dev A HIGH day costs its own price, and it is not twenty-one normals — the two are
     ///      independent constants and must stay that way.
     function test_theHighPriceIsItsOwnConstant() public {
         uint24 start = _today() + 1;
@@ -492,7 +494,7 @@ contract CrapsPassesTest is CrapsPins {
         vm.prank(alice);
         craps.buyFutureCrapsDays(start, 1, true);
         assertEq(flip.burned(alice) - before_, craps.HIGH_FUTURE_DAY_PRICE(), "the high day burned the wrong price");
-        assertEq(craps.HIGH_FUTURE_DAY_PRICE(), 450_000 ether, "the high price moved");
+        assertEq(craps.HIGH_FUTURE_DAY_PRICE(), 500_000 ether, "the high price moved");
         assertEq(craps.NORMAL_FUTURE_DAY_PRICE(), 25_000 ether, "the normal price moved");
     }
 
@@ -505,7 +507,7 @@ contract CrapsPassesTest is CrapsPins {
 
         uint256 before_ = flip.burned(alice);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         craps.buyFutureCrapsDays(start, 5, false);
         assertEq(flip.burned(alice), before_, "a rejected range still burned");
         assertEq(craps.dayStateOf(start, alice), 0, "a rejected range still wrote its first day");
@@ -589,7 +591,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.buyFutureCrapsDays(target, 1, false);
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         craps.buyFutureCrapsDays(target, 1, false);
 
         vm.prank(ContractAddresses.GAME);
@@ -639,12 +641,12 @@ contract CrapsPassesTest is CrapsPins {
         craps.openBonusDay();
 
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBonusDay(_seven(), 1);
 
         // And a single window of that day is barred too — the seat is a claim on all seven.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.AlreadyInBonus.selector);
+        vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
         craps.enterBonusBattle(1, _seven(), 1);
     }
 
@@ -740,75 +742,74 @@ contract CrapsPassesTest is CrapsPins {
 
     bytes32 internal constant _CONVERTED_SIG = keccak256("CrapsNormalPassesConverted(address,uint256,uint256)");
 
-    /// @dev NINETEEN NORMALS BUY ONE HIGH — the credits' own value ratio, so the conversion moves
-    ///      value exactly. The retail future-day prices imply 18:1; that pair carries margins the
-    ///      credits never did, and pricing off it would subsidize every conversion.
-    function test_nineteenNormalsConvertToOneHigh() public {
-        craps.setPassCredits(alice, 19, 0);
+    /// @dev TWENTY-ONE NORMALS BUY ONE HIGH — the credits' own value ratio, so the conversion moves
+    ///      value exactly. Retail premiums and discounts do not reprice the credit lanes.
+    function test_twentyOneNormalsConvertToOneHigh() public {
+        craps.setPassCredits(alice, 21, 0);
         vm.prank(alice);
         craps.convertNormalToHigh(1);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
-        assertEq(n, 0, "the nineteen normals were not all spent");
+        assertEq(n, 0, "the twenty-one normals were not all spent");
         assertEq(h, 1, "the high credit did not arrive");
     }
 
-    /// @dev The handoff's own worked example: 38 normal and 4 high become 0 and 6, atomically.
-    function test_thirtyEightNormalsConvertToTwoHighs() public {
-        craps.setPassCredits(alice, 38, 4);
+    /// @dev The handoff's own worked example: 42 normal and 4 high become 0 and 6, atomically.
+    function test_fortyTwoNormalsConvertToTwoHighs() public {
+        craps.setPassCredits(alice, 42, 4);
         vm.prank(alice);
         craps.convertNormalToHigh(2);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
-        assertEq(n, 0, "the two conversions did not spend all thirty-eight normals");
+        assertEq(n, 0, "the two conversions did not spend all forty-two normals");
         assertEq(h, 6, "the high lane did not gain exactly two");
     }
 
     function test_aZeroConversionReverts() public {
-        craps.setPassCredits(alice, 19, 0);
+        craps.setPassCredits(alice, 21, 0);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.BadPassCount.selector);
+        vm.expectRevert(CrapsBattleStorage.BadPassCount.selector);
         craps.convertNormalToHigh(0);
     }
 
-    /// @dev EIGHTEEN CANNOT BUY ONE. The rate is nineteen exactly, and a short balance reverts on
+    /// @dev TWENTY CANNOT BUY ONE. The rate is twenty-one exactly, and a short balance reverts on
     ///      the debit itself with neither lane moved.
-    function test_eighteenNormalsCannotBuyAHigh() public {
-        craps.setPassCredits(alice, 18, 7);
+    function test_twentyNormalsCannotBuyAHigh() public {
+        craps.setPassCredits(alice, 20, 7);
         vm.prank(alice);
         vm.expectRevert(stdError.arithmeticError);
         craps.convertNormalToHigh(1);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
-        assertEq(n, 18, "a refused conversion still debited normals");
+        assertEq(n, 20, "a refused conversion still debited normals");
         assertEq(h, 7, "a refused conversion still credited a high");
     }
 
-    /// @dev A SHORT MULTI-COUNT is refused whole: 37 normals cannot buy two highs, and the one
+    /// @dev A SHORT MULTI-COUNT is refused whole: 41 normals cannot buy two highs, and the one
     ///      conversion they could have bought is not quietly delivered instead.
     function test_aShortBalanceConvertsNothingNotPart() public {
-        craps.setPassCredits(alice, 37, 0);
+        craps.setPassCredits(alice, 41, 0);
         vm.prank(alice);
         vm.expectRevert(stdError.arithmeticError);
         craps.convertNormalToHigh(2);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
-        assertEq(n, 37, "a refused conversion moved the normal lane");
+        assertEq(n, 41, "a refused conversion moved the normal lane");
         assertEq(h, 0, "a refused conversion moved the high lane");
     }
 
     /// @dev A FULL HIGH LANE refuses the conversion BEFORE the debit — all or nothing, so an
     ///      overflow cannot burn normals for credits that were never banked.
     function test_aFullHighLaneRevertsWithoutDebitingNormals() public {
-        craps.setPassCredits(alice, 19, type(uint32).max);
+        craps.setPassCredits(alice, 21, type(uint32).max);
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.PassLaneFull.selector);
+        vm.expectRevert(CrapsBattleStorage.PassLaneFull.selector);
         craps.convertNormalToHigh(1);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
-        assertEq(n, 19, "an overflowing conversion still debited normals");
+        assertEq(n, 21, "an overflowing conversion still debited normals");
         assertEq(h, type(uint32).max, "the full lane moved");
     }
 
     /// @dev ONE LOG AND ONLY ONE. Both lane deltas live in the conversion event; a
     ///      `CrapsPassesCredited` alongside it would hand an indexer the high addition twice.
     function test_aConversionEmitsExactlyOneCanonicalLog() public {
-        craps.setPassCredits(alice, 57, 0);
+        craps.setPassCredits(alice, 63, 0);
         vm.recordLogs();
         vm.prank(alice);
         craps.convertNormalToHigh(3);
@@ -817,7 +818,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(logs[0].topics[0], _CONVERTED_SIG, "the one log is not the conversion event");
         assertEq(address(uint160(uint256(logs[0].topics[1]))), alice, "the log named another player");
         (uint256 spent, uint256 received) = abi.decode(logs[0].data, (uint256, uint256));
-        assertEq(spent, 57, "the log misstates the normals spent");
+        assertEq(spent, 63, "the log misstates the normals spent");
         assertEq(received, 3, "the log misstates the highs received");
     }
 
@@ -825,7 +826,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      day's seat word, and converting the remaining bank neither touches the reservation
     ///      nor claws the committed pass back.
     function test_aConversionCannotReachACommittedReservation() public {
-        craps.setPassCredits(alice, 20, 0);
+        craps.setPassCredits(alice, 22, 0);
         uint24 target = _today() + 2;
         vm.prank(alice);
         craps.applyCrapsPasses(target, 1, false);
@@ -843,7 +844,7 @@ contract CrapsPassesTest is CrapsPins {
     /// @dev NOTHING BURNS, MINTS OR MOVES COINFLIP MONEY. A conversion is a pure re-denomination
     ///      of banked credits.
     function test_aConversionTouchesNoOutsideLedger() public {
-        craps.setPassCredits(alice, 19, 0);
+        craps.setPassCredits(alice, 21, 0);
         uint256 burnedBefore = flip.burned(alice);
         uint256 creditsBefore = coinflip.credits();
         vm.prank(alice);
@@ -854,7 +855,7 @@ contract CrapsPassesTest is CrapsPins {
 
     event CrapsDayWindowsUpgraded(address indexed player, uint24 indexed day, uint8 upgradedMask, uint256 burned);
 
-    uint256 internal constant DAYHIGH_MASK = 0x7F << 217;
+    uint256 internal constant DAYHIGH_MASK = 0x3F << 217;
 
     /// @dev A normal reservation on a future day swaps to the high lane for one banked high
     ///      credit, and the normal credit it was taken with comes back: the bet word carries the
@@ -870,7 +871,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(craps.betWordOf(betId) & DAYHIGH_MASK, 0, "a normal reservation started high");
 
         vm.expectEmit(address(craps));
-        emit CrapsDayWindowsUpgraded(alice, day, 0x7F, 0);
+        emit CrapsDayWindowsUpgraded(alice, day, 0x3F, 0);
         vm.prank(alice);
         craps.upgradeReservedDay(day);
 
@@ -880,7 +881,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(craps.betWordOf(betId) & DAYHIGH_MASK, DAYHIGH_MASK, "the seat did not turn high");
         assertEq(craps.betOf(betId).chips, PACKED_SEVEN, "the upgrade moved the board");
         assertEq(craps.dayTicketsWordOf(day) & 0xFFFFFFFF, 1, "the upgrade changed the day's total");
-        for (uint256 p = 0; p < 7; ++p) {
+        for (uint256 p = 0; p < craps.BONUS_PERIODS_PER_DAY(); ++p) {
             assertEq(craps.dayHighTicketsOf(day, p), 1, "a period did not count the high ticket");
         }
     }
@@ -906,7 +907,7 @@ contract CrapsPassesTest is CrapsPins {
         uint24 day = _today() + 2;
         vm.prank(alice);
         craps.applyCrapsPasses(day, 1, true, 0);
-        vm.expectRevert(CrapsBattle.NothingToUpgrade.selector);
+        vm.expectRevert(CrapsBattleStorage.NothingToUpgrade.selector);
         vm.prank(alice);
         craps.upgradeReservedDay(day);
     }
@@ -916,7 +917,7 @@ contract CrapsPassesTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         craps.creditPasses(alice, 0, 1);
         uint24 day = _today() + 2;
-        vm.expectRevert(CrapsBattle.NoSuchBet.selector);
+        vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
         vm.prank(alice);
         craps.upgradeReservedDay(day);
     }
@@ -927,7 +928,7 @@ contract CrapsPassesTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         craps.creditPasses(alice, 0, 1);
         uint24 today = _today();
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         vm.prank(alice);
         craps.upgradeReservedDay(today);
     }
@@ -992,24 +993,23 @@ contract CrapsAwardSplitTest is CrapsPins {
         _grade(2 * N, 1, 0);
     }
 
-    /// @dev EXACTLY the switch: a 20N budget is still NORMAL — twenty normal passes, never one
+    /// @dev EXACTLY the switch: a 22N budget is still NORMAL — twenty-two normal passes, never one
     ///      high — and one wei more flips the whole portion to a single high pass.
     function test_theDenominationCliffIsStrict() public {
-        _grade(40 * N, 20, 0);
-        _grade(40 * N + 2, 0, 1);
+        _grade(44 * N, 22, 0);
+        _grade(44 * N + 2, 0, 1);
     }
 
-    /// @dev The handoff's worked example: a 1,000,000 FLIP award has a 500,000 target, above
-    ///      456,000 — ONE high pass worth 433,200 and 566,800 liquid. Not twenty-one normals,
-    ///      and no random second high.
-    function test_theWorkedMillionFlipExample() public {
-        uint256 gross = 1_000_000 ether;
+    /// @dev The handoff's worked example: a 1,200,000 FLIP award has a 600,000 target, above
+    ///      545,600 — one high pass worth 520,800 and 679,200 liquid.
+    function test_theWorkedHighPassExample() public {
+        uint256 gross = 1_200_000 ether;
         uint256 banked = craps.splitAward(KEY, alice, 2, gross);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 0, "the high award issued normals");
         assertEq(h, 1, "the award did not bank exactly one high pass");
-        assertEq(banked, 433_200 ether, "the pass value is not one high pass");
-        assertEq(gross - banked, 566_800 ether, "the liquid change is not the remainder");
+        assertEq(banked, 520_800 ether, "the pass value is not one high pass");
+        assertEq(gross - banked, 679_200 ether, "the liquid change is not the remainder");
     }
 
     /// @dev Fractional remainders return as FLIP exactly, in both denominations.

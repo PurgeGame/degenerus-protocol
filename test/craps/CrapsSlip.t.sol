@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {CrapsViews} from "./CrapsViews.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -335,17 +337,17 @@ contract CrapsSlipTest is CrapsPins {
         uint8 maxMult = uint8(craps.MAX_BANKROLL_MULT());
         uint40 close = uint40(block.timestamp + 1 hours);
         vm.startPrank(vaultOwner);
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(20, 14, 5, 0, 0, close, false, 0); // 280 FLIP, under the floor
 
         // A round that is not ten whole chips is not a round.
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(25, 20, 5, 0, 0, close, false, 0);
 
         // A bankroll deeper than the cap, and one no rounds deep at all.
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(PLAYED, maxMult + 1, 5, 0, 0, close, false, 0);
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(PLAYED, 0, 5, 0, 0, close, false, 0);
 
         // Exactly at the floor, on the smallest round that can carry it: ten chips of two is a
@@ -596,17 +598,17 @@ contract CrapsSlipTest is CrapsPins {
         uint16 maxScore = uint16(craps.MAX_MIN_SCORE());
         vm.startPrank(vaultOwner);
 
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(PLAYED, 4, minGoal - 1, 0, 0, close, false, 0);
 
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(PLAYED, 4, maxGoal + 1, 0, 0, close, false, 0);
 
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(PLAYED, 4, 5, 0, maxScore + 1, close, false, 0);
 
         // A close time already past is not a window anyone can join.
-        vm.expectRevert(CrapsBattle.BadBattleTerms.selector);
+        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(PLAYED, 4, 5, 0, 0, uint40(block.timestamp), false, 0);
 
         uint64 slot = craps.createBattle(PLAYED, 4, 40, 0, 0, close, false, 0);

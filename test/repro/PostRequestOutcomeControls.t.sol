@@ -11,21 +11,6 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         stands (see KNOWN-ISSUES.md); a passing run confirms the behavior, not a fix.
 ///         Progressive fixtures inject finalized results through existing production-helper taps.
 contract PostRequestProgressiveControls is CrapsProgressiveTest {
-    function testAuditOtherDayVictoryErasesEarnedEventDouble() public {
-        uint256 pool = 1_000_000 ether;
-        uint256 standing = craps.SYBIL_SCORE_FLOOR();
-        craps.noteRoutineVictory(TAP_SLOT, true, alice);
-        craps.seedProgressive(pool);
-        uint256 snapshot = vm.snapshotState();
-        uint256 normal = craps.awardAt(TAP_EVENT_SLOT, 3000, true, 360_000, standing, alice);
-        assertTrue(vm.revertToState(snapshot));
-        // Resolve an already-known routine victory from another day before the event.
-        craps.noteRoutineVictory(TAP_SLOT_DAY2, true, alice);
-        uint256 reordered = craps.awardAt(TAP_EVENT_SLOT, 3000, true, 360_000, standing, alice);
-        assertEq(normal, 800_000 ether);
-        assertEq(reordered, 400_000 ether);
-    }
-
     function testAuditCrossBattleOrderChangesSameWinningAward() public {
         uint256 standing = craps.SYBIL_SCORE_FLOOR();
         craps.seedProgressive(1_000_000 ether);
@@ -35,8 +20,9 @@ contract PostRequestProgressiveControls is CrapsProgressiveTest {
         assertTrue(vm.revertToState(snapshot));
         craps.awardAt(TAP_SLOT_DAY2, 3000, true, 360_000, standing, bob);
         uint256 aliceLast = craps.awardAt(TAP_EVENT_SLOT, 3000, true, 360_000, standing, alice);
-        assertEq(aliceFirst, 400_000 ether);
-        assertEq(aliceLast, 360_000 ether);
+        // Order still matters through the pool: the first 10% award leaves 90% for the second.
+        assertEq(aliceFirst, 100_000 ether);
+        assertEq(aliceLast, 90_000 ether);
     }
 }
 

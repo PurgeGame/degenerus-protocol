@@ -7,6 +7,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 
 /// @dev The two things craps reads out of the live game: the raw lootbox-RNG slots and the
@@ -244,6 +245,17 @@ contract MockQuests {
 }
 
 abstract contract CrapsPins is Test {
+    function _startDailyBattle(CrapsViews table, uint24 requestDay, uint256 word, uint256 added) internal {
+        JackpotBattle api = JackpotBattle(address(table));
+        // Level 2 prices at 0.01 ETH, so a pool of `added / 500` locks exactly `added` (floor 50,000).
+        vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(requestDay, added / 500, 2);
+        uint256[] memory empty = new uint256[](0);
+        vm.startPrank(ContractAddresses.GAME);
+        api.prepareJackpotBattle(7, word);
+        api.appendJackpotBattle(empty, 0, true);
+        vm.stopPrank();
+    }
+
     /// @dev SETTLE EVERYTHING. `resolveSlot`'s second argument is a GAS ALLOWANCE, not a seat
     ///      count, so "the whole field" is now a budget no field can exhaust rather than a head
     ///      count above the biggest fixture. The internal seat ceiling still bounds one call.
@@ -269,6 +281,7 @@ abstract contract CrapsPins is Test {
         vm.etch(ContractAddresses.QUESTS, address(new MockQuests()).code);
         // The real engine, at its pin: the table settles nothing without it.
         vm.etch(ContractAddresses.CRAPS_ENGINE, address(new CrapsEngine()).code);
+        vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattle()).code);
         quests = MockQuests(ContractAddresses.QUESTS);
         game = MockGame(ContractAddresses.GAME);
         flip = MockFlip(ContractAddresses.COIN);

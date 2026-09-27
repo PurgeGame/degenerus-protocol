@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
@@ -194,11 +196,11 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         for (uint256 bit = 30; bit < 32; ++bit) {
             uint32 overflowing = board | uint32(1 << bit);
             vm.prank(ContractAddresses.CREATOR);
-            vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+            vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
             vault.crapsAmendSlip(betId, overflowing);
 
             vm.prank(ContractAddresses.CREATOR);
-            vm.expectRevert(CrapsBattle.BadRandomCount.selector);
+            vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
             crapsBattle.setVaultBoard(overflowing);
         }
     }
@@ -238,7 +240,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // Past period 1's close. The genesis+1 warp leaves a day's advance owed, and that is
         // fine: the crank loop below absorbs the advance arms first — craps is the LAST category,
         // exactly as production orders it — and the bounty arithmetic counts only craps cranks.
-        vm.warp(vm.getBlockTimestamp() + 4 hours);
+        vm.warp(vm.getBlockTimestamp() + 5 hours + 10 minutes); // period 1 shuts 6h03m in
 
         // ── The ARM. The cursor works OLDEST-FIRST, so period 0's window is shut and settled
         // before this one is touched — each crank does one piece and pays one flat FLIP for it.
@@ -318,7 +320,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         }
 
         uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
-        vm.warp(block.timestamp + 4 hours);
+        vm.warp(vm.getBlockTimestamp() + 5 hours + 10 minutes); // period 1 shuts 6h03m in
         // OLDEST-FIRST: the cursor settles period 0's window before this one arms.
         (uint48 index,) = _crankUntilArmed(slot);
         vm.store(address(game), keccak256(abi.encode(uint256(index - 1), uint256(34))), bytes32(uint256(1)));

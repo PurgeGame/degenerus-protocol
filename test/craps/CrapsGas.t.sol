@@ -149,7 +149,8 @@ contract CrapsGasTest is CrapsPins {
         uint256 used = g - gasleft();
 
         emit log_named_uint("engine worst-case run gas", used);
-        assertEq(result.handsPlayed, craps.MAX_SLIP_HANDS(), "benchmark did not reach the shooter cap");
+        assertGe(result.totalRolls, craps.SLIP_ROLL_BUDGET(), "benchmark did not reach the roll budget");
+        assertLe(result.totalRolls, craps.SLIP_ROLL_CEILING(), "benchmark passed the roll ceiling");
         assertLt(used, 3_000_000, "the engine's worst case regressed past its gas budget");
 
         // AND THE SAME RUN WITH A SCHEDULE ON, which is what every protocol window runs: a draw
@@ -162,7 +163,7 @@ contract CrapsGasTest is CrapsPins {
         emit log_named_uint("engine worst-case run gas, scheduled", usedBoosted);
         emit log_named_uint("  shooters                          ", boosted.handsPlayed);
         emit log_named_uint("  rolls                             ", boosted.totalRolls);
-        assertEq(boosted.handsPlayed, craps.MAX_SLIP_HANDS(), "the scheduled benchmark stopped early");
+        assertGe(boosted.totalRolls, craps.SLIP_ROLL_BUDGET(), "the scheduled benchmark stopped early");
         assertLt(usedBoosted, 3_000_000, "the scheduled worst case regressed past its gas budget");
 
         // THE ABSOLUTE ROLL CEILING is not the budget: the budget is judged BETWEEN shooters, so
@@ -173,7 +174,7 @@ contract CrapsGasTest is CrapsPins {
             craps.SLIP_ROLL_BUDGET() - 1 + craps.MAX_ROLLS(),
             "the stated ceiling is not budget - 1 + one whole hand"
         );
-        assertEq(craps.SLIP_ROLL_CEILING(), 8703, "the roll ceiling moved");
+        assertEq(craps.SLIP_ROLL_CEILING(), 1_511, "the roll ceiling moved");
     }
 
     /// @dev And the real surface: a max-legal slip (ten rounds of the board) placed and settled

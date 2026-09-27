@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+
 import {CrapsPins} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -426,7 +428,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
         flip.setNextBoonMask(uint8(MASK_15));
         // A run that reaches into the past cannot be reserved; the whole call unwinds.
         vm.prank(alice);
-        vm.expectRevert(CrapsBattle.DayNotReservable.selector);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         craps.buyFutureCrapsDays(today, 2, false);
 
         assertEq(craps.daySeatNumberOf(today, alice), 0, "a refused run still seated a day");
