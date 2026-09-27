@@ -1466,12 +1466,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Claim a fixed amount of accrued ETH winnings (partial cashout).
-    /// @dev Pre-gameOver: draws up to `amount` wei from claimable winnings (capped to leave the
-    ///      1-wei sentinel). Post-gameOver: the game is settled, so the claim takes ALL claimable
-    ///      + the caller's prepaid afking and the cap is ignored. Runs the cashout curse like the
-    ///      full claim — a partial cashout is still a cashout (the curse is activity-gated).
+    /// @dev Draws up to `amount` wei from claimable winnings (capped to leave the 1-wei sentinel).
+    ///      Post-gameOver the claim also takes the caller's whole prepaid afking, which
+    ///      `withdrawAfkingFunding` can draw down in parts first. The cap holding after game over
+    ///      is what lets a claimant take the ETH that exists while a stETH leg cannot move. Runs
+    ///      the cashout curse like the full claim — a partial cashout is still a cashout (the
+    ///      curse is activity-gated).
     /// @param player Player to claim for (address(0) = msg.sender; a non-self claim requires approval).
-    /// @param amount Maximum wei of claimable winnings to take (pre-gameOver; ignored post-gameOver).
+    /// @param amount Maximum wei of claimable winnings to take.
     function claimWinnings(address player, uint256 amount) external {
         _claimWinningsWithCurse(_resolvePlayer(player), amount);
     }
@@ -1498,8 +1500,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @param player Account whose accrued winnings are claimed.
     /// @param stethFirst True to pay out in stETH before ETH.
-    /// @param maxClaim Maximum claimable winnings (wei) to draw pre-gameOver (partial cashout);
-    ///        ignored post-gameOver, when the claim settles ALL claimable + afking.
+    /// @param maxClaim Maximum claimable winnings (wei) to draw (partial cashout). Post-gameOver the
+    ///        claim also settles the whole afking half.
     function _claimWinningsInternal(address player, bool stethFirst, uint256 maxClaim) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         // One packed load: claimable is the low half, afking the high half. The read reuse
@@ -1517,9 +1519,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 claimDebit = amount - 1; // available, leaving the 1-wei sentinel
             }
         }
-        // Pre-gameOver: cap the claimable draw to maxClaim (partial cashout). Post-gameOver the
-        // game is settled, so take everything (all claimable + afking) regardless of the cap.
-        if (!gameOver && claimDebit > maxClaim) {
+        // Cap the claimable draw to maxClaim (partial cashout), after game over too.
+        if (claimDebit > maxClaim) {
             claimDebit = maxClaim;
         }
         uint256 payout;

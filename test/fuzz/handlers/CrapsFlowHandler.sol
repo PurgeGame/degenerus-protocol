@@ -66,6 +66,8 @@ contract CrapsFlowHandler {
     uint256 public ghost_donations;
     uint256 public ghost_repeatSettleCreditDelta;
     uint256 public ghost_keeps;
+    /// @dev Keeper cranks that REVERTED — see `CrapsRngSealHandler.ghost_keepReverts`.
+    uint256 public ghost_keepReverts;
 
     constructor(CrapsViews craps_) {
         craps = craps_;
@@ -403,7 +405,9 @@ contract CrapsFlowHandler {
     function keep(uint64 budget) external {
         try craps.keepScheduled(budget % 64) {
             ++ghost_keeps;
-        } catch {}
+        } catch {
+            ++ghost_keepReverts;
+        }
         _landWords(budget);
     }
 

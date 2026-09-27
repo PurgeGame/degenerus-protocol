@@ -923,7 +923,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
                     if (
                         _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
                             && lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1] != 0
-                            && _terminalDrainBatch(drainLevel, true)
+                            && _terminalDrainBatch(drainLevel)
                     ) return (true, STAGE_TICKETS_WORKING);
                 } else if (
                     ticketQueue[_tqWriteKey(drainLevel)].length != 0 && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
@@ -948,7 +948,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         // per transaction. A finishing batch still returns, so the payout runs in its own.
         if (
             (ticketQueue[_tqReadKey(drainLevel)].length != 0 || _foilDrainPending())
-                && _terminalDrainBatch(drainLevel, false)
+                && _terminalDrainBatch(drainLevel)
         ) {
             return (true, STAGE_TICKETS_WORKING);
         }
@@ -963,25 +963,26 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
     /// @dev One terminal drain batch: TICKET_SLOT_BIT on the anchor asks the worker for its
     ///      single-key terminal mode, draining exactly drainLevel's read side plus the foil
     ///      tail — every queued ticket at any other level is worthless at game over.
-    ///      FUND-RELEASE FALLBACK: a worker revert (an unforeseen error in ticket processing)
-    ///      is swallowed and reported as no batch, so the ending moves on: undrained tickets
-    ///      forfeit trait-bucket eligibility, but terminal fund release is never blocked.
-    ///      Before the ending's swap (`beforeSwap`) a failure that carries no error of its own
-    ///      (empty return data, or EmptyRevert from a nested module call) is re-raised instead:
-    ///      a batch is gas-bounded well under the per-transaction cap, so that is a caller
-    ///      withholding gas, and swallowing it would close the one swap window with the write
-    ///      cohort left out. After the swap a swallowed failure falls through to the payout in
-    ///      the same transaction, which a starved call cannot afford.
+    ///      FUND-RELEASE FALLBACK: a worker revert that carries an error of its own (an
+    ///      unforeseen error in ticket processing) is swallowed and reported as no batch, so the
+    ///      ending moves on: undrained tickets forfeit trait-bucket eligibility, but terminal fund
+    ///      release is never blocked.
+    ///      A failure that carries NO error of its own (empty return data, or EmptyRevert from a
+    ///      nested module call) is re-raised instead, before the ending's swap and after it. A
+    ///      batch is gas-bounded well under the per-transaction cap, so that is a caller
+    ///      withholding gas. Before the swap, swallowing it would close the one swap window with
+    ///      the write cohort left out. After it, the payout the call falls through to is cheap
+    ///      when no winning bucket is populated yet — a starved call could afford it and forfeit
+    ///      the whole undrained cohort.
     /// @return ran True if a batch ran, finished or not.
-    function _terminalDrainBatch(uint24 drainLevel, bool beforeSwap) private returns (bool ran) {
+    function _terminalDrainBatch(uint24 drainLevel) private returns (bool ran) {
         (bool dOk, bytes memory dData) = ContractAddresses.GAME_MINT_MODULE
             .delegatecall(
                 abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector, drainLevel | TICKET_SLOT_BIT)
             );
-        if (
-            !dOk && beforeSwap
-                && (dData.length == 0 || (dData.length == 4 && bytes4(dData) == EmptyRevert.selector))
-        ) _revertDelegate(dData);
+        if (!dOk && (dData.length == 0 || (dData.length == 4 && bytes4(dData) == EmptyRevert.selector))) {
+            _revertDelegate(dData);
+        }
         return dOk && dData.length >= 64;
     }
 

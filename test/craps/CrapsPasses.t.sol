@@ -178,6 +178,35 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(n, max, "the lane did not saturate at its ceiling");
     }
 
+    /// @dev THE GAME'S TWO DOORS NEVER REVERT, and that is load-bearing: lootbox settlement calls
+    ///      `deliverPasses` bare, and the advance calls `creditPasses` bare. Any day, any prior
+    ///      balance in either lane, tomorrow free, taken or already worded, any award size.
+    function testFuzz_theGamesPassDoorsNeverRevert(
+        uint32 normal,
+        uint32 high,
+        uint32 priorNormal,
+        uint32 priorHigh,
+        uint8 dayShift,
+        bool tomorrowTaken,
+        bool tomorrowWorded
+    ) public {
+        vm.warp(vm.getBlockTimestamp() + uint256(dayShift % 31) * 1 days);
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(alice, priorNormal, priorHigh);
+        if (tomorrowTaken) {
+            vm.prank(ContractAddresses.GAME);
+            craps.deliverPasses(alice, 1, 0);
+        }
+        if (tomorrowWorded) _setDailyWord(_today() + 1, uint256(keccak256("worded")));
+
+        vm.prank(ContractAddresses.GAME);
+        (bool ok,) = address(craps).call(abi.encodeCall(craps.deliverPasses, (alice, normal, high)));
+        assertTrue(ok, "deliverPasses reverted for the game");
+        vm.prank(ContractAddresses.GAME);
+        (ok,) = address(craps).call(abi.encodeCall(craps.creditPasses, (alice, normal, high)));
+        assertTrue(ok, "creditPasses reverted for the game");
+    }
+
     // ── The board a reservation names ───────────────────────────────────────
 
     /// @dev Restated for `expectEmit`; matched by topics and data, not by declaring contract.

@@ -137,4 +137,99 @@ contract FinalSweepPayoutLegs is DeployProtocol {
         assertEq(address(game).balance, 0);
         assertEq(mockStETH.balanceOf(address(game)), 0);
     }
+
+    // ── The VRF shutdown leg: whatever Admin or Chainlink does, the sweep completes ─────
+
+    /// @notice The healthy shutdown: the sweep cancels the subscription and routes Admin's LINK
+    ///         to the vault.
+    function test_sweepShutsDownTheSubscription() public {
+        _driveToGameOver();
+        mockLINK.mint(address(admin), 7 ether);
+        uint256 vaultLink = mockLINK.balanceOf(ContractAddresses.VAULT);
+        _sweep();
+        assertEq(admin.subscriptionId(), 0, "subscription left live");
+        assertEq(mockLINK.balanceOf(address(admin)), 0, "LINK left in Admin");
+        assertEq(mockLINK.balanceOf(ContractAddresses.VAULT) - vaultLink, 7 ether, "LINK did not reach the vault");
+    }
+
+    /// @notice A coordinator that refuses the cancel — Chainlink's `PendingRequestExists`, the
+    ///         normal state of a dead VRF — cannot block the sweep: `shutdownVrf` catches it
+    ///         and still sweeps the LINK.
+    function test_sweepSurvivesACoordinatorThatRefusesTheCancel() public {
+        _driveToGameOver();
+        mockLINK.mint(address(admin), 7 ether);
+        vm.mockCallRevert(
+            address(mockVRF),
+            abi.encodeWithSelector(mockVRF.cancelSubscription.selector),
+            abi.encodeWithSignature("PendingRequestExists()")
+        );
+        _sweep();
+        assertEq(address(game).balance, 0, "the sweep did not pay out");
+        assertEq(admin.subscriptionId(), 0, "the handle was not spent");
+        assertEq(mockLINK.balanceOf(address(admin)), 0, "LINK left in Admin");
+    }
+
+    /// @notice A LINK transfer that reverts or returns false cannot block the sweep either.
+    function test_sweepSurvivesALinkTransferThatFails() public {
+        _driveToGameOver();
+        mockLINK.mint(address(admin), 7 ether);
+        vm.mockCallRevert(address(mockLINK), abi.encodeWithSelector(mockLINK.transfer.selector), "");
+        uint256 snap = vm.snapshotState();
+        _sweep();
+        assertEq(address(game).balance, 0, "the sweep did not pay out (reverting LINK)");
+        vm.revertToState(snap);
+
+        vm.clearMockedCalls();
+        vm.mockCall(address(mockLINK), abi.encodeWithSelector(mockLINK.transfer.selector), abi.encode(false));
+        _sweep();
+        assertEq(address(game).balance, 0, "the sweep did not pay out (false-returning LINK)");
+    }
+
+    /// @notice A shortfall below what the three sinks are owed — only an stETH loss larger than
+    ///         the unclaimed cushion can cause one — splits what exists pro rata instead of
+    ///         reverting, so the sweep still completes and every wei the game holds leaves it.
+    function test_aShortfallSplitsWhatExistsProRata() public {
+        _driveToGameOver();
+        vm.deal(address(this), 21 ether);
+        game.depositAfkingFunding{value: 12 ether}(ContractAddresses.VAULT);
+        game.depositAfkingFunding{value: 6 ether}(ContractAddresses.SDGNRS);
+        game.depositAfkingFunding{value: 3 ether}(ContractAddresses.GNRUS);
+        uint256 oV = _owed(ContractAddresses.VAULT);
+        uint256 oS = _owed(ContractAddresses.SDGNRS);
+        uint256 oG = _owed(ContractAddresses.GNRUS);
+        uint256 owed = oV + oS + oG;
+
+        // The loss: every stETH wei gone and the ETH left below what the sinks are owed.
+        uint256 st = mockStETH.balanceOf(address(game));
+        if (st != 0) {
+            vm.prank(address(game));
+            mockStETH.transfer(address(0xdead), st);
+        }
+        uint256 funds = owed / 3;
+        vm.deal(address(game), funds);
+
+        Ledger memory b = _ledger();
+        _sweep();
+        Ledger memory a = _ledger();
+        uint256 gotV = a.vaultEth - b.vaultEth;
+        uint256 gotS = a.sdEth - b.sdEth;
+        uint256 gotG = a.gnEth - b.gnEth;
+        assertEq(address(game).balance, 0, "the sweep left ETH behind");
+        assertEq(gotV + gotS + gotG, funds, "the legs do not sum to what existed");
+        assertEq(gotV, (oV * funds) / owed, "vault leg not pro rata");
+        assertEq(gotS, (oS * funds) / owed, "sDGNRS leg not pro rata");
+    }
+
+    function _owed(address sink) private view returns (uint256) {
+        return game.claimableWinningsOf(sink) + game.afkingFundingOf(sink);
+    }
+
+    /// @notice Without a subscription `shutdownVrf` is a no-op, never a revert.
+    function test_shutdownVrfWithoutASubscriptionIsANoOp() public {
+        vm.prank(ContractAddresses.GAME);
+        admin.shutdownVrf();
+        assertEq(admin.subscriptionId(), 0);
+        vm.prank(ContractAddresses.GAME);
+        admin.shutdownVrf();
+    }
 }

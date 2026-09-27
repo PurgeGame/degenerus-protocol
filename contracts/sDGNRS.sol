@@ -752,7 +752,11 @@ contract sDGNRS {
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         uint256 claimableEth = _claimableWinnings();
-        uint256 totalMoney = ethBal + stethBal + claimableEth - _pendingRedemptionEthValue;
+        // Floored at zero: an stETH loss that leaves custody below the reserved redemption value
+        // must price the burn at nothing, not panic every burn after game over.
+        uint256 gross = ethBal + stethBal + claimableEth;
+        uint256 reserved = _pendingRedemptionEthValue;
+        uint256 totalMoney = gross > reserved ? gross - reserved : 0;
         uint256 totalValueOwed = (totalMoney * amount) / supplyBefore;
 
         unchecked {
@@ -1082,10 +1086,9 @@ contract sDGNRS {
         uint256 supply = _totalSupply;
         if (amount == 0 || amount > supply) return (0, 0);
 
-        uint256 totalMoney = address(this).balance +
-            steth.balanceOf(address(this)) +
-            _claimableWinnings() -
-            _pendingRedemptionEthValue;
+        uint256 gross = address(this).balance + steth.balanceOf(address(this)) + _claimableWinnings();
+        uint256 reserved = _pendingRedemptionEthValue;
+        uint256 totalMoney = gross > reserved ? gross - reserved : 0;
         ethOut = (totalMoney * amount) / supply;
 
         // GameOver burns pay no FLIP. sDGNRS's full FLIP backing is its seed-reserve claimable +

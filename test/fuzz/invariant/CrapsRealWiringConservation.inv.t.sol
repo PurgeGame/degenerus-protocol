@@ -58,6 +58,12 @@ contract CrapsRealWiringConservation is DeployProtocol {
         }
     }
 
+    /// @notice `keepScheduled` NEVER REVERTS on the real wiring. The game's keeper router calls it
+    ///         bare, so a revert in any reachable state would take the whole crank down with it.
+    function invariant_keeperNeverReverts() public view {
+        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: keepScheduled reverted");
+    }
+
     /// @notice The comp lane opens on the converted two hundred passes, is charged exactly the
     ///         passes each grant banked, and is lowered by nothing but a grant — settlement can
     ///         only feed it.

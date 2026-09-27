@@ -69,6 +69,12 @@ contract CrapsRngSeal is DeployProtocol {
         assertEq(handler.ghost_settlesWithoutWord(), 0, "CRAPS-SEAL: the resolution cursor advanced on a zero word");
     }
 
+    /// @notice `keepScheduled` NEVER REVERTS. The game's keeper router calls it bare, so a revert in
+    ///         any reachable state would take the whole crank down with it.
+    function invariant_keeperNeverReverts() public view {
+        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: keepScheduled reverted");
+    }
+
     function invariant_crapsDoorsFreezeTheGameSet() public view {
         assertEq(
             handler.ghost_inWindowGameSetMutations(),

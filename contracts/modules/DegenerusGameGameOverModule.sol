@@ -346,9 +346,19 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
 
         if (totalFunds == 0) return;
 
-        // Protocol balances are fully backed: totalFunds >= owedV + owedSD + owedG.
-        // A shortfall reverts the sweep.
-        uint256 remainder  = totalFunds - (owedV + owedSD + owedG);
+        // Protocol balances are fully backed: totalFunds >= owedV + owedSD + owedG. Only an stETH
+        // loss (a negative rebase) larger than the unclaimed cushion can break that, and the sweep
+        // must still complete, so a shortfall splits what exists pro rata. The three legs still sum
+        // to exactly totalFunds.
+        uint256 owed = owedV + owedSD + owedG;
+        uint256 remainder;
+        if (totalFunds >= owed) {
+            remainder = totalFunds - owed;
+        } else {
+            owedV = (owedV * totalFunds) / owed;
+            owedSD = (owedSD * totalFunds) / owed;
+            owedG = totalFunds - owedV - owedSD;
+        }
         uint256 thirdShare = remainder / 3;
         uint256 gnrusExtra = remainder - thirdShare - thirdShare;
 

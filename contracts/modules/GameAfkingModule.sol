@@ -120,8 +120,8 @@ interface ISeatToken {
  * @custom:invariant No error-swallowing valve on the funded delivery path: the funded
  *                   process buy is revert-free by construction; a class-B solvency
  *                   underflow FAILS LOUD (the `claimablePool -=` propagates, it is never
- *                   swallowed). The one try/catch is `_crapsKeep`, which isolates the
- *                   external craps table from the keeper crank and moves no value.
+ *                   swallowed). The craps leg calls the table bare: `keepScheduled`
+ *                   is revert-free past running out of gas, so no failure is hidden.
  */
 contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /*------------------------------------------------------------------
@@ -2048,11 +2048,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         on the caller's no-work revert.
     function _crapsKeep(uint64 budgetUnits) private returns (bool worked) {
         // The table's own cursor decides what is owed and does the next piece of it; the crank
-        // pays only when the table says something moved. Caught, so a table defect can never
-        // take the whole crank down with it.
-        try craps.keepScheduled(budgetUnits) returns (bool progressed, uint64) {
-            worked = progressed;
-        } catch {}
+        // pays only when the table says something moved. BARE: the walk has no revert of its
+        // own, so a call that fails did so for gas and takes the whole crank with it — the
+        // outcome never depends on the gas the caller picked.
+        (worked, ) = craps.keepScheduled(budgetUnits);
     }
 
     /// @dev The 30-days-post-gameover final sweep is still owed: game over, the sweep

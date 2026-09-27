@@ -137,6 +137,9 @@ contract CrapsRngSealHandler is Test {
     uint256 public ghost_midDayInWindowCrapsActions;
     uint256 public ghost_fulfilments;
     uint256 public ghost_keeps;
+    /// @dev Keeper cranks that REVERTED. The game's craps leg calls `keepScheduled` bare, so a
+    ///      revert here at unbounded gas is a revert the crank would take down with it.
+    uint256 public ghost_keepReverts;
     uint256 public ghost_wordsLandedOnArmedIndices;
 
     // -------------------------------------------------------------------------
@@ -738,7 +741,9 @@ contract CrapsRngSealHandler is Test {
         vm.prank(currentActor);
         try craps.keepScheduled(budget % 64) {
             ghost_keeps++;
-        } catch {}
+        } catch {
+            ghost_keepReverts++;
+        }
         _after(open, midDay, h0);
         uint256 credited = _stakeLedger() - stake0;
         ghost_creditedOut += credited;

@@ -137,8 +137,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice A lootbox entry rolled Craps day passes. `day` is the future day one of them was
     ///         placed on, or zero where none could be — in which case every pass was banked as
-    ///         credit instead. Emitted once per entry, never once per box, and emitted even when
-    ///         the craps table could not be reached, so a pass award is never invisible.
+    ///         credit instead. Emitted once per entry, never once per box.
     event LootBoxCrapsPasses(address indexed player, uint32 normal, uint32 highRoller, uint24 day);
 
     /// @notice Emitted when a coin-presale box is resolved.
@@ -286,10 +285,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      these are EXTRACTORS from committed entropy, never a source of their own.
     uint256 private constant BOX_PASS_ROUND_TAG = 0x50617373526f756e64; // "PassRound"
     uint256 private constant BOX_PASS_SPIN_TAG = 0x506173735370696e; // "PassSpin"
-    /// @dev The stipend the one craps delivery call runs under. Generous for the work — a
-    ///      reservation write and two balance writes — and bounded so a table that ever misbehaves
-    ///      cannot drain the settling caller's gas.
-    uint256 private constant PASS_DELIVERY_GAS = 250_000;
     /// @dev Base BPS for low FLIP path (43.88%)
     uint16 private constant LOOTBOX_LARGE_FLIP_LOW_BASE_BPS = 4388;
     /// @dev Step increase in BPS for low FLIP path (3.60% per step)
@@ -1103,30 +1098,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Hand the entry's whole pass award to the craps table in ONE call — not one per winning
     ///      box — and let it place at most one of them on tomorrow.
     ///
-    ///      FAIL-OPEN, AND THE PASSES ARE NEVER LOST. A bounded stipend caps what a broken table
-    ///      could burn. A failure of the FULL lane does not swallow the award: it falls back to
-    ///      the table's credit-only door, and only if both fail does the entry revert — retryable,
-    ///      never silently consumed. The roll is announced from HERE, and the table's own
-    ///      `CrapsPassesCredited`/`CrapsDayReserved` logs say which disposition it landed in, so
-    ///      an indexer reconciles every rolled pass.
+    ///      BARE. For the Game the table's delivery door is revert-free — its standing is a
+    ///      constant, the reservation only declines, and every balance write saturates — so the
+    ///      call can only fail with the whole transaction, and the entry then stays retryable.
+    ///      The roll is announced from HERE, and the table's own `CrapsPassesCredited` /
+    ///      `CrapsDayReserved` logs say which disposition it landed in, so an indexer reconciles
+    ///      every rolled pass.
     function _deliverPasses(address player, BoxAcc memory acc) private {
-        uint24 day;
-        try ICrapsPassDelivery(ContractAddresses.CRAPS).deliverPasses{gas: PASS_DELIVERY_GAS}(
+        uint24 day = ICrapsPassDelivery(ContractAddresses.CRAPS).deliverPasses(
             player, acc.passNormal, acc.passHigh
-        ) returns (
-            uint24 reserved
-        ) {
-            day = reserved;
-        } catch {
-            // A PASS IS NEVER LOST. The full path can fail on its stipend — the reservation leg
-            // reads the player's standing off the Game — so the whole award falls back to the
-            // credit-only lane, which makes no external call at all. If even THAT fails, the box
-            // entry reverts and stays retryable: consuming it while recording nothing would be an
-            // award the logs assert and nobody owes.
-            ICrapsPassDelivery(ContractAddresses.CRAPS).creditPasses{gas: PASS_DELIVERY_GAS}(
-                player, acc.passNormal, acc.passHigh
-            );
-        }
+        );
         emit LootBoxCrapsPasses(player, acc.passNormal, acc.passHigh, day);
     }
 

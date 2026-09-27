@@ -87,6 +87,12 @@ contract CrapsConservationInv is CrapsPins {
 
     // ── The invariants ──────────────────────────────────────────────────────
 
+    /// @notice `keepScheduled` NEVER REVERTS. The game's keeper router calls it bare, so a revert in
+    ///         any reachable state would take the whole crank down with it.
+    function invariant_keeperNeverReverts() public view {
+        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: keepScheduled reverted");
+    }
+
     function invariant_crapsNeverMints() public view {
         assertEq(flip.totalMinted(), 0, "craps minted liquid FLIP");
     }

@@ -1880,8 +1880,7 @@ contract CrapsBattle is LootboxCraps {
 
     /// @notice GAME-only: bank a rolled pass award as credits and nothing else — no reservation
     ///         attempt, no external call, no way to revert past the saturation the credit lane
-    ///         already announces. The lootbox module's LAST resort when the full delivery lane
-    ///         fails: a pass the table has banked is a pass nobody can lose.
+    ///         already announces.
     /// @dev REVERT-FREE for the authorized caller, and that is load-bearing: the advance's
     ///      level-close sDGNRS passes call this bare from inside the daily advance, so a new
     ///      revert path here is an advance-liveness regression, not a local style choice.
@@ -2428,6 +2427,9 @@ contract CrapsBattle is LootboxCraps {
     ///
     ///      The HIGH pass takes the slot when a batch holds both. It is the more valuable of the
     ///      two, and only one can be seated.
+    ///
+    ///      REVERT-FREE for the authorized caller, and that is load-bearing: lootbox settlement
+    ///      calls this bare, so a new revert path here would wedge every box that rolls a pass.
     /// @param player The award's owner.
     /// @param normal Normal passes the batch rolled.
     /// @param high High-roller passes the batch rolled.
