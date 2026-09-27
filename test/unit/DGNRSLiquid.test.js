@@ -301,11 +301,23 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     });
 
     it("reverts when amount exceeds balance", async function () {
-      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
+      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      // Hold less than the 40B lifetime cap, so the balance check is the one that fires.
+      await dgnrs.connect(deployer).transfer(alice.address, 20_000_000_000n * eth("1"));
       const bal = await dgnrs.balanceOf(deployer.address);
       await expect(
         dgnrs.connect(deployer).unwrapTo(deployer.address, bal + 1n)
       ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
+    });
+
+    it("reverts past the 40B lifetime cap and reports the running total", async function () {
+      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      const cap = CREATOR_TOTAL / 5n;
+      await dgnrs.connect(deployer).unwrapTo(alice.address, cap);
+      expect(await dgnrs.totalUnwrapped()).to.equal(cap);
+      await expect(
+        dgnrs.connect(deployer).unwrapTo(alice.address, eth("1"))
+      ).to.be.revertedWithCustomError(dgnrs, "UnwrapCapExceeded");
     });
 
     it("reverts on zero amount", async function () {

@@ -80,6 +80,8 @@ contract DGNRS {
     error GameNotOver();
     /// @notice Thrown when an unwrap amount is below one whole DGNRS token
     error UnwrapTooSmall();
+    /// @notice Thrown when an unwrap would take lifetime unwraps past `UNWRAP_CAP`
+    error UnwrapCapExceeded();
 
     // =====================================================================
     //                              EVENTS
@@ -130,10 +132,13 @@ contract DGNRS {
     mapping(address => mapping(address => uint256)) public allowance;
 
     // =====================================================================
-    //                          VESTING STATE
+    //                     VESTING AND UNWRAP STATE
     // =====================================================================
 
-    uint256 private _vestingReleased;
+    /// @dev DGNRS released to the creator so far; at most CREATOR_TOTAL (2e29), under uint128.
+    uint128 private _vestingReleased;
+    /// @notice DGNRS unwrapped to soulbound sDGNRS over the contract's life; at most UNWRAP_CAP.
+    uint128 public totalUnwrapped;
 
     // =====================================================================
     //                          CONSTANTS
@@ -143,6 +148,8 @@ contract DGNRS {
     uint256 private constant VEST_PER_LEVEL  = 5_000_000_000 * 1e18;    // 5B per level
     uint256 private constant CREATOR_TOTAL   = 200_000_000_000 * 1e18;  // 200B total
     uint256 private constant MIN_UNWRAP_AMOUNT = 1 ether;
+    /// @dev Lifetime ceiling on `unwrapTo`: 20% of the 200B DGNRS supply, 4% of sDGNRS's 1T.
+    uint256 private constant UNWRAP_CAP = CREATOR_TOTAL / 5;
 
     IsDGNRS private constant staked = IsDGNRS(ContractAddresses.SDGNRS);
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
@@ -162,7 +169,7 @@ contract DGNRS {
         uint256 unvested = deposited - CREATOR_INITIAL;
         balanceOf[ContractAddresses.CREATOR] = CREATOR_INITIAL;
         balanceOf[address(this)] = unvested;
-        _vestingReleased = CREATOR_INITIAL;
+        _vestingReleased = uint128(CREATOR_INITIAL);
         emit Transfer(address(0), ContractAddresses.CREATOR, CREATOR_INITIAL);
         emit Transfer(address(0), address(this), unvested);
 
@@ -239,14 +246,19 @@ contract DGNRS {
     /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
     /// @dev Blocked while RNG is locked to prevent vote-stacking via DGNRS→sDGNRS conversion.
     ///      Unwraps are whole-token minimums so one account cannot be seeded with vote-ineligible dust.
+    ///      Lifetime unwraps are capped at `UNWRAP_CAP` (40B), however many calls or owners.
     /// @param recipient Address to receive the soulbound sDGNRS.
     /// @param amount Amount of DGNRS to burn and unwrap (18 decimals).
+    /// @custom:reverts UnwrapCapExceeded If lifetime unwraps would pass `UNWRAP_CAP`.
     function unwrapTo(address recipient, uint256 amount) external {
         if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
         if (recipient == address(0)) revert ZeroAddress();
         if (amount < MIN_UNWRAP_AMOUNT) revert UnwrapTooSmall();
+        uint256 unwrapped = totalUnwrapped;
+        if (amount > UNWRAP_CAP - unwrapped) revert UnwrapCapExceeded();
         if (game.rngLocked()) revert Unauthorized();
         _burn(msg.sender, amount);
+        totalUnwrapped = uint128(unwrapped + amount);
         staked.wrapperTransferTo(recipient, amount);
         emit UnwrapTo(recipient, amount);
     }
@@ -264,7 +276,7 @@ contract DGNRS {
         if (vested <= _vestingReleased) revert Insufficient();
         uint256 claimable;
         unchecked { claimable = vested - _vestingReleased; }
-        _vestingReleased = vested;
+        _vestingReleased = uint128(vested);
         balanceOf[address(this)] -= claimable;
         balanceOf[msg.sender] += claimable;
         emit Transfer(address(this), msg.sender, claimable);

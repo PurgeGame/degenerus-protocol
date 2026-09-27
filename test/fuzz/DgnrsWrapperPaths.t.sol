@@ -116,4 +116,44 @@ contract DgnrsWrapperPaths is DeployProtocol {
         }
         require(game.gameOver(), "fixture: gameOver must latch");
     }
+
+    /// @notice Lifetime unwraps stop at 40B, 20% of the 200B DGNRS supply: calls add up to the
+    ///         cap exactly, anything past it reverts, and the counter reads the running total.
+    function test_unwrapToLifetimeCap() public {
+        address owner = ContractAddresses.CREATOR; // holds CREATOR_INITIAL (50B), above the cap
+        uint256 cap = 40_000_000_000 * 1e18;
+
+        vm.startPrank(owner);
+        dgnrs.unwrapTo(address(0xBEEF), cap - 1_000 ether);
+        vm.expectRevert(DGNRS.UnwrapCapExceeded.selector);
+        dgnrs.unwrapTo(address(0xBEEF), 1_000 ether + 1);
+        dgnrs.unwrapTo(address(0xCAFE), 1_000 ether);
+        assertEq(dgnrs.totalUnwrapped(), cap, "lifetime total reached the cap exactly");
+        vm.expectRevert(DGNRS.UnwrapCapExceeded.selector);
+        dgnrs.unwrapTo(address(0xBEEF), 1 ether);
+        vm.stopPrank();
+
+        assertEq(dgnrs.balanceOf(owner), 10_000_000_000 * 1e18, "only the cap left the owner");
+        assertEq(sdgnrs.balanceOf(address(0xBEEF)) + sdgnrs.balanceOf(address(0xCAFE)), cap, "recipients hold the cap");
+    }
+
+    /// @notice Vesting and the unwrap total share one slot: an unwrap leaves the vesting mark
+    ///         alone, and a vest leaves the unwrap total alone.
+    function test_vestingAndUnwrapShareTheSlot() public {
+        address owner = ContractAddresses.CREATOR;
+        vm.prank(owner);
+        dgnrs.unwrapTo(address(0xBEEF), 7_000 ether);
+
+        // Level 4 vests 50B + 4 x 5B = 70B, so 20B is claimable past the 50B released at deploy.
+        vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("level()"), abi.encode(uint24(4)));
+        uint256 before = dgnrs.balanceOf(owner);
+        vm.prank(owner);
+        dgnrs.claimVested();
+        assertEq(dgnrs.balanceOf(owner), before + 20_000_000_000 * 1e18, "vested the level-4 tranche");
+        assertEq(dgnrs.totalUnwrapped(), 7_000 ether, "vesting left the unwrap total alone");
+
+        vm.prank(owner);
+        vm.expectRevert(DGNRS.Insufficient.selector);
+        dgnrs.claimVested();
+    }
 }
