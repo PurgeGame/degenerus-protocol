@@ -112,7 +112,38 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-27, terminal resilience and bare pinned calls
+## Current evidence — 2026-09-27, one daily jackpot battle for paid and awarded entries
+
+On top of `9ee8986d`. Paid and awarded jackpot entries play one battle on the craps table:
+- The daily request locks the paid field and the Added allocation.
+- The word lands alone in stage 18.
+- Stages 16 and 17 then draw the awards in chunks of up to 150 and settle seats on 1,500 work units per call. The sealing call settles on what its draw left.
+
+Other changes in this revision:
+- **Economics:** the jackpot fee is fixed at 8,000 FLIP. Added is 0.5% of the recorded pool with a 150,000 floor at level 0–1 and 50,000 after, one award per 10,000, at most 500. Every entry throws the same dice. Only the fee-funded bankroll is booked as action.
+- **Roll budget:** every slip shares a 1,000-roll budget (1,511-roll ceiling).
+- **Fixes:**
+  - the lapse sweep no longer walks remainder 7, where a detached jackpot battle's settle cursor lives;
+  - the Added formula moved from the Advance module into `JackpotBattle.lockJackpotBattle`, keeping the Advance module under EIP-170 at Hardhat pins;
+  - merge leftovers are removed.
+
+On a snapshot of this tree:
+- the 10 read-only gates and the storage-layout oracle pass;
+- foundry: 3,006 passed / 0 failed / 102 skipped over all seven compile groups (integration-gas 787, repro-symbolic 243, fuzz-1 484, fuzz-2 399, fuzz-3 502, fuzz-4 453, invariants 138);
+- hardhat: `npm test` 1,465 passing / 20 pending; `test:stat` 158 / 20 pending; `test:gas` 21 / 11 pending.
+
+Jackpot battle gas (isolated, intrinsic included):
+- full 150-entry draw chunks: up to 7.2M;
+- 1,500-unit settle calls: 5.1–5.3M;
+- the worst settle call is bounded near 8.6M. That covers 1,499 units at 4.7k per unit (measured at most 4.27k), one 1,511-roll run at 704 gas per roll, and a forced 254k finalization.
+
+In 102,400 shared-dice fields the largest settle call was 6.45M. `JackpotMergeAdvance.t.sol` asserts every jackpot transaction is at or below 10M. Stage 18 alone is 1.3M (3.3M with vault history). Century consolidation is up to 9.61M and the day-1 ETH stage 9.33M.
+
+Runtime sizes:
+- CrapsBattle 23,762 B;
+- DegenerusGameAdvanceModule 24,450 B at Hardhat pins (126 spare).
+
+## Evidence — 2026-09-27, terminal resilience and bare pinned calls
 
 Two commits on top of `6e299b60`:
 
