@@ -112,7 +112,33 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-26, deadline fires only on a caught-up day
+## Current evidence — 2026-09-27, terminal resilience and bare pinned calls
+
+Two commits on top of `6e299b60`:
+
+- `1b470d0f` Pinned-call cleanup and terminal resilience. Lootbox pass delivery, the keeper's
+  `keepScheduled` call and Admin's native forward are bare: each callee is revert-free for the
+  protocol's caller, so a catch only let the caller's gas limit decide the outcome. The terminal drain
+  re-raises a gas-starved batch (empty data or `EmptyRevert`) after the ending's swap as well as before
+  it, so no caller can make the ending skip a cohort; errors that carry data still fall through to fund
+  release. The final sweep keeps its `shutdownVrf` catch and splits a shortfall below the sinks' owed
+  balances pro rata instead of reverting; `claimWinnings(player, amount)` honours its cap after game
+  over; sDGNRS floors its post-gameOver burn value at zero instead of panicking on a deficit. New
+  `test/fuzz/AdminNativeForward.t.sol`, `test/fuzz/PostGameOverShortfall.t.sol` and
+  `test/repro/TerminalDrainPostSwapStarvation.t.sol`; the three craps invariant campaigns now fail on
+  any `keepScheduled` revert.
+- `c6a8fc0a` One icon path in `scripts/data/icons32Data.json`.
+
+On a clean worktree carrying `1b470d0f`'s sources: the 11 gates (including `check-interfaces`) and the
+storage-layout oracle pass; foundry 2,992 passed / 0 failed / 102 skipped over all seven compile groups
+(integration-gas 764, repro-symbolic 263, fuzz-1 502, fuzz-2 369, fuzz-3 483, fuzz-4 473, invariants
+138); hardhat `npm test` 1,465 passing / 19 pending, `test:stat` 159 / 20 pending, `test:gas` 21 / 11
+pending. The three new shortfall pins fail on the prior tree (two arithmetic panics and a reverting
+stETH leg) and pass here. The post-swap starvation sweep leaves the payout frame no gas at any starved
+limit. Runtime sizes: Advance −259 B, Lootbox −183 B, Game −42 B, Afking −12 B, Admin +56 B,
+GameOver +112 B, sDGNRS +144 B.
+
+## Evidence — 2026-09-26, deadline fires only on a caught-up day
 
 One commit on top of `36cc70c1`:
 
