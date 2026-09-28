@@ -127,7 +127,7 @@ interface IDegenerusGameJackpotModule {
 
     /// @notice Plays one step of the daily FLIP jackpot battle over unminted future levels as one
     ///         closed craps battle (JackpotBattle), on purchase and jackpot days alike
-    /// @param lvl The purchase level
+    /// @param lvl The mint ceiling: the draw's levels start above it
     /// @param randWord Random word for level picks and walks
     function payPurchaseJackpotBattle(uint24 lvl, uint256 randWord) external;
 

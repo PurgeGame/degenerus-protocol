@@ -3747,10 +3747,10 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Count of stamped-but-unopened afking boxes (at most one per subscriber — the
     ///      no-orphan rule blocks re-stamping, eviction, reclaim, and funding-kill while a
-    ///      box is pending, so the daily STAGE box stamps are the ONLY increments — batched
-    ///      one add per STAGE chunk, plus the once-per-level sDGNRS bonus box inline — and
-    ///      the box open the ONLY decrement). The rewarded open crank early-outs on zero, making a
-    ///      drained-ring "any work?" check O(1) instead of a full ring scan; the unrewarded
+    ///      box is pending, so the daily STAGE box stamps are the ONLY increment — batched
+    ///      one add per STAGE chunk — and the box open the ONLY decrement). The rewarded open
+    ///      crank early-outs on zero, making a drained-ring "any work?" check O(1) instead of
+    ///      a full ring scan; the unrewarded
     ///      openBoxes valve never consults it, so a counter fault can only cost gas (a walk
     ///      that finds nothing), never box liveness. Packs into the cursor slot (warm for
     ///      both writers); uint16 covers the 2005-subscriber cap (GameAfkingModule.SUBSCRIBER_CAP).

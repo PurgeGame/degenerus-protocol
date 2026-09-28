@@ -1053,10 +1053,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // only — the ETH debit used the full wei ethValue).
                 // The stamp below leaves lastOpenedDay behind lastAutoBoughtDay — the ONLY
                 // pending-box-creating shape (ticket buys and cover-buys mark themselves
-                // box-clean above). `_pendingBoxCount` is maintained by the two callers that
-                // reach this branch: the STAGE loop batches one add per chunk off its
-                // box-accrual count, and the sDGNRS level-bonus site increments inline —
-                // both atomic with this stamp (same tx, revert-together).
+                // box-clean above). `_pendingBoxCount` is maintained by the STAGE loop, the
+                // only caller that reaches this branch: it batches one add per chunk off its
+                // box-accrual count, atomic with this stamp (same tx, revert-together).
                 sub.score = score;
                 sub.amount = uint24(_packEthToMilliEth(amount));
             }

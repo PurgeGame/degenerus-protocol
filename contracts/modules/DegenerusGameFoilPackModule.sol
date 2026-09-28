@@ -675,8 +675,7 @@ contract DegenerusGameFoilPackModule is
         // draw/level/line/tier but mint DISTINCT markers, re-paying the win.
         if (day > type(uint24).max) return false;
 
-        // The day's sealed winning set, whether it pays double, and the cycle level
-        // active that day.
+        // The day's sealed winning set and the cycle level active that day.
         (bool drawPresent, uint32 winSet, uint24 L) = _foilDrawFor(day);
         if (!drawPresent) return false;
 
