@@ -1,7 +1,7 @@
 # Audit source scope — working-tree snapshot in docs/audit/snapshot.json
 # Game-logic scope, including interfaces, libraries, lenses and inherited code.
 # Deploy set: scripts/lib/predictAddresses.js; counts below are files, not deployments.
-# 63 source files. Deployment constants and artwork data are supporting build inputs.
+# 66 source files. Deployment constants and artwork data are supporting build inputs.
 
 contracts/AFKingSubscriptionToken.sol
 contracts/Coinflip.sol
@@ -36,6 +36,7 @@ contracts/interfaces/IDegenerusGameModules.sol
 contracts/interfaces/IDegenerusJackpots.sol
 contracts/interfaces/IDegenerusParimutuel.sol
 contracts/interfaces/IDegenerusQuests.sol
+contracts/interfaces/IJackpotBattle.sol
 contracts/interfaces/IStETH.sol
 contracts/interfaces/IVRFCoordinator.sol
 contracts/interfaces/IVaultCoin.sol
@@ -43,6 +44,7 @@ contracts/interfaces/IsDGNRS.sol
 contracts/libraries/ActivityCurveLib.sol
 contracts/libraries/BitPackingLib.sol
 contracts/libraries/CrapsPreferenceLib.sol
+contracts/libraries/CrapsPriceLib.sol
 contracts/libraries/EntropyLib.sol
 contracts/libraries/FlipRoundLib.sol
 contracts/libraries/GameTimeLib.sol
@@ -65,4 +67,5 @@ contracts/modules/DegenerusGameMintStreakUtils.sol
 contracts/modules/DegenerusGamePayoutUtils.sol
 contracts/modules/DegenerusGameWhaleModule.sol
 contracts/modules/GameAfkingModule.sol
+contracts/storage/CrapsBattleStorage.sol
 contracts/storage/DegenerusGameStorage.sol

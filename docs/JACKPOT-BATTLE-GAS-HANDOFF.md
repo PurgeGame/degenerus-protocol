@@ -1,14 +1,12 @@
 # Jackpot battle: roll cap, bigger budgets, fewer transactions
 
-**Subsequent user decision (2026-09-27):** use the same roll ceiling for everything. Production now has one `_SLIP_ROLL_BUDGET = 1_000` and `_SLIP_ROLL_CEILING = 1_511`, shared by all engine entry points and all battle types. The jackpot-only constants and selection branch are removed. The jackpot gas envelope still uses the same ceiling; the earlier instructions/results below about ordinary runs retaining a larger budget are historical.
+The gas derivation for the daily jackpot battle's draw and settlement budgets, with the dated work log (2026-09-27) that produced it. Where the log and the code differ, the code and [VERIFICATION.md](VERIFICATION.md) are current:
 
-**Verification update:** all ten source audit gates now pass, including the three previously stale manifests. Storage layouts and interface coverage pass. The 11 cold advance integration scenarios pass; the largest measured jackpot transaction is 7,196,658 gas. See [the current verification snapshot](JACKPOT-FIXED-8K-PROPOSAL.md#verification-snapshot) for sizes, coverage and limits. The estimates and sampled tails below do not constitute a proof of maximum transaction gas.
+- **One roll ceiling for everything.** Production has one `_SLIP_ROLL_BUDGET = 1_000` and `_SLIP_ROLL_CEILING = 1_511`, shared by all engine entry points and all battle types. The jackpot-only constants and selection branch described below were removed, so the notes about ordinary runs keeping a larger budget are historical. The jackpot gas envelope uses the same ceiling.
+- **The Added formula** moved from `DegenerusGameAdvanceModule._finalizeRngRequest` into `JackpotBattle.lockJackpotBattle`.
+- **Verification.** All source gates, the storage-layout oracle and the full Foundry and Hardhat suites pass. The largest measured jackpot transaction is 7,196,658 gas. See [the verification snapshot](JACKPOT-FIXED-8K-PROPOSAL.md#verification-snapshot) for sizes, coverage and limits. The estimates and sampled tails below do not constitute a proof of maximum transaction gas.
 
-**Remaining regression blocker:** the expanded test build hits a stack-depth compiler error in `AdvanceNestedFullCompositionGas.t.sol:244`. That test and its older purchase/nested gas fixtures still target the previous battle events and stage order; porting them remains necessary for a green broader regression run.
-
-Handoff for a fresh session, written 2026-09-27. The work in the tree is uncommitted. Codex also edits this tree, so check `git status` first and never reset anything. Do not commit without an explicit "approved".
-
-## Rules the user has set (do not reopen)
+## Design constraints
 
 - Fixed 8,000-FLIP jackpot fee.
 - Added = max(floor, 0.5% of the recorded pool): the floor is 150,000 FLIP while the Game's `level` is 0 or 1, and 50,000 after.
@@ -23,7 +21,7 @@ Handoff for a fresh session, written 2026-09-27. The work in the tree is uncommi
   - With the roll cap below, the target is a **hard** 10M.
 - No reverts on the hot chain that depend on another module's invariants.
 
-## Already done in the tree (uncommitted, 180/180 tests)
+## Starting point (180/180 tests)
 
 - **`CrapsPriceLib`:** the Added floors, `JACKPOT_AWARD_VALUE = 10,000`, and `jackpotAdded(X, level)`.
 - **`DegenerusGameAdvanceModule._finalizeRngRequest`:** applies the floor.
@@ -78,27 +76,22 @@ Handoff for a fresh session, written 2026-09-27. The work in the tree is uncommi
    - Measure the finalization and overhead terms directly. The current `_FINAL_UNITS = 6` understates finalization.
    - Re-measure `JackpotMergeAdvance` under `FOUNDRY_ISOLATE=true` and report the largest transaction and the number of settle transactions.
 
-6. **Optional, ask the user first:**
+6. **Optional:**
    - Let one settle call cross from paid runs into awarded runs by removing the clamp `if (from < paidEnd && end > paidEnd) end = paidEnd;` in `resolveSlot`, and update `test_PaidOwnThenDayThenAwarded_NoEarlyFinalization`.
    - Start settling in the seal transaction.
 
 ## How to verify
 
-- **Isolated copy:** never build in the repo (forge and hardhat caches collide, and Codex shares the tree).
-  1. Copy `contracts/`, `scripts/lib/`, `foundry.toml` and `package.json` into a scratch directory.
-  2. Symlink `lib` and `node_modules`.
-  3. Copy the test files listed below.
-  4. Run `node scripts/lib/patchForFoundry.js`.
-  5. Run `forge test --out <scratch>/out --match-path 'test/**'` with `FOUNDRY_CACHE_PATH=<scratch>/fcache`.
+- **Focused run:** `python3 scripts/test-foundry-groups.py --file <test> …` patches the deployment pins, runs the listed sources as one compile unit and restores the pins.
 - **Suites:**
   - `test/craps/{CrapsCompBudget,CrapsHighRoller,CrapsPasses,CrapsPricing,JackpotBattle}.t.sol`, plus the helpers `CrapsPins.sol`, `CrapsPreferenceStore.sol` and `CrapsViews.sol`;
   - `test/fuzz/{CrapsCompDonation,CrapsCompLane,CrapsPassAwards,JackpotMergeAdvance,LootboxCrapsPasses,SdgnrsLevelHighPasses}.t.sol`, plus `test/fuzz/helpers/DeployProtocol.sol`.
-- **Sizes:** `forge build --sizes` in the copy. With patched addresses, CrapsBattle is 24,390 bytes (186 left); keep it under the user's 24,450 rail.
-- **Gates:** `make -s check-*` in the repo is read-only, except `check-interfaces`, which builds. Judge by exit code, and compare the three red gates against their pre-existing failures.
+- **Sizes:** `forge build --skip test` then `node scripts/check-deployment-sizes.js`. With patched addresses CrapsBattle was 24,390 bytes at this stage; keep it under the 24,450-byte rail.
+- **Gates:** `make -s check-*`, judged by exit code.
 
-## Results (2026-09-27, uncommitted)
+## Results (2026-09-27)
 
-Tasks 1–6 are done in the tree. The user approved task 6 as long as the budget is handled properly.
+Tasks 1–6 are done. Task 6 was adopted on the condition that the sealing call's draw is charged against the same budget.
 
 ### 1. Run-length tail
 
@@ -174,9 +167,9 @@ The 4.7k-per-unit figure holds for any hand-length pattern on the shared dice. S
 - Sizes are unchanged except CrapsEngine (7,585 B). CrapsBattle is 24,390 B (patched addresses), 186 under the ceiling.
 - Gates: the same three are red with identical failures before and after (`check-advance-calls`, `check-rng-taint`, `check-unchecked`). The other seven are green. `check-interfaces` was not run, because it builds in the repo and no selector changed.
 
-### Stale, pre-existing and not touched
+### Merge drift found at this stage
 
-These predate this work (merge drift):
+These predated this work; all were resolved before commit:
 - `unchecked-manifest` row `_playJackpotBattle ++found`.
 - `test/unit/JackpotFarFutureCoinUnits.test.js`, which regex-checks `JACKPOT_BATTLE_ENTRANTS = 50` and the old walk.
 - The old-design `JACKPOT_BATTLE_ENTRANTS = 50` constants in `test/gas/{JackpotBattleStageGas,PurchaseDailyWorstCase,AdvanceNestedFullCompositionGas}.t.sol`.
@@ -217,8 +210,4 @@ These predate this work (merge drift):
   - the base charge at 0.
 
   All caught.
-- **Suites:**
-  - Verified set: 190/190.
-  - The extra battle-stage suites: the same 32 failures as before task 6, all merge drift. Three stale stage-sequence tests in `JackpotBattleStageGas.t.sol` now fail at a later assertion, because the battle stage runs once instead of twice.
-  - `test/gas/AdvanceNestedFullCompositionGas.t.sol` already fails to compile (stack too deep).
-- **Gates:** unchanged, except `check-advance-calls`, which has one fewer failure: `JackpotMergeAdvance` now mentions `advanceJackpotBattle`.
+- **Suites:** verified set 190/190 at this stage. The remaining merge-drift suites (the battle-stage gas tests and `test/gas/AdvanceNestedFullCompositionGas.t.sol`) were ported before commit; the full Foundry and Hardhat results are in [VERIFICATION.md](VERIFICATION.md).
