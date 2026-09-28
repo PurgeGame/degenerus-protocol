@@ -64,6 +64,19 @@ async function setStorage(gameAddress, slot, value) {
   ]);
 }
 
+async function setLevel(gameAddress, newLevel) {
+  const header = BigInt(
+    await hre.ethers.provider.getStorage(gameAddress, wordHex(0n))
+  );
+  const levelShift = 12n * 8n;
+  const levelMask = 0xffffffn << levelShift;
+  await setStorage(
+    gameAddress,
+    0n,
+    (header & ~levelMask) | (BigInt(newLevel) << levelShift)
+  );
+}
+
 async function seedTraitBucket(gameAddress, level, trait, holders) {
   await bucketSeed.seedTraitBucket(gameAddress, level, trait, holders, {
     traitSlot: lvlTraitEntrySlot,
@@ -403,5 +416,53 @@ describe("DegenerusGame simple bingo", function () {
         .connect(alice)
         .claimBingo(alice.address, level, symbol, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "AlreadyClaimed");
+  });
+
+  it("claims successfully while the game is still on the claimed level", async function () {
+    const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+    const gameAddress = await game.getAddress();
+    const bingo = await bingoAtGame(game);
+    const level = 80;
+    const symbol = 6;
+    await seedBingo(gameAddress, level, symbol, [alice.address]);
+    await setLevel(gameAddress, level);
+
+    await bingo
+      .connect(alice)
+      .claimBingo(alice.address, level, symbol, ZERO_SLOTS);
+
+    expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
+  });
+
+  it("expires an unclaimed bingo once the level advances past it, but the current level still claims", async function () {
+    const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+    const gameAddress = await game.getAddress();
+    const bingo = await bingoAtGame(game);
+    const expiredLevel = 90;
+    const currentLevel = 91;
+    const symbol = 10;
+    await seedBingo(gameAddress, expiredLevel, symbol, [alice.address]);
+    await seedBingo(gameAddress, currentLevel, symbol, [alice.address]);
+    await setLevel(gameAddress, currentLevel);
+
+    await expect(
+      bingo
+        .connect(alice)
+        .claimBingo(alice.address, expiredLevel, symbol, ZERO_SLOTS)
+    ).to.be.revertedWithCustomError(bingo, "BingoExpired");
+    expect(
+      BigInt(
+        await hre.ethers.provider.getStorage(
+          gameAddress,
+          wordHex(bingoClaimLeaf(expiredLevel, alice.address))
+        )
+      )
+    ).to.equal(0n);
+    expect(await coinflip.coinflipAmount(alice.address)).to.equal(0n);
+
+    await bingo
+      .connect(alice)
+      .claimBingo(alice.address, currentLevel, symbol, ZERO_SLOTS);
+    expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
   });
 });

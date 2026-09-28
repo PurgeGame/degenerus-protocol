@@ -432,7 +432,8 @@ interface IDegenerusGame {
     ) external;
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
-    /// @dev One reward per player per level; dispatches to the bingo module. Permissionless:
+    /// @dev One reward per player per level, claimable until the next level starts; dispatches
+    ///      to the bingo module. Permissionless:
     ///      settles to `player`, the slot owner, never the caller (address(0) = msg.sender).
     /// @param player Bingo owner to claim for (address(0) = msg.sender).
     /// @param level The level to claim on (uint24 storage-key width).

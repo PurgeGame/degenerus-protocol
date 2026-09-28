@@ -64,6 +64,10 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @notice Thrown when this player has already claimed on this level.
     error AlreadyClaimed();
 
+    /// @notice Thrown when the claimed level is below the current game level: a level's bingo
+    ///         expires the moment the next level starts.
+    error BingoExpired();
+
     // -------------------------------------------------------------------------
     // Reward constants
     // -------------------------------------------------------------------------
@@ -120,13 +124,15 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @dev Permissionless: the reward settles to `player` (the slot owner the 8-color check
     ///      verifies), never the caller, so an uninvited claim only ever harvests inward.
     ///      Each player may claim at most once per level, regardless of which qualifying
-    ///      symbol they use.
+    ///      symbol they use. A level's bingo is claimable until the next level starts: once the
+    ///      game's `level` passes it, an unclaimed bingo is gone.
     /// @param player The bingo owner to claim for (address(0) = msg.sender).
-    /// @param level The level to claim on (uint24 — the internal storage key width;
+    /// @param lvl The level to claim on (uint24 — the internal storage key width;
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
+    /// @custom:reverts BingoExpired If `lvl` is below the current game level.
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
-    function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external {
+    /// @param slots Per-color positions in lvlTraitEntry[lvl][traitId] the owner occupies.
+    function claimBingo(address player, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external {
         // Permissionless: a settled claim only ever credits the slot owner, never the caller.
         if (player == address(0)) player = msg.sender;
         // ---- Validation (gameOver hard cutoff + range gates) ----
@@ -134,10 +140,12 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // an unmaterialized bucket is empty and fails it, while a bucket the sweep has
         // already filled for a future level qualifies on ownership alone. claimBingo
         // only READS lvlTraitEntry (never writes it) and writes only its own claim flag,
-        // so this cannot corrupt VRF state (freeze-safe; no level gate is needed).
+        // so this cannot corrupt VRF state (freeze-safe). The only level gate is the expiry:
+        // a level's bingo dies when the next level starts.
         if (gameOver) revert GameOver();
+        if (lvl < level) revert BingoExpired();
         if (symbol >= 32) revert InvalidSymbol();
-        if (bingoClaimed[level][player]) revert AlreadyClaimed();
+        if (bingoClaimed[lvl][player]) revert AlreadyClaimed();
 
         uint8 quadrant = symbol >> 3; // bits 7-6 of the trait byte
         uint8 symInQ = symbol & 7; // bits 2-0 of the trait byte
@@ -147,14 +155,14 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // traitId = (quadrant << 6) | (c << 3) | symInQ. Guard the index against the
         // array length BEFORE the read so a bad index fails closed with one clean
         // custom error (no bare Panic(0x32)).
-        uint256[][256] storage levelBuckets = lvlTraitEntry[level];
+        uint256[][256] storage levelBuckets = lvlTraitEntry[lvl];
         uint256 traitBase = (uint256(quadrant) << 6) | uint256(symInQ);
         for (uint256 c = 0; c < 8; ) {
             uint8 traitId = uint8(traitBase | (c << 3));
             uint256 slot = slots[c];
             if (
                 slot >= levelBuckets[traitId].length ||
-                _bucketOwnerAt(level, traitId, slot) != player
+                _bucketOwnerAt(lvl, traitId, slot) != player
             ) {
                 revert NotSlotOwner();
             }
@@ -164,7 +172,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         }
 
         // ---- Per-player/per-level dedup (EFFECT) ----
-        bingoClaimed[level][player] = true;
+        bingoClaimed[lvl][player] = true;
 
         // ---- Interactions (after all effects) ----
         // sDGNRS draw: transferFromPool clamps to the available Reward pool and
@@ -180,7 +188,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // FLIP credit is always paid, even when the Reward pool is empty.
         coinflip.creditFlip(player, BINGO_FLIP);
 
-        emit BingoClaimed(player, level, symbol, BINGO_FLIP, dgnrsPaid);
+        emit BingoClaimed(player, lvl, symbol, BINGO_FLIP, dgnrsPaid);
     }
 
     // -------------------------------------------------------------------------
