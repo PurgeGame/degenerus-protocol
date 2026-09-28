@@ -15,7 +15,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     /// @notice A custom battle was opened on terms it may not have. ONE error for the whole
     ///         definition — round, bankroll depth, goal band, bounty ceiling and granule field,
-    ///         standing bar, close time and high-roller multiple — rather than one per field.
+    ///         close time and high-roller multiple — rather than one per field.
     ///         `createBattle` is creator-gated and rare, so per-field granularity bought a caller
     ///         very little and cost the table bytecode it does not have; the terms are documented
     ///         on the function and every bound is a public constant.
@@ -43,8 +43,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         excess instead of reverting.
     error SeedAboveMax();
 
-    /// @notice The battle asks for more standing than the caller held at entry.
-    error ScoreRequiredForBonus();
 
     /// @notice A board's packed word sets bits outside the ten three-bit legs, or names more
     ///         than seven chips.
@@ -236,15 +234,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _PROG_COMMON = 250_000;
     uint256 internal constant _PROG_RARE = 1_200_000;
 
-    /// @dev Where a `CrapsProgressiveRolled` came from: the main ladder, a contested high lane,
-    ///      or the boost capital a sole high rider's standing would not admit. Carried to
-    ///      `_rollIn` in the TOP BYTE of the amount — an amount is FLIP wei and nowhere near
-    ///      2^248, and the packing keeps every call's arguments opaque enough that the optimizer
-    ///      shares one copy of the bank instead of specializing three.
-    uint256 internal constant _ROLL_SRC_MAIN = uint256(1) << 248;
-    uint256 internal constant _ROLL_SRC_HIGH_CONTESTED = uint256(2) << 248;
-    uint256 internal constant _ROLL_SRC_HIGH_SOLE = uint256(3) << 248;
-
     /// @notice House money lands on a ROUND figure. It is already counted in 100-FLIP granules,
     ///         so anything up to forty of them is round already; past that it goes to the nearest
     ///         THOUSAND. A four-figure subsidy quoted to the hundred reads like a rounding error
@@ -270,7 +259,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     //   bits  28.. 32  bankMult   how many rounds deep the bankroll runs, 1.._MAX_BANKROLL_MULT
     //   bits  33.. 42  goalMult   the target, _MIN_BATTLE_GOAL_MULT.._MAX_GOAL_MULT x the bankroll
     //   bits  43.. 60  stakeUnits the bounty, in _BATTLE_STAKE_UNIT granules
-    //   bits  61.. 72  minScore   the standing bar
+    //   bits  61.. 72  unused
     //   bits  73..112  closeTime  when entry shuts and the table may be taken
     // The chips left to the dice are not a term: every ticket places zero through seven and
     // scatters the complement, but all play the slot's same ten-chip round.
@@ -281,24 +270,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _CB_GOAL_MASK = 0x3FF;
 
     uint256 internal constant _CB_CLOSE_MASK = 0xFFFFFFFFFF;
-
-    /// @notice The activity score at which house money pays in full. A scheduled window gates
-    ///         nobody at the door (a custom battle may set its own bar); a winner below this
-    ///         collects only `1 / (floor - score)` of the BOOST, and the rest is banked in the
-    ///         progressive — or, for a progressive award, simply stays in the pool. Score 11
-    ///         takes all of it, 6 takes a sixth, 1 takes an eleventh, and a scoreless wallet
-    ///         takes NONE.
-    ///
-    ///         It bites exactly where a sybil profits and nowhere else. Splitting a bankroll over
-    ///         fresh wallets buys more seats in a field that allows one, but the only free money
-    ///         in the pot is the house's — every bounty was posted by the seat that holds it. So
-    ///         the bounties and donations always pay out whole, a bust's remainder is deleted
-    ///         where it busted, and only the subsidy is rationed. A single account that plays
-    ///         clears this within days.
-    uint256 internal constant _SYBIL_SCORE_FLOOR = 12;
-
-    /// @dev The standing a Game-written seat carries (see `_standingOf`).
-    uint256 internal constant _AWARD_STANDING = 100;
 
     /// @notice The two sizes a protocol day's high-roller lane can take, and how often. One roll
     ///         off the day's own committed word decides which, 79 of 90 buckets the smaller: a
@@ -330,7 +301,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     // One stored bet word:
     //   bits   0..159  player
     //   bits 160..189  ten three-bit chip counts; all ten zero means draw all ten
-    //   bits 190..205  entry-time standing
+    //   bits 190..205  unused
     //   bits 206..208  the craps boon riding this slip, one-hot (see _BET_BOON_SHIFT)
     //   bits 209..216  unused (the entry multiple is carried on the event, never stored)
     //   bits 217..223  high-roller flags: bit 217 alone on a window-local slip, bit 217 + p per
@@ -346,13 +317,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      exceed seven.
     uint256 internal constant _BET_CHIPS_SHIFT = 160;
     uint256 internal constant _BET_CHIPS_MASK = 0x3FFFFFFF;
-    /// @dev The entrant's standing: captured at entry, re-read by every permitted `amendSlip`,
-    ///      and frozen from the moment amendments close — the slot's entry close, or a day
-    ///      ticket's first-window close. Standing earned after that cannot decide a race
-    ///      already entered.
-    uint256 internal constant _BET_SCORE_SHIFT = 190;
-    uint256 internal constant _BET_SCORE_MASK = 0xFFFF;
-
     /// @dev The entry multiple MINUS ONE, carried on `CrapsSlipPlaced` alone and never stored: a
     ///      seat's scale is derived from its high flag at settlement, not read back from the word.
     ///      The byte rides above the bet id on the event rather than in the two-bit gap under it —
@@ -441,16 +405,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev Where the bet id sits in `CrapsSlipPlaced`, clear of the chips' 30 bits.
     uint256 internal constant _EV_BET_SHIFT = 32;
 
-    /// @dev The standing a battle asks of its entrants. A battle TERM, so it is in the match key:
-    ///      a field is only a fair race if everyone in it cleared the same bar.
-    uint256 internal constant _BET_MINSCORE_MASK = 0xFFF;
-
-    /// @dev The two non-money terms, packed for the key: bounty granules in 0..23, standing bar
-    ///      in 32..43. They live on the SLOT, never in a header. The chips a ticket leaves to the
-    ///      dice are NOT a term — that is a per-ENTRANT choice, and every split between placed and
-    ///      scattered chips puts the same round down, so all eight shapes race in ONE field.
-    uint256 internal constant _TERM_SCORE_SHIFT = 32;
-
     /// @dev A ticket may place at most seven of the round's ten chips. The dice scatter the rest.
     uint256 internal constant _MAX_PICKED_CHIPS = 7;
 
@@ -464,7 +418,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     //
     // No roll slice: nothing ranks or qualifies on rolls — the progressive reads the winner's
     // HIGH POINT, which the composite already carries — and the composite needs the width: a
-    // high-water verdict is a goal flag, a high point, an ending bankroll and a standing, and
+    // high-water verdict is a goal flag, a high point and an ending bankroll, and
     // no two of those may share a field.
     uint256 internal constant _BG_RESOLVED_SHIFT = 32;
     uint256 internal constant _BG_BEST_SHIFT = 64;
@@ -473,7 +427,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _MASK32 = 0xFFFFFFFF;
 
     /// @dev The scoreboard's composite is `Craps._rankOf` (the layout and every field are
-    ///      documented there) with the entrant's STANDING in its low sixteen bits; this is the
+    ///      documented there) with sixteen reserved low bits; this is the
     ///      mask of the whole 105-bit verdict.
     uint256 internal constant _SC_BEST_MASK = (1 << 105) - 1;
     // The bonus seed lives in the battle's OWN word, not in a global "currently armed" pointer:
@@ -496,9 +450,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @param chips         The ten leg counts as one thirty-bit word, three bits each — the nine
     ///                      light legs at bits 0..26 and the dark side at 27..29. Zero is a blank
     ///                      ticket; the draw places all ten chips.
-    /// @param standing      The entrant's activity score as the slip last recorded it — at entry
-    ///                      or the last `amendSlip` — frozen once amendments close; the last
-    ///                      merit component before a word-derived exact-tie break.
     /// @dev The header is created at placement. Its chip slice may change through `amendSlip`
     ///      before close; settlement never writes the bet, and the slot's cursor carries its
     ///      settled mark.
@@ -509,7 +460,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         bool settled;
         bool battleClaimed;
         uint256 chips;
-        uint256 standing;
     }
 
     /// @notice One battle's scoreboard, decoded — what `_battleOf` returns.
@@ -550,6 +500,16 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint256 pot;
     }
 
+    /// @dev Resolved seat payment and action totals, returned as one memory pointer to keep the
+    ///      batch resolver within the compiler's stack limit. This adds no persistent storage.
+    struct SeatResult {
+        address player;
+        uint256 paid;
+        uint256 staked;
+        uint256 high;
+        uint256 cost;
+    }
+
     /// @dev One settlement's whole account, carried between the engine and the paying/preview
     ///      paths as a single memory pointer — the resolver is sensitive to stack pressure.
     ///      Its layout deliberately matches `Craps.SlipResult`: `paid` reuses the dead
@@ -570,7 +530,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         ///      the same hand count and survival state, but never qualifies it for records.
         uint256 peak;
         uint256 handsPlayed;
-        /// @dev THE MERIT COMPOSITE (`Craps._rankOf`), less standing: the fifth word, where
+        /// @dev THE MERIT COMPOSITE (`Craps._rankOf`): the fifth word, where
         ///      `SlipResult` carries escalated units, which the table never reads.
         ///      `CrapsEngine.settleRanked` returns the composite here instead.
         uint256 rank;
@@ -581,7 +541,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         Craps.SlipStop stop;
     }
 
-    /// @dev A bet is ONE word — `player | chips | standing`, and nothing else. It does not carry
+    /// @dev A bet is ONE word — `player | chips | flags`, and nothing else. It does not carry
     ///      which battle it is in, because that is the KEY it is stored under: an id is
     ///      `(slot << 64) | n`, where `n` is the entrant's index within its own field. Membership
     ///      is therefore structural — `n` runs 1..entrants with no gaps — so a settler walks a
@@ -681,8 +641,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     /// @dev THE PROGRESSIVE. One balance, shared by every scheduled window of every day.
     ///      Funded once when a protocol day opens — half of what that day's main allocation
-    ///      raised — and topped up by every wei of the protocol's own subsidy that a winner's
-    ///      activity standing would not admit. It is a virtual emission liability, counted the
+    ///      raised. Future qualifying wins draw from this balance without any activity-score
+    ///      reduction. It is a virtual emission liability, counted the
     ///      moment it lands here; a payout later RELEASES it and is not a second issuance.
     ///
     ///      Player money never enters. Bounties, principal, run losses, deleted bust remainders,
@@ -807,13 +767,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///              contract never disagree about where a chip went.
     ///            - bits 32..159 the bet id, itself `(slot << 64) | seat`.
     ///            - bits 160..167 the entry multiple MINUS ONE, so 0 reads as one copy of the run.
-    ///            - bits 190..205 the standing the seat held when this log was written, at the
-    ///              same shift the bet stores it, which is what lets one constant decode both. The
-    ///              log itself never changes, but the stored standing does: `amendSlip` re-reads
-    ///              the owner's standing, and the bet's copy at the time the field folds is what
-    ///              breaks a dead-level scoreboard and rations the boost a winner carries off. A
-    ///              reader that cannot see the bet word can order a field only down to a tie and
-    ///              can quote a subsidy only after the fact.
+    ///            - bits 190..205 are unused.
     ///            - bit 217 the high flag on a window seat; bits 217..223 a day ticket's per-period
     ///              high mask, bit `217 + p` for period `p` — the same bits the bet stores, so a
     ///              banked high pass seated at one copy of the run still reads as high.
@@ -832,9 +786,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @notice An open slip's chips were re-spread by its owner. `chips` is the same thirty-bit
     ///         word `CrapsSlipPlaced` carries in its low bits — ten counts, the dark side at
     ///         27..29, and ZERO for a blank ticket that has handed its board back to the dice.
-    ///         The same call re-reads the owner's standing into the slip; that figure is not
-    ///         logged here and is read back off the bet word. Every other term of the slip is
-    ///         the slot's and cannot move.
+    ///         Every other term of the slip belongs to its slot and cannot move.
     event CrapsSlipAmended(uint256 indexed betId, uint256 chips);
 
     /// @notice A wallet's automatic-entry default, in the canonical three-bit-per-leg encoding.
@@ -997,13 +949,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @param peak The winner's high point in whole FLIP, the figure that was tested.
     /// @param scoreBps That high point over the run's own starting bankroll, in basis points:
     ///        10,000 is 1x, and the cutoffs are 250,000 / 1,200,000.
-    /// @param candidate The rung's whole figure, before the winner's standing is applied.
-    /// @param paid What actually LEFT the pool — `candidate` at full standing, less below it —
-    ///        so `poolBefore - poolAfter` reconstructs from this figure alone. A slice of it can
-    ///        bank as pass credit rather than Coinflip money; the `CrapsProtocolAwardSplit` log
-    ///        riding the same finalization carries that liquid/pass breakdown. What the standing
-    ///        DENIED is `candidate - paid`; it was never removed from the pool, so it needs no
-    ///        funding log and no field of its own.
+    /// @param candidate The rung's whole figure; identical to paid.
+    /// @param paid The full gross award removed from the pool, including any pass-credit slice.
     /// @param balance The pool AFTER the debit.
     event CrapsProgressivePaid(
         uint256 indexed betId,
@@ -1026,14 +973,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         price back to the comp lane.
     event CrapsDayLapsed(uint24 indexed day, uint64 seats);
 
-    /// @notice Protocol money a winner's activity standing would not admit, banked in the
-    ///         progressive rather than left unminted.
-    /// @dev PROTOCOL MONEY ONLY. Bounties, principal, run losses, deleted bust remainders, the
-    ///      ladder's own variance and rounding dust are none of them a standing forfeiture and
-    ///      none of them arrive here.
-    /// @param source `_ROLL_SRC_MAIN`, `_ROLL_SRC_HIGH_CONTESTED` or `_ROLL_SRC_HIGH_SOLE`.
-    event CrapsProgressiveRolled(bytes32 indexed battleKey, uint8 indexed source, uint256 amount, uint256 balance);
-
     struct JackpotRound {
         uint256 word;
         uint256 added;
@@ -1054,6 +993,22 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     }
     mapping(uint256 => JackpotRound) internal _jackpotRounds;
     uint64 internal _activeJackpotSlot;
+    /// @dev One packed word per event. The nominee is sampled over the immutable paid high
+    ///      field as settlement advances; cursor counts paid seats examined, including normals.
+    struct HighRollerDraw {
+        address nominee;
+        uint32 eligible;
+        uint32 cursor;
+        bool resolved;
+        bool won;
+    }
+    // Append-only: both delegate contracts inherit these exact slots.
+    uint256 internal _highRollerReserve;
+    mapping(uint64 => HighRollerDraw) internal _highRollerDraws;
+    uint256 internal constant _HIGH_RESERVE_DIVISOR = 20; // 5% of unrolled gross Added
+    uint256 internal constant _HIGH_RESERVE_CHANCE = 10; // one field-wide chance in ten
+    uint256 internal constant HIGH_RESERVE_DRAW_TAG = uint256(keccak256("CrapsHighReserveDraw"));
+    uint256 internal constant HIGH_RESERVE_WINNER_TAG = uint256(keccak256("CrapsHighReserveWinner"));
     uint256 internal constant _JACKPOT_BANKROLL_UNIT = 300 ether;
     uint256 internal constant _JACKPOT_PRICE = CrapsPriceLib.JACKPOT_FEE;
     uint256 internal constant _AWARD_UNITS_SHIFT = 224;
@@ -1062,6 +1017,19 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     event JackpotBattleLocked(uint64 indexed slot, uint24 requestDay, uint256 added, uint256 paidEntries);
     event JackpotBattleStarted(uint64 indexed slot, uint24 level, uint256 drawnEntries, uint256 drawnUnits, uint256 word);
+    event HighRollerReserveFunded(uint64 indexed slot, uint256 contribution, uint256 balance);
+    /// @notice A finalized event's single reserve draw. No eligible entries means no attempt.
+    /// @param winner Zero on a miss or an empty eligible field.
+    /// @param amount Existing reserve value released as Coinflip credit, never fresh funding.
+    event HighRollerReserveDrawn(
+        uint64 indexed slot, uint32 eligible, address indexed winner, uint256 amount, uint256 balance
+    );
+    /// @notice Fee-only high exposure and its expected-loss comp allocation, before the fair pool roll.
+    /// @dev 80% of the conservative loss budget funds comps; the rest remains unissued. This is
+    ///      theoretical loss, not the result of a particular run or the pool multiplier.
+    event JackpotHighCompsAccrued(
+        uint64 indexed slot, uint256 fees, uint256 atRisk, uint256 lossBudget, uint256 comps
+    );
     function _highMultOf(uint256 word) internal pure returns (uint256) {
         if (word == 0) return 0;
         return CrapsPriceLib.highMultiple(_hash2(word, HIGH_TAG));

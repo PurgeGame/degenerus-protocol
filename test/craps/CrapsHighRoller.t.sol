@@ -198,13 +198,13 @@ contract CrapsHighRollerTest is CrapsPins {
     function test_aCreatorFixesTheMultipleOrDisablesTheLane() public {
         vm.startPrank(vaultOwner);
         uint40 close = uint40(vm.getBlockTimestamp() + 1 hours);
-        craps.createBattle(L, 2, 10, SU, 0, close, true, 0);
-        craps.createBattle(L, 2, 10, SU, 0, close, true, 2);
-        craps.createBattle(L, 2, 10, SU, 0, close, true, 256);
+        craps.createBattle(L, 2, 10, SU, close, true, 0);
+        craps.createBattle(L, 2, 10, SU, close, true, 2);
+        craps.createBattle(L, 2, 10, SU, close, true, 256);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(L, 2, 10, SU, 0, close, true, 1);
+        craps.createBattle(L, 2, 10, SU, close, true, 1);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(L, 2, 10, SU, 0, close, true, 257);
+        craps.createBattle(L, 2, 10, SU, close, true, 257);
         vm.stopPrank();
     }
 
@@ -275,7 +275,7 @@ contract CrapsHighRollerTest is CrapsPins {
         uint64 slot = _slotAt(today, 1);
         assertGt(craps.highBaseOf(slot), 0, "the fixture funded no lane boost");
 
-        // Below the floor, so `_boostShare` divides by seven rather than paying whole.
+        // Activity score must not reduce the bonus.
         game.setScore(alice, 5);
         game.setScore(bob, 5);
         vm.prank(alice);
@@ -304,7 +304,7 @@ contract CrapsHighRollerTest is CrapsPins {
         // — share in granules, round in granules, widen last — and hold the payment to it.
         (,,, uint256 battleStake,,) = craps.bonusTermsFor(today, 1);
         uint256 principal = 2 * (craps.highMultOfSlot(slot) - 1) * battleStake;
-        uint256 units = craps.boostShareOf(craps.highBoostUnitsOf(slot, craps.wordAt(index)), 5);
+        uint256 units = craps.highBoostUnitsOf(slot, craps.wordAt(index));
         // Under the threshold nothing rounds, so a fixture that landed there would prove nothing.
         assertGt(units, 40, "the fixture's lane boost is below the rounding threshold");
         assertTrue(units % 10 != 0, "the fixture's lane boost is already round: rounding is untested");

@@ -180,7 +180,6 @@ contract CrapsRngSeal is DeployProtocol {
         crapsBattle.amendSlip(betId, other);
         CrapsBattle.Bet memory after_ = crapsBattle.betOf(betId);
         assertEq(after_.chips, before.chips, "the packed board moved after the arm");
-        assertEq(after_.standing, before.standing, "the standing moved after the arm");
         assertEq(after_.seat, before.seat, "the seat moved after the arm");
     }
 

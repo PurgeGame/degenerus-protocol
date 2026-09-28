@@ -15,10 +15,9 @@ import {CrapsCustomTerms} from "./CrapsCustomTerms.sol";
 ///      it; it can only compute. Custom validation also reads the close-time deadline against the clock.
 contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @notice Validate and pack a custom table's immutable definition.
-    function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits,
-        uint16 minScore, uint40 closeTime, bool multiEntry, uint16 highRollerMult) external view returns (uint256)
+    function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits, uint40 closeTime, bool multiEntry, uint16 highRollerMult) external view returns (uint256)
     {
-        return _customDefinition(played, bankMult, goalMult, stakeUnits, minScore, closeTime, multiEntry, highRollerMult);
+        return _customDefinition(played, bankMult, goalMult, stakeUnits, closeTime, multiEntry, highRollerMult);
     }
 
     /// @notice Play one slip to its stop.

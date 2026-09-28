@@ -76,7 +76,7 @@ contract BattleHarness is CrapsViews {
         returns (uint256)
     {
         return (goal ? _SC_GOAL_BIT : 0) | ((primary & _SC_PRIMARY_MASK) << _SC_PRIMARY_SHIFT)
-            | ((wonFlip & _SC_WON_MASK) << _SC_WON_SHIFT) | standing;
+            | ((wonFlip & _SC_WON_MASK) << _SC_WON_SHIFT);
     }
 
     /// @dev The board a slip actually PLAYS: its chips grown by the ones the dice place. No slip
@@ -163,9 +163,7 @@ contract BattleHarness is CrapsViews {
         return _roundBoost(units);
     }
 
-    function boostShareFor(uint256 boostUnits, uint256 held) external pure returns (uint256) {
-        return _boostShare(boostUnits, held);
-    }
+
 
     /// @dev A slot's WHOLE boost in granules — the band's pick off the settling word plus every
     ///      donation on it — before any rationing.
@@ -456,7 +454,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(vaultOwner);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(
-            uint32(LW / 1 ether), 2, 5, uint24((LW * 2) / GRANULE) + 1, 0, uint40(block.timestamp + 1 hours), false
+            uint32(LW / 1 ether), 2, 5, uint24((LW * 2) / GRANULE) + 1, uint40(block.timestamp + 1 hours), false
         , 0);
     }
 
@@ -882,7 +880,7 @@ contract CrapsBattleTest is CrapsPins {
             (uint256(3) << 27) | (uint256(3) << 9) | (uint256(1) << 12),
             "the dark count did not land in its own field"
         );
-        assertEq(bet.standing, standing, "a full dark count corrupted the standing");
+        assertEq((craps.betWordOf(betId) >> 190) & 0xFFFF, 0, "reserved score bits were written");
         assertEq(bet.player, alice, "a full dark count corrupted the owner");
         // The multiple is what the money is scaled by, so a corrupt byte shows up as a mispriced
         // burn — read it off the entry itself rather than trusting a view.
@@ -904,7 +902,7 @@ contract CrapsBattleTest is CrapsPins {
             (uint256(3) << 9) | (uint256(3) << 12) | (uint256(1) << 15),
             "the amendment did not clear the dark count"
         );
-        assertEq(craps.betOf(betId).standing, standing, "the amendment corrupted the standing");
+        assertEq((craps.betWordOf(betId) >> 190) & 0xFFFF, 0, "amendment wrote score bits");
     }
 
     /// @dev An amendment rewrites ALL TEN counts, and only them. It runs the same packer the door
@@ -935,7 +933,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(alice);
         craps.amendSlip(betId, dark);
         assertEq(craps.betOf(betId).chips, darkPacked, "the amendment left the old light count behind");
-        assertEq(craps.betOf(betId).standing, craps.SYBIL_SCORE_FLOOR(), "an amendment moved the standing");
+        assertEq((craps.betWordOf(betId) >> 190) & 0xFFFF, 0, "amendment wrote score bits");
         assertEq(craps.betOf(betId).slot, slot, "an amendment moved the seat");
         slot; // silence
     }
@@ -1130,7 +1128,7 @@ contract CrapsBattleTest is CrapsPins {
             CrapsBattle.Bet memory stored = craps.betOf(betId);
             assertEq(address(uint160(uint256(logs[i].topics[1]))), stored.player, "wrong owner");
             assertEq(bet & 0x7FFFFFF, stored.chips, "wrong chips");
-            assertEq((bet >> 190) & 0xFFFF, stored.standing, "wrong frozen standing");
+            assertEq((bet >> 190) & 0xFFFF, uint256(0), "wrong frozen standing");
             assertEq(uint64(betId), stored.seat, "wrong seat");
             // The id is carried, not counted, but it must still agree with arrival order WITHIN
             // its own bucket, which is the only order a bet is numbered in.
@@ -1256,7 +1254,7 @@ contract CrapsBattleTest is CrapsPins {
         uint40 close = uint40(vm.getBlockTimestamp() + 1 hours);
         vm.prank(vaultOwner);
         uint32 played = uint32(LW / 1 ether);
-        uint64 single = craps.createBattle(played, 2, 5, SU, 0, close, false, 0);
+        uint64 single = craps.createBattle(played, 2, 5, SU, close, false, 0);
 
         vm.prank(alice);
         craps.enterBattle(single, _boardA(), 1);
@@ -1267,7 +1265,7 @@ contract CrapsBattleTest is CrapsPins {
         // The same terms with the toggle on: as many seats as the caller pays for, each at the
         // full price of a seat.
         vm.prank(vaultOwner);
-        uint64 many = craps.createBattle(played + 10, 2, 5, SU, 0, close, true, 0);
+        uint64 many = craps.createBattle(played + 10, 2, 5, SU, close, true, 0);
         uint256 burnedBefore = flip.burned(bob);
         vm.prank(bob);
         craps.enterBattle(many, _boardA(), 1);
@@ -1709,33 +1707,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      battle. But HOUSE MONEY is rationed by the winner's standing: at the floor it pays in
     ///      full, below it the winner carries off one part in `floor - standing`, and a scoreless
     ///      wallet carries off NONE. What is not taken is never minted.
-    function test_theBoostLadderRationsByStanding() public view {
-        uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
-        uint256 boost = 660; // divisible on every rung, so each is exact
 
-        // A scoreless wallet takes nothing at all — the rung below one eleventh is zero, not a
-        // twelfth. This is the whole point: a fresh wallet cannot touch the subsidy.
-        assertEq(craps.boostShareFor(boost, 0), 0, "a scoreless winner took house money");
-
-        // Then one part in (floor - standing), climbing to the whole boost one short of the floor.
-        for (uint256 held = 1; held < floor_; ++held) {
-            assertEq(craps.boostShareFor(boost, held), boost / (floor_ - held), "rung off the ladder");
-        }
-        assertEq(craps.boostShareFor(boost, floor_ - 1), boost, "one short of the floor was docked");
-        assertEq(craps.boostShareFor(boost, 1), boost / 11, "the bottom rung is not an eleventh");
-
-        // At the floor and above, whole.
-        assertEq(craps.boostShareFor(boost, floor_), boost, "the floor was docked");
-        assertEq(craps.boostShareFor(boost, 65_534), boost, "a high standing was docked");
-
-        // Monotone: more standing is never worth less.
-        uint256 prev;
-        for (uint256 held = 0; held <= floor_; ++held) {
-            uint256 share = craps.boostShareFor(boost, held);
-            assertGe(share, prev, "the ladder went backwards");
-            prev = share;
-        }
-    }
 
     /// @dev And settlement actually applies it: a bonus window's winner is paid its bounties and
     ///      busted crumbs WHOLE, plus only its rationed slice of the boost.
@@ -1772,12 +1744,12 @@ contract CrapsBattleTest is CrapsPins {
 
         CrapsBattle.Battle memory info = craps.battleOf(_keyOf(PER));
         uint256 winnerId = _idAt(slot, info.winnerId);
-        uint256 held = craps.betOf(winnerId).standing;
+        uint256 held = uint256(0);
 
         // RATIONED FIRST, ROUNDED SECOND, WIDENED LAST — production's own order. Widening before
         // rounding would leave the rounding a no-op on a wei figure and hand the winner an odd
         // hundred, so the order is what this asserts and not merely the granule.
-        uint256 share = craps.boostShareFor(boost, held);
+        uint256 share = boost;
         uint256 expected = uint256(BON_SU) * info.entrants * craps.BATTLE_STAKE_UNIT()
             + craps.roundBoostFor(share) * craps.BATTLE_STAKE_UNIT();
         // And the fixture has to actually straddle the step, or the two orders agree by accident.
@@ -1812,9 +1784,8 @@ contract CrapsBattleTest is CrapsPins {
 
         CrapsBattle.Battle memory info = craps.battleOf(_slotKeyOf(slot));
         uint256 winnerId = _idAt(slot, info.winnerId);
-        assertEq(craps.betOf(winnerId).standing, 0, "the winner is not the scoreless seat");
+        assertEq((craps.betWordOf(winnerId) >> 190) & 0xFFFF, 0, "winner header contains score bits");
         // The ladder WOULD have zeroed this if it applied here.
-        assertEq(craps.boostShareFor(donation, 0), 0, "the ladder does not zero a scoreless winner");
 
         assertEq(pot.betId, winnerId, "the pot named a seat the scoreboard did not");
         assertEq(
@@ -2359,7 +2330,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      asks nothing — the bar is still a TERM of the race and still in the match key, so two
     ///      battles asking different bars remain two different races, but the protocol sets its own
     ///      to zero and defends house money at the payout instead.
-    function test_onlyACustomCreatorMayAskForAScore() public {
+    function test_customAndScheduledEntriesIgnoreActivityScore() public {
         _openDay();
 
         // Scoreless, straight in — the window sets no bar at all.
@@ -2376,11 +2347,8 @@ contract CrapsBattleTest is CrapsPins {
         uint64 barred = _openBattle(craps, uint32(LW / 1 ether), 2, 5, SU, creatorBar);
         game.setScore(carol, creatorBar - 1);
         vm.prank(carol);
-        vm.expectRevert(CrapsBattleStorage.ScoreRequiredForBonus.selector);
         craps.enterBattle(barred, _boardA(), 1);
-        game.setScore(carol, creatorBar);
-        vm.prank(carol);
-        craps.enterBattle(barred, _boardA(), 1);
+
     }
 
     /// @dev A window advertises a CEILING and the odds behind it, never a figure: its rung comes
@@ -2426,7 +2394,7 @@ contract CrapsBattleTest is CrapsPins {
         // the window advertised, and below by nothing granular, since a small budget may draw
         // less than one granule. A busted run's remainder is deleted, so it is not in here.
         uint256 drew = craps.roundBoostFor(
-            craps.boostShareFor(craps.boostUnitsAt(slot), craps.betOf(winnerId).standing)
+            craps.boostUnitsAt(slot)
         ) * craps.BATTLE_STAKE_UNIT();
         assertEq(pot.betId, winnerId, "the pot named a seat the scoreboard did not");
         assertEq(pot.player, craps.betOf(winnerId).player, "the pot reached an address that held no seat");
@@ -2758,53 +2726,46 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.dayTicketsOf(day) >> 32, 1, "the high lane never counted the house");
     }
 
-    /// @dev A DONATION IS NOT HOUSE MONEY. It was burned by a third party for this field, so the
-    ///      winner's standing must not ration it away and the boost's rounding — which goes to the
-    ///      NEAREST thousand — must not inflate it into FLIP nobody burned. Driven on a SCORELESS
-    ///      winner, the rung where the protocol's own subsidy pays exactly nothing: whatever lands
-    ///      in the pot beyond the stakes is then the donation and only the donation.
+    /// @dev Funded donations pay whole. Only the protocol bonus can convert into passes, and
+    ///      a scoreless winner receives the entire bonus in liquid and deferred value together.
     function test_aDonationReachesAScorelessWinnerWhole() public {
-        // Neither body sits, so the lone entrant is the whole field and its win is certain.
         flip.setBurnRefused(ContractAddresses.SDGNRS, true);
         flip.setBurnRefused(ContractAddresses.VAULT, true);
         _openDay();
-        uint256 unit = craps.BATTLE_STAKE_UNIT();
-
         vm.prank(carol);
         craps.donate(false, PER, 7);
-
         game.setScore(alice, 0);
         vm.prank(alice);
         craps.enterBonusBattle(PER, _seven(), 1);
-
         _warpPastClose(PER);
         uint48 index = _armAt(PER);
-
         uint64 slot = _slotAt(PER);
-        uint256 entrants = craps.battleOf(_keyOf(PER)).entrants;
-        assertEq(craps.boostShareFor(1000, 0), 0, "a scoreless winner can still take house money");
-
-        // THE SCORELESS SEAT MUST WIN for this to test anything: the house's comped seat competes
-        // at the sybil floor, so the word is searched until the dice hand alice the field.
-        PaidOut memory pot;
         uint256 snap = vm.snapshotState();
-        for (uint256 i = 0; i < 64; ++i) {
+        bool found;
+        for (uint256 i; i < 64 && !found; ++i) {
             _setWord(index, uint256(keccak256(abi.encode("whole-donation", i))));
-            pot = _onlyPot(craps, slot, WHOLE_FIELD);
-            if (pot.player == alice) break;
-            vm.revertToState(snap);
-            snap = vm.snapshotState();
+            vm.recordLogs();
+            craps.resolveSlot(slot, WHOLE_FIELD);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            PaidOut[] memory pots = _potsIn(logs);
+            if (pots.length == 1 && pots[0].player == alice) {
+                uint256 banked;
+                bytes32 splitSig = keccak256("CrapsProtocolAwardSplit(bytes32,address,uint8,uint256,uint256)");
+                for (uint256 j; j < logs.length; ++j) {
+                    if (logs[j].topics[0] != splitSig || uint256(logs[j].topics[3]) != 1) continue;
+                    (uint256 gross, uint256 liquid) = abi.decode(logs[j].data, (uint256, uint256));
+                    banked += gross - liquid;
+                }
+                uint256 expected = (uint256(BON_SU) * craps.battleOf(_keyOf(PER)).entrants
+                    + craps.roundBoostFor(craps.boostUnitsAt(slot) - 7) + 7) * craps.BATTLE_STAKE_UNIT();
+                assertEq(pots[0].amount + banked, expected, "donation or bonus was withheld");
+                found = true;
+            } else {
+                vm.revertToState(snap);
+                snap = vm.snapshotState();
+            }
         }
-        assertEq(pot.player, alice, "no word gave the scoreless seat the field: the fixture proves nothing");
-        // The protocol's own boost is rationed by the winner's standing and then rounded; the
-        // DONATION is neither, and rides on top whole. Written as the sum so it holds whichever
-        // seat the dice hand the pot to.
-        uint256 expected = (
-            uint256(BON_SU) * entrants
-                + craps.roundBoostFor(craps.boostShareFor(craps.boostUnitsAt(slot), craps.betOf(pot.betId).standing))
-                + 7
-        ) * unit;
-        assertEq(pot.amount, expected, "the donation did not reach the winner whole");
+        assertTrue(found, "no word gave the scoreless seat the field");
     }
 
     /// @dev A ROUND MUST FIT THE RESOLVER'S LEG. A blank ticket leaves all ten chips to the dice
@@ -2815,11 +2776,11 @@ contract CrapsBattleTest is CrapsPins {
         // The largest legal round: the table maximum, down to a whole ten-chip stack.
         uint32 widest = uint32((uint256(type(uint24).max) / 10) * 10);
         vm.prank(vaultOwner);
-        craps.createBattle(widest, 1, 5, 0, 0, close, false, 0);
+        craps.createBattle(widest, 1, 5, 0, close, false, 0);
 
         vm.prank(vaultOwner);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(widest + 10, 1, 5, 0, 0, close, false, 0);
+        craps.createBattle(widest + 10, 1, 5, 0, close, false, 0);
     }
 
     /// @dev A WINDOW SEAT BARS THE DAY LANE. `_place` already refuses a second seat to a day
@@ -3137,7 +3098,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(scoreless);
         uint256 betId = craps.enterBonusBattle(PER, _seven(), 1);
         assertEq(craps.battleKeyOf(betId), _keyOf(PER), "a scoreless address was turned away");
-        assertEq(craps.betOf(betId).standing, 0, "the slip recorded a standing it does not hold");
+        assertEq((craps.betWordOf(betId) >> 190) & 0xFFFF, 0, "entry wrote score bits");
     }
 
     /// @dev A scheduled window accepts every placed count from zero through seven, rejects eight,
@@ -3340,7 +3301,7 @@ contract CrapsBattleTest is CrapsPins {
         uint256 winnerId = _idAt(slot, done.winnerId);
         uint256 drewUnits = craps.boostUnitsAt(slot);
         assertGe(drewUnits, 5, "the donation did not survive the pick");
-        uint256 drew = craps.boostShareFor(drewUnits, craps.betOf(winnerId).standing) * unit;
+        uint256 drew = drewUnits * unit;
 
         assertEq(pot.betId, winnerId, "the pot named a seat the scoreboard did not");
         assertEq(pot.player, craps.betOf(winnerId).player, "the pot reached an address that held no seat");

@@ -156,10 +156,12 @@ transition work run. The RNG lock stays held across all of it, including across 
 the paid field, preferences, queues and the committed word cannot change. Level
 1's purchase days, which pay no ETH jackpot, also run a trait-matched FLIP draw on the
 day's board over level 1: up to 50 winners, one equal whole-100-FLIP share each; the
-sub-share remainder and any unfilled share are not minted. Every seat the Game writes on the
-craps table (the lootbox pass reservations) carries a fixed standing of 100 rather than a
-read of the holder's activity score: above the boost floor and most casual wallets, below a
-dedicated player; `amendSlip` re-reads the real score.
+sub-share remainder and any unfilled share are not minted. Craps does not read or store the aggregate activity score. Equivalent entries receive the same
+dice ranking and payouts. Wallet-funded entries and cash upgrades charge 5% extra unless the
+player minted this/last level (next-level purchase-phase mints also qualify), has at least three
+credited lifetime mint levels, or holds a deity pass. The latter two checks use the packed player
+record and skip the current-level call. Awarded passes and vault comps retain their funded
+entitlement without a newcomer charge.
 
 The word rolls one multiplier for the whole pool, `(paid units x 8,000 + Added) x m`: 90% at
 0.5x, 9% at 3x, 0.9% at 20x and 0.1% at 100x, a 1x mean. Awards come from Added alone, one per
@@ -325,3 +327,7 @@ mapping-value slot. The seed is the low 32 bits of `keccak(word, DECIMATOR_BOX_T
 no other consumer of the day word shares its bits; the claim-box root re-hashes it with
 the tag and the fixed round level, and the box resolver then mixes the winning owner.
 Winner selection still uses the full word before the snapshot. The layout is unchanged.
+
+### High-roller jackpot reserve
+
+`JackpotBattle.lockJackpotBattle` assigns 5% of gross, unrolled Added to a persistent reserve and leaves 95% for the main field. Award counts still use gross Added. Once the field finalizes, any eligible high entry gives the event one 10% chance to pay the whole reserve through Coinflip credit. Each accepted high entry has one equal ticket; sDGNRS is excluded, the vault is eligible, and activity score is unused. Pass and comp entries consume their existing funding and qualify. Paid entry/upgrade closure freezes the field before the settling RNG. The cold module samples already-resolved paid seats in bounded batches, preserving its nominee/count/cursor; the final draw is idempotent. Reserve grants do not generate action, comps or another protocol multiplier. See [the reserve specification](CRAPS-HIGH-ROLLER-INCENTIVE-PROPOSAL.md).

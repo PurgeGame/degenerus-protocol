@@ -188,7 +188,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
     function test_customBattleSlotUnaffected() public {
         uint40 close = uint40(vm.getBlockTimestamp() + 1 hours);
         vm.prank(vaultOwner);
-        uint64 slot = craps.createBattle(60, 5, 5, 0, 0, close, true, 0);
+        uint64 slot = craps.createBattle(60, 5, 5, 0, close, true, 0);
         assertGe(uint256(slot), craps.customSlotBase(), "a custom battle slot must sit above the custom base");
 
         game.setScore(carol, craps.SYBIL_SCORE_FLOOR());

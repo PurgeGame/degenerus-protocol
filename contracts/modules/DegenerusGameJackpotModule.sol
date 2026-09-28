@@ -376,7 +376,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      - Three-day schedule: 6%-14% of remaining currentPrizePool on day 1, 12%-28% on day 2.
     ///      - Final physical day (day 3, or day 1 for turbo): distributes the remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird ticket jackpot (from futurePrizePool).
-    ///      - Latches the day's jackpot battle (payPurchaseJackpotBattle) for its own stage.
+    ///      - The day's jackpot battle is latched at the daily request and plays in its own
+    ///        stage (payPurchaseJackpotBattle), not here.
     ///      - The coin+tickets stage increments jackpotCounter on completion.
     ///
     ///      PURCHASE PHASE PATH (isJackpotPhase=false):
@@ -1936,15 +1937,27 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev Snapshot the eligible levels once (99 bounded queue reads), then draw at most
-    ///      JACKPOT_BATTLE_ENTRANTS independent entries per call with replacement. Repeated wallets
-    ///      keep separate seats. Cursor: next draw ordinal [0:31], frozen eligible-level bitset
-    ///      [32:130]. All registries and queues remain frozen under the daily lock, including across
-    ///      midnight and retries.
+    /// @dev A visit walks one level once, starting at a random queue position and wrapping.
+    ///      Levels are drawn WITH replacement, so later visits can award the same wallets again.
+    ///      Memory only; the continuation fits in JackpotRound.drawCursor without new storage.
+    struct JackpotDrawWalk {
+        uint256 ordinal;
+        uint256 offset;
+        uint256 position;
+        uint256 left;
+    }
+
+    /// @dev Snapshot the eligible levels once (99 bounded queue reads), then collect at most
+    ///      JACKPOT_BATTLE_ENTRANTS seats per call by walking randomly selected levels. Repeated
+    ///      wallets keep separate seats. Cursor: next visit ordinal [0:31], eligible-level bitset
+    ///      [32:130], active level offset [131:137], next queue position [138:169], positions left
+    ///      in the visit [170:201]. A chunk boundary never starts a new visit or changes its draw.
+    ///      All registries and queues remain frozen under the daily lock, including across
+    ///      midnight and retries. Packed queue words are loaded once per group of up to eight.
     function _collectJackpotChunk(uint24 lvl, uint256 word, uint256 cursor, uint256 remaining)
-        private view returns (address[] memory winners, uint256 next, bool exhausted)
+        internal view returns (address[] memory winners, uint256 next, bool exhausted)
     {
-        uint256 eligible = cursor >> 32;
+        uint256 eligible = (cursor >> 32) & ((uint256(1) << 99) - 1);
         uint24[99] memory levels;
         uint256 count;
         for (uint256 offset; offset < 99; ++offset) {
@@ -1959,19 +1972,56 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 wanted = remaining < JACKPOT_BATTLE_ENTRANTS ? remaining : JACKPOT_BATTLE_ENTRANTS;
         if (count == 0) return (new address[](0), 0, true);
         winners = new address[](wanted);
-        uint256 ordinal = uint32(cursor);
-        for (uint256 i; i < wanted; ++i) {
-            uint256 entropy = EntropyLib.hash2(word, ordinal + i);
-            uint24 candidate = levels[entropy % count];
+        JackpotDrawWalk memory walk = JackpotDrawWalk(
+            uint32(cursor), (cursor >> 131) & 127, uint32(cursor >> 138), uint32(cursor >> 170)
+        );
+        uint256 i;
+        while (i < wanted) {
+            uint256 entropy;
+            if (walk.left == 0) {
+                entropy = EntropyLib.hash2(word, walk.ordinal++);
+                walk.offset = levels[entropy % count] - lvl - 1;
+            }
+            uint24 candidate = lvl + 1 + uint24(walk.offset);
             uint256[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
             uint256 len = queue.length;
-            // An emptied level forfeits this draw rather than halting the advance.
-            if (len == 0) continue;
-            uint256 idx = (entropy >> 128) % len;
-            uint256 packed = _tqWordAt(queue, idx);
-            winners[i] = address(uint160(_entryRecord(candidate, uint32(packed >> ((idx & 7) << 5)))));
+            // An unexpectedly emptied level forfeits one award and ends this visit. Charging a
+            // position keeps even that fail-open path bounded when selection uses replacement.
+            if (len == 0) {
+                walk.left = 0;
+                ++i;
+                continue;
+            }
+            // A singleton completes its visit immediately; it needs no circular-walk setup.
+            if (len == 1) {
+                winners[i++] = address(uint160(_entryRecord(candidate, uint32(_tqWordAt(queue, 0)))));
+                walk.position = 0;
+                walk.left = 0;
+                continue;
+            }
+            if (walk.left == 0) {
+                walk.position = (entropy >> 128) % len;
+                walk.left = len;
+            }
+            uint256 take = wanted - i;
+            if (take > walk.left) take = walk.left;
+            walk.left -= take;
+            while (take != 0) {
+                uint256 packed = _tqWordAt(queue, walk.position) >> ((walk.position & 7) << 5);
+                uint256 lanes = 8 - (walk.position & 7);
+                if (lanes > len - walk.position) lanes = len - walk.position;
+                if (lanes > take) lanes = take;
+                for (uint256 j; j < lanes; ++j) {
+                    winners[i++] = address(uint160(_entryRecord(candidate, uint32(packed))));
+                    packed >>= 32;
+                }
+                walk.position += lanes;
+                if (walk.position == len) walk.position = 0;
+                take -= lanes;
+            }
         }
-        next = (eligible << 32) | (ordinal + wanted);
+        next = walk.ordinal | (eligible << 32) | (walk.offset << 131)
+            | (walk.position << 138) | (walk.left << 170);
     }
 
     /// @dev Records the day's board for the foil claim to read (foil == jackpot by

@@ -790,7 +790,7 @@ contract Craps {
     }
 
     /// @dev THE MERIT VERDICT as one lexicographic scalar, so the common fold is one comparison.
-    ///      Built by `_rankOf` (standing aside, which the table folds in). One hundred and five
+    ///      Built by `_rankOf`. One hundred and five
     ///      bits, most significant first:
     ///
     ///        bit  104     GOAL. Every goal beats every bust.
@@ -802,8 +802,7 @@ contract Craps {
     ///                         HIGH POINT (bits 60..92, whole FLIP, saturated).
     ///        bits 16..59  THE MONEY: the raw ENDING bankroll in whole FLIP — a goal's payout
     ///                     figure, a bust's surviving remainder — never the high point.
-    ///        bits  0..15  the entrant's STANDING as the slip last recorded it (entry or the
-    ///                     last amendment), frozen once amendments close.
+    ///        bits  0..15  reserved, always zero.
     ///
     ///      Exact equality is resolved separately by the table word's deterministic ordering of
     ///      bet ids, so settlement order cannot choose the winner.
@@ -826,7 +825,7 @@ contract Craps {
     uint256 internal constant _SC_BUST_PEAK_MASK = (1 << 33) - 1;
 
     /// @dev THE COMPARATOR, as one lexicographic scalar (see `_SC_GOAL_BIT`) — everything but the
-    ///      entrant's standing, which the table folds into the low bits.
+    ///      reserved low bits, which remain zero.
     ///
     ///      A GOAL BEATS EVERY BUST, and there is ONE comparator for both products:
     ///
@@ -835,7 +834,7 @@ contract Craps {
     ///        * BUSTS race on shooters completed, then on whether they kept anything, then on the
     ///          HIGH POINT, then on the remainder still held. A shared shooter ends many runs on
     ///          the same hand, so length alone ties often; the high point separates them before
-    ///          standing or the coin is needed.
+    ///          the coin is needed.
     function _rankOf(SlipResult memory r) internal pure returns (uint256) {
         unchecked {
             uint256 primary;

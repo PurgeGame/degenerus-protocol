@@ -316,7 +316,7 @@ contract CrapsFlowHandler {
         uint16 goalMult = uint16(5 + (termSeed % 20));
         vm.prank(creator);
         try craps.createBattle(
-            played, bankMult, goalMult, 2, 0, uint40(block.timestamp + 2 hours), false, 0
+            played, bankMult, goalMult, 2, uint40(block.timestamp + 2 hours), false, 0
         ) returns (uint64 slot) {
             ++ghost_customBattles;
             address who = _actor(actorSeed);

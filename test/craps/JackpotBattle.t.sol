@@ -235,7 +235,7 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(_round().paidUnits, 100);
         _start(123, 5, bob);
         CrapsBattleStorage.JackpotRound memory r = _round();
-        assertEq(r.totalPool, uint256(950_000 ether) * r.multiplierBps / 10_000);
+        assertEq(r.totalPool, uint256(942_500 ether) * r.multiplierBps / 10_000);
     }
 
     function test_FixedFeeVariableStakeAndExactPoolConservation() public {
@@ -246,7 +246,7 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(r.paidCount, 2); assertEq(r.paidUnits, 2);
         uint256 n = r.paidUnits + r.drawnUnits;
         assertEq(r.drawnUnits, 40);
-        assertEq(r.totalPool, (uint256(416_000 ether) * r.multiplierBps) / 10_000);
+        assertEq(r.totalPool, (uint256(396_000 ether) * r.multiplierBps) / 10_000);
         assertEq(uint256(r.bankroll) % 300 ether, 0);
         assertEq(n * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100 ether) + r.potRemainder, r.totalPool);
         assertLe(uint256(r.bankroll) * n, r.totalPool / 2);
@@ -461,7 +461,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.stopPrank();
         CrapsBattleStorage.JackpotRound memory r = _round();
         assertEq(r.paidUnits, h); assertEq(r.drawnUnits, 3); assertEq(r.drawnCount, 3);
-        assertEq(r.totalPool, (uint256(h) * 8_000 ether + r.added) * r.multiplierBps / 10_000);
+        assertEq(r.totalPool, (uint256(h) * 8_000 ether + r.added - r.added / 20) * r.multiplierBps / 10_000);
         _finish(300);
     }
     function test_OnlyGameCanLockOrSupplyField() public {
@@ -499,5 +499,190 @@ contract JackpotBattleTest is CrapsPins {
         uint256 n = r.paidUnits + r.drawnUnits;
         assertGe(r.bankroll, 300 ether);
         assertEq(n * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100 ether) + r.potRemainder, r.totalPool);
+    }
+
+    function _highDay(bool tail) private returns (uint16 multiple) {
+        multiple = tail ? 100 : 10;
+        for (uint256 word = 1; ; ++word) {
+            if (table.highMultOfWord(word) == multiple) {
+                _setDailyWord(day, word);
+                return multiple;
+            }
+        }
+    }
+
+    function _enterHigh(address player, uint16 multiple) private {
+        game.setScore(player, 100);
+        vm.prank(player);
+        table.enterBonusBattle(5, 0, multiple);
+    }
+
+    function _wordForMultiplier(uint256 bps) private pure returns (uint256 word) {
+        for (word = 1; ; ++word) {
+            uint256 roll = uint256(keccak256(abi.encode(word, uint256(0x436f696e447261774d756c7469706c696572)))) % 1000;
+            uint256 got = roll < 900 ? 5000 : roll < 990 ? 30000 : roll < 999 ? 200000 : 1000000;
+            if (got == bps) return word;
+        }
+    }
+
+    /// @dev Isolate payout accounting from dice luck. A qualified run returns exactly 5x, so it
+    ///      earns no progressive or record award; a bust returns zero and still ranks normally.
+    function _mockRun(bool qualified) private {
+        uint256 bank = _round().bankroll;
+        Craps.SlipResult memory result;
+        if (qualified) {
+            result.bankrollIn = bank * 5; // settleBattle returns the rounded payment here
+            result.bankrollOut = bank * 5;
+            result.peakBankroll = bank * 5;
+            result.unitsPlayed = (uint256(1) << 104) | ((bank * 5 / 1 ether) << 60)
+                | ((bank * 5 / 1 ether) << 16);
+            result.stop = Craps.SlipStop.Goal;
+        }
+        vm.mockCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(result));
+    }
+
+    function _mainPot(CrapsBattleStorage.JackpotRound memory r) private pure returns (uint256) {
+        return (uint256(r.paidCount) + r.drawnCount) * r.bountyUnits * 100 ether + r.potRemainder;
+    }
+
+    function test_HighUpgradeCannotDiluteTheMainSeatAllocation() public {
+        uint16 h = _highDay(true);
+        uint256 snap = vm.snapshotState();
+        _enter(alice, false); _enter(bob, false);
+        _lock(150_000 ether); _start(123, 15, address(0x1000));
+        CrapsBattleStorage.JackpotRound memory normal = _round();
+        assertTrue(vm.revertToState(snap));
+        _enterHigh(alice, h); _enter(bob, false);
+        _lock(150_000 ether); _start(123, 15, address(0x1000));
+        CrapsBattleStorage.JackpotRound memory high = _round();
+        assertEq(high.bankroll, normal.bankroll, "high copies diluted base bankrolls");
+        assertEq(high.bountyUnits, normal.bountyUnits, "high copies diluted main bounties");
+        assertEq(high.potRemainder, normal.potRemainder, "high allocation took main remainder");
+        assertEq(high.totalPool - normal.totalPool, 2 * table.jackpotTerms(slot).highExtra);
+    }
+
+    function test_AddedCannotIncreaseHighExtraCapital() public {
+        uint16 h = _highDay(true);
+        _enterHigh(alice, h); _enterHigh(bob, h);
+        uint256 snap = vm.snapshotState();
+        _lock(50_000 ether); _start(123, 0, address(0));
+        uint256 extra = table.jackpotTerms(slot).highExtra;
+        uint256 bank = _round().bankroll;
+        assertTrue(vm.revertToState(snap));
+        _lock(5_000_000 ether); _start(123, 0, address(0));
+        assertGt(_round().bankroll, bank);
+        assertEq(table.jackpotTerms(slot).highExtra, extra, "Added leaked into high capital");
+        assertEq(table.highBaseOf(slot), 0, "jackpot high field acquired a protocol boost");
+    }
+
+    function testFuzz_HighPoolConservesAndCompsOnlyExpectedFeeLoss(
+        bool tail, uint8 rawHeads, uint8 rawOrdinary, uint8 rawDrawn, uint96 rawAdded, uint256 word
+    ) public {
+        uint16 h = _highDay(tail);
+        uint256 heads = 1 + uint256(rawHeads) % 5;
+        uint256 ordinary = uint256(rawOrdinary) % 5;
+        for (uint160 i; i < heads; ++i) _enterHigh(address(0xA000 + i), h);
+        for (uint160 i; i < ordinary; ++i) _enter(address(0xB000 + i), false);
+        uint256 before = flip.compLane();
+        uint256 booked = table.dayStaked(day);
+        uint256 added = bound(rawAdded, 50_000 ether, 5_000_000 ether);
+        _lock(added); _start(word == 0 ? 1 : word, uint256(rawDrawn) % 16, address(0xC000));
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        uint256 highFees = heads * (h - 1) * 8_000 ether;
+        uint256 highPool = highFees * r.multiplierBps / 10_000;
+        uint256 mainPool = r.totalPool - highPool;
+        uint256 baseUnits = uint256(r.paidCount) + r.drawnUnits;
+        assertEq(2 * heads * table.jackpotTerms(slot).highExtra, highPool, "high pool must contain fees only");
+        assertEq(baseUnits * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100 ether) + r.potRemainder, mainPool);
+        uint256 retainedBps = r.multiplierBps < 10_000 ? r.multiplierBps : 10_000;
+        uint256 baseAction = uint256(r.paidCount) * 8_000 ether * retainedBps / 10_000
+            * (baseUnits * r.bankroll) / mainPool;
+        uint256 atRisk = heads == 1 ? highFees : highFees / 2;
+        uint256 highComps = atRisk * 12 / 100 * 80 / 100;
+        assertEq(flip.compLane() - before, baseAction / 50 + highComps);
+        assertEq(table.dayStaked(day) - booked, baseAction, "extra high loss was recycled into future boosts");
+    }
+
+    function test_HighCompBudgetUsesPreRollEVAndOnlyAccruesOnce() public {
+        uint16 h = _highDay(true);
+        _enterHigh(alice, h); _enterHigh(bob, h);
+        uint256[4] memory bps = [uint256(5000), 30000, 200000, 1000000];
+        uint256 snap = vm.snapshotState();
+        bytes32 eventSig = keccak256("JackpotHighCompsAccrued(uint64,uint256,uint256,uint256,uint256)");
+        for (uint256 i; i < bps.length; ++i) {
+            if (i != 0) { assertTrue(vm.revertToState(snap)); snap = vm.snapshotState(); }
+            _lock(150_000 ether);
+            vm.recordLogs();
+            _start(_wordForMultiplier(bps[i]), 15, address(0x1000));
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            uint256 found;
+            for (uint256 j; j < logs.length; ++j) {
+                if (logs[j].topics[0] != eventSig) continue;
+                (uint256 fees, uint256 atRisk, uint256 loss, uint256 comps) = abi.decode(logs[j].data, (uint256,uint256,uint256,uint256));
+                assertEq(fees, 1_584_000 ether);
+                assertEq(atRisk, 792_000 ether);
+                assertEq(loss, 95_040 ether);
+                assertEq(comps, 76_032 ether);
+                ++found;
+            }
+            assertEq(found, 1);
+            uint256 lane = flip.compLane();
+            _mockRun(false);
+            _finish(1);
+            vm.prank(ContractAddresses.GAME); api.advanceJackpotBattle(1500);
+            assertEq(flip.compLane(), lane, "settlement or retry credited comps twice");
+            vm.clearMockedCalls();
+        }
+    }
+
+    function test_ContestedHighPotPaysItsRolledFeesEvenWhenAllBust() public {
+        uint16 h = _highDay(true);
+        _enterHigh(alice, h); _enterHigh(bob, h);
+        _lock(150_000 ether); _start(_wordForMultiplier(30000), 0, address(0));
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        uint256 extra = table.jackpotTerms(slot).highExtra;
+        assertEq(extra, 1_188_000 ether);
+        _mockRun(false);
+        _finish(1500);
+        assertEq(coinflip.totalCredited(), _mainPot(r) + 2 * extra, "contested high bounty was scaled by Added or lost on busts");
+    }
+
+    function test_SoleHighBountyRidesAndItsWholeExtraFeeEarnsLossComps() public {
+        uint16 h = _highDay(false);
+        _enterHigh(alice, h);
+        uint256 before = flip.compLane();
+        _lock(50_000 ether); _start(_wordForMultiplier(5000), 0, address(0));
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        uint256 extra = table.jackpotTerms(slot).highExtra;
+        uint256 mainPool = (47_500 ether + 8_000 ether) / 2;
+        uint256 baseAction = 4_000 ether * uint256(r.bankroll) / mainPool;
+        assertEq(extra, 18_000 ether);
+        assertEq(flip.compLane() - before, baseAction / 50 + 6_912 ether, "sole bounty risk omitted or comped twice");
+        _mockRun(true);
+        _finish(1500);
+        assertEq(coinflip.staked(alice), _mainPot(r) + 5 * (uint256(r.bankroll) + 2 * extra));
+    }
+
+    function test_HighExtraReceivesNoMultipliedProtocolBoon() public {
+        uint16 h = _highDay(false);
+        flip.setNextBoonMask(4);
+        _enterHigh(alice, h); _enterHigh(bob, h);
+        _lock(50_000 ether); _start(_wordForMultiplier(5000), 0, address(0));
+        CrapsBattleStorage.JackpotRound memory r = _round();
+        uint256 extra = table.jackpotTerms(slot).highExtra;
+        _mockRun(true);
+        _finish(1500);
+        uint256 baseBoon = uint256(r.bankroll) * 5 * 15 / 100;
+        assertLt(baseBoon, 9_000 ether, "fixture must distinguish base boon from the high cap");
+        assertEq(coinflip.totalCredited(), _mainPot(r) + 2 * extra + 10 * (uint256(r.bankroll) + extra) + baseBoon);
+    }
+
+    function test_HighDayTicketUsesTheSameFeeOnlyAllocation() public {
+        uint16 h = _highDay(true);
+        vm.prank(alice); table.enterBonusDay(0, h);
+        _lock(150_000 ether); _start(_wordForMultiplier(5000), 15, address(0x1000));
+        assertEq(_round().paidUnits, 100);
+        assertEq(table.jackpotTerms(slot).highExtra, 198_000 ether);
+        _finish(1500);
     }
 }

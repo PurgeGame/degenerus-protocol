@@ -635,7 +635,7 @@ contract CrapsRngSealHandler is Test {
         uint40 closeTime = uint40(block.timestamp + 10 minutes + (seed % 30 minutes));
         vm.prank(ContractAddresses.CREATOR);
         uint64 slot;
-        try craps.createBattle(600, 10, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0, 0, closeTime, true, 0) returns (
+        try craps.createBattle(600, 10, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0, closeTime, true, 0) returns (
             uint64 s
         ) {
             slot = s;
@@ -991,7 +991,7 @@ contract CrapsRngSealHandler is Test {
     ///      `settled` / `battleClaimed` flags are the settlement's own writes and are excluded.
     function _headerOf(uint256 betId) internal view returns (bytes32) {
         CrapsBattle.Bet memory b = craps.betOf(betId);
-        return keccak256(abi.encode(b.player, b.slot, b.seat, b.chips, b.standing));
+        return keccak256(abi.encode(b.player, b.slot, b.seat, b.chips));
     }
 
     function _checkSealedHeaders() internal {

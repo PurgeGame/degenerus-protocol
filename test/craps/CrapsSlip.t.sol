@@ -10,7 +10,7 @@ import {Craps} from "../../contracts/Craps.sol";
 import {CrapsOracle} from "./CrapsOracle.sol";
 import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
 import {CrapsPins} from "./CrapsPins.sol";
-import {CrapsBattle, IFlipCoin, ICoinflipStake, IGameActivityScore} from "../../contracts/CrapsBattle.sol";
+import {CrapsBattle, IFlipCoin, ICoinflipStake, IGameCraps} from "../../contracts/CrapsBattle.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 
 /// @dev Points the three pins (game slots, FLIP) at doubles. Overrides nothing else, so every rule
@@ -338,21 +338,21 @@ contract CrapsSlipTest is CrapsPins {
         uint40 close = uint40(block.timestamp + 1 hours);
         vm.startPrank(vaultOwner);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(20, 14, 5, 0, 0, close, false, 0); // 280 FLIP, under the floor
+        craps.createBattle(20, 14, 5, 0, close, false, 0); // 280 FLIP, under the floor
 
         // A round that is not ten whole chips is not a round.
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(25, 20, 5, 0, 0, close, false, 0);
+        craps.createBattle(25, 20, 5, 0, close, false, 0);
 
         // A bankroll deeper than the cap, and one no rounds deep at all.
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(PLAYED, maxMult + 1, 5, 0, 0, close, false, 0);
+        craps.createBattle(PLAYED, maxMult + 1, 5, 0, close, false, 0);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(PLAYED, 0, 5, 0, 0, close, false, 0);
+        craps.createBattle(PLAYED, 0, 5, 0, close, false, 0);
 
         // Exactly at the floor, on the smallest round that can carry it: ten chips of two is a
         // 20-FLIP round, and fifteen of those is 300 FLIP.
-        craps.createBattle(20, 15, 5, 0, 0, close, false, 0);
+        craps.createBattle(20, 15, 5, 0, close, false, 0);
         vm.stopPrank();
     }
 
@@ -397,7 +397,7 @@ contract CrapsSlipTest is CrapsPins {
                 // of the id rather than shifted off the end.
                 assertEq((bet >> 27) & 0x1F, 0, "the gap between the chips and the id is dirty");
                 assertEq((bet >> 96) & type(uint64).max, slot, "the event named the wrong slot");
-                assertEq((bet >> 190) & 0xFFFF, craps.SYBIL_SCORE_FLOOR(), "the event lost the frozen standing");
+                assertEq((bet >> 190) & 0xFFFF, 0, "the event contains activity score bits");
                 chips = bet & 0x7FFFFFF;
                 found = true;
             }
@@ -595,23 +595,19 @@ contract CrapsSlipTest is CrapsPins {
         // Hoisted for the same reason as above.
         uint16 minGoal = uint16(craps.MIN_BATTLE_GOAL_MULT());
         uint16 maxGoal = uint16(craps.MAX_GOAL_MULT());
-        uint16 maxScore = uint16(craps.MAX_MIN_SCORE());
         vm.startPrank(vaultOwner);
 
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(PLAYED, 4, minGoal - 1, 0, 0, close, false, 0);
+        craps.createBattle(PLAYED, 4, minGoal - 1, 0, close, false, 0);
 
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(PLAYED, 4, maxGoal + 1, 0, 0, close, false, 0);
-
-        vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(PLAYED, 4, 5, 0, maxScore + 1, close, false, 0);
+        craps.createBattle(PLAYED, 4, maxGoal + 1, 0, close, false, 0);
 
         // A close time already past is not a window anyone can join.
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(PLAYED, 4, 5, 0, 0, uint40(block.timestamp), false, 0);
+        craps.createBattle(PLAYED, 4, 5, 0, uint40(block.timestamp), false, 0);
 
-        uint64 slot = craps.createBattle(PLAYED, 4, 40, 0, 0, close, false, 0);
+        uint64 slot = craps.createBattle(PLAYED, 4, 40, 0, close, false, 0);
         vm.stopPrank();
 
         vm.prank(alice);

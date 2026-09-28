@@ -111,7 +111,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertEq(uint256(index), uint256(crapsBattle.currentIndex()), "index read is unstable");
     }
 
-    /// @dev The user flow against every shipped dependency: real activity read, real FLIP burn,
+    /// @dev The user flow against every shipped dependency: real mint-history read, real FLIP burn,
     ///      real game-slot word lookup, permissionless settlement, and real coinflip credit. The word
     ///      is written directly only to stand in for the already-covered VRF lifecycle.
     function test_realProtocolPlaceRevealAndSettleFlow() public {
@@ -125,7 +125,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint128 bankroll = 6000 ether;
 
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(PLAYER, bankroll);
+        coin.mintForGame(PLAYER, uint256(bankroll) * 105 / 100);
 
         // A zero-bounty custom slot exercises run settlement without adding a battle claim to
         // this wiring proof. CREATOR holds the deployed vault's DGVE majority.
@@ -135,7 +135,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // not — leaves nothing for this proof to measure.
         vm.prank(ContractAddresses.CREATOR);
         uint64 slot = crapsBattle.createBattle(
-            600, 10, uint16(crapsBattle.MIN_BATTLE_GOAL_MULT()), 0, 0, uint40(block.timestamp + 1), false
+            600, 10, uint16(crapsBattle.MIN_BATTLE_GOAL_MULT()), 0, uint40(block.timestamp + 1), false
         , 0);
         vm.prank(PLAYER);
         uint256 betId = crapsBattle.enterBattle(slot, board, 1);
@@ -174,12 +174,12 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     function test_theVaultForwardsThePackedCrapsBoard() public {
         vm.prank(ContractAddresses.CREATOR);
         uint64 slot = crapsBattle.createBattle(
-            600, 1, uint16(crapsBattle.MIN_BATTLE_GOAL_MULT()), 0, 0, uint40(block.timestamp + 1), false, 0
+            600, 1, uint16(crapsBattle.MIN_BATTLE_GOAL_MULT()), 0, uint40(block.timestamp + 1), false, 0
         );
 
         uint32 board = uint32(3 | (3 << 12) | (1 << 15));
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(address(vault), 600 ether);
+        coin.mintForGame(address(vault), 630 ether);
         vm.prank(ContractAddresses.CREATOR);
         uint256 betId = vault.crapsEnterBattle(slot, board, 1);
 

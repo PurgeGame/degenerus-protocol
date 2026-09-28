@@ -174,5 +174,21 @@
     "offset": 0,
     "slot": 21,
     "typeLabel": "uint64"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "_highRollerReserve",
+    "offset": 0,
+    "slot": 22,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_highRollerDraws",
+    "offset": 0,
+    "slot": 23,
+    "typeLabel": "mapping(uint64 => struct CrapsBattleStorage.HighRollerDraw)"
   }
 ]

@@ -245,7 +245,6 @@ contract CrapsPassesTest is CrapsPins {
         emit CrapsSlipPlaced(
             alice,
             uint256(PACKED_SEVEN) | (((daySlot << 64) | 1) << 32)
-                | (craps.SYBIL_SCORE_FLOOR() << 190)
         );
         vm.prank(alice);
         craps.buyFutureCrapsDays(target, 1, false, PACKED_SEVEN);
@@ -346,9 +345,9 @@ contract CrapsPassesTest is CrapsPins {
         craps.amendSlip(betId, respread);
         assertEq(craps.betOf(betId).chips, respread, "a future day's board did not move");
         assertEq(
-            craps.betOf(betId).standing,
-            craps.SYBIL_SCORE_FLOOR() + 3,
-            "the amendment did not refresh standing"
+            (craps.betWordOf(betId) >> 190) & 0xFFFF,
+            0,
+            "amendment wrote score bits"
         );
 
         // Future or not, it is still nobody else's.

@@ -65,6 +65,25 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
     // ── fixtures ────────────────────────────────────────────────────────────
 
+    function test_newcomerPaysPremiumOnTheDayAndCashUpgradeOnly() public {
+        uint24 day = _openDay(10);
+        game.setMintHistory(alice, 0);
+        _buyNormalDay(alice);
+        uint256 dayCost = flip.burned(alice);
+        _buyNormalDay(bob);
+        assertEq(dayCost, flip.burned(bob) * 105 / 100, "day premium is not five percent");
+
+        uint256 baseDelta = _deltaOf(day, 3, 10);
+        vm.prank(alice);
+        uint256 burned = craps.upgradeDayWindows(day, uint8(1 << 3));
+        assertEq(burned, baseDelta * 105 / 100, "cash upgrade missed the premium");
+        assertEq(flip.burned(alice), dayCost + burned, "reported and actual burn differ");
+        vm.prank(bob);
+        assertEq(craps.upgradeDayWindows(day, uint8(1 << 3)), baseDelta);
+        assertEq(craps.daySeatHighMaskOf(day, alice), craps.daySeatHighMaskOf(day, bob));
+        assertEq(craps.dayHighTicketsOf(day, 3), 2, "premium bought extra high entries");
+    }
+
     /// @dev To the top of a protocol day, where period zero — the whole-day lane — is live.
     function _warpToDayStart() internal {
         uint256 elapsed = (vm.getBlockTimestamp() - 82_620) % 1 days;

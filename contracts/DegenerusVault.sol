@@ -769,7 +769,7 @@ contract DegenerusVault {
     /// @param slot  The custom battle to join.
     /// @param chips Up to seven the vault places; the complement to ten is scattered at settlement.
     /// @param multiple How many copies of the run to buy, 1 to `MAX_ENTRY_MULTIPLE`: the same
-    ///                  bounty and the same standing in the battle, at that multiple of the
+    ///                  bounty in the battle, at that multiple of the
     ///                  bankroll and that multiple of whatever the table returns.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @return betId The slip: `(slot << 64) | seat`.

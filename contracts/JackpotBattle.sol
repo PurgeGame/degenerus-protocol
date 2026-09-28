@@ -12,6 +12,10 @@ interface IFlipCrapsComps {
     function creditCrapsComps(uint256 amount) external;
 }
 
+interface IHighReserveCredit {
+    function creditFlip(address player, uint256 amount) external;
+}
+
 /// @notice Cold lifecycle and views for the daily jackpot battle, delegated by CrapsBattle.
 /// @dev Deployed at `JACKPOT_BATTLE` and reached only by CrapsBattle's fallback delegatecall, so it
 ///      runs in the table's storage; the shared base appends to the table's layout and moves no
@@ -19,8 +23,13 @@ interface IFlipCrapsComps {
 ///      budgeted resolver.
 contract JackpotBattle is CrapsBattleStorage {
     error BadJackpotField();
+    error OnlyTableSelf();
     /// @dev The Game's FLIP-per-price unit: `price / _PRICE_COIN_UNIT` FLIP buys one ticket.
     uint256 private constant _PRICE_COIN_UNIT = 1000 ether;
+    /// @dev Conservative whole-run loss budget, using the same 12% calibration as the ordinary
+    ///      action subsidy. Separate constants keep future boost tuning from changing high comps.
+    uint256 private constant _HIGH_LOSS_BPS = 1200;
+    uint256 private constant _HIGH_COMP_SHARE_BPS = 8000;
     event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, address indexed player, uint256 units, uint32 chips);
 
     /// @param pool The recorded prize pool the Added allocation is drawn from, in wei.
@@ -61,6 +70,9 @@ contract JackpotBattle is CrapsBattleStorage {
         r.paidUnits = uint64(uint256(r.paidCount) + uint32(_highField[key]) * (highMult - 1));
         r.requestDay = requestDay;
         _activeJackpotSlot = slot;
+        uint256 contribution = r.added / _HIGH_RESERVE_DIVISOR;
+        _highRollerReserve += contribution;
+        emit HighRollerReserveFunded(slot, contribution, _highRollerReserve);
         emit JackpotBattleLocked(slot, requestDay, r.added, r.paidCount);
     }
 
@@ -81,10 +93,13 @@ contract JackpotBattle is CrapsBattleStorage {
         if (r.drawWord != 0) return r;
         uint256 roll = _hash2(word, JACKPOT_MULT_TAG) % 1_000;
         uint256 multiplier = roll < 900 ? 5_000 : roll < 990 ? 30_000 : roll < 999 ? 200_000 : 1_000_000;
-        uint256 pool = (uint256(r.paidUnits) * _JACKPOT_PRICE + r.added) * multiplier / 10_000;
-        // Awards come from unrolled Added alone; paid fees do not create them. At least 10,000 of
-        // Added per award and 8,000 per paid unit leave the 0.5x roll 4,000 FLIP per unit, so
-        // every bankroll rounds to at least 1,800.
+        // The reserve is funded before the lottery and receives none of its multiplier.
+        // Award counts still use GROSS Added; high extras remain entirely fee-funded.
+        uint256 mainAdded = r.added - r.added / _HIGH_RESERVE_DIVISOR;
+        uint256 pool = (uint256(r.paidUnits) * _JACKPOT_PRICE + mainAdded) * multiplier / 10_000;
+        // Awards come from unrolled Added alone; paid fees do not create them. At least 9,500 of
+        // main-pool Added per award (after the 5% reserve) and 8,000 per paid unit leave the 0.5x
+        // roll at least 4,000 FLIP per unit, so every bankroll rounds to at least 1,800.
         uint256 target = r.added / CrapsPriceLib.JACKPOT_AWARD_VALUE;
         if (target > 500) target = 500;
         r.awardTarget = uint32(target);
@@ -121,7 +136,7 @@ contract JackpotBattle is CrapsBattleStorage {
                 entry >> (JackpotBattleFieldLib.BOARD_SHIFT - CrapsPreferenceLib.SHIFT));
             uint256 id = (uint256(slot) << 64) | (ownN + ++drawn);
             _bets[id] = uint160(player) | (uint256(chips) << _BET_CHIPS_SHIFT)
-                | (_AWARD_STANDING << _BET_SCORE_SHIFT) | (uint256(1) << _AWARD_UNITS_SHIFT);
+                | (uint256(1) << _AWARD_UNITS_SHIFT);
             ++units;
             emit JackpotBattleEntry(slot, id, player, 1, chips);
         }
@@ -130,11 +145,15 @@ contract JackpotBattle is CrapsBattleStorage {
         r.drawCursor = cursor;
         if (!last) return;
 
-        uint256 totalUnits = uint256(r.paidUnits) + units;
+        // Every paid seat buys ONE place in the Added-funded main battle. Its extra high
+        // units form their own fee-only bankroll/bounty allocation under the same fair roll.
+        uint256 totalUnits = uint256(r.paidCount) + units;
+        uint256 highPool = (uint256(r.paidUnits) - r.paidCount) * _JACKPOT_PRICE * r.multiplierBps / 10_000;
+        uint256 mainPool = r.totalPool - highPool;
         uint256 bankroll;
         uint256 bounty;
         if (totalUnits != 0) {
-            uint256 perUnit = r.totalPool / totalUnits;
+            uint256 perUnit = mainPool / totalUnits;
             bankroll = perUnit / 2 / _JACKPOT_BANKROLL_UNIT * _JACKPOT_BANKROLL_UNIT;
             uint256 maxBank = (uint256(type(uint24).max) / 10 / 6) * 6 * 50 ether;
             if (bankroll > maxBank) bankroll = maxBank;
@@ -144,30 +163,101 @@ contract JackpotBattle is CrapsBattleStorage {
         }
         r.bankroll = uint128(bankroll);
         r.bountyUnits = uint32(bounty);
-        r.potRemainder = r.totalPool - totalUnits * (bankroll + bounty * _BATTLE_STAKE_UNIT);
+        r.potRemainder = mainPool - totalUnits * (bankroll + bounty * _BATTLE_STAKE_UNIT);
         bytes32 key = bytes32(uint256(slot));
         _battles[key] = ((_battles[key] + drawn) & ~(_BSTAKE_MAX << _BG_STAKE_SHIFT))
             | (bounty << _BG_STAKE_SHIFT);
         r.word = r.drawWord;
         emit JackpotBattleStarted(slot, r.level, drawn, units, r.word);
-        _bookFees(slot, r, totalUnits * bankroll, uint32(_highField[key]));
+        _bookFees(slot, r, totalUnits * bankroll, mainPool, uint32(_highField[key]));
+        // An empty field has no seat that could finish it through the normal resolver.
+        if (totalUnits == 0) _settleHighRollerReserve(slot);
     }
 
-    /// @dev The paid fees are the battle's only craps action: the bankroll share of the fee money
-    ///      the pool roll kept. Added and any roll gain never reach the day books or the comp lane.
-    ///      Booked once, at seal, to the day the field played; the table books nothing for this slot.
-    function _bookFees(uint64 slot, JackpotRound storage r, uint256 ranBankroll, uint256 highSeats) private {
-        uint256 paidUnits = r.paidUnits;
-        if (paidUnits == 0 || ranBankroll == 0) return;
+    /// @notice The table's post-batch hook, reached through its self-call and delegate fallback.
+    /// @dev No caller-supplied candidate, count, randomness or cursor is trusted.
+    function settleHighRollerReserve(uint64 slot) external {
+        if (msg.sender != address(this)) revert OnlyTableSelf();
+        _settleHighRollerReserve(slot);
+    }
+
+    function _settleHighRollerReserve(uint64 slot) private {
+        JackpotRound storage r = _jackpotRounds[slot];
+        if (r.word == 0) revert BadJackpotField();
+        HighRollerDraw memory draw = _highRollerDraws[slot];
+        if (draw.resolved) return;
+        uint256 settled = _bonusCursor[slot];
+        uint256 end = settled < r.paidCount ? settled : r.paidCount;
+        uint256 daySlot = uint256(slot) / _BONUS_SLOTS_PER_DAY * _BONUS_SLOTS_PER_DAY;
+        uint256 dayN = slot % _BONUS_SLOTS_PER_DAY == 7 ? 0 : uint32(_dayTickets[daySlot]);
+        uint256 ownN = r.paidCount - dayN;
+        // Reservoir sampling: contender n replaces the nominee with probability 1/n. Counts
+        // and the nominee survive chunk boundaries, and the canonical seat order never changes.
+        // Every high seat has one ticket, regardless of its multiple, dice or activity history.
+        for (uint256 seat = uint256(draw.cursor) + 1; seat <= end; ++seat) {
+            bool daySeat = seat > ownN;
+            uint256 id = daySeat ? (daySlot << 64) | (seat - ownN) : (uint256(slot) << 64) | seat;
+            uint256 header = _bets[id];
+            uint256 highBit = daySeat ? _BET_HIGH_BIT << (_BONUS_PERIODS_PER_DAY - 1) : _BET_HIGH_BIT;
+            address player = address(uint160(header));
+            if (header & highBit == 0 || player == ContractAddresses.SDGNRS) continue;
+            ++draw.eligible;
+            if (_hash3(r.word, HIGH_RESERVE_WINNER_TAG, (uint256(slot) << 32) | draw.eligible) % draw.eligible == 0) {
+                draw.nominee = player;
+            }
+        }
+        draw.cursor = uint32(end);
+        uint256 amount;
+        if (settled == uint256(r.paidCount) + r.drawnCount) {
+            draw.resolved = true;
+            if (draw.eligible != 0 && _hash3(r.word, HIGH_RESERVE_DRAW_TAG, slot) % _HIGH_RESERVE_CHANCE == 0) {
+                draw.won = true;
+                amount = _highRollerReserve;
+                _highRollerReserve = 0;
+            }
+            emit HighRollerReserveDrawn(slot, draw.eligible, draw.won ? draw.nominee : address(0), amount, _highRollerReserve);
+        }
+        // Effects precede the existing Coinflip credit call. Awards never feed action or comps,
+        // never receive a pool multiplier, and never convert to additional pass grants.
+        _highRollerDraws[slot] = draw;
+        if (amount != 0) IHighReserveCredit(ContractAddresses.COINFLIP).creditFlip(draw.nominee, amount);
+    }
+
+    function highRollerReserve() external view returns (uint256) {
+        return _highRollerReserve;
+    }
+
+    /// @notice Sampling progress; eligible is the final count only once all paid seats are read.
+    /// @dev A nominee is a winner only if resolved AND won. Drawn free seats never enter this draw.
+    function highRollerDrawOf(uint64 slot) external view returns (HighRollerDraw memory) {
+        return _highRollerDraws[slot];
+    }
+
+    /// @dev Base-seat fees keep the ordinary action/2% comp treatment, excluding Added and roll
+    ///      gains. Extra high capital instead funds comps from its conservative 12% expected loss:
+    ///      80% to comps, 20% left unissued. The fair pool roll has mean one, so use PRE-ROLL fee
+    ///      value. A contested bounty is redistribution; a sole high seat risks its bounty too.
+    ///      These extras never enter the day books, which would spend their loss again on boosts.
+    ///      Book once at seal; the table books nothing for this slot during settlement.
+    function _bookFees(
+        uint64 slot, JackpotRound storage r, uint256 ranBankroll, uint256 mainPool, uint256 highSeats
+    ) private {
+        uint256 paidCount = r.paidCount;
+        if (paidCount == 0 || ranBankroll == 0) return;
         uint256 bps = r.multiplierBps < 10_000 ? r.multiplierBps : 10_000;
-        uint256 staked = paidUnits * _JACKPOT_PRICE * bps / 10_000 * ranBankroll / r.totalPool;
-        // High seats hold H units each: every paid unit beyond the seat count, plus the seats.
-        uint256 high = staked * (paidUnits - r.paidCount + highSeats) / paidUnits;
+        uint256 staked = paidCount * _JACKPOT_PRICE * bps / 10_000 * ranBankroll / mainPool;
+        uint256 high = staked * highSeats / paidCount;
         unchecked {
             _dayStaked[uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY)] += staked + (high << _DAY_HIGH_SHIFT);
         }
+        uint256 highFees = (uint256(r.paidUnits) - paidCount) * _JACKPOT_PRICE;
+        uint256 atRisk = highSeats == 1 ? highFees : highFees / 2;
+        uint256 lossBudget = atRisk * _HIGH_LOSS_BPS / _BPS_DENOMINATOR;
+        uint256 highComps = lossBudget * _HIGH_COMP_SHARE_BPS / _BPS_DENOMINATOR;
         uint256 earned = staked / 50;
+        earned += highComps;
         if (earned != 0) IFlipCrapsComps(ContractAddresses.COIN).creditCrapsComps(earned);
+        if (highFees != 0) emit JackpotHighCompsAccrued(slot, highFees, atRisk, lossBudget, highComps);
     }
 
     function jackpotProgress() external view returns (uint64 slot, uint256 added, bool started, bool complete) {

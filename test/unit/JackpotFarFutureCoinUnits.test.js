@@ -31,8 +31,8 @@ describe("JackpotFarFutureCoinUnits — the daily jackpot battle's award draw", 
     const draw = body("function _collectJackpotChunk(");
     expect(draw).to.include("ticketQueue[_tqFarFutureKey(candidate)]");
     expect(draw).to.include("(entropy >> 128) % len");
-    expect(draw).to.include("_tqWordAt(queue, idx)");
-    expect(draw).to.include("if (len == 0) continue;");
+    expect(draw).to.include("_tqWordAt(queue, walk.position)");
+    expect(draw).to.include("if (len == 0)");
     expect(draw).not.to.match(/queue\s*\[[^\]]+\]\s*=|queue\.push|queue\.pop|delete\s+queue/);
   });
 

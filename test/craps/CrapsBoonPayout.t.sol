@@ -67,7 +67,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
 
     function _customSlot() internal returns (uint64 slot) {
         vm.prank(vaultOwner);
-        slot = craps.createBattle(PLAYED, 4, 10, 0, 0, uint40(block.timestamp + 1 days), true, 0);
+        slot = craps.createBattle(PLAYED, 4, 10, 0, uint40(block.timestamp + 1 days), true, 0);
     }
 
     // ---------------------------------------------------------------------

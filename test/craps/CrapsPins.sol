@@ -11,11 +11,20 @@ import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 
 /// @dev The two things craps reads out of the live game: the raw lootbox-RNG slots and the
-///      player's activity score. One double serves both because production reads both from the
+///      player's mint history. One double serves both because production reads both from the
 ///      single `ContractAddresses.GAME` pin.
 contract MockGame {
     mapping(bytes32 => bytes32) public slots;
     mapping(address => uint256) public score;
+    uint24 public level;
+    mapping(address => uint256) private mintHistory;
+    mapping(address => bool) private hasMintHistory;
+    function setLevel(uint24 value) external { level = value; }
+    function setMintHistory(address player, uint256 value) external { mintHistory[player] = value; hasMintHistory[player] = true; }
+    // Existing economic fixtures model qualified players; newcomer tests explicitly write zero.
+    function mintPackedFor(address player) external view returns (uint256) {
+        return hasMintHistory[player] ? mintHistory[player] : uint256(3) << 24;
+    }
     bool public rngLocked;
 
     function setRngLocked(bool locked) external { rngLocked = locked; }
@@ -328,7 +337,7 @@ abstract contract CrapsPins is Test {
         // MULTI-ENTRY: the general fixture, so a suite can seat one address more than once when
         // it wants twin slips on one table. The single-entry default is exercised directly by
         // `test_aCustomBattleChoosesWhetherOneAddressMayTakeSeveralSeats`.
-        slot = c.createBattle(played, bankMult, goalMult, su, bar, closeTime, true, 0);
+        slot = c.createBattle(played, bankMult, goalMult, su, closeTime, true, 0);
     }
 
     function _openBattle(CrapsViews c, uint32 played, uint8 bankMult, uint16 goalMult, uint24 su)
@@ -346,7 +355,7 @@ abstract contract CrapsPins is Test {
     {
         uint40 closeTime = uint40(vm.getBlockTimestamp() + 1 hours);
         vm.prank(vaultOwner);
-        slot = c.createBattle(played, bankMult, goalMult, su, 0, closeTime, true, h);
+        slot = c.createBattle(played, bankMult, goalMult, su, closeTime, true, h);
     }
 
     /// @dev A battle whose target the dice will never reach — the goal-agnostic fixture, for

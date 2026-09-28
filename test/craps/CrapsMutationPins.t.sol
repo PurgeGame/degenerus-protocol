@@ -84,7 +84,7 @@ contract CrapsMutationPins is CrapsPins {
         uint64 slot;
         for (uint256 i; i < 8; ++i) {
             vm.prank(vaultOwner);
-            slot = craps.createBattle(played, 2, 5, SU, 0, close, true, 0);
+            slot = craps.createBattle(played, 2, 5, SU, close, true, 0);
         }
         assertEq(slot, uint64(craps.customSlotBase() + 8), "the eighth custom sits at base + 8");
         assertEq(slot % 8, 0, "and its number is a multiple of eight");
@@ -113,7 +113,7 @@ contract CrapsMutationPins is CrapsPins {
         uint40 close = uint40(vm.getBlockTimestamp() + 1 hours);
         uint32 played = uint32(LW / 1 ether);
         vm.prank(vaultOwner);
-        uint64 slot = craps.createBattle(played, 2, 5, SU, 0, close, true, 2);
+        uint64 slot = craps.createBattle(played, 2, 5, SU, close, true, 2);
 
         vm.prank(alice);
         uint256 high = craps.enterBattle(slot, _boardA(), 2);

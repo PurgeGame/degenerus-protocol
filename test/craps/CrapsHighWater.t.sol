@@ -106,7 +106,7 @@ contract WaterHarness is CrapsViews {
         s.stop = Craps.SlipStop.Goal;
         s.peak = peakFlip * 1 ether;
         s.won = endFlip * 1 ether;
-        return _compositeOf(s) | standing;
+        return _compositeOf(s);
     }
 }
 
@@ -472,7 +472,7 @@ contract CrapsHighWaterTest is CrapsPins {
     ///      point wins; level on that the larger ending bankroll; level on that the higher frozen
     ///      standing. Nothing below that is in the composite — the table's own word breaks an
     ///      exact tie, which `CrapsBattle.t.sol` pins separately.
-    function test_theScheduledComparatorRanksPeakThenEndingThenStanding() public view {
+    function test_theScheduledComparatorRanksPeakThenEnding() public view {
         assertGt(
             craps.compositeAt(_goal(1, 0)),
             craps.compositeAt(_bust(511, 1e12)),
@@ -488,11 +488,7 @@ contract CrapsHighWaterTest is CrapsPins {
             craps.compositeAt(_goal(500, 89)) | 4095,
             "the ending bankroll is not the second term"
         );
-        assertGt(
-            craps.compositeAt(_goal(500, 90)) | 8,
-            craps.compositeAt(_goal(500, 90)) | 7,
-            "the standing is not the last term"
-        );
+        assertEq(craps.compositeAt(_goal(500, 90)) & 0xFFFF, 0, "activity bits entered the rank");
     }
 
     /// @dev THE ALL-BUST RACE IS BYTE-FOR-BYTE WHAT IT WAS, in both products: more shooters, then
@@ -501,9 +497,7 @@ contract CrapsHighWaterTest is CrapsPins {
     function test_theAllBustComparatorIsUnchangedAndIgnoresAPeak() public view {
         assertGt(craps.compositeAt(_bust(9, 1)), craps.compositeAt(_bust(8, 1e12)), "shooters first");
         assertGt(craps.compositeAt(_bust(9, 2)), craps.compositeAt(_bust(9, 1)), "remainder second");
-        assertGt(
-            craps.compositeAt(_bust(9, 1)) | 5, craps.compositeAt(_bust(9, 1)) | 4, "standing third"
-        );
+        assertEq(craps.compositeAt(_bust(9, 1)) & 0xFFFF, 0, "activity bits entered a bust rank");
         // The SAME bust ranks identically under both products' readings.
         assertEq(
             craps.compositeAt(_bust(9, 1)), craps.compositeAt(_bust(9, 1)), "a bust read two ways"

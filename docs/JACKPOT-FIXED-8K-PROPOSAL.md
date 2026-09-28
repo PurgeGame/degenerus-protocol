@@ -1,6 +1,6 @@
 # Fixed jackpot fee and pass purchase prices
 
-Latest pricing configuration, 2026-09-27. The user kept **25,000 normal / 500,000 high** retail and asked to retune the component rolls. The working tree now applies the tier distributions, 8,000 jackpot fee, and pass accounting below. It also applies the jackpot Added floor (150,000 FLIP while the game level is 0 or 1, then 50,000) and one award per 10,000 of Added. Verification of pricing and integration is distinct from a proof of the maximum possible transaction gas.
+Latest pricing and jackpot funding configuration, 2026-09-28. The user kept **25,000 normal / 500,000 high** retail and asked to retune the component rolls. The working tree applies the tier distributions, 8,000 jackpot fee, and pass accounting below. It also applies the jackpot Added floor (150,000 FLIP while the game level is 0 or 1, then 50,000), one award per 10,000 of Added, and fee-only extra high exposure. Verification of pricing and integration is distinct from a proof of the maximum possible transaction gas.
 
 ## Added and award count
 
@@ -30,33 +30,55 @@ The larger floor at levels 0 and 1 buys a broader early field: 15 awards instead
 | 1,000,000 | any | 1,000,000 | 100 | 10,000 |
 | 5,000,000 | any | 5,000,000 | 500 (cap) | 10,000 |
 
-For P normal paid-equivalent units and F awarded units, keeping the whole-pool lottery M:
+For P paid seats (each high roller counts once), F awarded seats, K high rollers, and the day's high multiple H, keeping the whole-pool lottery M:
 
 ```
-capital per unit = M × (Added + 8,000P) / (P + F)
+main allocation = M × (Added + 8,000P)
+capital per base seat = main allocation / (P + F)
+extra high fees = K × (H − 1) × 8,000
+extra high allocation = M × extra high fees
 ```
 
-Financial high copies count in P, while high-seat ranking and side-pot behavior remain separate. Valid pass/comp entitlements contribute quoted entry value, not a second count of their full-day face value. Pool capital is divided approximately half to gameplay and half to pot capital; allocation is not expected winnings.
+Each high roller contributes one 8,000-FLIP base entry to the main allocation and receives one ordinary base seat. Only this seat shares Added. Upgrading it to high cannot change anyone's base bankroll, main bounty or main remainder. The extra H−1 units receive no Added or ordinary high-lane protocol boost. Valid pass/comp entitlements contribute their quoted entry value, not a second count of their full-day face value. Pool capital is divided approximately half to gameplay and half to pot capital; allocation is not expected winnings.
+
+Every high roller's extra allocation is split exactly half to extra bankroll and half to the high-only bounty. The extra bankroll rides that seat's common run in proportion to its capital; ranking still uses the unscaled base run. Two or more high rollers compete for the whole high-only bounty, including when everyone busts. With one high roller, its extra bounty rides its run too and can bust. The ordinary base bounty always belongs to the main pot. Rounding and engine-cap excess from the base allocation stay in the main pot. A jackpot high seat's boon applies to its base run only; its extra capital earns no multiplied boon.
+
+The shared multiplier is 0.5× with 90% probability, 3× with 9%, 20× with 0.9%, and 100× with 0.1%; its mean is exactly one. Both allocations use that same roll. Thus the extra high allocation can grow or shrink, but is backed by extra entry value in expectation. For example, two 100× high rollers contribute 1,584,000 extra FLIP in total. At 0.5×, 396,000 funds their extra bankrolls and 396,000 funds their contested high-only pot. At 3×, each half is 2,376,000. Added changes neither figure.
 
 For illustration, assume about 0.90 of capital comes back to an entry: an 83% engine return on the bankroll half, the whole pot half, and coinflip credit at 0.984. This excludes progressive/record/boon rewards and gas.
 
 - A paid entry returns about 1.06 to 1.12 of its fee with two paid entries.
-- It returns about 1.01 when paid units equal awards.
-- It breaks even at about 1.25 paid units per award.
+- It returns about 1.01 when paid base seats equal awards.
+- It breaks even at about 1.25 paid base seats per award.
 - It approaches the engine and coinflip edge beyond that.
 
-This profile is the same at every game stage, because Added per award is pinned near 10,000. Shared dice correlate outcomes, so these marginal expectations are not independent-run probabilities.
+These illustrations describe base seats, not the high extras. This profile is the same at every game stage, because Added per award is pinned near 10,000. Shared dice correlate outcomes, so these marginal expectations are not independent-run probabilities.
 
-**Emission.** The floor binds while X is below it:
+## Extra high loss and comps
+
+At field seal, the extra high fees fund a conservative whole-run loss budget of **12% of capital exposed to the engine**. This reuses the existing scheduled-run subsidy calibration as an estimate, not a measurement of the battle's realized profit. **80% of that budget credits the shared comp allowance; 20% stays unissued.** Any engine loss beyond the conservative budget also stays unissued. Comp allowance is not an immediate player payout.
+
+| High field | Pre-multiplier capital exposed to engine loss | Loss budget | Comp allowance added |
+|---|---:|---:|---:|
+| Two or more high rollers | Half the extra fees | 6% of extra fees | **4.8% of extra fees** |
+| One high roller | All extra fees, including the bounty rider | 12% of extra fees | **9.6% of extra fees** |
+
+The contested bounty is redistribution between players, so it does not count as engine loss. The fair multiplier changes realized capital without changing its EV; comp booking therefore uses fee value before that roll. Neither the value removed by a 0.5× roll nor the extra value allocated by a high roll changes this loss budget. For the two-100×-roller example, comps accrue 76,032 FLIP under every multiplier, and 19,008 of the loss budget remains unissued.
+
+Extra high capital does not also enter the seven-day action book: doing so would spend the same expected loss again on future battle boosts. The high roller's one base seat retains the ordinary jackpot fee-only action booking and 2% comp treatment. Both comp components accrue exactly once, at seal. `JackpotHighCompsAccrued` exposes extra fee value, at-risk capital, loss budget and comp credit for indexers. Ordinary non-jackpot high battles retain their existing accounting.
+
+## Added allocation while the floor binds
+
+The floor binds while X is below it:
 
 - X reaches 150,000 at a pool of 30,000 tickets;
 - X reaches 50,000 at a pool of 10,000 tickets (100 ETH at 0.01, 400 ETH at 0.04).
 
-At bootstrap the rule emits 150,000 a day, against 50,000 under 25,000 + X. Level 0 can last up to the 365-day deploy idle timeout. Above X = 50,000 it emits 25,000 a day less than 25,000 + X.
+At bootstrap the rule allocates 150,000 a day, against 50,000 under 25,000 + X. This is pre-multiplier capital, not net tokens issued after runs and payouts. Level 0 can last up to the 365-day deploy idle timeout. Above X = 50,000 it allocates 25,000 a day less than 25,000 + X.
 
 ## Small stakes become straightforward
 
-Added is at least 10,000 times F, and each paid financial unit contributes 8,000. Therefore the smallest pool roll, M=0.5, leaves at least 4,000 capital per unit for any nonempty field. Rounding half of that down in 300-FLIP bankroll increments leaves at least **1,800 FLIP bankroll**.
+Added is at least 10,000 times F, and each paid base seat contributes 8,000 to the main allocation. Therefore the smallest pool roll, M=0.5, leaves at least 4,000 capital per base seat for any nonempty field. Rounding half of that down in 300-FLIP bankroll increments leaves at least **1,800 FLIP bankroll**. Extra high capital is a separate rider and cannot dilute this allocation.
 
 Consequently this proposal does not need the earlier tiny-bankroll normalization design. A count cap only increases this lower bound. Do not derive F from the multiplied pool, which would change the proof. Very large allocations still need the existing upper-bound, high-pot residual and gas checks.
 
@@ -101,11 +123,21 @@ The component tier odds change, not their maximum bankroll or bounty. Matching b
 
 At the daily request, Game computes X and applies the floor with `CrapsPriceLib.jackpotAdded(X, level)`, using the level before the last-purchase bump. The jackpot delegate stores that whole Added and counts awards as Added / 10,000. Paid fees and the pool lottery do not change that target. The cap is 500 awards, collected in chunks of up to 150. The old capacity-based removal of awards is unnecessary under this funding formula; the minimum-bankroll argument above applies.
 
-The floor is additional protocol subsidy while it binds. Every paid and awarded entry throws the field's one dice seed. An awarded entry keys only its board scatter, survival coin and shooter boost to its bet id, so repeat awards to one wallet stay separate runs. Only paid fees are craps action. At seal the battle books the bankroll share of the fee money the pool roll kept (half the fees, halved again on a 0.5x roll) and credits 2% of that to the comp lane. Awarded bankroll, Added and any roll gain are never booked or comped. The table books and comps nothing further for the jackpot slot.
+The floor is additional protocol subsidy while it binds. Every paid and awarded entry throws the field's one dice seed. An awarded entry keys only its board scatter, survival coin and shooter boost to its bet id, so repeat awards to one wallet stay separate runs. Base-seat action books only the bankroll share of the base fees the pool roll kept, excluding Added and roll gains, and credits 2% of that to comps. Extra high comps follow the separate expected-loss rule above. The table books and comps nothing further for the jackpot slot.
+
+Award selection chooses an eligible future level at random, chooses a random start in its queue, then walks circularly until the field is full or that level has been traversed once. Another level is then selected with replacement, so the same level and wallet may win again. Each award is a separate seat. Eligibility, visit position and remaining walk length survive the 150-entry transaction boundary; resuming does not reroll an unfinished visit.
 
 Focused verification includes exhaustive preset expectation checks, high odds and retail margins, comp debits, future-day commitment gates, 21:1 conversion, award splits, and jackpot funding/count checks. Full merged-jackpot worst-case gas certification remains separate; a typical successful advance is not a maximum-gas proof.
 
-### Verification snapshot
+### September 28 verification
+
+**277 Solidity tests pass** across the jackpot, ordinary battle/high/boon/comp/progressive, draw, purchase-stage and advance-integration suites, with `FOUNDRY_ISOLATE=true` and 1,000 runs per fuzz property. **Three JavaScript draw-source checks pass.** New coverage checks main-allocation invariance under a high upgrade, no Added in extra high capital, pool conservation, all four multiplier outcomes, pre-roll loss booking, single accrual across retries, sole versus contested bounty risk, and base-only jackpot high boons.
+
+The largest measured jackpot advance transaction is **7,041,046 gas**, including intrinsic gas; the 500-award fixture uses four draw calls and seven later settlement calls. On 99 populated large queues, sequential draw gas falls from **1,037,305 to 706,461** for the first chunk and **986,554 to 498,427** for a resumed chunk. Singleton queues add about 8–9% draw overhead but remain below 1 million in these fixtures. These measurements do not certify every possible dice sequence.
+
+Fresh production runtime sizes are CrapsBattle **24,056 bytes** (520 bytes of EIP-170 headroom), JackpotBattle **6,290**, and JackpotModule **22,558**. All production deployment sizes pass. The three changed contracts with storage match their layout goldens, and the table/delegate layouts match each other. RNG-window, RNG-taint and unchecked-arithmetic registry gates pass. This is focused regression coverage; the entire repository test tree was not rerun.
+
+### Historical verification snapshot (before the September 28 changes)
 
 **Commit-readiness blocker:** the expanded regression build fails with a via-IR stack-depth error at `test/gas/AdvanceNestedFullCompositionGas.t.sol:244`. That fixture and its `PurchaseDailyWorstCase` / `AdvanceNestedSettlementGas` dependencies still assume the earlier single-call battle, removed `JackpotBattleRun` events, and RNG application combined with daily payouts. They need porting to the current staged lifecycle before the broader test tree is green. The focused checks below pass; they do not imply that expanded suite passed.
 

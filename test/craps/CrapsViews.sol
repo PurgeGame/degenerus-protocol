@@ -24,6 +24,14 @@ contract CrapsViews is CrapsBattle {
         return _rankOf(r);
     }
 
+    // Legacy field positions used only to inject ignored score bits in regression tests.
+    uint256 internal constant _BET_SCORE_SHIFT = 190;
+    uint256 internal constant _BET_SCORE_MASK = 0xFFFF;
+    uint256 internal constant _AWARD_STANDING = 100;
+    uint256 internal constant _SYBIL_SCORE_FLOOR = 12;
+    uint256 internal constant _MAX_MIN_SCORE = 0xFFF;
+    function entryPrice(address player, uint256 base) external view returns (uint256) { return _entryPrice(player, base); }
+
     // ── Constants ───────────────────────────────────────────────────────────
     uint256 public constant MIN_BANKROLL_FLIP = _MIN_BANKROLL_FLIP;
     uint256 public constant MAX_BANKROLL_MULT = _MAX_BANKROLL_MULT;
@@ -250,10 +258,11 @@ contract CrapsViews is CrapsBattle {
             uint256 boardStake,
             uint256 battleStake,
             uint256 boostQuote,
-            uint256 minScore
+            uint256 reserved
         )
     {
-        return _bonusTermsFor(day, period);
+        (bankroll, goal, boardStake, battleStake, boostQuote) = _bonusTermsFor(day, period);
+        reserved = 0; // Preserve the test fixtures' tuple shape; no score gate exists.
     }
 
     function bonusBoostBand(uint24 day, uint256 period)
@@ -532,7 +541,7 @@ contract CrapsViews is CrapsBattle {
             // CONTESTED lane is paid to one of its seats when the field finishes, not returned by
             // a run, so it is no part of what this quotes.
             if (header & _BET_HIGH_BIT != 0 && uint32(_highField[w.key]) == 1) {
-                (uint256 lane,) = _laneBoostSplit(w, word, header);
+                uint256 lane = _laneBoost(w, word);
                 paid += _ride(s.paid, (scale - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT + lane, w.bankroll);
             }
         }
@@ -621,10 +630,6 @@ contract CrapsViews is CrapsBattle {
         return _boostBase(_slotWindow(slot));
     }
 
-    function boostShareOf(uint256 units, uint256 held) external pure returns (uint256) {
-        return _boostShare(units, held);
-    }
-
     function highBaseOf(uint64 slot) external view returns (uint256) {
         return _highBase(_slotWindow(slot));
     }
@@ -671,10 +676,7 @@ contract CrapsViews is CrapsBattle {
             paid = s.paid * scale;
             paid += _boonBonus((header >> _BET_BOON_SHIFT) & _BET_BOON_MASK, paid);
             if (hi && uint32(_highField[w.key]) == 1) {
-                // The admitted lane boost, as `_laneBoostSplit` rations it by the seat's standing.
-                uint256 lane = _roundBoost(
-                    _boostShare(_highBoostUnits(w, word), (header >> _BET_SCORE_SHIFT) & _BET_SCORE_MASK)
-                ) * _BATTLE_STAKE_UNIT;
+                uint256 lane = _roundBoost(_highBoostUnits(w, word)) * _BATTLE_STAKE_UNIT;
                 paid += _ride(s.paid, (scale - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT + lane, w.bankroll);
             }
         }

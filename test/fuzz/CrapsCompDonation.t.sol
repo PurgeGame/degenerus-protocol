@@ -24,7 +24,7 @@ contract CrapsCompDonationTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.prank(ContractAddresses.CREATOR);
-        slot = crapsBattle.createBattle(300, 4, 5, 2, 0, uint40(block.timestamp + 1 hours), false, 0);
+        slot = crapsBattle.createBattle(300, 4, 5, 2, uint40(block.timestamp + 1 hours), false, 0);
         index = slot - crapsBattle.CUSTOM_SLOT_BASE();
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame(player, 2_000 ether);

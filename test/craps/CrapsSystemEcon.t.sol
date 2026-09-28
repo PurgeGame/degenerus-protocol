@@ -296,15 +296,20 @@ contract CrapsSystemEconTest is CrapsPins {
         // entrant count now includes the free, awarded seats that burned nothing. What actually
         // cancels against the door's burn is the fee money the field's OWN `_bookFees` did not
         // already book as action; the rest of the pot — Added, the multiplier's gain, every
-        // free seat's share — is house money like any other window's boost. Replayed here off
-        // the same round the contract sealed, since nothing else exposes that split.
+        // free seat's share — is house money like any other window's boost. Only base seats are
+        // booked: a high seat's extra units are door fees that fund its rider and the high-only
+        // bounty, never action. Replayed here off the same round the contract sealed, since
+        // nothing else exposes that split.
         if (period == 5) {
             (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(craps)).jackpotBattleOf(slot);
             uint256 price = JackpotBattle(address(craps)).jackpotEntryPrice();
-            uint256 totalUnits = uint256(round.paidUnits) + uint256(round.drawnUnits);
+            uint256 totalUnits = uint256(round.paidCount) + uint256(round.drawnUnits);
+            uint256 highPool = (uint256(round.paidUnits) - round.paidCount) * price * round.multiplierBps / 10_000;
+            uint256 mainPool = round.totalPool - highPool;
             uint256 ranBankroll = totalUnits * uint256(round.bankroll);
             uint256 bps = uint256(round.multiplierBps) < 10_000 ? uint256(round.multiplierBps) : 10_000;
-            uint256 staked = uint256(round.paidUnits) * price * bps / 10_000 * ranBankroll / round.totalPool;
+            uint256 staked = round.paidCount == 0 || ranBankroll == 0 ? 0
+                : uint256(round.paidCount) * price * bps / 10_000 * ranBankroll / mainPool;
             fieldBounty = price * round.paidUnits - staked;
             laneStake = 0;
         }

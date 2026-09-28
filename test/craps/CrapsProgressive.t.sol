@@ -9,9 +9,9 @@ import {CrapsPins} from "./CrapsPins.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Taps for the progressive alone. Every one of them drives a SHIPPED internal — the fold
-///      that stores a winner's composite, the award branch a finalization runs, the rollover a
-///      rationed subsidy takes — so nothing here is a second implementation of a rule.
+///      that stores a winner's composite and the award branch a finalization runs.
 contract ProgHarness is CrapsViews {
+
     function bookDay(uint24 day, uint256 staked) external {
         _bookDay(day, staked, 0);
     }
@@ -44,7 +44,7 @@ contract ProgHarness is CrapsViews {
         s.stop = Craps.SlipStop.Goal;
         s.peak = peakFlip * 1 ether;
         s.won = endFlip * 1 ether;
-        return _compositeOf(s) | standing;
+        return _compositeOf(s);
     }
 
     /// @dev The composite a BUST folds: shooters completed, whether it kept anything, its high
@@ -56,7 +56,7 @@ contract ProgHarness is CrapsViews {
         s.handsPlayed = hands;
         s.won = endFlip * 1 ether;
         s.peak = 1e30; // saturates the bust's high-point bits, identical across these scores
-        return _compositeOf(s) | standing;
+        return _compositeOf(s);
     }
 
     /// @dev THE AWARD BRANCH, on a synthesized finalized scoreboard, driven the way `_payout`
@@ -98,10 +98,6 @@ contract ProgHarness is CrapsViews {
         credited = before - _progressive;
     }
 
-    function rollIn(bytes32 key, uint8 source, uint256 amount) external {
-        _rollIn(key, (uint256(source) << 248) | amount);
-    }
-
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
         return _settlementOf(betId, _bets[betId], _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
@@ -129,7 +125,7 @@ contract ProgHarness is CrapsViews {
         returns (uint256)
     {
         return (goal ? _SC_GOAL_BIT : 0) | ((primary & _SC_PRIMARY_MASK) << _SC_PRIMARY_SHIFT)
-            | ((wonFlip & _SC_WON_MASK) << _SC_WON_SHIFT) | standing;
+            | ((wonFlip & _SC_WON_MASK) << _SC_WON_SHIFT);
     }
 
     function boostUnitsAt(uint64 slot) external view returns (uint256) {
@@ -631,20 +627,19 @@ contract CrapsProgressiveTest is CrapsPins {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // C. THE STANDING CURVE — what it denies goes into the pool, once.
+    // C. ACTIVITY INDEPENDENCE — the winner receives the full pool share.
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev A RATIONED AWARD SUBTRACTS ONLY THE CREDIT. The candidate was already in the pool, so
-    ///      what the standing denies never left it and is not added back a second time.
-    function test_aRationedAwardSubtractsOnlyTheCredit() public {
+    /// @dev The entire candidate is paid and debited from the pool, at every activity score.
+    function test_progressivePaysTheFullShareAtEveryActivityScore() public {
         uint16[5] memory scores = [uint16(0), 1, 6, 11, 12];
         for (uint256 i = 0; i < 5; ++i) {
             uint256 pool = 900_000 ether;
             craps.seedProgressive(pool);
             uint256 candidate = craps.poolShareOf(pool, craps.PROG_ROUTINE_COMMON_BPS());
-            uint256 expected = craps.boostShareOf(candidate, scores[i]);
+            uint256 expected = candidate;
             uint256 credited = craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 25, scores[i], alice);
-            assertEq(credited, expected, "the award did not follow the standing curve");
+            assertEq(credited, expected, "activity score reduced the award");
             assertEq(craps.progressivePool(), pool - expected, "the pool fell by other than the credit");
         }
 
@@ -652,10 +647,10 @@ contract CrapsProgressiveTest is CrapsPins {
         craps.seedProgressive(900_000 ether);
         assertEq(
             craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 25, 6, alice),
-            7_500 ether,
-            "the score-6 credit is not 7,500"
+            45_000 ether,
+            "activity score reduced the full 5% award"
         );
-        assertEq(craps.progressivePool(), 892_500 ether, "the score-6 pool is not 892,500");
+        assertEq(craps.progressivePool(), 855_000 ether, "pool did not debit the full award");
     }
 
     /// @dev AT FULL STANDING THERE IS NO RETENTION AND NO ROLLOVER — on the award and on the
@@ -703,114 +698,62 @@ contract CrapsProgressiveTest is CrapsPins {
             assertEq(peak, TAP_BANKROLL * 25, "the log carried another high point");
             assertEq(scoreBps, 25 * craps.BPS_DENOMINATOR(), "the log carried another multiple");
             assertEq(candidate, pool / 20, "the candidate is not the routine common rung");
-            assertEq(paid, candidate / 6, "the credit is not the score-6 share");
-            // What the standing denied has no field of its own — it is `candidate - paid`, and it
-            // never left the pool, which is what the balance below states.
+            assertEq(paid, candidate, "activity score reduced the award");
             assertEq(balance + paid, pool, "the new balance plus the credit is not the old balance");
             seen = true;
         }
         assertTrue(seen, "no award was logged");
     }
 
-    /// @dev THE ROLLOVER LOG, driven directly: it lands once, it names its source, and the balance
-    ///      it reports is the one the pool actually holds. A zero rollover writes and logs nothing.
-    function test_aRolloverLandsOnceAndAZeroOneIsSilent() public {
-        craps.seedProgressive(1000 ether);
-        vm.recordLogs();
-        craps.rollIn(bytes32(uint256(1)), 1, 0);
-        assertEq(vm.getRecordedLogs().length, 0, "a zero rollover was logged");
-        assertEq(craps.progressivePool(), 1000 ether, "a zero rollover moved the pool");
-
-        vm.recordLogs();
-        craps.rollIn(bytes32(uint256(1)), 2, 400 ether);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(logs.length, 1, "a rollover logged other than once");
-        assertEq(uint256(logs[0].topics[2]), 2, "the rollover did not name its source");
-        (uint256 amount, uint256 balance) = abi.decode(logs[0].data, (uint256, uint256));
-        assertEq(amount, 400 ether, "the rollover logged another amount");
-        assertEq(balance, 1400 ether, "the rollover logged another balance");
-        assertEq(craps.progressivePool(), balance, "the pool disagrees with its own log");
-    }
-
     // ════════════════════════════════════════════════════════════════════════
-    // D. THE LADDER AND THE LANE — a real field, a real rationed subsidy.
+    // D. THE LADDER AND THE LANE — full rewards at every activity score.
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev THE MAIN LADDER'S FORFEITURE, end to end and at every score the curve names. What the
-    ///      winner is credited plus what the pool takes is the FULL-STANDING award exactly, at the
-    ///      rounding stage the payment lands on.
-    ///
-    ///      THE TWO PROTOCOL BODIES ALWAYS HOLD THE FLOOR — `_seatBody` writes
-    ///      `_SYBIL_SCORE_FLOOR` outright rather than reading an activity score — so a field they
-    ///      win rolls nothing over and says nothing about the curve. The fixture therefore
-    ///      searches the settling word for a table the PLAYER wins, replaying off a snapshot so
-    ///      the search uses production's own comparator rather than a copy of it.
-    function test_theMainLaddersForfeitureLandsInThePoolAtEveryScore() public {
+    /// @dev Every activity score receives the full main bonus. Check actual liquid and deferred
+    ///      awards together so pass conversion cannot hide a withheld reward.
+    function test_mainAwardsHaveNoActivityForfeiture() public {
         uint16[5] memory scores = [uint16(0), 1, 6, 11, 12];
-        uint256 sawARollover;
-        for (uint256 s = 0; s < 5; ++s) {
+        for (uint256 s; s < scores.length; ++s) {
             _freshDay();
-            uint256 poolBefore = craps.progressivePool();
             _seat(alice, PER, scores[s]);
             _warpPastClose(PER);
             uint48 index = _armAt(PER);
             uint64 slot = _slotAt(PER);
             bytes32 key = craps.keyOfSlot(slot);
-
-            uint256 boost;
-            uint256 rolled;
-            bool found;
             uint256 snap = vm.snapshotState();
-            for (uint256 i = 0; i < 96 && !found; ++i) {
+            bool found;
+            for (uint256 i; i < 96 && !found; ++i) {
                 _setWord(index, uint256(keccak256(abi.encode("ladder", s, i))));
-                boost = craps.boostUnitsAt(slot);
+                uint256 boost = craps.boostUnitsAt(slot);
                 if (boost == 0) continue;
                 vm.recordLogs();
                 craps.resolveSlot(slot, WHOLE_FIELD);
+                Vm.Log[] memory logs = vm.getRecordedLogs();
                 if (craps.betOf(_idAt(slot, craps.battleOf(key).winnerId)).player == alice) {
-                    rolled = _rolledIn(vm.getRecordedLogs(), 1);
+                    PaidOut[] memory pots = _potsIn(logs);
+                    assertEq(pots.length, 1);
+                    (, uint256 gross, uint256 liquid) = _splitsIn(logs, 1);
+                    uint256 principal = craps.battleOf(key).entrants * craps.battleOf(key).battleStake;
+                    uint256 fullBonus = craps.roundBoostFor(boost) * craps.BATTLE_STAKE_UNIT();
+                    assertEq(pots[0].amount + gross - liquid, principal + fullBonus, "score reduced the award");
+                    assertEq(_rolledIn(logs, 1), 0, "score rolled a bonus into the pool");
                     found = true;
                 } else {
                     vm.revertToState(snap);
                     snap = vm.snapshotState();
                 }
             }
-            assertTrue(found, "no word gave the player a boosted win: the fixture proves nothing");
-
-            uint256 full = craps.roundBoostFor(boost);
-            uint256 admitted = craps.roundBoostFor(craps.boostShareOf(boost, scores[s]));
-
-            // THE IDENTITY: admitted + rolled == the full-standing award, in granules and so in
-            // wei. It closes at the floor (nothing rolled) and at zero (everything did).
-            assertEq(
-                admitted + rolled / craps.BATTLE_STAKE_UNIT(), full, "credit plus rollover is not the full award"
-            );
-            assertEq(rolled, (full - admitted) * craps.BATTLE_STAKE_UNIT(), "the rollover is not what standing denied");
-            assertGe(craps.progressivePool(), poolBefore, "a rollover took money out of the pool");
-            if (admitted < full) {
-                assertGt(rolled, 0, "the curve denied part of the award and nothing was banked");
-                ++sawARollover;
-            } else {
-                // The floor, and the rung just under it: `_boostShare` divides by `12 - held`, so
-                // a score of 11 takes the whole award exactly as a score of 12 does.
-                assertEq(rolled, 0, "an award the curve admitted whole still rolled money over");
-            }
-            if (scores[s] >= craps.SYBIL_SCORE_FLOOR() - 1) {
-                assertEq(admitted, full, "a score at or one below the floor was rationed");
-            }
+            assertTrue(found, "no word gave the player a boosted win");
         }
-        assertEq(sawARollover, 3, "the three rationed scores did not each bank a forfeiture");
     }
 
-    /// @dev A SOLE HIGH RIDER'S DENIED CAPITAL NEVER GETS ON THE TABLE. It is banked before the
-    ///      run is consulted, so nothing here manufactures a return on money the standing refused —
-    ///      and only the admitted capital rides.
-    function test_aSoleHighRidersDeniedCapitalIsBankedNotRidden() public {
+    /// @dev The sole high rider receives the full lane bonus as additional capital on its run.
+    function test_scorelessSoleHighRiderReceivesFullBonusCapital() public {
         _freshDayWithHighAction();
         uint64 slot = _slotAt(PER);
         uint256 laneUnits;
 
-        // A scoreless high roller: the whole lane boost is denied.
+        // A scoreless high roller receives the same lane capital as an established one.
         _seatHigh(alice, PER, 0);
         _warpPastClose(PER);
         uint48 index = _armAt(PER);
@@ -829,32 +772,30 @@ contract CrapsProgressiveTest is CrapsPins {
         uint256 rolled = _rolledIn(logs, 3);
         assertEq(
             rolled,
-            craps.roundBoostFor(laneUnits) * craps.BATTLE_STAKE_UNIT(),
-            "a scoreless sole rider did not bank its whole lane boost"
+            0,
+            "activity score withheld high-lane capital"
         );
-        // The same scoreless seat also wins the main field, so its LADDER forfeiture lands here
-        // too. The pool's movement is the sum of every source and nothing besides.
+        // Neither lane nor main awards withhold anything into the progressive.
         assertEq(
             craps.progressivePool(),
             poolBefore + rolled + _rolledIn(logs, 1) + _rolledIn(logs, 2),
             "the pool moved by other than its logged rollovers"
         );
 
-        // And what rode home carries NO boost: with the boost denied, the rider's return is a
-        // fraction of its extra bounties alone.
+        // Liquid plus pass value must account for the full bonus riding the same dice run.
         PaidOut[] memory rides = _lanePaymentsIn(logs, true);
         assertEq(rides.length, 1, "the sole lane did not settle exactly once");
         CrapsBattle.Settlement memory s = craps.settlementIn(rides[0].betId, slot);
         uint256 extra =
             (craps.highMultOfSlot(slot) - 1) * craps.battleOf(craps.keyOfSlot(slot)).battleStake;
         (uint128 bank,,,,,) = craps.bonusTermsFor(craps.currentDayIndex(), PER);
-        assertEq(rides[0].amount, craps.rideOf(s.paid, extra, bank), "the denied boost still rode");
+        uint256 boostCapital = craps.roundBoostFor(laneUnits) * craps.BATTLE_STAKE_UNIT();
+        (, uint256 laneGross, uint256 laneLiquid) = _splitsIn(logs, 3);
+        assertEq(rides[0].amount + laneGross - laneLiquid, craps.rideOf(s.paid, extra + boostCapital, bank), "full bonus did not ride");
     }
 
-    /// @dev A CONTESTED LANE ROUTES ITS BOOST FORFEITURE AND NOTHING ELSE. The lane's principal is
-    ///      player-funded — every seat posted the same bounties — so it pays out whole whatever
-    ///      the winner's score, and no part of it reaches the pool.
-    function test_aContestedLaneRoutesOnlyItsBoostForfeiture() public {
+    /// @dev A contested high winner receives the whole funded principal and protocol bonus.
+    function test_scorelessContestedHighWinnerReceivesFullBonus() public {
         _freshDayWithHighAction();
         uint64 slot = _slotAt(PER);
         _seatHigh(alice, PER, 0);
@@ -881,12 +822,13 @@ contract CrapsProgressiveTest is CrapsPins {
 
         assertEq(
             _rolledIn(logs, 2),
-            craps.roundBoostFor(laneUnits) * craps.BATTLE_STAKE_UNIT(),
-            "the contested lane did not bank its denied boost"
+            0,
+            "activity score withheld the contested bonus"
         );
         PaidOut[] memory lane = _lanePaymentsIn(logs, false);
         assertEq(lane.length, 1, "a contested lane did not pay exactly once");
-        assertEq(lane[0].amount, principal, "the lane paid other than its whole player-funded principal");
+        (, uint256 laneGross, uint256 laneLiquid) = _splitsIn(logs, 2);
+        assertEq(lane[0].amount + laneGross - laneLiquid, principal + craps.roundBoostFor(laneUnits) * craps.BATTLE_STAKE_UNIT(), "lane did not pay principal plus full bonus");
         assertEq(
             craps.progressivePool() - poolBefore,
             _rolledIn(logs, 1) + _rolledIn(logs, 2) + _rolledIn(logs, 3),
@@ -1009,10 +951,10 @@ contract CrapsProgressiveTest is CrapsPins {
 
     /// @dev THE ENDING BANKROLL BREAKS A LEVEL HIGH POINT, and the standing breaks a level pair.
     ///      The ladder is exactly the one the comparator documents.
-    function test_theComparatorLadderIsPeakThenEndingThenStanding() public view {
+    function test_comparatorRanksPeakThenEndingAndIgnoresActivity() public view {
         assertGt(craps.goalScore(5000, 100, 0), craps.goalScore(4999, 1e12, 4095), "the peak is not the first term");
         assertGt(craps.goalScore(5000, 101, 0), craps.goalScore(5000, 100, 4095), "the ending is not the second term");
-        assertGt(craps.goalScore(5000, 100, 7), craps.goalScore(5000, 100, 6), "the standing is not the last term");
+        assertEq(craps.goalScore(5000, 100, 7), craps.goalScore(5000, 100, 6), "activity score broke a dice tie");
     }
 
     /// @dev THE COMPOSITE DECODES BACK TO WHAT IT SAYS, and it says the same thing for both
@@ -1224,7 +1166,6 @@ contract CrapsProgressiveTest is CrapsPins {
 
         // Funding, a rollover and an award, all with the books held up against them.
         _openDay();
-        craps.rollIn(bytes32(uint256(1)), 1, 777 ether);
         craps.seedProgressive(1_000_000 ether);
         craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 130, 12, alice);
         assertEq(craps.dayStaked(day), staked, "progressive money reached the day's action");
@@ -1314,7 +1255,7 @@ contract CrapsProgressiveTest is CrapsPins {
     }
 
     /// @dev THE POOL CANNOT BE OVERDRAWN, at any balance, any high point and any score. Integer
-    ///      division floors, the curve only ever divides, and the pool falls by
+    ///      division floors, and the pool falls by
     ///      exactly what was credited.
     function testFuzz_theAwardNeverOverdrawsAndTheBooksClose(uint96 pool, uint32 peakMult, uint8 standing) public {
         uint256 held = standing % 16;
@@ -1336,7 +1277,7 @@ contract CrapsProgressiveTest is CrapsPins {
             ? craps.PROG_ROUTINE_RARE_BPS()
             : (score >= c ? craps.PROG_ROUTINE_COMMON_BPS() : 0);
         uint256 candidate = bps == 0 ? 0 : craps.poolShareOf(pool, bps);
-        assertEq(credited, craps.boostShareOf(candidate, held), "the award is not the rung's standing share");
+        assertEq(credited, candidate, "the award is not the full rung share");
     }
 
     /// @dev THE WHOLE LEDGER CLOSES. Over a scripted run of days, rollovers and awards, funding
@@ -1735,7 +1676,7 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev A SCORE-ZERO WINNER CONVERTS NOTHING even on a pumped day: the ration runs first, the
     ///      denied boost rolls into the progressive as it always did, and no pass rides what the
     ///      standing refused.
-    function test_aScoreZeroWinnerBanksNoPassesOnAPumpedDay() public {
+    function test_scorelessWinnerReceivesPassAwardsOnAPumpedDay() public {
         _freshDayWithMainAction();
         _seat(alice, PER, 0);
         _warpPastClose(PER);
@@ -1762,10 +1703,10 @@ contract CrapsProgressiveTest is CrapsPins {
         assertTrue(found, "no word gave the scoreless player a boosted win: the fixture proves nothing");
 
         (uint256 count,,) = _splitsIn(logs, 1);
-        assertEq(count, 0, "a fully denied boost still split");
+        assertGt(count, 0, "the full bonus did not split");
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
-        assertEq(n + h, 0, "a scoreless winner banked passes");
-        assertGt(_rolledIn(logs, 1), 0, "the denied boost no longer rolls into the pool");
+        assertGt(n + h, 0, "activity score blocked pass awards");
+        assertEq(_rolledIn(logs, 1), 0, "activity score withheld bonus value");
     }
 
     /// @dev A SOLE RIDER'S PROTOCOL RIDE SPLITS AND THE BOUNTY RIDE STAYS WHOLE. The pass slice
