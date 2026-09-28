@@ -139,6 +139,12 @@ contract DegenerusDeityPass {
     ///      symbol group — keep their own fills, and the die body (a <rect>, no
     ///      fill of its own) still inherits the gold ink.
     string private constant GOLD_DICE6_PIP_STYLE = "<style>#ico circle{fill:#111}</style>";
+    /// @dev Two crypto passes wear their familiar badge color on the outer ring, as the
+    ///      site's circular badges do: XRP (the WWXRP pass) red, Ethereum green.
+    uint8 private constant XRP_IDX = 0;
+    uint8 private constant ETH_IDX = 6;
+    string private constant XRP_RING = "#ed0e11";
+    string private constant ETH_RING = "#30d100";
 
     string private _outlineColor = "#3f1a82";
     string private _backgroundColor = "#d9d9d9";
@@ -262,9 +268,10 @@ contract DegenerusDeityPass {
     }
 
     /// @dev The protocol's three-ring badge, one big badge centered on the
-    ///      card: outer ring in the outline color, middle #111, inner #fff,
-    ///      the pass's symbol fitted into the inner circle. Crypto symbols
-    ///      keep source colors; non-crypto symbols use the settable ink.
+    ///      card: outer ring in the outline color (red for XRP, green for
+    ///      Ethereum), middle #111, inner #fff, the pass's symbol fitted into
+    ///      the inner circle. Crypto symbols keep source colors; non-crypto
+    ///      symbols use the settable ink.
     function _renderSvgInternal(
         string memory iconPath,
         uint8 quadrant,
@@ -286,8 +293,11 @@ contract DegenerusDeityPass {
         // dark pips over the gold die. Both the ring and the ink must be gold, so a
         // recolored pass falls back to the standard treatment.
         bool goldDice6;
+        string memory ring = _outlineColor;
         if (isCrypto) {
             colorOpen = "'><g style='vector-effect:non-scaling-stroke'>";
+            if (symbolIdx == XRP_IDX) ring = XRP_RING;
+            else if (symbolIdx == ETH_IDX) ring = ETH_RING;
         } else {
             string memory ncColor = _nonCryptoSymbolColor;
             goldDice6 =
@@ -323,7 +333,7 @@ contract DegenerusDeityPass {
             '" stroke="',
             _outlineColor,
             '" stroke-width="2.2"/>',
-            _rings(_outlineColor, goldDice6),
+            _rings(ring, goldDice6),
             symbolGroup,
             "</svg>"
         ));
