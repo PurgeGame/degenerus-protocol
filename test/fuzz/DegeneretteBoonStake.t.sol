@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
 
 /// @title DegeneretteBoonStake -- the degenerette stake boon (+4/8/12%, per currency)
 /// @notice The boon inflates the PACKED bet's per-spin stake and nothing else. The four
@@ -57,9 +58,11 @@ contract DegeneretteBoonStake is DeployProtocol {
         keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
 
     address private player;
+    DegeneretteMathHarness private math;
 
     function setUp() public {
         _deployProtocol();
+        math = new DegeneretteMathHarness();
         vm.warp(block.timestamp + 1 days);
 
         player = makeAddr("degenBoonPlayer");
@@ -137,7 +140,7 @@ contract DegeneretteBoonStake is DeployProtocol {
         vm.recordLogs();
         vm.prank(player);
         game.placeDegeneretteBet{value: ethValue}(address(0), currency, perSpin, spins, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
-        return _lastPackedStake();
+        return _lastPackedStake(perSpin);
     }
 
     /// @dev Place a single-spin ETH bet FOR `forPlayer` from `caller` (a gift when the
@@ -151,14 +154,16 @@ contract DegeneretteBoonStake is DeployProtocol {
         vm.recordLogs();
         vm.prank(caller);
         game.placeDegeneretteBet{value: perSpin}(forPlayer, CURRENCY_ETH, perSpin, 1, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
-        return _lastPackedStake();
+        return _lastPackedStake(perSpin);
     }
 
-    function _lastPackedStake() internal returns (uint256 stakePerSpin) {
+    function _lastPackedStake(uint128 paidPerSpin) internal returns (uint256 stakePerSpin) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] != BET_PLACED_SIG) continue;
             uint256 packed = abi.decode(logs[i].data, (uint256));
+            assertEq(math.paidStake(packed), paidPerSpin, "queued boon tier must recover the paid wager");
+            assertEq(packed >> 254, 0, "remaining reserved bits stay zero");
             uint256 unit = (packed >> BET_CURRENCY_SHIFT) & 1 == 0 ? 1 gwei : 1 ether;
             return ((packed >> BET_STAKE_SHIFT) & type(uint64).max) * unit;
         }

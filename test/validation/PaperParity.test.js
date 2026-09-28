@@ -841,66 +841,32 @@ describe("Paper Parity (Phase 46)", function () {
   // PAR-16: Degenerette base payouts and ROI curve
   // =========================================================================
 
-  // QUICK_PLAY_BASE_PAYOUTS_PACKED and ROI BPS values are private constants in
-  // DegenerusGameDegeneretteModule.sol. The packed value reconstruction verifies
-  // the encoding. Behavioral testing is in unit/DegenerusGame.test.js (Degenerette tests).
+  // Exercise the current single-symbol table through the production math harness.
   describe("PAR-16: Degenerette base payouts and ROI curve", function () {
-    it("base payouts at 100% ROI: 0, 0, 1.90, 4.75, 15, 42.5, 195, 1000, 100000", async function () {
-      // QUICK_PLAY_BASE_PAYOUTS_PACKED encodes:
-      //   0-match: 0x, 1-match: 0x, 2-match: 1.90x,
-      //   3-match: 4.75x, 4-match: 15x, 5-match: 42.5x,
-      //   6-match: 195x, 7-match: 1000x
-      //   8-match: 100000x (separate constant)
-      const packed =
-        (0n << 0n) | // 0 matches: 0x
-        (0n << 32n) | // 1 match: 0x
-        (190n << 64n) | // 2 matches: 1.90x (centi-x)
-        (475n << 96n) | // 3 matches: 4.75x
-        (1500n << 128n) | // 4 matches: 15x
-        (4250n << 160n) | // 5 matches: 42.5x
-        (19500n << 192n) | // 6 matches: 195x
-        (100000n << 224n); // 7 matches: 1000x
-
-      const extract = (n) => Number((packed >> (BigInt(n) * 32n)) & 0xFFFFFFFFn);
-
-      expect(extract(0)).to.equal(0, "0 matches = 0x");
-      expect(extract(1)).to.equal(0, "1 match = 0x");
-      expect(extract(2)).to.equal(190, "2 matches = 1.90x");
-      expect(extract(3)).to.equal(475, "3 matches = 4.75x");
-      expect(extract(4)).to.equal(1500, "4 matches = 15x");
-      expect(extract(5)).to.equal(4250, "5 matches = 42.5x");
-      expect(extract(6)).to.equal(19500, "6 matches = 195x");
-      expect(extract(7)).to.equal(100000, "7 matches = 1000x");
+    let math;
+    before(async function () {
+      math = await (await ethers.getContractFactory("DegeneretteMathHarness")).deploy();
     });
 
-    it("8-match jackpot: 100,000x base payout", async function () {
-      // QUICK_PLAY_BASE_PAYOUT_8_MATCHES = 10_000_000 centi-x = 100,000x
-      expect(10_000_000 / 100).to.equal(100000);
+    it("shared base payouts match the documented score table", async function () {
+      const centiX = [0, 0, 50, 300, 1000, 2500, 12500, 62500, 2035457, 25025025];
+      for (let score = 0; score < centiX.length; score++) {
+        expect(await math.base(score)).to.equal(centiX[score], `score ${score}`);
+      }
     });
 
-    it("ROI curve: 90% base -> 95% mid -> 99.5% high -> 99.9% max", async function () {
-      // ROI_MIN_BPS = 9_000 (90%)
-      // ROI_MID_BPS = 9_500 (95%)
-      // ROI_HIGH_BPS = 9_950 (99.5%)
-      // ROI_MAX_BPS = 9_990 (99.9%)
-      expect(9000).to.equal(9000, "ROI min = 90%");
-      expect(9500).to.equal(9500, "ROI mid = 95%");
-      expect(9950).to.equal(9950, "ROI high = 99.5%");
-      expect(9990).to.equal(9990, "ROI max = 99.9%");
+    it("all eight axes matching yields the score-9 jackpot", async function () {
+      const [score, gold] = await math.score(0, 0, 0);
+      expect(score).to.equal(9);
+      expect(gold).to.equal(0);
+      expect(await math.base(score)).to.equal(25025025);
+      expect(await math.payout(score, gold, 1, eth(1), 30000)).to.equal(eth("249999.99975"));
     });
 
-    it("ETH bets get +5% ROI bonus", async function () {
-      // ETH_ROI_BONUS_BPS = 500
-      expect(500).to.equal(500, "ETH ROI bonus = +5%");
-    });
-
-    it("activity score thresholds: mid=75%, high=255%, max=305%", async function () {
-      // ACTIVITY_SCORE_MID_BPS = 7_500
-      // ACTIVITY_SCORE_HIGH_BPS = 25_500
-      // ACTIVITY_SCORE_MAX_BPS = 30_500
-      expect(7500).to.equal(7500, "Mid threshold = 75%");
-      expect(25500).to.equal(25500, "High threshold = 255%");
-      expect(30500).to.equal(30500, "Max cap = 305%");
+    it("activity curve retains the 90 / 98.91 / 99.7 / 99.9% knees", async function () {
+      for (const [score, bps] of [[0, 9000], [305, 9891], [500, 9970], [30000, 9990], [65535, 9990]]) {
+        expect(await math.roi(score)).to.equal(bps);
+      }
     });
   });
 

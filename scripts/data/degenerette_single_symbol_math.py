@@ -1,7 +1,8 @@
 """Exact production model: one-symbol Degenerette, independent colors, matched-gold bonus.
 
 Run from any directory with Python 3. No dependencies; no contracts are modified.
-All probability and payout calculations use exact rational arithmetic. The constants are checked against the implemented shared payout table.
+All probability and payout calculations use exact rational arithmetic. Constants
+are checked against the ETH/FLIP table and WWXRP's unchanged internal-reward table.
 
 Rig assumption: when 2 <= raw matched axes <= 6, force one uniformly selected
 unmatched axis, excluding the hero symbol. Colors are independently score-bearing.
@@ -23,7 +24,10 @@ SOURCE = ROOT / "contracts/modules/DegenerusGameDegeneretteModule.sol"
 GOLD_INCREMENT = F(1, 4)
 # Multipliers in hundredths of stake. S8 absorbs the calibration residual;
 # every other tier is deliberately a simple number. S0/S1 pay nothing.
-PROPOSED_CENTIX = [0, 0, 50, 300, 1000, 2500, 12500, 62500, 2347036, 10000000]
+# S9's final FLIP jackpot approaches a million-x after gold and survival.
+PROPOSED_CENTIX = [0, 0, 50, 300, 1000, 2500, 12500, 62500, 2035457, 25025025]
+WWXRP_CENTIX = PROPOSED_CENTIX[:8] + [480677, 100000000]
+MAX_PAID_PAYOUT_X = 1_000_000
 WWXRP_RIG_RATE = F(1, 20)
 WWXRP_CURVE_BPS = [(0, 7000), (305, 12400), (500, 12760), (30000, 13000)]
 BONUS_SHARES = {6: F(1, 10), 7: F(3, 10), 8: F(3, 10), 9: F(3, 10)}
@@ -121,6 +125,8 @@ def verify_contract(factors, ww_floor, ww_factors):
     actual = [(packed >> (32*s)) & 0xFFFFFFFF for s in range(8)]
     actual += [constants["QUICK_PLAY_PAYOUT_S8"], constants["QUICK_PLAY_PAYOUT_S9"]]
     assert actual == PROPOSED_CENTIX, "production payout constants differ from exact model"
+    assert actual[:8] + [constants["WWXRP_PAYOUT_S8"], constants["WWXRP_PAYOUT_S9"]] == WWXRP_CENTIX
+    assert constants["MAX_PAID_PAYOUT_X"] == MAX_PAID_PAYOUT_X
     actual_factors = constants["ETH_BONUS_FACTORS_PACKED"]
     assert factors == {s: (actual_factors >> ((s-6)*64)) & (2**64-1) for s in range(6,10)}
     assert constants["BONUS_FACTOR_SCALE"] == 1_000_000
@@ -176,17 +182,18 @@ def main():
                                 for s, f in factors.items())
 
     ww_weights = [a * (1-WWXRP_RIG_RATE) + b * WWXRP_RIG_RATE for a,b in zip(ws,wr)]
-    ww_ev = dot(payouts, ww_weights)
+    ww_payouts = [F(x, 100) for x in WWXRP_CENTIX]
+    ww_ev = dot(ww_payouts, ww_weights)
     ww_joint = {k: plain.get(k,F(0))*(1-WWXRP_RIG_RATE)+helped.get(k,F(0))*WWXRP_RIG_RATE
                 for k in set(plain)|set(helped)}
     ww_denominator = lcm(*(p.denominator for p in ww_joint.values()))
     ww_floor = int(F(7000) * 1_000_000 / ww_ev)
-    ww_factors = {s: int(share / (ww_weights[s] * payouts[s]) * 1_000_000)
+    ww_factors = {s: int(share / (ww_weights[s] * ww_payouts[s]) * 1_000_000)
                   for s,share in BONUS_SHARES.items()}
     def ww_return(activity):
         bonus = wwxrp_target_bps(activity) - 7000
         return ww_ev * F(ww_floor, 10_000_000_000) + sum(
-            payouts[s] * ww_weights[s] * F(bonus * f, 10_000_000_000) for s,f in ww_factors.items())
+            ww_payouts[s] * ww_weights[s] * F(bonus * f, 10_000_000_000) for s,f in ww_factors.items())
     ww_first_profitable = next(s for s in range(30001) if ww_return(s) >= 1)
     for score in range(65536):
         value = ww_return(score)
@@ -208,13 +215,37 @@ def main():
     sdgnrs_rates = {7: F(4, 100), 8: F(8, 100), 9: F(15, 100)}
     sdgnrs_new = sum(ps[s] * rate for s, rate in sdgnrs_rates.items())
     sdgnrs_old = sum(old['N0'][1][s] * rate for s, rate in sdgnrs_rates.items())
+    ordinary_denominator = lcm(*(p.denominator for p in plain.values()))
+    ceiling_costs = {}
+    unboosted_maxima = {}
+    for currency in ["ETH", "FLIP"]:
+        survival = 2 if currency == "FLIP" else 1
+        cost = F(0)
+        for (s, g), probability in plain.items():
+            roi = F(999, 1000) + (F(factors.get(s, 0), 20_000_000) if currency == "ETH" else 0)
+            final = payouts[s] * (1 + F(g, 4)) * roi * survival
+            assert final <= MAX_PAID_PAYOUT_X
+            boosted = final * F(28, 25)  # maximum +12% stake boon, below its stake cap
+            if boosted > MAX_PAID_PAYOUT_X:
+                assert (s, g) == (9, 4), "only the all-gold jackpot may reach the cap"
+                cost += probability * (boosted - MAX_PAID_PAYOUT_X) / survival
+            if (s, g) == (9, 4):
+                unboosted_maxima[currency] = float(final)
+        assert cost * 100 < F(1, 10_000)  # <0.0001 percentage points, even with max boon
+        ceiling_costs[currency] = float(cost * 100)
     data = {
         "checks": "PASS: contract constants, full enumeration and independent 16-state calculation agree",
         "assumptions": {
             "gold_bonus": "1 + 0.25 * matchedGold (after rig)",
             "scoring": "2*heroSymbol + 3 ordinary symbols + 4 independent colors",
             "rig": "force one uniformly selected unmatched non-hero axis if 2 <= rawMatches <= 6",
-            "WWXRP_scaling": "rig-calibrated 70% base; activity raises total to 130%, with all added EV on scores 6-9; one shared score table",
+            "WWXRP_scaling": "unchanged internal-reward table; rig-calibrated 70% base and 130% max activity",
+            "paid_bet_ceiling": "1,000,000x paid stake, including gold, stake boons and FLIP survival; ETH includes lootbox value",
+        },
+        "paid_bet_ceiling": {
+            "max_x": MAX_PAID_PAYOUT_X,
+            "unboosted_max_x": unboosted_maxima,
+            "max_boon_cap_ev_cost_pp": ceiling_costs,
         },
         "wwxrp": {
             "probability_denominator": str(ww_denominator),
@@ -228,11 +259,15 @@ def main():
             "base_ev_percent": float(ww_return(0)*100),
             "max_ev_percent": float(ww_return(30000)*100),
             "activity_bonus_ev_by_winning_score_pp": {
-                s: float(payouts[s]*ww_weights[s]*F(6000*f,100_000_000)) for s,f in ww_factors.items()
+                s: float(ww_payouts[s]*ww_weights[s]*F(6000*f,100_000_000)) for s,f in ww_factors.items()
             },
         },
         "base_ev_fraction": str(base_ev),
         "base_ev_percent": float(base_ev * 100),
+        "ordinary": {
+            "probability_denominator": str(ordinary_denominator),
+            "score_gold_weights": [[s,g,str(p*ordinary_denominator)] for (s,g),p in sorted(plain.items()) if p],
+        },
         "gold_extra_base_ev_pp": float((base_ev - dot(payouts, ps)) * 100),
         "exact_s8": str(exact_s8),
         "exact_s8_decimal": float(exact_s8),
@@ -268,8 +303,8 @@ def main():
              "ETH_with_5pp": float(base_ev * F(bps, 100) + bonus_ev * 100),
              "WWXRP": float(ww_return(score)*100),
              "WWXRP_target": wwxrp_target_bps(score)/100,
-             "WWXRP_uncalibrated_rig5": float(rig_evs[F(1, 20)] * F(bps, 100)),
-             "WWXRP_rig60": float(rig_evs[F(3, 5)] * F(bps, 100))}
+             "WWXRP_uncalibrated_rig5": float(ww_ev * F(bps, 100)),
+             "WWXRP_rig60": float(dot(ww_payouts, [a*F(2,5)+b*F(3,5) for a,b in zip(ws,wr)]) * F(bps, 100))}
             for score, bps in activity
         ],
         "current_table_new_rules_ev_percent": {

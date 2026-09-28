@@ -6,7 +6,7 @@ describe('Shared Degenerette payout and activity invariants', function () {
   let h;
   before(async function () { h = await (await hre.ethers.getContractFactory('DegeneretteMathHarness')).deploy(); });
   it('uses the agreed table in the deployed production math', async function () {
-    const values = [0, 0, 50, 300, 1000, 2500, 12500, 62500, 2347036, 10000000];
+    const values = [0, 0, 50, 300, 1000, 2500, 12500, 62500, 2035457, 25025025];
     for (let s=0;s<10;s++) expect(await h.base(s)).to.equal(values[s]);
   });
   it('retains all activity knees', async function () {
@@ -31,6 +31,20 @@ describe('Shared Degenerette payout and activity invariants', function () {
       const percent = Number(total)*100/Number(denominator*10n**18n);
       expect(percent).to.be.closeTo(row.WWXRP, 1e-10);
       expect(percent).to.be.closeTo(row.WWXRP_target, 0.00002);
+    }
+  });
+  it('preserves ordinary and ETH return targets through the compiled payout path', async function () {
+    const m = JSON.parse(execFileSync('python3',['-B','scripts/data/degenerette_single_symbol_math.py'],{encoding:'utf8'}));
+    const denominator = BigInt(m.ordinary.probability_denominator);
+    for (const row of m.activity_returns_percent) {
+      for (const [currency, target] of [[1, row.ordinary], [0, row.ETH_with_5pp]]) {
+        let total = 0n;
+        for (const [score,gold,weight] of m.ordinary.score_gold_weights) {
+          total += BigInt(weight)*await h.payout(score,gold,currency,10n**18n,row.activity_score);
+        }
+        const percent = Number(total)*100/Number(denominator*10n**18n);
+        expect(percent).to.be.closeTo(target, 1e-10);
+      }
     }
   });
 });

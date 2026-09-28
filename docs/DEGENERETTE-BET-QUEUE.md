@@ -35,7 +35,8 @@ in the storage layout shifted.
 | 171 | record flag | set when a biggest-spin record bounty is armed in `degeneretteRecordBounty` |
 | 172..187 | activity | activity score in whole points |
 | 188..251 | stake per spin | in currency units: ETH = gwei, FLIP = whole FLIP |
-| 252..255 | reserved | always zero |
+| 252..253 | consumed stake-boon tier | 0..3 = +0/4/8/12%; recovers original paid stake for the payout ceiling |
+| 254..255 | reserved | always zero |
 
 ## Placement rules
 

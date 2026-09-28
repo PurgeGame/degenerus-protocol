@@ -10,6 +10,25 @@ import {IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegen
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 
+/// @dev Expose an internal ETH award while keeping the real Game facade available
+///      for callbacks from the resulting lootbox rewards (notably Lens.extsload).
+contract DegeneretteEthAwardRouter {
+    address private immutable facade;
+
+    constructor(address facade_) { facade = facade_; }
+
+    fallback() external payable {
+        address target = msg.sig == IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector
+            ? ContractAddresses.GAME_DEGENERETTE_MODULE : facade;
+        (bool ok, bytes memory result) = target.delegatecall(msg.data);
+        assembly ("memory-safe") {
+            switch ok
+            case 0 { revert(add(result, 32), mload(result)) }
+            default { return(add(result, 32), mload(result)) }
+        }
+    }
+}
+
 contract DegeneretteSingleSymbolTest is DeployProtocol {
     DegeneretteMathHarness private math;
     address private alice;
@@ -169,7 +188,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         assertEq(s, 5);
         assertEq(g, 0, "unmatched gold must not boost");
         assertEq(math.payout(4, 1, 1, 1 ether, 0), 11.25 ether);
-        assertEq(math.payout(4, 1, 3, 1 ether, 0), 7.299_884_997_5 ether, "WWXRP base is calibrated for its rig");
+        assertEq(math.payout(4, 1, 3, 1 ether, 0), 7.707_337_088_75 ether, "WWXRP base is calibrated for its rig");
         assertEq(math.payout(1, 1, 0, 1 ether, 0), 0);
     }
 
@@ -219,8 +238,8 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         uint256 wx = math.payout(score, gold, 3, amount, activity);
         if (score < 6) assertEq(wx, math.payout(score, gold, 3, amount, 0));
         else assertGe(wx, math.payout(score, gold, 3, amount, 0));
-        assertLe(wx, uint256(amount) * 5_485_508);
-        assertLe(math.payout(score, gold, 0, amount, activity), uint256(amount) * 647_193);
+        assertLe(wx, uint256(amount) * 6_601_883);
+        assertLe(math.payout(score, gold, 0, amount, activity), uint256(amount) * 947_393);
         assertLe(math.roi(activity), 9990);
         assertGe(math.roi(activity), 9000);
     }
@@ -349,7 +368,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         );
         (uint256 packed, uint256 payout) = _boxRecord(logs);
         assertEq(uint8(packed >> 64), 9, "production spin kept the natural jackpot");
-        assertEq(payout, 58_399.07998 ether, "WWXRP jackpot payout changed");
+        assertEq(payout, 616_586.9671 ether, "WWXRP jackpot payout changed");
         assertEq(abi.decode(returned, (uint256)), payout, "caller receives the token payout");
         assertEq(vm.load(address(game), claimsSlot), bytes32(type(uint256).max), "WWXRP changed whale-pass claims");
         assertEq(vm.load(address(game), bracketSlot), bytes32(0), "WWXRP consumed a whale-pass bracket");
@@ -357,6 +376,39 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 0) assertTrue(logs[i].topics[0] != retiredAward, "retired award emitted");
         }
+    }
+
+    /// @notice Exercise a real million-x jackpot through ETH's cap and lootbox recirculation.
+    function testNaturalEthJackpotCapsCashAndResolvesOverflow() public {
+        // Reuse the known natural WWXRP jackpot's inner seed on the ordinary ETH stream.
+        uint256 seed = Ref.drawWord(729_121, true);
+        uint256 claimableBefore = game.claimableWinningsOf(alice);
+        bytes memory facade = address(game).code;
+        address facadeCopy = makeAddr("eth_jackpot_facade");
+        vm.etch(facadeCopy, facade);
+        vm.etch(address(game), address(new DegeneretteEthAwardRouter(facadeCopy)).code);
+        vm.recordLogs();
+        IDegenerusGameDegeneretteModule(address(game)).resolveEthSpinFromBox(
+            alice, 0.01 ether, uint16(30_000), seed, uint8(7)
+        );
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        vm.etch(address(game), facade);
+        (uint256 packed, uint256 payout) = _boxRecord(logs);
+        assertEq(uint8(packed >> 64), 9, "must exercise the natural jackpot");
+        assertEq(payout, 4_736.962082350125 ether, "jackpot includes max activity and ETH bonus");
+        // 25% of gross exceeds the cap: exactly 10% of the 10,000 ETH future pool is cash.
+        assertEq(game.claimableWinningsOf(alice) - claimableBefore, 1000 ether);
+        assertEq(uint256(vm.load(address(game), bytes32(uint256(2)))) >> 128, 9000 ether);
+        bytes32 capTopic = keccak256("PayoutCapped(address,uint256,uint256)");
+        bool capped;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0 || logs[i].topics[0] != capTopic) continue;
+            (uint256 cash, uint256 overflow) = abi.decode(logs[i].data, (uint256, uint256));
+            assertEq(cash, 1000 ether);
+            assertEq(overflow, 3_736.962082350125 ether);
+            capped = true;
+        }
+        assertTrue(capped, "jackpot must report the capped cash and lootbox remainder");
     }
 
     function testHeroIsStoredOnlyInTheSelectedSymbol() public {

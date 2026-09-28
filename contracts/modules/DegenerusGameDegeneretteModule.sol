@@ -107,7 +107,8 @@ contract DegenerusGameDegeneretteModule is
     /// @param resultTraits The spin-0 house result traits.
     /// @param spins Five bytes per spin, spin 0 first: the player's traits (4 bytes,
     ///        big-endian), then score S (low 4 bits, 0-9) | matched gold (bits 4-6). Each
-    ///        spin's payout follows from these plus the bet's stake and activity score.
+    ///        spin's payout follows from these plus the bet's stake, activity score and
+    ///        the paid-stake ceiling (the packed boon tier recovers the original stake).
     event DegeneretteResolved(
         address indexed player,
         uint32 indexed index,
@@ -256,16 +257,22 @@ contract DegenerusGameDegeneretteModule is
     // Shared score table: neutral EV includes the matched-gold multiplier.
     // Derived and checked by scripts/data/degenerette_single_symbol_math.py.
     // Scores 0..7 are packed in 32-bit centi-x lanes; 8/9 are separate.
+    // S9 stays just below 1,000,000x after max activity, four golds and FLIP survival.
+    // S8 absorbs the remaining neutral EV; paid bets also cap boon-boosted jackpots.
     uint256 private constant QUICK_PLAY_PAYOUTS_PACKED = 0x0000f424000030d4000009c4000003e80000012c000000320000000000000000;
-    uint256 private constant QUICK_PLAY_PAYOUT_S8 = 2_347_036;
-    uint256 private constant QUICK_PLAY_PAYOUT_S9 = 10_000_000;
+    uint256 private constant QUICK_PLAY_PAYOUT_S8 = 2_035_457;
+    uint256 private constant QUICK_PLAY_PAYOUT_S9 = 25_025_025;
+    uint256 private constant MAX_PAID_PAYOUT_X = 1_000_000;
     // ETH's +5 percentage points, 10/30/30/30 EV allocation to scores 6/7/8/9.
-    uint256 private constant ETH_BONUS_FACTORS_PACKED = 0x0000000002aaaaaa00000000003c513900000000006cdd2100000000000f7734;
+    uint256 private constant ETH_BONUS_FACTORS_PACKED = 0x000000000110cb290000000000458ce600000000006cdd2100000000000f7734;
     uint256 private constant BONUS_FACTOR_SCALE = 1_000_000;
-    // WWXRP keeps the shared score table. Normalize its rigged/gold base to 70%,
+    // WWXRP retains its own S8/S9 prizes and is outside the paid-bet ceiling.
+    // Normalize its rigged/gold base to 70%,
     // then allocate activity's extra 0..60 percentage points to scores 6..9.
-    uint256 private constant WWXRP_FLOOR_SCALED = 5_839_907_998;
-    uint256 private constant WWXRP_BONUS_FACTORS_PACKED = 0x0000000002aaaaaa00000000001d6c4d000000000046626100000000000bb73b;
+    uint256 private constant WWXRP_FLOOR_SCALED = 6_165_869_671;
+    uint256 private constant WWXRP_PAYOUT_S8 = 480_677;
+    uint256 private constant WWXRP_PAYOUT_S9 = 100_000_000;
+    uint256 private constant WWXRP_BONUS_FACTORS_PACKED = 0x000000000044444400000000008faa84000000000046626100000000000bb73b;
     uint16 private constant WWXRP_ROI_MIN_BPS = 7_000;
     uint16 private constant WWXRP_ROI_VA_BPS = 12_400;
     uint16 private constant WWXRP_ROI_VB_BPS = 12_760;
@@ -285,11 +292,12 @@ contract DegenerusGameDegeneretteModule is
     //
     // A bet is one word in degeneretteQueue[index] (full layout on the storage declaration):
     // owner [0..159] | symbol [160..164] | spinCount [165..169] | currency [170] |
-    // record flag [171] | activity score [172..187] | stake per spin in units [188..251].
+    // record flag [171] | activity score [172..187] | boosted stake units [188..251] |
+    // consumed stake-boon tier [252..253]. The tier lets settlement recover paid stake.
     // The bet id is the queue position + 1, so the index and id need no bits.
     //
     /// Every symbol choice has the same distribution. Fresh uniform colors,
-    /// independent color scoring, and matched-gold boosts share one payout table.
+    /// independent color scoring, and matched-gold boosts share the ETH/FLIP table.
     /// Internal WWXRP reward spins add a 5% help gate and a 70–130% activity target.
     //
     // -------------------------------------------------------------------------
@@ -300,6 +308,7 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant BET_RECORD_FLAG = uint256(1) << 171;
     uint256 private constant BET_ACTIVITY_SHIFT = 172;
     uint256 private constant BET_STAKE_SHIFT = 188;
+    uint256 private constant BET_BOON_SHIFT = 252;
 
     /// @dev Stake units. An ETH stake is whole gwei and a FLIP stake whole FLIP, so 64 bits
     ///      cover any stake (about 1.8e10 ETH or 1.8e19 FLIP per spin). Placement rejects an
@@ -686,7 +695,7 @@ contract DegenerusGameDegeneretteModule is
         // which funds collection and the pool credit). The bonus rides the PACKED bet only,
         // so the player spins on more than they paid without any unfunded ETH entering the
         // pools. ETH solvency is unaffected: an ETH win is capped at a share of the live pool
-        // at distribution time, never at the bet's own size.
+        // at distribution time. The jackpot also respects the million-x paid-stake cap.
         //
         // Self-or-operator-funded bets only, mirroring the coinflip deposit boon's funder
         // gate: a permissionless gift must never spend the recipient's boon (a dust gift
@@ -727,7 +736,8 @@ contract DegenerusGameDegeneretteModule is
             (uint256(spinCount) << BET_COUNT_SHIFT) |
             (uint256(currency) << BET_CURRENCY_SHIFT) |
             (uint256(activityScore) << BET_ACTIVITY_SHIFT) |
-            (stakeUnits << BET_STAKE_SHIFT);
+            (stakeUnits << BET_STAKE_SHIFT) |
+            (uint256(boonBps / 400) << BET_BOON_SHIFT);
         if (recordBounty != 0) {
             bet |= BET_RECORD_FLAG;
             degeneretteRecordBounty[(uint256(index) << 64) | betId] = recordBounty;
@@ -832,6 +842,9 @@ contract DegenerusGameDegeneretteModule is
             if (spinIdx == 0) totals.firstResultTraits = spin.resultTraits;
             uint8 s = spin.score;
             uint256 payout = _degenerettePayout(spin, currency, amountPerSpin, activityScore);
+            // Only S9 can reach the ceiling, including the largest stake boon.
+            // FLIP is capped before survival at half the final ceiling.
+            if (s == 9) payout = _capPaidBetPayout(bet, payout);
             {
                 uint256 traits = spin.playerTraits;
                 uint256 tail = uint256(s) | (uint256(spin.goldMatches) << 4);
@@ -857,8 +870,8 @@ contract DegenerusGameDegeneretteModule is
                     payout,
                     acc
                 );
-                // Bounded by maxSpins * amountPerSpin(uint128) * max payout factor —
-                // ~15.7M below 2^256, so the per-spin accumulation cannot overflow.
+                // maxSpins * max payout factor < 2^26, even after FLIP survival;
+                // with a uint128 stake the bet total stays below 2^154.
                 unchecked {
                     totals.totalPayout += paid;
                 }
@@ -1237,7 +1250,8 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev One table and matched-gold rule, with currency bonuses on scores 6–9.
+    /// @dev ETH/FLIP share a table; WWXRP retains separate S8/S9 entries.
+    ///      All currencies use matched gold, with currency bonuses on scores 6–9.
     ///      WWXRP normalizes its rigged base to 70% and adds the activity surplus;
     ///      ETH adds five percentage points to its ordinary activity return.
     ///      Keep full precision through the final division. At uint128 max stake,
@@ -1250,6 +1264,10 @@ contract DegenerusGameDegeneretteModule is
     ) internal pure returns (uint256) {
         uint8 s = spin.score;
         uint256 base = _basePayoutCentiX(s);
+        if (currency == CURRENCY_WWXRP) {
+            if (s == 8) base = WWXRP_PAYOUT_S8;
+            else if (s == 9) base = WWXRP_PAYOUT_S9;
+        }
         if (base == 0) return 0;
         uint256 scaledRoi;
         uint256 bonusBps;
@@ -1283,6 +1301,35 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
     // Payout Math
     // -------------------------------------------------------------------------
+
+    /// @dev Recover the original paid stake from the boosted integer stake and frozen
+    ///      boon tier. For raw units R, effective E = R + min(floor(R*bps/10000), C),
+    ///      where C is the per-spin capped bonus. Invert both branches and take the
+    ///      larger result. This preserves the existing stake field and its rounding.
+    function _paidBetStake(uint256 bet) internal pure returns (uint128) {
+        uint8 currency = uint8((bet >> BET_CURRENCY_SHIFT) & 1);
+        uint256 unit = currency == CURRENCY_ETH ? ETH_STAKE_UNIT : FLIP_STAKE_UNIT;
+        uint256 units = (bet >> BET_STAKE_SHIFT) & MASK_64;
+        uint256 boonBps = ((bet >> BET_BOON_SHIFT) & 3) * 400;
+        if (boonBps != 0) {
+            uint256 spins = (bet >> BET_COUNT_SHIFT) & MASK_5;
+            uint256 cap = currency == CURRENCY_ETH ? DEGENERETTE_BOON_ETH_CAP : DEGENERETTE_BOON_FLIP_CAP;
+            uint256 cappedBonus = (cap / unit) * boonBps / 10_000 / spins;
+            uint256 fromCap = units > cappedBonus ? units - cappedBonus : 0;
+            uint256 fromRate = (units * 10_000 + 10_000 + boonBps - 1) / (10_000 + boonBps);
+            units = fromCap > fromRate ? fromCap : fromRate;
+        }
+        return uint128(units * unit);
+    }
+
+    /// @dev ETH gross includes its lootbox leg. FLIP doubles after this cap, then rounds
+    ///      to 100 tokens; the final ceiling is itself a 100-token multiple because paid
+    ///      FLIP stakes are whole tokens. Rounding therefore cannot cross the ceiling.
+    function _capPaidBetPayout(uint256 bet, uint256 payout) internal pure returns (uint256) {
+        uint256 ceiling = uint256(_paidBetStake(bet)) * MAX_PAID_PAYOUT_X;
+        if ((bet >> BET_CURRENCY_SHIFT) & 1 == CURRENCY_FLIP) ceiling /= 2;
+        return payout > ceiling ? ceiling : payout;
+    }
 
     /// @dev Scheduled return target at the shared activity knees (305, 500, 30,000).
     /// Ordinary: 90 / 98.91 / 99.7 / 99.9%. WWXRP: 70 / 124 / 127.6 / 130%.

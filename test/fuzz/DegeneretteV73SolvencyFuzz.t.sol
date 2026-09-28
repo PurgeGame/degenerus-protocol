@@ -79,7 +79,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         uint256 payout = math.payout(score, gold, CURRENCY_FLIP, DQ.stake(bet), DQ.activity(bet));
         assertLe(score, 9, "score must be in {0..9}");
         uint256 base = (payout * 1_000_000) / (uint256(perTicket) * roiBps);
-        assertLe(base, 20_000_000, "honest base exceeds S=9 with four gold matches");
+        assertLe(base, 50_050_050, "honest base exceeds S=9 with four gold matches");
         if (score < 2) assertEq(payout, 0, "pay floor: S<2 must pay 0");
     }
 

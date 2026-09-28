@@ -61,6 +61,6 @@ contract DegeneretteV73MutationKills is Test {
         (uint8 score, uint8 gold) = h.score(p, fixedResult, 0);
         assertEq(score, 7);
         assertEq(gold, 4);
-        assertEq(h.payout(score, gold, 3, 1 ether, 0), 729.98849975 ether);
+        assertEq(h.payout(score, gold, 3, 1 ether, 0), 770.733708875 ether);
     }
 }

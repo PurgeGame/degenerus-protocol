@@ -6,6 +6,14 @@ import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 
 /// @dev Exposes the production pure math for exhaustive and differential tests.
 contract DegeneretteMathHarness is DegenerusGameDegeneretteModule {
+    function paidStake(uint256 bet) external pure returns (uint128) {
+        return _paidBetStake(bet);
+    }
+
+    function capPaidPayout(uint256 bet, uint256 amount) external pure returns (uint256) {
+        return _capPaidBetPayout(bet, amount);
+    }
+
     function score(uint32 p, uint32 r, uint8 hero) external pure returns (uint8, uint8) {
         return _score(p, r, hero);
     }

@@ -18,6 +18,6 @@ describe('Single-symbol exact EV (production constants)', function () {
   it('has the same paying-score probability under the rig, but improves high tiers', function () {
     expect(m.paying_score_percent).to.be.closeTo(31.2782168388, 1e-8);
     expect(m.rig_rates[1].score_at_least_6_percent).to.be.above(m.rig_rates[0].score_at_least_6_percent);
-    expect(m.rig_rates[1].base_ev_percent).to.be.closeTo(119.8649020060897, 1e-8);
+    expect(m.rig_rates[1].base_ev_percent).to.be.closeTo(118.80701931491494, 1e-8);
   });
 });

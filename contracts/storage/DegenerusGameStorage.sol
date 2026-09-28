@@ -2258,7 +2258,8 @@ abstract contract DegenerusGameStorage {
     ///      - [171]      record flag: a biggest-spin record bounty waits in degeneretteRecordBounty
     ///      - [172..187] activity score in whole points
     ///      - [188..251] stake per spin in currency units (ETH: gwei, FLIP: whole FLIP)
-    ///      - [252..255] reserved (always zero)
+    ///      - [252..253] consumed stake-boon tier (0..3 = +0/4/8/12%)
+    ///      - [254..255] reserved (always zero)
     mapping(uint48 => uint256[]) internal degeneretteQueue;
 
     // =========================================================================
