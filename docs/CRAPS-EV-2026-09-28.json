@@ -1,0 +1,1046 @@
+{
+  "assumptions": {
+    "basis": "FLIP commitments before Coinflip, steady state, full-standing awards",
+    "ordinary_bankroll_per_normal_day": 10860.0,
+    "ordinary_bounty_per_normal_day": 5965.0,
+    "nominal_day_entry_ev": 24825.0,
+    "high_day_entry_ev": 521325.0,
+    "mean_retained_jackpot_multiplier_for_base_action": 0.55,
+    "unmodeled": [
+      "ordinary boost payout rounding",
+      "boons",
+      "quests",
+      "external pass grants",
+      "shared record funding",
+      "downstream Coinflip"
+    ]
+  },
+  "break_even": [
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "pricing": "live",
+      "unfunded_house": 0,
+      "normal_days": 385,
+      "paid_volume": 9557625
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "normal_days": 482,
+      "paid_volume": 11965650
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "pricing": "retail",
+      "unfunded_house": 0,
+      "normal_days": 227,
+      "paid_volume": 5675000
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "normal_days": 285,
+      "paid_volume": 7125000
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "pricing": "live",
+      "unfunded_house": 0,
+      "normal_days": 177,
+      "paid_volume": 4394025
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "normal_days": 222,
+      "paid_volume": 5511150
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "pricing": "retail",
+      "unfunded_house": 0,
+      "normal_days": 134,
+      "paid_volume": 3350000
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "normal_days": 168,
+      "paid_volume": 4200000
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "pricing": "live",
+      "unfunded_house": 0,
+      "normal_days": 115,
+      "paid_volume": 2854875
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "normal_days": 144,
+      "paid_volume": 3574800
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "pricing": "retail",
+      "unfunded_house": 0,
+      "normal_days": 95,
+      "paid_volume": 2375000
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "normal_days": 119,
+      "paid_volume": 2975000
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "pricing": "live",
+      "unfunded_house": 0,
+      "normal_days": 85,
+      "paid_volume": 2110125
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "normal_days": 106,
+      "paid_volume": 2631450
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "pricing": "retail",
+      "unfunded_house": 0,
+      "normal_days": 74,
+      "paid_volume": 1850000
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "normal_days": 92,
+      "paid_volume": 2300000
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "pricing": "live",
+      "unfunded_house": 0,
+      "normal_days": 757,
+      "paid_volume": 18792525
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "normal_days": 854,
+      "paid_volume": 21200550
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "pricing": "retail",
+      "unfunded_house": 0,
+      "normal_days": 447,
+      "paid_volume": 11175000
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "normal_days": 504,
+      "paid_volume": 12600000
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "pricing": "live",
+      "unfunded_house": 0,
+      "normal_days": 347,
+      "paid_volume": 8614275
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "normal_days": 392,
+      "paid_volume": 9731400
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "pricing": "retail",
+      "unfunded_house": 0,
+      "normal_days": 263,
+      "paid_volume": 6575000
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "normal_days": 297,
+      "paid_volume": 7425000
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "pricing": "live",
+      "unfunded_house": 0,
+      "normal_days": 225,
+      "paid_volume": 5585625
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "normal_days": 253,
+      "paid_volume": 6280725
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "pricing": "retail",
+      "unfunded_house": 0,
+      "normal_days": 186,
+      "paid_volume": 4650000
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "normal_days": 210,
+      "paid_volume": 5250000
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "pricing": "live",
+      "unfunded_house": 0,
+      "normal_days": 165,
+      "paid_volume": 4096125
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "normal_days": 186,
+      "paid_volume": 4617450
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "pricing": "retail",
+      "unfunded_house": 0,
+      "normal_days": 143,
+      "paid_volume": 3575000
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "normal_days": 161,
+      "paid_volume": 4025000
+    }
+  ],
+  "zero_outside_play": [
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "unfunded_normal_bodies": 0,
+      "cash_in": 0.0,
+      "ordinary_risk": 0.0,
+      "jackpot_risk": 24544.5,
+      "booked_action": 0.0,
+      "engine_and_pots": 46563.77,
+      "boost_and_progressive": 50000.0,
+      "comps": 0.0,
+      "net": 96563.77
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "unfunded_normal_bodies": 1,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 28852.2,
+      "booked_action": 13045.078345,
+      "engine_and_pots": 69265.292,
+      "boost_and_progressive": 51565.409401,
+      "comps": 260.901567,
+      "net": 121091.602968
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "unfunded_normal_bodies": 2,
+      "cash_in": 0.0,
+      "ordinary_risk": 21720.0,
+      "jackpot_risk": 31346.7,
+      "booked_action": 25725.023273,
+      "engine_and_pots": 92220.662,
+      "boost_and_progressive": 53087.002793,
+      "comps": 514.500465,
+      "net": 145822.165258
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "unfunded_normal_bodies": 0,
+      "cash_in": 0.0,
+      "ordinary_risk": 0.0,
+      "jackpot_risk": 24544.5,
+      "booked_action": 0.0,
+      "engine_and_pots": 46072.88,
+      "boost_and_progressive": 50000.0,
+      "comps": 0.0,
+      "net": 96072.88
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "unfunded_normal_bodies": 1,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 28852.2,
+      "booked_action": 13045.078345,
+      "engine_and_pots": 68471.048,
+      "boost_and_progressive": 51565.409401,
+      "comps": 260.901567,
+      "net": 120297.358968
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "unfunded_normal_bodies": 2,
+      "cash_in": 0.0,
+      "ordinary_risk": 21720.0,
+      "jackpot_risk": 31346.7,
+      "booked_action": 25725.023273,
+      "engine_and_pots": 91159.328,
+      "boost_and_progressive": 53087.002793,
+      "comps": 514.500465,
+      "net": 144760.831258
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "unfunded_normal_bodies": 0,
+      "cash_in": 0.0,
+      "ordinary_risk": 0.0,
+      "jackpot_risk": 24544.5,
+      "booked_action": 0.0,
+      "engine_and_pots": 45581.99,
+      "boost_and_progressive": 50000.0,
+      "comps": 0.0,
+      "net": 95581.99
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "unfunded_normal_bodies": 1,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 28852.2,
+      "booked_action": 13045.078345,
+      "engine_and_pots": 67676.804,
+      "boost_and_progressive": 51565.409401,
+      "comps": 260.901567,
+      "net": 119503.114968
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "unfunded_normal_bodies": 2,
+      "cash_in": 0.0,
+      "ordinary_risk": 21720.0,
+      "jackpot_risk": 31346.7,
+      "booked_action": 25725.023273,
+      "engine_and_pots": 90097.994,
+      "boost_and_progressive": 53087.002793,
+      "comps": 514.500465,
+      "net": 143699.497258
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "unfunded_normal_bodies": 0,
+      "cash_in": 0.0,
+      "ordinary_risk": 0.0,
+      "jackpot_risk": 24544.5,
+      "booked_action": 0.0,
+      "engine_and_pots": 45091.1,
+      "boost_and_progressive": 50000.0,
+      "comps": 0.0,
+      "net": 95091.1
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "unfunded_normal_bodies": 1,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 28852.2,
+      "booked_action": 13045.078345,
+      "engine_and_pots": 66882.56,
+      "boost_and_progressive": 51565.409401,
+      "comps": 260.901567,
+      "net": 118708.870968
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "unfunded_normal_bodies": 2,
+      "cash_in": 0.0,
+      "ordinary_risk": 21720.0,
+      "jackpot_risk": 31346.7,
+      "booked_action": 25725.023273,
+      "engine_and_pots": 89036.66,
+      "boost_and_progressive": 53087.002793,
+      "comps": 514.500465,
+      "net": 142638.163258
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "unfunded_normal_bodies": 0,
+      "cash_in": 0.0,
+      "ordinary_risk": 0.0,
+      "jackpot_risk": 73633.5,
+      "booked_action": 0.0,
+      "engine_and_pots": 139691.31,
+      "boost_and_progressive": 50000.0,
+      "comps": 0.0,
+      "net": 189691.31
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "unfunded_normal_bodies": 1,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 77836.8,
+      "booked_action": 13007.118987,
+      "engine_and_pots": 162407.448,
+      "boost_and_progressive": 51560.854278,
+      "comps": 260.14238,
+      "net": 214228.444658
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "unfunded_normal_bodies": 2,
+      "cash_in": 0.0,
+      "ordinary_risk": 21720.0,
+      "jackpot_risk": 81967.2,
+      "booked_action": 26047.02188,
+      "engine_and_pots": 185133.792,
+      "boost_and_progressive": 53125.642626,
+      "comps": 520.940438,
+      "net": 238780.375063
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "unfunded_normal_bodies": 0,
+      "cash_in": 0.0,
+      "ordinary_risk": 0.0,
+      "jackpot_risk": 73633.5,
+      "booked_action": 0.0,
+      "engine_and_pots": 138218.64,
+      "boost_and_progressive": 50000.0,
+      "comps": 0.0,
+      "net": 188218.64
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "unfunded_normal_bodies": 1,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 77836.8,
+      "booked_action": 13007.118987,
+      "engine_and_pots": 160633.512,
+      "boost_and_progressive": 51560.854278,
+      "comps": 260.14238,
+      "net": 212454.508658
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "unfunded_normal_bodies": 2,
+      "cash_in": 0.0,
+      "ordinary_risk": 21720.0,
+      "jackpot_risk": 81967.2,
+      "booked_action": 26047.02188,
+      "engine_and_pots": 183060.048,
+      "boost_and_progressive": 53125.642626,
+      "comps": 520.940438,
+      "net": 236706.631063
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "unfunded_normal_bodies": 0,
+      "cash_in": 0.0,
+      "ordinary_risk": 0.0,
+      "jackpot_risk": 73633.5,
+      "booked_action": 0.0,
+      "engine_and_pots": 136745.97,
+      "boost_and_progressive": 50000.0,
+      "comps": 0.0,
+      "net": 186745.97
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "unfunded_normal_bodies": 1,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 77836.8,
+      "booked_action": 13007.118987,
+      "engine_and_pots": 158859.576,
+      "boost_and_progressive": 51560.854278,
+      "comps": 260.14238,
+      "net": 210680.572658
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "unfunded_normal_bodies": 2,
+      "cash_in": 0.0,
+      "ordinary_risk": 21720.0,
+      "jackpot_risk": 81967.2,
+      "booked_action": 26047.02188,
+      "engine_and_pots": 180986.304,
+      "boost_and_progressive": 53125.642626,
+      "comps": 520.940438,
+      "net": 234632.887063
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "unfunded_normal_bodies": 0,
+      "cash_in": 0.0,
+      "ordinary_risk": 0.0,
+      "jackpot_risk": 73633.5,
+      "booked_action": 0.0,
+      "engine_and_pots": 135273.3,
+      "boost_and_progressive": 50000.0,
+      "comps": 0.0,
+      "net": 185273.3
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "unfunded_normal_bodies": 1,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 77836.8,
+      "booked_action": 13007.118987,
+      "engine_and_pots": 157085.64,
+      "boost_and_progressive": 51560.854278,
+      "comps": 260.14238,
+      "net": 208906.636658
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "unfunded_normal_bodies": 2,
+      "cash_in": 0.0,
+      "ordinary_risk": 21720.0,
+      "jackpot_risk": 81967.2,
+      "booked_action": 26047.02188,
+      "engine_and_pots": 178912.56,
+      "boost_and_progressive": 53125.642626,
+      "comps": 520.940438,
+      "net": 232559.143063
+    }
+  ],
+  "high_marginal": [
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "pricing": "live",
+      "net_issuance_per_additional_high_day": -3771.79049975331
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 14.0,
+      "pricing": "retail",
+      "net_issuance_per_additional_high_day": 17553.20950024669
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "pricing": "live",
+      "net_issuance_per_additional_high_day": -10009.35849975331
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "pricing": "retail",
+      "net_issuance_per_additional_high_day": 11315.64150024669
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "pricing": "live",
+      "net_issuance_per_additional_high_day": -16246.92649975331
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "pricing": "retail",
+      "net_issuance_per_additional_high_day": 5078.07350024669
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "pricing": "live",
+      "net_issuance_per_additional_high_day": -22484.49449975331
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 20.0,
+      "pricing": "retail",
+      "net_issuance_per_additional_high_day": -1159.4944997533103
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "pricing": "live",
+      "net_issuance_per_additional_high_day": -3772.332880941407
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 14.0,
+      "pricing": "retail",
+      "net_issuance_per_additional_high_day": 17552.66711905859
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "pricing": "live",
+      "net_issuance_per_additional_high_day": -10009.978880941408
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "pricing": "retail",
+      "net_issuance_per_additional_high_day": 11315.021119058592
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "pricing": "live",
+      "net_issuance_per_additional_high_day": -16247.624880941406
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "pricing": "retail",
+      "net_issuance_per_additional_high_day": 5077.375119058593
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "pricing": "live",
+      "net_issuance_per_additional_high_day": -22485.270880941407
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 20.0,
+      "pricing": "retail",
+      "net_issuance_per_additional_high_day": -1160.2708809414073
+    }
+  ],
+  "examples": [
+    {
+      "added": 50000,
+      "normal": 0,
+      "high": 0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 28852.2,
+      "booked_action": 13045.078345,
+      "engine_and_pots": 67676.804,
+      "boost_and_progressive": 51565.409401,
+      "comps": 260.901567,
+      "net": 119503.114968
+    },
+    {
+      "added": 50000,
+      "normal": 100,
+      "high": 0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 2500000.0,
+      "ordinary_risk": 1096860.0,
+      "jackpot_risk": 406086.0,
+      "booked_action": 1298538.280392,
+      "engine_and_pots": 2286794.72,
+      "boost_and_progressive": 205824.593647,
+      "comps": 25970.765608,
+      "net": 18590.079255
+    },
+    {
+      "added": 50000,
+      "normal": 200,
+      "high": 0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 5000000.0,
+      "ordinary_risk": 2182860.0,
+      "jackpot_risk": 788135.4,
+      "booked_action": 2586471.702861,
+      "engine_and_pots": 4505045.828,
+      "boost_and_progressive": 360376.604343,
+      "comps": 51729.434057,
+      "net": -82848.133599
+    },
+    {
+      "added": 50000,
+      "normal": 300,
+      "high": 0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 7500000.0,
+      "ordinary_risk": 3268860.0,
+      "jackpot_risk": 1169623.8,
+      "booked_action": 3874424.049647,
+      "engine_and_pots": 6723397.916,
+      "boost_and_progressive": 514930.885958,
+      "comps": 77488.480993,
+      "net": -184182.717049
+    },
+    {
+      "added": 50000,
+      "normal": 0,
+      "high": 1,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 500000.0,
+      "ordinary_risk": 358220.0,
+      "jackpot_risk": 191346.7,
+      "booked_action": 362225.023273,
+      "engine_and_pots": 497227.994,
+      "boost_and_progressive": 88939.264642,
+      "comps": 20218.500465,
+      "net": 106385.759107
+    },
+    {
+      "added": 50000,
+      "normal": 0,
+      "high": 10,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 5000000.0,
+      "ordinary_risk": 2291460.0,
+      "jackpot_risk": 868112.0,
+      "booked_action": 2315131.296,
+      "engine_and_pots": 4719352.04,
+      "boost_and_progressive": 327815.75552,
+      "comps": 123102.62592,
+      "net": 170270.42144
+    },
+    {
+      "added": 50000,
+      "normal": 0,
+      "high": 10,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 5213250.0,
+      "ordinary_risk": 2291460.0,
+      "jackpot_risk": 868112.0,
+      "booked_action": 2315131.296,
+      "engine_and_pots": 4719352.04,
+      "boost_and_progressive": 327815.75552,
+      "comps": 123102.62592,
+      "net": -42979.57856
+    },
+    {
+      "added": 150000,
+      "normal": 0,
+      "high": 0,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 0.0,
+      "ordinary_risk": 10860.0,
+      "jackpot_risk": 77836.8,
+      "booked_action": 13007.118987,
+      "engine_and_pots": 158859.576,
+      "boost_and_progressive": 51560.854278,
+      "comps": 260.14238,
+      "net": 210680.572658
+    },
+    {
+      "added": 150000,
+      "normal": 100,
+      "high": 0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 2500000.0,
+      "ordinary_risk": 1096860.0,
+      "jackpot_risk": 450346.8,
+      "booked_action": 1295494.189127,
+      "engine_and_pots": 2378827.776,
+      "boost_and_progressive": 205459.302695,
+      "comps": 25909.883783,
+      "net": 110196.962478
+    },
+    {
+      "added": 150000,
+      "normal": 200,
+      "high": 0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 5000000.0,
+      "ordinary_risk": 2182860.0,
+      "jackpot_risk": 829116.0,
+      "booked_action": 2582080.344246,
+      "engine_and_pots": 4597669.32,
+      "boost_and_progressive": 359849.641309,
+      "comps": 51641.606885,
+      "net": 9160.568194
+    },
+    {
+      "added": 150000,
+      "normal": 300,
+      "high": 0,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 7500000.0,
+      "ordinary_risk": 3268860.0,
+      "jackpot_risk": 1210596.0,
+      "booked_action": 3869856.878787,
+      "engine_and_pots": 6816022.92,
+      "boost_and_progressive": 514382.825454,
+      "comps": 77397.137576,
+      "net": -92197.11697
+    },
+    {
+      "added": 150000,
+      "normal": 0,
+      "high": 1,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 500000.0,
+      "ordinary_risk": 358220.0,
+      "jackpot_risk": 241967.2,
+      "booked_action": 362547.02188,
+      "engine_and_pots": 588116.304,
+      "boost_and_progressive": 88975.817924,
+      "comps": 20224.940438,
+      "net": 197317.062361
+    },
+    {
+      "added": 150000,
+      "normal": 0,
+      "high": 10,
+      "pricing": "retail",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 5000000.0,
+      "ordinary_risk": 2291460.0,
+      "jackpot_risk": 914036.0,
+      "booked_action": 2313962.672269,
+      "engine_and_pots": 4811085.72,
+      "boost_and_progressive": 327675.520672,
+      "comps": 123079.253445,
+      "net": 261840.494118
+    },
+    {
+      "added": 150000,
+      "normal": 0,
+      "high": 10,
+      "pricing": "live",
+      "unfunded_house": 1,
+      "engine_loss_pct": 18,
+      "cash_in": 5213250.0,
+      "ordinary_risk": 2291460.0,
+      "jackpot_risk": 914036.0,
+      "booked_action": 2313962.672269,
+      "engine_and_pots": 4811085.72,
+      "boost_and_progressive": 327675.520672,
+      "comps": 123079.253445,
+      "net": 48590.494118
+    }
+  ],
+  "coinflip_sensitivity": [
+    {
+      "engine_loss_pct": 14.0,
+      "coinflip_bonus_percent": 0,
+      "net_per_retail_high_min": 9595.18161799336,
+      "net_per_retail_high_max": 9812.607120120025
+    },
+    {
+      "engine_loss_pct": 14.0,
+      "coinflip_bonus_percent": 2,
+      "net_per_retail_high_min": 14647.89773370976,
+      "net_per_retail_high_max": 14727.275297978225
+    },
+    {
+      "engine_loss_pct": 14.0,
+      "coinflip_bonus_percent": 6,
+      "net_per_retail_high_min": 24556.611653694625,
+      "net_per_retail_high_max": 24753.32996514256
+    },
+    {
+      "engine_loss_pct": 16.0,
+      "coinflip_bonus_percent": 0,
+      "net_per_retail_high_min": 3455.8553139933592,
+      "net_per_retail_high_max": 3673.2808161200246
+    },
+    {
+      "engine_loss_pct": 16.0,
+      "coinflip_bonus_percent": 2,
+      "net_per_retail_high_min": 8446.19574970976,
+      "net_per_retail_high_max": 8525.573313978224
+    },
+    {
+      "engine_loss_pct": 16.0,
+      "coinflip_bonus_percent": 6,
+      "net_per_retail_high_min": 18230.158309694623,
+      "net_per_retail_high_max": 18426.87662114256
+    },
+    {
+      "engine_loss_pct": 18.0,
+      "coinflip_bonus_percent": 0,
+      "net_per_retail_high_min": -2683.4709900066405,
+      "net_per_retail_high_max": -2466.0454878799756
+    },
+    {
+      "engine_loss_pct": 18.0,
+      "coinflip_bonus_percent": 2,
+      "net_per_retail_high_min": 2244.49376570976,
+      "net_per_retail_high_max": 2323.871329978225
+    },
+    {
+      "engine_loss_pct": 18.0,
+      "coinflip_bonus_percent": 6,
+      "net_per_retail_high_min": 11903.704965694626,
+      "net_per_retail_high_max": 12100.42327714256
+    },
+    {
+      "engine_loss_pct": 20.0,
+      "coinflip_bonus_percent": 0,
+      "net_per_retail_high_min": -8822.797294006641,
+      "net_per_retail_high_max": -8605.371791879976
+    },
+    {
+      "engine_loss_pct": 20.0,
+      "coinflip_bonus_percent": 2,
+      "net_per_retail_high_min": -3957.2082182902404,
+      "net_per_retail_high_max": -3877.8306540217754
+    },
+    {
+      "engine_loss_pct": 20.0,
+      "coinflip_bonus_percent": 6,
+      "net_per_retail_high_min": 5577.251621694625,
+      "net_per_retail_high_max": 5773.96993314256
+    }
+  ],
+  "coinflip_break_even": [
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "coinflip_bonus_percent": 0,
+      "normal_future_days_min": 109,
+      "normal_future_days_max": 110
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 16.0,
+      "coinflip_bonus_percent": 2,
+      "normal_future_days_min": 140,
+      "normal_future_days_max": 141
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "coinflip_bonus_percent": 0,
+      "normal_future_days_min": 86,
+      "normal_future_days_max": 87
+    },
+    {
+      "added": 50000,
+      "engine_loss_pct": 18.0,
+      "coinflip_bonus_percent": 2,
+      "normal_future_days_min": 104,
+      "normal_future_days_max": 105
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "coinflip_bonus_percent": 0,
+      "normal_future_days_min": 192,
+      "normal_future_days_max": 194
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 16.0,
+      "coinflip_bonus_percent": 2,
+      "normal_future_days_min": 248,
+      "normal_future_days_max": 249
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "coinflip_bonus_percent": 0,
+      "normal_future_days_min": 151,
+      "normal_future_days_max": 152
+    },
+    {
+      "added": 150000,
+      "engine_loss_pct": 18.0,
+      "coinflip_bonus_percent": 2,
+      "normal_future_days_min": 184,
+      "normal_future_days_max": 185
+    }
+  ]
+}

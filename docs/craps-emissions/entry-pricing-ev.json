@@ -1,0 +1,274 @@
+[
+  {
+    "paid_players": 1,
+    "added": 50000,
+    "jackpot_expected_return": 8284.162571428571,
+    "jackpot_qualified_roi_pct": 3.5520321428571426,
+    "jackpot_newcomer_roi_pct": -1.379017006802721,
+    "day_expected_return_min": 40222.77688575928,
+    "day_expected_return_max": 49705.229282609675,
+    "day_qualified_roi_pct": [
+      60.89110754303712,
+      98.8209171304387
+    ],
+    "day_newcomer_roi_pct": [
+      53.229626231463925,
+      89.35325440994161
+    ]
+  },
+  {
+    "paid_players": 5,
+    "added": 50000,
+    "jackpot_expected_return": 7914.100181818182,
+    "jackpot_qualified_roi_pct": -1.0737477272727274,
+    "jackpot_newcomer_roi_pct": -5.784521645021645,
+    "day_expected_return_min": 30428.97492585753,
+    "day_expected_return_max": 32677.408674104394,
+    "day_qualified_roi_pct": [
+      21.71589970343011,
+      30.709634696417577
+    ],
+    "day_newcomer_roi_pct": [
+      15.91990447945725,
+      24.48536637754055
+    ]
+  },
+  {
+    "paid_players": 10,
+    "added": 50000,
+    "jackpot_expected_return": 7711.184,
+    "jackpot_qualified_roi_pct": -3.6102,
+    "jackpot_newcomer_roi_pct": -8.200190476190476,
+    "day_expected_return_min": 27737.156950808454,
+    "day_expected_return_max": 28691.929719476684,
+    "day_qualified_roi_pct": [
+      10.948627803233814,
+      14.767718877906743
+    ],
+    "day_newcomer_roi_pct": [
+      5.665359812603633,
+      9.302589407530231
+    ]
+  },
+  {
+    "paid_players": 25,
+    "added": 50000,
+    "jackpot_expected_return": 7543.769483870968,
+    "jackpot_qualified_roi_pct": -5.702881451612903,
+    "jackpot_newcomer_roi_pct": -10.193220430107527,
+    "day_expected_return_min": 25597.455278209127,
+    "day_expected_return_max": 25876.70841806335,
+    "day_qualified_roi_pct": [
+      2.389821112836505,
+      3.5068336722534026
+    ],
+    "day_newcomer_roi_pct": [
+      -2.4858846544414237,
+      -1.4220631692824734
+    ]
+  },
+  {
+    "paid_players": 50,
+    "added": 50000,
+    "jackpot_expected_return": 7443.052571428571,
+    "jackpot_qualified_roi_pct": -6.961842857142857,
+    "jackpot_newcomer_roi_pct": -11.392231292517007,
+    "day_expected_return_min": 24722.737473131074,
+    "day_expected_return_max": 24835.33022554708,
+    "day_qualified_roi_pct": [
+      -1.1090501074757015,
+      -0.6586790978116823
+    ],
+    "day_newcomer_roi_pct": [
+      -5.818142959500668,
+      -5.3892181883920784
+    ]
+  },
+  {
+    "paid_players": 100,
+    "added": 50000,
+    "jackpot_expected_return": 7381.390716981132,
+    "jackpot_qualified_roi_pct": -7.732616037735849,
+    "jackpot_newcomer_roi_pct": -12.126300988319857,
+    "day_expected_return_min": 24242.07739237468,
+    "day_expected_return_max": 24290.156780669207,
+    "day_qualified_roi_pct": [
+      -3.0316904305012904,
+      -2.83937287732317
+    ],
+    "day_newcomer_roi_pct": [
+      -7.6492289814298005,
+      -7.466069406974448
+    ]
+  },
+  {
+    "paid_players": 200,
+    "added": 50000,
+    "jackpot_expected_return": 7348.3397669902915,
+    "jackpot_qualified_roi_pct": -8.14575291262136,
+    "jackpot_newcomer_roi_pct": -12.51976467868701,
+    "day_expected_return_min": 23990.042304102288,
+    "day_expected_return_max": 24011.805234533636,
+    "day_qualified_roi_pct": [
+      -4.039830783590855,
+      -3.9527790618654493
+    ],
+    "day_newcomer_roi_pct": [
+      -8.609362651038909,
+      -8.526456249395666
+    ]
+  },
+  {
+    "paid_players": 500,
+    "added": 50000,
+    "jackpot_expected_return": 7326.970134387352,
+    "jackpot_qualified_roi_pct": -8.412873320158102,
+    "jackpot_newcomer_roi_pct": -12.774165066817242,
+    "day_expected_return_min": 23834.000979000073,
+    "day_expected_return_max": 23842.12824237948,
+    "day_qualified_roi_pct": [
+      -4.663996083999711,
+      -4.63148703048208
+    ],
+    "day_newcomer_roi_pct": [
+      -9.203805794285438,
+      -9.172844790935315
+    ]
+  },
+  {
+    "paid_players": 1,
+    "added": 150000,
+    "jackpot_expected_return": 8525.247411764705,
+    "jackpot_qualified_roi_pct": 6.565592647058824,
+    "jackpot_newcomer_roi_pct": 1.4910406162464986,
+    "day_expected_return_min": 38229.54142377435,
+    "day_expected_return_max": 49940.66827536092,
+    "day_qualified_roi_pct": [
+      52.91816569509742,
+      99.76267310144368
+    ],
+    "day_newcomer_roi_pct": [
+      45.636348281045166,
+      90.25016485851779
+    ]
+  },
+  {
+    "paid_players": 5,
+    "added": 150000,
+    "jackpot_expected_return": 8284.162571428571,
+    "jackpot_qualified_roi_pct": 3.5520321428571426,
+    "jackpot_newcomer_roi_pct": -1.379017006802721,
+    "day_expected_return_min": 29508.491171473564,
+    "day_expected_return_max": 33038.56261594301,
+    "day_qualified_roi_pct": [
+      18.03396468589426,
+      32.15425046377203
+    ],
+    "day_newcomer_roi_pct": [
+      12.41329970085168,
+      25.861190917878123
+    ]
+  },
+  {
+    "paid_players": 10,
+    "added": 150000,
+    "jackpot_expected_return": 8088.216615384616,
+    "jackpot_qualified_roi_pct": 1.1027076923076924,
+    "jackpot_newcomer_roi_pct": -3.7117069597069596,
+    "day_expected_return_min": 27299.50524478801,
+    "day_expected_return_max": 29059.40604049209,
+    "day_qualified_roi_pct": [
+      9.19802097915204,
+      16.237624161968355
+    ],
+    "day_newcomer_roi_pct": [
+      3.9981152182400392,
+      10.702499201874625
+    ]
+  },
+  {
+    "paid_players": 25,
+    "added": 150000,
+    "jackpot_expected_return": 7789.5404878048785,
+    "jackpot_qualified_roi_pct": -2.6307439024390242,
+    "jackpot_newcomer_roi_pct": -7.267375145180023,
+    "day_expected_return_min": 25507.85416653968,
+    "day_expected_return_max": 26145.4915573012,
+    "day_qualified_roi_pct": [
+      2.031416666158717,
+      4.581966229204808
+    ],
+    "day_newcomer_roi_pct": [
+      -2.827222222705984,
+      -0.3981274007573258
+    ]
+  },
+  {
+    "paid_players": 50,
+    "added": 150000,
+    "jackpot_expected_return": 7639.881090909091,
+    "jackpot_qualified_roi_pct": -4.501486363636364,
+    "jackpot_newcomer_roi_pct": -9.049034632034632,
+    "day_expected_return_min": 24741.338738492475,
+    "day_expected_return_max": 25027.397411259575,
+    "day_qualified_roi_pct": [
+      -1.034645046030104,
+      0.10958964503829771
+    ],
+    "day_newcomer_roi_pct": [
+      -5.747280996219146,
+      -4.657533671392097
+    ]
+  },
+  {
+    "paid_players": 100,
+    "added": 150000,
+    "jackpot_expected_return": 7501.57751724138,
+    "jackpot_qualified_roi_pct": -6.230281034482759,
+    "jackpot_newcomer_roi_pct": -10.695505747126436,
+    "day_expected_return_min": 24275.225542694552,
+    "day_expected_return_max": 24406.800290997766,
+    "day_qualified_roi_pct": [
+      -2.8990978292217946,
+      -2.372798836008936
+    ],
+    "day_newcomer_roi_pct": [
+      -7.522950313544566,
+      -7.0217131771513674
+    ]
+  },
+  {
+    "paid_players": 200,
+    "added": 150000,
+    "jackpot_expected_return": 7414.046666666667,
+    "jackpot_qualified_roi_pct": -7.324416666666667,
+    "jackpot_newcomer_roi_pct": -11.737539682539683,
+    "day_expected_return_min": 24013.348524572226,
+    "day_expected_return_max": 24075.54643312998,
+    "day_qualified_roi_pct": [
+      -3.946605901711096,
+      -3.6978142674800805
+    ],
+    "day_newcomer_roi_pct": [
+      -8.520577049248663,
+      -8.283632635695314
+    ]
+  },
+  {
+    "paid_players": 500,
+    "added": 150000,
+    "jackpot_expected_return": 7354.996651162791,
+    "jackpot_qualified_roi_pct": -8.062541860465116,
+    "jackpot_newcomer_roi_pct": -12.440516057585825,
+    "day_expected_return_min": 23845.409910977683,
+    "day_expected_return_max": 23869.30686171242,
+    "day_qualified_roi_pct": [
+      -4.61836035608926,
+      -4.522772553150329
+    ],
+    "day_newcomer_roi_pct": [
+      -9.160343196275486,
+      -9.069307193476503
+    ]
+  }
+]
