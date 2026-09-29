@@ -139,10 +139,10 @@ contract CrapsDayUpgradeTest is CrapsPins {
         returns (Vm.Log[] memory logs)
     {
         uint64 slot = _slotAt(day, period);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, word);
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         logs = vm.getRecordedLogs();
     }
 
@@ -286,7 +286,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint24 day = _openDay(10);
         _buyNormalDay(alice);
         vm.warp(vm.getBlockTimestamp() + 7 hours);
-        craps.armBonusWindow(_slotAt(day, 1));
+        craps.armWindow(_slotAt(day, 1));
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);

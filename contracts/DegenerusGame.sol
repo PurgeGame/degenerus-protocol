@@ -989,20 +989,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Open every box queued at an RNG index — the ETH-lootbox leg, the coin-presale-box
-    ///         leg, or both (each robust to being empty). Permissionless: anyone may open another
-    ///         player's ready boxes (the economically-incentivized auto-open bounty path). Box
-    ///         rewards always credit the owner, so it needs no approval; address(0) = msg.sender.
-    /// @dev Signature: openBox(address player, uint48 index). The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
-    ///      here would cost contract-size headroom for no behavior change.
-    function openBox(address, uint48) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
     /// @notice Purchase whale pass: boosts levelCount, queues 100 levels of ticket entries, includes lootbox.
     /// @dev Available at any level. Can be purchased multiple times (1-100 per call).
     ///      Price: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), or discounted with boon.
@@ -1121,22 +1107,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint8,
         uint8
     ) external payable {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DEGENERETTE_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Resolve queued Degenerette bets at one RNG index once its word is available.
-    /// @dev Permissionless: settlement only credits each bet's owner, so any caller may resolve
-    ///      any bet early; the mineFlip sweep resolves every bet on its own. Signature:
-    ///      resolveDegeneretteBets(uint48 index, uint64[] betIds). The signature matches the
-    ///      module function exactly (identical selector), so the calldata forwards as-is —
-    ///      re-encoding here would cost contract-size headroom for no behavior change.
-    function resolveDegeneretteBets(
-        uint48,
-        uint64[] calldata
-    ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DEGENERETTE_MODULE
             .delegatecall(msg.data);

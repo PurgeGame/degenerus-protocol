@@ -155,7 +155,7 @@ contract CrapsRngSeal is DeployProtocol {
         (uint64 slot,,) = _openDayWithOneEntrant();
         uint48 cursorBefore = crapsBattle.currentIndex();
         vm.warp(block.timestamp + crapsBattle.BONUS_EVENT_CLOSE() + crapsBattle.BONUS_CLOCK_ALIGN());
-        uint48 index = crapsBattle.armBonusWindow(slot);
+        uint48 index = crapsBattle.armWindow(slot);
         assertEq(index, cursorBefore, "the field must bind the cursor's leaf");
         assertEq(crapsBattle.wordAt(index), 0, "the bound leaf must be unworded");
         assertEq(crapsBattle.currentIndex(), cursorBefore + 1, "the arm's request must have advanced the cursor");
@@ -172,7 +172,7 @@ contract CrapsRngSeal is DeployProtocol {
         (uint64 slot, uint256 betId, address who) = _openDayWithOneEntrant();
         CrapsBattle.Bet memory before = crapsBattle.betOf(betId);
         vm.warp(block.timestamp + crapsBattle.BONUS_EVENT_CLOSE() + crapsBattle.BONUS_CLOCK_ALIGN());
-        crapsBattle.armBonusWindow(slot);
+        crapsBattle.armWindow(slot);
         Craps.Bets memory other;
         other.dontPass = 2;
         vm.prank(who);
@@ -187,10 +187,10 @@ contract CrapsRngSeal is DeployProtocol {
     function test_settlementRefusesAZeroWord() public {
         (uint64 slot,,) = _openDayWithOneEntrant();
         vm.warp(block.timestamp + crapsBattle.BONUS_EVENT_CLOSE() + crapsBattle.BONUS_CLOCK_ALIGN());
-        uint48 index = crapsBattle.armBonusWindow(slot);
+        uint48 index = crapsBattle.armWindow(slot);
         assertEq(crapsBattle.wordAt(index), 0);
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
-        crapsBattle.resolveSlot(slot, type(uint64).max);
+        crapsBattle.settleSlot(slot, type(uint64).max);
     }
 
     /// @notice FALSIFIABILITY: seed a word onto the leaf the next arm will bind and prove the

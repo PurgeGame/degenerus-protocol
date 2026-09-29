@@ -62,17 +62,28 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.store(address(game), keccak256(abi.encode(uint48(1), uint256(34))), bytes32(word));
     }
 
+    /// @dev Resolve exactly one queued bet at index 1 through the sweep and read back its own
+    ///      event. Advances the active index past 1 so the sweep's finalized-index frontier
+    ///      reaches it (idempotent to repeat across the sequential per-bet calls below), then
+    ///      hands `openBoxes` a minimal budget: 2, since the fixture's fixed 2-member afking
+    ///      ring (VAULT + sDGNRS, both perpetually skip-only here) always burns exactly 1 of it
+    ///      before the human-box leg sees any. What's left is the smallest nonzero budget the
+    ///      bet queue reaches; the first bet at the cursor always runs whatever it costs, and
+    ///      that cost alone exhausts the tiny remainder, so the walk stops before touching a
+    ///      second bet. Filtered by `id` so a call that still swept more than one bet cannot be
+    ///      mistaken for a different bet's result.
     function _resolve(address who, uint64 id, uint8 symbol, uint256 word)
         private
         returns (uint32[] memory tickets, uint32 firstHouse)
     {
-        uint64[] memory ids = new uint64[](1);
-        ids[0] = id;
+        uint256 lr = uint256(vm.load(address(game), bytes32(uint256(33))));
+        vm.store(address(game), bytes32(uint256(33)), bytes32((lr & ~uint256(0xFFFFFFFFFFFF)) | 2));
         vm.recordLogs();
-        game.resolveDegeneretteBets(1, ids);
+        game.openBoxes(2);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != DQ.RESOLVED_SIG) continue;
+            if (uint256(logs[i].topics[3]) != id) continue;
             assertEq(address(uint160(uint256(logs[i].topics[1]))), who, "bet owner");
             bytes memory spins;
             (, firstHouse, spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));

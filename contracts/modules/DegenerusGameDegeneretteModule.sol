@@ -424,44 +424,6 @@ contract DegenerusGameDegeneretteModule is
         uint32 firstResultTraits;
     }
 
-    /// @notice Resolves queued bets at one RNG index ahead of the sweep.
-    /// @dev Permissionless: payouts always credit each bet's owner, so any caller may settle
-    ///      any bet; the mineFlip sweep resolves every bet without being asked. The first id
-    ///      fail-fasts on an already-resolved or unknown bet so a racing duplicate settle
-    ///      bails cheaply; later ids skip instead. ETH/FLIP payouts accumulate per owner and
-    ///      flush once per owner run; the prize-pool running local is written once.
-    /// @param index Lootbox RNG index the bets were placed at.
-    /// @param betIds Bet ids within `index` (queue position + 1).
-    function resolveDegeneretteBets(uint48 index, uint64[] calldata betIds) external {
-        // Once game-over liveness has drained the balance into claimable, resolving a
-        // pending bet would credit ETH claimable out of the already-distributed
-        // futurePrizePool residual, pushing claimablePool above the ETH balance
-        // (unbacked obligation). Pending bets are NOT settled by the game-over drain: their
-        // stakes stay in the pools the terminal distribution already paid out.
-        if (_livenessTriggered()) revert GameOver();
-        uint256 rngWord = lootboxRngWordByIndex[index];
-        if (rngWord == 0) revert RngNotReady();
-        uint256[] storage queue = degeneretteQueue[index];
-        uint256 qlen = queue.length;
-        ResolveAcc memory acc;
-        uint256 len = betIds.length;
-        for (uint256 i; i < len; ) {
-            uint64 betId = betIds[i];
-            uint256 bet = betId == 0 || betId > qlen ? 0 : queue[betId - 1];
-            if (bet != 0) {
-                queue[betId - 1] = 0;
-                _resolveBet(bet, uint32(index), betId, rngWord, acc);
-            } else if (i == 0) {
-                revert InvalidBet();
-            }
-            unchecked {
-                ++i;
-            }
-        }
-        _flushOwner(acc);
-        _flushPool(acc);
-    }
-
     /// @notice Human-box sweep leg for bets: resolves the queue at `index` from `pos`.
     /// @dev Delegatecall target of the lootbox module's openHumanBoxes, which reaches a bet
     ///      queue only after that index's box entries and only once its word has landed.
@@ -1017,8 +979,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
     /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
-    ///        local accumulate here (flushed once per resolveDegeneretteBets or
-    ///        sweepDegeneretteBets call); FLIP
+    ///        local accumulate here (flushed once per sweepDegeneretteBets call); FLIP
     ///        mint totals accumulate here too.
     /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP),
     ///         summed by the caller into the per-bet box.
@@ -1053,7 +1014,7 @@ contract DegenerusGameDegeneretteModule is
             // read mirrors the live storage value the per-spin path would have
             // read; subsequent spins decrement the running local in memory, so
             // each spin's cap/solvency sees the same shrinking pool storage would
-            // have held — byte-identical to per-spin. Flushed once by resolveDegeneretteBets.
+            // have held — byte-identical to per-spin. Flushed once by sweepDegeneretteBets.
             if (!acc.poolLoaded) {
                 acc.poolLoaded = true;
                 acc.poolFrozen = prizePoolFrozen;

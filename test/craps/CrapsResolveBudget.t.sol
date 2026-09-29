@@ -60,23 +60,23 @@ contract CrapsResolveBudgetTest is CrapsPins {
     function test_zeroSettlesNothingAndOneWeiOfBudgetSettlesOneSeat() public {
         (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("boundary")));
 
-        craps.resolveSlot(slot, 0);
+        craps.settleSlot(slot, 0);
         assertEq(craps.bonusCursorOf(slot), 0, "a zero budget settled a seat");
 
-        craps.resolveSlot(slot, 1);
+        craps.settleSlot(slot, 1);
         assertEq(craps.bonusCursorOf(slot), 1, "the smallest nonzero budget did not settle exactly one seat");
 
-        craps.resolveSlot(slot, 1);
+        craps.settleSlot(slot, 1);
         assertEq(craps.bonusCursorOf(slot), 2, "a second minimal budget did not take the next seat");
 
         // A budget no field can exhaust takes the rest and stops at the field's end.
         uint64 entrants = uint64(craps.battleOf(craps.keyOfSlot(slot)).entrants);
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertEq(craps.bonusCursorOf(slot), entrants, "an oversized budget did not finish the field");
 
         // And a finished field is silent rather than a revert, whatever the budget.
-        craps.resolveSlot(slot, WHOLE_FIELD);
-        craps.resolveSlot(slot, 1);
+        craps.settleSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, 1);
         assertEq(craps.bonusCursorOf(slot), entrants, "a finished field moved");
     }
 
@@ -88,7 +88,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         for (uint256 i = 0; i < 6; ++i) {
             uint256 snap = vm.snapshotState();
             (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("ladder")));
-            craps.resolveSlot(slot, budgets[i]);
+            craps.settleSlot(slot, budgets[i]);
             uint256 seats = craps.bonusCursorOf(slot);
             assertGe(seats, last, "a larger budget bought fewer seats");
             assertGe(seats, 1, "a nonzero budget bought no seat at all");
@@ -108,7 +108,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("ceiling")));
         uint64 entrants = uint64(craps.battleOf(craps.keyOfSlot(slot)).entrants);
         assertLt(entrants, craps.resolveMaxSeats(), "the fixture field reaches the ceiling");
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertEq(craps.bonusCursorOf(slot), entrants, "the ceiling clipped a field below it");
     }
 
@@ -135,11 +135,11 @@ contract CrapsResolveBudgetTest is CrapsPins {
             craps.seedProgressive(1_000_000 ether);
 
             if (mode == 0) {
-                craps.resolveSlot(slot, WHOLE_FIELD);
+                craps.settleSlot(slot, WHOLE_FIELD);
             } else if (mode == 1) {
-                for (uint256 i = 0; i < FIELD + 8; ++i) craps.resolveSlot(slot, 1);
+                for (uint256 i = 0; i < FIELD + 8; ++i) craps.settleSlot(slot, 1);
             } else {
-                for (uint256 i = 0; i < 12; ++i) craps.resolveSlot(slot, 180);
+                for (uint256 i = 0; i < 12; ++i) craps.settleSlot(slot, 180);
             }
 
             CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
@@ -178,7 +178,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             bookedBefore = booked;
 
             vm.recordLogs();
-            craps.resolveSlot(slot, 150);
+            craps.settleSlot(slot, 150);
             uint256 settled = _countSig(vm.getRecordedLogs(), keccak256("CrapsBetSettled(uint256,address,uint256,uint256)"));
             uint64 after_ = craps.bonusCursorOf(slot);
             // EXACTLY the seats that settled, and every one of them contiguous with the last.
@@ -199,9 +199,9 @@ contract CrapsResolveBudgetTest is CrapsPins {
             uint256 snap = vm.snapshotState();
             (uint64 slot, uint24 day) = _field(PLAIN_WORD, uint256(keccak256("action")));
             if (mode == 0) {
-                craps.resolveSlot(slot, WHOLE_FIELD);
+                craps.settleSlot(slot, WHOLE_FIELD);
             } else {
-                for (uint256 i = 0; i < FIELD + 8; ++i) craps.resolveSlot(slot, 1);
+                for (uint256 i = 0; i < FIELD + 8; ++i) craps.settleSlot(slot, 1);
             }
             staked[mode] = craps.dayStaked(day);
             high[mode] = craps.highStakedOf(day);
@@ -225,7 +225,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         uint256 checked;
         for (uint256 i = 0; i < own; ++i) {
             vm.recordLogs();
-            craps.resolveSlot(slot, 1);
+            craps.settleSlot(slot, 1);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
             for (uint256 j = 0; j < logs.length; ++j) {
@@ -251,19 +251,19 @@ contract CrapsResolveBudgetTest is CrapsPins {
     ///      the last complete one stopped.
     function test_anUnderfundedCallerRevertsWholeAndStrandsNothing() public {
         (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("underfunded")));
-        craps.resolveSlot(slot, 1);
+        craps.settleSlot(slot, 1);
         uint64 marked = craps.bonusCursorOf(slot);
         assertEq(marked, 1, "the fixture did not settle its first seat");
 
         // A big work budget behind far too little gas: out of gas, nothing committed.
         (bool ok,) = address(craps).call{gas: 60_000}(
-            abi.encodeWithSignature("resolveSlot(uint64,uint64)", slot, uint64(100_000))
+            abi.encodeWithSignature("settleSlot(uint64,uint64)", slot, uint64(100_000))
         );
         assertFalse(ok, "a call below one seat's gas did not run out");
         assertEq(craps.bonusCursorOf(slot), marked, "a reverted call committed part of a walk");
 
         // And the field is still perfectly live, from exactly where it stopped.
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized, "the field was stranded by the failed call");
     }
 
@@ -276,7 +276,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         for (uint256 i = 0; i < 64; ++i) {
             (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256(abi.encode("allbust", i))));
             vm.recordLogs();
-            craps.resolveSlot(slot, 300);
+            craps.settleSlot(slot, 300);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             uint256 settled = _countSig(logs, keccak256("CrapsBetSettled(uint256,address,uint256,uint256)"));
             uint256 paidSeats = _paidIn(logs);
@@ -313,7 +313,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         }
         slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(block.timestamp + 5 hours);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, wordSalt);
     }
 

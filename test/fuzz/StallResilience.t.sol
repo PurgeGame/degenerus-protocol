@@ -240,8 +240,8 @@ contract StallResilience is DeployProtocol {
         _resumeAfterSwap(newVRF, 0x1007CAFE);
         assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Reserved index finalized by the reissued word");
 
-        // openBox does not revert for that index.
+        // openBoxes does not revert for that index.
         vm.prank(buyer);
-        game.openBox(buyer, orphanedIndex);
+        game.openBoxes(type(uint256).max);
     }
 }

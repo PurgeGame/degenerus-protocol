@@ -205,10 +205,10 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         }
     }
 
-    /// @dev THE CRANK REACHES THE TABLE. `armBonusWindow` and `resolveSlot` are permissionless on
-    ///      the table itself, so the risk was never authority — it was that a window shuts on a
-    ///      clock nobody is watching. `mineFlip` now takes both jobs as its last leg and pays a
-    ///      flat FLIP for either, which is what puts a keeper on the schedule.
+    /// @dev THE CRANK REACHES THE TABLE. `keepScheduled` is permissionless on the table itself,
+    ///      so the risk is not authority — it is that a window shuts on a clock nobody is
+    ///      watching. `mineFlip` runs it as its last leg (arming and settling in schedule order)
+    ///      and pays a flat FLIP for either, which is what puts a keeper on the schedule.
     ///
     ///      Driven through the REAL Game, the REAL table and the REAL Coinflip credit lane,
     ///      because the wiring is the whole claim: the module reaches CRAPS by pin, and the

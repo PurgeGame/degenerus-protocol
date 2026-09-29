@@ -5,25 +5,27 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 
-/// @title DegeneretteResolveRepeg -- batch-partitioning invariance of queued-bet resolution.
-/// @notice Bets are queued per RNG index (`degeneretteQueue[index]`, id = queue position + 1).
-///         `resolveDegeneretteBets(index, betIds)` is PERMISSIONLESS and pays NO keeper reward
-///         of any kind -- the flat ~1-FLIP "loser" reward, the >=3-successful-resolutions gate,
-///         `BatchAlreadyTaken`, and the zero-resolved `NoWork()` revert this file used to test
-///         all belonged to the removed `game.degeneretteResolve(players, betIds)` keeper-crank
-///         helper and have no replacement (confirmed absent from contracts/ by grep). Unresolved
-///         bets settle automatically once their index's box entries clear, via the human-box
-///         sweep (`game.openBoxes`, unrewarded, or `game.mineFlip`, rewarded to the CALLER based
-///         on the walk-unit work actually done -- see KeeperFaucetResistance.t.sol and
-///         DegeneretteSweep.t.sol for that reward's own faucet-safety and equivalence proofs).
+/// @title DegeneretteResolveRepeg -- sweep-budget invariance of queued-bet resolution.
+/// @notice Bets are queued per RNG index (`degeneretteQueue[index]`, id = queue position + 1) and
+///         resolve ONLY through the permissionless human-box sweep (`game.openBoxes`, unrewarded,
+///         or `game.mineFlip`, rewarded to the CALLER based on the walk-unit work actually done --
+///         see KeeperFaucetResistance.t.sol and DegeneretteSweep.t.sol for that reward's own
+///         faucet-safety and equivalence proofs), strictly in queue order. There is no per-id
+///         door: the flat ~1-FLIP "loser" reward, the >=3-successful-resolutions gate,
+///         `BatchAlreadyTaken`, and the zero-resolved `NoWork()` revert this file used to test all
+///         belonged to the removed `game.degeneretteResolve(players, betIds)` keeper-crank helper
+///         and have no replacement (confirmed absent from contracts/ by grep); the later
+///         `resolveDegeneretteBets(index, betIds)` cherry-pick door that superseded it is also
+///         gone, so a caller can no longer choose an arbitrary id list or its ordering -- only
+///         how much budget one sweep call spends before the walk stops.
 ///
 ///         What remains meaningful here: the cross-bet payout accumulator
 ///         (`DegenerusGameDegeneretteModule.ResolveAcc`) sums ETH/FLIP per owner and flushes once
 ///         per owner-run, purely additively. This file proves that additivity end-to-end -- the
-///         SAME set of queued bets must settle to byte-identical player balances whether resolved
-///         in one `resolveDegeneretteBets` call, across several separate calls, or picked up by
-///         the automatic sweep -- so a caller's choice of batch partitioning (or a caller simply
-///         never showing up, leaving the sweep to do it) can never move value.
+///         SAME set of queued bets must settle to byte-identical player balances whether one
+///         full-budget sweep drains them all in a single call or several minimal-budget sweeps
+///         drain them one at a time -- so a caller's choice of sweep-call budget can never move
+///         value.
 contract DegeneretteResolveRepeg is DeployProtocol {
     // =========================================================================
     // Storage slot constants (confirmed via `forge inspect ... storage`)
@@ -67,16 +69,21 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     }
 
     // =========================================================================
-    // Batch-partitioning invariance
+    // Sweep-budget invariance
     // =========================================================================
 
     /// @notice The player's total resolution deltas (ETH claimable / claimablePool / FLIP minted)
-    ///         are byte-identical no matter how a caller partitions or delivers the same set of
-    ///         queued bets: one `resolveDegeneretteBets` call for all three, three separate
-    ///         single-bet calls, or the automatic `openBoxes` sweep never called by the player at
-    ///         all. Also proves the sweep result matches hand resolution exactly for a mixed
-    ///         ETH/FLIP batch (DegeneretteSweep.t.sol proves the single-bet and resume-across-
-    ///         calls shapes of this same property; this file owns the batch-partitioning angle).
+    ///         are byte-identical no matter how many `openBoxes` calls it takes to drain the same
+    ///         queued bets: one full-budget sweep that drains all three in a single call, or
+    ///         three minimal-budget sweeps that each drain exactly one. Bets resolve only through
+    ///         this permissionless FIFO sweep now (the manual per-id door that let a caller
+    ///         choose an arbitrary id list, its ordering, or a third-party "automatic sweep vs
+    ///         caller-driven call" distinction is gone -- every sweep call is the same entrypoint,
+    ///         whoever sends it), so call-budget size is the only remaining degree of freedom
+    ///         over how resolution gets split across transactions; this proves that freedom moves
+    ///         nothing either (DegeneretteSweep.t.sol proves the single-bet and resume-across-
+    ///         calls shapes of this same property; this file owns the full-sweep-vs-incremental
+    ///         comparison).
     function testResolutionDeltasIndependentOfBatchPartitioning() public {
         _seedFuturePrizePool(1_000_000 ether);
 
@@ -101,12 +108,9 @@ contract DegeneretteResolveRepeg is DeployProtocol {
 
         uint256 snap = vm.snapshotState();
 
-        // --- A: all 3 bets in ONE resolveDegeneretteBets call ---
-        uint64[] memory allIds = new uint64[](3);
-        allIds[0] = b0;
-        allIds[1] = b1;
-        allIds[2] = b2;
-        game.resolveDegeneretteBets(index, allIds);
+        // --- A: all 3 bets drained by ONE full-budget openBoxes sweep ---
+        _advanceActiveIndexPast(index);
+        game.openBoxes(type(uint256).max);
 
         uint256 claimableDeltaA = game.claimableWinningsOf(player) - preClaimable;
         uint256 claimablePoolDeltaA = _readClaimablePool() - preClaimablePool;
@@ -115,45 +119,32 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         assertEq(game.degeneretteBetInfo(index, b1), 0, "Run A: bet 1 resolved");
         assertEq(game.degeneretteBetInfo(index, b2), 0, "Run A: bet 2 resolved");
 
-        // --- B: revert, resolve the SAME 3 bets in THREE separate single-bet calls ---
+        // --- B: revert, resolve the SAME 3 bets in THREE separate minimal-budget sweeps ---
+        // openBoxes(2) always forces the bet at the cursor through regardless of its own cost
+        // (the first bet of a call runs whatever it costs), then the tiny remaining budget
+        // cannot also fit the next one, so each call drains exactly one bet in queue order.
+        // (2, not 1: the fixture's fixed 2-member afking ring -- VAULT + sDGNRS, both
+        // perpetually skip-only here -- always burns exactly 1 unit of maxCount before the
+        // human-box leg sees any.)
         vm.revertToState(snap);
-        uint64[] memory one = new uint64[](1);
-        one[0] = b0;
-        game.resolveDegeneretteBets(index, one);
-        one[0] = b1;
-        game.resolveDegeneretteBets(index, one);
-        one[0] = b2;
-        game.resolveDegeneretteBets(index, one);
+        _advanceActiveIndexPast(index);
+        game.openBoxes(2);
+        game.openBoxes(2);
+        game.openBoxes(2);
 
         uint256 claimableDeltaB = game.claimableWinningsOf(player) - preClaimable;
         uint256 claimablePoolDeltaB = _readClaimablePool() - preClaimablePool;
         uint256 flipDeltaB = coin.balanceOf(player) - preFlip;
-
-        // --- C: revert, resolve the SAME 3 bets via the automatic sweep (no caller-driven
-        // resolveDegeneretteBets call at all) ---
-        vm.revertToState(snap);
-        _advanceActiveIndexPast(index);
-        game.openBoxes(type(uint256).max);
-
-        uint256 claimableDeltaC = game.claimableWinningsOf(player) - preClaimable;
-        uint256 claimablePoolDeltaC = _readClaimablePool() - preClaimablePool;
-        uint256 flipDeltaC = coin.balanceOf(player) - preFlip;
-        assertEq(game.degeneretteBetInfo(index, b0), 0, "Run C: sweep resolved bet 0");
-        assertEq(game.degeneretteBetInfo(index, b1), 0, "Run C: sweep resolved bet 1");
-        assertEq(game.degeneretteBetInfo(index, b2), 0, "Run C: sweep resolved bet 2");
+        assertEq(game.degeneretteBetInfo(index, b0), 0, "Run B: bet 0 resolved");
+        assertEq(game.degeneretteBetInfo(index, b1), 0, "Run B: bet 1 resolved");
+        assertEq(game.degeneretteBetInfo(index, b2), 0, "Run B: bet 2 resolved");
 
         assertEq(claimableDeltaA, claimableDeltaB,
-            "batch-invariant: ETH claimable delta identical, one call vs three separate calls");
-        assertEq(claimableDeltaA, claimableDeltaC,
-            "batch-invariant: ETH claimable delta identical, one call vs the automatic sweep");
+            "budget-invariant: ETH claimable delta identical, one full sweep vs three incremental sweeps");
         assertEq(claimablePoolDeltaA, claimablePoolDeltaB,
-            "batch-invariant: claimablePool delta identical, one call vs three separate calls");
-        assertEq(claimablePoolDeltaA, claimablePoolDeltaC,
-            "batch-invariant: claimablePool delta identical, one call vs the automatic sweep");
+            "budget-invariant: claimablePool delta identical, one full sweep vs three incremental sweeps");
         assertEq(flipDeltaA, flipDeltaB,
-            "batch-invariant: FLIP mint delta identical, one call vs three separate calls");
-        assertEq(flipDeltaA, flipDeltaC,
-            "batch-invariant: FLIP mint delta identical, one call vs the automatic sweep");
+            "budget-invariant: FLIP mint delta identical, one full sweep vs three incremental sweeps");
 
         // Non-vacuity: the resolutions actually paid SOMETHING (the equality is not 0 == 0).
         assertGt(claimableDeltaA, 0, "non-vacuity: the resolutions credited ETH claimable");

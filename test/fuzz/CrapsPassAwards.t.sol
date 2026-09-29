@@ -214,6 +214,21 @@ contract CrapsPassAwards is DeployProtocol {
         );
     }
 
+    /// @dev `_buyPresaleBox` queues at the CURRENT LR_INDEX, which only advances via
+    ///      advanceGame's daily tick -- never touched by the buy itself. The permissionless
+    ///      openBoxes() sweep only walks FINALIZED indices (idx <= LR_INDEX-1), so without this
+    ///      poke `index` stays the live/un-finalized head forever and the sweep no-ops. Force
+    ///      LR_INDEX to `index + 1` so `index` becomes reachable, mirroring a landed VRF word.
+    function _finalizeIndex(uint48 index) private {
+        uint256 packed = uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED)));
+        uint256 mask = 0xFFFFFFFFFFFF;
+        vm.store(
+            address(game),
+            bytes32(SLOT_LOOTBOX_RNG_PACKED),
+            bytes32((packed & ~mask) | uint256(index + 1))
+        );
+    }
+
     function _seedOf(uint256 word, address who) private view returns (uint256) {
         uint48 index = uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED))));
         return uint256(keccak256(abi.encodePacked(word, keccak256("PRESALE_BOX"), who, index)));
@@ -279,9 +294,10 @@ contract CrapsPassAwards is DeployProtocol {
         _setWord(index, word);
 
         uint256 flipOut = _mirrorFlipOut(word, p, amount);
+        _finalizeIndex(index);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, index, amount, flipOut, 0, 0, false, 0, 0);
-        game.openBox(p, index);
+        game.openBoxes(type(uint256).max);
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(cn | ch, 0, "the FLIP side banks no passes");
@@ -300,11 +316,12 @@ contract CrapsPassAwards is DeployProtocol {
         assertEq(h, 0, "scenario shape: below the high switch");
         assertEq(flipLeft, 0, "scenario shape: uncapped side pays no FLIP");
 
+        _finalizeIndex(index);
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(p, false, n);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, index, amount, 0, 0, 0, false, n, 0);
-        game.openBox(p, index);
+        game.openBoxes(type(uint256).max);
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(cn, n, "normal credits banked");
@@ -324,11 +341,12 @@ contract CrapsPassAwards is DeployProtocol {
         assertGt(h, 0, "scenario shape: at least one high pass");
         assertLt(h, HIGH_CAP, "scenario shape: under the cap");
 
+        _finalizeIndex(index);
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(p, true, h);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, index, amount, 0, 0, 0, false, 0, h);
-        game.openBox(p, index);
+        game.openBoxes(type(uint256).max);
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(cn, 0, "no normal credits in the high lane");
@@ -348,11 +366,12 @@ contract CrapsPassAwards is DeployProtocol {
         assertEq(h, HIGH_CAP, "capped at twelve high passes");
         assertGt(flipLeft, 0, "the rest of the roll stays FLIP");
 
+        _finalizeIndex(index);
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(p, true, HIGH_CAP);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, index, amount, flipLeft, 0, 0, false, 0, uint32(HIGH_CAP));
-        game.openBox(p, index);
+        game.openBoxes(type(uint256).max);
 
         (, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(ch, HIGH_CAP, "twelve high credits banked");
@@ -381,10 +400,11 @@ contract CrapsPassAwards is DeployProtocol {
         uint48 index = _buyPresaleBox(p, amount);
         uint256 word = _subPassWord(p, amount, true);
         _setWord(index, word);
+        _finalizeIndex(index);
 
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, index, amount, 0, 0, 0, false, 1, 0);
-        game.openBox(p, index);
+        game.openBoxes(type(uint256).max);
 
         (uint256 cn,) = crapsBattle.passCreditsOf(p);
         assertEq(cn, 1, "the winning fraction pays one whole normal pass");
@@ -396,10 +416,11 @@ contract CrapsPassAwards is DeployProtocol {
         uint48 index = _buyPresaleBox(p, amount);
         uint256 word = _subPassWord(p, amount, false);
         _setWord(index, word);
+        _finalizeIndex(index);
 
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, index, amount, 0, 0, WWXRP_DUD, false, 0, 0);
-        game.openBox(p, index);
+        game.openBoxes(type(uint256).max);
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(cn | ch, 0, "the losing fraction banks no passes");

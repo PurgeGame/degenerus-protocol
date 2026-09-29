@@ -24,7 +24,7 @@ contract LapseArmHarness is CrapsViews {
 ///      with a word) is LAPSED to the keeper: its day-lane reservations are swept back to pass
 ///      credits. A window of that same day, seeded ahead of time by a vault window-ahead comp,
 ///      must not be armable afterwards — arming it would bind a table and pay FLIP off a day
-///      that banked no ladder. `armBonusWindow` now refuses to arm any window whose day never ran
+///      that banked no ladder. The arm refuses any window whose day never ran
 ///      `openBonusDay` (its boost budget is zero). This suite proves that guard on both orderings
 ///      against the sweep, plus a positive control that an ordinary, opened day still arms and
 ///      settles.
@@ -153,7 +153,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         uint256 daveStakeBefore = coinflip.staked(dave);
         vm.recordLogs();
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
-        craps.armBonusWindow(slot);
+        craps.armWindow(slot);
         Vm.Log[] memory armLogs = vm.getRecordedLogs();
         (, bool finalized) = _finalizedPot(armLogs);
         assertFalse(finalized, "the refused arm still finalized a pot");
@@ -188,7 +188,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
 
         // THE ARM, attempted before the sweep even runs.
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
-        craps.armBonusWindow(slot);
+        craps.armWindow(slot);
         assertEq(craps.slotIndexOf(slot), 0, "the refused arm bound a table anyway");
 
         // Now the keeper sweeps G as lapsed and refunds the seat the refused arm never touched.
@@ -234,7 +234,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         // Move past G's own window close so the arm door is live for it.
         vm.warp(vm.getBlockTimestamp() + 1 days);
 
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         assertTrue(craps.slotIndexOf(slot) != 0, "the opened day's window did not arm");
         (uint256 entrants,) = craps.fieldOf(bytes32(uint256(slot)));
         assertEq(entrants, daySeats + 1, "the arm must fold all day tickets into Dave's window seat");
@@ -244,7 +244,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
 
         _setWord(index, uint256(keccak256("settling-word-control")));
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory settleLogs = vm.getRecordedLogs();
 
         assertEq(craps.bonusCursorOf(slot), entrants, "every seat must settle on the opened day's window");

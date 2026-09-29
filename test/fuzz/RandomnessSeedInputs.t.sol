@@ -16,6 +16,12 @@ contract SeedInputSeeder is DegenerusGame {
         else lootboxOrder[1][player] = (uint256(10) << LB_LEVEL_SHIFT) |
             (uint256(1) << LB_CUSTOM_COUNT_SHIFT) |
             ((amount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
+        // Box-order migration: the removed per-(player,index) `openBox` read the leg mappings
+        // above directly; its sweep replacement only ever finds a box by walking
+        // boxPlayers[index], which a real purchase pushes to on first deposit. This seeder
+        // forges the leg mappings straight, so enqueue here too (index 1 is already finalized
+        // above via LR_INDEX = 2, and index/cursor default to 1/0 on a fresh deploy).
+        boxPlayers[1].push(player);
     }
 
     function afking(address player, uint256 amount, uint256 word) external {
@@ -45,7 +51,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         SeedInputSeeder host = SeedInputSeeder(payable(address(game)));
         host.seed(PLAYER, word, amount, route == 3);
         vm.recordLogs();
-        if (route == 0 || route == 3) game.openBox(PLAYER, 1);
+        if (route == 0 || route == 3) game.openBoxes(type(uint256).max);
         else if (route == 1) host.afking(PLAYER, amount, word);
         else {
             vm.prank(address(sdgnrs));

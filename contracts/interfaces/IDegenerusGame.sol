@@ -286,12 +286,6 @@ interface IDegenerusGame {
     /// @return active True if presale is active.
     function lootboxPresaleActiveFlag() external view returns (bool active);
 
-    /// @notice Open every box queued at an RNG index — the ETH-lootbox leg, the coin-presale-box
-    ///         leg, or both. Claims ETH, DGNRS, WWXRP, and potential boons/boosts.
-    /// @param player The player address to open for (address(0) = msg.sender).
-    /// @param index The RNG index the box(es) queued at.
-    function openBox(address player, uint48 index) external;
-
     /// @notice Buy a credit-gated coin-presale box (ETH + claimable shortfall).
     /// @param buyer Player to receive the box (address(0) = msg.sender).
     /// @param boxAmount Requested box ETH (>= 0.01 ETH; overpay and clamp-to-50 excess credit to AFKing).
@@ -336,15 +330,6 @@ interface IDegenerusGame {
         uint8 spinCount,
         uint8 symbol
     ) external payable;
-
-    /// @notice Resolve queued Degenerette bets at one RNG index once its word is available.
-    ///         mineFlip resolves every bet on its own; this settles chosen bets early.
-    /// @param index Lootbox RNG index the bets were placed at.
-    /// @param betIds Bet ids within `index` (queue position + 1).
-    function resolveDegeneretteBets(
-        uint48 index,
-        uint64[] calldata betIds
-    ) external;
 
     /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
     /// @param index Lootbox RNG index the bet was placed at.

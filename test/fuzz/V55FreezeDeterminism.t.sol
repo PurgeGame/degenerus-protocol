@@ -493,9 +493,17 @@ contract V55FreezeDeterminism is DeployProtocol {
 
         assertTrue(_lootboxAmountRaw(index, player) == amount, "human box amount pinned to the tuple");
 
+        // Box-order migration: the removed per-(player,index) `openBox` read lootboxOrder
+        // straight from the mapping regardless of "finalized"; its sweep replacement only walks
+        // finalized indices (idx <= LR_INDEX-1). `index` is still the live (active, unfinalized)
+        // index here, so finalize it (advance LR_INDEX past it) and park the sweep frontier
+        // exactly on it -- `player` is the sole queued entry there (a real purchase above), so a
+        // full-budget sweep opens exactly this one box.
+        _advanceLootboxIndex(index + 1);
+        _parkBoxFrontierAt(index);
         vm.recordLogs();
         vm.prank(player);
-        game.openBox(player, index);
+        game.openBoxes(type(uint256).max);
         Box memory b = _decodeLootBoxOpenedFor(player);
         // Belt-and-braces: the human box opened at the SAME live level (baseLevel == currentLevel), so the
         // differential is a fixed-live-level equivalence (not a level-frozen claim).
@@ -628,6 +636,19 @@ contract V55FreezeDeterminism is DeployProtocol {
 
     function _liveLootboxIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))));
+    }
+
+    /// @dev Park the sweep's open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both
+    ///      slot 56) at `index` with cursor 0, so a bounded/full-budget openBoxes() call begins
+    ///      exactly there instead of walking every lower/unrelated index from the true frontier.
+    function _parkBoxFrontierAt(uint48 index) internal {
+        bytes32 slot = bytes32(uint256(56));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        uint256 m = (uint256(1) << 48) - 1;
+        packed &= ~(m << (7 * 8));
+        packed &= ~(m << (13 * 8));
+        packed |= (uint256(index) & m) << (13 * 8);
+        vm.store(address(game), slot, bytes32(packed));
     }
 
     /// @dev Advance the live lootbox RNG index to `newIndex` (lootboxRngPacked bits[0:47]), preserving every

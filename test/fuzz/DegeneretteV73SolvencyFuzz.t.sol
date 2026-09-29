@@ -71,9 +71,11 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         uint256 bet = game.degeneretteBetInfo(1, betId);
         uint256 roiBps = _roiBps(DQ.activity(bet));
         _injectLootboxRngWord(1, word);
+        uint256 lr2 = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32((lr2 & ~uint256(0xFFFFFFFFFFFF)) | 2));
         vm.recordLogs();
         vm.prank(player);
-        game.resolveDegeneretteBets(1, _one(betId));
+        game.openBoxes(type(uint256).max);
         (uint8 score, uint8 gold) = _firstSpin();
         assertLe(gold, 4, "at most four gold matches");
         uint256 payout = math.payout(score, gold, CURRENCY_FLIP, DQ.stake(bet), DQ.activity(bet));
@@ -146,11 +148,6 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         }
         return ROI_VB_BPS + ((score - ACTIVITY_SEG_B_KNEE_POINTS) * (ROI_MAX_BPS - ROI_VB_BPS)) /
             (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
-    }
-
-    function _one(uint64 betId) internal pure returns (uint64[] memory a) {
-        a = new uint64[](1);
-        a[0] = betId;
     }
 
     function _firstSpin() internal returns (uint8 score, uint8 gold) {

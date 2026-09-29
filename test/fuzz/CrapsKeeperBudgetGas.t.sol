@@ -80,7 +80,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             _landTableWord(index, uint256(keccak256(abi.encode("sweep", dayWord, i))));
             uint256 before = coinflip.coinflipAmount(address(0));
             uint256 g = gasleft();
-            crapsBattle.resolveSlot(slot, KEEPER_ALLOWANCE);
+            crapsBattle.settleSlot(slot, KEEPER_ALLOWANCE);
             used[i] = g - gasleft();
             seats[i] = crapsBattle.bonusCursorOf(slot);
             over[i] = used[i] > KEEPER_ALLOWANCE ? used[i] - KEEPER_ALLOWANCE : 0;
@@ -141,7 +141,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         uint256 snap = vm.snapshotState();
         for (uint256 i = 0; i < 9; ++i) {
             _landTableWord(index, uint256(keccak256(abi.encode("cmp", dayWord, i))));
-            crapsBattle.resolveSlot(slot, KEEPER_ALLOWANCE);
+            crapsBattle.settleSlot(slot, KEEPER_ALLOWANCE);
             seats[i] = crapsBattle.bonusCursorOf(slot);
             vm.revertToState(snap);
             snap = vm.snapshotState();
@@ -162,7 +162,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         (uint64 slot, uint48 index) = _deepField(dayWord, PICKED_PASS_PLACE8);
         _landTableWord(index, word);
         uint256 g = gasleft();
-        crapsBattle.resolveSlot(slot, KEEPER_ALLOWANCE);
+        crapsBattle.settleSlot(slot, KEEPER_ALLOWANCE);
         uint256 bare = g - gasleft();
         uint256 bareSeats = crapsBattle.bonusCursorOf(slot);
         vm.revertToState(snap);
@@ -226,7 +226,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             uint64 seats = uint64(crapsBattle.battleOf(crapsBattle.keyOfSlot(slot)).entrants);
             for (uint64 n = 0; n < seats; ++n) {
                 uint256 g = gasleft();
-                crapsBattle.resolveSlot(slot, 1); // one seat: the smallest nonzero budget
+                crapsBattle.settleSlot(slot, 1); // one seat: the smallest nonzero budget
                 uint256 used = g - gasleft();
                 if (n + 1 == seats) {
                     if (used > worstFinal) worstFinal = used;
@@ -282,7 +282,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
         // Seated at +1h05m; period 1 shuts 6h03m into the day (05:00 UTC).
         vm.warp(vm.getBlockTimestamp() + 5 hours);
-        index = crapsBattle.armBonusWindow(slot);
+        index = crapsBattle.armWindow(slot);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -352,7 +352,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
         // Seated at +1h05m; period 1 shuts 6h03m into the day (05:00 UTC).
         vm.warp(vm.getBlockTimestamp() + 5 hours);
-        index = crapsBattle.armBonusWindow(slot);
+        index = crapsBattle.armWindow(slot);
     }
 
     /// @dev The fixed scheduled depth, reconstructed from a live window.

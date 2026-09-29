@@ -87,6 +87,31 @@ contract PresaleBoxDrain is DeployProtocol {
         vm.store(address(game), slot, bytes32(word));
     }
 
+    /// @dev Advance LR_INDEX (the packed slot's low 48 bits) past `index` so the permissionless
+    ///      openBoxes() sweep treats it as finalized (idx <= finalized) -- mirrors what a real
+    ///      VRF fulfillment does to LR_INDEX, without running an actual VRF round; only bits
+    ///      [0:47] are touched, every other packed field (pendingEth, threshold, ...) survives.
+    function _finalizeIndex(uint48 index) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED)));
+        uint256 mask = 0xFFFFFFFFFFFF;
+        vm.store(
+            address(game),
+            bytes32(SLOT_LOOTBOX_RNG_PACKED),
+            bytes32((packed & ~mask) | uint256(index + 1))
+        );
+    }
+
+    /// @dev Open exactly the NEXT pending queue entry at the (already-finalized) frontier index
+    ///      via the permissionless sweep, and no further. openBoxes(2): the afking leg's ring
+    ///      scan (the deploy's standing subscribers, none with a pending box) rounds up to one
+    ///      step of maxCount, leaving the human sweep one entry-weight of budget. openHumanBoxes
+    ///      always runs the first entry of a call regardless of its cost, then stops before a
+    ///      second (`opened != 0` guard), so this can never spill into the next buyer's entry
+    ///      even though the RNG word is about to change before the next call.
+    function _openOneQueuedEntry() internal {
+        game.openBoxes(2);
+    }
+
     /// @dev Force the presale-box DGNRS pool to a chosen balance (drives the SMALL-pool clamp
     ///      scenario). Drains via the game-only transferFromPool to a sink, mirroring the live
     ///      draw path -- no direct array poke, so poolBalance() stays internally consistent.
@@ -166,25 +191,31 @@ contract PresaleBoxDrain is DeployProtocol {
         // so the ratio isolates the tier multiplier alone.
         uint256 poolStart = _poolBal();
 
+        // Both boxes are already queued at `index` (LR_INDEX, still active/un-finalized); the
+        // permissionless sweep only walks finalized indices (idx <= LR_INDEX-1), so finalize it
+        // now -- after both buys, so neither buy's index shifted -- mirroring a landed VRF word.
+        _finalizeIndex(index);
+
         // Force the DGNRS branch for each (control the per-index word + per-player seed).
         uint256 word1 = _wordForDgnrs(tier1Buyer, index);
         assertGe(_outcome(word1, tier1Buyer, index), 50, "tier1 outcome >= 50");
         assertLt(_outcome(word1, tier1Buyer, index), 90, "tier1 outcome < 90");
 
-        // Resolve tier-1 box; the pool delta is the on-chain DGNRS reward.
+        // Resolve tier-1 box; the pool delta is the on-chain DGNRS reward. tier1Buyer is the
+        // OLDEST (first-bought) queue entry at this index, so the sweep's in-order walk opening
+        // "the next pending entry" opens exactly this one, matching the direct-open original.
         _setRngWord(index, word1);
         uint256 before1 = _poolBal();
-        vm.prank(tier1Buyer);
-        game.openBox(tier1Buyer, index);
+        _openOneQueuedEntry();
         uint256 reward1 = before1 - _poolBal();
         assertGt(reward1, 0, "tier1 drew DGNRS");
 
         // Resolve tier-5 box (re-seed the word for the tier-5 player so it also hits DGNRS).
+        // tier5Buyer is now the sweep's next (and only remaining) queued entry at this index.
         uint256 word5 = _wordForDgnrs(tier5Buyer, index);
         _setRngWord(index, word5);
         uint256 before5 = _poolBal();
-        vm.prank(tier5Buyer);
-        game.openBox(tier5Buyer, index);
+        _openOneQueuedEntry();
         uint256 reward5 = before5 - _poolBal();
         assertGt(reward5, 0, "tier5 drew DGNRS");
 
@@ -235,6 +266,10 @@ contract PresaleBoxDrain is DeployProtocol {
         // Confirm the closing flag (bit 255) is set on the closer's record.
         assertTrue((_boxRecord(index, closer) >> 255) & 1 == 1, "closer box is the closing box");
 
+        // All 7 boxes are queued; finalize `index` now (after every buy, so none of them shifted
+        // index) so the permissionless sweep can reach it.
+        _finalizeIndex(index);
+
         // Seed a SMALL pool relative to the per-box reward so the early DGNRS opens empty it
         // before the closer. Snapshot poolStart first by forcing it, then size it tiny: pick a
         // pool that 2 DGNRS-branch opens fully drain. With poolStart small, base = poolStart/40
@@ -250,14 +285,23 @@ contract PresaleBoxDrain is DeployProtocol {
 
         // Drain the pool through early DGNRS-branch opens. Track that NO per-box draw ever
         // exceeds the live pool balance (the clamp invariant).
+        //
+        // The original loop stopped as soon as the pool hit 0 (a gas-only optimization: opening
+        // a drained-pool entry always draws 0, still passing the <= clamp check below), then
+        // jumped straight to the closer -- cherry-picking it ahead of the still-unopened
+        // non-closing entries. The permissionless sweep is a strict in-order, oldest-first walk
+        // (see class-rule caveat 2): it cannot open the closer while an earlier entry is still
+        // pending. Every non-closing entry is opened here unconditionally instead (a 0-draw once
+        // the pool is empty still satisfies every assertion below, so this is not a weaker
+        // check), which keeps the closer the genuinely NEXT queued entry when its turn comes.
         uint256 opened;
         for (uint256 i = 0; i < nNonClosing; ++i) {
-            if (_poolBal() == 0) break; // pool already empty -> stop opening
             uint256 word = _wordForDgnrs(buyers[i], index);
             _setRngWord(index, word);
             uint256 poolBefore = _poolBal();
-            vm.prank(buyers[i]);
-            game.openBox(buyers[i], index);
+            // buyers[i] is the sweep's next queued entry (opened oldest-first, matching the buy
+            // order above), so budget-1 opens exactly this one and stops.
+            _openOneQueuedEntry();
             uint256 drew = poolBefore - _poolBal();
             assertLe(drew, poolBefore, "no per-box draw exceeds live pool (clamp)");
             opened++;
@@ -272,8 +316,7 @@ contract PresaleBoxDrain is DeployProtocol {
         uint256 closerWord = _wordForDgnrs(closer, index);
         _setRngWord(index, closerWord);
         uint256 poolBeforeClose = _poolBal();
-        vm.prank(closer);
-        game.openBox(closer, index); // no revert == clamp held end-to-end
+        _openOneQueuedEntry(); // no revert == clamp held end-to-end
         uint256 poolAfterClose = _poolBal();
 
         // The closing sweep (transferFromPool of the remainder) drew at most the dust that was
@@ -344,23 +387,27 @@ contract PresaleBoxDrain is DeployProtocol {
         address closer = buyers[nBoxes - 1];
         assertTrue((_boxRecord(index, closer) >> 255) & 1 == 1, "final box is the closing box");
 
+        // All 250 boxes are queued at `index` (still active/un-finalized); finalize it now, once,
+        // after every buy, so the permissionless sweep can walk it.
+        _finalizeIndex(index);
+
         // --- Resolve every box, forcing each to its assigned branch via the per-index word. ---
         // Track the cumulative per-box DGNRS draw (pool delta on the non-closing opens) so the
-        // closing sweep can be isolated from the closer's own roll.
+        // closing sweep can be isolated from the closer's own roll. Every non-closing buyer is
+        // opened here unconditionally, in queue (== buy) order, so the closer is always the
+        // sweep's genuinely next entry when its own turn comes below.
         uint256 cumulativeBoxDraw;
         for (uint256 i = 0; i < nBoxes - 1; ++i) {
             if (_poolBal() == 0) {
                 // Pool already empty: remaining DGNRS-branch opens draw 0 (clamp). Still open
                 // them so the run is complete and the closer is reached.
                 _setRngWord(index, _wordForBand(buyers[i], index, bands[i]));
-                vm.prank(buyers[i]);
-                game.openBox(buyers[i], index);
+                _openOneQueuedEntry();
                 continue;
             }
             _setRngWord(index, _wordForBand(buyers[i], index, bands[i]));
             uint256 poolBefore = _poolBal();
-            vm.prank(buyers[i]);
-            game.openBox(buyers[i], index);
+            _openOneQueuedEntry();
             cumulativeBoxDraw += poolBefore - _poolBal();
         }
 
@@ -375,8 +422,7 @@ contract PresaleBoxDrain is DeployProtocol {
         // measured pool delta across the closing open is the closing SWEEP alone.
         _setRngWord(index, _wordForBand(closer, index, 2));
         uint256 poolBeforeClose = _poolBal();
-        vm.prank(closer);
-        game.openBox(closer, index);
+        _openOneQueuedEntry();
         uint256 swept = poolBeforeClose - _poolBal();
 
         // Dust bound (T-327-01-FC2): <= poolStart/100 (1%). The v47 /1_000 curve left the

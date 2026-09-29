@@ -11,13 +11,9 @@ import {Vm} from "forge-std/Vm.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
 
-/// @title DegeneretteFreezeResolutionTest -- Proves FIX-04 (freeze-routing) AND
+/// @title DegeneretteFreezeResolutionTest -- Proves
 ///        DGAS-05 same-results: the v47 Degenerette `resolveBets` write-batching
 ///        is payout-IDENTICAL to the old per-spin behavior.
-///
-/// @notice FIX-04: _distributePayout routes the ETH portion through
-///         _getPendingPools/_setPendingPools during prizePoolFrozen, keeping the
-///         live futurePrizePool snapshot untouched (tests 1-3).
 ///
 /// @notice DGAS-05 (tests 4-7): the resolver accumulates ETH/FLIP
 ///         payouts CROSS-BET into a `ResolveAcc` memory struct and flushes ONCE
@@ -38,8 +34,20 @@ import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarne
 ///      inject freeze state and seed pending pools to a known value, then places
 ///      a real degenerette bet via the public API, injects a lootbox RNG word
 ///      pre-computed to produce a winning result, and resolves the bet.
-/// @dev PORT NOTE: bets are now one word in `degeneretteQueue[index]` (id = queue position + 1).
-///      `resolveDegeneretteBets(index, betIds)` replaced the old `(player, betIds)` signature.
+/// @dev DOORS-REMOVAL PORT NOTE: bets are one word in `degeneretteQueue[index]` (id = queue
+///      position + 1), resolved ONLY through the permissionless in-order sweep
+///      `game.openBoxes(maxCount)` (delegates to `sweepDegeneretteBets`) — the manual
+///      `resolveDegeneretteBets(index, betIds)` door is gone, with it the per-call
+///      caller-composed betId list and its first-id fail-fast revert. A bet resolves once every
+///      box AND bet at every index <= its own is resolved. FIX-04 (resolving a bet through the
+///      pending pool while `prizePoolFrozen`) was behavior specific to that removed door:
+///      `sweepDegeneretteBets` already held the whole queue (`if (prizePoolFrozen) return (0,
+///      pos, 0, 0);`) rather than resolving it, so a bet now only ever resolves once the pool
+///      is unfrozen again, through the live (not pending) pool. The former freeze-routing tests
+///      (conservation + Insolvent-on-identical-spin) proved a path that no longer exists and were
+///      removed rather than adapted; the "pending bet is not settled post-game-over" invariant is
+///      kept (see testResolveBetsRevertsPostGameOver_InsolvencyReproClosed) since `openHumanBoxes`
+///      still no-ops (not reverts) once `_livenessTriggered()`.
 ///      The per-spin `DegeneretteResult` event is gone, replaced by ONE `DegeneretteResolved`
 ///      per bet carrying every spin's (playerTraits, score, gold) as packed bytes
 ///      (see test/helpers/DegeneretteQueue.sol `spinAt`). Per-spin RAW payouts (before the ETH
@@ -131,142 +139,17 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Test 1: Resolution during freeze succeeds with winning bet,
-    //         ETH conservation holds
+    // Tests 1-2 REMOVED (doors removal): both proved FIX-04's freeze-time ETH
+    // conservation / Insolvent-revert through the manual `resolveDegeneretteBets`
+    // door while `prizePoolFrozen`. That door is gone, and its only replacement,
+    // `sweepDegeneretteBets` (reached via `game.openBoxes`), already held the whole
+    // queue during a freeze rather than resolving it (`if (prizePoolFrozen) return
+    // (0, pos, 0, 0);`, unchanged by this port). So freeze-time resolution — and the
+    // pending-pool routing / per-spin Insolvent revert these tests proved — is no
+    // longer reachable through any live entry point; a queued bet simply waits until
+    // the pool unfreezes and then resolves through the LIVE pool. There is no
+    // successor behavior to port these two tests onto.
     // =========================================================================
-
-    /// @notice Prove degenerette ETH resolution during prizePoolFrozen:
-    ///         - Does not revert (pre-fix: reverted with E())
-    ///         - Live futurePrizePool is UNTOUCHED (per D-05)
-    ///         - Pending future accumulator is debited by exactly ethPortion
-    ///         - Player receives claimable ETH credit equal to ethPortion
-    ///         - Conservation: pendingDebit == playerClaimable
-    function testDegeneretteFreezeResolutionEthConserved() public {
-        // --- Phase 1: Set up freeze state ---
-
-        // Seed the live futurePrizePool to 50 ether (to prove it stays untouched)
-        _seedFuturePrizePool(50 ether);
-
-        // Set prizePoolFrozen = true
-        _setFrozenFlag(true);
-
-        // Seed pending future accumulator large enough to cover worst-case degenerette
-        // ETH payout (8-match win can exceed 4000 ETH on a 0.01 ETH bet).
-        _seedPendingFuture(10_000 ether);
-
-        // Record pre-bet state
-        uint256 preLiveFuture = _readFuturePrizePool();
-        uint256 prePendingFuture = _readPendingFuture();
-        assertEq(preLiveFuture, 50 ether, "Pre-bet live future should be 50 ETH");
-        assertEq(prePendingFuture, 10_000 ether, "Pre-bet pending future should be 10000 ETH");
-
-        // --- Phase 2: Find a winning RNG word ---
-        // Pre-compute an RNG word that produces a result ticket with >= 2 matches
-        // against our custom ticket. This guarantees _distributePayout is called.
-        uint48 index = 1; // default lootboxRngIndex
-        uint32 customTraits;
-        uint256 winningRngWord;
-        (customTraits, winningRngWord) = _findWinningCombo(index);
-
-        // --- Phase 3: Place a degenerette ETH bet during freeze ---
-        // The bet goes to pending pools per L558-561 (prizePoolFrozen branch).
-        uint128 betAmount = 0.01 ether;
-
-        vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
-
-        // Record post-bet state: pending future should have increased by betAmount
-        uint256 postBetPendingFuture = _readPendingFuture();
-        uint256 postBetLiveFuture = _readFuturePrizePool();
-        assertEq(postBetLiveFuture, preLiveFuture, "Live future must be untouched after freeze bet");
-        assertEq(postBetPendingFuture, prePendingFuture + betAmount,
-            "Pending future should include the bet deposit");
-
-        // --- Phase 4: Inject RNG word and resolve the bet ---
-        _injectLootboxRngWord(index, winningRngWord);
-
-        // Record pre-resolve state
-        uint256 preResolvePendingFuture = _readPendingFuture();
-        uint256 preResolveClaimable = game.claimableWinningsOf(player);
-        assertEq(preResolveClaimable, 0, "Player should have no claimable before resolve");
-
-        // Resolve the bet (betId = 1, first bet for this player).
-        // Pre-fix: this call would revert with E() because prizePoolFrozen was true.
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = 1;
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, betIds);
-
-        // --- Phase 5: Assert ETH conservation ---
-        uint256 postResolvePendingFuture = _readPendingFuture();
-        uint256 postResolveLiveFuture = _readFuturePrizePool();
-        uint256 postResolveClaimable = game.claimableWinningsOf(player);
-
-        // CRITICAL: Live futurePrizePool UNTOUCHED (per D-05)
-        assertEq(postResolveLiveFuture, preLiveFuture,
-            "Live futurePrizePool must remain exactly 50 ETH (untouched during freeze)");
-
-        // Player must have received a nonzero ETH credit (we engineered a winning RNG word)
-        assertGt(postResolveClaimable, 0, "Player must have nonzero claimable (winning bet)");
-
-        // Pending future was debited by exactly the ETH portion credited to the player
-        uint256 pendingDebit = preResolvePendingFuture - postResolvePendingFuture;
-        assertEq(pendingDebit, postResolveClaimable,
-            "ETH conservation: pending pool debit must equal player's claimable ETH credit");
-
-        // The pending pool was not over-debited (conservation: debit <= what was available)
-        assertLe(pendingDebit, preResolvePendingFuture,
-            "Pending pool debit must not exceed what was available");
-
-        emit log_named_uint("Pending debit (ETH portion)", pendingDebit);
-        emit log_named_uint("Player claimable", postResolveClaimable);
-        emit log_named_uint("Post live future", postResolveLiveFuture);
-        emit log_named_uint("Post pending future", postResolvePendingFuture);
-    }
-
-    // =========================================================================
-    // Test 2: Zero pending future during freeze -- ETH capped to zero,
-    //         resolution succeeds without revert
-    // =========================================================================
-
-    /// @notice With insufficient pending future, resolution reverts with E()
-    ///         (solvency check: pFuture < ethPortion).
-    function testDegeneretteFreezeResolutionZeroPendingReverts() public {
-        _setFrozenFlag(true);
-
-        // Seed pending future to enough for the bet placement (bet adds to pending),
-        // then zero it before resolution.
-        _seedPendingFuture(1 ether);
-
-        // Seed live future to prove it stays untouched
-        _seedFuturePrizePool(50 ether);
-
-        // Find a winning combo to ensure _distributePayout is actually called
-        uint48 index = 1;
-        uint32 customTraits;
-        uint256 winningRngWord;
-        (customTraits, winningRngWord) = _findWinningCombo(index);
-
-        uint128 betAmount = 0.01 ether;
-        vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
-
-        // Zero pending future before resolution
-        _seedPendingFuture(0);
-
-        // Inject RNG word
-        _injectLootboxRngWord(index, winningRngWord);
-
-        // Resolution reverts: ethPortion > 0 but pFuture = 0 → solvency check fails
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = 1;
-        vm.prank(player);
-        vm.expectRevert(bytes4(0xfc220038)); // Insolvent()
-        game.resolveDegeneretteBets(index, betIds);
-
-        // Live future untouched
-        assertEq(_readFuturePrizePool(), 50 ether, "Live future must remain untouched");
-    }
 
     // =========================================================================
     // Test 3: Unfrozen path regression (behavior unchanged)
@@ -305,13 +188,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         assertEq(_readPendingFuture(), prePendingFuture,
             "Unfrozen: pending future should be untouched");
 
-        // Inject RNG word and resolve
+        // Inject RNG word, finalize the index, and sweep it through openBoxes.
         _injectLootboxRngWord(index, winningRngWord);
-
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = 1;
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, betIds);
+        _advanceLootboxRngIndexByOne();
+        game.openBoxes(type(uint256).max);
 
         // Live future should have decreased (debited by ETH payout)
         uint256 postResolveLiveFuture = _readFuturePrizePool();
@@ -361,7 +241,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @notice ETH and FLIP players share the result board for the same RNG period: the same
     ///         symbol at the same index/word produces identical player traits, score and gold
-    ///         per spin regardless of owner, currency, bet order or which id resolves first.
+    ///         per spin regardless of owner, currency or queue position. (Doors removal: the
+    ///         sweep always walks the queue in ascending position, so "which id resolves first"
+    ///         is no longer caller-selectable; the shared-board claim itself — the part this
+    ///         test actually proves — is unaffected and is proven here off a single sweep call.)
     function test_SharedBoardAcrossPlayersCurrenciesAndBets() public {
         uint256 word = uint256(keccak256("shared-period-board"));
         uint32 pick = _winningTicketFor(1, word);
@@ -373,13 +256,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _placeBet(CURRENCY_FLIP, 100 ether, 1, pick); // decoy bet shifts the queue position
         uint64 second = _placeBet(CURRENCY_FLIP, 200 ether, 3, pick);
         _injectLootboxRngWord(1, word);
+        _advanceLootboxRngIndexByOne();
 
-        uint64[] memory ids = new uint64[](1);
         vm.recordLogs();
-        ids[0] = second;
-        game.resolveDegeneretteBets(1, ids);
-        ids[0] = first;
-        game.resolveDegeneretteBets(1, ids);
+        game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (, uint32 firstResultTraits, bytes memory firstSpins) = _decodeResolved(logs, 1, first);
@@ -439,13 +319,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint256 preWwxrp = wwxrp.balanceOf(player);
 
         // Resolve both in ONE call (the cross-bet flush under test).
-        uint64[] memory betIds = new uint64[](2);
-        betIds[0] = ethBet;
-        betIds[1] = flipBet;
-
+        _advanceLootboxRngIndexByOne();
         vm.recordLogs();
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, betIds);
+        game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Replay the per-spin baseline from each bet's own DegeneretteResolved `spins` payload,
@@ -550,11 +426,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         uint256 preFlip = coin.balanceOf(player);
 
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
+        _advanceLootboxRngIndexByOne();
         vm.recordLogs();
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, betIds);
+        game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Raw spins paid: Sum of the per-spin payouts recomputed off the resolved event's
@@ -609,11 +483,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint16 activity = DQ.activity(game.degeneretteBetInfo(index, betId));
         uint256 preClaimable = game.claimableWinningsOf(player);
 
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
+        _advanceLootboxRngIndexByOne();
         vm.recordLogs();
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, betIds);
+        game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Recompute the per-spin RAW payouts off the resolved event's packed spins, and read
@@ -661,74 +533,38 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         emit log_named_uint("tier2_spins_capped", predictedCapCount);
     }
 
-    /// @notice Frozen-pool Tier-2 variant: prove the frozen solvency check
-    ///         (pendingFuture < ethShare -> revert E()) fires on the IDENTICAL spin
-    ///         the per-spin replay predicts. Seeds a pending-future just large enough
-    ///         to cover the first ETH win but NOT the second, so resolution reverts
-    ///         when the running pending-local underflows on the identical spin.
-    function testFrozenSolvencyRevertsOnIdenticalSpin_Tier2() public {
-        _setFrozenFlag(true);
-
-        uint48 index = 1;
-        uint256 word = uint256(keccak256("tier2_frozen_word"));
-        uint32 ticket = _winningTicketFor(index, word);
-
-        uint128 perTicket = 0.01 ether;
-        uint8 spins = 4;
-
-        // Seed pending future large enough to ACCEPT the bet placement AND cover a
-        // winning multi-spin frozen resolve in the PEEK pass (an 8/8 jackpot spin on
-        // a 0.01 ETH bet credits ~700 ETH; 4 spins -> seed well above that).
-        _seedPendingFuture(100_000 ether);
-        uint64 betId = _placeBet(CURRENCY_ETH, perTicket, spins, ticket);
-        // Capture activity BEFORE resolving -- degeneretteBetInfo zeroes after resolve.
-        uint16 activity = DQ.activity(game.degeneretteBetInfo(index, betId));
-        _injectLootboxRngWord(index, word);
-
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
-
-        // PEEK pass: snapshot, resolve with ample pending to read the FIRST spin's
-        // raw payout (the payout formula is freeze-independent), then revert. The
-        // peek leaves the bet intact for the real (trimmed) revert assertion.
-        uint256 snap = vm.snapshotState();
-        vm.recordLogs();
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, betIds);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        (, , bytes memory spinsData) = _decodeResolved(logs, index, betId);
-        vm.revertToState(snap);
-        require(spinsData.length == uint256(spins) * 5, "peek must produce all spins");
-        uint256[] memory rawPayouts = _rawPayouts(spinsData, CURRENCY_ETH, perTicket, activity);
-        uint256 firstEthShare = _ethShareOf(rawPayouts[0], perTicket);
-        require(firstEthShare > 0, "first spin must pay ETH");
-
-        // Trim pending future BELOW the first spin's ethShare -> the very first ETH
-        // win's per-spin solvency check (pendingFuture < ethShare) must revert Insolvent()
-        // on the IDENTICAL (first) spin the replay predicts.
-        _seedPendingFuture(firstEthShare - 1);
-
-        vm.prank(player);
-        vm.expectRevert(bytes4(0xfc220038)); // Insolvent()
-        game.resolveDegeneretteBets(index, betIds);
-
-        // Live future must stay untouched throughout the (reverted) frozen resolve.
-        assertEq(_readFuturePrizePool(), 0, "Frozen: live future untouched (was never seeded)");
-    }
+    // testFrozenSolvencyRevertsOnIdenticalSpin_Tier2 REMOVED (doors removal): proved the
+    // frozen-pool Insolvent() revert (pendingFuture < ethShare) firing mid-resolve through the
+    // manual door. That path is unreachable now — `sweepDegeneretteBets` holds the whole queue
+    // while `prizePoolFrozen` (see the Tests 1-2 removal note above) instead of ever reaching
+    // `_distributePayout`'s frozen branch, so there is no live call that can hit this revert.
 
     // =========================================================================
     // DGAS-05 Test 6: lootbox summed PER betId, never across bets
     // =========================================================================
 
+    /// @dev Mirrors DegenerusGameStorage.OPEN_HUMAN_ENTRY_WEIGHT (15) and the DegeneretteModule
+    ///      private per-bet walk-unit weights (BET_ENTRY_WEIGHT_ETH = 36, BET_SPIN_WEIGHT_ETH = 2)
+    ///      so Run B below can budget-starve `openBoxes` to resolve exactly ONE queued 1-spin ETH
+    ///      bet per call (see the derivation comment at its call site).
+    uint256 private constant MIRROR_OPEN_HUMAN_ENTRY_WEIGHT = 15;
+    uint256 private constant MIRROR_ONE_SPIN_ETH_BET_WEIGHT = 36 + 1 * 2;
+
     /// @notice Prove the lootbox-share is summed PER betId (one box per bet), never
     ///         across bets (the resolution-batch-invariant). Two bets SHARE the same
     ///         lootbox index (two bet-txs, same index). Both flip into the lootbox
     ///         (small pool -> cap binds on each bet's single spin). Resolving both in
-    ///         ONE resolveBets must produce TWO independent box resolutions — proven
+    ///         ONE sweep must produce TWO independent box resolutions — proven
     ///         by the equivalence: resolving the two bets in ONE call yields the
     ///         IDENTICAL ETH credited + box ticket effects as resolving them in TWO
     ///         separate calls. A summed-across implementation (one box on share1+share2)
     ///         would diverge (the box ticket-roll is non-linear in `amount`).
+    /// @dev Doors removal: there is no caller-composed betId list to split into two calls
+    ///      anymore — `openBoxes` always walks the queue in order. Run B instead
+    ///      budget-starves the FIRST call so only bet1 fits (a 1-spin ETH bet always costs
+    ///      MIRROR_ONE_SPIN_ETH_BET_WEIGHT walk units and the sweep's first entry always runs
+    ///      regardless of cost, but never a second one that would exceed the budget), then
+    ///      drains the rest — reproducing "resolve bet1, then bet2, in two separate txs" exactly.
     function testLootboxSummedPerBetIdNotAcrossBets() public {
         uint48 index = 1;
         uint256 word = uint256(keccak256("perbetid_word"));
@@ -741,40 +577,43 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint64 bet2 = _placeBet(CURRENCY_ETH, perTicket, 1, ticket);
         _seedFuturePrizePool(smallPool);
         _injectLootboxRngWord(index, word);
+        _advanceLootboxRngIndexByOne();
 
         // Snapshot so the SAME placed bets can be resolved two different ways.
         uint256 snap = vm.snapshotState();
 
         // --- Run A: resolve BOTH in ONE call (the cross-bet batch under test) ---
         uint256 preA = game.claimableWinningsOf(player);
-        uint64[] memory both = new uint64[](2);
-        both[0] = bet1;
-        both[1] = bet2;
         vm.recordLogs();
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, both);
+        game.openBoxes(type(uint256).max);
 
         uint256 ethCreditedOneCall = game.claimableWinningsOf(player) - preA;
-        // Two betIds resolved -> two DegeneretteResolved, two PayoutCapped (one spin each).
+        // Two bets resolved -> two DegeneretteResolved, two PayoutCapped (one spin each).
         (uint256 resolvedCount, uint256 cappedCount) = _countResolvedAndCapped(bet1, bet2);
-        assertEq(resolvedCount, 2, "two betIds resolved -> two DegeneretteResolved (per-bet unit)");
+        assertEq(resolvedCount, 2, "two bets resolved -> two DegeneretteResolved (per-bet unit)");
         assertEq(cappedCount, 2,
             "per-betId: each bet's single spin capped independently -> two PayoutCapped");
 
         // --- Run B: revert to the snapshot, resolve the SAME two bets in TWO calls ---
-        // (the per-betId baseline: one box per bet, resolved one at a time).
+        // (the per-betId baseline: one box per bet, resolved one at a time). maxCount=3 ->
+        // openHumanBoxes budget = 3 * MIRROR_OPEN_HUMAN_ENTRY_WEIGHT = 45, minus 1 walk unit
+        // for the index header = 44 walk units handed to sweepDegeneretteBets: enough for
+        // bet1 (MIRROR_ONE_SPIN_ETH_BET_WEIGHT = 38 walk units, forced to run first regardless
+        // of cost) but not bet1+bet2 (76), so the sweep resolves exactly bet1 and leaves bet2
+        // queued for the next call.
         vm.revertToState(snap);
         uint256 preB = game.claimableWinningsOf(player);
 
-        uint64[] memory one = new uint64[](1);
-        one[0] = bet1;
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, one);
+        // maxCount such that maxCount * MIRROR_OPEN_HUMAN_ENTRY_WEIGHT - 1 (the index-header
+        // step) lands in [weight, 2*weight - 1) = [38, 75]: exactly one bet's worth of budget.
+        uint256 runBFirstCallMaxCount =
+            (MIRROR_ONE_SPIN_ETH_BET_WEIGHT + 1) / MIRROR_OPEN_HUMAN_ENTRY_WEIGHT + 1;
+        game.openBoxes(runBFirstCallMaxCount);
+        assertEq(_betPacked(bet1), 0, "Run B call 1: bet1 alone resolved");
+        assertGt(_betPacked(bet2), 0, "Run B call 1: bet2 left queued (budget-starved)");
 
-        uint64[] memory two = new uint64[](1);
-        two[0] = bet2;
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, two);
+        game.openBoxes(type(uint256).max);
+        assertEq(_betPacked(bet2), 0, "Run B call 2: bet2 resolved");
 
         uint256 ethCreditedTwoCalls = game.claimableWinningsOf(player) - preB;
 
@@ -839,11 +678,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         require(rewardPoolBefore > 0, "Reward pool must be funded at deploy");
         uint256 sdgnrsBefore = sdgnrs.balanceOf(player);
 
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
+        _advanceLootboxRngIndexByOne();
         vm.recordLogs();
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, betIds);
+        game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         uint256 sdgnrsGain = sdgnrs.balanceOf(player) - sdgnrsBefore;
@@ -872,9 +709,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // 323 Task 2: post-game-over resolveBets liveness guard (insolvency repro closed)
     // =========================================================================
 
-    /// @notice Prove the v47 liveness guard on resolveBets (DegeneretteModule:421,
-    ///         `if (_livenessTriggered()) revert E();`) CLOSES the §1 post-game-over
-    ///         unbacked-credit path documented in 323-SOLVENCY-FINDING.md.
+    /// @notice Prove the v47 liveness guard (now `openHumanBoxes`'s entry-gate
+    ///         `if (rngLockedFlag || _livenessTriggered()) return (0, 0);`) CLOSES the §1
+    ///         post-game-over unbacked-credit path documented in 323-SOLVENCY-FINDING.md.
     ///
     ///         The §1 insolvency: a Degenerette ETH bet placed (and RNG-committed)
     ///         BEFORE game-over could be resolved AFTER the game-over drain, crediting
@@ -889,8 +726,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///              not RNG-readiness;
     ///           3. revert to the snapshot, drive the game into the terminal liveness
     ///              state (level-0 deploy-idle timeout > 365 days) so gameOver() == true;
-    ///           4. assert resolveDegeneretteBets now REVERTS with E() — the unbacked
-    ///              post-drain credit can no longer happen.
+    ///           4. assert the sweep now NO-OPS (doors removal: `openHumanBoxes` returns
+    ///              early rather than reverting) — the bet stays queued and credits
+    ///              nothing, so the unbacked post-drain credit still cannot happen.
     function testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() public {
         // --- Phase 1: place a winning ETH bet pre-game-over, commit its RNG word ---
         // Large unfrozen pool so the win resolves to a real ETH credit pre-GO.
@@ -906,20 +744,17 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint128 perTicket = 0.05 ether; // >= MIN_BET_ETH
         uint64 betId = _placeBet(CURRENCY_ETH, perTicket, 1, ticket);
         _injectLootboxRngWord(index, word); // RNG committed -> bet is resolvable
-
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
+        _advanceLootboxRngIndexByOne(); // finalize the index so the sweep can reach it
 
         // --- Phase 2: prove the bet IS otherwise resolvable pre-game-over ---
         // (the §1 path: pre-fix, this same call after game-over would have credited
         // claimable out of the drained residual). The snapshot lets the SAME placed,
-        // RNG-committed bet be re-used for the post-game-over revert assertion, so the
+        // RNG-committed bet be re-used for the post-game-over no-op assertion, so the
         // only difference between the two runs is the game-over state the guard checks.
         uint256 snap = vm.snapshotState();
 
         uint256 preClaimable = game.claimableWinningsOf(player);
-        vm.prank(player);
-        game.resolveDegeneretteBets(index, betIds);
+        game.openBoxes(type(uint256).max);
         uint256 ethCreditedPreGo = game.claimableWinningsOf(player) - preClaimable;
         assertGt(
             ethCreditedPreGo,
@@ -930,9 +765,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // --- Phase 3: revert and drive into the terminal liveness state ---
         vm.revertToState(snap);
 
-        // The guard at DegeneretteModule:421 checks `_livenessTriggered()` (the live
-        // terminal CONDITION), not the stored `gameOver` flag (which the advanceGame
-        // drain latches afterward). _livenessTriggered() is true at level 0 once
+        // The guard checks `_livenessTriggered()` (the live terminal CONDITION), not the
+        // stored `gameOver` flag (which the advanceGame drain latches afterward).
+        // _livenessTriggered() is true at level 0 once
         // currentDay - purchaseStartDay > _DEPLOY_IDLE_TIMEOUT_DAYS (365), with
         // lastPurchaseDay/jackpotPhaseFlag false (fresh-deploy default). Warp well past it.
         // This is the exact predicate the guard gates on, so the warp reproduces the
@@ -945,19 +780,23 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             "game-over liveness must now be triggered (the predicate the guard checks)"
         );
 
-        // --- Phase 4: the guard must now REVERT the resolve (unbacked path closed) ---
-        // Without the guard at DegeneretteModule:421, this call would proceed to credit
-        // claimableWinnings (RNG is committed, the bet is otherwise resolvable per Phase 2),
-        // pushing claimablePool above the ETH balance. The guard reverts first.
-        vm.prank(player);
-        vm.expectRevert(bytes4(0xdf469ccb)); // GameOver()
-        game.resolveDegeneretteBets(index, betIds);
+        // --- Phase 4: the sweep must NOT settle the pending bet post-game-over ---
+        // Doors removal: `openHumanBoxes`'s entry-gate returns (0, 0) rather than reverting
+        // once `_livenessTriggered()`, so the call succeeds but does nothing — the bet stays
+        // queued and credits nothing, closing the same unbacked-credit path a revert would.
+        uint256 preClaimablePostGo = game.claimableWinningsOf(player);
+        assertEq(preClaimablePostGo, 0, "precondition: no claimable yet post-revert");
+        game.openBoxes(type(uint256).max);
 
-        // Belt-and-suspenders: the resolve credited nothing post-game-over.
         assertEq(
             game.claimableWinningsOf(player),
             0,
-            "post-game-over resolve must credit zero claimable (guard reverted before any credit)"
+            "post-game-over sweep must credit zero claimable (no-op, not a revert)"
+        );
+        assertGt(
+            game.degeneretteBetInfo(index, betId),
+            0,
+            "post-game-over: the bet remains queued, unresolved (pending bets are not settled by the game-over no-op)"
         );
     }
 
@@ -1260,6 +1099,17 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.store(address(game), slot, bytes32(rngWord));
     }
 
+    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 33) by
+    ///      one, so a bet placed at the prior index now sits at LR_INDEX-1 — the finalized
+    ///      index the sweep (`openHumanBoxes`/`sweepDegeneretteBets`, reached via
+    ///      `game.openBoxes`) resolves. Mirrors RngFreezeAndRemovalProofs._advanceLootboxRngIndexByOne.
+    function _advanceLootboxRngIndexByOne() internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        uint48 idx = uint48(packed & 0xFFFFFFFFFFFF);
+        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx + 1);
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+    }
+
     /// @notice Find a (customTraits, rngWord) pair that guarantees >= 2 matches.
     /// @dev Tries RNG words in sequence, computing the result ticket for spin 0
     ///      (index 1) using the same derivation as _resolveBet. Returns
@@ -1301,76 +1151,21 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Batch-resolve tolerance: the first bet is strict (any failure aborts the
-    // whole tx, so a racing duplicate-clicker settle bails cheaply); trailing bets
-    // skip an already-resolved or not-ready id so one bad id can't brick an
-    // en-masse settle.
+    // Batch-resolve tolerance (REMOVED — doors removal): all three tests that lived here
+    // (testResolveBatchRngNotReadyFirstRevertsTrailingSkips, already removed per the port
+    // note this replaces; testResolveBatchFirstBetAlreadyResolvedReverts; and
+    // testResolveBatchTrailingAlreadyResolvedSkipped) proved behavior of the manual
+    // `resolveDegeneretteBets(index, betIds)` door's caller-composed betId array: a strict
+    // first-id probe (fail-fast InvalidBet() on an already-resolved/unknown first id) and a
+    // tolerant tail (a stale id later in the array is silently skipped). That door — and with
+    // it the whole notion of a caller-composed betId array — is gone: `openBoxes` takes no id
+    // list and always walks the queue in ascending position, silently skipping a zeroed
+    // (already-resolved) slot it happens to resume on (`sweepDegeneretteBets`: `if (bet == 0)
+    // { ++pos; ++unitsSpent; continue; }`) rather than ever being handed one out of turn. There
+    // is no "duplicate clicker resends a caller-composed batch" scenario left to reproduce, and
+    // the remaining unset-index-word property is already covered by DegeneretteSweep.t.sol's
+    // testHandResolutionGuards, so none of the three is adapted.
     // =========================================================================
-
-    /// @dev Probe (first) bet already resolved by a competing tx -> the whole call
-    ///      reverts InvalidBet, so a duplicate clicker wastes only the probe SLOAD.
-    function testResolveBatchFirstBetAlreadyResolvedReverts() public {
-        _seedFuturePrizePool(50 ether);
-        (uint32 ticket, uint256 word) = _findWinningCombo(1);
-        uint64 b1 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        _injectLootboxRngWord(1, word);
-
-        uint64[] memory batch = new uint64[](2);
-        batch[0] = b1;
-        batch[1] = b2;
-
-        // First clicker settles the whole batch.
-        vm.prank(player);
-        game.resolveDegeneretteBets(1, batch);
-        assertEq(_betPacked(b1), 0, "b1 resolved by first clicker");
-        assertEq(_betPacked(b2), 0, "b2 resolved by first clicker");
-
-        // Second clicker re-sends the SAME batch: the probe (b1) is already resolved.
-        vm.prank(player);
-        vm.expectRevert(bytes4(0xaa822249)); // InvalidBet()
-        game.resolveDegeneretteBets(1, batch);
-    }
-
-    /// @dev A stale (already-resolved) id in the TAIL is skipped, never reverts — the
-    ///      surrounding valid bets still resolve.
-    function testResolveBatchTrailingAlreadyResolvedSkipped() public {
-        _seedFuturePrizePool(50 ether);
-        (uint32 ticket, uint256 word) = _findWinningCombo(1);
-        uint64 b1 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        uint64 b3 = _placeBet(CURRENCY_ETH, 0.01 ether, 1, ticket);
-        _injectLootboxRngWord(1, word);
-
-        // Pre-resolve the middle bet so it is stale (packed == 0) when the batch runs.
-        uint64[] memory mid = new uint64[](1);
-        mid[0] = b2;
-        vm.prank(player);
-        game.resolveDegeneretteBets(1, mid);
-        assertEq(_betPacked(b2), 0, "b2 pre-resolved");
-
-        // Batch [b1(probe), b2(stale), b3]: probe resolves, stale trailing skips, b3 resolves.
-        uint64[] memory batch = new uint64[](3);
-        batch[0] = b1;
-        batch[1] = b2;
-        batch[2] = b3;
-        vm.prank(player);
-        game.resolveDegeneretteBets(1, batch); // must not revert
-        assertEq(_betPacked(b1), 0, "b1 resolved");
-        assertEq(_betPacked(b3), 0, "b3 resolved despite stale trailing b2");
-    }
-
-    // NOTE (port): the old testResolveBatchRngNotReadyFirstRevertsTrailingSkips test relied on
-    // placing two bets at DIFFERENT lootbox indices and resolving both ids in one
-    // `resolveDegeneretteBets` call. Under the queued-bet design that call takes a SINGLE
-    // `index` for the whole batch, so ids from two indices can no longer be mixed in one call,
-    // and RngNotReady is now checked ONCE for the whole call before the loop even starts
-    // (`resolveDegeneretteBets`: `if (rngWord == 0) revert RngNotReady();`) rather than per-id —
-    // there is no "b1 ready, b2 not ready" state within a single index for this call to
-    // distinguish. The remaining property (an unset index word reverts the whole call,
-    // regardless of id ordering/validity) is already covered by
-    // DegeneretteSweep.t.sol's testHandResolutionGuards, so this test is removed rather than
-    // adapted. The InvalidBet() probe-vs-tail-skip property below is unaffected and kept.
 
     /// @dev Read the queued bet word at (index 1, betId); 0 == resolved/nonexistent.
     function _betPacked(uint64 betId) internal view returns (uint256) {

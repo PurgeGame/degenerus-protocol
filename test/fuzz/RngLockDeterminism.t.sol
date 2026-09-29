@@ -339,10 +339,13 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 9) {
-            uint48 idx = uint48(bound(nonce, 0, 1000));
-            // Opening boxes for any address is permissionless; the vault owns the box,
-            // anyone may open it via game.openBox(vault, idx).
-            try game.openBox(address(vault), idx) {} catch { return; }
+            // Box opening is permissionless; the removed per-(player,index) door read
+            // "anyone may open the vault's box" via game.openBox(vault, idx). The sweep
+            // replacing it (game.openBoxes) is equally permissionless and equally credits
+            // the box owner regardless of caller — it just has no per-index target anymore
+            // (an in-order, all-players sweep from the open frontier), so the perturbation
+            // now drains whatever is pending instead of aiming at one bounded random index.
+            try game.openBoxes(type(uint256).max) {} catch { return; }
             return;
         }
         if (action == 10) {
@@ -816,7 +819,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 buyerClaimablePre = game.claimableWinningsOf(buyer);
 
         vm.prank(buyer);
-        game.openBox(buyer, purchaseIndex);
+        game.openBoxes(type(uint256).max);
 
         uint256 amountAfterOpen = _lootboxEthBase(purchaseIndex, buyer);
         bool presaleAfterOpen = game.lootboxPresaleActiveFlag();
@@ -852,7 +855,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 buyerClaimablePreB = game.claimableWinningsOf(buyer);
 
         vm.prank(buyer);
-        game.openBox(buyer, purchaseIndex);
+        game.openBoxes(type(uint256).max);
 
         uint256 baselineAmount = _lootboxEthBase(purchaseIndex, buyer);
         bool baselinePresale = game.lootboxPresaleActiveFlag();
@@ -1972,9 +1975,13 @@ contract RngLockDeterminism is DeployProtocol {
             _lootboxRngWord(boxIndex) != 0,
             "no-maroon: the box index's per-index word landed (not orphaned/zeroed by the lock)"
         );
-        // The box is openable at its index — it materializes post-unlock; none stranded.
+        // The box is openable at its index — it materializes post-unlock; none stranded. The
+        // relocated sweep walks the open frontier in order rather than a chosen index, so park it
+        // at boxIndex first (nothing was queued at an earlier index in this test, so this matches
+        // the natural frontier — same idiom as part (2) below, just for a genuinely-landed word).
+        _parkBoxFrontier(boxIndex);
         vm.prank(boxOwner);
-        game.openBox(boxOwner, boxIndex);
+        game.openBoxes(type(uint256).max);
         assertEq(
             _lootboxEthBase(boxIndex, boxOwner), 0,
             "no-maroon: the deferred box materializes post-unlock (first-deposit signal zeroed)"

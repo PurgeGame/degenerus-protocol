@@ -103,7 +103,7 @@ interface ICoinflipStake {
 ///         chips and leaves the rest of the ten to the draw.
 ///
 /// @dev Entry burns the bankroll plus any battle stake. Closing a slot binds it to
-///      `_currentIndex()`, the table whose word cannot exist yet, and asks for that word. `resolveSlot`
+///      `_currentIndex()`, the table whose word cannot exist yet, and asks for that word. `_resolveSlot`
 ///      walks the slot's dense, 1-based seats and credits each run's rounded return as coinflip
 ///      stake. A non-zero battle stake also records a single running leader, and the seat that
 ///      completes the field hands that leader the pot in the same call — there is no claim.
@@ -139,7 +139,7 @@ contract CrapsBattle is CrapsBattleStorage {
     function advanceJackpotBattle(uint64 budgetUnits) external returns (bool complete) {
         if (msg.sender != _GAME) revert OnlyGame();
         uint64 slot = _activeJackpotSlot;
-        resolveSlot(slot, budgetUnits);
+        _resolveSlot(slot, budgetUnits);
         uint256 g = _battles[bytes32(uint256(slot))];
         return uint32(g >> _BG_RESOLVED_SHIFT) == uint32(g);
     }
@@ -529,8 +529,20 @@ contract CrapsBattle is CrapsBattleStorage {
     // Settling
     // ---------------------------------------------------------------------------------------
 
-    /// @notice Settle a slot's entrants — bonus window or custom battle alike — in id order,
-    ///         from wherever its cursor stands.
+    /// @notice Settle a CUSTOM battle's entrants in id order, from wherever its cursor stands.
+    ///         Permissionless. Scheduled windows and the daily jackpot never settle here: the
+    ///         keeper and the advance settle those in order, so no caller picks which goes first.
+    /// @param slot The custom battle's slot.
+    /// @param budgetUnits HOW MUCH WORK to do, in walk units (see `_resolveSlot`).
+    /// @custom:reverts NoSuchBattle If `slot` is not a custom battle.
+    /// @custom:reverts RngNotReady If the battle has not closed, or its table has no word yet.
+    function resolveSlot(uint64 slot, uint64 budgetUnits) external {
+        if (slot < _CUSTOM_SLOT_BASE) revert NoSuchBattle();
+        _resolveSlot(slot, budgetUnits);
+    }
+
+    /// @notice Settle a slot's entrants — bonus window, daily jackpot or custom battle — in id
+    ///         order, from wherever its cursor stands.
     /// @dev THE settle lane, and the only one there is. A slot's readiness is uniform — every
     ///      member shut onto the same table — so the arm and the word are proven ONCE here and
     ///      every member the walk then examines settles. The cursor advances to the last id
@@ -559,7 +571,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///        after the first seat whose charge meets or crosses the budget. Zero settles
     ///        nothing; any nonzero budget completes at least one seat.
     /// @custom:reverts RngNotReady If the slot has not shut, or its table has no word yet.
-    function resolveSlot(uint64 slot, uint64 budgetUnits) public {
+    function _resolveSlot(uint64 slot, uint64 budgetUnits) internal {
         if (budgetUnits == 0) return;
         // Unarmed reads as zero: the slot has not shut, so no table has been chosen yet.
         uint256 word = _slotWord(slot);
@@ -613,7 +625,7 @@ contract CrapsBattle is CrapsBattleStorage {
         }
     }
 
-    /// @dev The walk itself, on a frame of its own. Split out of `resolveSlot` for STACK, not for
+    /// @dev The walk itself, on a frame of its own. Split out of `_resolveSlot` for STACK, not for
     ///      structure: the loop carries the two credit arrays, their cursor, the batch bounds, the
     ///      two id bases and the running action, and via-IR runs out of slots with the readiness
     ///      checks and the decoded window still live above it. The same split the session loops in
@@ -701,14 +713,13 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      slot still owing work means a field that outlasts one budget — or whose word came
     ///      late, the daily event above all — is never left behind the rewarded crank.
     ///      This cursor cannot pass a slot that still owes anything, so nothing scheduled is ever
-    ///      forgotten; external help (a direct arm, a direct settle) is detected as done work and
-    ///      crossed, never wedged on.
+    ///      forgotten; a slot whose work is already done is detected and crossed, never wedged on.
     ///
     ///      WHAT IT WILL NOT DO is wait for the impossible. It stops — reporting no progress and
     ///      earning no bounty — on a window still taking bets, an armed field whose word has not
     ///      landed, a day the advance has not opened yet, and a settle it lacks budget for. All
     ///      four resolve themselves; polling them pays nobody.
-    /// @param budgetUnits The work allowance in walk units, exactly as `resolveSlot` takes it.
+    /// @param budgetUnits The work allowance in walk units, exactly as `_resolveSlot` takes it.
     ///        Zero still does the cheap lifecycle work — crossing spent slots and shutting a
     ///        closed window — since the arm is the time-critical piece and costs no settlement.
     /// @return progressed Whether ANY state moved: the cursor, a sweep, an arm, or settled seats.
@@ -778,7 +789,7 @@ contract CrapsBattle is CrapsBattleStorage {
                 }
                 if (_slotWord(cur) == 0) break;
                 if (budgetUnits == 0) break;
-                resolveSlot(cur, budgetUnits);
+                _resolveSlot(cur, budgetUnits);
                 progressed = true;
                 g = _battles[w.key];
                 if (((g >> _BG_RESOLVED_SHIFT) & _MASK32) == (g & _MASK32)) ++cur;
@@ -1079,7 +1090,7 @@ contract CrapsBattle is CrapsBattleStorage {
         return header & bit != 0;
     }
 
-    /// @dev Settle one loaded bet. The slot's terms and word are supplied by `resolveSlot`, which
+    /// @dev Settle one loaded bet. The slot's terms and word are supplied by `_resolveSlot`, which
     ///      reads each once for the whole batch.
     /// @dev The last return is the seat's WORK CHARGE in walk units — plumbing, dice and the
     ///      deferred credit a paying run adds — computed here, where the roll count is in hand.
@@ -1779,8 +1790,8 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      same reason.
     /// @custom:reverts OnlyGame If the caller is not the pinned game.
     /// @dev Opening walks nothing but today. A window that this day leaves unshut is not stranded
-    ///      and does not need sweeping up: `armBonusWindow` takes any window that has stopped
-    ///      taking bets, on any day, in any order, from anyone.
+    ///      and does not need sweeping up: the scheduled keeper shuts every window that has
+    ///      stopped taking bets, in order.
     function openBonusDay() external {
         if (msg.sender != _GAME) revert OnlyGame();
         uint24 today = _currentDayIndex();
@@ -1852,37 +1863,9 @@ contract CrapsBattle is CrapsBattleStorage {
         );
     }
 
-    /// @notice Shut a bonus window and take the table it settles on. Permissionless, open from the
-    ///         moment that window stops taking bets, and good for ANY window on any day in any
-    ///         order — which is what makes a window impossible to strand, whoever forgot it and
-    ///         however long ago. The index is `_currentIndex()`, the table whose word cannot exist
-    ///         yet — every path that fills an index advances the cursor past it in the same
-    ///         transaction — so the dice were unknowable to every entrant however late it is shut.
-    ///         The request fired below is the one that fills it.
-    /// @param slot The window: `day * _BONUS_SLOTS_PER_DAY + period + 1`.
-    /// @return index The table index bound to this window, `_currentIndex()` at arming time.
-    function armBonusWindow(uint64 slot) external returns (uint48 index) {
-        if (_isJackpotSlot(slot)) revert BonusStillRunning();
-        (,, uint256 open) = _currentBonusSlot();
-        // Anything below the window currently taking bets has stopped taking them — on this day or
-        // any before it, since a slot is `day * _BONUS_SLOTS_PER_DAY + period + 1` and so runs in
-        // time order. No schedule order is imposed on top of that: two windows binding out of
-        // sequence still settle on their own words, and choosing the moment gains nothing when the
-        // index bound is one that has no word yet.
-        if (slot >= open) revert BonusStillRunning();
-        if (_slotIndex[slot] != 0) revert BonusPeriodSpent();
-        Window memory w = _slotWindow(slot);
-        if (_battles[w.key] == 0) revert BonusPeriodSpent();
-        // Only a day that OPENED can arm. A day whose word was backfilled through a stall never
-        // ran `openBonusDay`, so it banked no ladder and the keeper sweeps its seats as lapsed;
-        // a window-ahead comp seeded before the stall must not arm that day a second way.
-        if (_boostBudget[uint24(slot / _BONUS_SLOTS_PER_DAY)] == 0) revert BonusPeriodSpent();
-        index = _armSlot(slot, w);
-    }
-
-    /// @dev The arm itself, past the door's checks — shared by the permissionless door above and
-    ///      the scheduled cursor, which has already proven the same preconditions on its own walk.
-    function _armSlot(uint64 slot, Window memory w) private returns (uint48 index) {
+    /// @dev The arm itself — shared by the scheduled cursor, which has already proven a window's
+    ///      preconditions on its own walk, and by `closeBattle` for custom battles.
+    function _armSlot(uint64 slot, Window memory w) internal returns (uint48 index) {
         unchecked {
             index = _currentIndex();
             _slotIndex[slot] = index + 1;
@@ -2142,7 +2125,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///
     ///      A HIGH pass is honoured as a high seat, exactly as the paid door builds one: the
     ///      day's own multiple, the high bit, and the high half of the ticket counter — which is
-    ///      what `armBonusWindow` folds into each window's sideboard. The FLIP fallback is always
+    ///      what `_armSlot` folds into each window's sideboard. The FLIP fallback is always
     ///      an ordinary 1x seat, so `cost` is only ever the plain seven-window bill.
     function _seatBody(uint256 daySlot, address body, uint256 cost) private {
         // Already sitting: a pass spent on this day wrote the seat the moment it was spent, so

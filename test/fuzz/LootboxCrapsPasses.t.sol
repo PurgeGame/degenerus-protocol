@@ -12,6 +12,9 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 contract LootboxCrapsPasses is DeployProtocol {
     uint256 constant SLOT_LOOTBOX_ETH = 15;
     uint256 constant SLOT_LOOTBOX_WORD = 34;
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_BOX_PLAYERS = 57;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
+    uint256 constant SLOT_BOX_CURSORS = 56;     // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
     uint256 constant LB_SCORE_SHIFT = 24;
     uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;
     uint256 constant LB_CUSTOM_SIZE_SHIFT = 113;
@@ -47,11 +50,37 @@ contract LootboxCrapsPasses is DeployProtocol {
         return keccak256(abi.encode(uint256(index), baseSlot));
     }
 
+    /// @dev box-order migration: the removed per-(player,index) `openBox` read
+    ///      lootboxOrder[index][player] straight from the mapping (no discovery queue, no
+    ///      "finalized" notion). Its sweep replacement (`openBoxes`) only ever finds a box by
+    ///      walking `boxPlayers[index]`, and only for indices at or below LR_INDEX-1, so this
+    ///      forged setup also enqueues `player` and finalizes+parks the sweep frontier on
+    ///      `index` -- every call is self-contained (LR_INDEX and the cursor are unconditionally
+    ///      overwritten each time), so the many non-monotonic index sequences the callers below
+    ///      use are each independently reachable regardless of call order.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount, uint256 vrfWord) internal {
         uint256 packed = uint256(game.level()) | (uint256(1) << LB_SCORE_SHIFT)
             | (uint256(1) << LB_CUSTOM_COUNT_SHIFT) | ((ethAmount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
         vm.store(address(game), _nested(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
         vm.store(address(game), _simple(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
+
+        bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
+        uint256 len = uint256(vm.load(address(game), lenSlot));
+        bytes32 dataBase = keccak256(abi.encode(lenSlot));
+        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
+        vm.store(address(game), lenSlot, bytes32(len + 1));
+
+        uint256 mask48 = (uint256(1) << 48) - 1;
+        bytes32 lrSlot = bytes32(SLOT_LOOTBOX_RNG_IDX);
+        uint256 lrPacked = uint256(vm.load(address(game), lrSlot));
+        vm.store(address(game), lrSlot, bytes32((lrPacked & ~mask48) | (uint256(index) + 1)));
+
+        bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
+        uint256 cur = uint256(vm.load(address(game), cursorSlot));
+        cur &= ~(mask48 << (7 * 8));
+        cur &= ~(mask48 << (13 * 8));
+        cur |= (uint256(index) & mask48) << (13 * 8);
+        vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
     /// @dev Open a box on a chosen word and report what, if anything, it announced. Deliberately
@@ -64,7 +93,7 @@ contract LootboxCrapsPasses is DeployProtocol {
         _setupLootbox(player, index, size, word);
         vm.recordLogs();
         vm.prank(player);
-        game.openBox(player, index);
+        game.openBoxes(type(uint256).max);
         return _passEventIn(vm.getRecordedLogs());
     }
 

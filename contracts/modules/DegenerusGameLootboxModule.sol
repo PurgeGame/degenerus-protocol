@@ -70,7 +70,7 @@ interface ICrapsPassDelivery {
  *
  * ## Functions
  *
- * - Box opening (openBox, resolveLootboxDirect, resolveRedemptionLootbox)
+ * - Box opening (openHumanBoxes sweep, resolveLootboxDirect, resolveRedemptionLootbox)
  * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
@@ -893,24 +893,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         lootboxOrder[idx][buyer] = word;
     }
 
-    /// @dev Open the ETH-lootbox leg of an index for a player, if one is queued. Applies the
-    ///      frozen activity-score EV multiplier (the 10 ETH cap was drawn at deposit). Returns
-    ///      false (no-op) when no lootbox is queued, so the unified open path can still resolve
-    ///      the presale leg; the manual `openBox` shell turns an all-empty index into a revert.
-    /// @param player Player address to open the lootbox for.
-    /// @param index The RNG index of the lootbox.
-    /// @param currentLevel Open level (`level + 1`, the level new tickets route to); the
-    ///        target-level roll's base and the FLIP legs' price basis.
-    /// @return opened True if a lootbox leg was resolved.
-    /// @custom:reverts RngNotReady When the lootbox is queued but its RNG word is not yet set.
-    function _openLootBoxLeg(address player, uint48 index, uint24 currentLevel) internal returns (bool opened) {
-        uint256 word = lootboxOrder[index][player];
-        // Early-out before the rngWord SLOAD when no boxes are queued (the presale leg loads
-        // the word itself).
-        if (_boxOrderCount(word) == 0) return false;
-        return _openLootBoxLegWith(player, index, word, lootboxRngWordByIndex[index], currentLevel);
-    }
-
     /// @dev Per-entry reward accumulator. Every lane an entry's boxes can pay into is summed
     ///      here and normally settled ONCE at the end, rather than credited per roll: the
     ///      fungible lanes collapse to a single call each, and tickets collapse to one write per
@@ -1248,68 +1230,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 )
             );
         if (!okBoon) revert EmptyRevert();
-    }
-
-    /// @notice Open every box queued at an RNG index for a player — the ETH-lootbox leg, the
-    ///         coin-presale-box leg, or both (one committed word, two domain-separated draws,
-    ///         each leg robust to being empty). The unified manual open entrypoint.
-    /// @param player Player that owns the box(es) (resolved by the entrypoint).
-    /// @param index The shared RNG index the box(es) queued at.
-    /// @custom:reverts NothingToClaim When neither leg has a box queued at this index for the player.
-    /// @custom:reverts RngNotReady When a queued leg's committed RNG word is not yet set.
-    /// @custom:reverts E Once the liveness timeout has fired (see the gate below).
-    function openBox(address player, uint48 index) external {
-        // A roll queues ticket entries at the write buffer, so the open is a
-        // position-creating action and closes with the game: past the liveness
-        // trigger the terminal word is public, which would let a caller open only
-        // the boxes whose entries match the already-known winning traits and have
-        // the terminal swap commit them. The sweep sibling gates identically. The
-        // box's ETH is not stranded — it was banked into the pools at purchase and
-        // is distributed by the terminal drain.
-        if (_livenessTriggered()) revert E();
-        // A wide order queues tickets at up to 51 levels and the far band reverts under the
-        // daily RNG lock, so a 100-box open during the lock fails with near-certainty anyway
-        // (P ~= 1 - 0.92^N). Gate here so it fails FAST with the real reason; the sweep is
-        // already lock-gated, and the lock clears within the day.
-        if (rngLockedFlag) revert RngLocked();
-        // Permissionless: box rewards always credit the owner, so any caller may open any
-        // player's ready boxes (zero address = caller).
-        if (player == address(0)) player = msg.sender;
-        // Probe the presale leg until the sweep has drained presale (free slot-0 read of the flag).
-        if (!_openBoxBoth(player, index, !presaleDrained, level + 1)) revert NothingToClaim();
-    }
-
-    /// @dev Both-leg open body for the manual `openBox` entrypoint (the sweep threads
-    ///      pre-loaded values into `_openLootBoxLegWith` directly). Resolves the lootbox leg
-    ///      (if queued) then, when `checkPresale`, the presale-box leg (if queued); each robust
-    ///      to being empty. The `player` is the resolved owner — `openBox` maps the zero address
-    ///      to msg.sender, and the sweep passes a concrete owner. Runs in the game's storage context.
-    /// @param player Box owner (already resolved).
-    /// @param index The shared RNG index.
-    /// @param checkPresale Whether to probe the presale-box leg — the caller passes `!presaleDrained`,
-    ///        skipping the cold presaleBoxEth SLOAD once presale is fully drained.
-    /// @param currentLevel Open level (`level + 1`, the level new tickets route to); the
-    ///        target-level roll's base and the FLIP legs' price basis.
-    /// @return any True if at least one leg was resolved.
-    function _openBoxBoth(address player, uint48 index, bool checkPresale, uint24 currentLevel)
-        internal
-        returns (bool any)
-    {
-        // Lootbox leg: resolves (and reports) only if one is queued — its own seed derivation.
-        if (_openLootBoxLeg(player, index, currentLevel)) any = true;
-        // Presale-box leg: probed only while presale boxes are outstanding. Boon-less, own
-        // resolution (NOT a _resolveLootboxCommon caller): a credit-funded box can never mint a
-        // whale pass. 50/40/10 FLIP-valued budget (coin or Craps passes) / DGNRS / WWXRP.
-        if (checkPresale) {
-            uint256 stored = presaleBoxEth[index][player];
-            if (stored != 0) {
-                uint256 rngWord = lootboxRngWordByIndex[index];
-                if (rngWord == 0) revert RngNotReady();
-                presaleBoxEth[index][player] = 0; // dequeue
-                _resolvePresaleBox(player, index, stored, rngWord, currentLevel);
-                any = true;
-            }
-        }
     }
 
     /// @notice Human-box leg of openBoxes(): a permissionless, gas-bounded MULTI-INDEX sweep.
@@ -1680,7 +1600,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
 
-        // allowEthSpin=false: this is the recirc entry, called inside resolveDegeneretteBets' deferred
+        // allowEthSpin=false: this is the recirc entry, called inside sweepDegeneretteBets' deferred
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll
         // 19 awards tickets instead. Every box itemizes its contents, so this path emits the
         // `LootBoxOpened` summary unconditionally (gated only by the spin suppression downstream).
@@ -2202,8 +2122,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Degenerette module; their sub-seeds are hash2-tagged off `seed` (no primary-
     ///      chunk bits consumed). The ETH-spin only fires on directly-opened boxes
     ///      (`allowEthSpin`); on recirc boxes roll 19 awards tickets instead, which keeps
-    ///      every box resolved inside a bet resolution (`resolveDegeneretteBets` or the sweep's
-    ///      `sweepDegeneretteBets`, the ETH-pool memory-accumulator contexts) free of an ETH-pool
+    ///      every box resolved inside a bet resolution (the sweep's `sweepDegeneretteBets`, the
+    ///      ETH-pool memory-accumulator context) free of an ETH-pool
     ///      read-modify-write.
     /// @param player Player receiving the reward
     /// @param amount The roll's main amount (box amount less the boon budget)
@@ -2214,7 +2134,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param activityScore Frozen whole-point activity score threaded from the box commitment;
     ///        scales the spin ROI / EV exactly as a regular bet's snapshot does.
     /// @param allowEthSpin When false (recirc boxes), roll 19 awards tickets instead of an
-    ///        ETH spin — no ETH-pool RMW can race a deferred `resolveDegeneretteBets` pool flush.
+    ///        ETH spin — no ETH-pool RMW can race a deferred `sweepDegeneretteBets` pool flush.
     /// @param currentLevel Open level (`level + 1`), the FLIP legs' price basis.
     /// @param acc Running reward accumulator: caches the DGNRS pool read (priced net of DGNRS
     ///        already pending), is flushed/invalidated around an ETH spin, and receives the

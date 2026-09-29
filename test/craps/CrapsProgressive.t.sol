@@ -303,7 +303,7 @@ contract CrapsProgressiveTest is CrapsPins {
         // Arming every window of the day, in any order, adds nothing either.
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 p = 0; p + 1 < craps.BONUS_PERIODS_PER_DAY(); ++p) {
-            craps.armBonusWindow(uint64(uint256(today) * craps.BONUS_SLOTS_PER_DAY() + p + 1));
+            craps.armWindow(uint64(uint256(today) * craps.BONUS_SLOTS_PER_DAY() + p + 1));
         }
         assertEq(craps.progressivePool(), once, "arming funded the pool");
     }
@@ -727,7 +727,7 @@ contract CrapsProgressiveTest is CrapsPins {
                 uint256 boost = craps.boostUnitsAt(slot);
                 if (boost == 0) continue;
                 vm.recordLogs();
-                craps.resolveSlot(slot, WHOLE_FIELD);
+                craps.settleSlot(slot, WHOLE_FIELD);
                 Vm.Log[] memory logs = vm.getRecordedLogs();
                 if (craps.betOf(_idAt(slot, craps.battleOf(key).winnerId)).player == alice) {
                     PaidOut[] memory pots = _potsIn(logs);
@@ -766,7 +766,7 @@ contract CrapsProgressiveTest is CrapsPins {
 
         uint256 poolBefore = craps.progressivePool();
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         uint256 rolled = _rolledIn(logs, 3);
@@ -817,7 +817,7 @@ contract CrapsProgressiveTest is CrapsPins {
 
         uint256 poolBefore = craps.progressivePool();
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(
@@ -1016,7 +1016,7 @@ contract CrapsProgressiveTest is CrapsPins {
         }
 
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         CrapsBattle.Battle memory done = craps.battleOf(key);
@@ -1085,9 +1085,9 @@ contract CrapsProgressiveTest is CrapsPins {
         vm.recordLogs();
         craps.resolveSeats(slot, 1);
         craps.resolveSeats(slot, 1);
-        craps.resolveSlot(slot, WHOLE_FIELD);
-        craps.resolveSlot(slot, WHOLE_FIELD);
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized, "the batched field did not finalize");
@@ -1120,7 +1120,7 @@ contract CrapsProgressiveTest is CrapsPins {
         for (uint256 pass = 0; pass < 2; ++pass) {
             if (pass == 1) vm.revertToState(snap);
             if (pass == 0) {
-                craps.resolveSlot(slot, WHOLE_FIELD);
+                craps.settleSlot(slot, WHOLE_FIELD);
             } else {
                 // Every seat in its own transaction, the smallest batches the lane allows.
                 craps.resolveSeats(slot, 16);
@@ -1180,7 +1180,7 @@ contract CrapsProgressiveTest is CrapsPins {
         uint256 entrants = craps.battleOf(craps.keyOfSlot(slot)).entrants;
         (uint128 bank,,,,,) = craps.bonusTermsFor(day, PER);
         uint256 before = craps.dayStaked(day);
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertEq(
             craps.dayStaked(day) - before, uint256(bank) * entrants, "the field booked other than its bankrolls"
         );
@@ -1230,7 +1230,7 @@ contract CrapsProgressiveTest is CrapsPins {
             _setWord(index, uint256(keccak256(abi.encode("lane-vs-main", i))));
             craps.seedProgressive(1_000_000 ether);
             vm.recordLogs();
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
             logs = vm.getRecordedLogs();
             PaidOut[] memory lane = _lanePaymentsIn(logs, false);
             if (lane.length == 1 && lane[0].betId != _idAt(slot, craps.battleOf(key).winnerId)) {
@@ -1291,7 +1291,7 @@ contract CrapsProgressiveTest is CrapsPins {
             _warpPastClose(PER);
             uint48 index = _armAt(PER);
             _setWord(index, uint256(keccak256(abi.encode("ledger", i))));
-            craps.resolveSlot(_slotAt(PER), WHOLE_FIELD);
+            craps.settleSlot(_slotAt(PER), WHOLE_FIELD);
         }
         craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 130, 6, bob);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -1339,7 +1339,7 @@ contract CrapsProgressiveTest is CrapsPins {
 
         craps.seedProgressive(1_000_000 ether);
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
@@ -1387,9 +1387,9 @@ contract CrapsProgressiveTest is CrapsPins {
         uint64 slot = _slotAt(PER);
         uint256 entrants = craps.battleOf(craps.keyOfSlot(slot)).entrants;
         g = gasleft();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         uint256 whole = g - gasleft();
-        emit log_named_uint("resolveSlot, whole field     ", whole);
+        emit log_named_uint("settleSlot, whole field      ", whole);
         emit log_named_uint("  entrants                   ", entrants);
         emit log_named_uint("  per entrant                ", whole / entrants);
 
@@ -1431,7 +1431,7 @@ contract CrapsProgressiveTest is CrapsPins {
 
     function _armAt(uint256 period) internal returns (uint48 index) {
         (, uint48 already,,) = craps.bonusWindowOf(period);
-        index = already == 0 ? craps.armBonusWindow(_slotAt(period)) : already;
+        index = already == 0 ? craps.armWindow(_slotAt(period)) : already;
     }
 
     /// @dev Move to a day nobody has opened, land inside the window under test, and open it.
@@ -1640,7 +1640,7 @@ contract CrapsProgressiveTest is CrapsPins {
             // A boost too small to convert proves nothing here; the boundary suite owns that case.
             if (drew < 2 * craps.NORMAL_PASS_VALUE()) continue;
             vm.recordLogs();
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
             if (craps.betOf(_idAt(slot, craps.battleOf(key).winnerId)).player == alice) {
                 logs = vm.getRecordedLogs();
                 found = true;
@@ -1691,7 +1691,7 @@ contract CrapsProgressiveTest is CrapsPins {
             _setWord(index, uint256(keccak256(abi.encode("zerosplit", i))));
             if (craps.boostUnitsAt(slot) == 0) continue;
             vm.recordLogs();
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
             if (craps.betOf(_idAt(slot, craps.battleOf(key).winnerId)).player == alice) {
                 logs = vm.getRecordedLogs();
                 found = true;
@@ -1729,7 +1729,7 @@ contract CrapsProgressiveTest is CrapsPins {
                 * craps.BATTLE_STAKE_UNIT();
             if (lane == 0) continue;
             vm.recordLogs();
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
             logs = vm.getRecordedLogs();
             // The claim needs a CONVERTING protocol ride — a run good enough that half its
             // lane-boost copy buys at least one pass.
@@ -1788,7 +1788,7 @@ contract CrapsProgressiveTest is CrapsPins {
             uint256(heads) * (craps.highMultOfSlot(slot) - 1) * craps.battleOf(craps.keyOfSlot(slot)).battleStake;
 
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 count, uint256 g, uint256 l) = _splitsIn(logs, 2);

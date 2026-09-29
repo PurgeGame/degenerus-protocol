@@ -406,7 +406,7 @@ abstract contract CrapsPins is Test {
     ///      where the two are still separate, so a pot is read through here.
     function _resolveForPots(CrapsViews c, uint64 slot, uint64 budget) internal returns (PaidOut[] memory) {
         vm.recordLogs();
-        c.resolveSlot(slot, budget);
+        c.settleSlot(slot, budget);
         return _potsIn(vm.getRecordedLogs());
     }
 
@@ -461,7 +461,7 @@ abstract contract CrapsPins is Test {
         returns (PaidOut[] memory)
     {
         vm.recordLogs();
-        c.resolveSlot(slot, budget);
+        c.settleSlot(slot, budget);
         return _lanePaymentsIn(vm.getRecordedLogs(), rider);
     }
 
@@ -473,7 +473,7 @@ abstract contract CrapsPins is Test {
         returns (PaidOut[] memory pots, PaidOut[] memory lane)
     {
         vm.recordLogs();
-        c.resolveSlot(slot, budget);
+        c.settleSlot(slot, budget);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         pots = _potsIn(logs);
         lane = _lanePaymentsIn(logs, false);

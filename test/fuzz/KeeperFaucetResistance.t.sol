@@ -29,7 +29,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         FLIP), so it cannot be immediately round-tripped to a profit.
 ///
 ///         Also asserts the one-reward-per-item lock
-///         (re-settling a resolved bet reverts InvalidBet and pays nothing), the
+///         (re-sweeping a drained queue makes no progress and pays nothing), the
 ///         below-gate-unpaid / zero-reverts-NoWork shape, and the pre-RNG-word
 ///         block (an attempt before the word lands skips, no reward).
 ///
@@ -157,26 +157,26 @@ contract KeeperFaucetResistance is DeployProtocol {
     // Task 1 — Faucet round-trip <= 0, illiquidity, one-reward-per-item, pre-RNG-word block
     // =========================================================================
 
-    /// @notice One-reward-per-item: a bet is zeroed in its queue before it resolves, so settling it
-    ///         again reverts InvalidBet and the sweep skips it; no path pays for it twice. Hand
-    ///         resolution itself pays no keeper reward at all.
+    /// @notice One-reward-per-item: a bet is zeroed in its queue once the sweep resolves it, so a
+    ///         second sweep over the same drained queue makes no progress and pays nothing; no
+    ///         path pays for it twice. The sweep itself (`openBoxes`) pays no keeper reward at all
+    ///         (only `mineFlip` does).
     function testReResolveResolvedBetRevertsNoSecondReward() public {
         uint64 betId = _placeLosingBet(player);
         _injectLootboxRngWord(INDEX, FIXED_WORD);
+        _openSweepFor(INDEX);
 
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
         uint256 stakeBefore = coinflip.coinflipAmount(player);
         vm.prank(player);
-        game.resolveDegeneretteBets(INDEX, betIds);
+        game.openBoxes(type(uint256).max);
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "resolved bet word is zeroed (one-reward lock)");
-        assertEq(coinflip.coinflipAmount(player), stakeBefore, "hand resolution pays no keeper reward");
+        assertEq(coinflip.coinflipAmount(player), stakeBefore, "sweep resolution pays no keeper reward");
 
         uint256 stakeBeforeSecond = coinflip.coinflipAmount(sybil);
         vm.prank(sybil);
-        vm.expectRevert(bytes4(keccak256("InvalidBet()")));
-        game.resolveDegeneretteBets(INDEX, betIds);
-        assertEq(coinflip.coinflipAmount(sybil), stakeBeforeSecond, "re-settling a resolved bet yields nothing");
+        uint256 openedAgain = game.openBoxes(type(uint256).max);
+        assertEq(openedAgain, 0, "an already-drained queue offers a second sweep nothing to resolve");
+        assertEq(coinflip.coinflipAmount(sybil), stakeBeforeSecond, "re-sweeping a resolved queue yields nothing");
     }
 
     /// @notice Pre-RNG-word block (boxes / orphan-index gate): autoOpen on an index whose

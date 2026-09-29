@@ -651,7 +651,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // openLootBox should succeed (word available, no RngNotReady revert)
         vm.prank(buyer);
-        game.openBox(buyer, purchaseIndex);
+        game.openBoxes(type(uint256).max);
     }
 
     /// @notice Full mid-day lifecycle: purchase -> requestLootboxRng -> VRF fulfill -> openLootBox.
@@ -680,15 +680,16 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // openLootBox should succeed
         vm.prank(buyer);
-        game.openBox(buyer, purchaseIndex);
+        game.openBoxes(type(uint256).max);
     }
 
-    /// @notice Attempting openBox before VRF fulfillment reverts. Box-order migration: `openBox`
-    ///         now gates on `rngLockedFlag` FIRST ("fails FAST with the real reason",
-    ///         DegenerusGameLootboxModule.openBox) — while the daily RNG lock is engaged (as here,
-    ///         immediately post-advanceGame with no fulfillment yet) the revert is `RngLocked()`,
-    ///         not the deeper per-index `RngNotReady()` check (which only a mid-day, non-locked,
-    ///         still-unworded index would reach).
+    /// @notice Opening before VRF fulfillment no-ops instead of reverting, and the box is
+    ///         DEFERRED, not dropped. Box-order migration: the removed per-(player,index)
+    ///         `openBox` gated on `rngLockedFlag` FIRST and reverted `RngLocked()`. Its sweep
+    ///         replacement (`openBoxes`) instead entry-gates on the same flag and returns 0 — a
+    ///         non-reverting no-op (DegenerusGameLootboxModule.openHumanBoxes's rngLockedFlag /
+    ///         liveness entry-gate) — so this now asserts that no-op plus the box surviving
+    ///         untouched, rather than a revert the new entrypoint cannot throw for this reason.
     function test_fullLifecycleRngNotReady() public {
         address buyer = makeAddr("notReadyBuyer");
 
@@ -697,6 +698,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Purchase lootbox
         _makePurchase(buyer, 1 ether);
+        assertGt(_lootboxAmount(purchaseIndex, buyer), 0, "box queued before the lock");
 
         // advanceGame triggers VRF request (index increments)
         game.advanceGame();
@@ -704,11 +706,12 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Do NOT fulfill VRF -- word at purchaseIndex is still 0
 
-        // openBox must revert with RngLocked (the lock is engaged) before it would ever reach
-        // the deeper per-index RngNotReady check.
+        // openBoxes must NOT revert while the daily RNG lock is engaged -- it no-ops (opens
+        // nothing) before it would ever reach the deeper per-index RngNotReady check, and the
+        // box stays queued (deferred, not dropped) for a later call once the lock clears.
         vm.prank(buyer);
-        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
-        game.openBox(buyer, purchaseIndex);
+        assertEq(game.openBoxes(type(uint256).max), 0, "locked sweep opens nothing");
+        assertGt(_lootboxAmount(purchaseIndex, buyer), 0, "box still queued -- not consumed by the locked no-op");
     }
 
     /// @notice Multiple indices: purchases at different indices each use their respective VRF word.
@@ -739,11 +742,16 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertTrue(wordN1 != 0, "Word at indexN+1 should be nonzero");
         assertTrue(wordN != wordN1, "Different days should have different words");
 
-        // Open both lootboxes -- both should succeed
+        // Open both lootboxes -- both should succeed. The sweep is an in-order, multi-index walk
+        // (no per-index target), but indexN and indexN1 are consecutive and buyer is the sole
+        // entry at each, so opening oldest-first naturally matches this order: budget 1 opens
+        // exactly indexN's one entry and stops (openHumanBoxes always runs the first entry of a
+        // call, then the `opened != 0` guard blocks a second), then the second call drains the
+        // rest (indexN1).
         vm.prank(buyer);
-        game.openBox(buyer, indexN);
+        game.openBoxes(1);
 
         vm.prank(buyer);
-        game.openBox(buyer, indexN1);
+        game.openBoxes(type(uint256).max);
     }
 }

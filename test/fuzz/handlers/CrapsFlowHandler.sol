@@ -177,7 +177,7 @@ contract CrapsFlowHandler {
         for (uint256 p = 0; p < PERIODS; ++p) {
             uint64 bound = _boundOf(d, p);
             if (craps.slotIndexOf(bound) == 0) {
-                try craps.armBonusWindow(bound) returns (uint48 index) {
+                try craps.armWindow(bound) returns (uint48 index) {
                     _setWord(index, uint256(keccak256(abi.encode("sweep", wordSeed, bound))) | 1);
                     _trackSlot(bound);
                 } catch {}
@@ -374,7 +374,7 @@ contract CrapsFlowHandler {
             if (craps.slotIndexOf(bound) != 0) continue;
             uint256 close = _closeOf(p);
             if (block.timestamp - _dayStart() < close) vm.warp(_dayStart() + close);
-            try craps.armBonusWindow(bound) returns (uint48 index) {
+            try craps.armWindow(bound) returns (uint48 index) {
                 _setWord(index, uint256(keccak256(abi.encode("word", wordSeed, bound))) | 1);
                 _trackSlot(bound);
             } catch {}
@@ -393,13 +393,16 @@ contract CrapsFlowHandler {
     /// @dev The settle core: walk the whole field, book the ghosts, and prove the repeat walk
     ///      credits nothing.
     function _settleBound(uint64 slot) internal {
-        try craps.resolveSlot(slot, type(uint64).max) {} catch {
+        // `slot` may be a scheduled window's or a custom battle's — `ghost_slots` tracks both —
+        // so this settles through the unrestricted test door rather than the production
+        // `resolveSlot`, which now rejects a scheduled slot outright.
+        try craps.settleSlot(slot, type(uint64).max) {} catch {
             return;
         }
         ++ghost_settledFields;
         if (slot < 1 << 40) ++ghost_scheduledSettles;
         uint256 before = coinflip.totalCredited();
-        try craps.resolveSlot(slot, type(uint64).max) {} catch {}
+        try craps.settleSlot(slot, type(uint64).max) {} catch {}
         ghost_repeatSettleCreditDelta += coinflip.totalCredited() - before;
     }
 

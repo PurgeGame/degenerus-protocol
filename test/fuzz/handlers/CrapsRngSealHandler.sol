@@ -588,7 +588,7 @@ contract CrapsRngSealHandler is Test {
         bool ok;
         vm.prank(currentActor);
         if (slot < CUSTOM_SLOT_BASE) {
-            try craps.armBonusWindow(slot) returns (uint48 idx) {
+            try craps.armWindow(slot) returns (uint48 idx) {
                 index = idx;
                 ok = true;
             } catch {}
@@ -690,7 +690,10 @@ contract CrapsRngSealHandler is Test {
         uint256 bound = _liabilityBound(slot);
         (bool open, bool midDay, bytes32 h0) = _before();
         vm.prank(currentActor);
-        try craps.resolveSlot(slot, type(uint64).max) {} catch {}
+        // `slot` may be a scheduled window's or a custom battle's — `armedSlots` tracks both —
+        // so this settles through the unrestricted test door rather than the production
+        // `resolveSlot`, which now rejects a scheduled slot outright.
+        try craps.settleSlot(slot, type(uint64).max) {} catch {}
         _after(open, midDay, h0);
         uint256 credited = _stakeLedger() - stake0;
         ghost_creditedOut += credited;
@@ -945,7 +948,7 @@ contract CrapsRngSealHandler is Test {
         bytes32 prior = vm.load(address(game), leaf);
         vm.store(address(game), leaf, bytes32(uint256(keccak256("craps-seal-falsify")) | 1));
         uint48 index;
-        try craps.armBonusWindow(slot) returns (uint48 idx) {
+        try craps.armWindow(slot) returns (uint48 idx) {
             index = idx;
         } catch {
             vm.store(address(game), leaf, prior);

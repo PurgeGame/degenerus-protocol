@@ -132,7 +132,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BOOST_ACTION_BPS = 1200;
     uint256 internal constant _BPS_DENOMINATOR = 10_000;
 
-    /// @notice THE ABSOLUTE SEAT CEILING for one `resolveSlot` call, independent of whatever
+    /// @notice THE ABSOLUTE SEAT CEILING for one `_resolveSlot` call, independent of whatever
     ///         budget the caller supplies. It bounds the two credit arrays and the loop counter,
     ///         so one call can never be made to allocate or iterate without limit — and it is the
     ///         only bound that does not depend on gas being measured correctly.

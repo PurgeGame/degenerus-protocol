@@ -517,7 +517,7 @@ contract CrapsShooterBoostTest is CrapsPins {
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 7 hours);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("all-boost-rows")));
 
         (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, PER);
@@ -611,7 +611,7 @@ contract CrapsShooterBoostTest is CrapsPins {
 
         // And the WALK pays what was quoted: the settled event carries the same figures.
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         (uint256 settledWonA, uint256 settledPaidA) = _settledOf(vm.getRecordedLogs(), pickedId);
         assertEq(settledWonA, wonA, "the settled run is not the previewed one");
         assertEq(settledPaidA, paidA, "the settled payment is not the previewed one");
@@ -697,7 +697,7 @@ contract CrapsShooterBoostTest is CrapsPins {
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 7 hours);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("high-boost")));
 
         uint256 betId = (uint256(slot) << 64) | 1;
@@ -812,7 +812,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         assertGt(battleStake, 0, "the fixture's window carried no bounty");
 
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         PaidOut[] memory pots = _potsIn(vm.getRecordedLogs());
         assertEq(pots.length, 1, "the window paid other than one pot");
         assertGt(pots[0].amount, 0, "the fixture's pot paid nothing");
@@ -879,7 +879,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         }
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 7 hours);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("rotation-field")));
         (uint128 bank, uint128 goal,,,,) = craps.bonusTermsFor(day, PER);
         bytes32 seed = craps.seedForBet(slot);
@@ -1013,7 +1013,7 @@ contract CrapsShooterBoostTest is CrapsPins {
 
         slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 7 hours);
-        index = craps.armBonusWindow(slot);
+        index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("boosted-table")));
     }
 

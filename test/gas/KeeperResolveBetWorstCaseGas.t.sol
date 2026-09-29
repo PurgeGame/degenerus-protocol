@@ -40,9 +40,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev The Phase-319 GAS-01 reference spin count (the OLD MAX_SPINS_PER_BET). Kept so the
     ///      per-1-spin-item marginal and the 10-vs-25 absorption comparison both have a stable
-    ///      reference point. `resolveDegeneretteBets` pays NO reward at all now (the old flat
-    ///      per-item CRANK_RESOLVE_BET_GAS_UNITS-calibrated reward is gone); these numbers are
-    ///      pure gas-shape measurements.
+    ///      reference point. The sweep (`openBoxes`) that resolves these bets now pays NO reward
+    ///      at all (only `mineFlip` does); these numbers are pure gas-shape measurements.
     uint8 internal constant LEGACY_WORST_SPINS = 10;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
@@ -93,9 +92,9 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(INDEX);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
 
-        // resolveDegeneretteBets is directly permissionless (any caller may settle any queued
-        // bet; payouts always credit the bet's owner), so no operator-approval dance is needed
-        // for the cranker/keeper to resolve `player`'s bets.
+        // The sweep (openBoxes) is permissionless (any caller may settle any queued bet;
+        // payouts always credit the bet's owner), so no operator-approval dance is needed for
+        // the cranker/keeper to resolve `player`'s bets.
 
         // Pin the legacy 10-spin worst-case (Phase-319 reference).
         (worstCaseWord, worstCaseTicket) = _findWorstCase(INDEX, LEGACY_WORST_SPINS);
@@ -107,7 +106,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // Test A — 10-spin all-match worst case (the GAS-01 fit-check)
     // =========================================================================
 
-    /// @notice GAS-01 worst-case-FIRST: a single `resolveDegeneretteBets` item resolving a `ticketCount == 10`
+    /// @notice GAS-01 worst-case-FIRST: a single sweep-resolved item with a `ticketCount == 10`
     ///         bet where every spin wins ETH and flips into the lootbox branch (10 materializations).
     ///         Asserts the scenario IS the maximum (ticketCount == 10 AND all 10 spins materialized a
     ///         lootbox) BEFORE the measurement is trusted, and asserts the measured gas < 30M mainnet.
@@ -119,15 +118,18 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
         // assert-is-worst-case precondition (1/2): the placed bet's ticketCount IS the legacy max.
         assertEq(_betTicketCount(betId), LEGACY_WORST_SPINS, "legacy worst case: ticketCount == 10");
+        _advanceActiveIndexPast(INDEX);
 
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = betId;
 
-        // Measure the worst-case crank item's gas (gasleft delta around the external call).
+        // Measure the worst-case sweep item's gas (gasleft delta around the external call). No
+        // reward is paid either way: openBoxes is unrewarded, exactly like the removed direct
+        // per-id door was.
         vm.recordLogs();
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.resolveDegeneretteBets(INDEX, betIds);
+        game.openBoxes(type(uint256).max);
         uint256 gasUsed = gasBefore - gasleft();
 
         (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects(betIds);
@@ -167,7 +169,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @notice GAS-01: isolate the per-1-spin-item MARGINAL gas — the marginal cost of adding one
-    ///         typical (1-spin) resolve item to `resolveDegeneretteBets`, which pays no reward at
+    ///         typical (1-spin) resolve item to the sweep (`openBoxes`), which pays no reward at
     ///         all (the old flat per-item CRANK_RESOLVE_BET_GAS_UNITS-calibrated reward is gone;
     ///         this is a pure gas-shape measurement now). Measured by the loop-N-divide
     ///         micro-bench idiom: crank N independent 1-spin items in one batch and divide the
@@ -186,11 +188,12 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
         // Sanity: each placed item is a 1-spin bet (the typical case the marginal calibrates against).
         assertEq(_betTicketCount(betIds[0]), 1, "Test B item is a 1-spin bet (the typical case)");
+        _advanceActiveIndexPast(INDEX);
 
         // Bracket the whole N-item batch; divide by N for the per-1-spin-item marginal.
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.resolveDegeneretteBets(INDEX, betIds);
+        game.openBoxes(type(uint256).max);
         uint256 totalGas = gasBefore - gasleft();
         uint256 perItemMarginal = totalGas / nItems;
 
@@ -257,15 +260,21 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // cold reading, and both sit orders of magnitude under the block limit either way.
         uint256 legacyGas = _measureTenSpinWorstCase();
 
-        // That reference leaves its own word injected at INDEX; placement requires word == 0.
-        _injectLootboxRngWord(INDEX, 0);
-        uint64 betId = _placeWorstCaseBetN(player, MAX_SPINS_ETH, worstCaseTicket25);
+        // _measureTenSpinWorstCase leaves the active index moved past whatever fresh index it
+        // used; the sweep only ever reaches an index once, so this 25-spin bet places at the
+        // NEW current index and derives its own worst-case word/ticket for it (the setUp-pinned
+        // worstCaseWord25/worstCaseTicket25 are entropy-specific to index 1 and would not be a
+        // genuine worst case at a different index).
+        uint48 idx = _currentActiveIndex();
+        (uint256 word25, uint32 ticket25) = _findWorstCase(idx, MAX_SPINS_ETH);
+        uint64 betId = _placeWorstCaseBetN(player, MAX_SPINS_ETH, ticket25);
         // Small pool so the 10% ETH-win cap flips every winning spin into the lootbox branch.
         _setFuturePool(SMALL_POOL_WEI);
-        _injectLootboxRngWord(INDEX, worstCaseWord25);
+        _injectLootboxRngWord(idx, word25);
+        _advanceActiveIndexPast(idx);
 
         // assert-is-worst-case (1/2): ticketCount IS the structural ETH cap (25).
-        assertEq(_betTicketCount(betId), MAX_SPINS_ETH, "DSPIN-02: ticketCount == MAX_SPINS_ETH (25)");
+        assertEq(DQ.spinCount(game.degeneretteBetInfo(idx, betId)), MAX_SPINS_ETH, "DSPIN-02: ticketCount == MAX_SPINS_ETH (25)");
 
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = betId;
@@ -273,7 +282,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         vm.recordLogs();
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.resolveDegeneretteBets(INDEX, betIds);
+        game.openBoxes(type(uint256).max);
         uint256 gasUsed = gasBefore - gasleft();
 
         (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects(betIds);
@@ -285,7 +294,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // ran fully (25) and that the achieved cap-flip count equals the achieved winning-spin count
         // (every winning spin flips, the per-spin max branch) and is materially non-vacuous.
         assertEq(spinResults, MAX_SPINS_ETH, "DSPIN-02: all 25 spins resolved (full loop; packed into the one DegeneretteResolved event)");
-        uint8 winningSpins = _countWinningSpins(INDEX, worstCaseWord25, worstCaseTicket25, MAX_SPINS_ETH);
+        uint8 winningSpins = _countWinningSpins(idx, word25, ticket25, MAX_SPINS_ETH);
         assertEq(
             lootboxFlips,
             uint256(winningSpins),
@@ -294,7 +303,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         assertGt(lootboxFlips, 0, "DSPIN-02 non-vacuity: at least one spin materialized the lootbox branch");
 
         // Non-vacuity: the bet was actually resolved (queue word zeroed), not silently skipped.
-        assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "non-vacuity: 25-spin worst-case bet resolved (word zeroed)");
+        assertEq(game.degeneretteBetInfo(idx, betId), 0, "non-vacuity: 25-spin worst-case bet resolved (word zeroed)");
 
         // Headline DSPIN-02 assertion: the 25-spin worst case fits the REAL mainnet block gas limit.
         assertLt(
@@ -319,58 +328,9 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     }
 
     // =========================================================================
-    // DSPIN-02 Test D — mixed-currency batch up to the per-currency caps
-    // =========================================================================
-
-    /// @notice Exercise both supported currencies at their caps in one settlement:
-    ///         25 ETH spins and 15 FLIP spins, with the ETH lootbox work retained.
-    function testWorstCaseMixedCurrencyBatchGas() public {
-        // Both bets use one committed word; every spin executes its full resolution.
-        uint128 flipPerTicket = 200 ether;  // >= MIN_BET_FLIP (100 ether)
-        _fundFlip(player, uint256(flipPerTicket) * MAX_SPINS_FLIP + 1 ether);
-
-        // Place one bet per currency at its cap, all using worstCaseTicket25 (wins on the ETH word).
-        uint64 ethBet = _placeWorstCaseBetN(player, MAX_SPINS_ETH, worstCaseTicket25);
-        uint64 flipBet = _placeCurrencyBet(player, 1, flipPerTicket, MAX_SPINS_FLIP, worstCaseTicket25);
-
-        // Small pool so the ETH spins flip into the lootbox branch (max ETH-side work).
-        _setFuturePool(SMALL_POOL_WEI);
-        _injectLootboxRngWord(INDEX, worstCaseWord25);
-
-        // Resolve the whole mixed batch in ONE call (the cross-bet flush under measurement). The crank
-        // resolve relaxation isn't needed here — player resolves their own bets.
-        uint64[] memory betIds = new uint64[](2);
-        betIds[0] = ethBet;
-        betIds[1] = flipBet;
-
-        vm.recordLogs();
-        vm.prank(player);
-        uint256 gasBefore = gasleft();
-        game.resolveDegeneretteBets(INDEX, betIds);
-        uint256 gasUsed = gasBefore - gasleft();
-
-        // Non-vacuity: both bets resolved and all 40 spins ran.
-        (uint256 spinResults, ) = _countResolveEffects(betIds);
-        assertEq(spinResults, uint256(MAX_SPINS_ETH) + MAX_SPINS_FLIP,
-            "mixed batch: all 40 spins resolved (ETH 25 + FLIP 15)");
-        assertEq(game.degeneretteBetInfo(INDEX, ethBet), 0, "non-vacuity: ETH bet resolved");
-        assertEq(game.degeneretteBetInfo(INDEX, flipBet), 0, "non-vacuity: FLIP bet resolved");
-
-        // DSPIN-02: the maximum mixed-currency batch fits the 30M mainnet block gas limit.
-        assertLt(
-            gasUsed,
-            MAINNET_BLOCK_GAS_LIMIT,
-            "DSPIN-02: max mixed-currency batch (40 spins, 2 currencies) fits under the 30M block limit"
-        );
-
-        emit log_named_uint("worst_case_mixed_currency_batch_gas", gasUsed);
-        emit log_named_uint("mixed_batch_total_spins", spinResults);
-        emit log_named_uint("mainnet_block_gas_limit", MAINNET_BLOCK_GAS_LIMIT);
-    }
-
-    // =========================================================================
-    // Sweep-path variants — the SAME worst-case bet shapes, resolved by the automatic
-    // human-box sweep (game.openBoxes) instead of a direct resolveDegeneretteBets call.
+    // Sweep-path variants — the SAME worst-case bet shapes, resolved at a fresh, untouched
+    // index using the setUp-pinned word/ticket directly (Tests A-C above derive their own
+    // per-index word/ticket instead, since some reuse the sweep more than once per test).
     // =========================================================================
 
     /// @notice DSPIN-02 via the sweep: the same 25-spin all-match ETH worst case, resolved by
@@ -504,23 +464,30 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
-    /// @dev Place a fresh 10-spin worst-case bet (the word is already injected by the caller), reset
-    ///      the pool so the cap flips every spin, then crank and return the measured gas. Used by
-    ///      Test B to compare the per-1-spin marginal against the worst case in the same test state.
+    /// @dev Place a fresh 10-spin worst-case bet at the CURRENT active index and crank it via the
+    ///      sweep, returning the measured gas. Used by Test B and Test C to compare against the
+    ///      worst case in the same test state. Unlike the removed direct per-id door (which let a
+    ///      test reuse one fixed index across many placement/resolve cycles by clearing its word
+    ///      between them), the sweep only ever reaches an index once the active pointer has moved
+    ///      past it, so each call here must place at a fresh index and derive its own worst-case
+    ///      word/ticket for that index rather than reusing the ones setUp pinned for index 1.
     function _measureTenSpinWorstCase() internal returns (uint256 gasUsed) {
-        // Placement requires the index's word == 0; clear it, place, then re-inject.
-        _injectLootboxRngWord(INDEX, 0);
-        uint64 betId = _placeWorstCaseBet(player);
+        uint48 idx = _currentActiveIndex();
+        (uint256 word, uint32 ticket) = _findWorstCase(idx, LEGACY_WORST_SPINS);
+        uint64 betId = _placeWorstCaseBetN(player, LEGACY_WORST_SPINS, ticket);
         _setFuturePool(SMALL_POOL_WEI);
-        _injectLootboxRngWord(INDEX, worstCaseWord);
-
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
+        _injectLootboxRngWord(idx, word);
+        _advanceActiveIndexPast(idx);
 
         vm.prank(cranker);
         uint256 gasBefore = gasleft();
-        game.resolveDegeneretteBets(INDEX, betIds);
+        game.openBoxes(type(uint256).max);
         gasUsed = gasBefore - gasleft();
+    }
+
+    /// @dev The current active lootbox RNG index (low 48 bits of lootboxRngPacked).
+    function _currentActiveIndex() internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))));
     }
 
     /// @dev Search bounded candidate rounds for the most paying spins with a single

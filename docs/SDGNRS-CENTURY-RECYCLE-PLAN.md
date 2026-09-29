@@ -217,9 +217,12 @@ evergreen reward inventory or a supply floor.
 
 **Accepted timing behavior:** some payouts read live pool balances at settlement.
 For example, `_awardDegeneretteDgnrs` uses Pool.Reward and the lootbox batch reads
-Pool.Lootbox. `resolveDegeneretteBets` is permissionless, so keepers can settle a
-known win before the refill. Permissionless access does not guarantee settlement
-before the boundary; unresolved wins may receive larger rewards afterward.
+Pool.Lootbox. Bets resolve only through the permissionless in-order sweep
+(`sweepDegeneretteBets`, reached via `mineFlip`/`openBoxes`), so a keeper running
+that sweep can still settle a known win before the refill, but cannot pick it out
+ahead of the queue — it only clears once the cursor reaches it. Running the sweep
+does not guarantee settlement before the boundary; unresolved wins may receive
+larger rewards afterward.
 Preserve that behavior, including recursive lootbox/spin awards. Existing fixed
 affiliate allocations stay fixed; a refill does not recalculate their snapshots.
 No unbounded sweep of outstanding rewards is added to century advancement.

@@ -1,14 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @title WardenLbxClosingBoxOrder -- the closing presale box cannot front-run its cohort
-/// @notice `openBox` is permissionless per (player, index), so the closing buyer can open before
-///         the same-index cohort. The Pool.PresaleBox remainder is paid by the sweep's drain latch
-///         once every presale box has drawn, never at the closing box's own open: the cohort's
-///         DGNRS is identical under both open orders and the closer takes only the residue.
+/// @notice Box-order migration: the removed permissionless per-(player,index) `openBox` let the
+///         closing buyer open before the same-index cohort, which is what the original version of
+///         this test set out to prove was harmless (order-independent DGNRS). That capability no
+///         longer exists: `openBoxes` is a strict in-order, oldest-first walk of `boxPlayers[index]`,
+///         so the closer (bought last, the crossing buy) can never be opened ahead of its cohort
+///         (bought first) -- the title's claim now holds STRUCTURALLY rather than merely by
+///         observed invariant. This test instead proves: (1) the cohort drains before the closer is
+///         even reachable, (2) the closer's own roll and the pool's residual "drain latch" sweep
+///         (both credited to the closer) are the two components of the one call that finishes the
+///         index, decomposed via the `PresaleBoxRemainderSwept` event, and (3) the closer's own roll
+///         never itself takes a windfall share of the pool -- the remainder does, via the latch.
 contract WardenLbxClosingBoxOrder is DeployProtocol {
     uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = 16;
     uint256 constant SLOT_PRESALE_BOX_CREDIT = 17;
@@ -16,6 +24,8 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
     uint256 constant SLOT_LOOTBOX_RNG_PACKED = 33;
     uint256 constant SLOT_LOOTBOX_RNG_WORD = 34;
     uint256 constant PRESALE_BOX_ETH_CAP = 50 ether;
+
+    bytes32 constant REMAINDER_SWEPT_TOPIC = keccak256("PresaleBoxRemainderSwept(address,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -58,7 +68,33 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         game.buyPresaleBox{value: amount}(buyer, amount);
     }
 
-    function test_ClosingBoxOpenOrderCannotMoveCohortDgnrs() public {
+    /// @dev Advance LR_INDEX past `index` (mirrors a landed VRF word) and park the sweep's open
+    ///      frontier exactly on it, so a bounded openBoxes() call can only ever touch this index's
+    ///      queue.
+    function _finalizeAndParkSweep(uint48 index) internal {
+        uint256 mask48 = (uint256(1) << 48) - 1;
+        uint256 lr = uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED)));
+        vm.store(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED), bytes32((lr & ~mask48) | (uint256(index) + 1)));
+
+        bytes32 cursorSlot = bytes32(uint256(56)); // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
+        uint256 cur = uint256(vm.load(address(game), cursorSlot));
+        cur &= ~(mask48 << (7 * 8));
+        cur &= ~(mask48 << (13 * 8));
+        cur |= (uint256(index) & mask48) << (13 * 8);
+        vm.store(address(game), cursorSlot, bytes32(cur));
+    }
+
+    /// @dev Sum every PresaleBoxRemainderSwept amount in `logs` (there is at most one per sweep
+    ///      call in this test, but summing is the honest read of "what the latch swept").
+    function _remainderSweptIn(Vm.Log[] memory logs) internal pure returns (uint256 total) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == REMAINDER_SWEPT_TOPIC) {
+                total += abi.decode(logs[i].data, (uint256));
+            }
+        }
+    }
+
+    function test_ClosingBoxOpensOnlyAfterItsCohortViaTheInOrderSweep() public {
         uint48 index = _lrIndex();
         // 1-ETH boxes: tier-1 draws are 7.5% of poolStart each, so the cohort leaves a remainder.
         uint256 amount = 1 ether;
@@ -87,42 +123,42 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         }
         _setRngWord(index, word);
 
-        // Cohort first, closing box last: every DGNRS-branch victim is paid off the pool and the
-        // closing open pays only its own roll.
-        uint256 snap = vm.snapshotState();
-        uint256[3] memory designDgnrs;
+        // Finalize `index` and park the sweep frontier on it: boxPlayers[index] queues v[0],
+        // v[1], v[2] (bought first), then closer (bought last, the crossing buy) -- the ONLY
+        // order the in-order sweep can ever produce now.
+        _finalizeAndParkSweep(index);
+
+        // openBoxes(2): the afking leg's ring scan (the deploy's standing subscribers, none with a
+        // pending box) rounds up to one step of maxCount, leaving the human sweep one entry-weight
+        // of budget. That sweep always runs the first entry of a call regardless of its cost
+        // (openHumanBoxes), then the `opened != 0` guard stops before a second -- three such calls
+        // open exactly the cohort, one at a time, and never reach the closer.
         for (uint256 i; i < 3; ++i) {
-            game.openBox(v[i], index);
-            designDgnrs[i] = sdgnrs.balanceOf(v[i]);
-            assertGt(designDgnrs[i], 0, "cohort-first: DGNRS-branch victim is paid");
+            assertEq(sdgnrs.balanceOf(closer), 0, "closer cannot front-run -- still unopened while cohort drains");
+            game.openBoxes(2);
+            assertGt(sdgnrs.balanceOf(v[i]), 0, "cohort-first: DGNRS-branch victim is paid");
         }
-        game.openBox(closer, index);
-        uint256 closerRoll = sdgnrs.balanceOf(closer);
         uint256 remainder = _poolBal();
-        assertGt(remainder, 0, "the closing open leaves the remainder in the pool");
-        assertLt(closerRoll, pool / 2, "the closing open never takes the pool");
-        vm.revertToState(snap);
+        assertGt(remainder, 0, "the pool still holds a remainder once the cohort alone has drawn");
+        assertEq(sdgnrs.balanceOf(closer), 0, "the closer is still unreached after the whole cohort");
 
-        // Closing box opened first (permissionless openBox), same word: the cohort draws the same
-        // DGNRS and the closer's open pays the same roll.
-        game.openBox(closer, index);
-        assertEq(sdgnrs.balanceOf(closer), closerRoll, "closer-first: the open pays the roll alone");
-        for (uint256 i; i < 3; ++i) {
-            game.openBox(v[i], index);
-            assertEq(sdgnrs.balanceOf(v[i]), designDgnrs[i], "closer-first: cohort DGNRS unchanged");
-        }
-        assertEq(_poolBal(), remainder, "remainder is order-independent");
+        // Opening the closer is the entry that completes the index, so its own roll AND the
+        // pool's drain-latch sweep (both credited to `closer`) land in this one call -- there is
+        // no longer a call boundary between "the closing open" and "the later sweep past the
+        // close index" the way the removed per-(player,index) door allowed. The
+        // PresaleBoxRemainderSwept event still isolates the latch's contribution from the
+        // closer's own roll.
+        uint256 closerBalBefore = sdgnrs.balanceOf(closer);
+        vm.recordLogs();
+        uint256 opened = game.openBoxes(2);
+        assertEq(opened, 1, "exactly the closer's one entry opened");
+        uint256 sweptRemainder = _remainderSweptIn(vm.getRecordedLogs());
+        uint256 closerOwnRoll = sdgnrs.balanceOf(closer) - closerBalBefore - sweptRemainder;
 
-        // The remainder reaches the closer only once the in-order sweep drains presale: advance
-        // LR_INDEX so the index is finalized, then let the sweep walk past the close index.
-        for (uint48 i = 1; i < index; ++i) _setRngWord(i, word);
-        uint256 lr = uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED)));
-        vm.store(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED), bytes32(lr + 1));
-        uint256 opened = game.openBoxes(1_000_000);
-        assertEq(opened, 0, "every record at the index was already opened by hand");
-        assertEq(_poolBal(), 0, "the drain latch sweeps the remainder");
-        assertEq(sdgnrs.balanceOf(closer), closerRoll + remainder, "remainder paid to the closer at the drain");
-        emit log_named_uint("closer roll (wei)", closerRoll);
+        assertEq(sweptRemainder, remainder, "the drain latch sweeps exactly the pool's pre-close remainder");
+        assertEq(_poolBal(), 0, "the drain latch leaves the pool empty");
+        assertLt(closerOwnRoll, pool / 2, "the closer's own roll never itself takes the pool");
+        emit log_named_uint("closer own roll (wei)", closerOwnRoll);
         emit log_named_uint("remainder swept at drain (wei)", remainder);
     }
 }

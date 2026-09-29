@@ -605,8 +605,30 @@ contract CrapsViews is CrapsBattle {
     ///      it is a statement about the budget rule rather than a way around it.
     function resolveSeats(uint64 slot, uint64 n) external {
         for (uint64 i = 0; i < n; ++i) {
-            resolveSlot(slot, 1);
+            _resolveSlot(slot, 1);
         }
+    }
+
+    /// @dev Test-only settle door. Production settles a scheduled window or the daily jackpot
+    ///      only through `keepScheduled`'s in-order cursor; a custom battle still has its own
+    ///      external `resolveSlot`. Fixtures that need one specific window settled without
+    ///      walking the whole cursor call this instead.
+    function settleSlot(uint64 slot, uint64 budget) external {
+        _resolveSlot(slot, budget);
+    }
+
+    /// @dev Test-only arm door, restating the removed `armBonusWindow` under a new name so the
+    ///      suite can still shut and bind one chosen window directly. Production arms scheduled
+    ///      windows only in order, through `keepScheduled`'s cursor.
+    function armWindow(uint64 slot) external returns (uint48 index) {
+        if (_isJackpotSlot(slot)) revert BonusStillRunning();
+        (,, uint256 open) = _currentBonusSlot();
+        if (slot >= open) revert BonusStillRunning();
+        if (_slotIndex[slot] != 0) revert BonusPeriodSpent();
+        Window memory w = _slotWindow(slot);
+        if (_battles[w.key] == 0) revert BonusPeriodSpent();
+        if (_boostBudget[uint24(slot / _BONUS_SLOTS_PER_DAY)] == 0) revert BonusPeriodSpent();
+        index = _armSlot(slot, w);
     }
 
     /// @dev The day's 4:2:1 routine denominator, and one window's slice of a given budget.

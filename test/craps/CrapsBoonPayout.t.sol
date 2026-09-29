@@ -349,10 +349,10 @@ contract CrapsBoonPayoutTest is CrapsPins {
     function _paidAt(uint24 day, uint256 period, uint256 betId, uint256 salt) internal returns (uint256) {
         _warpPastPeriod(period);
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + period + 1);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256(abi.encode("settle", period, salt))));
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {

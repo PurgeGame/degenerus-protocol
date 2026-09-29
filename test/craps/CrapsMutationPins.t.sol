@@ -63,7 +63,7 @@ contract CrapsMutationPins is CrapsPins {
         // And through the permissionless door: the gap sits below the window taking bets, so the
         // only thing that refuses it is the terms read.
         vm.expectRevert(CrapsBattleStorage.NoSuchBattle.selector);
-        craps.armBonusWindow(gap);
+        craps.armWindow(gap);
         // The period right after the gap is a real window.
         assertTrue(craps.termsKeyOf(gap + 1) != bytes32(0), "period zero of the day is a window");
     }

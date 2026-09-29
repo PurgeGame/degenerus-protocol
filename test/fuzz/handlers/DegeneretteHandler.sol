@@ -119,16 +119,18 @@ contract DegeneretteHandler is Test {
         // Try to resolve the newest unresolved bet
         PlacedBet memory bet = actorBets[currentActor][count - 1];
 
-        uint64[] memory ids = new uint64[](1);
-        ids[0] = bet.betId;
-
-        // Fill the bet's lootbox word so the resolve RNG-ready gate is satisfiable.
+        // Fill the bet's lootbox word so the sweep's resolve RNG-ready gate is satisfiable, and
+        // force the active lootbox index past the bet's index so the sweep's finalized-index
+        // frontier reaches it (mirrors _ensureLootboxIndexOpen's storage-poke idiom above: the
+        // unguided fuzzer can leave the active index sitting ON the bet's own index for many
+        // calls, which the removed per-id door never needed but the sweep does).
         _fillLootboxWordForResolve(bet.index);
+        _advanceLootboxIndexPast(bet.index);
 
         uint256 claimableBefore = game.claimableWinningsOf(currentActor);
 
         vm.prank(currentActor);
-        try game.resolveDegeneretteBets(bet.index, ids) {
+        try game.openBoxes(type(uint256).max) {
             ghost_betsResolved++;
             uint256 claimableAfter = game.claimableWinningsOf(currentActor);
             if (claimableAfter > claimableBefore) {
@@ -220,10 +222,10 @@ contract DegeneretteHandler is Test {
         }
     }
 
-    /// @dev Make a placed bet resolvable: resolveDegeneretteBets reverts (RngNotReady) unless
-    ///      lootboxRngWordByIndex[index] is non-zero. Fill the bet's index word with a
-    ///      deterministic non-zero entropy so resolveDegeneretteBets executes its live payout +
-    ///      claimable-credit path (exercising the post-resolve solvency leg too).
+    /// @dev Make a placed bet resolvable: the sweep reverts (RngNotReady on placement, or simply
+    ///      never reaching the index) unless lootboxRngWordByIndex[index] is non-zero. Fill the
+    ///      bet's index word with a deterministic non-zero entropy so the sweep executes its
+    ///      live payout + claimable-credit path (exercising the post-resolve solvency leg too).
     function _fillLootboxWordForResolve(uint48 index) private {
         if (index == 0) return;
         bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
@@ -234,6 +236,16 @@ contract DegeneretteHandler is Test {
                 bytes32(uint256(keccak256(abi.encodePacked("degenerette_resolve_word", index))) | 1)
             );
         }
+    }
+
+    /// @dev Force the active lootbox index past `index` so the sweep's finalized-index frontier
+    ///      (which only opens indices strictly below the active one) can reach a bet queued at
+    ///      `index`. A no-op if the active index has already moved past it.
+    function _advanceLootboxIndexPast(uint48 index) private {
+        uint256 packed = uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT)));
+        if (uint48(packed) > index) return;
+        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(index) + 1);
+        vm.store(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT), bytes32(packed));
     }
 
 }

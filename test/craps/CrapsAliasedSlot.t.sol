@@ -105,7 +105,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
         assertGt(flip.burned(carol), 0, "carol's legitimate entry was not charged");
 
         vm.warp(_dayStart() + _closeOf(PER));
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("aliased-slot-word")));
 
         uint64 entrantsArmed = craps.battleOf(key).entrants;
@@ -139,10 +139,10 @@ contract CrapsAliasedSlotTest is CrapsPins {
         _seat(bob, PER);
 
         vm.warp(_dayStart() + _closeOf(PER));
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("settled-window-word")));
 
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         CrapsBattle.Battle memory done = craps.battleOf(key);
         assertTrue(done.finalized, "fixture: the window did not finalize");
         uint64 entrants0 = done.entrants;
@@ -163,7 +163,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
 
         // ---- settle the real slot a second time ---------------------------------------------
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         CrapsBattle.Battle memory again = craps.battleOf(key);
 

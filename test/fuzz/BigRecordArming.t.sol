@@ -169,9 +169,12 @@ contract BigRecordArmingTest is DeployProtocol {
         assertGt(_recordBounty(betId), 0, "the rival armed a claim");
 
         _injectLootboxRngWord(1, uint256(keccak256("record-spin-word")));
+        // The sweep only reaches a finalized index (active - 1); bump the active index past
+        // BET_INDEX so the walk's frontier actually opens it, mirroring the word injection above.
+        _advanceLootboxIndex();
         vm.recordLogs();
         vm.prank(rival);
-        game.resolveDegeneretteBets(BET_INDEX, _one(betId));
+        game.openBoxes(type(uint256).max);
 
         assertTrue(_sawRecordBoxSpin(), "the bounty spun as a type-3 BoxSpin");
         assertEq(_recordBounty(betId), 0, "resolution clears the side slot");
@@ -371,11 +374,6 @@ contract BigRecordArmingTest is DeployProtocol {
             if ((uint256(betId) >> 60) & 7 == BOX_SPIN_TYPE_RECORD) return true;
         }
         return false;
-    }
-
-    function _one(uint64 betId) internal pure returns (uint64[] memory a) {
-        a = new uint64[](1);
-        a[0] = betId;
     }
 
     function _recordBounty(uint64 betId) internal view returns (uint256) {

@@ -38,6 +38,9 @@ contract WhaleBoonExpiry is DeployProtocol {
     uint256 constant SLOT_BOON_PACKED  = 50;   // mapping(address => BoonPacked)
     uint256 constant SLOT_LOOTBOX_ETH  = 15;   // mapping(uint48 => mapping(address => uint256)) (packed order word)
     uint256 constant SLOT_LOOTBOX_WORD = 34;   // mapping(uint48 => uint256) lootboxRngWordByIndex
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_BOX_PLAYERS = 57;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
+    uint256 constant SLOT_BOX_CURSORS = 56;     // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
 
     // Packed lootboxOrder bit layout (mirrors DegenerusGameStorage lootboxOrder -- see LB_* there).
     uint256 constant LB_SCORE_SHIFT        = 24;  // score        [24:39]
@@ -126,6 +129,29 @@ contract WhaleBoonExpiry is DeployProtocol {
 
         uint256 vrfWord = uint256(keccak256(abi.encode("whaleBoonExpiry", player, index)));
         vm.store(address(game), _simpleMappingSlot(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
+
+        // Box-order migration: the removed per-(player,index) `openBox` read lootboxOrder
+        // straight from the mapping; its sweep replacement only ever finds a box by walking
+        // boxPlayers[index] (never populated by this forged setup) at or below LR_INDEX-1
+        // (never advanced past `index` here either). Enqueue + finalize + park so a
+        // full-budget openBoxes() call reaches exactly this one entry.
+        bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
+        uint256 len = uint256(vm.load(address(game), lenSlot));
+        bytes32 dataBase = keccak256(abi.encode(lenSlot));
+        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
+        vm.store(address(game), lenSlot, bytes32(len + 1));
+
+        uint256 mask48 = (uint256(1) << 48) - 1;
+        bytes32 lrSlot = bytes32(SLOT_LOOTBOX_RNG_IDX);
+        uint256 lrPacked = uint256(vm.load(address(game), lrSlot));
+        vm.store(address(game), lrSlot, bytes32((lrPacked & ~mask48) | (uint256(index) + 1)));
+
+        bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
+        uint256 cur = uint256(vm.load(address(game), cursorSlot));
+        cur &= ~(mask48 << (7 * 8));
+        cur &= ~(mask48 << (13 * 8));
+        cur |= (uint256(index) & mask48) << (13 * 8);
+        vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
     /// @dev Trigger checkAndClearExpiredBoon by opening a lootbox: LootboxModule's per-tier
@@ -135,7 +161,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     function _triggerSweep(address player, uint48 index) internal {
         _setupLootbox(player, index, 10 ether);
         vm.prank(player);
-        game.openBox(player, index);
+        game.openBoxes(type(uint256).max);
     }
 
     // ──────────────────────────────────────────────────────────────────────

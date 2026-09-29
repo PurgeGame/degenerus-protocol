@@ -13,8 +13,8 @@ Each bet is one storage word appended to `degeneretteQueue[index]`
 RNG index active when the bet is placed. A bet's id is its queue position + 1,
 scoped to that index (not global, and no longer per-player). Placement only
 appends while `index`'s RNG word is still unset; once the word lands the queue
-for that index is frozen (no further placements), and it is either resolved by
-the sweep or resolved early by anyone via `resolveDegeneretteBets`.
+for that index is frozen (no further placements) and resolves only through
+the sweep, in queue order.
 
 `degeneretteQueue` occupies the storage slot vacated by the retired WWXRP
 whale-pass mapping (`wwxrpJackpotWhalePassBracketAwarded`, slot 21). The old
@@ -126,14 +126,7 @@ box) was rejected because a 25-spin bet earned about five units for the same
 Measured sweep cost per bet (warm, same owner): ~9.1k gas for a 1-spin loss,
 ~2.5-3k per extra spin, and ~57k more for a win box.
 
-## Manual resolve API
-
-`resolveDegeneretteBets(uint48 index, uint64[] betIds)` is permissionless and
-pays no keeper reward; it lets anyone settle chosen bets at `index` ahead of
-the sweep (credits always go to each bet's owner). The first id fails fast
-with `InvalidBet` if it is zero, out of range, or already resolved; later ids
-in the same call are skipped instead, so a racing duplicate settle bails
-cheaply without reverting the whole batch.
+## Bet view
 
 `degeneretteBetInfo(uint48 index, uint64 betId)` is a view that returns the
 raw queued bet word (zero once resolved or if the id is unknown/out of
@@ -150,6 +143,10 @@ range).
   `mineFlip()` sweep like anyone else's; no resolve call is needed.
 - The per-spin `DegeneretteResult` event — replaced by one `DegeneretteResolved`
   event per bet (below).
+- `resolveDegeneretteBets(uint48 index, uint64[] betIds)` — the manual door
+  that let anyone settle chosen bets at `index`, in any order, ahead of the
+  sweep. A bet now resolves only when the sweep's own in-order cursor reaches
+  it (see Sweep integration above).
 
 ## Event format
 
@@ -159,8 +156,7 @@ queued bet word (layout above).
 
 `DegeneretteResolved(address indexed player, uint32 indexed index, uint64
 indexed betId, uint256 totalPayout, uint32 resultTraits, bytes spins)` is
-emitted once per resolved bet, whether resolved by the sweep or by
-`resolveDegeneretteBets`. `spins` packs 5 bytes per spin (spin 0 first): 4
+emitted once per resolved bet, always by the sweep. `spins` packs 5 bytes per spin (spin 0 first): 4
 bytes of big-endian player traits, then one byte of `score (bits 0-3) | gold
 matches (bits 4-6)`. Per-spin payouts are recomputable off-chain from each
 spin's score and gold, the bet word's stake-per-spin and currency, and its
@@ -176,7 +172,7 @@ write, and a player's very first-ever bet is now about 17k gas cheaper (no
 nonce slot to initialize). Resolution is about 2.4k gas per spin cheaper than
 before, from the packed per-bet event replacing the old per-spin event — and
 under the new model players no longer pay resolution gas at all; the keeper
-crank (or an early permissionless resolver) does.
+crank does.
 
 ## Settlement order and indexing
 
@@ -184,11 +180,12 @@ Everything a bet's spins roll — player tickets, the house reel, scores, gold
 matches, the FLIP survival flip and rounding — is fixed by the index word and
 the bet's own id, so no choice made after the word lands can change them. A
 few payout legs read live state instead, so the order bets settle in can shift
-their size, exactly as the old per-player resolve could: the ETH leg is capped
-at 10% of the live future pool (later wins in a busy index see a smaller pool),
-the S>=7 sDGNRS award is a share of the live Reward pool, and the win box and
-affiliate legs price at the live level. Anyone may settle any bet early with
-`resolveDegeneretteBets`, so a bettor can put their own winning bet first.
+their size: the ETH leg is capped at 10% of the live future pool (later wins
+in a busy index see a smaller pool), the S>=7 sDGNRS award is a share of the
+live Reward pool, and the win box and affiliate legs price at the live level.
+That order is now fixed by the sweep, which resolves a queue strictly in id
+order — no caller can jump their own bet ahead of an earlier one to claim a
+bigger share of a live-priced leg.
 
 `PayoutCapped` carries no bet id, but every capped spin of a bet emits it
 before that bet's `DegeneretteResolved` (and after the previous bet's), so an

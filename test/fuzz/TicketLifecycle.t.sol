@@ -731,6 +731,11 @@ contract TicketLifecycleTest is DeployProtocol {
                 _storeLootboxRngWord(indices[i], 1000 + i);
             }
         }
+        // The open sweep walks only finalized indices (idx <= LR_INDEX - 1), so move LR_INDEX
+        // past the seeded indices too -- what a landed VRF word does alongside the word itself.
+        for (uint256 i = 0; i < 8; i++) {
+            if (indices[i] > 0) _finalizeLootboxIndex(indices[i]);
+        }
 
         // Snapshot write-key queue lengths before opening
         uint256[6] memory writeKeysBefore;
@@ -1512,36 +1517,28 @@ contract TicketLifecycleTest is DeployProtocol {
         // - Far-future roll: _queueEntriesScaled reverts RngLocked()
         // Either outcome is safe. We verify at least one revert occurs (proving
         // the guard fires on the integration path), or all succeed (all near rolls).
-        uint256 reverts = 0;
-        uint256 successes = 0;
+        // Box-order migration: the removed openBox() reverted RngLocked() unconditionally at its
+        // OWN entry gate before ever reaching _queueEntriesScaled, so under the OLD door every
+        // one of these opens always hit the `reverts` branch below regardless of a near- or
+        // far-future roll -- the near-future "success" branch this loop watches for was already
+        // unreachable through that door (the top-level gate fires first). The sweep replacement's
+        // entry gate (openHumanBoxes' rngLockedFlag check) is the same flag, but a locked call
+        // no-ops (returns 0) instead of reverting, so it can no longer distinguish or even reach
+        // the deep near/far-future write-buffer routing this test set out to integration-prove.
+        // What IS still provable, and is the honest replacement: the entry gate uniformly blocks
+        // every open while locked, for every index, with no work done and nothing reverted.
+        uint256 checked = 0;
         for (uint256 i = 0; i < validCount; i++) {
             uint256 rngWord = _lootboxRngWord(indices[i]);
             if (rngWord == 0) continue;
 
             vm.prank(buyer3);
-            try game.openBox(buyer3, indices[i]) {
-                successes++;
-            } catch (bytes memory reason) {
-                // Check if the revert is specifically RngLocked
-                if (reason.length == 4 &&
-                    bytes4(reason) == DegenerusGameStorage.RngLocked.selector) {
-                    reverts++;
-                }
-                // Other reverts (e.g., lootbox not ready) are ignored
-            }
+            uint256 opened = game.openBoxes(type(uint256).max);
+            assertEq(opened, 0, "RNG-03b: the sweep's entry gate must no-op every open while rngLocked");
+            checked++;
         }
 
-        // At least one lootbox open must have either succeeded or reverted with RngLocked.
-        // Both outcomes prove the integration path is guarded:
-        // - Success means near-future roll -> write buffer (structural safety)
-        // - RngLocked revert means far-future roll -> blocked by guard
-        assertTrue(successes + reverts > 0,
-            "RNG-03b: at least one lootbox open must reach ticket queuing (success or RngLocked)");
-
-        // The structural property: with rngLocked=true, any lootbox open that produces
-        // a far-future target reverts. The TicketRouting.t.sol unit tests prove the guard
-        // fires at the function level; this integration test proves the guard is reached
-        // through the full openLootBox -> _resolveLootboxCommon -> _queueEntriesScaled chain.
+        assertGt(checked, 0, "RNG-03b: at least one lootbox index must be checked");
     }
 
     // =========================================================================
@@ -2304,7 +2301,7 @@ contract TicketLifecycleTest is DeployProtocol {
         if (rngWord == 0) return; // Skip if RNG not available (caller should have seeded it)
 
         vm.prank(who);
-        try game.openBox(who, lootboxIndex) {} catch {}
+        try game.openBoxes(type(uint256).max) {} catch {}
     }
 
     /// @notice Pick an rngWord whose resolution for `player` lands in the far band (offset 5-50).
@@ -2328,6 +2325,14 @@ contract TicketLifecycleTest is DeployProtocol {
     function _storeLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         vm.store(address(game), slot, bytes32(rngWord));
+    }
+
+    /// @dev Move LR_INDEX (low 48 bits of lootboxRngPacked, slot 33) past `index` so the open
+    ///      sweep treats it as finalized. Never moves it backwards; the other packed fields stay.
+    function _finalizeLootboxIndex(uint48 index) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(33))));
+        if (uint48(packed) > index) return;
+        vm.store(address(game), bytes32(uint256(33)), bytes32((packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(index) + 1)));
     }
 
     /// @notice Drive one advanceGame + VRF cycle to finalize pending lootbox RNG.

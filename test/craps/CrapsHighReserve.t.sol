@@ -80,7 +80,7 @@ contract CrapsHighReserveTest is CrapsPins {
         for (uint256 i; i < 500; ++i) {
             (,,, bool complete) = api.jackpotProgress();
             if (complete) return;
-            table.resolveSlot(slot, budget); // permissionless path must run the reserve too
+            table.settleSlot(slot, budget); // permissionless path must run the reserve too
         }
         revert("settlement stalled");
     }
@@ -255,7 +255,7 @@ contract CrapsHighReserveTest is CrapsPins {
         assertEq(keccak256(abi.encode(cold.highRollerDrawOf(slot))), keccak256(abi.encode(one)));
         assertEq(coinflip.totalCredited(), credited); assertEq(cold.highRollerReserve(), reserve);
         vm.recordLogs();
-        table.resolveSlot(slot, WHOLE_FIELD);
+        table.settleSlot(slot, WHOLE_FIELD);
         vm.prank(ContractAddresses.GAME); api.advanceJackpotBattle(WHOLE_FIELD);
         assertEq(vm.getRecordedLogs().length, 0, "retry attempted another draw");
         assertEq(coinflip.totalCredited(), credited); assertEq(cold.highRollerReserve(), reserve);
@@ -265,7 +265,7 @@ contract CrapsHighReserveTest is CrapsPins {
         for (uint160 i; i < 270; ++i) _enter(address(0x1000 + i), true, false);
         _lock(50_000 ether); _start(_word(true), 0);
         vm.recordLogs();
-        table.resolveSlot(slot, WHOLE_FIELD);
+        table.settleSlot(slot, WHOLE_FIELD);
         assertEq(cold.highRollerDrawOf(slot).eligible, 256);
         assertFalse(cold.highRollerDrawOf(slot).resolved);
         assertEq(cold.highRollerReserve(), 2_500 ether);

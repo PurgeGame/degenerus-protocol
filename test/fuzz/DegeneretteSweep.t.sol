@@ -26,12 +26,11 @@ contract HumanSweepProbe is DegenerusGameStorage {
 ///         priced per bet in walk units and resumable mid-queue. This suite owns:
 ///
 ///         1. PLACEMENT: one word per bet with the documented layout; whole stake units only.
-///         2. EQUIVALENCE: sweeping a queue pays exactly what resolving the same bets by hand
-///            pays, owner by owner, including across calls the budget splits.
-///         3. SKIPS: a bet resolved by hand is skipped by the sweep and never paid twice.
-///         4. EVENT: DegeneretteResolved carries every spin as five packed bytes.
-///         5. FROZEN POOL: the sweep holds the queue while the prize pool is frozen.
-///         6. KEEPER: a plain mineFlip() resolves the queue and pays the box-open bounty.
+///         2. EQUIVALENCE: a queue swept in one call resolves every bet in order, and sweeping
+///            it across many small-budget calls pays exactly what one full-budget call pays.
+///         3. EVENT: DegeneretteResolved carries every spin as five packed bytes.
+///         4. FROZEN POOL: the sweep holds the queue while the prize pool is frozen.
+///         5. KEEPER: a plain mineFlip() resolves the queue and pays the box-open bounty.
 ///
 ///         Callees the sweep reaches, driven here: IDegenerusCoin.mintForGame (the owner FLIP
 ///         flush), ICoinflip.creditFlip + IDegenerusAffiliate.getReferrer (the affiliate leg of
@@ -42,6 +41,7 @@ contract DegeneretteSweep is DeployProtocol {
     uint256 private constant LR_PACKED_SLOT = 33;
     uint256 private constant LR_WORD_SLOT = 34;
     uint256 private constant PRIZE_POOLS_SLOT = 2;
+    uint256 private constant QUEUE_SLOT = 21; // degeneretteQueue mapping root
     uint256 private constant FROZEN_BIT = uint256(1) << 208; // slot 0, byte 26
 
     uint8 private constant ETH = 0;
@@ -142,10 +142,11 @@ contract DegeneretteSweep is DeployProtocol {
         assertEq(a.bobDgnrs, b.bobDgnrs, "bob sDGNRS");
     }
 
-    function _resolveAllByHand(uint64 count) private {
-        uint64[] memory ids = new uint64[](count);
-        for (uint64 i; i < count; ++i) ids[i] = i + 1;
-        game.resolveDegeneretteBets(IDX, ids);
+    /// @dev Resolve the whole queue at IDX in one full-budget sweep call — the only surviving
+    ///      resolution entry point. Used as the one-shot reference against which a many-call,
+    ///      small-budget sweep is compared for budget-split invariance.
+    function _resolveAllInOneSweep() private {
+        game.openBoxes(type(uint256).max);
     }
 
     /// @dev Resolved (betId => totalPayout) pairs in log order.
@@ -213,28 +214,25 @@ contract DegeneretteSweep is DeployProtocol {
     }
 
     // =========================================================================
-    // 2. Equivalence with hand resolution
+    // 2. Equivalence
     // =========================================================================
 
-    function testFuzz_SweepPaysExactlyWhatHandResolutionPays(uint256 word) public {
+    /// @notice The sweep resolves every bet in a fuzzed-word mixed queue in one openBoxes(max)
+    ///         call, strictly in queue order, zeroing each bet and completing the index's
+    ///         frontier. (Sweep resolution is now the only entry point, so there is no second
+    ///         independent path left to cross-check payouts against; this asserts the sweep's
+    ///         own resolution shape directly instead.)
+    function testFuzz_SweepResolvesFullMixedQueueInOrder(uint256 word) public {
         vm.assume(word != 0);
         _placeMixedQueue();
         _landWord(IDX, word);
 
-        uint256 snap = vm.snapshotState();
-        vm.recordLogs();
-        _resolveAllByHand(6);
-        uint256[] memory byHand = _resolvedPayouts(vm.getRecordedLogs());
-        Fingerprint memory handPrint = _fingerprint();
-        vm.revertToState(snap);
-
         vm.recordLogs();
         game.openBoxes(type(uint256).max);
         uint256[] memory swept = _resolvedPayouts(vm.getRecordedLogs());
-        _assertSame(handPrint, _fingerprint());
 
-        assertEq(swept.length, byHand.length, "resolved count");
-        for (uint256 i; i < swept.length; ++i) assertEq(swept[i], byHand[i], "per-bet id/payout");
+        assertEq(swept.length, 12, "six resolved bets, id+payout pairs");
+        for (uint256 i; i < 6; ++i) assertEq(swept[i * 2], i + 1, "resolved in queue order");
         for (uint64 id = 1; id <= 6; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "bet zeroed");
         assertTrue(game.boxIndexComplete(IDX), "frontier passed the index");
     }
@@ -244,7 +242,7 @@ contract DegeneretteSweep is DeployProtocol {
         _landWord(IDX, uint256(keccak256("sweep_resume_word")));
 
         uint256 snap = vm.snapshotState();
-        _resolveAllByHand(12);
+        _resolveAllInOneSweep();
         Fingerprint memory handPrint = _fingerprint();
         vm.revertToState(snap);
 
@@ -266,53 +264,9 @@ contract DegeneretteSweep is DeployProtocol {
         _assertSame(handPrint, _fingerprint());
     }
 
-    // =========================================================================
-    // 3. Hand-resolved bets are skipped
-    // =========================================================================
-
-    function testHandResolvedBetIsSkippedNotRepaid() public {
-        _placeMixedQueue();
-        _landWord(IDX, uint256(keccak256("sweep_skip_word")));
-
-        uint256 snap = vm.snapshotState();
-        _resolveAllByHand(6);
-        Fingerprint memory handPrint = _fingerprint();
-        vm.revertToState(snap);
-
-        uint64[] memory ids = new uint64[](2);
-        ids[0] = 2;
-        ids[1] = 5;
-        game.resolveDegeneretteBets(IDX, ids);
-        assertEq(game.degeneretteBetInfo(IDX, 2), 0, "resolved by hand");
-
-        uint256 n = game.openBoxes(type(uint256).max);
-        assertEq(n, 4, "the sweep resolves only the four still queued");
-        _assertSame(handPrint, _fingerprint());
-    }
-
-    function testHandResolutionGuards() public {
-        _place(alice, FLIP, 100 ether, 1);
-        uint64[] memory ids = new uint64[](1);
-        ids[0] = 1;
-        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.resolveDegeneretteBets(IDX, ids);
-
-        _landWord(IDX, uint256(keccak256("guard_word")));
-        ids[0] = 0;
-        vm.expectRevert(bytes4(keccak256("InvalidBet()")));
-        game.resolveDegeneretteBets(IDX, ids);
-        ids[0] = 2;
-        vm.expectRevert(bytes4(keccak256("InvalidBet()")));
-        game.resolveDegeneretteBets(IDX, ids);
-
-        ids[0] = 1;
-        game.resolveDegeneretteBets(IDX, ids);
-        vm.expectRevert(bytes4(keccak256("InvalidBet()")));
-        game.resolveDegeneretteBets(IDX, ids);
-    }
 
     // =========================================================================
-    // 4. The packed per-bet event
+    // 3. The packed per-bet event
     // =========================================================================
 
     function testFuzz_ResolvedEventCarriesEverySpin(uint256 word) public {
@@ -347,7 +301,7 @@ contract DegeneretteSweep is DeployProtocol {
     }
 
     // =========================================================================
-    // 5. Frozen pool holds the queue
+    // 4. Frozen pool holds the queue
     // =========================================================================
 
     function testSweepHoldsQueueWhilePoolFrozen() public {
@@ -366,7 +320,7 @@ contract DegeneretteSweep is DeployProtocol {
     }
 
     // =========================================================================
-    // 6. Keeper path and the reached callees
+    // 5. Keeper path and the reached callees
     // =========================================================================
 
     /// @dev A word whose spin 0 scores at least `minScore` for SYMBOL.
@@ -459,9 +413,13 @@ contract DegeneretteSweep is DeployProtocol {
     function testSweepThatOpensNothingReportsConsumedUnits() public {
         for (uint256 i; i < 10; ++i) _place(alice, FLIP, 100 ether, 1);
         _landWord(IDX, uint256(keccak256("hole_word")));
-        uint64[] memory ids = new uint64[](10);
-        for (uint64 i; i < 10; ++i) ids[i] = i + 1;
-        game.resolveDegeneretteBets(IDX, ids);
+        // Holes ahead of the cursor: zero the ten queued words in place, leaving the sweep
+        // cursor where it stands. This is exactly the queue state the removed by-id door left
+        // behind; the sweep itself zeroes a bet only as it steps past it, so a hole ahead of
+        // the cursor is now forged here to reach the sweep's zeroed-bet skip.
+        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT)))));
+        for (uint256 i; i < 10; ++i) vm.store(address(game), bytes32(base + i), bytes32(0));
+        for (uint64 id = 1; id <= 10; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "hole forged");
         bytes memory original = address(game).code;
         vm.etch(address(game), type(HumanSweepProbe).runtimeCode);
         (uint256 opened, uint256 units) =

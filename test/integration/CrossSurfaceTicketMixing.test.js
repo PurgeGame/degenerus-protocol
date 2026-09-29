@@ -586,8 +586,11 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         ).to.equal(0);
       }
 
-      // Drive the REAL openBox entry point full-stack.
-      await game.connect(alice).openBox(alice.address, index);
+      // Drive the REAL lootbox-open path full-stack. The removed per-(player,index)
+      // `openBox` entry point is gone; `openBoxes(MaxUint256)` is its permissionless
+      // sweep replacement — alice is the fixture's sole queued entry, so draining
+      // everything ready opens exactly her box and then finds nothing else to do.
+      await game.connect(alice).openBoxes(hre.ethers.MaxUint256);
 
       // Re-snapshot every watched level: the whole-ticket `_queueEntries` path
       // carries the rem byte untouched, so rem must STILL be 0 everywhere —
@@ -796,8 +799,11 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         ).to.equal(0n);
       }
 
-      // Drive the REAL openBox entry point full-stack and capture LootBoxOpened.
-      const tx = await game.connect(alice).openBox(alice.address, index);
+      // Drive the REAL lootbox-open path full-stack and capture LootBoxOpened. The
+      // removed per-(player,index) `openBox` entry point is gone; `openBoxes(MaxUint256)`
+      // is its permissionless sweep replacement — alice is the fixture's sole queued
+      // entry, so draining everything ready opens exactly her box.
+      const tx = await game.connect(alice).openBoxes(hre.ethers.MaxUint256);
       const receipt = await tx.wait();
 
       const lbArtifact = await hre.artifacts.readArtifact(

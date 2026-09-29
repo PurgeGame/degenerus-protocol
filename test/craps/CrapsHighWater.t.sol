@@ -651,13 +651,13 @@ contract CrapsCustomBoundaryTest is CrapsPins {
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 5 hours);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("scheduled-books")));
 
         (uint128 bank,,,,,) = craps.bonusTermsFor(day, PER);
         uint256 entrants = craps.battleOf(craps.keyOfSlot(slot)).entrants;
         uint256 before = craps.dayStaked(day);
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertEq(craps.dayStaked(day) - before, uint256(bank) * entrants, "a scheduled field booked the wrong action");
     }
 
@@ -729,7 +729,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
 
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 5 hours);
-        _setWord(craps.armBonusWindow(slot), uint256(keccak256("permute")));
+        _setWord(craps.armWindow(slot), uint256(keccak256("permute")));
         craps.seedProgressive(1_000_000 ether);
         bytes32 key = craps.keyOfSlot(slot);
 
@@ -743,12 +743,12 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         for (uint256 mode = 0; mode < 3; ++mode) {
             if (mode != 0) vm.revertToState(snap);
             if (mode == 0) {
-                craps.resolveSlot(slot, WHOLE_FIELD);
+                craps.settleSlot(slot, WHOLE_FIELD);
             } else if (mode == 1) {
-                for (uint256 i = 0; i < 12; ++i) craps.resolveSlot(slot, 1);
+                for (uint256 i = 0; i < 12; ++i) craps.settleSlot(slot, 1);
             } else {
-                craps.resolveSlot(slot, 8);
-                craps.resolveSlot(slot, WHOLE_FIELD);
+                craps.settleSlot(slot, 8);
+                craps.settleSlot(slot, WHOLE_FIELD);
             }
             CrapsBattle.Battle memory b = craps.battleOf(key);
             assertTrue(b.finalized, "a partition left the field unfinished");

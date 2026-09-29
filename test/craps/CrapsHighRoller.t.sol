@@ -284,7 +284,7 @@ contract CrapsHighRollerTest is CrapsPins {
         craps.enterBonusBattle(1, _boardA(), 10);
 
         vm.warp(vm.getBlockTimestamp() + 7 hours);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, uint256(keccak256("granule")));
         PaidOut[] memory lane = _resolveForLane(craps, slot, WHOLE_FIELD, false);
         assertEq(lane.length, 1, "the contested lane paid other than once");
@@ -607,7 +607,7 @@ contract CrapsHighRollerTest is CrapsPins {
         for (uint256 p = 0; p < 2; ++p) {
             uint64 slot = _slotAt(day, p);
             (bytes32 key,,,) = craps.bonusWindowOf(p);
-            craps.armBonusWindow(slot);
+            craps.armWindow(slot);
             (uint32 heads,,,,) = craps.highFieldOf(key);
             assertEq(heads, 1, "arming did not fold the day's high ticket into the window");
         }
@@ -622,7 +622,7 @@ contract CrapsHighRollerTest is CrapsPins {
         craps.openBonusDay();
         vm.warp(block.timestamp + 8 hours);
         (bytes32 key,,,) = craps.bonusWindowOf(0);
-        craps.armBonusWindow(_slotAt(day, 0));
+        craps.armWindow(_slotAt(day, 0));
         (uint32 heads,,,,) = craps.highFieldOf(key);
         assertEq(heads, 0, "a protocol seat joined the lane");
         assertGt(craps.battleOf(key).entrants, 0, "the window seated nobody at all");

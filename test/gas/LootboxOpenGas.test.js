@@ -40,7 +40,12 @@
 // Lifecycle reachability: lootbox open requires (a) a purchase that allocates
 // lootboxes, (b) a `requestLootboxRng()` outside the daily advance window that
 // requests VRF entropy for the lootbox index, (c) `mockVRF.fulfillRandomWords`
-// for the lootbox request id, then (d) `openBox(player, index)`. The
+// for the lootbox request id, then (d) the permissionless sweep
+// `openBoxes(maxCount)` — the per-(player,index) `openBox` entry point is
+// gone. `openBoxes(1)` opens exactly one ready entry (the first entry of a
+// call always runs regardless of its cost, per DegenerusGameLootboxModule's
+// `openHumanBoxes`), which is alice's sole queued entry in this fixture —
+// the closest surviving equivalent of the old single-player open. The
 // simulator's purchase/advance state machine may not always permit step (b) or
 // (c) (e.g. when the activity threshold isn't met or the daily-advance window
 // blocks lootbox-RNG requests). The soft-skip pattern follows the existing
@@ -229,7 +234,10 @@ describe("Phase 266 GAS-01 — lootbox-open entry-point gas regression at v36.0 
         return;
       }
 
-      const tx = await game.connect(alice).openBox(alice.address, index);
+      // openBox(player, index) is gone; openBoxes(1) opens exactly one ready
+      // entry (alice's, the sole queued entry at this point in the fixture)
+      // via the permissionless in-order sweep.
+      const tx = await game.connect(alice).openBoxes(1);
       const receipt = await tx.wait();
       const measured = Number(receipt.gasUsed);
 

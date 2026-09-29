@@ -641,8 +641,37 @@ contract V55RevertFreeEvCap is DeployProtocol {
         // The buy-time draw already happened (lbFirstDeposit branch). Open the box to complete the human leg
         // (the open reads the FROZEN adj — no second draw; the draw was buy-time).
         _forceLootboxWord(index, uint256(keccak256("human-shared-word")));
+        // Box-order migration: the removed per-(player,index) `openBox` read lootboxOrder
+        // straight from the mapping regardless of "finalized"; its sweep replacement only walks
+        // finalized indices (idx <= LR_INDEX-1). `index` is still the live (active, unfinalized)
+        // index here, so finalize it and park the sweep frontier exactly on it -- `buyer` is the
+        // sole queued entry there (a real purchase above), so a full-budget sweep opens exactly
+        // this one box.
+        _advanceLootboxIndexPast(index);
+        _parkBoxFrontierAt(index);
         vm.prank(buyer);
-        game.openBox(buyer, index);
+        game.openBoxes(type(uint256).max);
+    }
+
+    /// @dev Advance LR_INDEX (lootboxRngPacked bits[0:47], slot 33) to `index + 1`, preserving
+    ///      every upper-bit field, so the sweep treats `index` as finalized.
+    function _advanceLootboxIndexPast(uint48 index) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        packed &= ~((uint256(1) << 48) - 1);
+        packed |= uint256(index) + 1;
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+    }
+
+    /// @dev Park the sweep's open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both
+    ///      slot 56) at `index` with cursor 0.
+    function _parkBoxFrontierAt(uint48 index) internal {
+        bytes32 slot = bytes32(uint256(56));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        uint256 m = (uint256(1) << 48) - 1;
+        packed &= ~(m << (7 * 8));
+        packed &= ~(m << (13 * 8));
+        packed |= (uint256(index) & m) << (13 * 8);
+        vm.store(address(game), slot, bytes32(packed));
     }
 
     /// @dev Credit `who` claimableWinnings AND bump claimablePool in tandem (SOLVENCY-01 balanced; the

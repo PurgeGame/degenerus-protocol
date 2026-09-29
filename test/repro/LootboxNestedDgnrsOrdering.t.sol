@@ -43,8 +43,13 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
         uint256 snapshot = vm.snapshotState();
         uint256 balanceBefore = sdgnrs.balanceOf(PLAYER);
+        // Box-order migration: the removed per-(player,index) `openBox` let a third party settle
+        // PLAYER's box; its sweep replacement, `openBoxes`, is equally permissionless and equally
+        // credits the box owner regardless of caller. GENESIS_INDEX is PLAYER's only queued box
+        // (a real purchase through the production path, so boxPlayers[GENESIS_INDEX] already
+        // holds it) with nothing else pending, so this ports as a clean rename.
         vm.prank(address(0xCA11));
-        game.openBox(PLAYER, GENESIS_INDEX);
+        game.openBoxes(type(uint256).max);
         uint256 beforeRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
         assertGt(beforeRefillAward, 0, "known winner was actually settled by another address");
 
@@ -53,13 +58,13 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         sdgnrs.recycleCentury(100, RNG_WORD);
         uint256 poolBefore = _lootboxPool();
         vm.prank(address(0xCA11));
-        game.openBox(PLAYER, GENESIS_INDEX);
+        game.openBoxes(type(uint256).max);
         uint256 afterRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
         assertGt(afterRefillAward, beforeRefillAward, "unresolved award retains live-pool pricing");
         assertEq(poolBefore - _lootboxPool(), afterRefillAward, "nested awards debit funded inventory");
         uint256 balanceAfter = sdgnrs.balanceOf(PLAYER);
         // Either the existing spent-box no-op or its revert is acceptable; no second payout.
-        try game.openBox(PLAYER, GENESIS_INDEX) {} catch {}
+        try game.openBoxes(type(uint256).max) {} catch {}
         assertEq(sdgnrs.balanceOf(PLAYER), balanceAfter);
     }
 
@@ -76,7 +81,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
         vm.recordLogs();
         uint256 gasBefore = gasleft();
-        game.openBox(PLAYER, GENESIS_INDEX);
+        game.openBoxes(type(uint256).max);
         uint256 gasUsed = gasBefore - gasleft();
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
 

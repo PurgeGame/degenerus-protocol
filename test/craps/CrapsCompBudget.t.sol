@@ -133,14 +133,14 @@ contract CrapsCompBudgetTest is CrapsPins {
     function _arm(uint24 day, uint256 period, uint256 word) internal returns (uint64 slot) {
         slot = _slotAt(day, period);
         _pastWindow(period);
-        uint48 index = craps.armBonusWindow(slot);
+        uint48 index = craps.armWindow(slot);
         _setWord(index, word);
     }
 
     function _settle(uint24 day, uint256 period, uint256 word, uint64 budget) internal returns (uint256 entrants) {
         uint64 slot = _arm(day, period, word);
         entrants = _entrantsIn(slot);
-        craps.resolveSlot(slot, budget);
+        craps.settleSlot(slot, budget);
     }
 
     /// @dev The field as it is frozen at the arm — players, folded day tickets and the protocol
@@ -235,13 +235,13 @@ contract CrapsCompBudgetTest is CrapsPins {
             (uint256 entrants, uint256 resolved) = craps.fieldOf(key);
             if (resolved == entrants) break;
             assertEq(flip.compLane(), before, "the lane was fed before the field finished");
-            craps.resolveSlot(slot, 1);
+            craps.settleSlot(slot, 1);
         }
         assertEq(flip.compLane() - before, want, "chunked settlement fed a different figure");
         assertEq(flip.compAccruals(), 1, "chunked settlement fed the lane more than once");
 
         // A retry on the finished slot feeds nothing.
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertEq(flip.compAccruals(), 1, "a settled slot fed the lane again");
     }
 

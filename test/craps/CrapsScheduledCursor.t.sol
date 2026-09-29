@@ -163,7 +163,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         uint48 index = craps.slotIndexOf(winSlot) - 1;
         _setWord(index, uint256(keccak256("external")));
         vm.recordLogs();
-        craps.resolveSlot(winSlot, WHOLE_FIELD);
+        craps.settleSlot(winSlot, WHOLE_FIELD);
         uint256 pots = _countSig(vm.getRecordedLogs(), keccak256("CrapsBattlePaid(uint256,bytes32,address,uint256)"));
         assertTrue(craps.battleOf(craps.keyOfSlot(winSlot)).finalized, "the external settle did not finish");
 

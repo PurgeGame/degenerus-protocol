@@ -21,6 +21,9 @@ contract BoonStaticDiscard is DeployProtocol {
     uint256 constant SLOT_BOON_PACKED = 50; // mapping(address => BoonPacked)
     uint256 constant SLOT_LOOTBOX_ETH = 15; // mapping(uint48 => mapping(address => uint256))
     uint256 constant SLOT_LOOTBOX_WORD = 34; // mapping(uint48 => uint256)
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_BOX_PLAYERS = 57; // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
+    uint256 constant SLOT_BOX_CURSORS = 56; // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
 
     uint256 constant LB_SCORE_SHIFT = 24;
     uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;
@@ -77,6 +80,27 @@ contract BoonStaticDiscard is DeployProtocol {
             | ((ethAmount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
         vm.store(address(game), _simpleMappingSlot(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
+
+        // Box-order migration: enqueue + finalize + park (same pattern as
+        // LootboxBoonCoexistence._setupLootbox) so the sweep replacement for the removed
+        // per-(player,index) `openBox` can discover and reach this forged, sparse-index entry.
+        bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
+        uint256 len = uint256(vm.load(address(game), lenSlot));
+        bytes32 dataBase = keccak256(abi.encode(lenSlot));
+        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
+        vm.store(address(game), lenSlot, bytes32(len + 1));
+
+        uint256 mask48 = (uint256(1) << 48) - 1;
+        bytes32 lrSlot = bytes32(SLOT_LOOTBOX_RNG_IDX);
+        uint256 lrPacked = uint256(vm.load(address(game), lrSlot));
+        vm.store(address(game), lrSlot, bytes32((lrPacked & ~mask48) | (uint256(index) + 1)));
+
+        bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
+        uint256 cur = uint256(vm.load(address(game), cursorSlot));
+        cur &= ~(mask48 << (7 * 8));
+        cur &= ~(mask48 << (13 * 8));
+        cur |= (uint256(index) & mask48) << (13 * 8);
+        vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
     function _boonSlot(address player, uint256 offset) internal pure returns (bytes32) {
@@ -109,7 +133,7 @@ contract BoonStaticDiscard is DeployProtocol {
 
             vm.recordLogs();
             vm.prank(player);
-            try game.openBox(player, index) {} catch { continue; }
+            try game.openBoxes(type(uint256).max) {} catch { continue; }
 
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j = 0; j < logs.length; j++) {

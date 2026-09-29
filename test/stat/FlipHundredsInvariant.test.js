@@ -31,7 +31,7 @@
 // which would look like an oversight to the next audit pass without a test saying so:
 //   - the mint-boost flip credit (`_purchaseForWithCached`) — out of scope
 //   - the degenerette affiliate `refFlip` and every other affiliate FLIP path — owner-ruled out
-//   - `acc.flipMint` at the `resolveDegeneretteBets` flush — rounding the caller-composed
+//   - `acc.flipMint` at the `sweepDegeneretteBets` flush — rounding the caller-composed
 //     aggregate is the one real grind in this design, so its ABSENCE is load-bearing
 //
 // CROSS-CITES:
@@ -321,16 +321,17 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
   });
 
   describe("Anti-grind: the caller-composed aggregate is NEVER rounded (§4)", function () {
-    it("[04a] `resolveDegeneretteBets` flushes through the shared `_flushOwner`, which mints `acc.flipMint` raw — no collapse at the flush", function () {
-      // Post-queue-refactor, resolveDegeneretteBets(index, betIds) and
-      // sweepDegeneretteBets both loop bets into a shared ResolveAcc and delegate the
-      // per-owner payout to `_flushOwner` (called once per owner-run and once at the
-      // end of the call). The entry-point body itself no longer inlines the mint —
-      // pin it to the shared flush instead, which both entry points route through.
-      const entry = bodyOf(DEGENERETTE, "function resolveDegeneretteBets(");
+    it("[04a] `sweepDegeneretteBets` flushes through the shared `_flushOwner`, which mints `acc.flipMint` raw — no collapse at the flush", function () {
+      // Doors removal: the manual `resolveDegeneretteBets(index, betIds)` entry point this
+      // test used to pin is gone — bets now resolve ONLY through the permissionless in-order
+      // sweep `sweepDegeneretteBets` (reached via `game.openBoxes`), which loops queued bets
+      // into a shared ResolveAcc and delegates the per-owner payout to `_flushOwner` (called
+      // once per owner-run and once at the end of the call). The entry-point body itself
+      // does not inline the mint — pin it to the shared flush instead, which it routes through.
+      const entry = bodyOf(DEGENERETTE, "function sweepDegeneretteBets(");
       expect(
         /_flushOwner\s*\(\s*acc\s*\)\s*;/.test(entry),
-        "resolveDegeneretteBets must settle through the shared per-owner flush"
+        "sweepDegeneretteBets must settle through the shared per-owner flush"
       ).to.equal(true);
 
       const body = bodyOf(DEGENERETTE, "function _flushOwner(");

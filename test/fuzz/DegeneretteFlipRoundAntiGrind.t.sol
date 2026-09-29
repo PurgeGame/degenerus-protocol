@@ -7,36 +7,40 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 
 /// @title DegeneretteFlipRoundAntiGrind — the 100-FLIP collapse is fixed at VRF fulfillment,
-///        not at settle time, however the caller composes the batch.
+///        not at settle time, however many bets a sweep call happens to flush together.
 ///
-/// @notice `resolveDegeneretteBets(uint48 index, uint64[] betIds)` is PERMISSIONLESS and takes
-///         a CALLER-CHOSEN `betIds[]` array. The per-bet FLIP payouts sum into one `acc.flipMint`
-///         and mint in a single flush. That combination is the one real grind this design has to
-///         defend against:
+/// @notice Bets queued at an index resolve only through the permissionless FIFO sweep
+///         (`openBoxes`/`mineFlip`), which drains the queue in order and groups however many
+///         bets fit one call's walk-unit budget into a single `acc.flipMint` flush. That
+///         grouping is the one real grind this design has to defend against:
 ///
-///           If the 100-FLIP collapse ran on the SUMMED `acc.flipMint` at the flush, a settler
-///           could enumerate batch partitions off-chain against the ALREADY-COMMITTED VRF word,
-///           and pick the split whose remainders round up most often — a free, repeatable edge
-///           worth up to ~100 FLIP per bet, available to anyone, on bets they do not even own.
+///           If the 100-FLIP collapse ran on the SUMMED `acc.flipMint` at the flush, a caller
+///           could pick a budget that groups bets against the ALREADY-COMMITTED VRF word so the
+///           remainder rounds up most often — a free, repeatable edge worth up to ~100 FLIP per
+///           bet, available to anyone, on bets they do not even own.
 ///
 ///         The defence is that the collapse runs PER BET on a `betId`-keyed word
 ///         (`EntropyLib.hash4(rngWord, player, betId, FLIP_ROUND_TAG)`), so the outcome of every bet is
-///         determined the moment the VRF word lands and batching is a pure no-op on value.
+///         determined the moment the VRF word lands and how many bets one call's budget happens
+///         to flush together is a pure no-op on value.
 ///
-/// @notice This file proves that BEHAVIOURALLY, not structurally: the same set of bets, against
-///         the same injected word, must mint the IDENTICAL total FLIP whether they are settled
-///         one-per-transaction, all in one batch, or in one batch in reverse order. The
-///         structural companion (the absence of any `FlipRoundLib` reference at the flush) lives
-///         in `test/stat/FlipHundredsInvariant.test.js` [04a]; this file is the one that fails if
-///         the "simplify it later — just round once at the flush" refactor is ever made.
+/// @notice This file proves that BEHAVIOURALLY, not structurally: the same queued bets, against
+///         the same injected word, must mint the IDENTICAL total FLIP whether one full-budget
+///         sweep drains the whole queue in a single flush or a sequence of minimal-budget sweeps
+///         drains it across many smaller flushes. (The sweep is strictly FIFO and permissionless
+///         over the whole queue, not a caller-chosen id list, so call-budget size is the only
+///         remaining degree of freedom over flush grouping — an exhaustive arbitrary-subset
+///         partition search is no longer constructible and would in any case be redundant with
+///         this comparison, since per-bet independence here already implies invariance to any
+///         grouping.) The structural companion (the absence of any `FlipRoundLib` reference at
+///         the flush) lives in `test/stat/FlipHundredsInvariant.test.js` [04a]; this file is the
+///         one that fails if the "simplify it later — just round once at the flush" refactor is
+///         ever made.
 ///
 /// @dev Scaffold (setUp, slot constants, bet placement, RNG injection) is a faithful copy of
 ///      `DegeneretteResolveRepeg.t.sol`, which in turn copies `DegeneretteFreezeResolution.t.sol`.
 ///      CROSS-CITE: .planning/PLAN-FLIP-ROUND-HUNDREDS.md §4.
 contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
-    /// @dev Every bet here is placed at the seeded lootbox index 1.
-    uint48 private constant BET_INDEX = 1;
-
     // =========================================================================
     // Storage slot constants (confirmed via `forge inspect ... storage`)
     // =========================================================================
@@ -95,78 +99,63 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     // The anti-grind property
     // =========================================================================
 
-    /// @notice One batch, one-per-transaction, and one reversed batch must all mint the same
-    ///         total FLIP. Any collapse applied to the caller-composed aggregate would break at
-    ///         least one of the three, because the remainder being rounded would differ.
-    function testBatchCompositionCannotMoveTheFlipTotal() public {
+    /// @notice One full-budget sweep and a sequence of minimal-budget sweeps over the same
+    ///         queued bets must mint the same total FLIP. Any collapse applied to a per-call
+    ///         flush aggregate instead of the per-bet word would break this, because the
+    ///         remainder being rounded would differ between a one-call flush and a many-call one.
+    function testSweepCallGroupingCannotMoveTheFlipTotal() public {
         uint48 index = 1;
         uint256 word = uint256(keccak256("flip-round-anti-grind"));
 
-        uint64[] memory ids = _placeWinningFlipBets(index, word);
+        _placeWinningFlipBets(index, word);
         _injectLootboxRngWord(index, word);
+        _advanceActiveIndexPast(index);
 
-        // Leg A — all bets in one batch.
+        // Leg A — the whole queue drained by one full-budget sweep call.
         uint256 snap = vm.snapshotState();
-        uint256 batchTotal = _resolveAndMeasure(ids);
+        uint256 batchTotal = _sweepAndMeasure(type(uint256).max);
         vm.revertToState(snap);
 
-        // Leg B — one bet per transaction. If the collapse keyed on the batch instead of the
-        // bet, this leg would round `BET_COUNT` separate remainders instead of one summed
+        // Leg B — the same queue drained by a sequence of minimal-budget sweep calls. If the
+        // collapse keyed on the per-call flush instead of the bet, this leg would round however
+        // many separate remainders the call grouping happens to produce instead of one summed
         // remainder, and the totals would diverge.
         snap = vm.snapshotState();
-        uint256 singleTotal;
+        uint256 incrementalTotal;
         uint256 nonZeroMints;
-        for (uint256 i; i < ids.length; i++) {
-            uint64[] memory one = new uint64[](1);
-            one[0] = ids[i];
-            uint256 minted = _resolveAndMeasure(one);
+        uint256 calls;
+        while (!game.boxIndexComplete(index)) {
+            // 2, not 1: the fixture's fixed 2-member afking ring (VAULT + sDGNRS, both
+            // perpetually skip-only here) always burns exactly 1 unit of maxCount before the
+            // human-box leg sees any budget.
+            uint256 minted = _sweepAndMeasure(2);
             if (minted != 0) {
                 ++nonZeroMints;
-                // Every surviving payout here clears the threshold, so each one must land on
-                // a whole 100-FLIP multiple on its own — not merely in aggregate.
+                // Every surviving payout here clears the threshold, so any per-call flush,
+                // whether it grouped one bet or several, must land on a whole 100-FLIP multiple.
                 assertEq(
                     minted % FlipRoundLib.FLIP_ROUND_UNIT,
                     0,
-                    "a per-bet FLIP mint is not a whole 100-FLIP multiple"
-                );
-                assertGt(
-                    minted,
-                    FlipRoundLib.FLIP_ROUND_THRESHOLD,
-                    "stake sizing must keep every paid bet above the threshold, or the test is vacuous"
+                    "a sweep-call FLIP mint is not a whole 100-FLIP multiple"
                 );
             }
-            singleTotal += minted;
+            incrementalTotal += minted;
+            ++calls;
+            require(calls < 20, "sweep stalled");
         }
         vm.revertToState(snap);
 
-        // Leg C — one batch, reverse order. Ordering is another degree of freedom a settler
-        // controls for free.
-        snap = vm.snapshotState();
-        uint64[] memory reversed = new uint64[](ids.length);
-        for (uint256 i; i < ids.length; i++) {
-            reversed[i] = ids[ids.length - 1 - i];
-        }
-        uint256 reversedTotal = _resolveAndMeasure(reversed);
-        vm.revertToState(snap);
-
-        // Non-vacuity: the survival flip must have left something to round, and at least two
-        // bets must have paid, or "batching cannot move the total" is trivially true.
+        // Non-vacuity: the survival flip must have left something to round, and the
+        // minimal-budget leg must actually have taken more than one call, or "call grouping
+        // cannot move the total" is trivially true.
         assertGt(batchTotal, 0, "no FLIP was minted - the fixture pays nothing");
-        assertGe(
-            nonZeroMints,
-            2,
-            "fewer than two bets survived their flip - the batch has no partition freedom to test"
-        );
+        assertGt(calls, 1, "the minimal-budget sweep never actually split across calls");
+        assertGe(nonZeroMints, 1, "no sweep call paid - there is nothing to compare");
 
         assertEq(
             batchTotal,
-            singleTotal,
-            "settling one-per-tx paid a different total than one batch: the collapse is keyed on the BATCH, not the bet"
-        );
-        assertEq(
-            batchTotal,
-            reversedTotal,
-            "reordering the batch moved the total: the collapse depends on settle-time ordering"
+            incrementalTotal,
+            "settling across many minimal-budget sweeps paid a different total than one full sweep: the collapse is keyed on the CALL GROUPING, not the bet"
         );
         assertEq(
             batchTotal % FlipRoundLib.FLIP_ROUND_UNIT,
@@ -175,88 +164,39 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         );
     }
 
-    /// @notice Every proper subset settles to the same per-bet value as the full batch, so no
-    ///         partition of the bet set beats any other. This is the property a grinder would
-    ///         actually search over, checked directly against every 2-way split.
-    function testEveryPartitionPaysTheSameTotal() public {
-        uint48 index = 1;
-        uint256 word = uint256(keccak256("flip-round-partition-search"));
-
-        uint64[] memory ids = _placeWinningFlipBets(index, word);
-        _injectLootboxRngWord(index, word);
-
-        uint256 snap = vm.snapshotState();
-        uint256 wholeTotal = _resolveAndMeasure(ids);
-        vm.revertToState(snap);
-
-        // Walk every non-trivial 2-way split of the bet set by bitmask. With BET_COUNT = 6
-        // that is 62 partitions — the whole search space a settler could enumerate.
-        uint256 masks = (1 << BET_COUNT) - 1;
-        for (uint256 mask = 1; mask < masks; mask++) {
-            snap = vm.snapshotState();
-
-            uint256 leftLen;
-            for (uint256 i; i < BET_COUNT; i++) {
-                if (mask & (1 << i) != 0) ++leftLen;
-            }
-            uint64[] memory left = new uint64[](leftLen);
-            uint64[] memory right = new uint64[](BET_COUNT - leftLen);
-            uint256 l;
-            uint256 r;
-            for (uint256 i; i < BET_COUNT; i++) {
-                if (mask & (1 << i) != 0) {
-                    left[l++] = ids[i];
-                } else {
-                    right[r++] = ids[i];
-                }
-            }
-
-            uint256 splitTotal = _resolveAndMeasure(left) +
-                _resolveAndMeasure(right);
-
-            assertEq(
-                splitTotal,
-                wholeTotal,
-                "a batch partition paid a different total than the whole set - the collapse is grindable"
-            );
-
-            vm.revertToState(snap);
-        }
-    }
-
     // =========================================================================
     // Helpers
     // =========================================================================
 
     /// @dev Place `BET_COUNT` FLIP bets that all self-match on spin 0 (so they win and have a
     ///      payout to round), funded up front.
-    function _placeWinningFlipBets(uint48 index, uint256 word)
-        internal
-        returns (uint64[] memory ids)
-    {
+    function _placeWinningFlipBets(uint48 index, uint256 word) internal {
         _fundFlip(
             player,
             uint256(FLIP_PER_SPIN) * SPINS * BET_COUNT + 1 ether
         );
         uint32 ticket = _winningTicketFor(index, word);
 
-        ids = new uint64[](BET_COUNT);
         for (uint256 i; i < BET_COUNT; i++) {
-            ids[i] = _placeBet(CURRENCY_FLIP, FLIP_PER_SPIN, SPINS, ticket);
+            _placeBet(CURRENCY_FLIP, FLIP_PER_SPIN, SPINS, ticket);
         }
     }
 
-    /// @dev Resolve `betIds` from the keeper and return the FLIP minted to `player`.
+    /// @dev Move the active lootbox RNG index (low 48 bits of lootboxRngPacked) to `idx + 1`, the
+    ///      state the human-box sweep needs before it will reach `idx`'s bet queue.
+    function _advanceActiveIndexPast(uint48 idx) internal {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
+        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(idx) + 1);
+        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+    }
+
+    /// @dev Sweep index 1 with `budget` from the keeper and return the FLIP minted to `player`.
     ///      Resolution is permissionless and only ever credits the bet owner, so the keeper
-    ///      needs no approval — which is exactly why batch composition is attacker-controlled.
-    function _resolveAndMeasure(uint64[] memory betIds)
-        internal
-        returns (uint256 minted)
-    {
-        if (betIds.length == 0) return 0;
+    ///      needs no approval.
+    function _sweepAndMeasure(uint256 budget) internal returns (uint256 minted) {
         uint256 before = coin.balanceOf(player);
         vm.prank(keeper);
-        game.resolveDegeneretteBets(BET_INDEX, betIds);
+        game.openBoxes(budget);
         minted = coin.balanceOf(player) - before;
     }
 

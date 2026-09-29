@@ -241,12 +241,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint256 preClaimable = game.claimableWinningsOf(player);
         assertEq(preClaimable, 0, "no claimable before resolve");
 
-        // Land the word and resolve it from an unrelated caller (permissionless, post-unlock).
+        // Land the word and resolve it from an unrelated caller (permissionless, post-unlock)
+        // through the sweep, which requires the active index to have moved past INDEX.
         _injectLootboxRngWord(INDEX, word);
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
+        _advanceLootboxRngIndexByOne();
         vm.prank(cranker);
-        game.resolveDegeneretteBets(INDEX, betIds);
+        game.openBoxes(type(uint256).max);
 
         // The bet resolved (queue word zeroed) and the winnings landed wholly in claimable.
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "winning bet resolved");
@@ -967,15 +967,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint128 betAmount = 0.01 ether;
         vm.prank(who);
         game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(winTicket & 7));
-        uint64 betId = DQ.lastBetId(vm, address(game), atIndex);
 
         _seedFuturePrizePool(10_000 ether);
         uint256 pre = game.claimableWinningsOf(who);
         _injectLootboxRngWord(atIndex, word);
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = betId;
+        _advanceLootboxRngIndexByOne();
         vm.prank(cranker);
-        game.resolveDegeneretteBets(atIndex, betIds);
+        game.openBoxes(type(uint256).max);
         creditDelta = game.claimableWinningsOf(who) - pre;
     }
 

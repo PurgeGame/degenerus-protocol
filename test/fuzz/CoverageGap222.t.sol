@@ -1501,19 +1501,10 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "payRecordSdgnrs rejected non-coinflip caller");
     }
 
-    function test_gap_game_openBox_paths() public {
-        vm.prank(buyer);
-        (bool o1, ) = address(game).call(
-            abi.encodeWithSignature(
-                "openBox(address,uint48)",
-                buyer,
-                uint48(0)
-            )
-        );
-        // v47: game.openFlipLootBox removed (FLIP-lootbox surface deleted); its negative-auth
-        // probe is dropped — the selector no longer exists to be access-controlled.
-        assertFalse(o1, "game.openBox reverts when no box is queued for caller");
-    }
+    // v47: game.openFlipLootBox removed (FLIP-lootbox surface deleted). The manual game.openBox
+    // door that this probe covered next is gone too (doors removal): boxes now open only through
+    // the in-order sweep, so the selector no longer exists to be access-controlled and the probe
+    // is dropped along with it.
 
     function test_gap_game_degenerette_paths() public {
         vm.prank(buyer);
@@ -1527,18 +1518,9 @@ contract CoverageGap222 is DeployProtocol {
                 uint8(0)
             )
         );
-        uint64[] memory ids = new uint64[](1);
-        ids[0] = 0;
-        vm.prank(buyer);
-        (bool o2, ) = address(game).call(
-            abi.encodeWithSignature(
-                "resolveDegeneretteBets(uint48,uint64[])",
-                uint48(1),
-                ids
-            )
-        );
+        // The manual game.resolveDegeneretteBets door is gone (doors removal): bets now resolve
+        // only in the in-order sweep, so the selector no longer exists to be access-controlled.
         assertFalse(o1, "game.placeDegeneretteBet rejected non-vault caller");
-        assertFalse(o2, "game.resolveDegeneretteBets rejected non-vault caller");
     }
 
     function test_gap_game_vrf_admin_paths() public {

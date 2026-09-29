@@ -19,7 +19,7 @@ contract SysHarness is CrapsViews {
 ///
 /// @notice Everything else in the craps suite grades one rule. This one grades the LEDGER: it
 ///         opens real protocol days, seats real fields through the real doors, shuts every window
-///         on the clock, settles every field through `resolveSlot`, and then reads what FLIP the
+///         on the clock, settles every field through `settleSlot`, and then reads what FLIP the
 ///         table actually destroyed and what it actually handed back.
 ///
 /// @dev Three quantities, kept apart because they are not the same money:
@@ -234,7 +234,7 @@ contract CrapsSystemEconTest is CrapsPins {
                 uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1);
                 uint256 word = uint256(keccak256(abi.encode("table", salt, d, p)));
                 if (p == 5) _startDailyBattle(craps,day + 1,word,100_000 ether);
-                else { uint48 idx = craps.armBonusWindow(slot); _setWord(idx,word); }
+                else { uint48 idx = craps.armWindow(slot); _setWord(idx,word); }
                 _settleAndSplit(L, slot, day, p);
                 ++L.fields;
             }
@@ -315,7 +315,7 @@ contract CrapsSystemEconTest is CrapsPins {
         }
 
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         PaidOut[] memory pots = _potsIn(logs);

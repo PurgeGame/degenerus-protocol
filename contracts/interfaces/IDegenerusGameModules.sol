@@ -367,13 +367,6 @@ interface IDegenerusGameMintModule {
 /// @title IDegenerusGameLootboxModule
 /// @notice Interface for opening lootboxes and managing boons
 interface IDegenerusGameLootboxModule {
-    /// @notice Opens every box queued at an RNG index for a player — the whole order (all four
-    ///         bought tiers plus any cover box), the presale leg, or both. The order is the unit,
-    ///         so this needs no per-box position.
-    /// @param player Address of the box owner
-    /// @param index Shared RNG index the box(es) queued at
-    function openBox(address player, uint48 index) external;
-
     /// @notice Price a packed box order without touching state
     /// @param buyer Player the order is for
     /// @param boxOrder Packed order: [small:8][med:8][large:8][customCount:8][customSize:48]
@@ -587,14 +580,6 @@ interface IDegenerusGameDegeneretteModule {
         uint8 spinCount,
         uint8 symbol
     ) external payable;
-
-    /// @notice Resolves queued bets at one RNG index (permissionless: credits each owner)
-    /// @param index Lootbox RNG index the bets were placed at
-    /// @param betIds Bet ids within `index` (queue position + 1)
-    function resolveDegeneretteBets(
-        uint48 index,
-        uint64[] calldata betIds
-    ) external;
 
     /// @notice Human-box sweep leg: resolves the bet queue at `index` from `pos` within `budget`
     /// @param index The swept RNG index

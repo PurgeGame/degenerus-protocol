@@ -285,7 +285,12 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // G1 — RngNotReady freeze guard: placement (reject a bet at an already-worded index) + resolve.
         assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady guard byte-present");
         assertGt(_countOccurrences(degenerette, "if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();"), 0, "G1: placement freeze guard (reject bet at an already-worded index)");
-        assertGt(_countOccurrences(degenerette, "if (rngWord == 0) revert RngNotReady();"), 0, "G1: bet-resolve freeze guard (cannot resolve before the index word lands)");
+        // Doors removal: resolveDegeneretteBets (which held its own `if (rngWord == 0) revert
+        // RngNotReady();`) is gone. Bets resolve only through sweepDegeneretteBets, which takes
+        // the index's word as an already-validated parameter -- the readiness gate relocated to
+        // its caller, openHumanBoxes' `if (indexWord == 0) break;` (G2, below), which gates both
+        // the box queue and the bet queue off the SAME per-index word before either is touched.
+        assertGt(_countOccurrences(lootbox, "if (indexWord == 0) break;"), 0, "G1: bet-resolve freeze guard now enforced by the caller (openHumanBoxes) before the shared queue is reached");
 
         // G2 — RngNotReady open-box guard / orphan-index skip. The relocated multi-index sweep
         // (DegenerusGameLootboxModule.openHumanBoxes) never advances past an un-worded index: it
@@ -294,8 +299,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(lootbox, "if (indexWord == 0) break;"), 0, "G2: sweep orphan-index skip (break, never advance past an un-worded index)");
         assertGt(_countOccurrences(lootbox, "revert RngNotReady()"), 0, "G2: LootboxModule open RngNotReady guard byte-present");
 
-        // G3 — one-reward-per-item: the queue word is zeroed before the bet resolves, on both paths.
-        assertGt(_countOccurrences(degenerette, "queue[betId - 1] = 0;"), 0, "G3: manual resolve zeroes the bet word first");
+        // G3 — one-reward-per-item: the queue word is zeroed before the bet resolves.
         assertGt(_countOccurrences(degenerette, "queue[pos] = 0;"), 0, "G3: sweep zeroes the bet word first");
 
         // G4 — one-reward-per-item: box zeroing + autoOpen already-emptied skip. Post-repack the box
@@ -305,21 +309,16 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(lootbox, "uint256 word = lootboxOrder[idx][player];"), 0, "G4: sweep per-entry box-word load (the skip-check read doubles as the open's input)");
         assertGt(_countOccurrences(lootbox, "if (boxes == 0 && stored == 0) {"), 0, "G4: sweep already-opened skip (both legs zero -> continue)");
 
-        // G5 — duplicate-settle short-circuit: the first id of a manual resolve fails fast when the
-        // bet is already resolved or unknown, so a racing duplicate settle bails cheaply.
-        assertGt(_countOccurrences(degenerette, "uint256 bet = betId == 0 || betId > qlen ? 0 : queue[betId - 1];"), 0, "G5: bounded id read (zero for unknown ids)");
-        assertGt(_countOccurrences(degenerette, "} else if (i == 0) {"), 0, "G5: first-id fail-fast branch");
-
         // G6 — (v49 batchPurchase per-player slice try/catch) DROPPED, D-351-02 (removed surface). The
         // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.
         assertEq(_countOccurrences(game_, "this._batchPurchaseUnit{value: slice}"), 0, "G6 (D-351-02): batchPurchase per-slice try REMOVED (no valve under D-348-04)");
 
-        // G7 — crank per-item isolation. The bet path wraps each item in a catchable external
-        // self-call to the permissionless resolveDegeneretteBets (no dedicated wrapper); the
-        // human-box open per-item isolation lives in the lootbox module's sweep, where each entry
-        // resolves both legs in isolation from its own pre-loaded values (robust to either leg
-        // empty, guaranteed-non-reverting under the entry-gate) — a long queue can never gas-wall
-        // the tx.
+        // G7 — crank per-item isolation. The bet sweep breaks (never skips) on a bet that does
+        // not fit its remaining budget, resuming it next call, and holds its queue while the
+        // pool is frozen; the human-box open per-item isolation lives in the lootbox module's
+        // sweep, where each entry resolves both legs in isolation from its own pre-loaded values
+        // (robust to either leg empty, guaranteed-non-reverting under the entry-gate) — a long
+        // queue can never gas-wall the tx.
         assertGt(_countOccurrences(degenerette, "if ((resolved != 0 || !mustRunFirst) && unitsSpent + cost > budget) break;"), 0, "G7: bet sweep breaks (never skips) on a bet that does not fit, first bet always runs");
         assertGt(_countOccurrences(degenerette, "if (prizePoolFrozen) return (0, pos, 0, 0);"), 0, "G7: bet sweep holds its queue while the pool is frozen (no Insolvent revert can stall the frontier)");
         assertGt(_countOccurrences(lootbox, "if (betPos < blen) break;"), 0, "G7: box sweep resumes mid bet queue next call");
@@ -364,7 +363,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(bytes(afking).length, 1000, "stripped GameAfkingModule source is non-empty (repoint live)");
         assertGt(bytes(storage_).length, 1000, "stripped DegenerusGameStorage source is non-empty (repoint live)");
         // Known code identifiers that unquestionably exist post-strip in each repointed source.
-        assertGt(_countOccurrences(game_, "function resolveDegeneretteBets("), 0, "harness live: a known Game code symbol is found");
+        assertGt(_countOccurrences(game_, "function openBoxes(uint256 maxCount)"), 0, "harness live: a known Game code symbol is found");
         assertGt(_countOccurrences(afking, "function mineFlip()"), 0, "harness live: a known GameAfkingModule code symbol is found");
         assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "harness live: a known DegenerusGameStorage code symbol is found");
         // A comment-only sentinel must be STRIPPED (proves comments are actually removed).
