@@ -1,0 +1,681 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "passAddress",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidColor",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidGeometry",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidPass",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidToken",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotTokenOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyPass",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UnsupportedSymbolInk",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "MetadataUpdate",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "rimColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "badgeBackgroundColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "symbolColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "backgroundColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "outlineColor",
+            "type": "string"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct DeityPassCustomizationRenderer.Colors",
+        "name": "overrides",
+        "type": "tuple"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "overrideMask",
+        "type": "uint8"
+      }
+    ],
+    "name": "TokenColorsUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "TokenCustomizationCleared",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "radius",
+            "type": "uint16"
+          },
+          {
+            "internalType": "int16",
+            "name": "centerX",
+            "type": "int16"
+          },
+          {
+            "internalType": "int16",
+            "name": "centerY",
+            "type": "int16"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct DeityPassCustomizationRenderer.Geometry",
+        "name": "geometry",
+        "type": "tuple"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "overridden",
+        "type": "bool"
+      }
+    ],
+    "name": "TokenGeometryUpdated",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "BACKGROUND",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "BADGE_BACKGROUND",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "GEOMETRY",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "OUTLINE",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "RIM",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SYMBOL",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "clearTokenColors",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "clearTokenCustomization",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "clearTokenGeometry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "effectiveTokenStyle",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "rimColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "badgeBackgroundColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "symbolColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "backgroundColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "outlineColor",
+            "type": "string"
+          }
+        ],
+        "internalType": "struct DeityPassCustomizationRenderer.Colors",
+        "name": "colors",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "radius",
+            "type": "uint16"
+          },
+          {
+            "internalType": "int16",
+            "name": "centerX",
+            "type": "int16"
+          },
+          {
+            "internalType": "int16",
+            "name": "centerY",
+            "type": "int16"
+          }
+        ],
+        "internalType": "struct DeityPassCustomizationRenderer.Geometry",
+        "name": "geometry",
+        "type": "tuple"
+      },
+      {
+        "internalType": "uint8",
+        "name": "overrideMask",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "geometryBounds",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "unitsPerSvgUnit",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "minRadius",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "maxRadius",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "defaultRadius",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "innerHalfExtent",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "innerCornerRadius",
+        "type": "uint16"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "radius",
+        "type": "uint16"
+      },
+      {
+        "internalType": "int16",
+        "name": "centerX",
+        "type": "int16"
+      },
+      {
+        "internalType": "int16",
+        "name": "centerY",
+        "type": "int16"
+      }
+    ],
+    "name": "isValidGeometry",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pass",
+    "outputs": [
+      {
+        "internalType": "contract ICustomizableDeityPass",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "radius",
+        "type": "uint16"
+      }
+    ],
+    "name": "positionBounds",
+    "outputs": [
+      {
+        "internalType": "int16",
+        "name": "minCenter",
+        "type": "int16"
+      },
+      {
+        "internalType": "int16",
+        "name": "maxCenter",
+        "type": "int16"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "quadrant",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "symbolIdx",
+        "type": "uint8"
+      },
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "iconPath",
+        "type": "string"
+      },
+      {
+        "internalType": "bool",
+        "name": "isCrypto",
+        "type": "bool"
+      },
+      {
+        "internalType": "string",
+        "name": "outlineColor",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "backgroundColor",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "nonCryptoSymbolColor",
+        "type": "string"
+      }
+    ],
+    "name": "render",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "rimColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "badgeBackgroundColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "symbolColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "backgroundColor",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "outlineColor",
+            "type": "string"
+          }
+        ],
+        "internalType": "struct DeityPassCustomizationRenderer.Colors",
+        "name": "colors",
+        "type": "tuple"
+      }
+    ],
+    "name": "setTokenColors",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint16",
+            "name": "radius",
+            "type": "uint16"
+          },
+          {
+            "internalType": "int16",
+            "name": "centerX",
+            "type": "int16"
+          },
+          {
+            "internalType": "int16",
+            "name": "centerY",
+            "type": "int16"
+          }
+        ],
+        "internalType": "struct DeityPassCustomizationRenderer.Geometry",
+        "name": "geometry",
+        "type": "tuple"
+      }
+    ],
+    "name": "setTokenGeometry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "tokenCustomization",
+    "outputs": [
+      {
+        "components": [
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "rimColor",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "badgeBackgroundColor",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "symbolColor",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "backgroundColor",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "outlineColor",
+                "type": "string"
+              }
+            ],
+            "internalType": "struct DeityPassCustomizationRenderer.Colors",
+            "name": "colors",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint16",
+                "name": "radius",
+                "type": "uint16"
+              },
+              {
+                "internalType": "int16",
+                "name": "centerX",
+                "type": "int16"
+              },
+              {
+                "internalType": "int16",
+                "name": "centerY",
+                "type": "int16"
+              }
+            ],
+            "internalType": "struct DeityPassCustomizationRenderer.Geometry",
+            "name": "geometry",
+            "type": "tuple"
+          },
+          {
+            "internalType": "uint8",
+            "name": "overrideMask",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct DeityPassCustomizationRenderer.Customization",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

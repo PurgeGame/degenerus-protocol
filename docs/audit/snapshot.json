@@ -1,7 +1,7 @@
 {
   "date": "2026-09-29",
   "status": "working-tree source identity; verification status is recorded separately",
-  "base_commit": "8455c88b49418fe6ea2aa202e80a6a2578de6b67",
+  "base_commit": "62e950c3c4b22316b01ce8faaf09adc613d19444",
   "source_file_count": 66,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -73,6 +73,7 @@
   ],
   "build_and_deployment_inputs": [
     "contracts/ContractAddresses.sol",
+    "contracts/DeityPassCustomizationRenderer.sol",
     "contracts/Icons32Data.sol",
     "foundry.toml",
     "foundry.lock",

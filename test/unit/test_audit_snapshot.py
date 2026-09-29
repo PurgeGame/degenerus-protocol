@@ -32,6 +32,8 @@ class VerificationInputTests(unittest.TestCase):
             "scope.txt": "contracts/Logic.sol\n",
             "out_of_scope.txt": "contracts/mocks/\ncontracts/test/\n",
         }
+        for name in AUDITOR.SUPPORTING_SOLIDITY:
+            contents.setdefault(name, "contract Supporting {}\n")
         for name, content in contents.items():
             (self.root / name).write_text(content)
         manifest = {"source_files": [], "source_file_count": 0,

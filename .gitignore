@@ -53,6 +53,10 @@ docs/*
 !docs/DEGENERETTE-SINGLE-SYMBOL-MATH.md
 !docs/DEITY-BOONS.md
 !docs/WWXRP-BOONS.md
+!docs/DEITY-PASS-CUSTOMIZATION.md
+!docs/abi/
+docs/abi/*
+!docs/abi/DeityPassCustomizationRenderer.json
 !docs/audit/
 docs/audit/*
 !docs/audit/RNG-DOMAINS.md

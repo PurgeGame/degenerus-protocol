@@ -12,7 +12,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT = ROOT / "docs/audit"
-SUPPORTING_SOLIDITY = {"contracts/ContractAddresses.sol", "contracts/Icons32Data.sol"}
+SUPPORTING_SOLIDITY = {"contracts/ContractAddresses.sol", "contracts/DeityPassCustomizationRenderer.sol",
+                       "contracts/Icons32Data.sol"}
 
 
 def digest(path):

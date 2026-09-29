@@ -5,6 +5,8 @@
 # Supporting build inputs, not standalone audit targets:
 contracts/ContractAddresses.sol
 contracts/Icons32Data.sol
+# Swappable deity-pass artwork: display only; the Vault owner can replace or unset it.
+contracts/DeityPassCustomizationRenderer.sol
 contracts/mocks/
 contracts/test/
 test/
