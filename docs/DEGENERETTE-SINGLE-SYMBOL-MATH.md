@@ -72,7 +72,7 @@ units and the existing canonical activity multiplier (1x/2x/3x at 0/400/1200).
 The bet recipient owns the entry. Stake-boon additions and generated award spins
 do not add weight, and neither a spin win nor a jackpot hero win is required.
 These entries share the existing daily RNG settlement; ordinary ETH hero tracking
-continues unchanged. See [the boon draw mechanics](DEITY-PERPETUAL-AND-BOON-DRAW-PLAN.md).
+continues unchanged. See [the boon draw mechanics](DEITY-BOONS.md).
 
 ## Scoring and matched gold
 
@@ -325,44 +325,3 @@ gold for every manual, box, foil and record spin. Payouts consume that result
 and the frozen activity score directly. Foil callers pass a symbol instead of
 a full ticket. Automatic FLIP stake sizing now rejects values that would
 truncate when converted to uint128, consistently with the ETH/WWXRP paths.
-
-Validation of the September 28 paid-wager ceiling:
-
-- Exact enumeration and independent binomial math agree with production
-  constants. Unboosted ETH/FLIP returns remain calibrated, and the maximum
-  boon-clipping loss is below 0.0001 percentage points. WWXRP's unchanged
-  return curve is checked across all 65,536 activity values.
-- Hardhat: **18 passing** across the four Degenerette statistical suites and
-  PaperParity's PAR-16, including exact compiled payout integration.
-- Foundry: **88 passing, 1 pre-existing skipped**, covering payout bounds,
-  natural jackpots, boons, frozen settlement, batching, sweeps and gas checks.
-  Paid-stake inversion and the final ceiling pass 1,000 fuzz runs; actual bet
-  placement verifies the boon snapshot recovers the amount paid across all
-  existing boon tests. Maximum-boon all-gold jackpots hit the ceiling exactly.
-- The natural ETH jackpot integration test at 0.01 ETH effective stake and
-  maximum activity resolves 4,736.962082350125 ETH gross: 1,000 ETH cash from
-  a 10,000 ETH future pool and the remainder through the real lootbox path.
-- All **11** repository source/interface gates pass. The Hardhat production
-  runtime is **19,835 bytes**, below the 24,576-byte limit.
-
-Foundry evidence: `.audit-test-logs/degenerette-paid-ceiling/`.
-
-Historical validation after the September 22 WWXRP calibration and cleanup
-(predates the million-x revision):
-
-- Exact probability/EV model passes against the production constants, including
-  all 65,536 activity values and the 169/170 negative-EV crossover.
-- Hardhat: **59 passing**, covering the four Degenerette statistical suites,
-  deployed payout integration, event surfaces and hero-override regressions.
-- Foundry: **132 distinct checks passing** across the focused integration run
-  and corrected invariant rerun; one existing sDGNRS-award test remains skipped.
-  The initial invariant run exposed a fixture that could reach game-over before
-  placing a bet. The fixture now places and resolves a real bet before fuzzing;
-  all five invariants pass at 256 runs and 128 calls per run.
-- All ten source gates and interface coverage pass. The storage-layout oracle
-  matches every golden, including shared delegatecall slots.
-- All 32 production runtime-size checks pass. The Degenerette module is
-  **17,582 bytes**, leaving 6,994 bytes below the EIP-170 limit.
-
-Foundry evidence is in `.audit-test-logs/degenerette-wwxrp-cleanup/` and
-`.audit-test-logs/degenerette-wwxrp-invariant/`.

@@ -150,20 +150,7 @@ event JackpotBattleStarted(uint64 indexed slot, uint24 level, uint256 drawnEntri
 - Settlement and payment use the table's ordinary events: `CrapsBetSettled`, `CrapsBattleFinalized`, `CrapsBattlePaid`, `CrapsHighRollerPaid`, `CrapsProgressivePaid` and `CrapsProtocolAwardSplit`. Record claims appear as `BigRecordUpdated` and the trophy events.
 - `CrapsSlipPlaced` records the board of each paid ticket.
 
-## Measured cost
+## Gas checks
 
-Measured on the real protocol under `FOUNDRY_ISOLATE`, with intrinsic gas included:
-
-| Transaction | Gas |
-| --- | ---: |
-| Draw chunk, 150 entries, distinct wallets sharing one low address byte (the field library's full dedupe scan) | 6.9–7.2M |
-| Settle call, 1,500 units | 5.1–5.3M |
-| Sealing call, 50-entry chunk plus 890 units of settlement | 5.2–5.4M |
-| Whole battle in the sealing call (5 awards, 42 paid seats, payout included) | 4.2M |
-
-The worst possible settle call is bounded at about 8.6M:
-- 1,499 units of earlier seats at the 4.7k-per-unit calibration (measured at most 4.27k);
-- one run at the 1,511-roll ceiling (at most 704 gas per roll);
-- the finalization, with every award branch forced (at most 254k).
-
-`test/fuzz/JackpotMergeAdvance.t.sol` drives full 150-entry chunks and asserts every jackpot transaction stays at or below 10M. The derivation is in `JACKPOT-BATTLE-GAS-HANDOFF.md`.
+`test/fuzz/JackpotMergeAdvance.t.sol` exercises full draw chunks and asserts a
+10M transaction ceiling. See [Verification](VERIFICATION.md) for cold gas checks.

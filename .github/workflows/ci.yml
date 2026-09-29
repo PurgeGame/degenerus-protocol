@@ -153,10 +153,8 @@ jobs:
   # Strong-but-slow guarantees the per-PR gate skips: the configured Halmos symbolic checks
   # and the deep-profile invariant sweep (runs=1000/depth=256, ~8x the per-PR budget).
   # Runs on the weekly schedule and on manual dispatch — a proof or deep invariant that
-  # regresses fails here instead of silently shipping green. (The mutation campaign is
-  # NOT wired here: its harness lives in the gitignored audit/ tree and a full run far
-  # exceeds the 6h job ceiling — it is run locally/overnight and its kill-rate evidence
-  # is committed to the audit pack.)
+  # regresses fails here instead of silently shipping green. The local mutation
+  # campaign is not part of this CI job or the supplied verification guarantee.
   deep-guarantees:
     name: Halmos proofs (scheduled / manual)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

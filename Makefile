@@ -1,6 +1,6 @@
 .PHONY: test test-foundry test-hardhat check-audit-snapshot test-assurance-tools check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete coverage-check invariant-test invariant-build invariant-clean
 
-# Identity only: test results are recorded separately in the audit readiness report.
+# Source/input identity only; this target does not run tests.
 check-audit-snapshot:
 	@python3 scripts/audit-snapshot.py
 

@@ -59,8 +59,8 @@ price tables and reward curves.
 - The vault holds one permanent AFKing subscription seat and controls a **998-seat**
   tranche it can mint to chosen recipients once all **1,000** free-tranche seats have
   been minted. sDGNRS holds the other permanent seat, for **2,000** seats total.
-- The craps comp allowance starts at **4.56M FLIP-equivalent** and grows by **2% of completed
-  battle bankroll**. It cannot be cashed out, but grants produce ordinary player reward
+- The craps comp allowance starts at **4.96M FLIP-equivalent** (`200 * CrapsPriceLib.NORMAL_VALUE`)
+  and grows by **2% of completed battle bankroll**. It cannot be cashed out, but grants produce ordinary player reward
   opportunities. Owner and delegate recipients are not restricted to unrelated wallets.
   Owner grants charge no delegate allowance; the lane balance is their only cap.
 
@@ -113,13 +113,19 @@ see [the timing and skim
 curve](docs/ARCHITECTURE.md#purchase-timing-and-pool-acceleration).
 
 Game-over distribution and the later final sweep have distinct deadlines and beneficiaries.
-After existing claim liabilities and applicable paid-deity refunds are reserved, 2% of the
-distributable terminal pool is credited to the top affiliate for the terminal ticket level;
-the remainder goes to that level's terminal ticket jackpot. With no ranked affiliate, the
+In the normal, VRF-alive ending, after existing claim liabilities and applicable paid-deity
+refunds are reserved, 2% of the distributable terminal pool is credited to the top affiliate
+for the terminal ticket level; the remainder goes to that level's terminal ticket jackpot. With no ranked affiliate, the
 ticket jackpot receives the entire distributable pool. Affiliate score must be claimed
-before the terminal cohort is latched to affect this award. A newly requested terminal word
-follows the latch; an already delivered ordinary word can precede it (see `KNOWN-ISSUES.md`).
+before the terminal cohort is latched to affect this award. The game-over path requests its
+own terminal word after liveness freezes purchases and the cohort and affiliate are latched.
 Changing the allocation does not reroll jackpot recipients.
-Later affiliate claims cannot change the credited winner or the terminal pool. The terminal decimator has been removed.
+Later affiliate claims cannot change the credited winner or the terminal pool.
+
+When VRF is dead, the ending is deterministic: it pays no affiliate share and performs no
+jackpot draw. After existing claims and applicable deity refunds are reserved, the remaining
+pool is shared across the terminal level's tickets through `claimDeadVrf` until the final
+sweep. An unanswered normal-ending terminal request also takes this path after 14 days.
+The terminal decimator has been removed.
 Read `DegenerusGameGameOverModule` and the reserve-token terminal paths for the exact
 claim/forfeiture rules. Owner authority is enumerated in [Security](SECURITY.md).

@@ -42,6 +42,24 @@
 !/docs
 !/deployments
 
+# Publish the auditor's reference set; keep planning and generated reports local.
+docs/*
+!docs/README.md
+!docs/AUDIT.md
+!docs/ARCHITECTURE.md
+!docs/VERIFICATION.md
+!docs/CRAPS-PREFERENCES.md
+!docs/DEGENERETTE-BET-QUEUE.md
+!docs/DEGENERETTE-SINGLE-SYMBOL-MATH.md
+!docs/DEITY-BOONS.md
+!docs/WWXRP-BOONS.md
+!docs/audit/
+docs/audit/*
+!docs/audit/RNG-DOMAINS.md
+!docs/audit/snapshot.json
+!docs/audit/source-sha256.txt
+!docs/audit/verification-sha256.txt
+
 # ── Meta ────────────────────────────────────────────────────────────────
 !/README.md
 !/LICENSE
@@ -59,6 +77,11 @@ deployments/
 test/REGRESSION-BASELINE-*.md
 scripts/craps-high-water-system-sim.cpp
 scripts/craps-system-sim.cpp
+scripts/craps-emissions-report.py
+scripts/craps-engine-ev-calibration.py
+scripts/craps-entry-pricing-analysis.py
+scripts/craps-ev-analysis.py
+scripts/craps-high-roller-incentive-proposal.py
 scripts/check-craps-progressive-parity.sh
 scripts/ens-register.js
 scripts/ens-sepolia-proof.js

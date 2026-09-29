@@ -1,646 +1,125 @@
 # Build and verification
 
-Evidence rows below refer to their stated revisions, not automatically to the current tree.
+Run checks against the exact revision supplied for review. The repository contains
+source, tests and reproduction tooling; generated logs and analyzer reports stay in
+local output directories or CI artifacts.
 
-## Reproduce in a clean checkout
+## Setup
 
-Use the lockfiles, pinned compiler configuration and submodules. CI pins Node 20
-(`.github/workflows/ci.yml`); local recorded evidence ran on Node 24.18.0. Record
-`node --version`, `forge --version` and `git rev-parse HEAD` with results. Verify the
-snapshot hashes first, before anything patches addresses. The submodule step fetches
-`lib/forge-std` from GitHub at the revision pinned in `foundry.lock`.
+Use Node 20 (as in CI), Python 3, Bash, Git and Foundry. Solidity 0.8.34, via IR,
+1,000 optimizer runs and EVM Osaka are set in both compiler configurations.
+The npm dependencies and forge-std revision are locked in the repository. Foundry
+CI currently follows nightly; record the actual version when reproducing a run.
 
 ```sh
-sha256sum -c docs/audit/source-sha256.txt
+git rev-parse HEAD
+node --version
+forge --version
 python3 scripts/audit-snapshot.py
 npm ci
 git submodule update --init --recursive
 ```
 
-The snapshot checker also detects missing scope entries and new or changed test
-inputs. After recording the changed revision's verification status, maintainers
-can refresh its identity with `python3 scripts/audit-snapshot.py --write`.
-Refreshing hashes does not run tests or change a failing result into a pass.
+The snapshot check verifies the scope and hashes of source, build and verification
+inputs. It does not attest that tests pass. Maintainers refresh those hashes with
+`python3 scripts/audit-snapshot.py --write` after finalizing changes.
 
-Both test fixtures rewrite `contracts/ContractAddresses.sol`. The maintained
-Foundry and Hardhat runners save the exact original bytes and restore them in
-`finally`, including on failure or Ctrl-C. Use separate disposable checkouts for
-concurrent campaigns; do not overwrite another runner's pins. Raw Hardhat/npm
-commands bypass that restoration and should only run in a disposable checkout.
+Foundry and Hardhat fixtures patch `contracts/ContractAddresses.sol` to their
+predicted deployment addresses. The maintained runners restore its original bytes
+on completion, failure or handled interruption. Run concurrent campaigns in
+separate disposable checkouts. Raw test commands bypass this restoration.
 
-### Foundry
-
-The full test tree exceeds the practical memory budget of a single compilation.
-The runner discovers all Solidity tests, rejects unassigned test files,
-and keeps seven logical groups with a separate Foundry cache. The integration/gas
-group defaults to batches of at most 20 source roots; the other six groups retain
-their existing boundaries. `--list` reports the current physical batches.
-Helper sources remain available to every group. Splitting compilation does not
-lower the configured 1,000 fuzz runs or global 256 invariant runs at depth 128.
-Source-specific overrides still apply: `AdvanceLiveness` intentionally uses 64 × 100
-by default and now explicitly restores 1,000 × 256 in the deep profile. Verify the
-actual run/call metrics; setting a profile alone did not override its inline defaults.
-
-```sh
-make test-foundry
-# Inspect or select compile groups:
-python3 scripts/test-foundry-groups.py --list
-python3 scripts/test-foundry-groups.py --group integration-gas
-# Use a smaller limit when another process is consuming memory:
-python3 scripts/test-foundry-groups.py --group integration-gas --max-files 5
-# Cold transaction isolation used by the final gas campaign and CI:
-FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group integration-gas --max-files 5 --threads 1
-# A focused compile rather than just a post-compilation test filter:
-python3 scripts/test-foundry-groups.py --file test/repro/TerminalAffiliateKnownWord.t.sol
-```
-
-Raw logs and exact file lists default to `.audit-test-logs/foundry`. Each invocation
-gets a unique directory containing commands, tool version, relevant environment,
-actual patched input hashes (including reference `.hex` bytecode), logs and a summary. The top-level `summary.json`
-appends results across invocations, so a retry does not erase earlier failures.
-Reported counts are executions: imported helper suites can repeat between batches.
-Missing totals, zero executed suites/tests, a reported test failure, source drift,
-or a failing process all fail the runner. SIGINT/SIGTERM stop its child process group
-before restoring address pins. `--log-dir` changes the evidence directory.
-Unknown options are forwarded to `forge test`. CI runs the driver control tests and
-preserves Foundry evidence even on failure. `make test-assurance-tools` runs the
-control tests locally without compiling Solidity.
-
-CI separates the six ordinary groups (at most ten roots, one thread, isolation
-disabled) from integration/gas (at most five roots, one thread, isolation enabled).
-The latter preserves cold transaction boundaries used by the recorded gas checks.
-The unqualified local target uses your environment; pass the explicit settings
-above when reproducing cold gas measurements.
-
-Snapshot checks verify archive checksums too, including during a source-hash refresh.
-CI uses `npm ci` and fails if the lockfile cannot be installed.
-
-### Hardhat
-
-```sh
-make test-hardhat
-# Inspect the same file order used by hardhat.config.js:
-python3 scripts/test-hardhat-groups.py --list
-# Select one or more files; additional --file arguments are supported:
-python3 scripts/test-hardhat-groups.py --file test/stat/SurfaceRegression.test.js
-```
-
-`make test-hardhat` runs the eleven `check-*` gates and then the maintained Python
-runner over the full configured tree. The default is one test file per process;
-`--max-files` changes the batch size. Larger shared EDR processes exhausted the
-recorded 6 GiB limit, even when individual files passed. The liveness fixture now
-caches its expensive common public setup without removing assertions.
-
-Evidence defaults to `.audit-test-logs/hardhat` with append-safe unique histories.
-A Node preload captures actual standard-JSON compiler inputs before compilation,
-including fixture-triggered clean/rebuilds and failed compiles. It records compiler
-and API-module hashes, checks source contents against the run's expected identity,
-and identifies cached inputs separately from fresh compiler invocations. Missing
-or ambiguous totals, no passing tests, failures, source drift or process errors fail
-the runner. Controls include a transient source change followed by restoration;
-checking only the final files would miss that case.
-
-Historical rows explicitly identify their command; `npm test` runs only the
-unit/integration/deploy/access/edge globs plus three gas files and reports fewer tests.
-`npm run test:stat` needs `python3` on PATH: two of its suites spawn
-`scripts/data/derive_5_tables.py` (stdlib-only) as the canonical generator of the
-Degenerette payout constants. Historical September 27 runs passed their enabled
-statistical tests: the `v36.0 SURF-03` check pins the moved remainder roll, and
-`STAT-03` (the legacy empty-bucket skip rate) remains skipped as superseded by the
-craps / FLIP split and future fill draw. Earlier results do not certify subsequent fixes.
-
-### Deep and symbolic checks
-
-```sh
-FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group invariants --max-files 5 --threads 1
-```
-
-The scheduled/manual CI jobs run deep invariants independently from Halmos. A
-symbolic timeout therefore does not prevent the invariant job from starting.
-Halmos is pinned to 0.3.3; its configured campaign currently has five unresolved
-timeouts and must still fail. Log uploads use `always()` and the piped symbolic
-command enables `pipefail`. Source annotations and assertion/loop bounds are part
-of the proof scope, not evidence of universal EVM correctness. The Foundry installer
-still selects a moving nightly; record the exact version used with each run.
-
-### Static analysis
-
-Slither 0.11.5 and Aderyn 0.6.8 produced the evidence rows. Compile with Hardhat first so
-Slither reuses that build:
-
-```sh
-pip install slither-analyzer==0.11.5
-npx hardhat compile
-npm run slither      # slither . --filter-paths 'node_modules|mocks' --exclude naming-convention,solc-version,low-level-calls,assembly,too-many-digits,similar-names,dead-code
-cargo install aderyn   # or: npm install -g @cyfrin/aderyn
-aderyn . -o aderyn-report.md
-```
-
-The historical local Slither run explicitly selected `--compile-force-framework hardhat
---ignore-compile` after compilation; this avoids auto-selecting Foundry without its
-required build-info output.
-
-CI runs Slither through `crytic/slither-action` with `--exclude-informational
---exclude-optimization` and Aderyn with the same `aderyn . -o aderyn-report.md`; the evidence
-row counts come from `npm run slither` with the flags above.
-
-### Size table
+## Build and structural checks
 
 ```sh
 forge build --skip test
 node scripts/check-deployment-sizes.js
-```
-
-The size gate reads the exact `DEPLOY_ORDER` name map plus `DegenerusVaultShare`,
-rejects missing/unlinked bytecode and stale source hashes, and requires every
-runtime to fit 24,576 bytes. It does not classify deployments by test-helper name
-suffixes. Build failures are fatal. `FOUNDRY_OUT` or a positional artifact directory
-selects a nondefault output. Address pins affect optimizer output; check the actual
-deployment pins as well as each test fixture.
-
-## Structural and gas checks
-
-```sh
+bash scripts/layout/storage_layout_oracle.sh
 make check-interfaces check-delegatecall check-raw-selectors check-rng-window \
   check-rng-taint check-advance-calls check-unchecked check-write-owners \
   check-pool-writes check-array-delete check-gasleft
-bash scripts/layout/storage_layout_oracle.sh
+make test-assurance-tools
 ```
 
-Inspect the runtime sizes for EVERY deployment entry, with actual deployment pins as
-well as test pins; require <=24,576 bytes. `forge build --sizes` also reports test/utility
-artifacts when included, so identify deployable code explicitly. Verify the engine pin
-has code and is appended without shifting earlier addresses. Check initcode/deployment
-gas independently of runtime size.
-
-Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
-`test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
-advance calls. Test gas caps must not be raised simply to make a regression pass.
-
-## Historical evidence — 2026-09-27, one daily jackpot battle for paid and awarded entries
-
-On top of `9ee8986d`. Paid and awarded jackpot entries play one battle on the craps table:
-- The daily request locks the paid field and the Added allocation.
-- The word lands alone in stage 18.
-- Stages 16 and 17 then draw the awards in chunks of up to 150 and settle seats on 1,500 work units per call. The sealing call settles on what its draw left.
-
-Other changes in this revision:
-- **Economics:** the jackpot fee is fixed at 8,000 FLIP. Added is 0.5% of the recorded pool with a 150,000 floor at level 0–1 and 50,000 after, one award per 10,000, at most 500. Every entry throws the same dice. Only the fee-funded bankroll is booked as action.
-- **Roll budget:** every slip shares a 1,000-roll budget (1,511-roll ceiling).
-- **Fixes:**
-  - the lapse sweep no longer walks remainder 7, where a detached jackpot battle's settle cursor lives;
-  - the Added formula moved from the Advance module into `JackpotBattle.lockJackpotBattle`, keeping the Advance module under EIP-170 at Hardhat pins;
-  - merge leftovers are removed.
-
-On a snapshot of this tree:
-- the 10 read-only gates and the storage-layout oracle pass;
-- foundry: 3,006 passed / 0 failed / 102 skipped over all seven compile groups (integration-gas 787, repro-symbolic 243, fuzz-1 484, fuzz-2 399, fuzz-3 502, fuzz-4 453, invariants 138);
-- hardhat: `npm test` 1,465 passing / 20 pending; `test:stat` 158 / 20 pending; `test:gas` 21 / 11 pending.
-
-Jackpot battle gas (isolated, intrinsic included):
-- full 150-entry draw chunks: up to 7.2M;
-- 1,500-unit settle calls: 5.1–5.3M;
-- the worst settle call is bounded near 8.6M. That covers 1,499 units at 4.7k per unit (measured at most 4.27k), one 1,511-roll run at 704 gas per roll, and a forced 254k finalization.
-
-In 102,400 shared-dice fields the largest settle call was 6.45M. `JackpotMergeAdvance.t.sol` asserts every jackpot transaction is at or below 10M. Stage 18 alone is 1.3M (3.3M with vault history). Century consolidation is up to 9.61M and the day-1 ETH stage 9.33M.
-
-Runtime sizes:
-- CrapsBattle 23,762 B;
-- DegenerusGameAdvanceModule 24,450 B at Hardhat pins (126 spare).
-
-## Evidence — 2026-09-27, terminal resilience and bare pinned calls
-
-Two commits on top of `6e299b60`:
-
-- `1b470d0f` Pinned-call cleanup and terminal resilience. Lootbox pass delivery, the keeper's
-  `keepScheduled` call and Admin's native forward are bare: each callee is revert-free for the
-  protocol's caller, so a catch only let the caller's gas limit decide the outcome. The terminal drain
-  re-raises a gas-starved batch (empty data or `EmptyRevert`) after the ending's swap as well as before
-  it, so no caller can make the ending skip a cohort; errors that carry data still fall through to fund
-  release. The final sweep keeps its `shutdownVrf` catch and splits a shortfall below the sinks' owed
-  balances pro rata instead of reverting; `claimWinnings(player, amount)` honours its cap after game
-  over; sDGNRS floors its post-gameOver burn value at zero instead of panicking on a deficit. New
-  `test/fuzz/AdminNativeForward.t.sol`, `test/fuzz/PostGameOverShortfall.t.sol` and
-  `test/repro/TerminalDrainPostSwapStarvation.t.sol`; the three craps invariant campaigns now fail on
-  any `keepScheduled` revert.
-- `c6a8fc0a` One icon path in `scripts/data/icons32Data.json`.
-
-On a clean worktree carrying `1b470d0f`'s sources: the 11 gates (including `check-interfaces`) and the
-storage-layout oracle pass; foundry 2,992 passed / 0 failed / 102 skipped over all seven compile groups
-(integration-gas 764, repro-symbolic 263, fuzz-1 502, fuzz-2 369, fuzz-3 483, fuzz-4 473, invariants
-138); hardhat `npm test` 1,465 passing / 19 pending, `test:stat` 159 / 20 pending, `test:gas` 21 / 11
-pending. The three new shortfall pins fail on the prior tree (two arithmetic panics and a reverting
-stETH leg) and pass here. The post-swap starvation sweep leaves the payout frame no gas at any starved
-limit. Runtime sizes: Advance −259 B, Lootbox −183 B, Game −42 B, Afking −12 B, Admin +56 B,
-GameOver +112 B, sDGNRS +144 B.
-
-## Evidence — 2026-09-26, deadline fires only on a caught-up day
-
-One commit on top of `36cc70c1`:
-
-- `e995dc55` The purchase deadline's trigger (`_pastDeadlineTriggered`) fires only on a caught-up day
-  (`today == dailyIdx + 1`). A gap behind `dailyIdx` is a stall of that length (a daily or mid-day VRF
-  request that has not come back, the coordinator-swap re-send, a ticket backlog, or days nobody
-  advanced) and waits for the next daily word's backfill to credit it to `purchaseStartDay`. This
-  closes audit A-1: a stalled mid-day word landing past the deadline ended the level before the
-  credit. Liveness no longer reads `rngRequestTime` or `lastVrfProcessedTimestamp`; the VRF callback,
-  the deadman and the VRF-dead window are unchanged. New `test/fuzz/MidDayStallCredit.t.sol`; the
-  `TransientLiveness`, `DeadVrfEnding` and `ReviewFixes0924` cases that pinned the removed
-  unattended-gap clause now pin the new rule.
-
-At `e995dc55` (clean worktree): the 11 gates, `check-interfaces` and the storage-layout oracle pass;
-foundry 2,956 passed / 0 failed / 102 skipped over all seven compile groups (integration-gas 763,
-repro-symbolic 260, fuzz-1 482, fuzz-2 383, fuzz-3 482, fuzz-4 451, invariants 135; the 23 new tests
-included); hardhat `npx hardhat test` 1,639 passing / 23 pending; `test:stat` 159 passing / 20
-pending. The previous section's 2,952 counted `GoldenTicketArmResolve` (19 tests) in both fuzz-1 and
-fuzz-2; counted once, that tree is 2,933. Gas is unchanged on every probed path (mid-day and daily callbacks,
-mid-day request, daily-request advance, backfill advance); `DegenerusGame` shrinks 94 B and
-`DegenerusGameAdvanceModule` 101 B (inherited predicate).
-
-## Evidence — 2026-09-26, single daily board, jackpot fill stage and flat foil table
-
-One commit on top of `ee60d36f`:
-
-- `b6e8996d` Every day rolls one winning board (`DailyWinningTraits(uint24 indexed day, uint32
-  mainTraitsPacked)`); the bonus set, the jackpot carryover ticket leg (0.5% future reserve, stage
-  13) and the coin draw's craps half are removed. Jackpot days play the fill-draw craps battle from
-  a new advance stage `STAGE_JACKPOT_FILL = 16`, latched by the ETH stage at bit 72 of
-  `dailyTicketBudgetsPacked`, between the ETH / early-bird stages and the coin+tickets stage that
-  seals the day. Early-bird tickets and the early-bird surplus whale pass skip the ETH leg's solo
-  quadrant unless it is the only active bucket. Level 1's trait-matched draw pays up to 50
-  FLIP-only shares. `vaultComp` is VAULT-only and `creditPasses` returns nothing. Foil claims drop
-  `drawKind` and compare once a day at a doubled face table (16 / 48 / 280 / 3,200 / 80,000).
-
-At `b6e8996d`: the 11 gates, `check-interfaces` and the storage-layout oracle pass; foundry
-2,952 passed / 0 failed over all seven compile groups (integration-gas 763, repro-symbolic 260,
-fuzz-1 501, fuzz-2 383, fuzz-3 462, fuzz-4 448, invariants 135); hardhat `npm test` 1,639
-passing / 23 pending; `test:stat` 159 passing / 20 pending; `test:gas` 21 passing / 11 pending.
-Worst cold advance transactions (including intrinsic): fill stage 2,820,598 (10,130,598 with the
-whole 7,310,000 battle bound added); coin+tickets 5,981,402 (final day x00 5,962,448); day-1 ETH
-stage with the word applied 10,570,572; early-bird 7,881,498; level-1 daily with the word applied
-6,202,472 (13,512,472 with the bound); purchase daily with the word applied 5,914,687 (13,224,687
-with the bound). Sizes: `DegenerusGameJackpotModule` 20,776, `DegenerusGameAdvanceModule` 24,104,
-`DegenerusGameWhaleModule` 24,401, `DegenerusGameFoilPackModule` 20,118, `CrapsBattle` 24,251.
-
-## Evidence — 2026-09-26, Degenerette bet queue, WWXRP game mint scale and gas levers
-
-Five commits on top of `9a36d3b2`:
-
-- `cf5a020d` Degenerette bets become one word each in `degeneretteQueue[index]` and settle in the
-  `mineFlip` / `openBoxes` human-box sweep; `degeneretteResolve` and the Vault resolve wrapper are
-  removed; one packed `DegeneretteResolved` event per bet.
-- `f6e2ad60` `WWXRP.setGameMintScale(uint256)`: the vault owner sets a whole-number multiplier
-  (default 1, no upper bound, saturating so a game mint cannot revert) on every WWXRP mint the pinned
-  game contracts request; one `uint256` is appended at WWXRP slot 9. The token is renamed
-  "Worthless Wrapped XRP".
-- `c30e421e` Straight-line reel unpack and branch-free `_score` (byte-identical: exhaustive lane
-  tests plus the halmos proof `check_production_score_matches_mirror`); each swept bet credits the
-  keeper a flat 1,500 gas.
-- `70d06e60` `WWXRP.enter` reads the entrant's WWXRP boon lane through `extsload` and skips the
-  consume dispatch for an empty lane.
-- `224de529` Protocol boon-draw pools and entries use two-slot rings keyed `day & 1` with a day tag.
-- `de852e79` A human-box sweep that opens nothing reports the walk units it consumed, so the
-  `mineFlip` router sizes its craps leg from the real spend (audit finding E L-01).
-
-Each commit's tree was rebuilt from `9a36d3b2` by applying the commit patches in order and checked
-with the 11 gates, the storage-layout oracle and the suites it touches. At `224de529`: the 11
-gates and the storage-layout oracle pass; foundry 2,836 passed / 0 failed / 102 skipped over all
-seven compile groups; hardhat 1,641 passing / 22 pending; stat 160 passing / 20 pending; halmos
-`DegeneretteV73HalmosTest` 4/4. Gas against `9a36d3b2` (isolated transactions): a boon-draw ETH bet
-33.5k cheaper as a day's first entry on a warm ring and 16.6k on later entries; resolution 1.0k
-cheaper for a 1-spin bet and 28.6k for a 25-spin one; `WWXRP.enter` 5.0k cheaper without a boon
-(1.2k dearer with one).
-
-## Evidence — 2026-09-24, quadrant and early-bird whale passes
-
-The working-tree changes based on `3a9bbe9c` now include whole-pass conversion
-from up to 25% of each jackpot-phase ETH quadrant. The exact cost funds future,
-one fresh recipient gets all passes for that quadrant, and the remaining ETH
-uses the original draw. Early bird uses the shared award helper with its prior
-nextPool funding and separate gold-preferred recipient rules.
-
-The ten-source affected Foundry run passed **87 tests, zero failures and zero
-skips**, with 1,000 cases per fuzz test. It includes threshold and conservation
-checks, all day shapes and active masks, real/deity weights, unchanged ETH draws,
-amount-independent pass recipients, golden-ticket ownership, deferred claims
-and the early-bird regressions. Cold measured jackpot advance calls peaked at
-**9,431,446 gas** in the plain-board day-one case; the large final-day case used
-**9,322,879 gas**, or **9,325,221 gas** when advanced late. The converted early-bird
-stress case used **7,955,028 gas**. These exclude intrinsic gas and test assertion
-costs and are fixture measurements, not a global maximum proof.
-
-All eleven source/interface gates and all 27 storage-layout goldens pass, with
-shared-slot alignment intact. All 33 deployment entries fit EIP-170 under both
-production and Foundry fixture pins. Jackpot runtime is **24,447 bytes** (129
-spare), and Whale runtime is **24,306 bytes** (270 spare). Production artifacts
-and source metadata were checked after a forced fresh build.
-
-See the [quadrant design and reproduction command](JACKPOT-QUADRANT-WHALE-PASSES.md#verification).
-Raw evidence is in `.audit-test-logs/quadrant-whale-final/`. Full repository suites
-and static analyzers were not rerun for this change.
-
-## Evidence — 2026-09-24, initial early-bird surplus whale passes
-
-The working-tree change from base `3a9bbe9c` conditionally caps early-bird tickets
-at 45 per winning slot and awards surplus full passes to one separate,
-gold-preferred recipient. The full early-bird ETH budget still goes to nextPool.
-
-The six-source affected Foundry run passed **61 tests, zero failures and zero
-skips**, retaining 1,000 fuzz cases. It covers price-tier boundaries, exact
-surplus accounting, ticket-recipient parity, gold/deity selection, amount
-independence, deferred claims, replay and terminal cleanup. Cold converted
-advance calls measured **7,954,662 gas** for both 15 and 6,615 passes; the late,
-partial-queue case measured **7,944,704 gas**, excluding transaction intrinsic
-gas and test assertions. These pass the fixture's 10M target and transaction
-call cap; they are not a proof of a global maximum.
-
-All eleven source/interface gates and all 27 storage-layout goldens pass. The
-new pending-pass field is appended at slot 74 across the Game and twelve modules;
-no existing field moves. All 33 deployment entries fit EIP-170 under production
-and Foundry pins. Jackpot runtime is 24,528 bytes (48 spare), and Whale runtime
-is 23,947 bytes (629 spare); production metadata was checked after a forced
-fresh build.
-
-See the [implementation design and reproduction command](EARLY-BIRD-WHALE-PASS-PLAN.md#implementation-verification--september-24-2026).
-Raw logs are in `.audit-test-logs/early-bird-final/`. This is affected-suite
-verification; full repository suites and static analyzers were not rerun for
-this change. The earlier snapshots below retain their original scope.
-
-## Evidence — 2026-09-23, unminted-tickets, fill-battle and foil revision
-
-The source is the committed revision `418052332758b6adcda475e669bd0d826be1d0c8`. Commits after it touch only
-`docs/`, so every hash and every run below describes this tree. Its contracts are those of `5d52e4f6`;
-`41805233` itself changes one test handler (see the first row). It carries eight changes on top of the single-symbol degenerette revision below, and adds one
-source file, `contracts/CoinDrawBattle.sol` (60 in scope).
-
-Jackpot phase and timing. The normal jackpot phase is three physical days (turbo still runs it in
-one); the counter always steps by one. After level 0 the purchase deadline is 30 days (day 30 is the
-distress rescue day, game over is eligible from day 31), the VRF deadman is 30 days at every level
-and gap backfill follows it. The purchase-phase drip is 4% of the future pool, and the next-to-future
-skim is keyed on purchase age.
-
-Unminted future tickets. Levels above the mint ceiling (level + 1, or level + 2 from a latched last
-purchase day until its request) stay queued in the far-future key space; the seal freezes the next
-level's pool, which mints once on the first cohort committed after the seal. New far-future
-registrations revert under the RNG lock (top-ups are allowed). The BAF scatter runs 48 rounds with
-wallet-uniform future bands.
-
-Coin draws. Jackpot-day and level-1 coin draws split their budget between craps seats (tomorrow's
-opener, or a banked whole-day pass) and equal FLIP shares. The purchase-day fill draw walks up to 50
-far-future wallets and plays them as one closed craps battle in `CoinDrawBattle`, a storage-free,
-GAME-only contract deployed last (N+31): two thirds of the budget are stakes in whole 300-FLIP
-bankrolls, the pot is everything else, each run is capped at exactly 200 rolls and 22 shooters, and
-the Game credits the result in one batch. `Craps._settleSlip` treats a roll budget under one hand
-as exact; the table's 8,192 budget is unchanged. The battle's `resolve` is bounded at 7,310,000 gas
-for a full field at both caps, and every purchase-day worst-case fixture must clear 16,777,216 with
-that whole bound added to its measured gas.
-
-Craps ranking. Busts now rank on shooters completed, then whether anything was kept, then the high
-point; the comparator runs in `CrapsEngine.settleRanked` and `CrapsBattle` reads the result. A bust's
-high point still decodes as zero for the progressive, the record and the finalization log.
-
-Foil. Purchase days past level 1 roll the main winning set alone and store bonus zero; a bonus-set
-claim on such a day never pays. The face table is four times larger (8 / 24 / 140 / 1,600 / 40,000).
-
-Protocol boon draw and WWXRP. Boon-draw entries come from ordinary ETH Degenerette bets on the deity
-hero symbols; the donation entry points are removed. WWXRP's vault allowance and escrow ledger are
-removed, and the vault or its owner mints directly.
-
-| Check | Result |
-| --- | --- |
-| Foundry full seven-group sweep at this revision | 2,741 passed, 0 failed, 104 skipped. The sweep at `9676d23b` (same contracts) passed 2,608 in six groups, all exit 0; its invariants group reported 2 failures from one suite, `CrapsRealWiringConservation`, whose per-run vacuity guard needs a successful vault comp grant and could see none (a harness flake: the same seed passed on rerun). `41805233` fixes the handler (test-only) and the whole invariants group, re-run at that exact revision with a fresh failure-persist directory, passes 133/0 (`invariants-at-41805233/`). Up 30 on the revision below: the fill-battle, coin-draw, deadline, foil and full-composition suites, less the retired comp and escrow suites |
-| Per-test gas, previous revision vs this revision, same fixture pins | 1,890 entries changed over the six groups with snapshots (invariants has none, see above). The largest moves are harness cost from the unminted ticket queue: `SdgnrsWhaleBuy:test_CapAt100PaidPasses` -76.7%, `RngReuseJackpotStraddle` -69.8%, `FarFutureIntegration:testMultiLevelAdvancementWithFFTickets` +29.1%, `BafFarFutureTickets` +10.8% to +14.5%. Advance stages: `AdvanceNestedVaultCompSettlement` +7.5% (15.50M), `AdvanceNestedDaily*` +4.3% to +4.7% (up to 16.40M in these combined stress fixtures), `AdvanceCenturyAtHundredThreshold` +9.2% (13.79M); `AdvanceNestedFullCompositionGas` (all purchase-day legs plus the full battle envelope) fits 15M (`gas-delta-per-test.txt`) |
-| Hardhat `make test-hardhat` | 1,641 passing, 22 pending, 0 failing; down 18 because the removed far/near-future coin legs took their unit tests with them |
-| Hardhat `npm run test:stat` | 160 passing, 20 pending, 0 failing. Neither former accepted red remains: `v36.0 SURF-03` now pins the moved remainder roll, and `STAT-03` (the legacy empty-bucket skip rate) is skipped as superseded by the craps / FLIP split and the fill draw |
-| Eleven `make check-*` gates and the storage layout oracle | all pass by exit code; the oracle matches every golden and reports delegatecall shared-slot consistency between the modules and the Game |
-| EIP-170 runtime size, checked-in pins | `DegenerusGameMintModule` 24,255 (321 spare), `CrapsBattle` 24,212 (364), `DegenerusGame` 24,195 (381), `DegenerusGameJackpotModule` 24,072 (504), `DegenerusGameAdvanceModule` 24,051 (525), `CoinDrawBattle` 5,845 (new); all 33 entries fit |
-| EIP-170 runtime size, Hardhat-style fixture pins | `CrapsBattle` 24,280 (296 spare), `DegenerusGameMintModule` 24,260 (316), `DegenerusGame` 24,200 (376), `DegenerusGameJackpotModule` 24,077 (499), `DegenerusGameAdvanceModule` 24,068 (508), `CoinDrawBattle` 5,845; all 33 entries fit |
-| Slither 0.11.5, same flags as below | 3,746 results over 188 contracts: 203 High, 517 Medium, 561 Low, 2,409 Informational, 56 Optimization. High composition changes only in the standing delegatecall-storage class: `uninitialized-state` 155 -> 157 (`jackpotFlags` re-keys the removed `compressedJackpotFlag`; new rows for `deityBySymbol` and `protocolBoonEntries` read by the boon-draw entry and draw), and `reentrancy-eth` 3 -> 2. New Medium rows are intentional floors or ignored returns: `divide-before-multiply` in `CoinDrawBattle.resolve` (the 300-FLIP bankroll floor) and `_coinDrawPlan`, `incorrect-equality` on `level == 0` in `_purchaseDeadlineDay`, `unused-return` on the pre-screened `vaultComp` seat in `_seatOnTable`; the rest are re-keyed (`slither-delta-vs-degenerette-recycle-run.txt`) |
-| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,388 instances (26 fewer than the revision below); no new category |
-
-## Evidence — 2026-09-22, single-symbol degenerette and century-recycle revision (base of the revision above)
-
-The source is the committed revision `c7287f6eb764274c73a2adb8519c359b953669c6`. Commits after it
-touch only `docs/`, so every hash and every run below describes this tree. It carries six
-changes on top of the reveal and incinerator revision below.
-
-`WWXRP.setTrustedMinter(address, bool)` lets the vault owner (more than 50.1% of DGVE) register
-or revoke any address as a WWXRP minter and burner alongside the pinned game contracts, with no
-cap, by design and as disclosed; one mapping is appended at WWXRP slot 8.
-
-The decimator's activity multiplier now covers a player's first 500,000 FLIP of base burn at a
-level (was: until 200,000 FLIP of multiplied weight), tracked in the free bits of the existing
-per-level record. Two things moved at once, so the effect is larger than the cap ratio alone:
-because the cap now measures base rather than weight, bonus weight above base at maximum
-activity rises from 87,848 to 391,650 FLIP (106,538 to 569,950 on day one). The same commit
-raises `SDGNRS_DECIMATOR_CAP` in `FLIP.sol` from 150,000 to 500,000 FLIP, so the sDGNRS auto
-entry is now entirely multiplied and spends up to 3.33x more backing per opening.
-
-Degenerette moves to single-symbol tickets: the player picks one hero symbol, everything else is
-generated fresh from committed domain-separated draws, colors score independently, gold-on-gold
-matches add 25% each, and one shared payout table (0.5x to 100,000x) replaces the eight
-per-gold-count tables and the separate WWXRP rig family; the module shrinks by roughly a third.
-The trait packer's colors become uniform 1/8 (gold was 1/15), and the WWXRP reel rig drops to a
-5% gate. Return targets: FLIP equals the activity curve exactly, ETH adds five points, WWXRP
-runs 70% to 130% with the surplus on scores 6-9, all reproduced by
-`scripts/data/degenerette_single_symbol_math.py`.
-
-The century incinerator now pays only against a book whose flip actually lost. It reads the
-armed BAF day's stored result rather than assuming the transition word's low bit, because a VRF
-stall can resolve the armed day from a backfilled derived word while the transition keeps a
-later day's, leaving the two independent. A day that won, or never resolved, funds nothing.
-
-And sDGNRS recycles: at the transition close after levels 100, 200 and so on, a random 25-75%
-of the supply decrease since the previous such close is minted back into the Whale, Affiliate,
-Lootbox and Reward pools in a 1:3:2:1 split, with Lootbox taking the allocation dust. The whole
-percentage is drawn from the committed transition word under a mechanism- and level-specific
-domain, so the burn delta sizes the mint but never selects the roll, and a completed century
-cannot be rerolled. No backing moves, so a refill of fraction `r` after a century that burned
-fraction `b` reduces each surviving token's share of the reserves by `r*b / (1 - b + r*b)`; at
-50% burned that is 20%, 33.3% or 42.9% for a 25%, 50% or 75% refill. This is disclosed in
-`ECONOMIC_DISCLOSURES.md`, mapped in [the RNG domain map](audit/RNG-DOMAINS.md) and analysed in
-[the recycling note](audit/SDGNRS-CENTURY-RECYCLE-2026-09-22.md) as amended by
-[the random-refill verification](audit/SDGNRS-CENTURY-RANDOM-2026-09-22.md). Three fields are
-appended at sDGNRS slot 8 and recycling closes permanently at game over. Both the GAME-only
-entry point `recycleCentury(uint24,uint256)` and the `CenturyRecycled` event change shape, so
-each carries a new selector and topic0 rather than changing meaning silently. The same work adds
-the two view-only ticket-lens search helpers.
-
-No separate intermediate chain is supplied for `d3ddb0c0`; see the last row of the table.
-
-| Check | Result |
-| --- | --- |
-| Foundry full seven-group sweep at this revision | 2,711 passed, 0 failed, 104 skipped, run in a detached worktree at this exact revision with its own Foundry cache; all seven groups exit 0. Up 50 tests on the revision below (the single-symbol Degenerette, ticket-lens, entry-reveal, trusted-minter, century-recycle and random-refill suites). The one added skip is `LootboxNestedDgnrsOrdering`, which is LOST COVERAGE rather than a retirement — see KNOWN-ISSUES.md |
-| Per-test gas, reveal/incinerator revision vs this revision, same fixture pins | 918 entries changed and 757 fixed-gas tests moved against the revision below, dominated by the Degenerette rewrite. The largest single line is the newly skipped nested-DGNRS ordering fixture (3,714,661 -> 0, i.e. not run). Among tests that still execute, the largest are `KeeperFaucetResistance:testReResolveResolvedBetRevertsNoSecondReward` +57.3% (196,806 -> 309,533, whose harness changed in this delta) and `DegeneretteFreezeResolutionTest:testResolveBatchTrailingAlreadyResolvedSkipped` -52.7% (636,018 -> 300,847) (`gas-delta-per-test.txt`) |
-| Hardhat `make test-hardhat` | 1,659 passing, 22 pending, 0 failing — identical to the revision below |
-| Hardhat `npm run test:stat` | 157 passing, 19 pending, 2 failing: the same two pre-disclosed reds, the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`. Nothing new is red. The passing count falls from 191 because the rewrite collapsed thirteen payout tables (eight honest (N, heroIsGold) plus five rigged WWXRP) into one shared table, so the per-N loops in `DegenerettePerNEvExactness`, `DegeneretteProducerChi2`, `DegeneretteBonusEv` and `DegeneretteV73Invariants` no longer parameterize; no stat file was deleted and declared `it()` blocks fall 24 -> 13 across those four |
-| Eleven `make check-*` gates and the storage layout oracle | all pass; judged by exit code, including `check-rng-taint` after the `_rollSingleBoxBoons` manifest row was corrected back to `nonceBase = 0`. The oracle matches every golden and reports delegatecall shared-slot consistency between the modules and the Game |
-| EIP-170 runtime size, checked-in pins | `DegenerusGameMintModule` 24,538 (38 spare), `DegenerusGameAdvanceModule` 24,518 (58 spare), `CrapsBattle` 24,331 (245 spare), `DegenerusGame` 24,192 (384 spare); all 32 entries fit. The advance module spent 120 bytes of headroom in this revision (was 24,398 / 178 spare) on the century-recycle hook and the refill word |
-| EIP-170 runtime size, Hardhat-style fixture pins | `DegenerusGameMintModule` 24,543 (33 spare), `DegenerusGameAdvanceModule` 24,535 (41 spare), `CrapsBattle` 24,399 (177 spare), `DegenerusGame` 24,197 (379 spare); all 32 entries fit |
-| Slither 0.11.5, same flags as below | 3,752 results over 185 contracts with 95 detectors: 202 High, 520 Medium, 556 Low, 2,418 Informational, 56 Optimization (exit 255 is Slither's normal found-issues status). High composition is unchanged except `uninitialized-state` 153 -> 155; both new rows (`DegenerusGameStorage.prizePoolFrozen`, `ticketQueue`) are the standing delegatecall-storage false-positive class — the Game writes them, the modules read them through the shared layout. 18 new entries, 167 gone; the Informational fall of 156 tracks the Degenerette module shrinking by roughly a third (`slither-delta-vs-reveal-incinerator-run.txt`) |
-| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,414 instances (41 fewer than the revision below, tracking the removed payout tables); no new category |
-| Intermediate chain at `d3ddb0c0` | Not produced, and no such archive exists. The revision has advanced four commits past `d3ddb0c0` (single-symbol Degenerette, the incinerator armed-day guard, the century recycle and the random refill), so a chain at that midpoint would describe no shipped state; this revision's chain covers the whole tree instead. The 2026-09-21 and 2026-09-22 archives below remain supplied |
-
-## Evidence — 2026-09-22, reveal and incinerator revision (base of the revision above)
-
-The source is the committed revision `72325bd6404565308ed0adf1c90c214dcff7d930`, the merge of two changes on top
-of the craps extsload revision below. First, the ticket drain's `RoundTraitsGenerated` is
-replaced by the anonymous four-topic `EntryTraitsRevealed` (each topic `(level << 160) |
-player`, one data word of sixteen trait bytes and their presence bits, two logs per
-eight-seat round), and `ticketGenerationStartBlock[level]` is appended at slot 70 so an
-indexer can bound the block range it scans per level; the round's work charge rises from
-37 to 38 units. Second, the x00 century incinerator pays 10% of the FLIP the armed BAF
-day's direct depositors burned and lost, as flip credit through WWXRP, instead of 25% of
-the would-be BAF pool in ETH; the advance module shrinks by 160 bytes because the credit
-moved into WWXRP and the crank no longer decodes a return value. The duplicate mint-layout
-comment in the game facade is removed. Raw runs are in
-[the supplementary archive](audit/evidence-2026-09-22-reveal-incinerator.tar.gz).
-
-| Check | Result |
-| --- | --- |
-| Foundry full seven-group sweep at this revision | 2,661 passed, 0 failed, 103 skipped, run in a detached worktree at this exact revision (7 new tests: the entry-reveal gas/parity suite and the generation-window cases) |
-| Per-test gas, craps extsload revision vs this revision, same fixture pins | 389 fixed-gas tests moved, the largest by 5.5% on the driven century incinerator test (its armed day now carries a funded book) and otherwise within ±2.1%; drain-heavy tests fell up to 1.7% from the removed owner loop, purchase-heavy tests rose from the round's extra unit (`gas-delta-per-test.txt`) |
-| Hardhat `make test-hardhat` | 1,659 passing, 22 pending, 0 failing |
-| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`, both pre-disclosed reds |
-| Eleven `make check-*` gates and the storage layout oracle | all pass |
-| EIP-170 runtime size, checked-in pins | `DegenerusGameMintModule` 24,538 (38 spare), `DegenerusGameAdvanceModule` 24,398 (178 spare), `CrapsBattle` 24,331 (245 spare), `DegenerusGame` 24,220 (356 spare); all 32 entries fit |
-| EIP-170 runtime size, Hardhat-style fixture pins | `DegenerusGameMintModule` 24,543 (33 spare), `DegenerusGameAdvanceModule` 24,415 (161 spare), `CrapsBattle` 24,399 (177 spare), `DegenerusGame` 24,225 (351 spare); all 32 entries fit |
-| Slither 0.11.5, same flags as below | 3,901 results over 183 contracts: 200 High, 517 Medium, 554 Low, 2,574 Informational, 56 Optimization; High composition identical to the extsload run. Attributable new entries: Medium `unused-return` (the advance crank deliberately omits the incinerator's return decode), Medium `uninitialized-local` in the foil round worker, Low `reentrancy-events` on `WWXRP.resolveIncinerator` (event after the flip credit), and 14 Informational `unused-state` rows for `ticketGenerationStartBlock` (written by the game, read only via `extsload`); the remainder are re-keyed counterparts (`slither-delta-vs-event-index-run.txt`) |
-| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,455 instances (+6 in the literal categories from the new constants, one fewer uninitialized-local); no new category |
-
-## Evidence — 2026-09-22, craps extsload revision (base of the revision above)
-
-The source is the committed revision `6d02e4bfa25157987159eee225e7c3673a384fd1`. It differs from the
-event-index revision below by one view function: `CrapsBattle.extsload(bytes32)`, the
-raw-slot reader `DegenerusGame` already exposes, so craps lens/viewer contracts and client
-replay can read table state through `eth_call` without touching the contract again. It adds
-no storage, no event and no runtime gas on any existing path; it adds 42 bytes of runtime.
-The self-imposed headroom rail in `test/craps/CrapsGas.t.sol` moved from 24,300 to 24,400
-bytes because it was calibrated to an older build; the EIP-170 limit is unchanged. Raw runs
-are in [the supplementary archive](audit/evidence-2026-09-22-craps-extsload.tar.gz).
-
-| Check | Result |
-| --- | --- |
-| Foundry full seven-group sweep at this revision | 2,654 passed, 0 failed, 103 skipped, run in a detached worktree at this exact revision with its own build cache; the invariant that tripped its non-vacuity guard under the default seed on the two prior trees passed here |
-| Per-test gas, event-index revision vs this revision, same fixture pins | +22 gas per external `CrapsBattle` call (one more selector compare in the dispatcher): 812 tests moved, 755 of them exact multiples of 22; largest +1.34% on a craps draw-rate test making thousands of table calls; 4 tests fell, at most 57,538 gas in tests that deploy a module (`gas-delta-per-test.txt`) |
-| Hardhat `make test-hardhat` | 1,659 passing, 22 pending, 0 failing |
-| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`, both pre-disclosed reds |
-| Eleven `make check-*` gates and the storage layout oracle | all pass |
-| EIP-170 runtime size, checked-in pins | `DegenerusGameAdvanceModule` 24,543 (33 spare), `DegenerusGameMintModule` 24,538 (38 spare), `CrapsBattle` 24,331 (245 spare), `DegenerusGame` 24,220 (356 spare); all 32 entries fit |
-| EIP-170 runtime size, Hardhat-style fixture pins | `DegenerusGameAdvanceModule` 24,560 (16 spare), `DegenerusGameMintModule` 24,543 (33 spare), `CrapsBattle` 24,399 (177 spare), `DegenerusGame` 24,225 (351 spare); all 32 entries fit |
-| Slither 0.11.5, same flags as below | 3,889 results over 183 contracts: 200 High, 517 Medium, 555 Low, 2,561 Informational, 56 Optimization; High and Medium sets identical to the event-index run; the one new entry is Informational `missing-inheritance` (`CrapsBattle` now matches the slot-reader interface shape through `extsload`); 33 further Low/Medium/High entries re-keyed with cancelling counterparts in the same functions (`slither-delta-vs-event-index-run.txt`) |
-| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,449 instances; every category and per-category instance count identical to the event-index report |
-
-## Evidence — 2026-09-21, event-index revision (base of the revision above)
-
-The source is the committed revision `91cc40e39bb97ae1ab50e011ff54db92021033d2`. It differs from the
-seed-domain snapshot below by one line: `EntryOwnerRegistered.owner` is now an indexed
-topic (`contracts/storage/DegenerusGameStorage.sol`), so a wallet's registry positions
-resolve from one `eth_getLogs` filter without an off-chain ticket index. The event
-signature, and therefore `topic0`, is unchanged; `owner` moves from the second data word
-to the third topic. No emit site, storage slot or other event changed. The addendum in
-[the readiness review](audit/AUDIT-READINESS-2026-09-21.md) prices the change; raw runs
-are in [the supplementary archive](audit/evidence-2026-09-21-event-index.tar.gz).
-
-| Check | Result |
-| --- | --- |
-| Foundry full seven-group sweep at this revision | 2,652 passed, 0 unresolved failures, 103 skipped; one invariant (`CrapsRealWiringConservation`) tripped its own non-vacuity guard under the runner's default seed on both the base and this revision and passes with seeds `0xdeadbeef` and `0x1` (logs in `invariant-reruns/`) |
-| Per-test gas, base revision vs this revision, same fixture pins | +95 gas per owner registration on the canonical path, +104 on the foil-buy path; largest single-test change +0.31%; 14 tests fell by at most 1,600 gas (module deploy size); no test moved for any other reason (`gas-delta-per-test.txt`) |
-| Hardhat `make test-hardhat` | 1,659 passing, 22 pending, 0 failing |
-| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`, both pre-disclosed reds |
-| Eleven `make check-*` gates and the storage layout oracle | all pass |
-| EIP-170 runtime size, checked-in pins | `DegenerusGameAdvanceModule` 24,543 (33 spare), `DegenerusGameMintModule` 24,538 (38 spare), `CrapsBattle` 24,289 (287 spare), `DegenerusGame` 24,220 (356 spare); `DegenerusGameWhaleModule` −90 bytes, `DegenerusGameFoilPackModule` +6, every other registry sink −8; all 32 entries fit |
-| EIP-170 runtime size, Hardhat-style fixture pins | `DegenerusGameAdvanceModule` 24,560 (16 spare), `DegenerusGameMintModule` 24,543 (33 spare), `CrapsBattle` 24,357 (219 spare), `DegenerusGame` 24,225 (351 spare); all 32 entries fit; pins reproduced outside the fixture from the default Hardhat signer and mock nonces (`ContractAddresses-hardhat-style.sol` in the supplementary archive) |
-| Slither 0.11.5, same flags as below | 3,888 results over 183 contracts: 200 High, 517 Medium, 555 Low, 2,560 Informational, 56 Optimization, identical totals and identical High composition to the seed-domain run; keyed line-insensitively, 8 Low/Informational entries re-keyed with 8 cancelling counterparts in the same functions (`slither-delta-vs-2026-09-21-baseline.txt`) |
-| Aderyn 0.6.8 | 10 High and 23 Low categories, 2,449 instances; every category and per-category instance count identical to the seed-domain report |
-
-## Evidence — 2026-09-21, seed-domain snapshot (base of the revision above)
-
-The source is the working-tree snapshot based on `1a4d06d08aa1c5e2a15575039dd66e9c8cc1e0b3`.
-See [the readiness review](audit/AUDIT-READINESS-2026-09-21.md) and
-[the evidence archive](audit/evidence-2026-09-21.tar.gz). Exact test identities and
-which rerun supplies each result are in `foundry-reconciliation.json` inside the archive.
-
-| Check | Result |
-| --- | --- |
-| Foundry full seven-group sweep | 2,608 passes, 45 initial failures, 103 skips; every initial failure resolved by the affected-suite reruns |
-| Reconciled Foundry identities, including new regressions | 2,550 unique passing tests, 0 unresolved failures, 103 skipped; duplicate imported test executions counted once |
-| Final decimator/claim/freeze/golden/gas rerun | 58 passed, 0 failed, 7 skipped; includes 1,000 full-width entropy fuzz cases and the century stress variants |
-| Final Hardhat full suite | 1,658 passed, 0 failed, 23 pending |
-| Final statistical suite | 191 passed, 20 pending, 2 previously disclosed failures: obsolete v36 protected-source baseline and STAT-03 empty-bucket expectation |
-| Eleven source/interface gates | All pass; 245 RNG taint sites, 91 registered RNG storage accesses and 223 advance external-call sites |
-| Storage layout oracle | All 27 top-level goldens and delegatecall slot alignment pass; the packed one-slot decimator snapshot and its tagged claim seed are separately checked by `DecimatorEntropy.t.sol` |
-| Runtime size | All 32 deployment entries fit EIP-170 with checked-in and test pins; smallest measured headroom is 16 bytes under Hardhat fixture pins |
-| Static analysis | Current counts and triage context in the readiness review; analyzer output is not a clean-bill-of-health assertion |
-
-Fuzz tests retain the configured 1,000 cases (some existing tests request 10,000);
-invariants retain 256 runs at depth 128. The full sweep ran during fixture repairs.
-The final decimator full-word storage change followed that sweep and was checked
-with the 58-test affected suite, a fresh production build, layout/source gates,
-full Hardhat rerun and refreshed analyzers. The archive preserves the earlier
-contract hashes and initial failed logs; it does not present this as a single
-uninterrupted green Foundry invocation. Current discovery splits 193 top-level
-fuzz sources into 49/49/49/46 groups; the earlier sweep had 48 in each group.
-
-Cold full-transaction gas measurements (including intrinsic gas where named):
-
-| Path | Gas |
-| --- | ---: |
-| Century consolidation + failed/rolled-back 365-day vault settlement, final decimator storage | 13,339,416 |
-| Same century case, successful vault settlement | 13,302,484 |
-| Terminal fresh-word settlement + deity refunds | 10,418,873 |
-| Terminal recorded-word settlement + deity refunds | 10,330,161 |
-| Early-bird 128-recipient, hero and partial-source-word pressure (call gas, excluding intrinsic) | 7,895,877 |
-| Genesis initialization, both protocol deities | 16,378,197 |
-
-The largest measured cold advance has 1,660,584 gas below the 15M review target
-and 3,437,800 below the 16,777,216 transaction cap. Genesis is a separate
-initialization transaction with only 399,019 gas spare. Stress fixtures retain
-explicit capped calls and their non-vacuity assertions. These measurements are
-not a mathematical maximum over all reachable states. Summing two separate
-advance stages does not describe a single transaction.
-
-## Historical evidence — 2026-09-18
-
-These results precede the current source snapshot and are retained as a baseline.
-Recorded on 2026-09-18 (Node 24.18.0, Foundry 1.6.0-nightly, solc 0.8.34) at the manifest's
-base revision `2d350e4f9`. The whole-tree Foundry rows were measured on that revision's
-sources before they were committed; the far-future suites were re-run after the last
-working-tree change to `DegenerusGameMintModule.sol` was reverted to the committed text.
-Gates, oracle, sizes and the static-analysis rows were run at the committed revision.
-
-| Check | Result |
-| --- | --- |
-| Foundry, whole `test/` tree in the seven compile units above | 2,460 passed, 0 failed, 104 skipped, 313 suites |
-| Foundry unit 1 (craps, gas, economics, mutation) | 631 passed, 0 failed, 13 skipped |
-| Hardhat `make test-hardhat` | 1,656 passing, 22 pending, 0 failing |
-| Hardhat `npm run test:stat` | 191 passing, 20 pending, 2 failing: the `v36.0 SURF-01..04` byte-identical baseline check and `STAT-03`, both pre-disclosed reds |
-| Eleven `make check-*` gates and the storage layout oracle | all pass |
-| Slither 0.11.5, 182 contracts, rescanned at the base revision | 4,120 results, 187 High; High and Medium composition identical to the prior scan (one `uninitialized-state` key re-keyed by the new early-bird latch helper, the shared-storage class) |
-| Aderyn 0.6.8 | 10 High, 22 Low, unchanged |
-| Worst-case advance stages, cold state, word applied in the same transaction | jackpot-phase day one 10,424,211 (ETH leg) and 8,076,401 (early-bird leg, its own stage); purchase-phase daily 13,837,513; all under 16,777,216 (`test/gas/JackpotDayOneWorstCase.t.sol`, `PurchaseDailyWorstCase.t.sol`) |
-| EIP-170 runtime size, checked-in pins | largest 24,559 bytes (`DegenerusGameAdvanceModule`, 17 spare); `DegenerusGameMintModule` 24,444 (132 spare); `CrapsBattle` 23,930 (646 spare); none over |
-
-
-Some `test/repro` tests deliberately assert an undesirable current behavior: a passing
-witness confirms the behavior, not a fix. Inspect test intent, skips and failures.
-Slither/Aderyn output requires source-specific triage. The 187 Slither Highs by class, as
-the project reads them; each remains open to the auditor's own judgment:
-
-- 141 `uninitialized-state`: variables of the shared `DegenerusGameStorage` layout read in one
-  module's compilation unit and written in another's. The modules delegatecall against one
-  storage, so no unit is a deployment on its own.
-- 21 `weak-prng`: day-index and time-of-day gates on `block.timestamp`, and a modulo over an
-  already-hashed VRF word; nothing a caller can steer is drawn from them.
-- 6 `arbitrary-send-eth`: two in mocks; the rest are the ETH/stETH payout doors of the Game,
-  the Vault and sDGNRS paying a recipient computed from the contract's own claim state.
-- 6 `reentrancy-balance` and 3 `reentrancy-eth`, all on the advance chain: external calls
-  into protocol contracts pinned at deployment.
-- 4 `delegatecall-loop`: the lootbox module's spin dispatch to pinned modules.
-- 2 `encode-packed-collision`: SVG string assembly in the subscription token renderer.
-- 2 `incorrect-exp`: `^` used as bitwise XOR, in OpenZeppelin `mulDiv` and a quest pairing hash.
-- 2 `incorrect-shift`: Yul shifts in the bucket-lane packing whose operand order the detector
-  misreads; the packing tests pin the layout.
-
-Symbolic proofs and deep invariants are separate runs, not implied by `make test-hardhat` or an
-ordinary Foundry pass.
+The size gate checks deployment entries against the 24,576-byte runtime limit and
+rejects stale, missing or unlinked artifacts. Address pins affect compiled output;
+repeat deployment checks with the intended production pins. The storage oracle
+compares top-level slots, offsets and types; it does not recursively verify nested
+struct members. Source manifests are review aids, not proofs of their annotations.
+
+## Tests
+
+The grouped runners bound compilation memory, reject empty or failed batches and
+record commands and inputs under the ignored `.audit-test-logs/` directory.
+`--list` prints the selected files; `--file` selects a focused source root. Foundry
+uses seven logical groups, while Hardhat defaults to one test file per process.
+
+```sh
+make test-foundry
+make test-hardhat
+# Inspect selections or run a focused regression:
+python3 scripts/test-foundry-groups.py --list
+python3 scripts/test-hardhat-groups.py --list
+python3 scripts/test-foundry-groups.py --file test/repro/TerminalAffiliateKnownWord.t.sol
+python3 scripts/test-hardhat-groups.py --file test/edge/BackfillIdempotency.test.js
+```
+
+For CI-equivalent cold integration and gas checks:
+
+```sh
+FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
+  --group integration-gas --max-files 5 --threads 1
+```
+
+CI runs the other six Foundry groups with isolation disabled, at most ten roots
+per batch and one thread. The default fuzz campaign uses 1,000 runs; default
+invariants use 256 runs at depth 128, with per-suite overrides visible in source.
+`npm test` selects fewer files than the maintained Hardhat runner.
+
+Gas expectations, including transaction intrinsic gas, are <=10M for ordinary
+calls, <=11M for unusual calls and <=11.5M for extreme cases. No transaction may
+exceed 11.5M. Fixture gas limits permit setup and multiple transactions; they are
+not the production ceiling. Lower gas usage is acceptable. Do not raise a ceiling
+to make a regression pass.
+
+## Deep and symbolic checks
+
+```sh
+FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py \
+  --group invariants --max-files 5 --threads 1
+```
+
+The deep invariant profile uses 1,000 runs at depth 256. The separate Halmos job
+uses version 0.3.3, the `halmos` Foundry profile and the bounds recorded in
+[CI](../.github/workflows/ci.yml). Both jobs run on scheduled or manual dispatch.
+Use that job's command in a disposable checkout to reproduce symbolic checks.
+
+Known verification limits:
+
+- The last local full Halmos campaign left five properties timed out. A timeout
+  establishes neither a counterexample nor a proof; the campaign is not all green.
+  These are `check_cost_no_overflow`, `check_autorebuy_ethspent_bounded` and
+  `check_takeprofit_multiple` in `test/halmos/Arithmetic.t.sol`, plus
+  `check_bps_split_exact` and `check_affiliate_reward_bounded` in
+  `test/halmos/NewProperties.t.sol`.
+- The last local deep invariant campaign did not finish. Ordinary test passes
+  do not substitute for a completed deep run.
+- Existing skipped/pending tests and harness assumptions remain visible in test
+  source. Imported helper suites can repeat across batches, so execution totals
+  are not counts of unique properties.
+- A full remote CI run of the supplied revision has not been confirmed. Consult
+  that revision's CI results rather than historical local pass counts.
+
+## Static analysis
+
+Optional Slither and Aderyn jobs are configured in CI and are non-blocking.
+To run Slither against a fresh Hardhat build in a disposable checkout:
+
+```sh
+pip install slither-analyzer==0.11.5
+npx hardhat compile
+slither . --compile-force-framework hardhat --ignore-compile
+```
+
+Analyzer output requires independent triage. Reports and test logs are generated
+on demand and are not part of the source handoff.

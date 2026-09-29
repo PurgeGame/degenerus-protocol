@@ -115,38 +115,14 @@ nothing:
 | Per resolved bet | `BET_WORK_CREDIT_GAS` | 1,500 gas (~0.3 unit) |
 | Unit divisor (floor) | `BET_WORK_UNIT_GAS` | 4,700 gas/unit |
 
-Bets are not a bounty farm: placing a bet costs ~100k gas, and one full knee
-step of the bounty takes ~47 resolved bets, so placing bets to crank them
-yourself only breaks even below ~0.05 gwei, house edge ignored, and then for
-dust. `KeeperFaucetResistance` (GAS-06) pins this for every cheap bet shape
-(1 to maximum spins, both currencies, a warm boon-draw ring) down to 0.1 gwei,
-after the keeper's largest refund. A work-priced credit (base + per spin + win
-box) was rejected because a 25-spin bet earned about five units for the same
-~100k placement, which paid below ~0.35 gwei.
-Measured sweep cost per bet (warm, same owner): ~9.1k gas for a 1-spin loss,
-~2.5-3k per extra spin, and ~57k more for a win box.
+The `KeeperFaucetResistance` tests compare placement costs and keeper credits
+across cheap bet shapes. See [Verification](VERIFICATION.md) for execution.
 
 ## Bet view
 
 `degeneretteBetInfo(uint48 index, uint64 betId)` is a view that returns the
 raw queued bet word (zero once resolved or if the id is unknown/out of
 range).
-
-## Removed surface
-
-- `degeneretteResolve(address[], uint64[])` — the old keeper helper and its
-  flat ~1 FLIP reward. `MinerBounty` kind 3
-  (`MINER_BOUNTY_DEGENERETTE_RESOLVE`) is retired; queued-bet resolutions now
-  earn the box-open bounty (kind 2, `MINER_BOUNTY_BOX_OPEN`) via the sweep.
-- `DegenerusVault.gameResolveDegeneretteBets` — the vault's wrapper around the
-  old per-player resolve call. The vault's bets are now resolved by the
-  `mineFlip()` sweep like anyone else's; no resolve call is needed.
-- The per-spin `DegeneretteResult` event — replaced by one `DegeneretteResolved`
-  event per bet (below).
-- `resolveDegeneretteBets(uint48 index, uint64[] betIds)` — the manual door
-  that let anyone settle chosen bets at `index`, in any order, ahead of the
-  sweep. A bet now resolves only when the sweep's own in-order cursor reaches
-  it (see Sweep integration above).
 
 ## Event format
 
@@ -163,16 +139,6 @@ spin's score and gold, the bet word's stake-per-spin and currency, and its
 activity score — nothing else needed to itemize an indexer's view of a bet's
 spins beyond this one event. `PayoutCapped` (ETH pool-cap overflow to
 lootbox) is unchanged.
-
-## Gas
-
-Placement is roughly unchanged versus the old per-player book: one new queue
-slot plus the array length write replaces the old bet slot plus nonce-counter
-write, and a player's very first-ever bet is now about 17k gas cheaper (no
-nonce slot to initialize). Resolution is about 2.4k gas per spin cheaper than
-before, from the packed per-bet event replacing the old per-spin event — and
-under the new model players no longer pay resolution gas at all; the keeper
-crank does.
 
 ## Settlement order and indexing
 

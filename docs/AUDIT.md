@@ -12,10 +12,10 @@ From the repository root, verify the supplied source/build inputs before patchin
 sha256sum -c docs/audit/source-sha256.txt
 ```
 
-Any source change requires a new manifest and appropriately scoped verification. The
-test and static-analysis results recorded in [Verification](VERIFICATION.md) identify
-the source version actually checked; historical rows do not verify the latest snapshot. The audit snapshot does not identify or certify any
-deployed instance.
+Any source change requires refreshed hashes and appropriately scoped verification.
+[Verification](VERIFICATION.md) explains how to build and run checks independently,
+including their known limitations. The snapshot identifies source inputs, not test
+results or a deployed instance.
 
 ## Read in this order
 
@@ -23,8 +23,7 @@ deployed instance.
 2. [Security](../SECURITY.md): who can do what and which dependencies are trusted.
 3. [Known issues](../KNOWN-ISSUES.md) and [economic disclosures](../ECONOMIC_DISCLOSURES.md).
 4. [RNG domains](audit/RNG-DOMAINS.md): seeds, intentional shared outcomes and retained exceptions.
-5. [Current readiness review](audit/AUDIT-READINESS-2026-09-21.md): changes, evidence and remaining limits.
-6. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
+5. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
 
 ## Review priorities
 
@@ -39,6 +38,12 @@ deployed instance.
    eligibility, recipients, rounding and exactly-once settlement across all games.
 
 Operational assumptions, including scheduled progression, are disclosed in Known Issues.
+
+Gas expectations are at most 10M for ordinary calls, 11M for unusual calls and 11.5M
+for extreme cases; 11.5M is the hard transaction ceiling, including intrinsic gas.
+At game over, fair ETH distribution and completion take priority. FLIP has no
+post-game value by design; unfinished Craps or other FLIP bookkeeping does not
+justify adding prerequisites to ETH release.
 
 ## Project High-severity criteria
 

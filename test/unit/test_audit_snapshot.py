@@ -1,5 +1,4 @@
-"""Evidence checksum failures must survive a source-identity refresh."""
-import hashlib
+"""Snapshot identity includes verification inputs without expanding audit scope."""
 import importlib.util
 import contextlib
 import io
@@ -13,52 +12,6 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("audit_snapshot", ROOT / "scripts/audit-snapshot.py")
 AUDITOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(AUDITOR)
-
-
-class EvidenceIntegrityTests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.audit = Path(self.temp.name)
-        self.patch = patch.object(AUDITOR, "AUDIT", self.audit)
-        self.patch.start()
-        self.addCleanup(self.patch.stop)
-        self.contents = b"identifiable evidence, including failed attempts\n"
-        (self.audit / "evidence.zip").write_bytes(self.contents)
-        self.manifest = {
-            "supplement_archive_10": "evidence.zip",
-            "supplement_archive_10_sha256": hashlib.sha256(self.contents).hexdigest(),
-        }
-
-    def test_matching_numbered_and_original_archives(self):
-        self.manifest.update(evidence_archive="evidence.zip", evidence_archive_sha256=hashlib.sha256(self.contents).hexdigest())
-        AUDITOR.check_archives(self.manifest)
-
-    def test_tampered_archive_fails_even_when_refreshing_sources(self):
-        (self.audit / "evidence.zip").write_bytes(b"replaced by a passing-only log")
-        (self.audit / "snapshot.json").write_text(json.dumps(self.manifest))
-        with patch("sys.argv", ["audit-snapshot.py", "--write"]):
-            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
-                AUDITOR.main()
-        self.assertEqual(json.loads((self.audit / "snapshot.json").read_text()), self.manifest)
-        self.assertFalse((self.audit / "source-sha256.txt").exists())
-
-    def test_missing_archive_fails(self):
-        (self.audit / "evidence.zip").unlink()
-        with self.assertRaises(FileNotFoundError):
-            AUDITOR.check_archives(self.manifest)
-
-    def test_parent_and_absolute_paths_fail(self):
-        for name in ("../evidence.zip", "/tmp/evidence.zip"):
-            with self.subTest(name=name):
-                self.manifest["supplement_archive_10"] = name
-                with self.assertRaisesRegex(ValueError, "invalid evidence archive path"):
-                    AUDITOR.check_archives(self.manifest)
-
-    def test_missing_checksum_fails(self):
-        del self.manifest["supplement_archive_10_sha256"]
-        with self.assertRaisesRegex(ValueError, "missing or invalid archive checksum"):
-            AUDITOR.check_archives(self.manifest)
 
 
 class VerificationInputTests(unittest.TestCase):

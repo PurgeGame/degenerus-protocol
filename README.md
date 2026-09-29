@@ -14,7 +14,7 @@ execute by delegatecall, while craps uses a separate stateless dice engine.
 | [Security and roles](SECURITY.md) | Authorities, external dependencies and reporting |
 | [Known issues](KNOWN-ISSUES.md) | Accepted assumptions and disclosed limitations |
 | [Economic disclosures](ECONOMIC_DISCLOSURES.md) | Creator allocations and economic rights |
-| [Verification](docs/VERIFICATION.md) | Build, tests and evidence limits |
+| [Verification](docs/VERIFICATION.md) | Build, tests and known verification limits |
 
 Solidity **0.8.34**, via IR, optimizer **1,000 runs**, EVM **Osaka**. Dependencies are
 recorded in `package-lock.json` and `foundry.lock`; see verification instructions before

@@ -32,8 +32,7 @@ The century refill uses the committed transition word already passed through
 from 25 through 75, inclusive, with a domain specific to this mechanism and level.
 Burn amounts size the mint but do not enter the draw. The result is public once
 the word is known; permissionless settlement retains its existing live-pool timing.
-Repeated calls cannot reroll a completed century. See
-[the random-refill verification](SDGNRS-CENTURY-RANDOM-2026-09-22.md).
+Repeated calls cannot reroll a completed century.
 
 ## Domain map
 
@@ -121,8 +120,8 @@ named constants in the consumer; full string hashes are constant expressions.
 - There is no entropy fallback. A VRF request unanswered for 14 days ends the
   game deterministically with no word at all: the terminal level's tickets share
   the pot (`claimDeadVrf`). A normal ending draws only on a terminal word it
-  requested itself after liveness froze purchases. `../VRF-STALL-AND-DEADMAN-PLAN.md`
-  is an earlier design; the NatSpec of `_livenessTriggered`, `_vrfDead` and
+  requested itself after liveness froze purchases. The NatSpec of
+  `_livenessTriggered`, `_vrfDead` and
   `_handleGameOverPath` states the implemented behavior.
 
 ## Regression evidence
@@ -137,5 +136,5 @@ checks shared boards across owners, currencies, stakes and bet ids;
 `DecimatorEntropy.t.sol` checks the full-word-derived, tagged 32-bit snapshot and
 the actual claim-box delegatecall for words sharing their low 32 bits and for
 different rounds. It does not establish 256 bits of retained claim-box entropy.
-See the current verification report for execution status; the inventory itself
-is not a proof of statistical independence or an external audit clearance.
+See [Verification](../VERIFICATION.md) to run these tests and understand their
+limits. This inventory does not establish statistical independence.

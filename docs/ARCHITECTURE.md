@@ -88,8 +88,8 @@ per day. An x01 transition in a later century uses the accelerated curve.
 
 ## Comp accounting
 
-The shared comp allowance starts at 4.56M FLIP-equivalent. Each battle credits 2% of
-participating bankroll once at finalization, including high-seat multiples and paid,
+The shared comp allowance starts at 4.96M FLIP-equivalent (`200 * CrapsPriceLib.NORMAL_VALUE`).
+Each battle credits 2% of participating bankroll once at finalization, including high-seat multiples and paid,
 pass, comp and protocol seats; bounty, donations and boosts are excluded.
 
 Grants debit the shared allowance and, for delegates, their individual limit atomically.
@@ -192,8 +192,9 @@ reserve forward. This award is Coinflip credit and creates no extra action, comp
 and skipped days have no paid field; their award-only battle uses the day's otherwise unused
 remainder-seven slot, which the lapse sweep never walks. The worst settle call is bounded near
 8.6M gas and a full draw chunk measures up to 7.2M; see
-[the preferences and jackpot battle interface](CRAPS-PREFERENCES.md) and
-[the gas derivation](JACKPOT-BATTLE-GAS-HANDOFF.md). The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
+[the preferences and jackpot battle interface](CRAPS-PREFERENCES.md) and the
+`JackpotBattleStageGas`, `JackpotBattleDrawGas` and `JackpotBattleAwardsGas` tests.
+The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
 second) over 48 rounds of four samples: 12 each at the BAF level, level + 1, level + 2..5
 and level + 6..99 (centuries: 8, 8, 8, 8, and 16 on the previous 99 levels). The two
 unminted ranges sample one queue lane per wallet.
@@ -271,8 +272,7 @@ calculated first. The Jackpot module delegates a separate recipient draw and
 claim credit to `WhaleModule.awardWhalePass`; it returns the exact cost credited
 to futurePrizePool. The Jackpot module includes that cost in the current-pool
 debit and pays the remaining ETH to the original winners. The solo ETH winner
-still owns any golden-ticket arm. See the
-[quadrant conversion design](JACKPOT-QUADRANT-WHALE-PASSES.md).
+still owns any golden-ticket arm. `QuadrantWhalePass` covers the conversion rules.
 
 Early-bird pricing still moves the entire 3% future-pool slice to nextPrizePool.
 When the ordinary payout exceeds 45 whole tickets per winning slot and the pooled
@@ -287,15 +287,15 @@ serves only when it is the one active bucket. All full passes go to that one pla
 who need not have won immediate tickets. Pass selection uses separate tagged
 entropy from the day's committed word; award amounts do not reroll recipients.
 Settlement moves no ETH and the sub-pass remainder also stays in next. Below
-the conversion conditions, the ordinary ticket payout remains intact. See the
-[early-bird conversion design](EARLY-BIRD-WHALE-PASS-PLAN.md).
+the conversion conditions, the ordinary ticket payout remains intact.
+`EarlyBirdWhalePass` covers the conversion rules.
 
 Protocol deity grants occur after the deployment sequence. Their perpetual entries
 and protocol boon cohorts have their own pre-request scheduling and closure rules.
 Foil packs resolve tomorrow's committed draw, then compare their four lines against each
 day's board once a day, purchase and jackpot days alike, at the same face table. A VRF stall skips missed days on
 recovery and freezes auto-rebuy arming; a request unanswered for 14 days ends the game
-deterministically. `VRF-STALL-AND-DEADMAN-PLAN.md` is an earlier design; the NatSpec of `_livenessTriggered`,
+deterministically. The NatSpec of `_livenessTriggered`,
 `_vrfDead` and `_handleGameOverPath` states the implemented behavior.
 
 At the first AFKing stage of each level, sDGNRS attempts a whale-pass purchase of
@@ -318,8 +318,8 @@ is split Whale/Affiliate/Lootbox/Reward in a 1:3:2:1 ratio, with allocation dust
 Lootbox; PresaleBox and the wrapper receive no allocation. A processed-century
 marker prevents replay, and terminal pool destruction permanently closes the
 mechanism even when inventory is zero. Recycling moves no backing and changes no
-pending redemption claims. See [the recycling design](SDGNRS-CENTURY-RECYCLE-PLAN.md)
-and [economic disclosures](../ECONOMIC_DISCLOSURES.md) for dilution and timing.
+pending redemption claims. See [economic disclosures](../ECONOMIC_DISCLOSURES.md)
+for dilution and timing, and `SdgnrsCenturyRecycle` for the accounting tests.
 
 ## Invariants to preserve
 
@@ -362,4 +362,4 @@ entry point.
 
 ### High-roller jackpot reserve
 
-`JackpotBattle.lockJackpotBattle` assigns 5% of gross, unrolled Added to a persistent reserve and leaves 95% for the main field. Award counts still use gross Added. Once the field finalizes, any eligible high entry gives the event one 10% chance to pay the whole reserve through Coinflip credit. Each accepted high entry has one equal ticket; sDGNRS is excluded, the vault is eligible, and activity score is unused. Pass and comp entries consume their existing funding and qualify. Paid entry/upgrade closure freezes the field before the settling RNG. The cold module samples already-resolved paid seats in bounded batches, preserving its nominee/count/cursor; the final draw is idempotent. Reserve grants do not generate action, comps or another protocol multiplier. See [the reserve specification](CRAPS-HIGH-ROLLER-INCENTIVE-PROPOSAL.md).
+`JackpotBattle.lockJackpotBattle` assigns 5% of gross, unrolled Added to a persistent reserve and leaves 95% for the main field. Award counts still use gross Added. Once the field finalizes, any eligible high entry gives the event one 10% chance to pay the whole reserve through Coinflip credit. Each accepted high entry has one equal ticket; sDGNRS is excluded, the vault is eligible, and activity score is unused. Pass and comp entries consume their existing funding and qualify. Paid entry/upgrade closure freezes the field before the settling RNG. The cold module samples already-resolved paid seats in bounded batches, preserving its nominee/count/cursor; the final draw is idempotent. Reserve grants do not generate action, comps or another protocol multiplier.

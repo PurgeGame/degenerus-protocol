@@ -248,10 +248,3 @@ The existing six maximum-depth searches remain covered by the daily advance gas
 witness. Degenerette scoring, stake boons and RNG freeze regression suites run
 alongside the entry tests. Source gates cover delegatecall routing, removed
 selectors, RNG closure, pool writes and advance-chain calls.
-
-Validated September 22, 2026: **106 Foundry tests passed**, zero failed, with one
-existing skipped per-spin DGNRS test. Fuzz properties run 1,000 cases each. The
-cold daily settlement with six maximum-depth boon searches used **1,800,678 gas**,
-including intrinsic gas. Interface coverage, all ten source gates, storage-layout
-consistency and all 32 checked deployment runtime-size limits pass. Logs are under
-`.audit-test-logs/eth-hero-boons-final/`.
