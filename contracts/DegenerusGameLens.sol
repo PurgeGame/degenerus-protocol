@@ -553,6 +553,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint8 denom,
         uint8 subBucket
     ) external view returns (uint256 totalBurn, uint32 length) {
+        // Only live denominators and their subbuckets are valid; reject storage aliases.
+        if (denom < 2 || denom > 12 || subBucket >= denom) revert E();
         uint256 base;
         assembly {
             base := decBucketBurnTotal.slot

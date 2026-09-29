@@ -386,6 +386,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      scan on top of a full-budget human sweep.
     uint256 internal constant OPEN_WEIGHT_BUDGET = OPEN_BATCH * OPEN_ITEM_WEIGHT;
 
+    /// @dev The decimator leg's walk budget, in the same units, less what the box legs scanned.
+    ///      Its settles are charged by measured in-batch cost (DegenerusGameDecimatorModule), so
+    ///      the budget is sized on the bound itself: 2,030 units x 4.7k, plus one settle's
+    ///      overshoot (at most ~60 units) and the router's tail, stays within 10M gas.
+    uint256 internal constant DEC_WALK_BUDGET = 2_030;
+
     /// @dev THE CRAPS LEG'S FLAT REWARD — one FLIP for shutting a window or walking a field,
     ///      whichever the crank found to do. Flat rather than pro-rated because the two jobs are
     ///      nothing alike: an arm is one cheap state change and a settle batch is a whole gas
@@ -1964,7 +1970,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // afking walk left idle. `opened == 0` is also exactly when no box bounty was
                 // priced, so the one credit below stays one category and cannot be stacked.
                 (uint256 decSettled, uint256 decUnits, bool decMoved) = _decimatorSettle(
-                    spentUnits < OPEN_WEIGHT_BUDGET ? OPEN_WEIGHT_BUDGET - spentUnits : 0
+                    spentUnits < DEC_WALK_BUDGET ? DEC_WALK_BUDGET - spentUnits : 0
                 );
                 spentUnits += decUnits;
                 if (decSettled != 0) {

@@ -5,7 +5,7 @@
 // Per D-275-TST-04-01: direct-call seed-uniqueness chi-square + cross-pair
 // independence + cross-slice independence across the 4 upstream auto-resolve
 // callers:
-//   (a) DecimatorModule:594 — claimDecimatorJackpot single-shot per call
+//   (a) DecimatorModule — settleDecimatorWinners, single-shot per settled entry
 //   (b) DegeneretteModule:786 — single-shot per payout
 //   (c) sDGNRS:672 — single-shot per redemption; upstream
 //       entropy = keccak(rngWord, player)

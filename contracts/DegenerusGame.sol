@@ -1234,7 +1234,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  • GAME_AFKING_MODULE       - AFKing subscriptions, seats and prepaid balances                                 |
       |  • GAME_BINGO_MODULE        - Bingo card purchase and claims                                                   |
       |  • GAME_BOON_MODULE         - Deity boon effects and activation                                                |
-      |  • GAME_DECIMATOR_MODULE    - Decimator claim credits and lootbox payouts                                      |
+      |  • GAME_DECIMATOR_MODULE    - Decimator burns, draws and settlement                                            |
       |  • GAME_DEGENERETTE_MODULE  - Degenerette bet placement and resolution                                         |
       |  • GAME_FOILPACK_MODULE     - Foil pack purchase, match and round drains                                       |
       |  • GAME_GAMEOVER_MODULE     - Game-over declaration and final sweeps                                           |
@@ -1362,19 +1362,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_JACKPOT_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Permissionlessly settle one winning Decimator entry (value credits to its owner).
-    /// @dev Signature: claimDecimatorJackpot(uint24 lvl, uint8 denom, uint32 position) — the level
-    ///      whose round the entry won (per-level snapshots persist, no expiry), the entry's
-    ///      denominator, and its position in the winning list. The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding here
-    ///      would cost contract-size headroom for no behavior change.
-    function claimDecimatorJackpot(uint24, uint8, uint32) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }

@@ -35,7 +35,7 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 /**
  * @title DegenerusGameDecimatorModule
  * @author Burnie Degenerus
- * @notice Delegate-called module handling decimator jackpot tracking, resolution, and claim credits.
+ * @notice Delegate-called module handling decimator jackpot tracking, resolution, and settlement.
  * @dev This module is called via delegatecall from DegenerusGame, meaning all
  *      storage reads/writes operate on the game contract's storage.
  */
@@ -49,8 +49,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /// @param lvl Current game level.
     /// @param bucket The denominator bucket used (2-12).
     /// @param subBucket The deterministic subbucket assigned (0 to bucket-1).
-    /// @param position The entry's position in the (lvl, bucket, subBucket) list — with lvl and
-    ///        bucket, what `claimDecimatorJackpot` names.
+    /// @param position The entry's position in the (lvl, bucket, subBucket) list.
     /// @param effectiveAmount Burn weight after the multiplier. The multiplier applies to
     ///        the first DECIMATOR_MULTIPLIER_CAP of BASE burned at this level; the weight
     ///        it produces is itself uncapped.
@@ -100,12 +99,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         uint256 totalBurn
     );
 
-    /// @notice Emitted when a winning decimator entry settles, by claim or by mineFlip's walk.
+    /// @notice Emitted when mineFlip's walk settles a winning decimator entry.
     /// @param player The entry's owner, credited with the payout.
-    /// @param lvl Decimator level being claimed.
+    /// @param lvl Decimator level the entry won.
     /// @param amountWei Total pro-rata payout in wei.
     /// @param ethPortion Portion credited as ETH claimable.
-    /// @param lootboxPortion Portion routed to whale passes / lootbox (0 post-GAMEOVER).
+    /// @param lootboxPortion Portion routed to whale passes / lootbox.
     event DecimatorClaimed(
         address indexed player,
         uint24 indexed lvl,
@@ -125,19 +124,6 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
     /// @notice Caller is not the authorized game contract.
     error OnlyGame();
-
-    /// @notice Claim attempted for an inactive decimator round.
-    error DecClaimInactive();
-    /// @notice The game-over trigger reads true but the ending has not finished: a claim waits for
-    ///         game over rather than settle in a shape the game might not end in.
-    error EndingPending();
-
-    /// @notice The named winning entry is already settled, moved to a better bucket, or past
-    ///         the list's end.
-    error DecAlreadyClaimed();
-
-    /// @notice The named denominator is outside 2-12, or the entry's share rounds to zero.
-    error DecNotWinner();
 
     // -------------------------------------------------------------------------
     // Internal Helpers
@@ -180,13 +166,19 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     ///      level's outcome largely visible.
     uint16 private constant DEC_LAST_DAY_DEBUFF_BPS = 9_000;
 
-    /// @dev Walk-budget weight of one settle in mineFlip's decimator leg, in the shared open-budget
-    ///      unit (1 unit ~= 4.7k gas; see OPEN_HUMAN_ENTRY_WEIGHT). Covers the entry read, the
-    ///      claimable credit, the pool moves and the lootbox resolution. Priced at the cold p90 of a
-    ///      whale-pass-sized settle (~200k; test/gas/DecimatorSettleGas.t.sol), so a full budget holds
-    ///      45 settles: ~9.1M at that p90 and under 11.5M even with every settle at the measured
-    ///      maximum. A round probe, a list-length read and an empty entry cost 1 unit each.
-    uint256 private constant DEC_SETTLE_WEIGHT = 42;
+    /// @dev Walk-unit price (1 unit ~= 4.7k gas) of a settle's own frame in mineFlip's decimator
+    ///      leg: the entry read and delete, the claimable credit, the pool moves, the event and the
+    ///      box delegatecall. The box is charged separately by its outcome (resolveLootboxDirect's
+    ///      return), and deferred whole half-passes add DEC_WHALE_UNITS. Each is the in-batch
+    ///      marginal cost for a fresh winner; DEC_CALL_UNITS covers what a call touches once.
+    ///      Pinned by test/gas/DecimatorSettleWorstCaseGas.t.sol.
+    uint256 private constant DEC_SETTLE_UNITS = 8;
+    /// @dev Walk units charged once per call, on its first settle: the first touches a batch
+    ///      shares (module code, the credited protocol contracts, the shared Game slots, the open
+    ///      level's first append, tomorrow's first seat and the quest re-sync's bitmap words), so
+    ///      the per-settle prices carry only what each settle adds inside a batch.
+    uint256 private constant DEC_CALL_UNITS = 39;
+    uint256 private constant DEC_WHALE_UNITS = 5;
 
     // -------------------------------------------------------------------------
     // External Entry Points (delegatecall targets)
@@ -331,12 +323,12 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
     /*+======================================================================+
       |                    DECIMATOR JACKPOT RESOLUTION                      |
       +======================================================================+
-      |  Snapshots winning subbuckets for deferred claim distribution.       |
+      |  Snapshots winning subbuckets for deferred settlement.               |
       +======================================================================+*/
 
     /// @notice Snapshot Decimator jackpot winners for deferred settlement.
     /// @dev Selects winning subbucket per denominator and snapshots totals.
-    ///      Payouts happen when mineFlip's walk or a claim settles each winning entry.
+    ///      Payouts happen when mineFlip's walk settles each winning entry.
     ///      Returns poolWei if level already snapshotted or no qualifying burns.
     /// @param poolWei Total ETH prize pool for this level.
     /// @param lvl Level number being resolved.
@@ -387,91 +379,38 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             return poolWei;
         }
 
-        // Store packed winning subbuckets for claim validation
+        // Store packed winning subbuckets for the settle walk
         decBucketOffsetPacked[lvl] = packedOffsets;
         emit DecimatorResolved(lvl, packedOffsets, poolWei, totalBurn);
 
-        // Snapshot claim round for this level (persistent — no expiry)
+        // Snapshot the round for this level (persistent — no expiry)
         round.poolWei = uint96(poolWei);
         round.totalBurn = uint128(totalBurn);
         // Winners were already selected from the full VRF word above (decSeed) and packed
-        // into decBucketOffsetPacked; the stored seed serves the claim-time box draw only,
+        // into decBucketOffsetPacked; the stored seed serves the settle-time box draw only,
         // on its own tagged stream so no other consumer of the day word shares its bits.
         round.rngWord = uint32(uint256(keccak256(abi.encode(rngWord, DECIMATOR_BOX_TAG))));
 
-        return 0; // All funds held for claims
+        return 0; // All funds held for settlement
     }
 
     /*+======================================================================+
-      |                      DECIMATOR CLAIM FUNCTIONS                       |
+      |                      DECIMATOR SETTLEMENT                            |
       +======================================================================+*/
-
-    /// @notice Settle one winning decimator entry (permissionless).
-    /// @dev Anyone may settle any winning entry; payout always credits the entry's owner, never the
-    ///      caller. Resolution-into-claimable only (no ETH leaves here). Whole Whale Pass units in a
-    ///      large lootbox portion materialize immediately on this path. The winning subbucket is
-    ///      implied by `denom`, so only winning entries can be named. Stays open after game over,
-    ///      where mineFlip's walk no longer runs, and pays the terminal shape there.
-    /// @param lvl Level whose round the entry won.
-    /// @param denom The entry's denominator (2-12).
-    /// @param position The entry's position in its winning list (from DecBurnRecorded or
-    ///        DecBurnMigrated).
-    /// @custom:reverts DecClaimInactive When no decimator snapshot exists for this level.
-    /// @custom:reverts DecNotWinner When `denom` is outside 2-12 or the share rounds to zero.
-    /// @custom:reverts DecAlreadyClaimed When no live entry sits at that position.
-    function claimDecimatorJackpot(
-        uint24 lvl,
-        uint8 denom,
-        uint32 position
-    ) external {
-        // Taking the winner's exclusive claim timing away removes the lootbox round-up from any
-        // single party's control. A frozen pool is no bar: the lootbox backing routes to the
-        // pending buffer and the roll seeds off this level's own committed word, never a live
-        // one. Only far-future ticket creation is lock-sensitive, and _queueEntries rejects
-        // that on its own, so a roll that lands far-future waits for the unlock.
-        DecClaimRound memory round = decClaimRounds[lvl];
-        if (round.poolWei == 0) revert DecClaimInactive();
-        if (denom < 2 || denom > DECIMATOR_MAX_DENOM) revert DecNotWinner();
-
-        uint8 sub = _unpackDecWinningSubbucket(decBucketOffsetPacked[lvl], denom);
-        uint256 key = _decEntryKey(lvl, denom, sub, position);
-        DecEntry memory e = decEntry[key];
-        if (e.weightMilli == 0) revert DecAlreadyClaimed();
-
-        uint256 amountWei = _decShare(round, e.weightMilli);
-        if (amountWei == 0) revert DecNotWinner();
-
-        // Terminal mode covers the whole death sequence: from the liveness trigger to the
-        // gameOver latch the claim would otherwise take the live branch and mint a
-        // lootbox, whose roll queues ticket entries against an already-public terminal
-        // word. Terminal mode pays the full amount as claimable instead — the claim stays
-        // open, it just stops creating positions. Both terms are load-bearing: gameOver is
-        // the authoritative latch this routing decision must never misread, and liveness
-        // extends the same treatment back over the multi-tx drain that precedes it. They
-        // share slot 0, so the pair costs one bit-test on an already-loaded word.
-        _claimDecimatorJackpotFor(
-            e.owner,
-            lvl,
-            denom,
-            key,
-            round.rngWord,
-            amountWei,
-            _terminalClaim(),
-            false
-        );
-    }
 
     /// @notice mineFlip's decimator leg: settle drawn rounds' winning entries in list order —
     ///         oldest level first, denominators 2 to 12, positions ascending — within
     ///         `budgetUnits` of the shared keeper walk budget.
     /// @dev Delegatecall target of GameAfkingModule.mineFlip, so it runs in the Game's storage.
-    ///      Idles, touching nothing, while the RNG lock is up, the liveness trigger reads true, or
-    ///      the game is over: under the lock a settle's far-future roll would wait for the unlock,
-    ///      and the ending settles through the claim in terminal shape. Every visit costs walk
-    ///      units: a round probe, a list-length read or an empty entry 1, a settle
-    ///      DEC_SETTLE_WEIGHT. A settle is priced before it runs, so the leg never spends past the
-    ///      budget; one that does not fit leaves the cursor on it. Whole half-pass units defer to
-    ///      `whalePassClaims`, redeemed later through claimWhalePass.
+    ///      The walk is the only way a winning entry settles. It idles, touching nothing, while the
+    ///      RNG lock is up, the liveness trigger reads true, or the game is over: under the lock a
+    ///      settle's far-future roll would wait for the unlock, and a lootbox minted during the
+    ///      ending would roll against a public terminal word. Every visit costs walk
+    ///      units: a round probe, a list-length read or an empty entry 1, and a settle what it did
+    ///      (its frame, any deferred half-passes and its box's outcome). A settle starts only while
+    ///      budget remains and is charged after it runs, so only the last one can pass the budget,
+    ///      by at most one settle. Whole half-pass units defer to `whalePassClaims`, redeemed later
+    ///      through claimWhalePass.
     ///
     ///      A level with no stored round either has its draw still to come or drew no winner. The
     ///      draw runs as that level enters its jackpot phase, so once `level` has passed it the
@@ -545,18 +484,10 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                 ++pos;
                 continue;
             }
-            if (budgetUnits - unitsUsed < DEC_SETTLE_WEIGHT) break;
-            _claimDecimatorJackpotFor(
-                e.owner,
-                lvl,
-                denom,
-                key,
-                round.rngWord,
-                amountWei,
-                false,
-                true
-            );
-            unitsUsed += DEC_SETTLE_WEIGHT;
+            // The call's first settle also pays for what every call touches once: the module
+            // code and the protocol contracts a box credits, and the shared Game slots.
+            if (settled == 0) unitsUsed += DEC_CALL_UNITS;
+            unitsUsed += _settleDecEntry(e.owner, lvl, denom, key, round.rngWord, amountWei);
             ++settled;
             ++pos;
         }
@@ -565,52 +496,31 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
         if (moved) decSettleCursor = DecSettleCursor(lvl, denom, pos);
     }
 
-    /// @dev Whether a claim settles in terminal shape (100% cash, no lootbox): only once the game
-    ///      is over, which is irreversible. While the game-over trigger reads true before that, the
-    ///      claim reverts and waits: the trigger can still read false again, and a terminal shape
-    ///      taken then would stick; and during the ending itself the live branch would mint a
-    ///      lootbox whose roll queues entries against a public word.
-    function _terminalClaim() private view returns (bool) {
-        if (gameOver) return true;
-        if (_livenessTriggered()) revert EndingPending();
-        return false;
-    }
-
-    /// @dev Shared settle core for the claim and mineFlip's walk. The lootbox portion's
-    ///      pool credit is freeze-aware at the call site below — it lands in the pending
-    ///      buffer while the pool is frozen and in the live future pool otherwise — so a
-    ///      frozen pool is no bar to settling and callers do not gate on it.
-    ///      Callers validate eligibility and compute `amountWei` (nonzero, live winning entry);
-    ///      this core empties the entry before any credit is applied. `deferWhalePass`
-    ///      changes only delivery timing for whole half-pass units.
-    function _claimDecimatorJackpotFor(
+    /// @dev Settle one winning entry: half as claimable ETH, half as a lootbox. The lootbox
+    ///      portion's pool credit is freeze-aware — it lands in the pending buffer while the pool
+    ///      is frozen and in the live future pool otherwise — so a frozen pool is no bar to
+    ///      settling. The caller computes `amountWei` (nonzero, live winning entry); this core
+    ///      empties the entry before any credit is applied.
+    /// @return units The settle's work in walk units: its frame, deferred passes and box.
+    function _settleDecEntry(
         address player,
         uint24 lvl,
         uint8 denom,
         uint256 key,
         uint32 rngWord,
-        uint256 amountWei,
-        bool over,
-        bool deferWhalePass
-    ) private {
+        uint256 amountWei
+    ) private returns (uint256 units) {
         // Empty the entry to prevent double settlement.
         delete decEntry[key];
-
-        if (over) {
-            _creditClaimable(player, amountWei);
-            emit DecimatorClaimed(player, lvl, amountWei, amountWei, 0);
-            return;
-        }
 
         // The denominator encodes the activity score sealed at decimator-burn time (see
         // _minScoreForBucket), freezing the lootbox EV multiplier instead of reading a live,
         // post-word score at settlement.
-        uint256 lootboxPortion = _creditDecJackpotClaimCore(
+        (uint256 lootboxPortion, uint256 awardUnits) = _creditDecJackpotClaimCore(
             player,
             amountWei,
             uint256(keccak256(abi.encode(uint256(rngWord), DECIMATOR_BOX_TAG, lvl))),
-            _minScoreForBucket(denom),
-            deferWhalePass
+            _minScoreForBucket(denom)
         );
         if (lootboxPortion != 0) {
             // Credit the lootbox backing to whichever accumulator is live: the pending
@@ -631,22 +541,23 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             amountWei - lootboxPortion,
             lootboxPortion
         );
+        units = DEC_SETTLE_UNITS + awardUnits;
     }
 
     // -------------------------------------------------------------------------
     // Decimator Helpers
     // -------------------------------------------------------------------------
 
-    /// @dev Credits decimator claim in normal (non-gameover) mode.
-    ///      Callers must ensure amount != 0 and account != address(0).
+    /// @dev Credits a settled decimator win. Callers must ensure amount != 0 and
+    ///      account != address(0).
     /// @return lootboxPortion Amount routed to lootbox tickets.
+    /// @return units Walk units of the deferred passes and the box.
     function _creditDecJackpotClaimCore(
         address account,
         uint256 amount,
         uint256 rngWord,
-        uint16 evScore,
-        bool deferWhalePass
-    ) private returns (uint256 lootboxPortion) {
+        uint16 evScore
+    ) private returns (uint256 lootboxPortion, uint256 units) {
         // Split 50/50: half ETH, half lootbox tickets
         uint256 ethPortion = amount >> 1;
         lootboxPortion = amount - ethPortion;
@@ -655,13 +566,7 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
 
         // Lootbox portion is no longer claimable ETH; remove from reserved pool.
         claimablePool -= uint128(lootboxPortion); // Safe: lootboxPortion is a fraction of claimablePool, fits uint128
-        _awardDecimatorLootbox(
-            account,
-            lootboxPortion,
-            rngWord,
-            evScore,
-            deferWhalePass
-        );
+        units = _awardDecimatorLootbox(account, lootboxPortion, rngWord, evScore);
     }
 
     /// @dev Apply the multiplier to the part of this burn's base that still fits under the
@@ -795,38 +700,33 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
             );
     }
 
-    /// @dev Awards decimator lootbox rewards to a claimer.
+    /// @dev Awards a settled winner's lootbox half. Whole half-pass units are recorded in
+    ///      `whalePassClaims` for the winner to redeem through claimWhalePass.
     /// @param winner Address to receive tickets.
-    /// @param amount Lootbox portion of decimator claim in wei.
+    /// @param amount Lootbox portion of the win in wei.
     /// @param rngWord VRF random word for lootbox resolution.
     /// @param evScore Activity score frozen when the winning burn was bucketed.
-    /// @param deferWhalePass Whether whole half-pass units are recorded for later claiming.
+    /// @return units Walk units of the deferred passes and of the box's outcome.
     function _awardDecimatorLootbox(
         address winner,
         uint256 amount,
         uint256 rngWord,
-        uint16 evScore,
-        bool deferWhalePass
-    ) private {
-        if (winner == address(0) || amount == 0) return;
+        uint16 evScore
+    ) private returns (uint256 units) {
+        if (winner == address(0) || amount == 0) return 0;
         if (amount > LOOTBOX_CLAIM_THRESHOLD) {
             // amount > 5 ether here, so fullHalfPasses = amount / 2.25 ether >= 2.
             uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
             uint256 remainder = amount % HALF_WHALE_PASS_PRICE;
-            if (deferWhalePass) {
-                whalePassClaims[winner] += fullHalfPasses;
-            } else {
-                uint24 startLevel = level + 1;
-                _applyWhalePassStats(winner, startLevel);
-                _queueHalfPassAward(winner, startLevel, 100, fullHalfPasses, false);
-            }
+            whalePassClaims[winner] += fullHalfPasses;
+            units = DEC_WHALE_UNITS;
             // Sub-half-pass remainder (< 2.25 ether, so always below the threshold):
             // falls through to direct-resolve as a futurePool-backed lootbox (like any
-            // small decimator claim), staying in futurePrizePool where the caller put it
+            // small decimator win), staying in futurePrizePool where the caller put it
             // so it is never double-backed. Below 0.01 ETH it is too small to be worth a
             // box, so the dust simply stays in futurePrizePool as future-prize liquidity
             // (no credit).
-            if (remainder < 0.01 ether) return;
+            if (remainder < 0.01 ether) return units;
             amount = remainder;
         }
         // Resolve lootbox via delegatecall to open module. The decimator recirc box itemizes its
@@ -844,10 +744,11 @@ contract DegenerusGameDecimatorModule is DegenerusGamePayoutUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
+        units += abi.decode(data, (uint256));
     }
 
     /// @dev Minimum activity score that lands a burn in `bucket` — the inverse of the
-    ///      shared bucket ladder. The decimator-claim lootbox EV multiplier reads this
+    ///      shared bucket ladder. The decimator lootbox EV multiplier reads this
     ///      sealed value (frozen when the winning burn was bucketed) rather than a live score.
     function _minScoreForBucket(uint8 bucket) private pure returns (uint16) {
         return ActivityCurveLib.minScoreForBucket(bucket);

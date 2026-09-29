@@ -3075,7 +3075,9 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev One subbucket's aggregate: the pro-rata denominator and the length of its entry list.
-    ///      Both change on the same burn, so they share the slot the burn already writes.
+    ///      Both change on the same burn, so they share the slot the burn already writes. The draw
+    ///      snapshots the winning totals into the round; settlement empties entries but leaves these
+    ///      totals as they stood at the draw.
     struct DecSubbucket {
         /// @notice Total effective burn in the subbucket, in wei (each entry's weight x 1e15).
         uint192 totalBurn;
@@ -3091,10 +3093,10 @@ abstract contract DegenerusGameStorage {
         uint32 position;
     }
 
-    /// @dev Snapshot of a decimator jackpot for claim processing. All three fields pack
+    /// @dev Snapshot of a decimator jackpot for settlement. All three fields pack
     ///      into ONE slot (96 + 128 + 32 = 256 bits).
     struct DecClaimRound {
-        /// @notice ETH prize pool available for claims. uint96 (7.9e28 wei = 7.9e10 ETH,
+        /// @notice ETH prize pool the round's winners settle against. uint96 (7.9e28 wei = 7.9e10 ETH,
         ///         far above any reachable pool).
         uint96 poolWei;
         /// @notice Total qualifying burn across winning subbuckets (denominator for
@@ -3105,7 +3107,7 @@ abstract contract DegenerusGameStorage {
         ///         base beyond the cap counts 1x. Supply-capped
         ///         at uint128; realistic per-level totals sit ~1e8x under it.
         uint128 totalBurn;
-        /// @notice Stored seed for the claim-time lootbox draw only: the low 32 bits of
+        /// @notice Stored seed for the settle-time lootbox draw only: the low 32 bits of
         ///         keccak(word, DECIMATOR_BOX_TAG), so no other consumer of the day word
         ///         shares these bits. The winning subbuckets are selected from the FULL VRF
         ///         word at snapshot and stored separately in decBucketOffsetPacked, so this
@@ -3123,8 +3125,7 @@ abstract contract DegenerusGameStorage {
     ///      Array sized [13][13] to allow direct indexing (denom 0-12, sub 0-12).
     mapping(uint24 => DecSubbucket[13][13]) internal decBucketBurnTotal;
 
-    /// @dev Decimator claim round snapshots per level.
-    ///      Claims persist indefinitely — no expiry on prior rounds.
+    /// @dev Decimator round snapshots per level, persistent — no expiry on prior rounds.
     mapping(uint24 => DecClaimRound) internal decClaimRounds;
 
     /// @dev Packed winning subbucket per denominator for a level.

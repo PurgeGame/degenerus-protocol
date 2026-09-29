@@ -119,10 +119,11 @@ interface ICoinflip {
     ///      processes a larger window of pending claims and mints all accumulated tokens.
     /// @param player The player configuring auto-rebuy (address(0) for msg.sender).
     /// @param enabled Whether auto-rebuy should be enabled.
-    /// @param takeProfit The threshold amount; winnings above this are auto-claimed in multiples.
+    /// @param takeProfit Threshold up to uint128 max; whole multiples are banked. Zero rolls all; ignored when disabling.
     /// @custom:reverts RngLocked If the player is already on auto-rebuy and today's flip has not
     ///                 been applied yet; enabling from off is never blocked.
     /// @custom:reverts AutoRebuyAlreadyEnabled If enabling when already enabled (in strict mode).
+    /// @custom:reverts TakeProfitTooLarge If enabling with a threshold above uint128 max.
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function setCoinflipAutoRebuy(
         address player,
@@ -133,9 +134,10 @@ interface ICoinflip {
     /// @notice Update the take profit threshold for auto-rebuy mode.
     /// @dev Only callable when auto-rebuy is already enabled. Processes pending claims before updating.
     /// @param player The player configuring (address(0) for msg.sender).
-    /// @param takeProfit The new threshold amount for auto-claiming multiples.
+    /// @param takeProfit New threshold up to uint128 max for banking whole multiples (zero rolls all).
     /// @custom:reverts RngLocked If today's flip has not been applied yet.
     /// @custom:reverts AutoRebuyNotEnabled If player does not have auto-rebuy enabled.
+    /// @custom:reverts TakeProfitTooLarge If the threshold exceeds uint128 max.
     /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
     function setCoinflipAutoRebuyTakeProfit(
         address player,

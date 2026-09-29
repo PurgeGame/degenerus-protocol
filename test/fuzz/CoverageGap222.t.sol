@@ -1460,20 +1460,10 @@ contract CoverageGap222 is DeployProtocol {
                 uint256(1)
             )
         );
-        vm.prank(buyer);
-        (bool o6, ) = address(game).call(
-            abi.encodeWithSignature(
-                "claimDecimatorJackpot(uint24,uint8,uint32)",
-                uint24(0),
-                uint8(2),
-                uint32(0)
-            )
-        );
         // All EOA calls must revert (self-call guard: msg.sender != address(this)).
         assertFalse(o1, "game.runDecimatorJackpot rejected external caller");
         assertFalse(o2, "game.runBafJackpot rejected external caller");
         assertFalse(o4, "game.runTerminalJackpot rejected external caller");
-        assertFalse(o6, "game.claimDecimatorJackpot rejected caller without claim");
     }
 
     function test_gap_game_resolveRedemptionLootbox_guard() public {

@@ -206,6 +206,8 @@ contract Coinflip {
     error AutoRebuyNotEnabled();
     /// @notice Thrown when a strict enable call targets a player who already has auto-rebuy on.
     error AutoRebuyAlreadyEnabled();
+    /// @notice Thrown when a take-profit threshold does not fit its stored uint128 value.
+    error TakeProfitTooLarge();
     /// @notice Thrown when an auto-rebuy action is attempted while today's flip is frozen for RNG.
     error RngLocked();
     /// @notice Thrown when sDGNRS's redemption submit (withdrawRedeemedFlip) asks for more FLIP
@@ -1267,7 +1269,7 @@ contract Coinflip {
     /// @notice Configure auto-rebuy mode for coinflips.
     /// @param player The player to configure (address(0) for msg.sender).
     /// @param enabled True to enable auto-rebuy, false to disable and cash out carry.
-    /// @param takeProfit Take-profit threshold: every whole multiple of it in a win is banked, the remainder rolls (0 = roll all).
+    /// @param takeProfit Threshold up to uint128 max: every whole multiple in a win is banked, the remainder rolls (0 = roll all). Ignored when disabling.
     function setCoinflipAutoRebuy(
         address player,
         bool enabled,
@@ -1284,7 +1286,7 @@ contract Coinflip {
 
     /// @notice Set auto-rebuy take profit.
     /// @param player The player to configure (address(0) for msg.sender, else operator-approved).
-    /// @param takeProfit New take-profit threshold (0 = roll all winnings).
+    /// @param takeProfit New take-profit threshold, at most uint128 max (0 = roll all winnings).
     function setCoinflipAutoRebuyTakeProfit(
         address player,
         uint256 takeProfit
@@ -1313,6 +1315,7 @@ contract Coinflip {
         }
 
         if (enabled) {
+            if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
             mintable = _claimCoinflipsInternal(player, state, false);
             if (state.autoRebuyEnabled) {
                 if (strict) revert AutoRebuyAlreadyEnabled();
@@ -1354,6 +1357,7 @@ contract Coinflip {
         PlayerCoinflipState storage state = playerState[player];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
         if (_flipFrozen()) revert RngLocked();
+        if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
 
         uint256 mintable = _claimCoinflipsInternal(player, state, false);
         state.autoRebuyStop = uint128(takeProfit);

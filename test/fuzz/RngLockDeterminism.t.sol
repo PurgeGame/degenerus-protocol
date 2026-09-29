@@ -404,14 +404,9 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 19) {
-            // Permissionless: anyone resolves the vault's decimator claim (credits the vault).
-            // Read the vault's own most-recent window from its pointer (slot 75) so denom/position
-            // name a real entry rather than a random level.
-            uint256 pw = uint256(vm.load(address(game), keccak256(abi.encode(address(vault), uint256(75)))));
-            uint24 lvl = uint24(pw);
-            uint8 denom = uint8(pw >> 24);
-            uint32 position = uint32(pw >> 40);
-            try game.claimDecimatorJackpot(lvl, denom, position) {} catch { return; }
+            // Permissionless: anyone cranks mineFlip, whose decimator leg settles winning entries
+            // (the vault's included) in list order.
+            try game.mineFlip() {} catch { return; }
             return;
         }
         if (action == 20) {
@@ -1011,7 +1006,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 playerClaimablePre = game.claimableWinningsOf(player);
 
         vm.prank(player);
-        try game.claimDecimatorJackpot(claimLevel, 2, 0) {} catch {}
+        try game.mineFlip() {} catch {}
 
         bytes32 perturbedOutputs = keccak256(
             abi.encode(
@@ -1037,7 +1032,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 playerClaimablePreB = game.claimableWinningsOf(player);
 
         vm.prank(player);
-        try game.claimDecimatorJackpot(claimLevel, 2, 0) {} catch {}
+        try game.mineFlip() {} catch {}
 
         bytes32 baselineOutputs = keccak256(
             abi.encode(

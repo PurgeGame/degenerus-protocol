@@ -19,7 +19,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///                          than a settle that clears it, which pays the flat per-call unit.
 ///           3. GAME-OVER — the leg settles nothing after game over (its own gate, alongside the
 ///                          RNG lock and liveness): mineFlip finds no work and the keeper earns
-///                          no bounty; the winners still settle through the individual claim.
+///                          no bounty.
 ///           4. ETH-VALUE — the FLIP credit holds its ETH-reimbursement value across the price
 ///                          curve at saturation: credit == BOUNTY_ETH_TARGET * PRICE_COIN_UNIT / mintPrice.
 ///           5. FAUCET    — the bounty is far below the FLIP a winner had to burn to exist, so a
@@ -181,9 +181,9 @@ contract DecimatorBountyRegression is DeployProtocol {
         assertEq(coinflip.coinflipAmount(keeper) - before, amount, "credited as a coinflip stake");
     }
 
-    /// @notice SCALES — a settle under the saturation knee pays less than the flat per-call unit;
-    ///         a settle that clears the knee (well past 75 walk units, guaranteed by 4 real
-    ///         settles at DEC_SETTLE_WEIGHT=42 each) pays exactly the unit, saturated.
+    /// @notice SCALES — the bounty is `unit * min(units / 15, 5) / 5` on the walk units the leg
+    ///         spent. Every settling call carries the once-per-call first-touch charge, so even a
+    ///         one-winner call reaches the knee and earns the same flat unit as a full batch.
     function test_BountyScalesToTheKneeThenSaturates() public {
         _installWinners(5, 6, 1, uint256(keccak256("scales-small")), 1 ether);
         vm.recordLogs();
@@ -196,12 +196,12 @@ contract DecimatorBountyRegression is DeployProtocol {
         (, , uint256 saturated) = _bounty(vm.getRecordedLogs());
 
         uint256 unit = _unit();
-        assertLt(small, saturated, "a smaller settle earns less than a saturating one");
+        assertEq(small, saturated, "a one-winner call reaches the knee through its first-touch charge");
         assertEq(saturated, unit, "a saturating settle earns the flat per-call unit");
     }
 
     /// @notice GAME-OVER — the leg settles nothing after game over: mineFlip finds no work and
-    ///         pays no bounty; the winners still settle through the individual claim.
+    ///         pays no bounty.
     function test_LegSettlesNothingAfterGameOverAndPaysNoBounty() public {
         address[] memory winners = _installWinners(5, 6, 1, uint256(keccak256("over")), 1 ether);
         _setGameOver();
@@ -215,10 +215,7 @@ contract DecimatorBountyRegression is DeployProtocol {
         assertEq(count, 0, "no bounty once the game is over");
         assertEq(_claimedCount(logs), 0, "the leg settles nothing after game over");
         assertEq(coinflip.coinflipAmount(keeper), before, "keeper earns nothing");
-
-        uint256 claimBefore = game.claimableWinningsOf(winners[0]);
-        game.claimDecimatorJackpot(5, 6, 0);
-        assertGt(game.claimableWinningsOf(winners[0]), claimBefore, "the claim still pays after game over");
+        assertEq(game.claimableWinningsOf(winners[0]), 0, "the winner is not paid after game over");
     }
 
     /// @notice ETH-VALUE — at saturation the FLIP credit holds its ETH-reimbursement value

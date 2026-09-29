@@ -4,6 +4,20 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {IDegenerusGameDecimatorModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+
+/// @dev Etched over the Game to drive the decimator walk with a chosen budget, through the same
+///      delegatecall mineFlip's `_decimatorSettle` makes.
+contract DecimatorListWalkHarness is DegenerusGame {
+    function settleDec(uint256 budgetUnits) external returns (uint256 settled, uint256 unitsUsed, bool moved) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameDecimatorModule.settleDecimatorWinners.selector, budgetUnits)
+        );
+        require(ok, "walk reverted");
+        return abi.decode(data, (uint256, uint256, bool));
+    }
+}
 
 /// @title DecimatorListRecord — the list entry is the burner's record, and mineFlip settles winners
 /// @notice Pins the decimator storage model and its settle walk:
@@ -15,11 +29,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///           2. ORDER   — mineFlip's decimator leg settles winning entries oldest level first,
 ///                        denominators 2..12, positions ascending, stepping over x95 and over levels
 ///                        whose draw paid no one, and waiting at a level whose draw is still to come.
-///           3. CHUNKS  — a backlog settled across several mineFlip calls ends in the same state as the
-///                        same entries settled one by one through the claim.
-///           4. GATES   — the leg settles nothing while the RNG lock is up or the game is over; the
-///                        claim still pays after game over, in terminal shape.
-///           5. ONCE    — an entry settles exactly once, whichever path reaches it first.
+///           3. CHUNKS  — a backlog settled across several full mineFlip calls ends in the same state
+///                        as the same backlog walked one entry per call.
+///           4. GATES   — the leg settles nothing while the RNG lock is up or the game is over.
+///           5. ONCE    — the walk settles each winning entry exactly once, steps over an entry a
+///                        migration emptied, and no entry point settles a chosen entry.
 ///           6. BOUNTY  — a settling call pays one MinerBounty of kind 5, pro-rated on the work knee.
 contract DecimatorListRecord is DeployProtocol {
     // forge inspect DegenerusGame storageLayout
@@ -34,6 +48,7 @@ contract DecimatorListRecord is DeployProtocol {
     uint256 internal constant MULT_1X = 10_000;
     uint256 internal constant DEC_BASE_UNIT = 1e15;
     uint8 internal constant KIND_DECIMATOR = 5;
+    uint256 internal constant OPEN_WEIGHT_BUDGET = 1920; // GameAfkingModule
     uint256 internal constant BOUNTY_ETH_TARGET = 885_000_000_000_000; // GameAfkingModule
     uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
 
@@ -421,44 +436,64 @@ contract DecimatorListRecord is DeployProtocol {
     //                               3. CHUNKS
     // ---------------------------------------------------------------------
 
-    /// @notice A backlog larger than one call's budget, settled across several mineFlip calls, ends in
-    ///         the same state as the same entries settled one by one through the claim.
-    function test_ChunkedWalkMatchesOneByOneClaims() public {
+    /// @notice A backlog larger than one call's budget, settled across several full mineFlip calls,
+    ///         ends in the same state, in the same order, as the same backlog walked one entry per
+    ///         call through a minimal budget.
+    function test_ChunkSizeDoesNotChangeTheOutcome() public {
         uint256 rngWord = uint256(keccak256("chunks"));
         uint8[] memory ds = _denoms(5, 7, 11);
-        address[] memory winners = _installWinners(5, ds, 40, rngWord, 30 ether);
+        // ~25 ETH per winner, so every settle also defers whole half-passes.
+        address[] memory winners = _installWinners(5, ds, 40, rngWord, 3_000 ether);
 
         uint256 snap = vm.snapshotState();
-        // Path A: the claim, entry by entry, in walk order.
-        for (uint256 d; d < ds.length; ++d) {
-            uint8 denom = ds[d];
-            (, uint32 len) = _agg(5, denom, _winningSub(rngWord, denom));
-            for (uint32 pos; pos < len; ++pos) {
-                game.claimDecimatorJackpot(5, denom, pos);
-            }
+        // Path A: one settle per call.
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(DecimatorListWalkHarness).runtimeCode);
+        vm.recordLogs();
+        uint256 steps;
+        // 13 units always reach one settle (a round probe and up to 11 length reads leave at least
+        // one unit to start it), and every settle's own charge exhausts the rest, so never two.
+        while (true) {
+            (uint256 settled, , bool moved) = DecimatorListWalkHarness(payable(address(game))).settleDec(13);
+            assertLe(settled, 1, "a minimal budget settles at most one entry");
+            if (settled == 0 && !moved) break;
+            ++steps;
         }
-        uint256[] memory viaClaim = new uint256[](winners.length);
-        for (uint256 i; i < winners.length; ++i) viaClaim[i] = game.claimableWinningsOf(winners[i]);
-        uint256 futureViaClaim = game.futurePrizePoolView();
-        uint256 claimablePoolViaClaim = game.claimablePoolView();
+        (address[] memory orderA, uint256 nA) = _claimedOrder(vm.getRecordedLogs());
+        vm.etch(address(game), original);
+        uint256[] memory claimA = new uint256[](winners.length);
+        uint256[] memory passesA = new uint256[](winners.length);
+        for (uint256 i; i < winners.length; ++i) {
+            claimA[i] = game.claimableWinningsOf(winners[i]);
+            passesA[i] = game.whalePassClaimAmount(winners[i]);
+        }
+        uint256 futureA = game.futurePrizePoolView();
+        uint256 claimablePoolA = game.claimablePoolView();
+        assertEq(nA, winners.length, "the minimal walk settles every winner");
         vm.revertToState(snap);
 
-        // Path B: mineFlip until the leg runs dry.
+        // Path B: full mineFlip calls until the leg runs dry.
         uint256 calls;
+        address[] memory orderB = new address[](winners.length);
+        uint256 nB;
         while (true) {
             vm.recordLogs();
             vm.prank(keeper);
             try game.mineFlip() {} catch { break; }
-            (, uint256 n) = _claimedOrder(vm.getRecordedLogs());
+            (address[] memory order, uint256 n) = _claimedOrder(vm.getRecordedLogs());
             if (n == 0) break;
+            for (uint256 k; k < n; ++k) orderB[nB++] = order[k];
             ++calls;
         }
-        assertGt(calls, 1, "the backlog needed more than one call");
+        assertGt(calls, 1, "the backlog needed more than one full call");
+        assertEq(nB, nA, "same number settled");
+        for (uint256 k; k < nA; ++k) assertEq(orderB[k], orderA[k], "same settlement order");
         for (uint256 i; i < winners.length; ++i) {
-            assertEq(game.claimableWinningsOf(winners[i]), viaClaim[i], "same credit per winner");
+            assertEq(game.claimableWinningsOf(winners[i]), claimA[i], "same credit per winner");
+            assertEq(game.whalePassClaimAmount(winners[i]), passesA[i], "same deferred passes per winner");
         }
-        assertEq(game.futurePrizePoolView(), futureViaClaim, "same lootbox backing");
-        assertEq(game.claimablePoolView(), claimablePoolViaClaim, "same reserve left");
+        assertEq(game.futurePrizePoolView(), futureA, "same lootbox backing");
+        assertEq(game.claimablePoolView(), claimablePoolA, "same reserve left");
     }
 
     // ---------------------------------------------------------------------
@@ -482,95 +517,120 @@ contract DecimatorListRecord is DeployProtocol {
         assertGt(game.claimableWinningsOf(winners[0]), 0, "settles once the lock lifts");
     }
 
-    function test_LegIdlesAfterGameOverAndClaimPaysTerminalShape() public {
+    function test_LegIdlesAfterGameOver() public {
         uint256 rngWord = uint256(keccak256("over"));
         address[] memory winners = _installWinners(5, _denoms(6), 1, rngWord, 1 ether);
         _setHeaderByte(21, 1); // gameOver
 
+        uint256 before = game.claimableWinningsOf(winners[0]);
         vm.recordLogs();
         vm.prank(keeper);
         try game.mineFlip() {} catch {}
         (, uint256 n) = _claimedOrder(vm.getRecordedLogs());
         assertEq(n, 0, "the walk does not run after game over");
-
-        uint256 before = game.claimableWinningsOf(winners[0]);
-        vm.recordLogs();
-        game.claimDecimatorJackpot(5, 6, 0);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == DEC_CLAIMED_SIG) {
-                (uint256 amountWei, uint256 eth, uint256 box) = abi.decode(logs[i].data, (uint256, uint256, uint256));
-                assertEq(eth, amountWei, "terminal shape: all claimable");
-                assertEq(box, 0);
-                assertEq(game.claimableWinningsOf(winners[0]) - before, amountWei);
-            }
-        }
+        (, uint64 w, ) = _entry(5, 6, _winningSub(rngWord, 6), 0);
+        assertGt(w, 0, "entry untouched");
+        assertEq(game.claimableWinningsOf(winners[0]), before, "nothing credited");
     }
 
     // ---------------------------------------------------------------------
     //                               5. ONCE
     // ---------------------------------------------------------------------
 
-    function test_EachEntrySettlesOnce() public {
+    /// @notice The walk settles each winning entry once and steps over a position a migration
+    ///         emptied; a second pass finds nothing left to do.
+    function test_EachEntrySettlesOnceAndEmptiedPositionsAreSkipped() public {
+        uint24 lvl = 5;
         uint256 rngWord = uint256(keccak256("once"));
-        address[] memory winners = _installWinners(5, _denoms(6), 3, rngWord, 3 ether);
-        address stranger = makeAddr("stranger");
-
-        // A stranger settles the middle entry; the credit goes to its owner.
-        uint256 before = game.claimableWinningsOf(winners[1]);
-        vm.prank(stranger);
-        game.claimDecimatorJackpot(5, 6, 1);
-        uint256 once = game.claimableWinningsOf(winners[1]);
-        assertGt(once, before, "owner credited");
-        assertEq(game.claimableWinningsOf(stranger), 0, "caller credited nothing");
-
-        vm.expectRevert();
-        game.claimDecimatorJackpot(5, 6, 1);
+        uint8 wsub6 = _winningSub(rngWord, 6);
+        uint8 wsub5 = _winningSub(rngWord, 5);
+        address a = _playerIn("once-a", 0, lvl, 6, wsub6, true);
+        _burn(a, lvl, 6, 1_000 ether);
+        // Position 1: a burner that then moves to a losing denom-5 subbucket, emptying it.
+        address mover;
+        for (uint256 k; ; ++k) {
+            mover = makeAddr(string(abi.encodePacked("once-mover-", vm.toString(k))));
+            if (_subOf(mover, lvl, 6) == wsub6 && _subOf(mover, lvl, 5) != wsub5) break;
+        }
+        _burn(mover, lvl, 6, 1_000 ether);
+        _burn(mover, lvl, 5, 1_000 ether);
+        address c = _playerIn("once-c", 0, lvl, 6, wsub6, true);
+        _burn(c, lvl, 6, 2_000 ether);
+        _draw(lvl, 3 ether, rngWord);
+        (address emptied, uint64 ew, ) = _entry(lvl, 6, wsub6, 1);
+        assertEq(emptied, address(0), "position 1 emptied by the migration");
+        assertEq(ew, 0);
 
         vm.recordLogs();
         _mine();
         (address[] memory order, uint256 n) = _claimedOrder(vm.getRecordedLogs());
-        assertEq(n, 2, "the walk skips the settled entry");
-        assertEq(order[0], winners[0]);
-        assertEq(order[1], winners[2]);
-        assertEq(game.claimableWinningsOf(winners[1]), once, "no second credit");
+        assertEq(n, 2, "two winners settle; the emptied position is stepped over");
+        assertEq(order[0], a);
+        assertEq(order[1], c);
+        uint256 creditA = game.claimableWinningsOf(a);
+        uint256 creditC = game.claimableWinningsOf(c);
+        assertGt(creditA, 0);
+        assertGt(creditC, 0);
+        assertEq(game.claimableWinningsOf(mover), 0, "the mover's losing entry pays nothing");
 
+        vm.prank(keeper);
         vm.expectRevert();
-        game.claimDecimatorJackpot(5, 6, 0);
+        game.mineFlip();
+        assertEq(game.claimableWinningsOf(a), creditA, "no second credit");
+        assertEq(game.claimableWinningsOf(c), creditC, "no second credit");
     }
 
-    function test_ClaimRefusesWhatItCannotName() public {
-        uint256 rngWord = uint256(keccak256("names"));
-        _installWinners(5, _denoms(6), 1, rngWord, 1 ether);
-
-        vm.expectRevert();
-        game.claimDecimatorJackpot(15, 6, 0); // no round
-        vm.expectRevert();
-        game.claimDecimatorJackpot(5, 1, 0); // denominator below 2
-        vm.expectRevert();
-        game.claimDecimatorJackpot(5, 13, 0); // denominator above 12
-        vm.expectRevert();
-        game.claimDecimatorJackpot(5, 6, 1); // past the list's end
-        vm.expectRevert();
-        game.claimDecimatorJackpot(5, 7, 0); // an empty winning list
+    /// @notice No Game entry point settles a chosen decimator entry: the walk is the only path.
+    function test_NoEntryPointSettlesAChosenEntry() public {
+        _installWinners(5, _denoms(6), 1, uint256(keccak256("no-door")), 1 ether);
+        bytes[3] memory probes = [
+            abi.encodeWithSignature("claimDecimatorJackpot(uint24,uint8,uint32)", uint24(5), uint8(6), uint32(0)),
+            abi.encodeWithSignature("claimDecimatorJackpot(address,uint24)", address(this), uint24(5)),
+            abi.encodeWithSignature("claimDecimatorJackpotMany(address[],uint24)", new address[](1), uint24(5))
+        ];
+        for (uint256 i; i < probes.length; ++i) {
+            (bool ok, ) = address(game).call(probes[i]);
+            assertFalse(ok, "no chosen-entry settlement selector");
+        }
+        (address owner, uint64 w, ) = _entry(5, 6, _winningSub(uint256(keccak256("no-door")), 6), 0);
+        assertTrue(owner != address(0) && w > 0, "the entry is still live");
     }
 
     // ---------------------------------------------------------------------
     //                               6. BOUNTY
     // ---------------------------------------------------------------------
 
+    /// @dev The walk units the leg spends on the current state, read through the etched harness
+    ///      and rolled back, so a bounty assertion can price the knee exactly.
+    function _legUnits() internal returns (uint256 units) {
+        uint256 snap = vm.snapshotState();
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(DecimatorListWalkHarness).runtimeCode);
+        (, units, ) = DecimatorListWalkHarness(payable(address(game))).settleDec(OPEN_WEIGHT_BUDGET);
+        vm.etch(address(game), original);
+        vm.revertToState(snap);
+    }
+
+    function _knee(uint256 unit, uint256 units) internal pure returns (uint256) {
+        uint256 k = units / 15; // OPEN_HUMAN_ENTRY_WEIGHT
+        if (k > 5) k = 5; // OPEN_KNEE
+        return (unit * k) / 5;
+    }
+
     function test_SettlingCallPaysOneDecimatorBounty() public {
         _installWinners(5, _denoms(6), 1, uint256(keccak256("bounty-1")), 1 ether);
         uint256 unit0 = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
+        uint256 units0 = _legUnits();
         vm.recordLogs();
         _mine();
         (uint256 count, uint8 kind, uint256 small) = _bounty(vm.getRecordedLogs());
         assertEq(count, 1, "one bounty");
         assertEq(kind, KIND_DECIMATOR);
-        // The walk spent 55 units: the round probe (1), the length reads of denominators 2-12
-        // (11), one settle (42) and the probe that finds level 15 undrawn (1). 55 / 15 = 3 knee
-        // credits of 5.
-        assertEq(small, (unit0 * 3) / 5, "knee pro-rate on walk units");
+        assertEq(small, _knee(unit0, units0), "knee pro-rate on the walk units spent");
+        // A settling call always carries the once-per-call first-touch charge, so even one settle
+        // reaches the knee: it pays for the ~0.4M of real work such a call does.
+        assertGe(units0, 75, "a one-settle call is charged past the knee");
+        assertEq(small, unit0, "one settle earns the flat per-call unit");
 
         _installWinners(15, _denoms(6, 8, 10), 4, uint256(keccak256("bounty-12")), 12 ether);
         _setLevel(15);

@@ -51,7 +51,7 @@ contract DecimatorEntropyTest is DeployProtocol {
         }
     }
 
-    function _probe(uint256 word, uint24 lvl, bool batch) private {
+    function _probe(uint256 word, uint24 lvl) private {
         uint256 snapshot = vm.snapshotState();
         bytes memory original = address(game).code;
         vm.etch(address(game), type(DecimatorEntropySeeder).runtimeCode);
@@ -60,7 +60,7 @@ contract DecimatorEntropyTest is DeployProtocol {
 
         vm.prank(address(game));
         game.runDecimatorJackpot(2 ether, lvl, word);
-        // One packed slot: pool (96) | totalBurn (128) | tagged 32-bit claim seed in the top
+        // One packed slot: pool (96) | totalBurn (128) | tagged 32-bit settle seed in the top
         // bits. The seed is keccak(word, tag) narrowed, so the whole word reaches it.
         bytes32 roundSlot = keccak256(abi.encode(lvl, uint256(42)));
         uint256 packed = uint256(vm.load(address(game), roundSlot));
@@ -72,19 +72,15 @@ contract DecimatorEntropyTest is DeployProtocol {
             IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
             abi.encode(PLAYER, uint256(1 ether), uint256(keccak256(abi.encode(uint256(seed32), BOX_TAG, lvl))))
         ));
-        if (batch) {
-            game.mineFlip();
-        } else {
-            game.claimDecimatorJackpot(lvl, 2, 0);
-        }
+        game.mineFlip();
         vm.revertToState(snapshot);
     }
 
-    function testFuzz_HighBitsAndRoundReachClaimBox(uint256 word) public {
+    function testFuzz_HighBitsAndRoundReachSettleBox(uint256 word) public {
         vm.assume(uint32(uint256(keccak256(abi.encode(word, BOX_TAG)))) != uint32(uint256(keccak256(abi.encode(word ^ (uint256(1) << 200), BOX_TAG)))));
-        _probe(word, 50, false);
-        // Identical low 32 bits of the WORD must not collapse into the same claim-box seed.
-        _probe(word ^ (uint256(1) << 200), 50, true);
-        _probe(word, 60, true);
+        _probe(word, 50);
+        // Identical low 32 bits of the WORD must not collapse into the same settle-box seed.
+        _probe(word ^ (uint256(1) << 200), 50);
+        _probe(word, 60);
     }
 }

@@ -24,7 +24,7 @@ contract DecimatorWalkHarness is DegenerusGame {
 /// @notice Measures, every call cold (vm.cool on the Game):
 ///           - the burn path: a player's first burn ever, a first burn in a later window (pointer
 ///             rewrite), a repeat burn in the same bucket, and a bucket migration;
-///           - one settle, as the per-settle cost behind DEC_SETTLE_WEIGHT (walk units of ~4.7k gas);
+///           - one walk settle at a time, with the walk units it was charged;
 ///           - a full mineFlip decimator call against the owner's tiers (<=10M realistic, intrinsic
 ///             included), for small boxes and for whale-pass-sized winners;
 ///           - a skip run of emptied entries, against the 1-unit price of an empty visit.
@@ -33,7 +33,6 @@ contract DecimatorSettleGas is DeployProtocol {
     uint256 internal constant SLOT_DEC_SUB = 41;
     uint256 internal constant MULT_1X = 10_000;
     uint256 internal constant UNIT_GAS = 4_700;
-    uint256 internal constant DEC_SETTLE_WEIGHT = 42;
     uint256 internal constant TX_INTRINSIC = 21_000;
     uint256 internal constant REALISTIC_CEILING = 10_000_000;
 
@@ -160,33 +159,12 @@ contract DecimatorSettleGas is DeployProtocol {
         console2.log("burn: first in a later window     ", laterWindow);
     }
 
-    /// @notice One settle's cost through the claim (identical settle core; the claim adds its own
-    ///         entry lookups), over many fresh winners, reporting the max against DEC_SETTLE_WEIGHT.
-    function test_gas_PerSettleDistribution() public {
-        uint256 rngWord = uint256(keccak256("gas-dist"));
-        address[] memory winners = _installWinners(5, 64, rngWord, 64 ether);
-        uint256 maxGas;
-        uint256 sum;
-        uint256[8] memory nextPos;
-        for (uint256 i; i < winners.length; ++i) {
-            uint8 denom = uint8(5 + (i % 8));
-            vm.cool(address(game));
-            game.claimDecimatorJackpot(5, denom, uint32(nextPos[denom - 5]++));
-            uint256 g = vm.lastCallGas().gasTotalUsed;
-            sum += g;
-            if (g > maxGas) maxGas = g;
-        }
-        console2.log("settle via claim: mean", sum / winners.length);
-        console2.log("settle via claim: max ", maxGas);
-        console2.log("max in walk units     ", (maxGas + UNIT_GAS - 1) / UNIT_GAS);
-    }
-
     function test_gas_FullDecimatorCall_SmallBoxes() public {
         address[] memory winners = _installWinners(5, 100, uint256(keccak256("gas-full")), 20 ether);
         (uint256 g, uint256 settled) = _mineCold();
         console2.log("full call, small boxes: gas", g);
         console2.log("full call, small boxes: settled", settled);
-        assertEq(settled, 45, "a full batch: 45 settles at 42 units");
+        assertEq(settled, 71, "this fixture's outcome-charged batch");
         assertLt(settled, winners.length, "budget-bound");
         assertLe(g + TX_INTRINSIC, REALISTIC_CEILING, "realistic tier");
     }
@@ -198,7 +176,7 @@ contract DecimatorSettleGas is DeployProtocol {
         (uint256 g, uint256 settled) = _mineCold();
         console2.log("full call, whale-pass winners: gas", g);
         console2.log("full call, whale-pass winners: settled", settled);
-        assertEq(settled, 45, "a full batch: 45 settles at 42 units");
+        assertEq(settled, 55, "this fixture's outcome-charged batch");
         assertLt(settled, winners.length, "budget-bound");
         assertLe(g + TX_INTRINSIC, REALISTIC_CEILING, "realistic tier");
         assertGt(game.whalePassClaimAmount(winners[0]), 0, "whale passes deferred");
@@ -219,7 +197,8 @@ contract DecimatorSettleGas is DeployProtocol {
         uint256[] memory samples = new uint256[](n);
         for (uint256 i; i < n; ++i) {
             vm.cool(address(game));
-            (uint256 settled, , ) = DecimatorWalkHarness(payable(address(game))).settleDec(DEC_SETTLE_WEIGHT + 2);
+            // 3 units: a round probe and a length read leave one unit to start exactly one settle.
+            (uint256 settled, , ) = DecimatorWalkHarness(payable(address(game))).settleDec(3);
             uint256 g = vm.lastCallGas().gasTotalUsed;
             if (settled == 0) continue;
             sum += g;

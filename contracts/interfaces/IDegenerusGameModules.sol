@@ -192,11 +192,6 @@ interface IDegenerusGameDecimatorModule {
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
-    /// @notice Permissionlessly settle one winning Decimator entry (value credits to its owner).
-    /// @param lvl Level whose round the entry won (any snapshotted round).
-    /// @param denom The entry's denominator (2-12); the winning subbucket is implied.
-    /// @param position The entry's position in its winning list.
-    function claimDecimatorJackpot(uint24 lvl, uint8 denom, uint32 position) external;
 
     /// @notice mineFlip's decimator leg: settle winning entries in list order within a walk budget.
     /// @param budgetUnits Walk units the leg may spend.
@@ -441,12 +436,13 @@ interface IDegenerusGameLootboxModule {
     /// @param amount Amount associated with the lootbox
     /// @param rngWord Random word for lootbox resolution
     /// @param activityScore Frozen activity score in whole points for the EV multiplier (caller-snapshotted)
+    /// @return workUnits The box's work in shared walk units, charged by its outcome
     function resolveLootboxDirect(
         address player,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
-    ) external payable;
+    ) external payable returns (uint256 workUnits);
 
     /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool
     ///         credit, 5-ETH chunked resolution) — delegatecall target of the Game's thin stub.
@@ -505,6 +501,8 @@ interface IDegenerusGameBoonModule {
     /// @param currentLevel Open level (level + 1)
     /// @param seed Player-mixed entry seed; box i draws off a (nonceBase + i)-tagged derivative
     /// @param nonceBase Global box position of this batch's first box within its entry
+    /// @return boonWork What the draw did, packed: bits 0-63 activity awards delivered, bits 64-127
+    ///         other boons drawn, bit 128 set when the expired-boon sweep ran
     function rollBoxBoons(
         address player,
         uint256 perBoxBudget,
@@ -513,7 +511,7 @@ interface IDegenerusGameBoonModule {
         uint24 currentLevel,
         uint256 seed,
         uint256 nonceBase
-    ) external payable;
+    ) external payable returns (uint256 boonWork);
 
     /// @notice Draw boons for a mixed box order in one delegatecall
     /// @param player Box owner

@@ -19,11 +19,10 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 //
 //   T1  a VRF stall that recovers past the purchase deadline does not fire liveness before the
 //       next advance's backfill credits the skipped days (unit + integration).
-//   T2  terminal claim routing is irreversible: the decimator claim and sDGNRS redemption wait
-//       (EndingPending) while liveness reads true before game over; mineFlip's decimator leg
-//       idles under both liveness and game over, so only the individual claim ever pays a
-//       post-liveness winner, in terminal shape once game over is final; the foil drain's
-//       terminal flag keys on the ending latch, not the liveness predicate.
+//   T2  terminal routing is irreversible: sDGNRS redemption waits (EndingPending) while liveness
+//       reads true before game over; mineFlip's decimator leg idles under both liveness and game
+//       over, so no decimator entry settles once the ending has begun; the foil drain's terminal
+//       flag keys on the ending latch, not the liveness predicate.
 //   T3  a vault DGVE burn whose afking shortfall exceeds the game's ETH is paid ETH + stETH.
 //   T4  the terminal jackpot pays exact shares: one wei in the pot moves a winner by wei, not a
 //       whole ticket unit.
@@ -176,7 +175,7 @@ contract RecoveredStallIntegrationTest is DeployProtocol {
 }
 
 // =====================================================================================
-// T2 — terminal claim routing waits for game over
+// T2 — terminal routing waits for game over
 // =====================================================================================
 
 contract ReviewClaimSeeder is DegenerusGame {
@@ -205,7 +204,7 @@ contract ReviewClaimSeeder is DegenerusGame {
         decEntry[_decEntryKey(lvl, 2, 0, 0)] = DecEntry({owner: player, weightMilli: 100, baseMilli: 100});
         decBucketBurnTotal[lvl][2][0] = DecSubbucket({totalBurn: 100 * 1e15, length: 1});
         decSettleCursor = DecSettleCursor({lvl: lvl, denom: 2, position: 0});
-        // Back the credit the claim writes (claimablePool is the ledger total).
+        // Back the credit a settle would write (claimablePool is the ledger total).
         claimablePool += uint128(poolWei);
     }
 
@@ -240,7 +239,7 @@ contract ReviewClaimSeeder is DegenerusGame {
     }
 }
 
-contract DecimatorEndingPendingTest is DeployProtocol {
+contract DecimatorLegEndingIdleTest is DeployProtocol {
     bytes private realCode;
     address private winner = makeAddr("dec-winner");
     uint24 private constant DLVL = 1;
@@ -264,20 +263,8 @@ contract DecimatorEndingPendingTest is DeployProtocol {
         vm.etch(address(game), realCode);
     }
 
-    function test_singleClaimWaitsThenSettlesTerminal() public {
-        uint256 before = game.claimableWinningsOf(winner);
-        vm.expectRevert(ENDING_PENDING);
-        game.claimDecimatorJackpot(DLVL, 2, 0);
-        assertEq(game.claimableWinningsOf(winner), before, "nothing settled while pending");
-
-        _over();
-        game.claimDecimatorJackpot(DLVL, 2, 0);
-        assertEq(game.claimableWinningsOf(winner) - before, 1 ether, "terminal shape after game over: 100% cash");
-    }
-
     /// @notice mineFlip's decimator leg idles under liveness pending, and keeps idling after
-    ///         game over — the leg never pays this winner in either state; only the permissionless
-    ///         claim does, in terminal shape once game over is final.
+    ///         game over: once the ending has begun, the entry stays unsettled.
     function test_legIdlesUnderLivenessAndAfterGameOver() public {
         uint256 before = game.claimableWinningsOf(winner);
 
@@ -295,9 +282,6 @@ contract DecimatorEndingPendingTest is DeployProtocol {
         assertEq(settled2, 0, "the leg settles nothing after game over either");
         assertFalse(moved2, "still no cursor movement");
         assertEq(game.claimableWinningsOf(winner), before, "the leg never pays this entry");
-
-        game.claimDecimatorJackpot(DLVL, 2, 0);
-        assertEq(game.claimableWinningsOf(winner) - before, 1 ether, "terminal shape after game over: 100% cash");
     }
 }
 

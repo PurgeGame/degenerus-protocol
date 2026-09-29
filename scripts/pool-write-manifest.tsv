@@ -44,9 +44,8 @@ POOL-TO-POOL	_setPendingPools	_freezePool	modules/DegenerusGameAdvanceModule.sol
 POOL-TO-POOL	_setFuturePrizePool	_freezePool	modules/DegenerusGameAdvanceModule.sol	READ	freeze seed: 1% of future moves to the pending-future buffer
 POOL-TO-POOL	prizePoolPendingPacked	_unfreezePool	modules/DegenerusGameAdvanceModule.sol	WRITE	pending zeroed after the fold (paired with the live-pool credit in the same body)
 POOL-TO-POOL	prizePoolsPacked	_unfreezePool	modules/DegenerusGameAdvanceModule.sol	WRITE	pending accumulators fold into the live pools at unlock: each half adds into its own, saturating independently, one RMW
-PRE-COUNTED	_creditClaimable	_claimDecimatorJackpotFor	modules/DegenerusGameDecimatorModule.sol	READ	game-over claim leg: round pool entered claimablePool at snapshot (AdvanceModule claimableDelta)
-POOL-TO-POOL	_setFuturePrizePool	_claimDecimatorJackpotFor	modules/DegenerusGameDecimatorModule.sol	READ	live-claim lootbox half returns to future; paired claimablePool -= in _creditDecJackpotClaimCore
-POOL-TO-POOL	_setPendingPools	_claimDecimatorJackpotFor	modules/DegenerusGameDecimatorModule.sol	READ	same lootbox half on the frozen path (pending future instead of live); same pairing
+POOL-TO-POOL	_setFuturePrizePool	_settleDecEntry	modules/DegenerusGameDecimatorModule.sol	READ	settled lootbox half returns to future; paired claimablePool -= in _creditDecJackpotClaimCore
+POOL-TO-POOL	_setPendingPools	_settleDecEntry	modules/DegenerusGameDecimatorModule.sol	READ	same lootbox half on the frozen path (pending future instead of live); same pairing
 PRE-COUNTED	_creditClaimable	_creditDecJackpotClaimCore	modules/DegenerusGameDecimatorModule.sol	READ	ETH half of a live decimator claim; aggregate counted at snapshot
 POOL-TO-POOL	claimablePool	_creditDecJackpotClaimCore	modules/DegenerusGameDecimatorModule.sol	WRITE	lootbox half leaves claimable, paired with the future += at the caller
 PAIRED-CREDIT	_creditClaimable	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	READ	per-player half of the same tandem credit

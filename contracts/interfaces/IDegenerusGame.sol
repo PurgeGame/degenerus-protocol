@@ -232,11 +232,6 @@ interface IDegenerusGame {
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external;
 
-    /// @notice Permissionlessly settle one winning Decimator entry (value credits to its owner).
-    /// @param lvl Level whose round the entry won (any snapshotted round).
-    /// @param denom The entry's denominator (2-12); the winning subbucket is implied.
-    /// @param position The entry's position in its winning list.
-    function claimDecimatorJackpot(uint24 lvl, uint8 denom, uint32 position) external;
 
     /// @notice Back an sDGNRS redemption reservation: segregate game-side ETH, or verify custody.
     /// @dev Access: sDGNRS only. Called at gambling-burn submit, fail-closed. Two legs: when
