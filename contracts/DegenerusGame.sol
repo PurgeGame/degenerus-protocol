@@ -1285,7 +1285,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint8));
     }
 
-    /// @notice Snapshot Decimator jackpot winners for deferred claims.
+    /// @notice Snapshot Decimator jackpot winners for deferred settlement.
     /// @dev Access: Game-only (self-call).
     ///      Signature: runDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) — the
     ///      total ETH prize pool for this level, the level number being resolved, and the
@@ -1366,27 +1366,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
-    /// @dev Signature: claimDecimatorJackpot(address player, uint24 lvl) — the winner whose
-    ///      claim to resolve, and the level to claim from (per-level snapshots persist, no expiry). The
-    ///      signature matches the module function exactly (identical selector), so the calldata
-    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    function claimDecimatorJackpot(address, uint24) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players
-    ///         (address[] players, uint24 lvl).
-    /// @dev Non-claimable entries are skipped, not reverted. The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
-    ///      the array here would cost contract-size headroom for no behavior change.
-    function claimDecimatorJackpotMany(
-        address[] calldata,
-        uint24
-    ) external {
+    /// @notice Permissionlessly settle one winning Decimator entry (value credits to its owner).
+    /// @dev Signature: claimDecimatorJackpot(uint24 lvl, uint8 denom, uint32 position) — the level
+    ///      whose round the entry won (per-level snapshots persist, no expiry), the entry's
+    ///      denominator, and its position in the winning list. The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding here
+    ///      would cost contract-size headroom for no behavior change.
+    function claimDecimatorJackpot(uint24, uint8, uint32) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
             .delegatecall(msg.data);

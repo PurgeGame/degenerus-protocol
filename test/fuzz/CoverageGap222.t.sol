@@ -1463,9 +1463,10 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o6, ) = address(game).call(
             abi.encodeWithSignature(
-                "claimDecimatorJackpot(address,uint24)",
-                buyer,
-                uint24(0)
+                "claimDecimatorJackpot(uint24,uint8,uint32)",
+                uint24(0),
+                uint8(2),
+                uint32(0)
             )
         );
         // All EOA calls must revert (self-call guard: msg.sender != address(this)).

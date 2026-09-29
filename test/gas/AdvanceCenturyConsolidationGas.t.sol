@@ -111,10 +111,12 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
                 _seedBucketDistinct(target, trait, 4, uint160(0xC3700000 + round * 16));
             }
         }
-        // A qualifying burn in every subbucket makes all 11 selected reads nonzero.
+        // A qualifying burn in every subbucket makes all 11 selected reads nonzero. The snapshot
+        // draw only reads totalBurn; length is set to 1 for an internally consistent record even
+        // though no settle runs in this fixture.
         for (uint8 denominator = 2; denominator <= 12; ++denominator) {
             for (uint8 sub; sub < denominator; ++sub) {
-                decBucketBurnTotal[100][denominator][sub] = 1 ether;
+                decBucketBurnTotal[100][denominator][sub] = DecSubbucket({totalBurn: 1 ether, length: 1});
             }
         }
     }

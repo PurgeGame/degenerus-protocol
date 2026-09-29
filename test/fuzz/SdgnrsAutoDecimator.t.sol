@@ -48,9 +48,17 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         lastPurchaseDay = false;
     }
 
+    /// @dev sDGNRS's live entry, if its pointer's window is `lvl` (its only reachable
+    ///      window) — otherwise no entry was ever recorded there.
     function entry(uint24 lvl) external view returns (uint192 burn, uint8 bucket) {
-        DecBet storage bet = decBurn[lvl][ContractAddresses.SDGNRS];
-        return (bet.burn, bet.bucket);
+        DecPointer memory p = decPointer[ContractAddresses.SDGNRS];
+        if (p.lvl != lvl) return (0, 0);
+        DecEntry memory e = decEntry[_decEntryKey(p.lvl, p.bucket, p.subBucket, p.position)];
+        return (uint192(uint256(e.weightMilli) * 1e15), p.bucket);
+    }
+
+    function _decEntryKey(uint24 lvl, uint8 denom, uint8 sub, uint32 position) private pure returns (uint256) {
+        return (uint256(lvl) << 48) | (uint256(denom) << 40) | (uint256(sub) << 32) | uint256(position);
     }
 }
 

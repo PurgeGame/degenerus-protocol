@@ -156,6 +156,9 @@ OWNER	ticketSeats	modules/DegenerusGameFoilPackModule.sol	drainRounds records th
 OWNER	ticketSeats	modules/DegenerusGameMintModule.sol	_drainSeatedSurvivors pops seats it drains by index below the seat floor; processFutureTicketBatch clears it on an empty queue
 OWNER	ticketSeats	storage/DegenerusGameStorage.sol	_releaseTicketQueue clears the seats with the drained queue
 OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimatorJackpot freezes winning subbuckets at the resolved level
+OWNER	decEntry	modules/DegenerusGameDecimatorModule.sol	recordDecBurn appends or adds to a burner's list entry and empties the old one on migration; _claimDecimatorJackpotFor empties it on settlement
+OWNER	decPointer	modules/DegenerusGameDecimatorModule.sol	recordDecBurn points a player at their entry on the first burn in a window and on migration
+OWNER	decSettleCursor	modules/DegenerusGameDecimatorModule.sol	settleDecimatorWinners advances the settle walk's place
 OWNER	terminalAffiliate	modules/DegenerusGameAdvanceModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; handleGameOverDrain reads it
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameJackpotModule.sol	pricing latches even half-pass units from exact early-bird surplus; settlement consumes once with no pool movement
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameGameOverModule.sol	terminal drain cancels any pending early-bird pass prize

@@ -18,14 +18,17 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///
 /// @dev recordDecBurn is driven directly with vm.prank(COIN) (the FLIP entrypoint's only
 ///      call site), with the decDayOneActive latch installed via vm.store (slot 0 byte 31).
-///      Weights are read back from decBurn[lvl][player].burn. The latch's set site (the
-///      x4/x99 window-open request) and clear site (the next fresh daily request) live in
-///      AdvanceModule._finalizeRngRequest and are covered by inspection + lifecycle suites.
+///      Weights are read back through the player's pointer (their entry for the current
+///      window) and the entry it names: weightMilli * DEC_BASE_UNIT. The latch's set site
+///      (the x4/x99 window-open request) and clear site (the next fresh daily request) live
+///      in AdvanceModule._finalizeRngRequest and are covered by inspection + lifecycle suites.
 contract DecimatorDayOneBonus is DeployProtocol {
     // forge inspect DegenerusGame storageLayout:
     uint256 internal constant SLOT_HEADER = 0; // packed flags; decDayOneActive @ byte 31
-    uint256 internal constant SLOT_DEC_BURN = 40; // mapping(uint24 => mapping(address => DecBet))
+    uint256 internal constant SLOT_DEC_ENTRY = 40; // mapping(uint256 => DecEntry)
+    uint256 internal constant SLOT_DEC_POINTER = 75; // mapping(address => DecPointer)
 
+    uint256 internal constant DEC_BASE_UNIT = 1e15;
     uint256 internal constant BPS = 10_000;
     uint256 internal constant DAY_ONE_BONUS_BPS = 12_000; // mirror of the module constant
     uint256 internal constant MULT_MAX_BPS = 17_833; // ActivityCurveLib.MULT_MAX_BPS
@@ -53,11 +56,18 @@ contract DecimatorDayOneBonus is DeployProtocol {
         vm.store(address(game), bytes32(SLOT_HEADER), bytes32(w));
     }
 
-    /// @dev decBurn[lvl][player].burn (low 192 bits of the packed DecBet slot).
+    /// @dev The player's live entry for the current window, read via their pointer: weight
+    ///      in wei (weightMilli * DEC_BASE_UNIT).
     function _recordedBurn() internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(LVL), SLOT_DEC_BURN));
-        bytes32 slot = keccak256(abi.encode(player, uint256(inner)));
-        return uint256(vm.load(address(game), slot)) & ((uint256(1) << 192) - 1);
+        uint256 pw = uint256(vm.load(address(game), keccak256(abi.encode(player, SLOT_DEC_POINTER))));
+        uint24 pLvl = uint24(pw);
+        uint8 pBucket = uint8(pw >> 24);
+        uint8 pSub = uint8(pw >> 32);
+        uint32 pPos = uint32(pw >> 40);
+        uint256 key = (uint256(pLvl) << 48) | (uint256(pBucket) << 40) | (uint256(pSub) << 32) | uint256(pPos);
+        uint256 ew = uint256(vm.load(address(game), keccak256(abi.encode(key, SLOT_DEC_ENTRY))));
+        uint64 weightMilli = uint64(ew >> 160);
+        return uint256(weightMilli) * DEC_BASE_UNIT;
     }
 
     function _burnAsCoin(uint256 baseAmount, uint256 multBps) internal {

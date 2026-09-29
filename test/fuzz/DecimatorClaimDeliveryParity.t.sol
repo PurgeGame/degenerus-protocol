@@ -5,15 +5,19 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 /// @title DecimatorClaimDeliveryParity
-/// @notice Pins the value and side-effect parity between eager single Decimator claims and
-///         batch claims that defer only their whole Whale Pass units.
+/// @notice Pins the value and side-effect parity between the eager single Decimator claim and
+///         mineFlip's decimator-leg walk, which defers only its whole Whale Pass units.
 contract DecimatorClaimDeliveryParity is DeployProtocol {
     uint256 internal constant SLOT_HEADER = 0;
     uint256 internal constant SLOT_POOLS = 1;
-    uint256 internal constant SLOT_DEC_BURN = 40;
+    uint256 internal constant SLOT_DEC_ENTRY = 40;
+    uint256 internal constant SLOT_DEC_SUB = 41;
     uint256 internal constant SLOT_DEC_CLAIM_ROUNDS = 42;
     uint256 internal constant SLOT_DEC_OFFSET_PACKED = 43;
+    uint256 internal constant SLOT_DEC_CURSOR = 76;
     uint256 internal constant SLOT_PENDING_POOLS_PACKED = 11;
+
+    uint256 internal constant DEC_BASE_UNIT = 1e15;
 
     uint256 internal constant POOL_FUTURE_SHIFT = 128;
     uint256 internal constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
@@ -29,6 +33,9 @@ contract DecimatorClaimDeliveryParity is DeployProtocol {
 
     address internal winner;
     address internal keeper;
+
+    uint256 private constant DRAIN_MAX_ITERATIONS = 64;
+    uint256 private _lastFulfilledReqId;
 
     struct ClaimResult {
         uint256 playerClaimable;
@@ -49,23 +56,56 @@ contract DecimatorClaimDeliveryParity is DeployProtocol {
         _deployProtocol();
         winner = makeAddr("decimator-delivery-winner");
         keeper = makeAddr("decimator-delivery-keeper");
+        // mineFlip's decimator leg only runs once the advance leg is not due and the box legs
+        // find nothing pending — drain both so the batch path below reaches the leg cleanly.
+        _settleGame(uint256(keccak256("dec-delivery-settle")));
+        game.openBoxes(1_000);
+        _quietCrapsTable();
+    }
+
+    function _settleGame(uint256 vrfWord) internal {
+        for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) break;
+            game.advanceGame();
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    mockVRF.fulfillRandomWords(reqId, vrfWord);
+                    _lastFulfilledReqId = reqId;
+                }
+            }
+        }
+    }
+
+    function _key(uint24 lvl, uint8 denom, uint8 sub, uint32 position) internal pure returns (uint256) {
+        return (uint256(lvl) << 48) | (uint256(denom) << 40) | (uint256(sub) << 32) | uint256(position);
     }
 
     function _setClaimRound(uint256 amountWei) internal {
         bytes32 slot = keccak256(abi.encode(uint256(LVL), SLOT_DEC_CLAIM_ROUNDS));
-        uint256 packed = amountWei | (amountWei << 96);
+        uint256 packed = amountWei | (amountWei << 96) | (uint256(ROUND_WORD) << 224);
         vm.store(address(game), slot, bytes32(packed));
-        vm.store(address(game), bytes32(uint256(slot) + 1), bytes32(uint256(ROUND_WORD)));
     }
 
+    /// @dev One winning list entry, its subbucket aggregate, the winning-subbucket offset, and the
+    ///      settle cursor pointed straight at it, so mineFlip's walk reaches this round directly
+    ///      rather than starting its natural walk at level 5.
     function _setWinningBet(uint256 burnWei) internal {
-        bytes32 inner = keccak256(abi.encode(uint256(LVL), SLOT_DEC_BURN));
-        bytes32 slot = keccak256(abi.encode(winner, uint256(inner)));
-        uint256 packed = burnWei | (uint256(DENOM) << 192) | (uint256(WINNING_SUB) << 200);
+        uint64 weightMilli = uint64(burnWei / DEC_BASE_UNIT);
+        bytes32 slot = keccak256(abi.encode(_key(LVL, DENOM, WINNING_SUB, 0), SLOT_DEC_ENTRY));
+        uint256 packed = uint256(uint160(winner)) | (uint256(weightMilli) << 160) | (uint256(weightMilli) << 224);
         vm.store(address(game), slot, bytes32(packed));
+
+        uint256 arrBase = uint256(keccak256(abi.encode(uint256(LVL), SLOT_DEC_SUB)));
+        bytes32 aggSlot = bytes32(arrBase + uint256(DENOM) * 13 + WINNING_SUB);
+        vm.store(address(game), aggSlot, bytes32(burnWei | (uint256(1) << 192)));
 
         bytes32 offsetSlot = keccak256(abi.encode(uint256(LVL), SLOT_DEC_OFFSET_PACKED));
         vm.store(address(game), offsetSlot, bytes32(uint256(WINNING_SUB)));
+
+        uint256 cursorWord = uint256(LVL) | (uint256(DENOM) << 24);
+        vm.store(address(game), bytes32(SLOT_DEC_CURSOR), bytes32(cursorWord));
     }
 
     function _setClaimablePool(uint128 value) internal {
@@ -112,14 +152,14 @@ contract DecimatorClaimDeliveryParity is DeployProtocol {
 
     function _claimSingle() internal {
         vm.prank(keeper);
-        game.claimDecimatorJackpot(winner, LVL);
+        game.claimDecimatorJackpot(LVL, DENOM, 0);
     }
 
+    /// @dev mineFlip's decimator leg, with the box/advance/craps legs already quiet, settles the
+    ///      one entry the cursor points at and defers its whole half-pass units.
     function _claimBatch() internal {
-        address[] memory players = new address[](1);
-        players[0] = winner;
         vm.prank(keeper);
-        game.claimDecimatorJackpotMany(players, LVL);
+        game.mineFlip();
     }
 
     function _assertEquivalentMaterialization(ClaimResult memory eager, ClaimResult memory deferred) internal pure {
@@ -308,7 +348,13 @@ contract DecimatorClaimDeliveryParity is DeployProtocol {
         _assertRewardBalancesEqual(eager, deferred);
     }
 
-    function test_RngLockAllowsBatchDeferralButGuardsMaterializationAtomically() public {
+    /// @notice Under RNG lock, both delivery paths are blocked: the eager claim reverts
+    ///         attempting immediate materialization, and mineFlip's decimator leg — gated on
+    ///         rngLockedFlag exactly as it is on gameOver and liveness — finds no work at all,
+    ///         so it defers nothing either. Once unlocked the walk settles and defers normally,
+    ///         and materialization is itself guarded by the same lock independent of how the
+    ///         pending units were recorded.
+    function test_RngLockBlocksTheClaimAndTheWalkThenGuardsMaterializationAtomically() public {
         uint256 halfPasses = 3;
         uint256 lootboxPortion = halfPasses * HALF_PASS_PRICE;
         uint256 award = lootboxPortion * 2;
@@ -326,12 +372,21 @@ contract DecimatorClaimDeliveryParity is DeployProtocol {
         assertEq(afterEagerRevert.mintPacked, 0, "failed eager stats roll back");
         assertEq(afterEagerRevert.seatBalance, 0, "failed eager seat rolls back");
 
+        vm.prank(keeper);
+        vm.expectRevert();
+        game.mineFlip();
+        ClaimResult memory afterWalkRevert = _capture();
+        _assertRewardBalancesEqual(beforeClaim, afterWalkRevert);
+        assertEq(afterWalkRevert.pendingPasses, 0, "the locked leg records no pending pass either");
+
+        _setRngLocked(false);
         _claimBatch();
         ClaimResult memory pending = _capture();
-        assertEq(pending.pendingPasses, halfPasses, "batch records exact pending units under lock");
-        assertEq(pending.mintPacked, 0, "batch performs no eager pass writes");
-        assertEq(pending.seatBalance, 0, "batch performs no eager seat mint");
+        assertEq(pending.pendingPasses, halfPasses, "the unlocked walk records exact pending units");
+        assertEq(pending.mintPacked, 0, "the walk performs no eager pass writes");
+        assertEq(pending.seatBalance, 0, "the walk performs no eager seat mint");
 
+        _setRngLocked(true);
         vm.expectRevert(RNG_LOCKED_SELECTOR);
         game.claimWhalePass(winner);
         ClaimResult memory afterMaterializeRevert = _capture();

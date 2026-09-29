@@ -2,102 +2,151 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title DecimatorBountyRegression — keeper box-bounty on claimDecimatorJackpotMany
-/// @notice Pins the per-settled-box FLIP flip-credit the decimator batch claim pays its caller
-///         during a live game:
-///           bounty = settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT / mintPrice
+/// @title DecimatorBountyRegression — mineFlip's decimator-leg bounty (MINER_BOUNTY_DECIMATOR)
+/// @notice Pins the FLIP flip-credit a mineFlip call earns for settling decimator winners through
+///         its decimator leg:
+///           bounty = unit * min(unitsUsed / 15, 5) / 5, unit = BOUNTY_ETH_TARGET * PRICE_COIN_UNIT / mintPrice
 ///         and the rules around it:
-///           1. LIVE      — a live-game batch claim credits the keeper exactly one box-bounty per
-///                          settled winner; the credit lands as a next-day coinflip STAKE
-///                          (creditFlip -> _addDailyFlip), surfaced by coinflipAmount.
-///           2. SCALES    — N settled winners credit N * the per-box bounty.
-///           3. GAME-OVER — no liveness is needed post-gameOver, so the bounty is NOT paid (the
-///                          winners still settle into claimable, the keeper just earns nothing).
+///           1. LIVE      — a live-game mineFlip call that settles winning entries credits the
+///                          keeper exactly one MinerBounty of kind 5; the credit lands as a
+///                          next-day coinflip STAKE (creditFlip -> _addDailyFlip), surfaced by
+///                          coinflipAmount.
+///           2. SCALES    — the bounty pro-rates with the leg's walk-unit spend up to a 5-credit
+///                          knee: a settle that stays under the saturation threshold pays less
+///                          than a settle that clears it, which pays the flat per-call unit.
+///           3. GAME-OVER — the leg settles nothing after game over (its own gate, alongside the
+///                          RNG lock and liveness): mineFlip finds no work and the keeper earns
+///                          no bounty; the winners still settle through the individual claim.
 ///           4. ETH-VALUE — the FLIP credit holds its ETH-reimbursement value across the price
-///                          curve: credit * mintPrice / PRICE_COIN_UNIT == settled * target.
+///                          curve at saturation: credit == BOUNTY_ETH_TARGET * PRICE_COIN_UNIT / mintPrice.
 ///           5. FAUCET    — the bounty is far below the FLIP a winner had to burn to exist, so a
-///                          keeper cannot manufacture boxes to farm it.
+///                          keeper cannot manufacture winners to farm it.
 ///
-/// @dev A winning DecBet + claim round + winning-subbucket offset are installed directly via
-///      vm.store (bypassing the expensive VRF-winning-subbucket resolution), then a keeper batch
-///      claims. Share size is kept dust-small (< 0.01 ETH) so the settle takes the no-box dust path
-///      and the test isolates the bounty rather than the lootbox payout machinery.
+/// @dev Winners are real decEntry list records, created through the real burn path
+///      (recordDecBurn via COIN) and drawn through the real runDecimatorJackpot, then settled by
+///      mineFlip's decimator leg with the box/advance/craps legs left quiet — the same harness
+///      shape DecimatorListRecord.t.sol uses to pin the leg itself.
 contract DecimatorBountyRegression is DeployProtocol {
-    // forge inspect DegenerusGame storageLayout (Stage B POST layout):
     uint256 internal constant SLOT_HEADER = 0; // packed flags incl. gameOver @ byte 21
     uint256 internal constant SLOT_POOLS_1 = 1; // currentPrizePool[0:128] | claimablePool[128:256]
-    uint256 internal constant SLOT_DEC_BURN = 40; // mapping(uint24 => mapping(address => DecBet))
-    uint256 internal constant SLOT_DEC_CLAIM_ROUNDS = 42; // mapping(uint24 => DecClaimRound) (one slot)
-    uint256 internal constant SLOT_DEC_OFFSET_PACKED = 43; // mapping(uint24 => uint64)
 
     uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
-    uint256 internal constant BOX_BOUNTY_ETH_TARGET = 15_000_000_000_000; // mirror of the module constant
+    uint256 internal constant BOUNTY_ETH_TARGET = 885_000_000_000_000; // mirror of the module constant
 
-    uint24 internal constant LVL = 50;
-    uint8 internal constant DENOM = 2;
-    uint8 internal constant SUB = 0;
+    uint256 internal constant MULT_1X = 10_000;
+    uint8 internal constant KIND_DECIMATOR = 5;
+
+    bytes32 internal constant MINER_BOUNTY_SIG = keccak256("MinerBounty(uint8,address,uint256)");
+    bytes32 internal constant DEC_CLAIMED_SIG =
+        keccak256("DecimatorClaimed(address,uint24,uint256,uint256,uint256)");
+
+    uint256 private constant DRAIN_MAX_ITERATIONS = 64;
+    uint256 private _lastFulfilledReqId;
 
     address internal keeper;
-    address internal winnerA;
-    address internal winnerB;
 
     function setUp() public {
         _deployProtocol();
-        keeper = makeAddr("dec_keeper");
-        winnerA = makeAddr("dec_winnerA");
-        winnerB = makeAddr("dec_winnerB");
+        keeper = makeAddr("dec_bounty_keeper");
+        // mineFlip's decimator leg only runs once the advance leg is not due and the box legs
+        // find nothing pending — drain both so every mine() below reaches the leg cleanly.
+        _settleGame(uint256(keccak256("dec-bounty-settle")));
+        game.openBoxes(1_000);
+        _quietCrapsTable();
     }
 
-    // ----------------------------------------------------------------------
-    //                       storage-slot writers
-    // ----------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    //                              harness
+    // ------------------------------------------------------------------
 
-    /// @dev decClaimRounds[lvl] = {uint96 poolWei | uint128 totalBurn}, then full uint256 rngWord.
-    function _setClaimRound(
-        uint24 lvl,
-        uint96 poolWei,
-        uint128 totalBurn,
-        uint256 rngWord
-    ) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(lvl), SLOT_DEC_CLAIM_ROUNDS));
-        uint256 packed = uint256(poolWei) |
-            (uint256(totalBurn) << 96);
-        vm.store(address(game), slot, bytes32(packed));
-        vm.store(address(game), bytes32(uint256(slot) + 1), bytes32(rngWord));
+    function _settleGame(uint256 vrfWord) internal {
+        for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) break;
+            game.advanceGame();
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    mockVRF.fulfillRandomWords(reqId, vrfWord);
+                    _lastFulfilledReqId = reqId;
+                }
+            }
+        }
     }
 
-    /// @dev decBucketOffsetPacked[lvl] winning subbucket for `denom` (4 bits at (denom-2)*4).
-    function _setWinningSub(uint24 lvl, uint8 denom, uint8 sub) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(lvl), SLOT_DEC_OFFSET_PACKED));
-        uint256 w = uint256(vm.load(address(game), slot));
-        uint256 shift = uint256(denom - 2) * 4;
-        w = (w & ~(uint256(0xF) << shift)) | (uint256(sub) << shift);
-        vm.store(address(game), slot, bytes32(w));
+    function _burn(address player, uint24 lvl, uint8 bucket, uint256 base) internal {
+        vm.prank(ContractAddresses.COIN);
+        game.recordDecBurn(player, lvl, bucket, base, MULT_1X);
     }
 
-    /// @dev decBurn[lvl][player] = {uint192 burn | uint8 bucket | uint8 subBucket | uint8 claimed=0}.
-    function _setEntry(
-        uint24 lvl,
-        address player,
-        uint192 burn,
-        uint8 bucket,
-        uint8 sub
-    ) internal {
-        bytes32 inner = keccak256(abi.encode(uint256(lvl), SLOT_DEC_BURN));
-        bytes32 slot = keccak256(abi.encode(player, uint256(inner)));
-        uint256 packed = uint256(burn) |
-            (uint256(bucket) << 192) |
-            (uint256(sub) << 200);
-        vm.store(address(game), slot, bytes32(packed));
+    function _subOf(address player, uint24 lvl, uint8 bucket) internal pure returns (uint8) {
+        return uint8(uint256(keccak256(abi.encodePacked(player, lvl, bucket))) % bucket);
     }
 
-    /// @dev Seed claimablePool (slot 1 high 128 bits) so the lootbox-portion debit cannot underflow.
-    function _setClaimablePool(uint128 value) internal {
+    function _winningSub(uint256 rngWord, uint8 denom) internal pure returns (uint8) {
+        return uint8(uint256(keccak256(abi.encodePacked(rngWord, denom))) % denom);
+    }
+
+    /// @dev A fresh address whose subbucket for (lvl, bucket) is `sub` (or is not, when `want` is false).
+    function _playerIn(string memory tag, uint256 i, uint24 lvl, uint8 bucket, uint8 sub, bool want)
+        internal
+        returns (address p)
+    {
+        for (uint256 n; ; ++n) {
+            p = makeAddr(string(abi.encodePacked(tag, vm.toString(i), "-", vm.toString(n))));
+            if ((_subOf(p, lvl, bucket) == sub) == want) return p;
+        }
+    }
+
+    /// @dev Run the real draw for `lvl`, then book the spend into claimablePool as the advance does.
+    function _draw(uint24 lvl, uint256 poolWei, uint256 rngWord) internal {
+        vm.prank(address(game));
+        uint256 returned = game.runDecimatorJackpot(poolWei, lvl, rngWord);
+        uint256 spend = poolWei - returned;
         uint256 w = uint256(vm.load(address(game), bytes32(SLOT_POOLS_1)));
-        w = (w & ((uint256(1) << 128) - 1)) | (uint256(value) << 128);
+        uint256 claimable = (w >> 128) + spend;
+        w = (w & ((uint256(1) << 128) - 1)) | (claimable << 128);
         vm.store(address(game), bytes32(SLOT_POOLS_1), bytes32(w));
+    }
+
+    /// @dev Install `n` winners at `denom` on `lvl`, plus one loser in the same denom so the
+    ///      winning total is not the whole level, and draw.
+    function _installWinners(uint24 lvl, uint8 denom, uint256 n, uint256 rngWord, uint256 poolWei)
+        internal
+        returns (address[] memory winners)
+    {
+        winners = new address[](n);
+        uint8 wsub = _winningSub(rngWord, denom);
+        _burn(_playerIn("lose", lvl, lvl, denom, wsub, false), lvl, denom, 2_000 ether);
+        for (uint256 i; i < n; ++i) {
+            address p = _playerIn(string(abi.encodePacked("win", vm.toString(lvl))), i, lvl, denom, wsub, true);
+            _burn(p, lvl, denom, 1_000 ether + i * 7 ether);
+            winners[i] = p;
+        }
+        _draw(lvl, poolWei, rngWord);
+    }
+
+    function _mine() internal {
+        vm.prank(keeper);
+        game.mineFlip();
+    }
+
+    function _bounty(Vm.Log[] memory logs) internal pure returns (uint256 count, uint8 kind, uint256 amount) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 2 && logs[i].topics[0] == MINER_BOUNTY_SIG) {
+                ++count;
+                (kind, amount) = abi.decode(logs[i].data, (uint8, uint256));
+            }
+        }
+    }
+
+    function _claimedCount(Vm.Log[] memory logs) internal pure returns (uint256 n) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 3 && logs[i].topics[0] == DEC_CLAIMED_SIG) ++n;
+        }
     }
 
     /// @dev Set the gameOver flag (slot 0, byte 21).
@@ -107,100 +156,88 @@ contract DecimatorBountyRegression is DeployProtocol {
         vm.store(address(game), bytes32(SLOT_HEADER), bytes32(w));
     }
 
-    /// @dev Install one winning entry whose pro-rata share is dust (< 0.01 ETH).
-    ///      poolWei 0.01 ETH * burn 500 / totalBurn 1000 = 0.005 ETH share.
-    function _installDustWinner(address player) internal {
-        _setEntry(LVL, player, uint192(500 ether), DENOM, SUB);
+    /// @dev The bounty's per-credit unit, priced the same way the module prices it.
+    function _unit() internal view returns (uint256) {
+        return (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
     }
 
-    function _expectedBounty(uint256 settled) internal view returns (uint256) {
-        return (settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
-    }
-
-    function _claim(address caller, address[] memory players) internal {
-        vm.prank(caller);
-        game.claimDecimatorJackpotMany(players, LVL);
-    }
-
-    function _one(address a) internal pure returns (address[] memory arr) {
-        arr = new address[](1);
-        arr[0] = a;
-    }
-
-    // ----------------------------------------------------------------------
+    // ------------------------------------------------------------------
     //                              tests
-    // ----------------------------------------------------------------------
+    // ------------------------------------------------------------------
 
-    function test_LiveBatchClaimPaysOneBoxBountyPerSettledBox() public {
-        _setClaimRound(LVL, uint96(0.01 ether), uint128(1000 ether), uint32(uint256(keccak256("dbr"))));
-        _setWinningSub(LVL, DENOM, SUB);
-        _setClaimablePool(1 ether);
-        _installDustWinner(winnerA);
+    /// @notice LIVE — one settling call credits the keeper exactly one kind-5 bounty, as a
+    ///         coinflip stake.
+    function test_LiveCallCreditsExactlyOneDecimatorBounty() public {
+        _installWinners(5, 6, 1, uint256(keccak256("live")), 1 ether);
 
         uint256 before = coinflip.coinflipAmount(keeper);
-        _claim(keeper, _one(winnerA));
-        uint256 credited = coinflip.coinflipAmount(keeper) - before;
+        vm.recordLogs();
+        _mine();
+        (uint256 count, uint8 kind, uint256 amount) = _bounty(vm.getRecordedLogs());
 
-        uint256 expected = _expectedBounty(1);
-        assertGt(expected, 0, "fixture: nonzero bounty");
-        assertEq(credited, expected, "one settled box credits exactly one box-bounty to the keeper");
-
-        // ETH-VALUE: the FLIP credit reimburses exactly the per-box ETH target at this price.
-        assertEq(
-            (credited * game.mintPrice()) / PRICE_COIN_UNIT,
-            BOX_BOUNTY_ETH_TARGET,
-            "bounty holds its ETH-reimbursement value across the price curve"
-        );
-
-        // FAUCET: far below the 500 FLIP the winner had to burn to be a box at all.
-        assertLt(credited, 500 ether, "bounty << burn cost to manufacture a winning box");
-
-        emit log_named_uint("dec_box_bounty_flip", credited);
-        emit log_named_uint("mint_price", game.mintPrice());
+        assertEq(count, 1, "exactly one bounty per settling call");
+        assertEq(kind, KIND_DECIMATOR);
+        assertGt(amount, 0, "nonzero bounty");
+        assertEq(coinflip.coinflipAmount(keeper) - before, amount, "credited as a coinflip stake");
     }
 
-    function test_BountyScalesWithSettledBoxCount() public {
-        _setClaimRound(LVL, uint96(0.01 ether), uint128(1000 ether), uint32(uint256(keccak256("dbr2"))));
-        _setWinningSub(LVL, DENOM, SUB);
-        _setClaimablePool(1 ether);
-        _installDustWinner(winnerA);
-        _installDustWinner(winnerB);
+    /// @notice SCALES — a settle under the saturation knee pays less than the flat per-call unit;
+    ///         a settle that clears the knee (well past 75 walk units, guaranteed by 4 real
+    ///         settles at DEC_SETTLE_WEIGHT=42 each) pays exactly the unit, saturated.
+    function test_BountyScalesToTheKneeThenSaturates() public {
+        _installWinners(5, 6, 1, uint256(keccak256("scales-small")), 1 ether);
+        vm.recordLogs();
+        _mine();
+        (, , uint256 small) = _bounty(vm.getRecordedLogs());
 
-        address[] memory players = new address[](2);
-        players[0] = winnerA;
-        players[1] = winnerB;
+        _installWinners(15, 6, 4, uint256(keccak256("scales-big")), 4 ether);
+        vm.recordLogs();
+        _mine();
+        (, , uint256 saturated) = _bounty(vm.getRecordedLogs());
 
-        uint256 before = coinflip.coinflipAmount(keeper);
-        _claim(keeper, players);
-        uint256 credited = coinflip.coinflipAmount(keeper) - before;
-
-        assertEq(credited, _expectedBounty(2), "two settled boxes credit exactly twice the per-box bounty");
+        uint256 unit = _unit();
+        assertLt(small, saturated, "a smaller settle earns less than a saturating one");
+        assertEq(saturated, unit, "a saturating settle earns the flat per-call unit");
     }
 
-    function test_NoBountyForAlreadyClaimedOrNonWinner() public {
-        _setClaimRound(LVL, uint96(0.01 ether), uint128(1000 ether), uint32(uint256(keccak256("dbr3"))));
-        _setWinningSub(LVL, DENOM, SUB);
-        _setClaimablePool(1 ether);
-        // winnerA is in a LOSING subbucket (sub 1 != winning sub 0): not a winner, settles nothing.
-        _setEntry(LVL, winnerA, uint192(500 ether), DENOM, 1);
+    /// @notice GAME-OVER — the leg settles nothing after game over: mineFlip finds no work and
+    ///         pays no bounty; the winners still settle through the individual claim.
+    function test_LegSettlesNothingAfterGameOverAndPaysNoBounty() public {
+        address[] memory winners = _installWinners(5, 6, 1, uint256(keccak256("over")), 1 ether);
+        _setGameOver();
 
         uint256 before = coinflip.coinflipAmount(keeper);
-        _claim(keeper, _one(winnerA));
-        assertEq(coinflip.coinflipAmount(keeper), before, "no settled box -> no bounty");
+        vm.recordLogs();
+        vm.prank(keeper);
+        try game.mineFlip() {} catch {}
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (uint256 count, , ) = _bounty(logs);
+        assertEq(count, 0, "no bounty once the game is over");
+        assertEq(_claimedCount(logs), 0, "the leg settles nothing after game over");
+        assertEq(coinflip.coinflipAmount(keeper), before, "keeper earns nothing");
+
+        uint256 claimBefore = game.claimableWinningsOf(winners[0]);
+        game.claimDecimatorJackpot(5, 6, 0);
+        assertGt(game.claimableWinningsOf(winners[0]), claimBefore, "the claim still pays after game over");
     }
 
-    function test_NoBountyAfterGameOver() public {
-        _setClaimRound(LVL, uint96(0.01 ether), uint128(1000 ether), uint32(uint256(keccak256("dbr4"))));
-        _setWinningSub(LVL, DENOM, SUB);
-        _installDustWinner(winnerA);
-        _setGameOver(); // post-gameOver: winners settle into claimable, keeper earns no liveness bounty
+    /// @notice ETH-VALUE — at saturation the FLIP credit holds its ETH-reimbursement value
+    ///         exactly: credit == BOUNTY_ETH_TARGET * PRICE_COIN_UNIT / mintPrice.
+    function test_SaturatedBountyHoldsItsEthReimbursementValue() public {
+        _installWinners(5, 6, 4, uint256(keccak256("eth-value")), 4 ether);
+        vm.recordLogs();
+        _mine();
+        (, , uint256 amount) = _bounty(vm.getRecordedLogs());
+        assertEq(amount, _unit(), "saturated bounty equals the priced unit exactly");
+    }
 
-        uint256 before = coinflip.coinflipAmount(keeper);
-        _claim(keeper, _one(winnerA));
-        assertEq(
-            coinflip.coinflipAmount(keeper),
-            before,
-            "post-gameOver batch claim pays no keeper bounty"
-        );
+    /// @notice FAUCET — even a saturated bounty is far below the FLIP a single winner had to
+    ///         burn to exist, so a keeper cannot manufacture winners to farm it.
+    function test_BountyFarBelowBurnCostToManufactureAWinner() public {
+        _installWinners(5, 6, 4, uint256(keccak256("faucet")), 4 ether);
+        vm.recordLogs();
+        _mine();
+        (, , uint256 amount) = _bounty(vm.getRecordedLogs());
+        assertLt(amount, 1_000 ether, "bounty << burn cost to manufacture a single winning entry");
     }
 }

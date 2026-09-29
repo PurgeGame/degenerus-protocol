@@ -44,7 +44,7 @@ interface IDegenerusGameLensSource {
 ///         the game's `extsload` raw-slot reader. Decodes the packed records that have
 ///         no per-field getters on the game (EIP-170 headroom lives here for free):
 ///         the full afking Sub record, the per-level affiliate DGNRS pool, decimator
-///         bets with their subbucket aggregates, foil-pack
+///         entries with their subbucket aggregates, foil-pack
 ///         records, and a per-component activity-score breakdown.
 ///
 ///         Deployment-decoupled periphery: not referenced by ContractAddresses, takes
@@ -198,12 +198,13 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 cursePoints; // subtracted, floored at 0, before the hard cap
     }
 
-    /// @notice A player's decimator entry for a level (decBurn[lvl][player]).
+    /// @notice A player's decimator entry in their most recent window (decPointer + decEntry).
     struct DecBurnEntry {
-        uint192 burn;
-        uint8 bucket; // 0 = no entry this level
+        uint192 burn; // effective weight, wei
+        uint8 bucket; // 0 = the player's most recent window is not this level
         uint8 subBucket;
-        bool claimed;
+        uint32 position; // in the (lvl, bucket, subBucket) list
+        bool claimed; // settled (the entry is empty)
     }
 
     /// @notice A player's foil-pack record for a cycle level (foilRecord[lvl][player]).
@@ -490,7 +491,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                          DECIMATOR                                   |
       +======================================================================+*/
 
-    /// @notice A player's decimator entry for a level (decBurn[lvl][player]).
+    /// @notice A player's decimator entry for a level, readable while that level is the player's
+    ///         most recent window (the pointer is reused each window; DecBurnRecorded carries
+    ///         every entry's position for older levels).
     function decBurnOf(
         address game,
         uint24 lvl,
@@ -498,33 +501,82 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     ) external view returns (DecBurnEntry memory e) {
         uint256 base;
         assembly {
-            base := decBurn.slot
+            base := decPointer.slot
         }
-        uint256 w = _sload(
-            game,
-            _mapSlot(player, uint256(_mapSlot(uint256(lvl), base)))
-        );
-        e.burn = uint192(w);
-        e.bucket = uint8(w >> 192);
-        e.subBucket = uint8(w >> 200);
-        e.claimed = uint8(w >> 208) != 0;
+        uint256 p = _sload(game, _mapSlot(player, base));
+        if (uint24(p) != lvl) return e;
+        e.bucket = uint8(p >> 24);
+        e.subBucket = uint8(p >> 32);
+        e.position = uint32(p >> 40);
+        (, uint256 weightWei) = _decEntryAt(game, lvl, e.bucket, e.subBucket, e.position);
+        e.burn = uint192(weightWei);
+        e.claimed = weightWei == 0;
+    }
+
+    /// @notice One decimator list entry: its owner and effective weight in wei. A zero weight is
+    ///         settled, migrated away, or past the list's end.
+    function decEntryAt(
+        address game,
+        uint24 lvl,
+        uint8 denom,
+        uint8 subBucket,
+        uint32 position
+    ) external view returns (address owner, uint256 weightWei) {
+        return _decEntryAt(game, lvl, denom, subBucket, position);
+    }
+
+    function _decEntryAt(
+        address game,
+        uint24 lvl,
+        uint8 denom,
+        uint8 subBucket,
+        uint32 position
+    ) private view returns (address owner, uint256 weightWei) {
+        uint256 base;
+        assembly {
+            base := decEntry.slot
+        }
+        uint256 key = (uint256(lvl) << 48) |
+            (uint256(denom) << 40) |
+            (uint256(subBucket) << 32) |
+            uint256(position);
+        uint256 w = _sload(game, _mapSlot(key, base));
+        owner = address(uint160(w));
+        weightWei = uint256(uint64(w >> 160)) * 1e15;
     }
 
     /// @notice Aggregated decimator burn for a level/denominator/subbucket — the
-    ///         pro-rata denominator a claim divides by (decBucketBurnTotal).
+    ///         pro-rata denominator a claim divides by — and the length of its entry list.
     function decBucketTotal(
         address game,
         uint24 lvl,
         uint8 denom,
         uint8 subBucket
-    ) external view returns (uint256) {
+    ) external view returns (uint256 totalBurn, uint32 length) {
         uint256 base;
         assembly {
             base := decBucketBurnTotal.slot
         }
-        // mapping(uint24 => uint256[13][13]): [denom] strides 13 slots, [subBucket] one.
+        // mapping(uint24 => DecSubbucket[13][13]): [denom] strides 13 slots, [subBucket] one.
         uint256 arrBase = uint256(_mapSlot(uint256(lvl), base));
-        return _sload(game, bytes32(arrBase + uint256(denom) * 13 + subBucket));
+        uint256 w = _sload(game, bytes32(arrBase + uint256(denom) * 13 + subBucket));
+        totalBurn = uint192(w);
+        length = uint32(w >> 192);
+    }
+
+    /// @notice Where mineFlip's decimator leg resumes: the level, denominator and position of
+    ///         the next winning entry it visits (all zero before its first step).
+    function decSettleCursorOf(
+        address game
+    ) external view returns (uint24 lvl, uint8 denom, uint32 position) {
+        bytes32 slot;
+        assembly {
+            slot := decSettleCursor.slot
+        }
+        uint256 w = _sload(game, slot);
+        lvl = uint24(w);
+        denom = uint8(w >> 24);
+        position = uint32(w >> 32);
     }
 
     /// @notice Find the first matching owner index in a bounded page of a trait bucket.

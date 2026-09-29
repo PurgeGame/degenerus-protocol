@@ -901,6 +901,7 @@ abstract contract DegenerusGameStorage {
     uint8 internal constant MINER_BOUNTY_ADVANCE = 1;
     uint8 internal constant MINER_BOUNTY_BOX_OPEN = 2;
     uint8 internal constant MINER_BOUNTY_CRAPS_KEEP = 4;
+    uint8 internal constant MINER_BOUNTY_DECIMATOR = 5;
 
     /// @dev Emitted whenever a player's claimable balance is debited by the protocol. Covers
     ///      mint payments (MintPaymentKind.Claimable / Combined), lootbox/ticket shortfall
@@ -3043,21 +3044,51 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // All decimator logic is consolidated into the DecimatorModule.
 
-    /// @dev Player's decimator burn entry per level.
-    struct DecBet {
-        /// @notice Total effective (multiplied) burn weight by player this level (capped at uint192.max).
-        uint192 burn;
-        /// @notice Player's denominator choice (2-12), may improve to lower denom during level.
+    /// @dev One burner's record in a decimator subbucket list: the list entry IS the record, so the
+    ///      settle walk reads owner and weight from the one slot it visits. A zero slot is settled,
+    ///      migrated away, or past the list's end.
+    struct DecEntry {
+        /// @notice The burner; every payout from this entry credits it.
+        address owner;
+        /// @notice Effective (multiplied) burn weight, in thousandths of a FLIP (each burn's weight
+        ///         floored to the unit; saturating).
+        uint64 weightMilli;
+        /// @notice Base FLIP burned at this level before any multiplier, in thousandths of a FLIP
+        ///         (each burn floored to the unit; saturating). The activity multiplier applies to
+        ///         the first DECIMATOR_MULTIPLIER_CAP of THIS figure, not of the weight above; the
+        ///         saturation point (4.29M FLIP) sits above that cap, so it never moves the math.
+        uint32 baseMilli;
+    }
+
+    /// @dev Where a player's entry for their most recent decimator window sits. Reused every
+    ///      window (only one is open at a time): a pointer naming another level means the player
+    ///      has not burned in the current one.
+    struct DecPointer {
+        /// @notice Resolution level of the window the entry belongs to.
+        uint24 lvl;
+        /// @notice Denominator (2-12); may improve to a lower one during the window.
         uint8 bucket;
         /// @notice Deterministic subbucket from hash(player, lvl, bucket), range 0..(bucket-1).
         uint8 subBucket;
-        /// @notice Claim flag (0 = unclaimed, 1 = claimed).
-        uint8 claimed;
-        /// @notice Base FLIP burned this level before any multiplier, in thousandths of a FLIP
-        ///         (each burn floored to the unit; saturating). The activity multiplier applies
-        ///         to the first DECIMATOR_MULTIPLIER_CAP of THIS figure, not of the weight above.
-        ///         Fills the slot's last 40 bits, so the record still packs into one word.
-        uint40 baseMilli;
+        /// @notice Position in the (lvl, bucket, subBucket) list.
+        uint32 position;
+    }
+
+    /// @dev One subbucket's aggregate: the pro-rata denominator and the length of its entry list.
+    ///      Both change on the same burn, so they share the slot the burn already writes.
+    struct DecSubbucket {
+        /// @notice Total effective burn in the subbucket, in wei (each entry's weight x 1e15).
+        uint192 totalBurn;
+        /// @notice Entries appended to this subbucket's list.
+        uint32 length;
+    }
+
+    /// @dev The settle walk's place: the level whose winning lists are being walked, the
+    ///      denominator within it, and the next position in that denominator's winning list.
+    struct DecSettleCursor {
+        uint24 lvl;
+        uint8 denom;
+        uint32 position;
     }
 
     /// @dev Snapshot of a decimator jackpot for claim processing. All three fields pack
@@ -3085,14 +3116,12 @@ abstract contract DegenerusGameStorage {
         uint32 rngWord;
     }
 
-    /// @dev Player decimator entries per level.
-    ///      decBurn[lvl][player] = DecBet
-    mapping(uint24 => mapping(address => DecBet)) internal decBurn;
+    /// @dev Decimator subbucket lists, one slot per entry, keyed by _decEntryKey(lvl, denom, sub, pos).
+    mapping(uint256 => DecEntry) internal decEntry;
 
-    /// @dev Aggregated burn totals per level/denom/subbucket.
-    ///      decBucketBurnTotal[lvl][denom][sub] = total burn in that subbucket.
+    /// @dev Aggregate and list length per level/denom/subbucket.
     ///      Array sized [13][13] to allow direct indexing (denom 0-12, sub 0-12).
-    mapping(uint24 => uint256[13][13]) internal decBucketBurnTotal;
+    mapping(uint24 => DecSubbucket[13][13]) internal decBucketBurnTotal;
 
     /// @dev Decimator claim round snapshots per level.
     ///      Claims persist indefinitely — no expiry on prior rounds.
@@ -4090,6 +4119,14 @@ abstract contract DegenerusGameStorage {
     ///      early-bird ETH budget still backs nextPrizePool. Appended to preserve
     ///      every existing delegatecall slot. Cleared at settlement or game over.
     uint256 internal earlyBirdWhalePasses;
+
+    /// @dev Each player's pointer to their entry in their most recent decimator window.
+    ///      Appended to preserve every existing delegatecall slot.
+    mapping(address => DecPointer) internal decPointer;
+
+    /// @dev Where mineFlip's decimator leg resumes. Appended to preserve every existing
+    ///      delegatecall slot.
+    DecSettleCursor internal decSettleCursor;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

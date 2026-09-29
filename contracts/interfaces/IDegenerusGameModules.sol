@@ -192,14 +192,20 @@ interface IDegenerusGameDecimatorModule {
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
-    /// @notice Permissionlessly resolve `player`'s Decimator jackpot claim (value credits to player).
-    /// @param player Winner whose claim to resolve.
-    /// @param lvl Resolved level whose unclaimed winning position is being settled (any snapshotted round).
-    function claimDecimatorJackpot(address player, uint24 lvl) external;
+    /// @notice Permissionlessly settle one winning Decimator entry (value credits to its owner).
+    /// @param lvl Level whose round the entry won (any snapshotted round).
+    /// @param denom The entry's denominator (2-12); the winning subbucket is implied.
+    /// @param position The entry's position in its winning list.
+    function claimDecimatorJackpot(uint24 lvl, uint8 denom, uint32 position) external;
 
-    /// @notice Permissionlessly resolve Decimator jackpot claims for a batch of players.
-    /// @dev Non-claimable entries are skipped, not reverted.
-    function claimDecimatorJackpotMany(address[] calldata players, uint24 lvl) external;
+    /// @notice mineFlip's decimator leg: settle winning entries in list order within a walk budget.
+    /// @param budgetUnits Walk units the leg may spend.
+    /// @return settled Entries settled.
+    /// @return unitsUsed Walk units spent.
+    /// @return moved Whether the settle cursor advanced.
+    function settleDecimatorWinners(
+        uint256 budgetUnits
+    ) external returns (uint256 settled, uint256 unitsUsed, bool moved);
 
 }
 

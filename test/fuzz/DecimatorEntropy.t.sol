@@ -10,14 +10,12 @@ contract DecimatorEntropySeeder is DegenerusGame {
     function prepare(address player, uint24 lvl, uint256 word) external {
         level = 10;
         claimablePool = 100 ether;
-        decBucketBurnTotal[lvl][2][0] = 1 ether;
-        decBucketBurnTotal[lvl][2][1] = 1 ether;
-        decBurn[lvl][player] = DecBet({
-            burn: 1 ether,
-            bucket: 2,
-            subBucket: uint8(uint256(keccak256(abi.encodePacked(word, uint8(2)))) % 2),
-            claimed: 0, baseMilli: 0
-        });
+        uint8 sub = uint8(uint256(keccak256(abi.encodePacked(word, uint8(2)))) % 2);
+        decBucketBurnTotal[lvl][2][sub] = DecSubbucket({totalBurn: 1 ether, length: 1});
+        uint256 key = (uint256(lvl) << 48) | (uint256(2) << 40) | (uint256(sub) << 32);
+        decEntry[key] = DecEntry({owner: player, weightMilli: 1000, baseMilli: 1000});
+        // The batch path is mineFlip's walk: seed the cursor at this round so it starts there.
+        decSettleCursor = DecSettleCursor({lvl: lvl, denom: 2, position: 0});
     }
 }
 
@@ -25,9 +23,32 @@ contract DecimatorEntropyTest is DeployProtocol {
     address private constant PLAYER = address(0xB0B);
     bytes32 private constant BOX_TAG = keccak256("degenerus.decimator.box");
 
+    uint256 private constant DRAIN_MAX_ITERATIONS = 64;
+    uint256 private _lastFulfilledReqId;
+
     function setUp() public {
         _deployProtocol();
         vm.deal(address(game), 100 ether);
+        // mineFlip's decimator leg only runs once the advance leg is not due, and once the box
+        // legs find nothing — drain both so the batch probe below reaches the decimator leg.
+        _settleGame(uint256(keccak256("dec-entropy-settle")));
+        game.openBoxes(1_000);
+        _quietCrapsTable();
+    }
+
+    function _settleGame(uint256 vrfWord) internal {
+        for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
+            if (!game.advanceDue() && !game.rngLocked()) break;
+            game.advanceGame();
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != _lastFulfilledReqId && reqId > 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) {
+                    mockVRF.fulfillRandomWords(reqId, vrfWord);
+                    _lastFulfilledReqId = reqId;
+                }
+            }
+        }
     }
 
     function _probe(uint256 word, uint24 lvl, bool batch) private {
@@ -52,10 +73,10 @@ contract DecimatorEntropyTest is DeployProtocol {
             abi.encode(PLAYER, uint256(1 ether), uint256(keccak256(abi.encode(uint256(seed32), BOX_TAG, lvl))))
         ));
         if (batch) {
-            address[] memory players = new address[](1);
-            players[0] = PLAYER;
-            game.claimDecimatorJackpotMany(players, lvl);
-        } else game.claimDecimatorJackpot(PLAYER, lvl);
+            game.mineFlip();
+        } else {
+            game.claimDecimatorJackpot(lvl, 2, 0);
+        }
         vm.revertToState(snapshot);
     }
 

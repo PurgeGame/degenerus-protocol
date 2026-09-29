@@ -28,7 +28,11 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {IDegenerusGameLootboxModule, IDegenerusGameWhaleModule} from "../interfaces/IDegenerusGameModules.sol";
+import {
+    IDegenerusGameDecimatorModule,
+    IDegenerusGameLootboxModule,
+    IDegenerusGameWhaleModule
+} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
@@ -1749,16 +1753,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Unified permissionless afking router: do ONE category of pending work this
-    ///         call (priority advance → box open → craps upkeep) and pay ONE bounty. The
-    ///         OPEN category walks the afking ring first; only a walk that opened nothing
-    ///         hands its remaining budget to the human-box sweep, and only a call that
-    ///         opened no box of either kind cranks the craps table with what is left.
+    ///         call (priority advance → box open → decimator settle → craps upkeep) and pay
+    ///         ONE bounty. The OPEN category walks the afking ring first; only a walk that
+    ///         opened nothing hands its remaining budget to the human-box sweep, only a call
+    ///         that opened no box of either kind settles decimator winners with what is left,
+    ///         and only a call that settled none cranks the craps table.
     /// @dev ROUTER one-category STRUCTURAL early-return: the rngLock-aware O(1) predicates
     ///      pick the first category with work; the advance and open bounties can never
     ///      stack in one tx (advance — the expensive leg — never co-runs with an open). NO
     ///      `nonReentrant` guard — the module is afking-never-a-payee: every external call
     ///      is to a pinned `ContractAddresses.*` [GAME self-call / LootboxModule
-    ///      delegatecall (afking AND human open legs) / COINFLIP], player value flows
+    ///      delegatecall (afking AND human open legs) / DecimatorModule delegatecall (settle
+    ///      leg) / COINFLIP], player value flows
     ///      through the game's claimable pull ledger, and the bounty is minted flip-credit
     ///      — never an ETH push the router receives. The human-open leg is likewise
     ///      pull-only (no callee on that path hands control to player code), so it keeps
@@ -1771,7 +1777,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      AdvanceModule's day-epoch stall `mult` (1/2/4/6). The OPEN leg pays
     ///      the `OPEN_KNEE` work-scaled pro-rate on knee credit: one per afking open
     ///      (net of the forced-split carry), one per entry-weight of human walk units
-    ///      (pay for work done, farm-by-splitting resistant). The craps leg pays the
+    ///      (pay for work done, farm-by-splitting resistant). The decimator leg pays the
+    ///      same pro-rate, one credit per entry-weight of its walk units. The craps leg pays the
     ///      flat CRAPS_KEEP_FLAT_FLIP. `mult == 0` (the gameover advance path) pays no
     ///      bounty.
     function mineFlip() external {
@@ -1949,22 +1956,38 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 uint256 k = afkKneeCredit < OPEN_KNEE ? afkKneeCredit : OPEN_KNEE;
                 bountyEarned = (unit * k) / OPEN_KNEE;
                 bountyKind = MINER_BOUNTY_BOX_OPEN;
-            } else if (_crapsKeep(_crapsUnitBudget(spentUnits))) {
-                // NO BOX OPENED, so the crank goes to the craps table — LAST, and only here. A
-                // call that spent its weight budget opening boxes is already ~9.1M of gas, and
-                // stacking a settle batch on top of that would push it past the ceiling; the
-                // same reason the human sweep only runs on a call the afking walk left idle.
-                // `opened == 0` is also exactly when no box bounty was priced, so the one credit
-                // below stays one category and cannot be stacked.
-                bountyEarned = CRAPS_KEEP_FLAT_FLIP;
-                bountyKind = MINER_BOUNTY_CRAPS_KEEP;
-            } else if (!sweptFrontier && !afkProgress) {
-                // Nothing opened, the craps table had nothing owed, AND neither cursor moved
-                // (no afking box, no human box, no skip run swept on either leg) — the clean
-                // no-work signal.
-                revert NoWork();
+            } else {
+                // NO BOX OPENED, so the crank settles decimator winners, then goes to the craps
+                // table — LAST, and only here. A call that spent its weight budget opening boxes
+                // is already ~9.1M of gas, and stacking a settle batch on top of that would push
+                // it past the ceiling; the same reason the human sweep only runs on a call the
+                // afking walk left idle. `opened == 0` is also exactly when no box bounty was
+                // priced, so the one credit below stays one category and cannot be stacked.
+                (uint256 decSettled, uint256 decUnits, bool decMoved) = _decimatorSettle(
+                    spentUnits < OPEN_WEIGHT_BUDGET ? OPEN_WEIGHT_BUDGET - spentUnits : 0
+                );
+                spentUnits += decUnits;
+                if (decSettled != 0) {
+                    // Knee credit in work, as for the human sweep: one entry-weight of walk
+                    // units per credit. Priced after the leg, which never writes
+                    // level/jackpotPhaseFlag.
+                    uint256 unit = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
+                        _mintPriceInContext();
+                    uint256 k = decUnits / OPEN_HUMAN_ENTRY_WEIGHT;
+                    if (k > OPEN_KNEE) k = OPEN_KNEE;
+                    bountyEarned = (unit * k) / OPEN_KNEE;
+                    bountyKind = MINER_BOUNTY_DECIMATOR;
+                } else if (_crapsKeep(_crapsUnitBudget(spentUnits))) {
+                    bountyEarned = CRAPS_KEEP_FLAT_FLIP;
+                    bountyKind = MINER_BOUNTY_CRAPS_KEEP;
+                } else if (!sweptFrontier && !afkProgress && !decMoved) {
+                    // Nothing opened or settled, the craps table had nothing owed, AND no cursor
+                    // moved (no afking box, no human box, no skip run swept on any leg) — the
+                    // clean no-work signal.
+                    revert NoWork();
+                }
+                // else: a leg advanced its cursor past a skip run — commit it, no bounty.
             }
-            // else: a leg advanced its cursor past a skip run — commit it, no bounty.
         }
 
         // The single unified bounty: ONE creditFlip, CEI-LAST, after the one-category
@@ -2029,6 +2052,29 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             allowance -= CRAPS_ROUTER_TAIL_UNITS;
             return allowance < CRAPS_MIN_START_UNITS ? 0 : uint64(allowance);
         }
+    }
+
+    /// @dev THE DECIMATOR LEG. The walk lives in the decimator module (delegatecall runs it in
+    ///      this Game's storage, the same nested pattern as the human sweep). BARE: the walk idles
+    ///      on its own gates and prices every settle before running it, so a call that fails did
+    ///      so for gas and takes the whole crank with it.
+    /// @param budgetUnits Walk units the box legs left of the call's weight budget.
+    /// @return settled Winning entries settled.
+    /// @return unitsUsed Walk units the leg spent.
+    /// @return moved Whether the settle cursor advanced.
+    function _decimatorSettle(
+        uint256 budgetUnits
+    ) private returns (uint256 settled, uint256 unitsUsed, bool moved) {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DECIMATOR_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameDecimatorModule.settleDecimatorWinners.selector,
+                    budgetUnits
+                )
+            );
+        if (!ok) _revertDelegate(data);
+        (settled, unitsUsed, moved) = abi.decode(data, (uint256, uint256, bool));
     }
 
     /// @dev THE CRAPS LEG. The table's doors are permissionless and its SCHEDULED CURSOR is its

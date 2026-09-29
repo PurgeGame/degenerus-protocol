@@ -102,23 +102,29 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         levelDgnrsPacked[lvl] = uint256(allocation) | (uint256(claimed) << 128);
     }
 
-    function setDecBurn(
-        uint24 lvl,
-        address p,
-        uint192 burn,
-        uint8 bucket,
-        uint8 subBucket,
-        uint8 claimed
-    ) external {
-        DecBet storage e = decBurn[lvl][p];
-        e.burn = burn;
-        e.bucket = bucket;
-        e.subBucket = subBucket;
-        e.claimed = claimed;
+    function setDecPointer(address p, uint24 lvl, uint8 bucket, uint8 subBucket, uint32 position) external {
+        decPointer[p] = DecPointer({lvl: lvl, bucket: bucket, subBucket: subBucket, position: position});
     }
 
-    function setDecBucketTotal(uint24 lvl, uint8 denom, uint8 subBucket, uint256 v) external {
-        decBucketBurnTotal[lvl][denom][subBucket] = v;
+    function setDecEntry(
+        uint24 lvl,
+        uint8 denom,
+        uint8 subBucket,
+        uint32 position,
+        address owner,
+        uint64 weightMilli,
+        uint32 baseMilli
+    ) external {
+        uint256 key = (uint256(lvl) << 48) | (uint256(denom) << 40) | (uint256(subBucket) << 32) | uint256(position);
+        decEntry[key] = DecEntry({owner: owner, weightMilli: weightMilli, baseMilli: baseMilli});
+    }
+
+    function setDecBucketTotal(uint24 lvl, uint8 denom, uint8 subBucket, uint192 totalBurn, uint32 length) external {
+        decBucketBurnTotal[lvl][denom][subBucket] = DecSubbucket({totalBurn: totalBurn, length: length});
+    }
+
+    function setDecSettleCursor(uint24 lvl, uint8 denom, uint32 position) external {
+        decSettleCursor = DecSettleCursor({lvl: lvl, denom: denom, position: position});
     }
 
     function setFoilRecord(uint24 lvl, address p, uint256 w) external {
@@ -328,24 +334,62 @@ contract LensParityTest is Test {
     function testFuzz_decBurnOf(
         uint24 lvl,
         address p,
-        uint192 burn,
+        uint64 weightMilli,
+        uint32 baseMilli,
         uint8 bucket,
         uint8 subBucket,
+        uint32 position,
         bool claimed
     ) public {
-        harness.setDecBurn(lvl, p, burn, bucket, subBucket, claimed ? 1 : 0);
+        if (claimed) weightMilli = 0;
+        else if (weightMilli == 0) weightMilli = 1;
+        harness.setDecPointer(p, lvl, bucket, subBucket, position);
+        harness.setDecEntry(lvl, bucket, subBucket, position, p, weightMilli, baseMilli);
         DegenerusGameLens.DecBurnEntry memory e = lens.decBurnOf(game, lvl, p);
-        assertEq(e.burn, burn, "burn");
+        assertEq(e.burn, uint256(weightMilli) * 1e15, "burn");
         assertEq(e.bucket, bucket, "bucket");
         assertEq(e.subBucket, subBucket, "subBucket");
+        assertEq(e.position, position, "position");
         assertEq(e.claimed, claimed, "claimed");
     }
 
-    function testFuzz_decBucketTotal(uint24 lvl, uint8 denom, uint8 subBucket, uint256 v) public {
+    function testFuzz_decBucketTotal(uint24 lvl, uint8 denom, uint8 subBucket, uint192 totalBurn, uint32 length)
+        public
+    {
         denom = uint8(bound(denom, 0, 12));
         subBucket = uint8(bound(subBucket, 0, 12));
-        harness.setDecBucketTotal(lvl, denom, subBucket, v);
-        assertEq(lens.decBucketTotal(game, lvl, denom, subBucket), v, "bucket total");
+        harness.setDecBucketTotal(lvl, denom, subBucket, totalBurn, length);
+        (uint256 t, uint32 l) = lens.decBucketTotal(game, lvl, denom, subBucket);
+        assertEq(t, totalBurn, "bucket total");
+        assertEq(l, length, "bucket length");
+    }
+
+    /// @notice A raw decimator list entry, read independent of any pointer — decEntryAt names
+    ///         (lvl, denom, subBucket, position) directly, as the winning-list walk does.
+    function testFuzz_decEntryAt(
+        uint24 lvl,
+        uint8 denom,
+        uint8 subBucket,
+        uint32 position,
+        address owner,
+        uint64 weightMilli,
+        uint32 baseMilli
+    ) public {
+        denom = uint8(bound(denom, 0, 12));
+        subBucket = uint8(bound(subBucket, 0, 12));
+        harness.setDecEntry(lvl, denom, subBucket, position, owner, weightMilli, baseMilli);
+        (address o, uint256 w) = lens.decEntryAt(game, lvl, denom, subBucket, position);
+        assertEq(o, owner, "owner");
+        assertEq(w, uint256(weightMilli) * 1e15, "weight");
+    }
+
+    /// @notice Where mineFlip's decimator leg resumes (decSettleCursor).
+    function testFuzz_decSettleCursorOf(uint24 lvl, uint8 denom, uint32 position) public {
+        harness.setDecSettleCursor(lvl, denom, position);
+        (uint24 l, uint8 d, uint32 p) = lens.decSettleCursorOf(game);
+        assertEq(l, lvl, "lvl");
+        assertEq(d, denom, "denom");
+        assertEq(p, position, "position");
     }
 
     function testFuzz_foilRecordOf(uint24 lvl, address p, uint24 resolveDay, uint16 multBps, uint16 score, uint8 snap)

@@ -11,6 +11,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IDegenerusGameDecimatorModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
@@ -18,9 +19,11 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 //
 //   T1  a VRF stall that recovers past the purchase deadline does not fire liveness before the
 //       next advance's backfill credits the skipped days (unit + integration).
-//   T2  terminal claim routing is irreversible: decimator and sDGNRS redemption claims wait
-//       (EndingPending) while liveness reads true before game over; the foil drain's terminal
-//       flag keys on the ending latch, not the liveness predicate.
+//   T2  terminal claim routing is irreversible: the decimator claim and sDGNRS redemption wait
+//       (EndingPending) while liveness reads true before game over; mineFlip's decimator leg
+//       idles under both liveness and game over, so only the individual claim ever pays a
+//       post-liveness winner, in terminal shape once game over is final; the foil drain's
+//       terminal flag keys on the ending latch, not the liveness predicate.
 //   T3  a vault DGVE burn whose afking shortfall exceeds the game's ETH is paid ETH + stETH.
 //   T4  the terminal jackpot pays exact shares: one wei in the pot moves a winner by wei, not a
 //       whole ticket unit.
@@ -191,23 +194,49 @@ contract ReviewClaimSeeder is DegenerusGame {
         _afkingResetDay = day;
     }
 
-    /// @dev A resolved decimator round at `lvl` where `player` holds the whole winning burn.
+    /// @dev A resolved decimator round at `lvl` where `player` holds the whole winning burn, at
+    ///      denom 2 / sub 0 / position 0 — also where the settle cursor starts, so mineFlip's
+    ///      leg reaches it directly rather than walking from level 5.
     function seedDecRound(uint24 lvl, address player, uint96 poolWei) external {
         decClaimRounds[lvl].poolWei = poolWei;
-        decClaimRounds[lvl].totalBurn = 100;
+        decClaimRounds[lvl].totalBurn = 100 * 1e15;
         decClaimRounds[lvl].rngWord = 7;
         decBucketOffsetPacked[lvl] = 0; // denom 2 wins sub 0
-        DecBet storage e = decBurn[lvl][player];
-        e.burn = 100;
-        e.bucket = 2;
-        e.subBucket = 0;
-        e.claimed = 0;
+        decEntry[_decEntryKey(lvl, 2, 0, 0)] = DecEntry({owner: player, weightMilli: 100, baseMilli: 100});
+        decBucketBurnTotal[lvl][2][0] = DecSubbucket({totalBurn: 100 * 1e15, length: 1});
+        decSettleCursor = DecSettleCursor({lvl: lvl, denom: 2, position: 0});
         // Back the credit the claim writes (claimablePool is the ledger total).
         claimablePool += uint128(poolWei);
     }
 
     function setGameOver() external {
         gameOver = true;
+    }
+
+    /// @dev Mirrors GameAfkingModule._decimatorSettle's delegatecall, isolated from mineFlip's
+    ///      other legs so the leg's own liveness/game-over gate is exercised directly.
+    function settleDecOne(uint256 budgetUnits)
+        external
+        returns (uint256 settled, uint256 unitsUsed, bool moved)
+    {
+        (bool ok, bytes memory data) = ContractAddresses
+            .GAME_DECIMATOR_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameDecimatorModule.settleDecimatorWinners.selector,
+                    budgetUnits
+                )
+            );
+        if (!ok) {
+            assembly ("memory-safe") {
+                revert(add(data, 32), mload(data))
+            }
+        }
+        (settled, unitsUsed, moved) = abi.decode(data, (uint256, uint256, bool));
+    }
+
+    function _decEntryKey(uint24 lvl, uint8 denom, uint8 sub, uint32 position) private pure returns (uint256) {
+        return (uint256(lvl) << 48) | (uint256(denom) << 40) | (uint256(sub) << 32) | uint256(position);
     }
 }
 
@@ -238,23 +267,36 @@ contract DecimatorEndingPendingTest is DeployProtocol {
     function test_singleClaimWaitsThenSettlesTerminal() public {
         uint256 before = game.claimableWinningsOf(winner);
         vm.expectRevert(ENDING_PENDING);
-        game.claimDecimatorJackpot(winner, DLVL);
+        game.claimDecimatorJackpot(DLVL, 2, 0);
         assertEq(game.claimableWinningsOf(winner), before, "nothing settled while pending");
 
         _over();
-        game.claimDecimatorJackpot(winner, DLVL);
+        game.claimDecimatorJackpot(DLVL, 2, 0);
         assertEq(game.claimableWinningsOf(winner) - before, 1 ether, "terminal shape after game over: 100% cash");
     }
 
-    function test_batchClaimWaitsThenSettlesTerminal() public {
-        address[] memory players = new address[](1);
-        players[0] = winner;
+    /// @notice mineFlip's decimator leg idles under liveness pending, and keeps idling after
+    ///         game over — the leg never pays this winner in either state; only the permissionless
+    ///         claim does, in terminal shape once game over is final.
+    function test_legIdlesUnderLivenessAndAfterGameOver() public {
         uint256 before = game.claimableWinningsOf(winner);
-        vm.expectRevert(ENDING_PENDING);
-        game.claimDecimatorJackpotMany(players, DLVL);
+
+        vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+        (uint256 settled1, , bool moved1) = ReviewClaimSeeder(payable(address(game))).settleDecOne(1000);
+        vm.etch(address(game), realCode);
+        assertEq(settled1, 0, "the leg idles while liveness is pending");
+        assertFalse(moved1, "the cursor does not move either");
 
         _over();
-        game.claimDecimatorJackpotMany(players, DLVL);
+
+        vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+        (uint256 settled2, , bool moved2) = ReviewClaimSeeder(payable(address(game))).settleDecOne(1000);
+        vm.etch(address(game), realCode);
+        assertEq(settled2, 0, "the leg settles nothing after game over either");
+        assertFalse(moved2, "still no cursor movement");
+        assertEq(game.claimableWinningsOf(winner), before, "the leg never pays this entry");
+
+        game.claimDecimatorJackpot(DLVL, 2, 0);
         assertEq(game.claimableWinningsOf(winner) - before, 1 ether, "terminal shape after game over: 100% cash");
     }
 }

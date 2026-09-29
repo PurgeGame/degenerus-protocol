@@ -326,7 +326,20 @@ A decimator round packs its pool, total qualifying burn and a 32-bit claim seed 
 mapping-value slot. The seed is the low 32 bits of `keccak(word, DECIMATOR_BOX_TAG)`, so
 no other consumer of the day word shares its bits; the claim-box root re-hashes it with
 the tag and the fixed round level, and the box resolver then mixes the winning owner.
-Winner selection still uses the full word before the snapshot. The layout is unchanged.
+Winner selection still uses the full word before the snapshot.
+
+### Decimator records and settlement
+
+Each burner's record is an entry in its (level, denominator, subbucket) list: owner,
+weight and base in one slot. A per-player pointer, reused every window, finds the entry for
+later burns; a better bucket empties the old position and re-appends the entry. Each
+subbucket slot holds the pro-rata total and the list length. After the draw, `mineFlip`
+settles winning entries in list order (oldest level, denominators 2-12, positions
+ascending) on whatever budget the box legs left, before the craps leg, and pays one
+knee-pro-rated bounty. It idles under the RNG lock, the liveness trigger and game over.
+The permissionless claim `claimDecimatorJackpot(lvl, denom, position)` settles any one
+winning entry and stays open after game over. The walk defers whole half-passes to
+`whalePassClaims`; the claim applies them immediately.
 
 ### High-roller jackpot reserve
 

@@ -826,7 +826,7 @@ contract FLIP {
 
         if (!degenerusGame.decWindow()) revert NotDecimatorWindow();
         // Key burns by the resolution level: burns during window level N land
-        // in decBurn[N+1] where the jackpot resolves at the N→N+1 bump.
+        // in level N+1's lists, where the jackpot resolves at the N→N+1 bump.
         uint24 lvl = degenerusGame.level() + 1;
 
         uint256 consumed = _consumeCoinflipShortfall(caller, amount);
