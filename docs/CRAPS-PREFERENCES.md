@@ -69,7 +69,9 @@ The daily RNG request locks the field before its word exists:
 
 Preference edits freeze with the lock. The lock stays held, across midnight too, until the battle has finished.
 
-When the word lands, one roll multiplies the whole pool, `(paid units × 8,000 + Added) × multiplier`:
+At lock, `floor(Added / 20)` funds the high-roller reserve. When the word lands,
+one roll multiplies the remaining pool,
+`(paid units × 8,000 + Added - floor(Added / 20)) × multiplier`:
 
 | Probability | Multiplier |
 | --- | ---: |
@@ -85,30 +87,41 @@ Awards come from Added alone: one per 10,000 FLIP of Added, at most 500. Paid vo
 ### Draw and seal
 
 The Game draws awards in chunks of up to 150 entries, one chunk per advance.
-- Each draw picks a level uniformly among the eligible far-future queues, then an entry uniformly within that queue. Draws are with replacement.
+
+- Each visit picks a level uniformly among eligible nonempty far-future queues, chooses a starting position, and walks that level's whole queue circularly. Levels are picked with replacement between visits. Chunk boundaries preserve the unfinished visit.
 - The Game reads all distinct wallets' saved boards in one `extsload(bytes32[])` call. It passes one word per entry: address in bits 0–159, the compact board in 160–179, one unit at bit 180. The battle makes no storage callbacks, and a malformed or empty entry forfeits its award.
 
-The chunk that reaches the award target, or finds no eligible level, seals the field. Sealing sizes every seat from the rolled pool. With N paid plus awarded units:
+The chunk that reaches the award target, or finds no eligible level, seals the field.
+Each paid seat has one base place in the Added-funded main pool; extra high units
+receive a separate fee-only allocation under the same multiplier. With N base
+paid seats plus awarded seats:
 
-- each unit's bankroll is half the pool per unit, rounded down to a multiple of 300 FLIP (at least 1,800, and capped at the engine's chip limit);
+- each base seat's bankroll is half the main pool per seat, rounded down to a multiple of 300 FLIP (at least 1,800, and capped at the engine's chip limit);
 - the rest of each unit's share is its bounty, in 100-FLIP granules, never above its bankroll;
 - rounding dust stays in the pot.
 
-Only the fee-funded part of the bankroll is booked as the day's craps action, and the comp lane earns 2% of it, both once at seal. Added and any multiplier gain are never action.
+Only the base seats' fee-funded bankroll is booked as the day's craps action, and
+the comp lane earns 2% of it, both once at seal. Extra high fees earn comps equal
+to 9.6% of their pre-roll at-risk value: all extra fees for a sole high seat, half
+for a contested high field. These extras, Added and multiplier gains never enter
+the action books.
 
 ### Settlement
 
 Every seat throws the same dice. Seats settle through the table's normal resolver in one order: paid window seats, then day tickets, then awarded seats.
+
 - An awarded seat keys its scatter, survival coin and shooter boost to its own bet id rather than to the wallet. Repeat awards to one wallet are therefore separate runs.
 - Each advance settles seats on a 1,500-unit work budget. The call that seals the field first charges its own draw (110 units plus 10 per entry) against that budget and settles on the rest.
 - Every run has the shared 1,000-roll between-shooter budget (1,511-roll ceiling), like every slip.
 
 Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat finalizes the field once:
+
 - The best-ranked run takes the pot: the bounties plus the seal's remainder.
 - A contested high lane pays its winner.
 - The pot winner's high point can also claim RIU. At **25×** it pays **5%** of the live progressive pool; at **120×** it pays **10%** instead. RIU keeps its usual pass/liquid split and the fixed standing of 100.
 - At **100×** or more, a strict improvement claims the biggest Dice Run record, with its FLIP, sDGNRS and trophy awards.
 - Nothing doubles the jackpot's RIU shares.
+- A separate field-wide 1-in-10 roll pays the high-roller reserve to one uniformly sampled paid high seat, excluding sDGNRS. If there is no eligible seat or the roll misses, the reserve carries forward. This Coinflip credit creates no extra action, comps or passes.
 
 ### Advance stages
 

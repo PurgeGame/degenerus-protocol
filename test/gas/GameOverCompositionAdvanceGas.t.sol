@@ -6,6 +6,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title GameOverCompositionAdvanceGas — v60 GASCEIL: the historical game-over composition
 /// @notice END-TO-END regression driving the REAL `advanceGame()` from the historical two-slot
@@ -22,7 +23,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///         Now every step is its own transaction: the committed read snapshot drains on its own
 ///         word, the write cohort is swapped in once (liveness has frozen purchases) before the
 ///         ending requests its terminal word, that word is applied (deriving the skipped days),
-///         the write cohort drains on it, and the terminal jackpot pays. Every measured
+///         the write cohort drains on the word, and the terminal jackpot pays. Every measured
 ///         transaction stays under the cap.
 /// @dev Test-only. NO contracts/*.sol is mutated. A GameSeeder (DegenerusGame subclass with seeders)
 ///      is etched onto the live game via type().runtimeCode (no constructor side effects), used to
@@ -55,7 +56,8 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         level = lvl;
         purchaseStartDay = 0;
         dailyIdx = day - 1;
-        levelPrizePool[lvl] = type(uint256).max; // _getNextPrizePool() (0) < target => liveness fires
+        // A reachable large pool keeps the target unmet (_getNextPrizePool() is zero).
+        levelPrizePool[lvl] = 100_000 ether;
         rngWordByDay[day] = rngWord; // the last sealed day's word; the ending requests its own
 
         // lootbox entropy word the ticket batch reads at lootboxRngWordByIndex[LR_INDEX-1].
@@ -92,8 +94,11 @@ contract GameSeeder is DegenerusGame, BucketSeed {
 contract GameOverCompositionAdvanceGas is DeployProtocol {
     /// @dev EIP-7825 per-transaction gas cap. A single advanceGame tx above this = permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
-    /// @dev USER soft comfort target.
+    /// @dev Review ceiling and stronger fixture-specific comfort target.
+    uint256 internal constant REVIEW_GAS_CAP = 11_500_000;
     uint256 internal constant GAS_TARGET = 10_000_000;
+    uint256 internal constant TX_INTRINSIC = 21_064;
+    uint256 internal constant MAX_TERMINAL_ADVANCES = 16;
 
     // Production caps mirrored from DegenerusGameJackpotModule.
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
@@ -112,17 +117,11 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
 
     /// @dev Mirror `runTerminalJackpot`'s winning-trait + geometry derivation so the seeded buckets
     ///      match the traits the live jackpot will actually roll for `rngWord` at the seeded pool.
-    function _deriveJackpot()
-        internal
-        pure
-        returns (uint8[4] memory traitIds, uint16[4] memory bucketCounts)
-    {
+    function _deriveJackpot() internal pure returns (uint8[4] memory traitIds, uint16[4] memory bucketCounts) {
         uint256 rngWord = _word();
         traitIds = JackpotBucketLib.getRandomTraits(rngWord);
         uint256 effEntropy = EntropyLib.hash2(rngWord, LVL + 1);
-        bucketCounts = JackpotBucketLib.bucketCountsForPool(
-            GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
+        bucketCounts = JackpotBucketLib.bucketCountsForPool(GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS);
     }
 
     /// @dev Etch the seeder, write the worst-case pre-state into live game storage, restore real code.
@@ -131,9 +130,8 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
 
         bytes memory realGameCode = address(game).code;
         vm.etch(address(game), type(GameSeeder).runtimeCode);
-        GameSeeder(payable(address(game))).seedGameOverWorstCase(
-            LVL, _word(), readOwed, writeOwed, traitIds, bucketCounts, uint160(0x5_0000_0000)
-        );
+        GameSeeder(payable(address(game)))
+            .seedGameOverWorstCase(LVL, _word(), readOwed, writeOwed, traitIds, bucketCounts, uint160(0x500000000));
         vm.etch(address(game), realGameCode);
 
         // Fund the contract so the terminal jackpot pool reaches the 305-winner geometry.
@@ -144,31 +142,39 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
     }
 
     // =========================================================================
-    // The headline assertion: EVERY game-over advanceGame tx stays under the EIP cap.
+    // The headline assertion: EVERY game-over advanceGame tx stays under 11.5M.
     // =========================================================================
 
     /// @notice Drive the seeded worst-case game-over through the REAL advanceGame() and assert that
-    ///         no single tx exceeds the EIP-7825 cap, while game-over still completes.
+    ///         no single tx exceeds the 11.5M hard cap, while game-over still completes.
     ///
     ///         PRE-FIX  : the first advanceGame() runs round1+round2+terminal-jackpot in ONE tx
     ///                    (~20M). The per-tx assertion below FAILS — that failure (with the logged
     ///                    ~20M) is the demonstration of the composition DoS.
     ///         POST-FIX : each batch, the terminal request, its application and the terminal
-    ///                    jackpot run in separate txs; every tx < 16.7M -> PASSES.
-    function test_GameOverDrain_EveryAdvanceTxUnderEipCap() public {
-        // Keep both historical slots near the cold write budget. Only the committed read slot is
-        // processed post-fix; pre-fix both finishing batches composed with the terminal jackpot.
+    ///                    jackpot run in separate txs; every tx must remain below 11.5M.
+    function test_GameOverDrain_EveryAdvanceTxUnderHardCap() public {
+        // Keep both historical slots near the cold write budget. They drain in separate calls,
+        // followed by the terminal ETH payout.
+        // FOUNDRY_ISOLATE=true makes every production invocation a cold transaction.
         _seedWorstCase(170, 170);
 
         uint256 maxTxGas;
         uint256 firstTxGas;
         bool over;
+        uint256 winners;
 
-        for (uint256 i = 0; i < 16; i++) {
+        for (uint256 i = 0; i < MAX_TERMINAL_ADVANCES; i++) {
+            vm.recordLogs();
             uint256 g0 = gasleft();
-            game.advanceGame();
-            uint256 used = g0 - gasleft();
+            game.advanceGame{gas: REVIEW_GAS_CAP - TX_INTRINSIC}();
+            uint256 used = g0 - gasleft() + TX_INTRINSIC;
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j; j < logs.length; ++j) {
+                if (logs[j].topics[0] == keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)")) ++winners;
+            }
             emit log_named_uint("advance_tx_gas[i]", used);
+            assertLt(used, REVIEW_GAS_CAP, "terminal stage exceeds 11.5M review cap");
             if (i == 0) firstTxGas = used;
             if (used > maxTxGas) maxTxGas = used;
             if (used > EIP7825_TX_GAS_CAP) over = true;
@@ -187,12 +193,10 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
         emit log_named_uint("eip7825_tx_gas_cap", EIP7825_TX_GAS_CAP);
 
         assertTrue(game.gameOver(), "game-over must complete (funds drained, not stranded)");
+        assertEq(winners, DAILY_ETH_MAX_WINNERS, "all 305 terminal award slots must execute");
 
         // The breach assertion. Pre-fix this FAILS on the ~20M composed tx; post-fix it PASSES.
-        assertFalse(
-            over,
-            "GAS-CEIL DoS: a single game-over advanceGame tx exceeded 16,777,216 (EIP-7825 brick)"
-        );
+        assertFalse(over, "GAS-CEIL DoS: a single game-over advanceGame tx exceeded 16,777,216 (EIP-7825 brick)");
         // Stronger: post-fix every game-over tx should also clear the 10M soft target.
         assertLt(maxTxGas, GAS_TARGET, "every game-over advanceGame tx clears the 10M soft target");
     }

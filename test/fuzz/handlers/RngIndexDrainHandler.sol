@@ -6,237 +6,221 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
-import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
-/// @title RngIndexDrainHandler -- Phase 232.1 invariant-suite handler
-/// @notice Drives advanceGame / VRF-fulfillment / purchase / warp actions and
-///         captures per-tx TraitsGenerated events via vm.recordLogs to track
-///         ghost counters that the invariant test asserts against.
-/// @dev W-3 RATIONALE for `ghost_dailyDrainBranchEntered`: the counter is
-///      incremented ONLY when the daily-drain branch BODY runs, detected via
-///      a TraitsGenerated emit during the advance tx. This is distinct from
-///      incrementing when LR_INDEX advances — game-over and other paths may
-///      advance LR_INDEX without executing the daily-drain body, so keying on
-///      LR_INDEX advance would produce false-high counts. TraitsGenerated is
-///      emitted exclusively from inside processTicketBatch / _processOneTicketEntry
-///      (the daily-drain consumers), so its presence is a reliable signal that
-///      the drain body actually ran.
-contract RngIndexDrainHandler is Test {
+/// @dev Independent receipt-to-storage oracle for the ordinary, per-entry ticket consumer.
+/// It reconstructs traits from the committed lootbox word; the event supplies only its
+/// public batch key/count. It never interprets event data as an emitted entropy word.
+/// Seated rounds and foil packs have different derivations and are excluded by this
+/// campaign's ticket-only, one-buyer fixture. Encountering either fails the oracle.
+abstract contract RngIndexDrainOracle is Test {
+    uint256 internal constant SLOT_LOOTBOX_MAPPING = 34;
+    uint256 internal constant SLOT_LR_INDEX = 33;
+    uint256 private constant SLOT_BUCKETS = 8;
+    uint256 private constant SLOT_OWNERS = 67;
+    uint256 private constant SLOT_TICKET_CURSOR = 14;
+    bytes32 internal constant TOPIC_TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
+
+    struct DrainSnapshot {
+        uint24 firstLevel;
+        uint48 index;
+        uint32 round;
+        uint256[1024] lengths;
+    }
+
+    struct DrainResult {
+        uint256 batches;
+        uint256 entries;
+        uint256 trackedEntries;
+        uint256 mismatches;
+        uint256 unsupported;
+    }
+
+    function _lrIndexOf(DegenerusGame subject) internal view returns (uint48) {
+        return uint48(uint256(vm.load(address(subject), bytes32(SLOT_LR_INDEX))));
+    }
+
+    function _wordAt(DegenerusGame subject, uint48 index) internal view returns (uint256) {
+        return uint256(vm.load(address(subject), keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_MAPPING))));
+    }
+
+    function _roundOf(DegenerusGame subject) private view returns (uint32) {
+        return uint32(uint256(vm.load(address(subject), bytes32(SLOT_TICKET_CURSOR))) >> 96);
+    }
+
+    function _bucketSlot(uint24 lvl, uint256 trait) private pure returns (bytes32) {
+        return bytes32(uint256(keccak256(abi.encode(uint256(lvl), SLOT_BUCKETS))) + trait);
+    }
+
+    function _snapshotDrain(DegenerusGame subject) internal view returns (DrainSnapshot memory snap) {
+        uint24 lvl = subject.level();
+        snap.firstLevel = lvl == 0 ? 0 : lvl - 1;
+        snap.index = _lrIndexOf(subject);
+        snap.round = _roundOf(subject);
+        // One advance cannot move the active window beyond level+2. Include its trailing
+        // level as well, so the same oracle sees current and frozen future-pool batches.
+        for (uint256 n; n < 1024; ++n) {
+            snap.lengths[n] = uint256(vm.load(address(subject), _bucketSlot(snap.firstLevel + uint24(n / 256), n % 256)));
+        }
+    }
+
+    function _ownerAt(DegenerusGame subject, uint24 lvl, uint8 trait, uint256 occurrence)
+        private view returns (address)
+    {
+        bytes32 slot = _bucketSlot(lvl, trait);
+        uint256 len = uint256(vm.load(address(subject), slot));
+        if (occurrence >= len) return address(0);
+        uint256 lanes = uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(slot))) + occurrence / 8)));
+        uint32 ownerIndex = uint32(lanes >> (32 * (occurrence % 8)));
+        bytes32 owners = keccak256(abi.encode(uint256(lvl), SLOT_OWNERS));
+        if (ownerIndex >= uint256(vm.load(address(subject), owners))) return address(0);
+        return address(uint160(uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(owners))) + ownerIndex)))));
+    }
+
+    /// @dev Reimplement the published 64-bit generator and color thresholds without
+    /// calling the production trait helper. Each returned byte includes its quadrant.
+    function _referenceTraits(uint256 key, uint256 word, uint32 start, uint32 take)
+        private pure returns (uint8[] memory traits)
+    {
+        traits = new uint8[](take);
+        uint256 end = uint256(start) + take;
+        uint256 i = start;
+        while (i < end) {
+            uint64 state = uint64(uint256(keccak256(abi.encode(key, word, uint32(i / 16))))) | 1;
+            uint64 offset = uint64(i % 16);
+            unchecked { state = state * (6364136223846793005 + offset) + offset; }
+            for (uint256 j = offset; j < 16 && i < end; ++j) {
+                unchecked { state = state * 6364136223846793005 + 1; }
+                uint8 quantile = uint8(state >> 24);
+                uint8 color = quantile < 64 ? 0 : quantile < 128 ? 1 : quantile < 192 ? 2
+                    : quantile < 224 ? 3 : quantile < 240 ? 4 : quantile < 248 ? 5 : quantile < 254 ? 6 : 7;
+                traits[i - start] = uint8((i % 4) * 64) | (color << 3) | (uint8(state >> 32) & 7);
+                ++i;
+            }
+        }
+    }
+
+    function _checkDrain(DegenerusGame subject, DrainSnapshot memory snap, Vm.Log[] memory logs, uint256 committedWord, address trackedPlayer)
+        internal view returns (DrainResult memory result)
+    {
+        uint256[1024] memory added;
+        uint256 previousKey = type(uint256).max;
+        uint32 processed;
+        if (_roundOf(subject) != snap.round) ++result.unsupported;
+        for (uint256 k; k < logs.length; ++k) {
+            Vm.Log memory entry = logs[k];
+            if (entry.emitter != address(subject) || entry.topics.length != 2 || entry.topics[0] != TOPIC_TRAITS_GENERATED) continue;
+            (uint256 key, uint32 take) = abi.decode(entry.data, (uint256, uint32));
+            uint24 lvl = uint24(key >> 224);
+            address player = address(uint160(uint256(entry.topics[1])));
+            if (lvl < snap.firstLevel || uint256(lvl - snap.firstLevel) >= 4 || take == 0
+                || (uint32(key) == 0 && take != 1)) {
+                // A zero-owed normal entry may win one fractional entry; a foil's
+                // sixteen-entry TraitsGenerated receipt is not an LCG batch.
+                ++result.unsupported;
+                continue;
+            }
+            if (address(uint160(key >> 32)) != player) ++result.mismatches;
+            uint256 identity = key >> 32;
+            if (identity != previousKey) processed = 0;
+            previousKey = identity;
+            uint8[] memory traits = _referenceTraits(key, committedWord, processed, take);
+            for (uint256 i; i < traits.length; ++i) {
+                uint256 n = uint256(lvl - snap.firstLevel) * 256 + traits[i];
+                uint256 pos = snap.lengths[n] + added[n]++;
+                if (_ownerAt(subject, lvl, traits[i], pos) != player) ++result.mismatches;
+            }
+            processed += take;
+            ++result.batches;
+            result.entries += take;
+            if (player == trackedPlayer) result.trackedEntries += take;
+        }
+        if (result.batches == 0) return result;
+        // Compare every bucket, including zero-expected buckets: a wrong word cannot
+        // escape merely by placing entries outside the traits predicted above.
+        for (uint256 n; n < 1024; ++n) {
+            uint256 afterLength = uint256(vm.load(address(subject), _bucketSlot(snap.firstLevel + uint24(n / 256), n % 256)));
+            if (afterLength != snap.lengths[n] + added[n]) ++result.mismatches;
+        }
+    }
+}
+
+/// @notice Stateful daily-drain binding checks over real ticket-only purchases, requests,
+/// fulfillments and time advances. A single buyer plus protocol recipients stays below
+/// the seated-round threshold; this suite makes no claim about foil/round RNG derivations.
+contract RngIndexDrainHandler is RngIndexDrainOracle {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
     DegenerusAdmin public admin;
+    address public immutable actor = address(0xD10A0);
 
-    // --- Actor management ---
-    address[] public actors;
-    address internal currentActor;
-
-    // --- Ghost variables: core SPEC invariants ---
-
-    /// @notice AC-1: count of advance txs where LR_INDEX bumped while the
-    ///         read-slot ticket queue was observed non-empty before the bump.
-    ///         Zero expected post-fix.
     uint256 public ghost_drainBeforeSwapViolations;
-
-    /// @notice AC-2: count of TraitsGenerated emits with `entropy == 0`.
-    ///         Zero expected post-fix across normal end-of-day, mid-day cross,
-    ///         and game-over paths.
     uint256 public ghost_zeroEntropyConsumptions;
-
-    /// @notice AC-3 crosscheck: count of TraitsGenerated emits where captured
-    ///         entropy differs from lootboxRngWordByIndex[LR_INDEX - 1] at the
-    ///         time of capture. Zero expected post-fix.
     uint256 public ghost_bindingMismatches;
-
-    // --- Ghost variables: branch-coverage signals ---
-
-    /// @notice W-3: incremented ONLY when the daily-drain branch body runs,
-    ///         detected via a TraitsGenerated emit during the advance tx.
-    ///         Must be > 0 across the run to make AC-2's "all paths" claim
-    ///         non-vacuous.
+    uint256 public ghost_unsupportedConsumers;
     uint256 public ghost_dailyDrainBranchEntered;
-
-    /// @notice Incremented when the advance call exhibits a mid-day signature
-    ///         (LR_MID_DAY flag set at start of advance). Fuzzer coverage
-    ///         health signal — not strictly required to be > 0 for AC-2 to
-    ///         be proved (the daily-drain gate covers the mid-day cross-day
-    ///         edge per D-02), but helps confirm the fuzzer exercised the
-    ///         mid-day path if it's reachable from the handler actions.
-    uint256 public ghost_midDayBranchEntered;
-
-    /// @notice Incremented when gameOver() becomes true during an advance
-    ///         call. Lets the invariant test distinguish "no branch coverage"
-    ///         from "game ended before drain could be exercised."
+    uint256 public ghost_entriesChecked;
+    uint256 public ghost_buyerEntriesChecked;
     uint256 public ghost_gameOverBranchEntered;
-
-    // --- Call counters ---
     uint256 public calls_advance;
     uint256 public calls_purchase;
     uint256 public calls_fulfillVrf;
     uint256 public calls_warp;
 
-    /// @dev Storage slot for lootboxRngWordByIndex mapping. RE-DERIVED via `solc --storage-layout`
-    ///      on the working tree (post Stage B pack: was 36, also stale pre-repack).
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 34;
-    /// @dev Storage slot for lootboxRngPacked (LR_INDEX at low 48 bits) (post Stage B pack: was 35).
-    uint256 internal constant SLOT_LR_INDEX = 33;
-
-    /// @dev Keccak topic-0 for TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256).
-    bytes32 internal constant TOPIC_TRAITS_GENERATED =
-        keccak256("TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256)");
-
-    constructor(
-        DegenerusGame game_,
-        MockVRFCoordinator vrf_,
-        DegenerusAdmin admin_
-    ) {
+    constructor(DegenerusGame game_, MockVRFCoordinator vrf_, DegenerusAdmin admin_) {
         game = game_;
         vrf = vrf_;
         admin = admin_;
-        for (uint256 i = 0; i < 3; i++) {
-            address actor = address(uint160(0xD10A0 + i));
-            actors.push(actor);
-            vm.deal(actor, 1000 ether);
-        }
-        // Fund the VRF subscription so advanceGame can request RNG.
+        vm.deal(actor, 1000 ether);
         vrf.fundSubscription(1, 1000e18);
     }
 
-    modifier useActor(uint256 seed) {
-        currentActor = actors[bound(seed, 0, actors.length - 1)];
-        _;
-    }
-
-    /// @dev Read lootboxRngWordByIndex[index] from storage.
-    function _lootboxWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_MAPPING));
-        return uint256(vm.load(address(game), slot));
-    }
-
-    /// @dev Read LR_INDEX from storage slot 34.
-    function _lrIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(SLOT_LR_INDEX))));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Handler Actions
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /// @notice Purchase tickets to populate the ticket queue.
-    function purchase(uint256 actorSeed, uint256 qty, uint256 lootboxWei)
-        external
-        useActor(actorSeed)
-    {
-        calls_purchase++;
-        if (game.gameOver()) {
-            ghost_gameOverBranchEntered++;
-            return;
-        }
+    function purchase(uint256 qty) external {
+        ++calls_purchase;
+        if (game.gameOver()) return;
+        // Small paid buys keep this campaign below the genesis prize target and
+        // avoid unrelated level transitions; quantity remains fuzzed, including dust.
         qty = bound(qty, 100, 2000);
-        lootboxWei = bound(lootboxWei, 0, 1 ether);
-
-        (, , , , uint256 priceWei) = game.purchaseInfo();
-        uint256 ticketCost = (priceWei * qty) / 400;
-        uint256 total = ticketCost + lootboxWei;
-        if (total == 0 || total > currentActor.balance) return;
-
-        vm.prank(currentActor);
-        try game.purchase{value: total}(
-            currentActor,
-            qty,
-            BoxOrderLib.boCustomFloor(lootboxWei),
-            bytes32(0),
-            MintPaymentKind.DirectEth, false
-        ) {} catch {
-            return;
-        }
+        (,,,, uint256 priceWei) = game.purchaseInfo();
+        uint256 cost = priceWei * qty / 400;
+        vm.prank(actor);
+        try game.purchase{value: cost}(actor, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
-    /// @notice Advance the game, capturing TraitsGenerated emits and scoring
-    ///         zero-entropy + binding invariants. Detects drain-before-swap
-    ///         by observing the ticket queue snapshot before vs LR_INDEX bump.
     function advance() external {
-        calls_advance++;
-        if (game.gameOver()) {
-            ghost_gameOverBranchEntered++;
-            return;
-        }
-
-        uint48 indexBefore = _lrIndex();
-
+        ++calls_advance;
+        if (game.gameOver()) { ++ghost_gameOverBranchEntered; return; }
+        DrainSnapshot memory snap = _snapshotDrain(game);
         vm.recordLogs();
         try game.advanceGame() {} catch {
-            // Capture whatever logs were emitted before the revert so we can
-            // still score ghosts for partial-advance txs.
-        }
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        uint48 indexAfter = _lrIndex();
-
-        bool sawTraits = false;
-        uint256 boundWord = (indexAfter > 0) ? _lootboxWord(indexAfter - 1) : 0;
-
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] != TOPIC_TRAITS_GENERATED) continue;
-
-            sawTraits = true;
-
-            // Decode: event TraitsGenerated(address indexed player,
-            //         uint24 indexed level, uint32 queueIdx, uint32 startIndex,
-            //         uint32 count, uint256 entropy)
-            // Data layout (4 × 32 bytes): [queueIdx | startIndex | count | entropy]
-            bytes memory d = logs[i].data;
-            uint256 entropy;
-            assembly {
-                entropy := mload(add(d, mload(d)))
-            }
-
-            if (entropy == 0) {
-                ghost_zeroEntropyConsumptions++;
-            }
-            if (entropy != boundWord) {
-                ghost_bindingMismatches++;
-            }
-        }
-
-        // AC-1 signal: if LR_INDEX bumped AND a TraitsGenerated fired in the
-        // same tx, the drain consumed entropy that was populated by the new
-        // gate. Under pre-fix code, the drain ran with an unpopulated slot
-        // (entropy == 0), so ghost_zeroEntropyConsumptions catches that case.
-        // To specifically catch "LR_INDEX bumped while read slot still had
-        // tickets" we would need to snapshot the ticket queue pre-advance;
-        // the zero-entropy consumption scored above is a stronger observable
-        // of the same underlying violation — a non-zero match rules both in.
-        if (sawTraits) {
-            ghost_dailyDrainBranchEntered++;
-        }
-
-        // Mid-day branch detection: if LR_MID_DAY flag is set before the
-        // advance, the mid-day branch may execute. Packed flag lives in slot
-        // 34; bit offset for LR_MID_DAY is compile-dependent, so use a
-        // conservative heuristic: LR_INDEX advanced by at least 2 during the
-        // call (request + mid-day in same advance window).
-        if (indexAfter > indexBefore + 1) {
-            ghost_midDayBranchEntered++;
-        }
-    }
-
-    /// @notice Fulfill the latest pending VRF request with a fuzzed word.
-    function fulfillVrf(uint256 randomWord) external {
-        calls_fulfillVrf++;
-        uint256 reqId = vrf.lastRequestId();
-        if (reqId == 0) return;
-        (, , bool fulfilled) = vrf.pendingRequests(reqId);
-        if (fulfilled) return;
-        try vrf.fulfillRandomWords(reqId, randomWord) {} catch {
+            // Reverted logs are not committed state and must not be scored.
+            vm.getRecordedLogs();
             return;
         }
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 committedWord = snap.index == 0 ? 0 : _wordAt(game, snap.index - 1);
+        DrainResult memory result = _checkDrain(game, snap, logs, committedWord, actor);
+        ghost_bindingMismatches += result.mismatches;
+        ghost_unsupportedConsumers += result.unsupported;
+        if (result.batches != 0) {
+            ++ghost_dailyDrainBranchEntered;
+            ghost_entriesChecked += result.entries;
+            ghost_buyerEntriesChecked += result.trackedEntries;
+            if (committedWord == 0) ++ghost_zeroEntropyConsumptions;
+            if (_lrIndexOf(game) != snap.index) ++ghost_drainBeforeSwapViolations;
+        }
     }
 
-    /// @notice Warp time by a bounded delta to progress day boundaries.
+    function fulfillVrf(uint256 randomWord) external {
+        ++calls_fulfillVrf;
+        uint256 id = vrf.lastRequestId();
+        if (id == 0) return;
+        (,, bool fulfilled) = vrf.pendingRequests(id);
+        if (fulfilled) return;
+        try vrf.fulfillRandomWords(id, randomWord) {} catch {}
+    }
+
     function warpTime(uint256 delta) external {
-        calls_warp++;
-        delta = bound(delta, 1 hours, 2 days);
-        vm.warp(block.timestamp + delta);
+        ++calls_warp;
+        vm.warp(block.timestamp + bound(delta, 1 hours, 2 days));
     }
 }

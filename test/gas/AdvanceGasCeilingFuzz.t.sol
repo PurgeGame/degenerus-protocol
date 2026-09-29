@@ -6,7 +6,9 @@ import {AdvanceGasCeilingBase} from "./AdvanceGasCeiling.sol";
 /// @title AdvanceGasCeilingFuzz — FUZZ-03 GAS-CEILING: the durable EIP-7825 advanceGame property
 /// @notice Exercises the REUSABLE AdvanceGasCeilingBase (test/gas/AdvanceGasCeiling.sol) over MANY
 ///         reachable worst-case advanceGame pre-states, asserting EVERY single advanceGame tx in the
-///         game-over drain consumes <= 16,777,216 gas (EIP-7825). advanceGame is the mandatory
+///         game-over drain consumes <= 11,500,000 gas including intrinsic, below EIP-7825.
+///         Run with FOUNDRY_ISOLATE=true so each advance has fresh transaction state.
+///         advanceGame is the mandatory
 ///         permissionless heartbeat — a single tx above the cap can never complete -> permanent,
 ///         unrecoverable game-over (the protocol bricks).
 ///
@@ -38,10 +40,10 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
     uint24 internal constant LVL_MAX = 4000;
 
     // Disjoint synthetic-holder base per fuzz run so seeded queues/buckets never alias across states.
-    uint160 internal constant FUZZ_BASE = uint160(0x6_0000_0000);
+    uint160 internal constant FUZZ_BASE = uint160(0x600000000);
 
-    // Bound the drain loop so a long run never lands mid-tx (pacing): the game-over double-drain +
-    // terminal jackpot post-fix splits across a handful of txs, far under this ceiling.
+    // Two ticket cohorts, terminal RNG request/application and ETH payout are bounded
+    // by the original driver allowance. Terminal FLIP games do not gate withdrawals.
     uint256 internal constant MAX_DRAIN_TX = 16;
 
     function setUp() public {
@@ -80,16 +82,25 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
         // Non-vacuity: the heavy branch (game-over latch -> ticket double-drain + terminal jackpot)
         // MUST have run, else the per-tx assertion measured nothing meaningful.
         assertTrue(
-            reachedHeavy,
-            "VACUOUS: game-over heavy branch never reached -> the per-tx cap assertion is meaningless"
+            reachedHeavy, "VACUOUS: game-over heavy branch never reached -> the per-tx cap assertion is meaningless"
         );
 
         // The per-tx <= cap assertion already fired inside _driveAndAssertUnderCap on EACH tx. Surface
         // the max for the 10M soft target (kept as a non-fatal observation in the fuzz so a single
         // unusually-heavy reachable geometry does not red the durable cap property — the HARD floor is
-        // the EIP-7825 cap, asserted per-tx in the base).
+        // the 11.5M cap, asserted per-tx in the base).
         emit log_named_uint("fuzz_max_advance_tx_gas", maxTxGas);
-        assertLe(maxTxGas, EIP7825_TX_GAS_CAP, "GAS-CEIL: fuzzed max advanceGame tx exceeded the EIP-7825 cap");
+        assertLe(maxTxGas, REVIEW_GAS_CAP, "GAS-CEIL: fuzzed max advanceGame tx exceeded 11.5M");
+    }
+
+    /// @dev Preserve the level-51 queued-state seed as an additional reachable gas witness.
+    function test_gameOverComposition_regression_level51QueuedGeometry() public {
+        testFuzz_advanceGame_everyTxUnderCap(
+            48_050_435_518_851_947_680_601_579_244_949_740_512_520_746_866_289_049_644_703_091_396_167_600_032,
+            10_373_189_839_209_939_029_463_935_049_339_729_502_126_815_281_991_995_894_760_766,
+            19_572_411_320_327_791_426_347_801_128_719,
+            4_059_533_221_497_168_973
+        );
     }
 
     /// @notice The named v60 game-over composition regression (the gasceil shape, fixed 6d2c8d0c),
@@ -103,7 +114,7 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
         uint256 rngWord = uint256(keccak256("gasceil_gameover_word")) | 1;
         uint256 readOwed = 170; // heavy yet finishing in one cold batch
         uint256 writeOwed = 170;
-        uint160 base = uint160(0x5_0000_0000);
+        uint160 base = uint160(0x500000000);
 
         _etchSeedRestore(lvl, rngWord, readOwed, writeOwed, base);
         (uint256 maxTxGas, bool reachedHeavy) = _driveAndAssertUnderCap(MAX_DRAIN_TX);

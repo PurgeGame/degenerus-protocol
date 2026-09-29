@@ -463,6 +463,83 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     /// `currentDayIndex() + 1`, resolution only ever resolves a day <= the wall day, so
     /// a stake is always strictly ahead of every known result. Walk several days and
     /// assert the gap never closes.
+    function testFuzz_OversizedTakeProfitCannotEnable(uint256 raw) public {
+        uint256 invalid = bound(raw, uint256(type(uint128).max) + 1, type(uint256).max);
+        vm.prank(player);
+        game.setOperatorApproval(operator, true);
+
+        address[3] memory callers = [player, operator, GAME];
+        for (uint256 i; i < callers.length; ++i) {
+            vm.prank(callers[i]);
+            vm.expectRevert(Coinflip.TakeProfitTooLarge.selector);
+            coinflip.setCoinflipAutoRebuy(player, true, invalid);
+            (bool enabled, uint256 stop, uint256 carry, uint24 start) = coinflip.coinflipAutoRebuyInfo(player);
+            assertFalse(enabled, "invalid threshold must not enable rebuy");
+            assertEq(stop, 0);
+            assertEq(carry, 0);
+            assertEq(start, 0);
+        }
+    }
+
+    function testFuzz_OversizedTakeProfitCannotChangePendingWin(uint256 raw) public {
+        uint256 invalid = bound(raw, uint256(type(uint128).max) + 1, type(uint256).max);
+        _enterRebuyWithStake(30_001 ether);
+        _resolveDay(3, true);
+        bytes32 stateBefore = _rebuyConfigHash();
+        uint256 balanceBefore = coin.balanceOf(player);
+        uint256 backingBefore = coinflip.previewSalvageFlipBacking(player);
+        assertGt(backingBefore, 0, "fixture must hold an actual unsettled winning balance");
+
+        address[3] memory callers = [player, operator, GAME];
+        for (uint256 i; i < callers.length; ++i) {
+            vm.prank(callers[i]);
+            vm.expectRevert(Coinflip.TakeProfitTooLarge.selector);
+            if (callers[i] == GAME) {
+                // The Game's non-strict enable path also updates an existing threshold.
+                coinflip.setCoinflipAutoRebuy(player, true, invalid);
+            } else {
+                coinflip.setCoinflipAutoRebuyTakeProfit(player, invalid);
+            }
+            assertEq(_rebuyConfigHash(), stateBefore);
+            assertEq(coin.balanceOf(player), balanceBefore, "invalid input must not settle or mint");
+            assertEq(coinflip.previewSalvageFlipBacking(player), backingBefore);
+        }
+    }
+
+    function _rebuyConfigHash() internal view returns (bytes32) {
+        (bool enabled, uint256 stop, uint256 carry, uint24 start) = coinflip.coinflipAutoRebuyInfo(player);
+        return keccak256(abi.encode(enabled, stop, carry, start));
+    }
+
+    function testFuzz_RepresentableTakeProfitRoundTripsExactly(uint128 threshold) public {
+        vm.prank(player);
+        coinflip.setCoinflipAutoRebuy(player, true, type(uint128).max);
+        (, uint256 stop,,) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(stop, type(uint128).max, "maximum representable threshold must be accepted");
+        vm.prank(player);
+        coinflip.setCoinflipAutoRebuyTakeProfit(player, threshold);
+        (, stop,,) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(stop, uint256(threshold), "stored threshold must equal the requested value");
+        vm.prank(player);
+        coinflip.setCoinflipAutoRebuyTakeProfit(player, 0);
+        (, stop,,) = coinflip.coinflipAutoRebuyInfo(player);
+        assertEq(stop, 0, "zero remains the explicit roll-all option");
+    }
+
+    function test_DisableStillIgnoresUnusedOversizedThreshold() public {
+        uint256 stake = _enterRebuyWithStake(7 ether);
+        _resolveDay(3, true);
+        uint256 payout = _payoutOf(stake, 3);
+        // The unbanked remainder earns the same 75 bps rebuy credit as an ordinary exit.
+        uint256 expected = payout + ((payout % 7 ether) * 75) / 10_000;
+        vm.prank(player);
+        coinflip.setCoinflipAutoRebuy(player, false, type(uint256).max);
+        (bool enabled,, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(player);
+        assertFalse(enabled);
+        assertEq(carry, 0);
+        assertEq(coin.balanceOf(player), expected, "unused configuration must not block a complete exit");
+    }
+
     function test_DepositAlwaysTargetsDayAfterLastResolved() public {
         vm.prank(GAME);
         coin.mintForGame(player, 1_000_000 ether);

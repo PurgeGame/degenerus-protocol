@@ -6,6 +6,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title AdvanceGasCeiling — the REUSABLE EIP-7825 gas-ceiling property component
 /// @notice advanceGame() is the mandatory permissionless heartbeat. A single advanceGame tx that
@@ -80,7 +81,8 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         level = lvl;
         purchaseStartDay = 0;
         dailyIdx = day - 1;
-        levelPrizePool[lvl] = type(uint256).max; // _getNextPrizePool() (0) < target => liveness fires
+        // A reachable large target remains unmet by the empty next pool.
+        levelPrizePool[lvl] = 100_000 ether;
         rngWordByDay[day] = rngWord; // the last sealed day's word; the ending requests its own
 
         // lootbox entropy word the ticket batch reads at lootboxRngWordByIndex[LR_INDEX-1].
@@ -138,6 +140,8 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
 
     /// @dev EIP-7825 per-transaction gas cap. A single advanceGame tx above this = permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
+    uint256 internal constant REVIEW_GAS_CAP = 11_500_000;
+    uint256 internal constant TX_INTRINSIC = 21_064;
     /// @dev USER soft comfort target.
     uint256 internal constant GAS_TARGET = 10_000_000;
 
@@ -159,9 +163,22 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     {
         traitIds = JackpotBucketLib.getRandomTraits(rngWord);
         uint256 effEntropy = EntropyLib.hash2(rngWord, uint256(lvl) + 1);
-        bucketCounts = JackpotBucketLib.bucketCountsForPool(
-            GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
+        // Mirror the production gold-quadrant solo rotation too. Otherwise a
+        // small seeded solo bucket can become a 152-award bucket, reusing a few
+        // warmed owners and understating the cold payout cost for that geometry.
+        uint256 goldQuads;
+        uint256 goldCount;
+        for (uint256 q; q < 4; ++q) {
+            if (((traitIds[q] >> 3) & 7) == 7) {
+                goldQuads |= q << (goldCount * 8);
+                ++goldCount;
+            }
+        }
+        if (goldCount != 0) {
+            uint256 solo = (goldQuads >> (((effEntropy >> 4) % goldCount) * 8)) & 255;
+            effEntropy = (effEntropy & ~uint256(3)) | ((3 - solo) & 3);
+        }
+        bucketCounts = JackpotBucketLib.bucketCountsForPool(GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS);
     }
 
     /// @notice (a) Etch the GameSeeder overlay, write a worst-case advanceGame pre-state from the given
@@ -172,22 +189,15 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     /// @param readOwed  committed read-slot owed size — bound near the cold write budget by the caller
     /// @param writeOwed write-slot owed size — swapped in before the terminal request
     /// @param base      disjoint synthetic-holder address base
-    function _etchSeedRestore(
-        uint24 lvl,
-        uint256 rngWord,
-        uint256 readOwed,
-        uint256 writeOwed,
-        uint160 base
-    ) internal {
+    function _etchSeedRestore(uint24 lvl, uint256 rngWord, uint256 readOwed, uint256 writeOwed, uint160 base) internal {
         uint256 word = rngWord | 1;
         _terminalWord = word;
         (uint8[4] memory traitIds, uint16[4] memory bucketCounts) = _deriveJackpot(lvl, word);
 
         bytes memory realGameCode = address(game).code;
         vm.etch(address(game), type(GameSeeder).runtimeCode);
-        GameSeeder(payable(address(game))).seedAdvanceWorstCase(
-            lvl, word, readOwed, writeOwed, traitIds, bucketCounts, base
-        );
+        GameSeeder(payable(address(game)))
+            .seedAdvanceWorstCase(lvl, word, readOwed, writeOwed, traitIds, bucketCounts, base);
         vm.etch(address(game), realGameCode);
 
         // Fund the contract so the terminal jackpot pool reaches the 305-winner geometry.
@@ -198,29 +208,28 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     }
 
     /// @notice (b) Drive the REAL game.advanceGame() in a bounded loop, asserting EVERY single tx
-    ///         consumes <= EIP7825_TX_GAS_CAP. Stops when game-over latches or the iteration budget is
+    ///         consumes <= REVIEW_GAS_CAP including intrinsic gas. Stops when game-over latches or the iteration budget is
     ///         spent.
     /// @param maxTxIters cap on advanceGame txs to drive (bound so a long run never lands mid-tx).
     /// @return maxTxGas     the largest single-tx gas observed (surface for the < GAS_TARGET soft check)
     /// @return reachedHeavy whether the heavy branch was exercised — true once game-over latches after
     ///                      the committed ticket batch and isolated terminal jackpot. If false, the
     ///                      measurement is vacuous and the caller MUST fail acceptance.
-    function _driveAndAssertUnderCap(uint256 maxTxIters)
-        internal
-        returns (uint256 maxTxGas, bool reachedHeavy)
-    {
+    function _driveAndAssertUnderCap(uint256 maxTxIters) internal returns (uint256 maxTxGas, bool reachedHeavy) {
+        uint256 winners;
         for (uint256 i = 0; i < maxTxIters; ++i) {
+            vm.recordLogs();
             uint256 g0 = gasleft();
-            game.advanceGame();
-            uint256 used = g0 - gasleft();
+            game.advanceGame{gas: REVIEW_GAS_CAP - TX_INTRINSIC}();
+            uint256 used = g0 - gasleft() + TX_INTRINSIC;
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j; j < logs.length; ++j) {
+                if (logs[j].topics[0] == keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)")) ++winners;
+            }
             emit log_named_uint("advance_tx_gas[i]", used);
             if (used > maxTxGas) maxTxGas = used;
-            // The per-tx EIP-7825 assertion — fires on EACH advanceGame tx in the drain.
-            assertLe(
-                used,
-                EIP7825_TX_GAS_CAP,
-                "GAS-CEIL DoS: a single advanceGame tx exceeded 16,777,216 (EIP-7825 brick)"
-            );
+            // The stricter 11.5M review assertion fires on EACH advance transaction.
+            assertLe(used, REVIEW_GAS_CAP, "GAS-CEIL: a terminal advance transaction exceeded the 11.5M review cap");
             if (game.gameOver()) {
                 reachedHeavy = true; // terminal jackpot ran -> the heavy branch was exercised
                 break;
@@ -235,5 +244,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         }
         emit log_named_uint("max_advance_tx_gas", maxTxGas);
         emit log_named_uint("eip7825_tx_gas_cap", EIP7825_TX_GAS_CAP);
+        assertTrue(reachedHeavy, "terminal driver exhausted before gameOver and payout");
+        assertEq(winners, DAILY_ETH_MAX_WINNERS, "all 305 terminal award slots must execute");
     }
 }

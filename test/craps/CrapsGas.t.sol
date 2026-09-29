@@ -6,6 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
 import {CrapsPins} from "./CrapsPins.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsBattle, IFlipCoin, ICoinflipStake} from "../../contracts/CrapsBattle.sol";
 
 contract GasHarness is CrapsViews {
@@ -31,14 +32,7 @@ contract GasHarness is CrapsViews {
         returns (Craps.SlipResult memory)
     {
         return _settleSlip(
-            b,
-            _seedFor(index),
-            bankroll,
-            0,
-            MAX_SLIP_HANDS,
-            SLIP_ROLL_BUDGET,
-            address(0),
-            _shooterBoostTerms(0)
+            b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0), _shooterBoostTerms(0)
         );
     }
 
@@ -50,14 +44,7 @@ contract GasHarness is CrapsViews {
         returns (Craps.SlipResult memory)
     {
         return _settleSlip(
-            b,
-            _seedFor(index),
-            bankroll,
-            goal,
-            MAX_SLIP_HANDS,
-            SLIP_ROLL_BUDGET,
-            player,
-            _shooterBoostTerms(0)
+            b, _seedFor(index), bankroll, goal, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, player, _shooterBoostTerms(0)
         );
     }
 }
@@ -174,7 +161,7 @@ contract CrapsGasTest is CrapsPins {
             craps.SLIP_ROLL_BUDGET() - 1 + craps.MAX_ROLLS(),
             "the stated ceiling is not budget - 1 + one whole hand"
         );
-        assertEq(craps.SLIP_ROLL_CEILING(), 1_511, "the roll ceiling moved");
+        assertEq(craps.SLIP_ROLL_CEILING(), 1511, "the roll ceiling moved");
     }
 
     /// @dev And the real surface: a max-legal slip (ten rounds of the board) placed and settled
@@ -205,39 +192,59 @@ contract CrapsGasTest is CrapsPins {
     ///      once that account and slot are warm — the figure any grouped-resolver optimisation
     ///      would be competing against.
     function test_batchSettleMarginalCost() public {
-        uint8 bankMult = uint8(craps.MAX_BANKROLL_MULT());
-        uint256 n = 20;
+        // Revert all setup between branches: both fields now have the same custom
+        // slot (part of the dice seed), word, owner, chips, bankroll and zero bounty.
+        uint256 snapshot = vm.snapshotState();
+        (uint256 single, uint64 lone) = _measureComparableField(1);
+        assertTrue(vm.revertToState(snapshot), "restore identical field pre-state");
+        (uint256 batch, uint64 many) = _measureComparableField(20);
+        assertEq(lone, many, "custom slot is part of the committed engine seed");
 
-        // One field of twenty, and a field of one on identical terms, so the difference is purely
-        // what the Nth entrant costs once the slot's word, terms and scoreboard are warm.
-        uint64 many = _openBattle(craps, PLAYED, bankMult, uint16(GOAL_FAR_MULT), 0);
-        vm.startPrank(player);
-        for (uint256 i = 0; i < n; ++i) {
-            craps.enterBattle(many, _placedBoard(), 1);
-        }
-        vm.stopPrank();
-        _closeOn(craps, many, 90_000, uint256(keccak256("batch")));
-
-        uint64 lone = _openBattle(craps, PLAYED, bankMult, uint16(GOAL_FAR_MULT), 1);
-        vm.prank(player);
-        craps.enterBattle(lone, _placedBoard(), 1);
-        _closeOn(craps, lone, 90_001, uint256(keccak256("batch")));
-
-        uint256 g = gasleft();
-        craps.resolveSlot(lone, WHOLE_FIELD);
-        uint256 single = g - gasleft();
-
-        g = gasleft();
-        craps.resolveSlot(many, WHOLE_FIELD);
-        uint256 batch = g - gasleft();
-
-        emit log_named_uint("one bet settled alone     ", single);
-        emit log_named_uint("field of 20, total        ", batch);
-        emit log_named_uint("field of 20, per bet      ", batch / n);
-        emit log_named_uint("saved per bet by the field", single - batch / n);
+        emit log_named_uint("one bet settled alone", single);
+        emit log_named_uint("field of 20, total", batch);
+        emit log_named_uint("field of 20, per bet", batch / 20);
+        uint256 marginal = (batch - single) / 19;
+        emit log_named_uint("gas per additional settled seat", marginal);
+        emit log_named_uint("saved per bet by the field", single - batch / 20);
         assertLt(single, 240_000, "a cold one-seat settlement regressed");
         assertLt(batch, 2_050_000, "a twenty-seat settlement regressed");
-        assertLt(batch / n, 105_000, "the warm marginal seat regressed");
+        assertLt(marginal, 105_000, "the warm marginal seat regressed");
+    }
+
+    function _measureComparableField(uint256 n) private returns (uint256 used, uint64 slot) {
+        slot = _openBattle(craps, PLAYED, uint8(craps.MAX_BANKROLL_MULT()), uint16(GOAL_FAR_MULT), 0);
+        vm.startPrank(player);
+        uint256 first;
+        uint256 last;
+        for (uint256 i; i < n; ++i) {
+            last = craps.enterBattle(slot, _placedBoard(), 1);
+            if (i == 0) first = last;
+        }
+        vm.stopPrank();
+        _closeOn(craps, slot, 90_000, uint256(keccak256("batch")));
+        _coolSettlement();
+        uint256 intrinsic = _intrinsic(abi.encodeWithSelector(craps.resolveSlot.selector, slot, WHOLE_FIELD));
+        uint256 g = gasleft();
+        craps.resolveSlot{gas: 11_500_000 - intrinsic}(slot, WHOLE_FIELD);
+        used = g - gasleft();
+        assertEq(craps.bonusCursorOf(slot), n, "every seat must settle");
+        assertTrue(craps.betOf(first).settled && craps.betOf(last).settled, "both ends of field settled");
+        assertLt(used + intrinsic, 11_500_000, "cold settlement transaction cap");
+    }
+
+    function _coolSettlement() private {
+        vm.cool(address(craps));
+        vm.cool(address(game));
+        vm.cool(address(flip));
+        vm.cool(address(coinflip));
+        vm.cool(ContractAddresses.CRAPS_ENGINE);
+    }
+
+    function _intrinsic(bytes memory data) private pure returns (uint256 gasCost) {
+        gasCost = 21_000;
+        for (uint256 i; i < data.length; ++i) {
+            gasCost += data[i] == 0 ? 4 : 16;
+        }
     }
 
     function _ids(uint64 a) internal pure returns (uint64[] memory out) {
@@ -249,6 +256,21 @@ contract CrapsGasTest is CrapsPins {
     ///      entrant pays the slot, the rest a warm RMW), and the one-transaction lane that
     ///      settles an index and pays its winners in the same call.
     function test_battleFlowGas() public {
+        _battleFlowGas(true);
+    }
+
+    function test_battleFlowGas_WarmSingleTransaction() public {
+        assertLt(this.measureWarmBattleFlow(), 260_000, "warm field settle regressed");
+    }
+
+    function measureWarmBattleFlow() external returns (uint256) {
+        require(msg.sender == address(this), "test self-call only");
+        // One outer transaction, even with --isolate: all setup and settlement
+        // below are nested calls and retain the original benchmark's warm state.
+        return _battleFlowGas(false);
+    }
+
+    function _battleFlowGas(bool cold) private returns (uint256 settle) {
         uint8 bankMult = uint8(craps.MAX_BANKROLL_MULT());
         uint256 bank = uint256(PLAYED) * bankMult * 1 ether;
         // The bounty may be anything up to the bankroll; take a small slice of it.
@@ -272,16 +294,46 @@ contract CrapsGasTest is CrapsPins {
         _closeOn(craps, slot, 85_000, uint256(keccak256("battlegas")));
         uint256 close = g - gasleft();
 
+        if (cold) {
+            _coolSettlement();
+            vm.record();
+        }
+        uint256 intrinsic = _intrinsic(abi.encodeWithSelector(craps.resolveSlot.selector, slot, WHOLE_FIELD));
         g = gasleft();
-        craps.resolveSlot(slot, WHOLE_FIELD);
-        uint256 settle = g - gasleft();
+        craps.resolveSlot{gas: 11_500_000 - intrinsic}(slot, WHOLE_FIELD);
+        settle = g - gasleft();
+        if (cold) {
+            assertLt(settle, 260_000 + _fieldColdAllowance(), "cold field exceeds warm budget plus storage allowance");
+        }
+        assertEq(craps.bonusCursorOf(slot), 2, "both bounty-bearing seats settled");
+        assertLt(settle + intrinsic, 11_500_000, "field transaction exceeds review cap");
 
         emit log_named_uint("createBattle              ", create);
         emit log_named_uint("enterBattle, first seat   ", firstSeat);
         emit log_named_uint("enterBattle, later seat   ", nextSeat);
         emit log_named_uint("closeBattle               ", close);
-        emit log_named_uint("resolveSlot, field of 2   ", settle);   // pays, too
-        assertLt(settle, 260_000, "the one-transaction field settle regressed");
+        emit log_named_uint("resolveSlot, field of 2   ", settle); // pays, too
+    }
+
+    /// @dev The original 260k warm ceiling remains a separate regression. This
+    /// conservative allowance uses the bounded storage footprint and EVM cold-read
+    /// / fresh-rewrite costs, not the observed cold gas number.
+    function _fieldColdAllowance() private returns (uint256 allowance) {
+        address[5] memory accounts =
+            [address(craps), address(game), address(flip), address(coinflip), ContractAddresses.CRAPS_ENGINE];
+        uint256 reads;
+        uint256 writes;
+        for (uint256 i; i < accounts.length; ++i) {
+            (bytes32[] memory r, bytes32[] memory w) = vm.accesses(accounts[i]);
+            reads += r.length;
+            writes += w.length;
+        }
+        assertLe(reads, 32, "two-seat field read footprint expanded");
+        assertLe(writes, 16, "two-seat field write footprint expanded");
+        allowance = reads * 2000 + writes * 2800 + accounts.length * 2600;
+        emit log_named_uint("field_cold_storage_reads", reads);
+        emit log_named_uint("field_cold_storage_writes", writes);
+        emit log_named_uint("field_estimated_transaction_state_allowance", allowance);
     }
 
     function test_marginalShooterCost() public {

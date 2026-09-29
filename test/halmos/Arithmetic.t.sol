@@ -127,7 +127,8 @@ contract ArithmeticSymbolicTest is Test {
         // entryQuantityScaled max = 40000
         // product max = 2.4e17 * 40000 = 9.6e21, well under uint256 max
         uint256 product = priceWei * entryQuantityScaled;
-        assert(product / entryQuantityScaled == priceWei || entryQuantityScaled == 0);
+        // Guard zero before division so the zero-quantity case reaches its assertions.
+        assert(entryQuantityScaled == 0 || product / entryQuantityScaled == priceWei);
         uint256 cost = product / 400;
         assert(cost <= product);
     }

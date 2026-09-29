@@ -38,9 +38,9 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     // deep walk lands well under it too — reported for visibility.
     uint256 internal constant GAS_TARGET = 10_000_000;
 
-    // Calibrated regression ceilings: measured worst case + headroom for minor
-    // toolchain/refactor drift. A real regression (a per-day cost creep) trips
-    // these well before the absolute perma-brick cap. Measured 2026-06-13:
+    // Historical WARM regression ceilings, retained unchanged in explicit
+    // single-transaction benchmarks. The old seed/proof/claim test body did not
+    // reset transaction state; it was not a cold user transaction. Measured 2026-06-13:
     // deep 1460-day = 3,719,531 ; regular 365-day = 944,567.
     uint256 internal constant DEEP_CLAIM_GAS_CEIL = 4_500_000;
     uint256 internal constant REGULAR_CLAIM_GAS_CEIL = 1_200_000;
@@ -53,6 +53,13 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     uint128 internal constant TAKE_PROFIT = 1 ether; // divides each payout evenly -> carry stays 0
 
     address internal player;
+    address internal regularPlayer;
+    // 1472 puts the regular 365-day window across 13 packed result words;
+    // the deep exit still clamps to days 1..1460 (46 result words, 731 stake words).
+    uint24 internal constant COLD_LATEST = 1472;
+    uint256 internal constant DEEP_INTRINSIC = 21_448;
+    uint256 internal constant REGULAR_INTRINSIC = 21_704;
+    uint256 internal constant REVIEW_GAS_CAP = 11_500_000;
 
     function setUp() public {
         _deployProtocol();
@@ -60,16 +67,16 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         // Land in the same benign purchase-window the other coinflip suites use,
         // so the post-walk BAF guard / purchaseInfo read behaves as in production.
         _warpToDay(2);
+        regularPlayer = makeAddr("regular_claim_player");
+        // Seed AND validate in setUp's prior transaction. Each cold test's first
+        // production call is the claim, with original SSTORE values already committed.
+        _prepareDeep(player, COLD_LATEST);
+        _prepareRegular(regularPlayer, COLD_LATEST, DEEP_CAP);
     }
 
     /// @dev Wall clock just inside GameTimeLib day `d` (mirror of the coinflip suites).
     function _warpToDay(uint24 d) internal {
-        vm.warp(
-            (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) *
-                1 days +
-                82_620 +
-                1
-        );
+        vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);
     }
 
     // ----------------------------------------------------------------------
@@ -93,21 +100,13 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
 
     /// @dev Install a win (WIN_BYTE) for every day in [0, n] with a stake on each day,
     ///      then overwrite `lossDay` as a resolved loss. Whole-slot writes for speed.
-    function _installResolvedWinsWithStake(
-        address p,
-        uint24 n,
-        uint24 lossDay
-    ) internal {
+    function _installResolvedWinsWithStake(address p, uint24 n, uint24 lossDay) internal {
         uint256 allWin;
         for (uint256 i = 0; i < 32; ++i) {
             allWin |= uint256(WIN_BYTE) << (i * 8);
         }
         for (uint24 k = 0; k <= (n >> 5); ++k) {
-            vm.store(
-                address(coinflip),
-                keccak256(abi.encode(uint256(k), uint256(1))),
-                bytes32(allWin)
-            );
+            vm.store(address(coinflip), keccak256(abi.encode(uint256(k), uint256(1))), bytes32(allWin));
         }
         uint256 stakeWord = STAKE | (STAKE << 128);
         for (uint24 k = 0; k <= (n >> 1); ++k) {
@@ -119,22 +118,14 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     /// @dev playerState slot 2. word0: claimableStored(0) | lastClaim<<128 |
     ///      autoRebuyStartDay<<152 | autoRebuyEnabled<<176. word1: autoRebuyStop |
     ///      autoRebuyCarry(0)<<128.
-    function _installPlayerState(
-        address p,
-        uint24 lastClaim,
-        uint24 startDay,
-        bool rebuyEnabled,
-        uint128 takeProfit
-    ) internal {
+    function _installPlayerState(address p, uint24 lastClaim, uint24 startDay, bool rebuyEnabled, uint128 takeProfit)
+        internal
+    {
         bytes32 base = keccak256(abi.encode(p, uint256(2)));
         uint256 w0 = (uint256(lastClaim) << 128) | (uint256(startDay) << 152);
         if (rebuyEnabled) w0 |= uint256(1) << 176;
         vm.store(address(coinflip), base, bytes32(w0));
-        vm.store(
-            address(coinflip),
-            bytes32(uint256(base) + 1),
-            bytes32(uint256(takeProfit))
-        );
+        vm.store(address(coinflip), bytes32(uint256(base) + 1), bytes32(uint256(takeProfit)));
     }
 
     /// @dev flipsClaimableDay slot 4, byte-offset 0 (shares the slot with sdgnrsAutoRebuyArmed).
@@ -153,46 +144,68 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     //          1. DEEP WALK — auto-rebuy-off settle of the 1460-day cap
     // ----------------------------------------------------------------------
 
-    function test_DeepClaim1460DaysFitsUnderTxGasCap() public {
-        uint24 latest = DEEP_CAP + 1; // available = latest - 0 = 1461 -> cap clamps to 1460
+    function _prepareDeep(address target, uint24 latest) private {
         uint24 lossDay = DEEP_CAP; // day 1460 is the single loss
 
-        _installResolvedWinsWithStake(player, DEEP_CAP, lossDay);
-        _installPlayerState(player, 0, 0, true, TAKE_PROFIT);
+        _installResolvedWinsWithStake(target, DEEP_CAP, lossDay);
+        _installPlayerState(target, 0, 0, true, TAKE_PROFIT);
         _setFlipsClaimableDay(latest);
 
         // Read-back proof the worst-case state is installed where the contract reads it.
         (uint16 r1, bool w1) = coinflip.getCoinflipDayResult(1);
         assertEq(r1, WIN_BYTE, "day 1 installed as max win");
         assertTrue(w1, "day 1 is a win");
-        (uint16 rMid, ) = coinflip.getCoinflipDayResult(730);
+        (uint16 rMid,) = coinflip.getCoinflipDayResult(730);
         assertEq(rMid, WIN_BYTE, "mid-range day installed as win");
         (uint16 rLoss, bool wLoss) = coinflip.getCoinflipDayResult(lossDay);
         assertEq(rLoss, LOSS_BYTE, "loss day installed as resolved loss");
         assertFalse(wLoss, "loss day is a loss");
-        (bool en, uint256 stop, uint256 carry, uint24 sd) = coinflip
-            .coinflipAutoRebuyInfo(player);
+        (bool en, uint256 stop, uint256 carry, uint24 sd) = coinflip.coinflipAutoRebuyInfo(target);
         assertTrue(en, "auto-rebuy armed");
         assertEq(stop, TAKE_PROFIT, "take-profit installed");
         assertEq(carry, 0, "carry starts 0");
         assertEq(sd, 0, "rebuy start day 0");
 
-        uint256 balBefore = coin.balanceOf(player);
+        assertEq(coin.balanceOf(target), 0, "fixture starts without minted winnings");
+    }
 
+    function test_DeepClaim1460DaysFitsUnderTxGasCap() public {
+        uint256 used = _measureDeep(player);
+        // A packed stake word adds at most 2k cold-read + 2.8k fresh-vs-dirty
+        // rewrite gas; reserve 5k. Result words add a cold read. 100k covers
+        // fixed player/credit state and cold accounts outside the bounded walk.
+        uint256 coldAllowance = (DEEP_CAP / 2 + 1) * 5000 + (DEEP_CAP / 32 + 1) * 2100 + 100_000;
+        assertLt(used, DEEP_CLAIM_GAS_CEIL + coldAllowance, "cold deep walk exceeds warm budget plus state allowance");
+    }
+
+    function test_DeepClaimWarmSingleTransactionRegression() public {
+        assertLt(this.measureWarmDeep(), DEEP_CLAIM_GAS_CEIL, "warm deep walk regressed");
+    }
+
+    function measureWarmDeep() external returns (uint256) {
+        require(msg.sender == address(this), "test self-call only");
+        address target = makeAddr("warm_deep_claim_player");
+        // All seed/proof/claim calls are nested under one outer transaction,
+        // reproducing the historical benchmark even when --isolate is enabled.
+        _prepareDeep(target, DEEP_CAP + 1);
+        return _measureDeep(target);
+    }
+
+    function _measureDeep(address target) private returns (uint256 gasUsed) {
         // Disabling auto-rebuy runs the deep settle of every resolved day at once.
-        vm.prank(player);
+        vm.prank(target);
         uint256 g0 = gasleft();
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
-        uint256 gasUsed = g0 - gasleft();
+        coinflip.setCoinflipAutoRebuy{gas: REVIEW_GAS_CAP - DEEP_INTRINSIC}(address(0), false, 0);
+        gasUsed = g0 - gasleft();
 
         // Correctness anchor: exactly 1459 wins were settled and minted (day 1460 lost).
         uint256 expectedMint = uint256(DEEP_CAP - 1) * _winPayout();
         assertEq(
-            coin.balanceOf(player) - balBefore,
+            coin.balanceOf(target),
             expectedMint,
             "deep walk settled & minted exactly 1459 win payouts (proves all 1460 days processed)"
         );
-        (bool enAfter, , , ) = coinflip.coinflipAutoRebuyInfo(player);
+        (bool enAfter,,,) = coinflip.coinflipAutoRebuyInfo(target);
         assertFalse(enAfter, "auto-rebuy turned off by the exit");
 
         emit log_named_uint("deep_claim_1460_gas_used", gasUsed);
@@ -204,43 +217,58 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
             EIP7825_TX_GAS_CAP,
             "deep 1460-day coinflip settle must fit under the EIP-7825 per-tx gas cap (no perma-brick)"
         );
-        assertLt(
-            gasUsed,
-            DEEP_CLAIM_GAS_CEIL,
-            "deep 1460-day settle regressed past its calibrated ceiling"
-        );
+        assertLt(gasUsed + DEEP_INTRINSIC, REVIEW_GAS_CAP, "deep claim transaction exceeds 11.5M");
     }
 
     // ----------------------------------------------------------------------
     //          2. REGULAR WINDOW — 365-day claimCoinflips cap
     // ----------------------------------------------------------------------
 
-    function test_RegularClaim365DayWindowFitsUnderTxGasCap() public {
-        uint24 latest = 1000;
-        uint24 lastClaim = latest - WINDOW; // 635 -> window walks days 636..1000 (365 days)
-        uint24 lossDay = latest; // day 1000 is the single loss
+    function _prepareRegular(address target, uint24 latest, uint24 lossDay) private {
+        uint24 lastClaim = latest - WINDOW; // exactly WINDOW resolved days
 
-        _installResolvedWinsWithStake(player, latest, lossDay);
-        _installPlayerState(player, lastClaim, 0, false, 0);
+        _installResolvedWinsWithStake(target, latest, lossDay);
+        _installPlayerState(target, lastClaim, 0, false, 0);
         _setFlipsClaimableDay(latest);
 
         (uint16 rFirst, bool wFirst) = coinflip.getCoinflipDayResult(lastClaim + 1);
         assertEq(rFirst, WIN_BYTE, "first windowed day installed as win");
         assertTrue(wFirst, "first windowed day is a win");
-        (uint16 rLoss, ) = coinflip.getCoinflipDayResult(lossDay);
+        (uint16 rLoss,) = coinflip.getCoinflipDayResult(lossDay);
         assertEq(rLoss, LOSS_BYTE, "loss day installed");
 
-        uint256 balBefore = coin.balanceOf(player);
+        assertEq(coin.balanceOf(target), 0, "fixture starts without minted winnings");
+    }
 
-        vm.prank(player);
+    function test_RegularClaim365DayWindowFitsUnderTxGasCap() public {
+        uint256 used = _measureRegular(regularPlayer);
+        uint256 coldAllowance = (WINDOW / 2 + 1) * 5000 + (WINDOW / 32 + 2) * 2100 + 100_000;
+        assertLt(
+            used, REGULAR_CLAIM_GAS_CEIL + coldAllowance, "cold regular walk exceeds warm budget plus state allowance"
+        );
+    }
+
+    function test_RegularClaimWarmSingleTransactionRegression() public {
+        assertLt(this.measureWarmRegular(), REGULAR_CLAIM_GAS_CEIL, "warm regular walk regressed");
+    }
+
+    function measureWarmRegular() external returns (uint256) {
+        require(msg.sender == address(this), "test self-call only");
+        address target = makeAddr("warm_regular_claim_player");
+        _prepareRegular(target, 1000, 1000);
+        return _measureRegular(target);
+    }
+
+    function _measureRegular(address target) private returns (uint256 gasUsed) {
+        vm.prank(target);
         uint256 g0 = gasleft();
-        coinflip.claimCoinflips(address(0), type(uint256).max);
-        uint256 gasUsed = g0 - gasleft();
+        coinflip.claimCoinflips{gas: REVIEW_GAS_CAP - REGULAR_INTRINSIC}(address(0), type(uint256).max);
+        gasUsed = g0 - gasleft();
 
-        // 365-day window, day 1000 lost -> 364 wins minted.
+        // The complete 365-day window contains one loss and exactly 364 wins.
         uint256 expectedMint = uint256(WINDOW - 1) * _winPayout();
         assertEq(
-            coin.balanceOf(player) - balBefore,
+            coin.balanceOf(target),
             expectedMint,
             "regular window settled & minted exactly 364 win payouts (proves the 365-day window walked)"
         );
@@ -249,14 +277,8 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         emit log_named_uint("headroom_to_16p7M_gas", EIP7825_TX_GAS_CAP - gasUsed);
 
         assertLt(
-            gasUsed,
-            EIP7825_TX_GAS_CAP,
-            "regular 365-day coinflip claim must fit under the EIP-7825 per-tx gas cap"
+            gasUsed, EIP7825_TX_GAS_CAP, "regular 365-day coinflip claim must fit under the EIP-7825 per-tx gas cap"
         );
-        assertLt(
-            gasUsed,
-            REGULAR_CLAIM_GAS_CEIL,
-            "regular 365-day claim regressed past its calibrated ceiling"
-        );
+        assertLt(gasUsed + REGULAR_INTRINSIC, REVIEW_GAS_CAP, "regular claim transaction exceeds 11.5M");
     }
 }

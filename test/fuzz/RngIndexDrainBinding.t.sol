@@ -5,38 +5,19 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {RngIndexDrainOracle} from "./handlers/RngIndexDrainHandler.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
-/// @title RngIndexDrainBinding -- Phase 232.1 SPEC AC-3 (binding consistency)
-/// @notice For a ticket frozen at lootbox RNG index X, the entropy parameter
-///         consumed by `_raritySymbolBatch` (captured via the TraitsGenerated
-///         event) equals `lootboxRngWordByIndex[X]` and is non-zero at drain time.
-/// @dev    Instrumentation: Option A (event-capture via existing TraitsGenerated
-///         event at DegenerusGameStorage.sol:479, emitted inside processTicketBatch
-///         at DegenerusGameMintModule.sol:470 immediately after _raritySymbolBatch).
-///         No contract changes needed.
-contract RngIndexDrainBindingTest is DeployProtocol {
-    /// @dev Storage slot for `lootboxRngWordByIndex` mapping. Authoritative at the
-    ///      working tree via `solc --storage-layout` (post Stage B Game pack:
-    ///      lootboxRngWordByIndex = slot 35, was 36).
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 34;
-    /// @dev Storage slot for `lootboxRngPacked` (LR_INDEX at low 48 bits).
-    ///      Authoritative slot 34 (post Stage B Game pack: was 35).
-    uint256 internal constant SLOT_LR_INDEX = 33;
+/// @notice Public-path daily ticket entropy binding and post-request box binding.
+/// The ordinary ticket oracle independently reconstructs generated traits and checks
+/// their persisted bucket counts and owners; no event entropy field is assumed.
+contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     /// @dev Base slot for `boxPlayers` mapping(uint48 => address[]). Authoritative
     ///      at the working tree (confirmed at runtime: boxPlayers[idx][0] == buyer).
     uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = 57;
     /// @dev Base slot for `presaleBoxEth` mapping(uint48 => mapping(address => uint256)).
     ///      Authoritative at the working tree (confirmed at runtime: low-96 cell == applied box ETH).
     uint256 internal constant SLOT_PRESALE_BOX_ETH_MAPPING = 15;
-
-    /// @dev Keccak topic-0 for the frozen slimmed TraitsGenerated(address,uint256,uint32)
-    ///      (DegenerusGameStorage:501). The pre-slim 6-arg form
-    ///      `TraitsGenerated(address,uint24,uint32,uint32,uint32,uint256)` (and its `entropy`
-    ///      field) no longer exists, which is the DEF-380-04-FC5 observability cause that skips
-    ///      both binding tests below.
-    bytes32 internal constant TOPIC_TRAITS_GENERATED =
-        keccak256("TraitsGenerated(address,uint256,uint32)");
 
     address internal buyer;
     uint256 internal lastFulfilledReqId;
@@ -78,7 +59,7 @@ contract RngIndexDrainBindingTest is DeployProtocol {
         return uint256(vm.load(address(game), slot));
     }
 
-    /// @dev Read LR_INDEX from `lootboxRngPacked` (slot 34, low 48 bits).
+    /// @dev Read LR_INDEX from `lootboxRngPacked` (slot 33, low 48 bits).
     function _lrIndex() internal view returns (uint48) {
         return uint48(uint256(vm.load(address(game), bytes32(SLOT_LR_INDEX))));
     }
@@ -118,99 +99,54 @@ contract RngIndexDrainBindingTest is DeployProtocol {
         logs = vm.getRecordedLogs();
     }
 
-    /// @dev Scan logs for all TraitsGenerated events and extract the trailing word.
-    ///      INERT at the frozen subject c4d48008: the slimmed event
-    ///      `TraitsGenerated(address indexed player, uint256 baseKey, uint32 take)` carries NO
-    ///      `entropy` field, and TOPIC_TRAITS_GENERATED is the 3-arg topic, so this never matches
-    ///      a real log that carries the old entropy payload. Retained only for the two
-    ///      DEF-380-04-FC5-skipped binding tests; both vm.skip before reaching it.
-    function _capturedEntropies(Vm.Log[] memory logs)
-        internal
-        pure
-        returns (uint256[] memory entropies)
-    {
-        uint256 count;
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics.length > 0 && logs[i].topics[0] == TOPIC_TRAITS_GENERATED) {
-                count++;
+    function _advanceAndCheck(bool checkWrongWord) internal returns (uint256 batches, uint256 entries, uint256 buyerEntries) {
+        DrainSnapshot memory snap = _snapshotDrain(game);
+        vm.recordLogs();
+        game.advanceGame();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 word = snap.index == 0 ? 0 : _wordAt(game, snap.index - 1);
+        DrainResult memory result = _checkDrain(game, snap, logs, word, buyer);
+        assertEq(result.unsupported, 0, "fixture crossed into a different trait consumer");
+        assertEq(result.mismatches, 0, "persisted ticket traits differ from committed-word replay");
+        if (result.batches != 0) {
+            assertGt(word, 0, "a ticket drain consumed an unpopulated commitment");
+            assertEq(_lrIndexOf(game), snap.index, "ticket drain must finish before the next index swap");
+            if (checkWrongWord) {
+                DrainResult memory mutant = _checkDrain(game, snap, logs, word ^ uint256(keccak256("wrong binding")), buyer);
+                assertGt(mutant.mismatches, 0, "oracle failed to reject a different committed word");
             }
         }
-        entropies = new uint256[](count);
-        uint256 j;
-        for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].topics.length > 0 && logs[i].topics[0] == TOPIC_TRAITS_GENERATED) {
-                // data = (uint32 queueIdx, uint32 startIndex, uint32 count, uint256 entropy)
-                // last 32 bytes of data is the entropy field.
-                bytes memory d = logs[i].data;
-                uint256 entropy;
-                assembly {
-                    entropy := mload(add(d, mload(d)))
-                }
-                entropies[j++] = entropy;
-            }
-        }
+        return (result.batches, result.entries, result.trackedEntries);
     }
 
-    // =========================================================================
-    // AC-3: Binding consistency on the normal end-of-day daily drain path
-    // =========================================================================
-
-    /// @notice For every ticket-batch processed by the daily-drain, the entropy
-    ///         consumed by _raritySymbolBatch equals the lootbox RNG word at the
-    ///         corresponding index AND is non-zero.
-    /// @dev DEF-380-04-FC5 (finding-candidate routed to the council, 382+ PRIME / 385 VRF-path sweep).
-    ///      SKIPPED against the frozen subject c4d48008: this test observes the per-batch
-    ///      entropy by decoding it out of the TraitsGenerated event, but the frozen event was
-    ///      slimmed to `TraitsGenerated(address indexed player, uint256 baseKey, uint32 take)`
-    ///      (DegenerusGameStorage:501) — it NO LONGER carries the `entropy` field. The drain
-    ///      STILL consumes `entropy` internally (`_raritySymbolBatch(player, baseKey, processed,
-    ///      take, entropy)` at DegenerusGameMintModule:473), but it is not emitted, so the
-    ///      RNG-binding invariant ("the entropy consumed == lootboxRngWordByIndex[boundIdx]")
-    ///      is no longer observable from the event. `baseKey` is a structured ticket key
-    ///      (`(lvl<<224)|(idx<<192)|(player<<32)|owed`, MintModule:429), NOT the entropy, so
-    ///      re-pointing the assertion at `baseKey` would assert nothing about the RNG binding
-    ///      and would MASK the lost observability. Whether the daily-drain entropy is still
-    ///      correctly index-bound (and whether the event-slimming should keep an observability
-    ///      hook for it) is an RNG-window judgment for the council — NOT a stale topic/slot the
-    ///      test can re-derive without changing what it proves. Recorded in
-    ///      REGRESSION-BASELINE-v62.md "Known behavior-divergence — finding-candidates". The
-    ///      sibling testBindingConsistencyMidDayCrossDay passes only because it vacuously
-    ///      returns when entropies.length == 0 (same removed-field cause). The contract is NOT
-    ///      modified.
-    function testBindingConsistencyDailyDrain() public {
-        vm.skip(true); // DEF-380-04-FC5 — see @dev above; council adjudicates (382+/385)
-        _purchase(400, 0);
-
-        uint48 idxBeforeAdvance = _lrIndex();
-
-        uint256 vrfWord = uint256(keccak256("binding-daily-drain-word"));
-        Vm.Log[] memory logs = _completeDayWithLogs(vrfWord);
-
-        uint256[] memory entropies = _capturedEntropies(logs);
-        assertGt(entropies.length, 0, "AC-3: no TraitsGenerated emitted during drain");
-
-        // The drain reads lootboxRngWordByIndex[LR_INDEX - 1] where LR_INDEX was
-        // bumped to idxBeforeAdvance + 1 by the daily VRF request. So the binding
-        // target is index (idxBeforeAdvance + 1) - 1 = idxBeforeAdvance ... but
-        // only if the VRF request actually landed. Tolerate the case where index
-        // bumped by zero (no-ticket day) — entropies.length will be 0 in that case
-        // and we already asserted >0 above.
-        uint48 idxAfterAdvance = _lrIndex();
-        assertGe(idxAfterAdvance, idxBeforeAdvance + 1, "VRF request did not bump LR_INDEX");
-
-        uint48 boundIdx = idxAfterAdvance - 1;
-        uint256 slotWord = _lootboxWord(boundIdx);
-
-        assertTrue(slotWord != 0, "AC-3: lootboxRngWordByIndex[X] is zero at drain time");
-
-        for (uint256 i = 0; i < entropies.length; i++) {
-            assertTrue(entropies[i] != 0, "AC-3: captured entropy is zero");
-            assertEq(
-                entropies[i],
-                slotWord,
-                "AC-3: captured entropy != lootboxRngWordByIndex[X]"
-            );
+    function _exerciseDailyDrain(bool checkWrongWord) internal returns (uint256 batches, uint256 entries) {
+        // One user plus the protocol's initial recipients remains below the seated
+        // round floor. This size requires repeated ordinary batches / budget resumes.
+        _purchase(40_000, 0);
+        uint256 buyerEntries;
+        (batches, entries, buyerEntries) = _advanceAndCheck(checkWrongWord);
+        uint256 request = mockVRF.lastRequestId();
+        assertGt(request, 0, "daily fixture did not request VRF");
+        mockVRF.fulfillRandomWords(request, uint256(keccak256("binding-daily-drain-word")));
+        for (uint256 i; i < 100 && game.rngLocked(); ++i) {
+            (uint256 b, uint256 n, uint256 paid) = _advanceAndCheck(checkWrongWord);
+            batches += b;
+            entries += n;
+            buyerEntries += paid;
         }
+        assertFalse(game.rngLocked(), "daily drain did not finish");
+        assertGt(batches, 1, "fixture must exercise multiple ordinary batches");
+        assertGe(buyerEntries, 400, "paid buyer entries did not all pass the binding oracle");
+    }
+
+    function testBindingConsistencyDailyDrain() public {
+        _exerciseDailyDrain(false);
+    }
+
+    /// @notice The same real persisted outputs must fail a deliberately wrong-word
+    /// replay. The production-mutation campaign additionally changes its entropy read.
+    function testBindingOracleRejectsWrongWord() public {
+        _exerciseDailyDrain(true);
     }
 
     // =========================================================================
@@ -228,13 +164,8 @@ contract RngIndexDrainBindingTest is DeployProtocol {
     ///         LR_INDEX is still un-worded and CANNOT be resolved by that word. This is the
     ///         load-bearing RNG-freeze property: a buyer cannot be resolved by a word already
     ///         requested at buy time.
-    /// @dev    Replaces the prior event-decode form (DEF-380-04-FC5): the slimmed
-    ///         `TraitsGenerated(address,uint256,uint32)` event (DegenerusGameStorage:501) dropped
-    ///         the `entropy` field, so the old `_capturedEntropies` path always returned empty and
-    ///         the test passed vacuously. This rewrite reads `lootboxRngWordByIndex` AND the
-    ///         box-binding records (`boxPlayers` / `presaleBoxEth`) directly from storage, pinning
-    ///         the exact index each artifact binds to — no removed event field, no vacuous return.
-    ///         The contract is NOT modified.
+    /// @dev Reads the committed word and box-binding storage directly. A post-request
+    ///      purchase must remain unresolved when the earlier in-flight word arrives.
     function testBindingConsistencyMidDayCrossDay() public {
         // ── Mid-day prerequisite: today's daily RNG must already be consumed
         //    (requestLootboxRng reverts while rngWordByDay[today] == 0). Complete a

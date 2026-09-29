@@ -63,10 +63,10 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
 
 /// @dev Setup runs before the measured transaction, so all production storage starts cold.
 ///      Measure the real Game -> Advance -> GameOver path, including call overhead and a
-///      conservative 21,064 intrinsic gas allowance. Assert work as well as the 15M ceiling.
+///      conservative 21,064 intrinsic gas allowance. Assert work as well as the 11.5M ceiling.
 abstract contract DeadVrfEndingGasFixture is DeployProtocol {
     uint256 internal constant INTRINSIC = 21_064;
-    uint256 internal constant TX_CAP = 16_777_216;
+    uint256 internal constant TX_CAP = 11_500_000;
     uint24 internal constant LVL = 5000;
     uint24 internal constant FOIL_DAY = 100;
     uint256 internal expectedUncreated;
@@ -89,13 +89,13 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
         vm.etch(address(game), code);
     }
 
-    function test_ColdDeadVrfBatchFits15M() public {
+    function test_ColdDeadVrfBatchFits11_5M() public {
         vm.recordLogs();
         uint256 beforeGas = gasleft();
         game.advanceGame{gas: TX_CAP - INTRINSIC}();
         uint256 used = beforeGas - gasleft() + INTRINSIC;
         emit log_named_uint("DEAD_VRF_COLD_INCLUDING_INTRINSIC", used);
-        assertLt(used, 15_000_000, "dead-VRF batch exceeds audit target");
+        assertLt(used, 11_500_000, "dead-VRF batch exceeds audit target");
 
         uint8 mode = shape();
         assertEq(game.gameOver(), mode == 3, "only the finishing batch may pay out");
@@ -186,7 +186,7 @@ contract DeadVrfClaimGas is DeployProtocol {
         expectedClaim = ((4400 ether * 25_600) / (25_600 + uncreated) / 256) * 256;
     }
 
-    function test_ColdClaimAcross256TraitsFits15M() public {
+    function test_ColdClaimAcross256TraitsFits11_5M() public {
         uint256[] memory refs = new uint256[](256);
         for (uint256 i; i < refs.length; ++i) {
             refs[i] = i << 64;
@@ -198,10 +198,10 @@ contract DeadVrfClaimGas is DeployProtocol {
         }
 
         uint256 beforeGas = gasleft();
-        game.claimDeadVrf{gas: 16_777_216 - intrinsic}(OWNER, refs);
+        game.claimDeadVrf{gas: 11_500_000 - intrinsic}(OWNER, refs);
         uint256 used = beforeGas - gasleft() + intrinsic;
         emit log_named_uint("DEAD_VRF_COLD_256_TRAIT_CLAIM_INCLUDING_INTRINSIC", used);
-        assertLt(used, 15_000_000);
+        assertLt(used, 11_500_000);
         assertEq(game.claimableWinningsOf(OWNER), expectedClaim);
         assertGt(expectedClaim, 0, "the measured call must pay the owner");
         vm.expectRevert();

@@ -321,12 +321,16 @@ contract VRFCore is DeployProtocol {
 
         // Record lootboxRngIndex after initial request
         uint48 indexAfterRequest = _lootboxRngIndex();
+        uint256 firstRequestId = _readVrfRequestId();
+        assertGt(firstRequestId, _lastFulfilledReqId, "Fresh pending request required");
 
         // Do NOT fulfill -- wait past the 20h vault-owner retry window
         vm.warp(block.timestamp + 21 hours);
 
         // Retry: advanceGame triggers timeout path -> _requestRng -> _finalizeRngRequest(isRetry=true)
         game.advanceGame();
+        assertGt(_readVrfRequestId(), firstRequestId, "Timeout must issue a replacement request");
+        assertTrue(game.rngLocked(), "Replacement request remains pending");
 
         // lootboxRngIndex should NOT have changed (retry, not fresh)
         uint48 indexAfterRetry = _lootboxRngIndex();
@@ -340,24 +344,18 @@ contract VRFCore is DeployProtocol {
 
         // Day 1: complete normally
         _completeDay(word1);
+        assertFalse(game.rngLocked(), "Prior day must finish before retry scenario");
 
         // Day 2: request
         vm.warp(block.timestamp + 1 days);
         game.advanceGame();
 
-        // Check if a new VRF request was actually fired by comparing mock's request counter.
-        // If the game processed day 2 inline (using a stale rngWordCurrent), no new
-        // VRF request was made. rngLocked() may still be true from ticket batch processing.
+        // A successful case must execute a fresh request and its real replacement.
         uint256 currentReqId = mockVRF.lastRequestId();
-        if (currentReqId == _lastFulfilledReqId) {
-            // No new VRF request was made -- nothing to timeout-retry.
-            // Process remaining ticket batches and return.
-            for (uint256 i = 0; i < 50; i++) {
-                if (!game.rngLocked()) break;
-                game.advanceGame();
-            }
-            return;
-        }
+        assertGt(currentReqId, _lastFulfilledReqId, "Fresh pending request required");
+        assertEq(_readVrfRequestId(), currentReqId, "Game binds the fresh request");
+        assertTrue(game.rngLocked(), "Fresh request holds the lock");
+        assertEq(_readRngWordCurrent(), 0, "Fresh request awaits entropy");
 
         uint48 indexAfterRequest = _lootboxRngIndex();
 
@@ -369,7 +367,13 @@ contract VRFCore is DeployProtocol {
 
         // Fulfill the retried request and complete the day
         uint256 newReqId = mockVRF.lastRequestId();
+        assertGt(newReqId, currentReqId, "Timeout must issue a replacement request");
+        assertEq(_readVrfRequestId(), newReqId, "Game binds the replacement request");
+        assertTrue(game.rngLocked(), "Replacement request holds the lock");
+        mockVRF.fulfillRandomWords(currentReqId, word1);
+        assertEq(_readRngWordCurrent(), 0, "Retired request cannot supply retry entropy");
         mockVRF.fulfillRandomWords(newReqId, word2);
+        assertEq(_readRngWordCurrent(), word2, "Replacement request supplies its own entropy");
         _lastFulfilledReqId = newReqId;
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
@@ -377,6 +381,7 @@ contract VRFCore is DeployProtocol {
         }
 
         // Index should still be the same (no double increment)
+        assertFalse(game.rngLocked(), "Retried day must finish");
         assertEq(_lootboxRngIndex(), indexAfterRequest, "Fuzz: index unchanged after retry+fulfill");
     }
 

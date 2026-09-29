@@ -37,6 +37,7 @@ contract NewPropertiesTest is Test {
 
     /// @notice Four-way lootbox split with remainder pattern conserves total exactly
     /// @dev Models _resolveLootboxRoll's split pattern from LootboxModule
+    /// @custom:halmos --solver z3
     function check_lootbox_four_split(
         uint256 total,
         uint16 futureBps,
@@ -44,7 +45,8 @@ contract NewPropertiesTest is Test {
         uint16 vaultBps
     ) public pure {
         if (total == 0 || total > 1e30) return;
-        if (futureBps + nextBps + vaultBps > 10000) return;
+        // Reject the mathematical sum before any narrow uint16 addition can panic.
+        if (uint256(futureBps) + nextBps + vaultBps > 10000) return;
 
         uint256 futureShare = (total * futureBps) / 10000;
         uint256 nextShare = (total * nextBps) / 10000;

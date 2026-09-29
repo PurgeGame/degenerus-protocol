@@ -656,91 +656,70 @@ describe("SecurityEconHardening", function () {
   // ECON-05: LINK reward formula correctness
   // =========================================================================
   describe("ECON-05: LINK reward formula", function () {
-    it("_linkRewardMultiplier: 3x at 0 LINK balance", async function () {
-      // At 0 LINK subscription balance, multiplier should be 3e18
-      // Formula: 3e18 - (0 * 2e18 / 200e18) = 3e18
-      // We can't call the private function directly, but we can verify
-      // the behavior through the full LINK donation flow.
-      const { admin, mockLINK, mockVRF, game } =
+    async function assertDonation(startLink, donatedLink, expectedFlip) {
+      const { admin, mockLINK, mockVRF, mockFeed, game, coinflip, dgnrs, sdgnrs, deployer, alice } =
         await loadFixture(deployFullProtocol);
-
-      // The multiplier is private but its effects are observable via events.
-      // Structural verification: the tiered formula is:
-      //   0-200 LINK: linear 3x -> 1x
-      //   200-1000 LINK: linear 1x -> 0x
-      //   1000+ LINK: 0x (no reward)
+      const adminAddr = await admin.getAddress();
+      const vrfAddr = await mockVRF.getAddress();
+      const feedAddr = await mockFeed.getAddress();
       const subId = await admin.subscriptionId();
       expect(subId).to.be.gt(0n);
+      expect(await admin.linkEthPriceFeed()).to.equal(ZERO_ADDRESS);
+      expect((await mockVRF.getSubscription(subId))[0]).to.equal(0n);
+
+      // Public unwrap supplies a real voter; governance installs the healthy feed.
+      await dgnrs.connect(deployer).unwrapTo(deployer.address, eth("1000"));
+      expect(await sdgnrs.votingSupply()).to.equal(eth("1000"));
+      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      const proposalId = await admin.feedProposalCount();
+      await admin.connect(deployer).voteFeedSwap(proposalId, true);
+      expect(await admin.linkEthPriceFeed()).to.equal(feedAddr);
+      expect((await admin.feedProposals(proposalId)).state).to.equal(1n);
+      expect(await mockFeed.price()).to.equal(eth("0.004"));
+      expect(await game.mintPrice()).to.equal(eth("0.01"));
+
+      // Seed the subscription with an actual LINK transfer, without donor rewards.
+      const initial = eth(startLink);
+      if (initial !== 0n) {
+        await mockLINK.mint(deployer.address, initial);
+        await mockLINK.connect(deployer).transferAndCall(vrfAddr, initial,
+          hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [subId]));
+      }
+      const amount = eth(donatedLink);
+      const reward = eth(expectedFlip);
+      expect(reward, "fixture must exercise a nonzero reward").to.be.gt(0n);
+      await mockLINK.mint(alice.address, amount);
+      expect(await mockLINK.balanceOf(alice.address)).to.equal(amount);
+      expect(await mockLINK.balanceOf(adminAddr)).to.equal(0n);
+      expect(await mockLINK.balanceOf(vrfAddr)).to.equal(initial);
+      expect((await mockVRF.getSubscription(subId))[0]).to.equal(initial);
+      expect(await coinflip.coinflipAmount(alice.address)).to.equal(0n);
+      const middayBefore = await game.middayRngCredits(alice.address);
+
+      const tx = await mockLINK.connect(alice).transferAndCall(adminAddr, amount, "0x");
+      await expect(tx).to.emit(admin, "LinkCreditRecorded").withArgs(alice.address, reward);
+      expect(await coinflip.coinflipAmount(alice.address), "actual donor reward").to.equal(reward);
+      expect(await mockLINK.balanceOf(alice.address)).to.equal(0n);
+      expect(await mockLINK.balanceOf(adminAddr)).to.equal(0n);
+      expect(await mockLINK.balanceOf(vrfAddr)).to.equal(initial + amount);
+      expect((await mockVRF.getSubscription(subId))[0]).to.equal(initial + amount);
+      expect(await game.middayRngCredits(alice.address)).to.equal(middayBefore + amount);
+    }
+
+    it("10 LINK from empty earns the integrated 2.95x reward: 11800 FLIP", async function () {
+      // Average of 3 and 2.9 over [0,10], times 400 FLIP/LINK at 1x.
+      await assertDonation("0", "10", "11800");
     });
 
-    it("LINK donation triggers reward calculation", async function () {
-      const { admin, mockLINK, game, deployer } =
-        await loadFixture(deployFullProtocol);
-
-      const adminAddr = await admin.getAddress();
-
-      // Fund deployer with mock LINK
-      await mockLINK.mint(deployer.address, eth(10));
-
-      // Configure price feed (admin function)
-      // The mock feed was deployed with 0.004 ETH/LINK
-      // setPriceFeed needs to be called by admin owner
-      // Since the admin deploys without a feed, we need to set one
-      try {
-        // The feed was already set during deployment or needs to be set
-        const feedAddr = await admin.linkEthFeed();
-        // If feed is zero, we skip this test as the reward path is disabled
-        if (feedAddr === ZERO_ADDRESS) {
-          // Expected: no feed configured by default, rewards disabled
-          return;
-        }
-      } catch {
-        return; // Feed not configured, skip
-      }
-
-      // Donate LINK via transferAndCall
-      // onTokenTransfer calculates reward based on _linkRewardMultiplier
-      try {
-        await mockLINK
-          .connect(deployer)
-          .transferAndCall(adminAddr, eth(10), "0x");
-        // If it succeeds, the LINK was forwarded and reward calculated
-      } catch {
-        // May revert if price feed not configured or subscription not ready
-        // This is expected in the test environment
-      }
+    it("LINK donation across 200 LINK pays the exact two-tier integral and forwards custody", async function () {
+      // [190,200]: 10*(1.1+1)/2; [200,210]: 10*(1+.9875)/2.
+      // Combined area 20.4375, at 400 FLIP per LINK-equivalent = 8175 FLIP.
+      await assertDonation("190", "20", "8175");
     });
 
-    it("LINK reward multiplier boundary values", async function () {
-      // Verify formula boundary conditions:
-      // At subBal = 0: mult = 3e18 - 0 = 3e18
-      // At subBal = 200 LINK: mult = 3e18 - 2e18 = 1e18
-      // At subBal = 600 LINK: mult = 1e18 - (400/800)*1e18 = 0.5e18
-      // At subBal = 1000 LINK: mult = 0
-      // At subBal = 1500 LINK: mult = 0
-
-      // These are pure function boundary values from the contract source.
-      // Formula Tier 1 (0-200): 3e18 - (subBal * 2e18 / 200e18)
-      const tier1 = (subBal) => {
-        const delta = (BigInt(subBal) * 2000000000000000000n) / eth(200);
-        return 3000000000000000000n - delta;
-      };
-      // Formula Tier 2 (200-1000): 1e18 - ((subBal-200e18) * 1e18 / 800e18)
-      const tier2 = (subBal) => {
-        const excess = BigInt(subBal) - eth(200);
-        const delta = (excess * 1000000000000000000n) / eth(800);
-        if (delta >= 1000000000000000000n) return 0n;
-        return 1000000000000000000n - delta;
-      };
-
-      // At 0 LINK
-      expect(tier1(0n)).to.equal(3000000000000000000n); // 3x
-      // At 200 LINK
-      expect(tier1(eth(200))).to.equal(1000000000000000000n); // 1x
-      // At 600 LINK
-      expect(tier2(eth(600))).to.equal(500000000000000000n); // 0.5x
-      // At 1000 LINK
-      expect(tier2(eth(1000))).to.equal(0n); // 0x
+    it("LINK donation crossing 1000 LINK rewards only its below-cap integral", async function () {
+      // [990,1000]: 10*(.0125+0)/2; [1000,1010]: zero. Area .0625 * 400.
+      await assertDonation("990", "20", "25");
     });
   });
 

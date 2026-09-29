@@ -1,23 +1,10 @@
-// JackpotCompAdvanceGas.test.js — the level-1 purchase-day advance carrying both the
-// trait-matched FLIP draw and the future jackpot battle, measured as one complete advanceGame
-// transaction through the REAL deployFixture wiring: real Game delegatecalls, the real
-// JackpotBattle playing the jackpot battle, the real Coinflip credits. CrapsBattle is
-// never touched by either draw.
-//
-// Level 1 (storage level 0) has no ETH leg; its daily instead runs TWO FLIP draws in the same tx:
-//   - the trait draw over lvlTraitEntry[1] on the day's main board (`payDailyFlipJackpot`) — pays
-//     up to COIN_DRAW_SHARES = 50 equal whole-unit shares, one `JackpotFlipWin` per winner;
-//   - the jackpot battle over the unminted far-future queues [2, 100] (`payPurchaseJackpotBattle`) —
-//     walks up to JACKPOT_BATTLE_ENTRANTS = 50 wallets (independent of budget) and hands them all,
-//     with the whole budget, to JackpotBattle.resolve in one call: two thirds of the budget stake
-//     one run per distinct wallet (dropped from the back if the budget affords fewer than 50 x
-//     300-FLIP bankrolls), one third is the pot to the highest surviving run.
-// Both budgets tested here comfortably saturate both draws — the trait draw at all 50 shares, the
-// fill's battle at all 50 walked wallets — so the two scenarios differ only in the FLIP amount each
-// trait share and each battle run pays:
-//   - B = 130,000 FLIP (520 ETH): 50 trait shares of 2,600 FLIP each;
-//   - B = 1,250,000 FLIP (5,000 ETH): 50 trait shares of 25,000 FLIP each.
-// Asserted under the EIP-7825 cap; logged against the 10M soft target.
+// Current level-one purchase-day gas witness through real Game -> JackpotModule ->
+// CrapsBattle/JackpotBattle wiring. A request freezes Added and the field; bounded
+// award/settlement transactions finish before the separate 50-share trait draw.
+// Every advance is a separate cold transaction under the owner's 11.5M hard ceiling.
+// These fixtures cover awarded-only fields and default boards, not paid/high seats
+// or an exhaustive maximum over RNG words. Exact awards, settled seat ownership,
+// actual FLIP credits, zero pass balances, and day completion are mandatory witnesses.
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -34,18 +21,20 @@ const { ethers } = hre;
 const WORD = BigInt(ethers.keccak256(ethers.toUtf8Bytes("comp-advance-gas-word")));
 const TRAIT_BOARD_TAG = ethers.keccak256(ethers.toUtf8Bytes("degenerus.jackpot.trait-board"));
 const FLIP_WIN_TOPIC = ethers.id("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
-const BATTLE_RUN_TOPIC = ethers.id("JackpotBattleRun(uint24,address,uint256,uint256,uint256,uint256,uint32)");
-const BATTLE_POT_TOPIC = ethers.id("JackpotBattlePot(uint24,address,uint256)");
+const BATTLE_ENTRY_TOPIC = ethers.id("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
+const SETTLED_TOPIC = ethers.id("CrapsBetSettled(uint256,address,uint256,uint256)");
+const POT_TOPIC = ethers.id("CrapsBattlePaid(uint256,bytes32,address,uint256)");
+const PASS_TOPIC = ethers.id("CrapsPassesCredited(address,bool,uint256)");
 const RNG_APPLIED_TOPIC = ethers.id("DailyRngApplied(uint24,uint256,uint256,uint256)");
 
-const EIP7825_TX_GAS_CAP = 16_777_216n;
+const AUDIT_GAS_CEILING = 11_500_000n;
 const SOFT_TARGET = 10_000_000n;
 const SHARES = 50; // COIN_DRAW_SHARES
 const FF_BIT = 1n << 22n;
 const VAULT_DEITY_SYMBOL = 0n;
 const SDGNRS_DEITY_SYMBOL = 6n;
 const TRAIT_HOLDERS = 2000; // per level-1 trait bucket: ~12 pulls each, repeats rare
-const FF_HOLDERS = 8; // per unminted level: 50 distinct fills within the 16 level picks
+const FF_HOLDERS = 20; // per unminted level; fresh wallet families separate from trait winners
 
 // Storage roots come from the checked-in layout oracle, which the layout gate verifies
 // against production. Reading it avoids forge's incremental artifact cache during a Hardhat run.
@@ -68,8 +57,9 @@ async function getSlot(addr, slot) {
   return BigInt(await ethers.provider.getStorage(addr, pad32(slot)));
 }
 
-// Append `holders` to lvlEntryOwner[lvl]; returns their registry positions. Position 0 is kept out
-// of any seeded lane (a zero lane index understates gas).
+// Append owners and return FF queue positions: registry index PLUS ONE.
+// Trait occurrence lanes instead store raw registry indices (subtract one at that call site).
+// The dummy prefix is excluded from every seeded lane.
 async function registerOwners(addr, ownerRoot, lvl, holders) {
   const lenSlot = mapSlot(lvl, ownerRoot);
   const data = arrayData(lenSlot);
@@ -81,7 +71,7 @@ async function registerOwners(addr, ownerRoot, lvl, holders) {
   const positions = [];
   for (const h of holders) {
     await setSlot(addr, data + count, BigInt(h));
-    positions.push(count);
+    positions.push(count + 1n);
     count += 1n;
   }
   await setSlot(addr, lenSlot, count);
@@ -112,128 +102,181 @@ function traitsOf(entropy) {
   ];
 }
 
-async function measureLevelOneAdvance(prevPoolEth) {
+async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   const fixture = await loadFixture(deployFullProtocol);
-  const { game, deployer, mockVRF, alice } = fixture;
+  const { game, deployer, mockVRF, alice, coinflip } = fixture;
   const gameAddr = await game.getAddress();
-
+  const crapsAddr = fixture.predicted.get("CRAPS");
+  const battle = await ethers.getContractAt("JackpotBattle", crapsAddr);
   const poolRoot = storageRootOf("levelPrizePool");
   const bucketRoot = storageRootOf("lvlTraitEntry");
   const ownerRoot = storageRootOf("lvlEntryOwner");
   const queueRoot = storageRootOf("ticketQueue");
   const deityRoot = storageRootOf("deityBySymbol");
+  const crapsLayout = JSON.parse(readFileSync(new URL("../../scripts/layout/golden/CrapsBattle.json", import.meta.url), "utf8"));
+  const passRoot = BigInt(crapsLayout.find((entry) => entry.label === "_passCredits").slot);
+  const betRoot = BigInt(crapsLayout.find((entry) => entry.label === "_bets").slot);
+  const traitOwners = new Set();
+  const fieldOwners = new Set();
 
-  // Genesis deities add virtual bucket entries naming VAULT / sDGNRS: exclude them so every
-  // trait-draw winner is a real table write (the worst-case, heaviest read path).
   await setSlot(gameAddr, mapSlot(VAULT_DEITY_SYMBOL, deityRoot), 0n);
   await setSlot(gameAddr, mapSlot(SDGNRS_DEITY_SYMBOL, deityRoot), 0n);
-
-  // Trait draw: the level-1 buckets of the day's main board (the day's word is WORD: no nudges,
-  // no salt — `_rollMainTraits` rolls the base board directly off the unsalted word).
-  const mainTraits = traitsOf(WORD);
-  for (const t of mainTraits) {
-    const holders = Array.from({ length: TRAIT_HOLDERS }, (_, i) => holder(0xace000000n + BigInt(t) * 0x10000n + BigInt(i + 1)));
-    const positions = await registerOwners(gameAddr, ownerRoot, 1n, holders);
-    await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions);
+  for (const t of traitsOf(WORD)) {
+    const owners = Array.from({ length: TRAIT_HOLDERS }, (_, i) => holder(0xace000000n + BigInt(t) * 0x10000n + BigInt(i + 1)));
+    owners.forEach((owner) => traitOwners.add(owner.toLowerCase()));
+    const positions = await registerOwners(gameAddr, ownerRoot, 1n, owners);
+    await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions.map((pos) => pos - 1n));
   }
-
-  // Jackpot battle: replace every unminted queue [2, 100] (genesis lanes included) with fresh wallets.
   for (let lvl = 2n; lvl <= 100n; ++lvl) {
-    const holders = Array.from({ length: FF_HOLDERS }, (_, i) => holder(0xb00000000n + lvl * 0x100n + BigInt(i + 1)));
-    const positions = await registerOwners(gameAddr, ownerRoot, lvl, holders);
-    // A queue lane names registry position + 1.
-    await writeLanes(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), positions.map((p) => p + 1n));
+    const owners = Array.from({ length: FF_HOLDERS }, (_, i) => holder(0xb00000000n + lvl * 0x100n + BigInt(i + 1)));
+    owners.forEach((owner) => fieldOwners.add(owner.toLowerCase()));
+    await writeLanes(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), await registerOwners(gameAddr, ownerRoot, lvl, owners));
   }
-
-  await setSlot(gameAddr, mapSlot(0n, poolRoot), ethers.parseEther(prevPoolEth));
-
-  // A real sale, then the day: request the word and drain until both draws land.
-  await game.connect(alice).purchase(ethers.ZeroAddress, 200n, 0n, ethers.ZeroHash, 0, false, {
+  const recordedPool = ethers.parseEther(prevPoolEth);
+  await setSlot(gameAddr, mapSlot(0n, poolRoot), recordedPool);
+  await (await game.connect(alice).purchase(ethers.ZeroAddress, 200n, 0n, ethers.ZeroHash, 0, false, {
     value: ethers.parseEther("2"),
-  });
+  })).wait();
   await advanceToNextDay();
-  await game.connect(deployer).advanceGame();
-  const requestId = await getLastVRFRequestId(mockVRF);
-  try {
-    await mockVRF.fulfillRandomWords(requestId, WORD);
-  } catch {
-    // advanceGame may consume the fulfillment in-line.
-  }
 
-  let traitReceipt = null;
-  let receipt = null;
-  for (let step = 0; step < 30 && receipt === null; ++step) {
-    const tx = await game.connect(deployer).advanceGame({ gasLimit: EIP7825_TX_GAS_CAP });
-    const r = await tx.wait();
-    if (r.logs.some((l) => l.topics[0] === FLIP_WIN_TOPIC)) traitReceipt = r;
-    if (r.logs.some((l) => l.topics[0] === BATTLE_RUN_TOPIC)) receipt = r;
-  }
-  expect(traitReceipt, "the advance chain never reached the trait draw").to.not.equal(null);
-  expect(receipt, "the advance chain never reached the jackpot battle").to.not.equal(null);
-  expect(receipt.hash, "trait draw and fill must use separate transactions").not.to.equal(traitReceipt.hash);
-  expect(receipt.logs.some((l) => l.topics[0] === FLIP_WIN_TOPIC)).to.equal(false);
-  expect(receipt.logs.some((l) => l.topics[0] === RNG_APPLIED_TOPIC)).to.equal(false);
+  const receipts = [];
+  const advance = async () => {
+    const r = await (await game.connect(deployer).advanceGame({ gasLimit: AUDIT_GAS_CEILING })).wait();
+    expect(r.gasUsed < AUDIT_GAS_CEILING, "every real advance must fit the 11.5M hard cap").to.equal(true);
+    receipts.push(r);
+    return r;
+  };
+  const oldRequest = await getLastVRFRequestId(mockVRF);
+  for (let step = 0; step < 30 && !(await game.rngLocked()); ++step) await advance();
+  expect(await game.rngLocked(), "bounded setup must reach a real request").to.equal(true);
+  const requestId = await getLastVRFRequestId(mockVRF);
+  expect(requestId).to.be.gt(oldRequest);
+  const requestDay = await game.currentDayView();
+  const locked = await battle.jackpotProgress();
+  const expectedAdded = recordedPool * ethers.parseEther("1000") / (ethers.parseEther("0.01") * 200n);
+  expect(locked.added).to.equal(expectedAdded);
+  expect(locked.started).to.equal(false);
+  expect(Number(expectedAdded / ethers.parseEther("10000"))).to.equal(expectedAwards);
+  await (await mockVRF.fulfillRandomWords(requestId, WORD)).wait();
+
+  // Stop on the actual day seal; never hide a fulfillment failure or call a completed day.
+  for (let step = 0; step < 100 && await game.rngLocked(); ++step) await advance();
+  expect(await game.rngLocked(), "bounded advance chain must seal the day").to.equal(false);
+  expect(await game.rngWordForDay(requestDay)).to.equal(WORD);
+  const progress = await battle.jackpotProgress();
+  expect(progress.started).to.equal(true);
+  expect(progress.complete, "all actual battle work must finish").to.equal(true);
+  const final = await battle.jackpotBattleOf(progress.slot);
+  expect(final.round.paidCount, "this witness is explicitly an awarded-only field").to.equal(0n);
+  expect(final.round.awardTarget).to.equal(BigInt(expectedAwards));
+  expect(final.round.drawnUnits).to.equal(BigInt(expectedAwards));
+  expect(final.round.drawnCount).to.equal(BigInt(expectedAwards));
+  expect(final.cursor).to.equal(BigInt(expectedAwards));
 
   const coder = ethers.AbiCoder.defaultAbiCoder();
-  const battleRuns = receipt.logs.filter((l) => l.topics[0] === BATTLE_RUN_TOPIC);
-  const battlePots = receipt.logs.filter((l) => l.topics[0] === BATTLE_POT_TOPIC);
-  expect(
-    battleRuns.every((l) => l.address.toLowerCase() === battleRuns[0]?.address.toLowerCase()),
-    "battle run events came from more than one emitter"
-  ).to.equal(true);
-  const tally = {
-    gas: receipt.gasUsed,
-    traitGas: traitReceipt.gasUsed,
-    traitShares: traitReceipt.logs.filter((l) => l.topics[0] === FLIP_WIN_TOPIC).length,
-    battleRuns: battleRuns.length,
-    battlePaidTotal: battleRuns.reduce((sum, l) => sum + coder.decode(["uint256", "uint256", "uint256", "uint256"], l.data)[3], 0n),
-    battlePot: battlePots.length ? coder.decode(["uint256"], battlePots[0].data)[0] : 0n,
-    rngApplied: receipt.logs.some((l) => l.topics[0] === RNG_APPLIED_TOPIC),
+  const addressTopic = (topic) => ethers.getAddress(ethers.dataSlice(topic, 12)).toLowerCase();
+  const entries = new Map();
+  const settled = new Set();
+  const credits = new Map();
+  const passes = new Map();
+  const traitReceipts = [];
+  const battleReceipts = [];
+  let traitShares = 0;
+  let traitTotal = 0n;
+  let battlePaid = 0n;
+  let pots = 0;
+  const addCredit = (owner, amount) => credits.set(owner, (credits.get(owner) ?? 0n) + amount);
+  const expectedShare = recordedPool * ethers.parseEther("1000") / (ethers.parseEther("0.01") * 400n) / 50n;
+  for (const r of receipts) {
+    const traitLogs = r.logs.filter((l) => l.address.toLowerCase() === gameAddr.toLowerCase() && l.topics[0] === FLIP_WIN_TOPIC);
+    const battleLogs = r.logs.filter((l) => l.address.toLowerCase() === crapsAddr.toLowerCase()
+      && [BATTLE_ENTRY_TOPIC, SETTLED_TOPIC, POT_TOPIC, PASS_TOPIC].includes(l.topics[0]));
+    if (traitLogs.length) traitReceipts.push(r);
+    if (battleLogs.length) battleReceipts.push(r);
+    expect(traitLogs.length === 0 || battleLogs.length === 0, "battle and trait work must use separate transactions").to.equal(true);
+    if (battleLogs.length) expect(r.logs.some((l) => l.topics[0] === RNG_APPLIED_TOPIC), "battle cannot ride the RNG application").to.equal(false);
+    for (const l of traitLogs) {
+      const owner = addressTopic(l.topics[1]);
+      const [amount, index] = coder.decode(["uint256", "uint256"], l.data);
+      const trait = BigInt(l.topics[3]);
+      expect(BigInt(l.topics[2])).to.equal(1n);
+      expect(index).to.be.lt(BigInt(TRAIT_HOLDERS));
+      expect(owner, "trait entry index must resolve to its actual registered owner")
+        .to.equal(holder(0xace000000n + trait * 0x10000n + index + 1n).toLowerCase());
+      expect(traitOwners.has(owner), "trait credit recipient must be a correctly encoded seeded owner").to.equal(true);
+      expect(amount).to.equal(expectedShare);
+      addCredit(owner, amount); traitTotal += amount; ++traitShares;
+    }
+    for (const l of battleLogs) {
+      if (l.topics[0] === BATTLE_ENTRY_TOPIC) {
+        expect(BigInt(l.topics[1])).to.equal(progress.slot);
+        const id = l.topics[2]; const owner = addressTopic(l.topics[3]);
+        expect(fieldOwners.has(owner), "awarded seat must belong to the seeded future cohort").to.equal(true);
+        expect(entries.has(id), "no duplicate seat ids").to.equal(false);
+        expect(coder.decode(["uint256", "uint32"], l.data)[0]).to.equal(1n);
+        entries.set(id, owner);
+      } else if (l.topics[0] === SETTLED_TOPIC) {
+        const id = l.topics[1]; const owner = addressTopic(l.topics[2]);
+        expect(entries.get(id), "settlement keeps the awarded owner").to.equal(owner);
+        expect(settled.has(id), "each seat settles once").to.equal(false); settled.add(id);
+        const paid = coder.decode(["uint256", "uint256"], l.data)[1];
+        addCredit(owner, paid); battlePaid += paid;
+      } else if (l.topics[0] === POT_TOPIC) {
+        expect(BigInt(l.topics[2])).to.equal(progress.slot);
+        const owner = addressTopic(l.topics[3]);
+        expect(entries.get(l.topics[1]), "pot belongs to an actual awarded seat").to.equal(owner);
+        const paid = coder.decode(["uint256"], l.data)[0];
+        addCredit(owner, paid); battlePaid += paid; ++pots;
+      } else {
+        const owner = addressTopic(l.topics[1]);
+        expect(fieldOwners.has(owner)).to.equal(true);
+        const [high, count] = coder.decode(["bool", "uint256"], l.data);
+        const prior = passes.get(owner) ?? [0n, 0n]; prior[high ? 1 : 0] += count; passes.set(owner, prior);
+      }
+    }
+  }
+  expect(traitReceipts.length).to.equal(1);
+  expect(traitShares, "the real trait draw must pay all fifty shares").to.equal(SHARES);
+  expect(entries.size, "exact current awarded field must be built").to.equal(expectedAwards);
+  expect(settled.size, "every awarded seat must really settle").to.equal(expectedAwards);
+  expect(pots, "nonzero pot must pay once").to.equal(1);
+  expect(battlePaid).to.be.gt(0n);
+  expect(passes.size, "this fixed jackpot field pays liquid FLIP without pass awards").to.equal(0);
+  expect(new Set(entries.values()).size, "fixture must retain a substantial fresh-owner field").to.be.gte(Math.floor(expectedAwards * 0.8));
+  expect(battleReceipts.every((r) => r.blockNumber < traitReceipts[0].blockNumber), "the entire battle must finish before the trait draw").to.equal(true);
+  // These wallet families were freshly seeded only in the Game registry. They had no prior
+  // Coinflip/pass balance. Reconcile all published run/pot/share payments to actual ownership.
+  for (const [id, owner] of entries) {
+    const stored = await getSlot(crapsAddr, mapSlot(BigInt(id), betRoot));
+    expect(stored & ((1n << 160n) - 1n), "settled seat retains its actual awarded owner").to.equal(BigInt(owner));
+  }
+  for (const [owner, expected] of credits) expect(await coinflip.coinflipAmount(owner), `actual stake for ${owner}`).to.equal(expected);
+  for (const owner of new Set(entries.values())) {
+    const packed = await getSlot(crapsAddr, mapSlot(BigInt(owner), passRoot));
+    expect(packed & 0xffffffffn, `normal passes for ${owner}`).to.equal(0n);
+    expect((packed >> 32n) & 0xffffffffn, `high passes for ${owner}`).to.equal(0n);
+  }
+  return {
+    gas: receipts.reduce((max, r) => r.gasUsed > max ? r.gasUsed : max, 0n),
+    traitGas: traitReceipts[0].gasUsed,
+    battleGas: battleReceipts.reduce((max, r) => r.gasUsed > max ? r.gasUsed : max, 0n),
+    transactions: receipts.length, battleTransactions: battleReceipts.length,
+    traitShares, traitTotal, awards: entries.size, settled: settled.size,
+    distinctBattleOwners: new Set(entries.values()).size, battlePaid,
   };
-  const recipients = new Set([
-    ...traitReceipt.logs.filter((l) => l.topics[0] === FLIP_WIN_TOPIC).map((l) => l.topics[1]),
-    ...receipt.logs.filter((l) => l.topics[0] === BATTLE_RUN_TOPIC || l.topics[0] === BATTLE_POT_TOPIC).map((l) => l.topics[2]),
-  ]);
-  tally.distinct = recipients.size;
-  return tally;
 }
 
 function report(label, t) {
-  const soft = t.gas < SOFT_TARGET ? `under 10M by ${SOFT_TARGET - t.gas}` : `OVER 10M by ${t.gas - SOFT_TARGET}`;
-  console.log(
-    `      [COIN-ADV ${label}] trait shares=${t.traitShares}, jackpot battle runs=${t.battleRuns}, ` +
-      `jackpot battle paid total=${t.battlePaidTotal}, jackpot battle pot=${t.battlePot}, ` +
-      `distinct recipients=${t.distinct}, word applied in this tx=${t.rngApplied}`
-  );
-  console.log(
-    `      [COIN-ADV-GAS ${label}] ${t.gas} gas; headroom to ${EIP7825_TX_GAS_CAP} = ` +
-      `${EIP7825_TX_GAS_CAP - t.gas}; ${soft}`
-  );
+  console.log(`      [COIN-ADV ${label}] ${JSON.stringify(t, (_, value) => typeof value === "bigint" ? value.toString() : value)}`);
+  console.log(`      [COIN-ADV-GAS ${label}] max=${t.gas}; headroom to ${AUDIT_GAS_CEILING}=${AUDIT_GAS_CEILING - t.gas}; soft-target headroom=${SOFT_TARGET - t.gas}`);
 }
 
-function expectTraitDrawAndSaturatedBattle(t) {
-  expect(t.traitShares, "the trait draw paid all 50 shares").to.equal(SHARES);
-  expect(t.battleRuns, "the jackpot battle ran fewer than all 50 walked wallets").to.equal(SHARES);
-  // The trait draw samples with replacement (a stray repeat is allowed); the battle's walk is exact.
-  expect(t.distinct, "coin-draw recipients are distinct cold wallets").to.be.gte(98);
-  expect(t.traitGas < EIP7825_TX_GAS_CAP, "trait stage exceeds cap").to.equal(true);
-  expect(t.gas < EIP7825_TX_GAS_CAP, "battle stage broke the EIP-7825 ceiling").to.equal(true);
-}
-
-describe("JackpotCoinAdvanceGas — level-1 FLIP draws in separate advanceGame transactions", function () {
-  after(function () {
-    restoreAddresses();
-  });
-
-  it("50 trait shares + the battle's saturated 50-run battle (B = 130,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
-    const t = await measureLevelOneAdvance("520");
-    report("130,000 FLIP", t);
-    expectTraitDrawAndSaturatedBattle(t);
-  });
-
-  it("50 trait shares + the battle's saturated 50-run battle (B = 1,250,000 FLIP per draw) fit the EIP-7825 ceiling", async function () {
-    const t = await measureLevelOneAdvance("5000");
-    report("1,250,000 FLIP", t);
-    expectTraitDrawAndSaturatedBattle(t);
-  });
+describe("JackpotCoinAdvanceGas — current staged battle and separate level-one trait draw", function () {
+  this.timeout(300_000);
+  after(function () { restoreAddresses(); });
+  for (const [pool, awards] of [["520", 26], ["5000", 250], ["10000", 500]]) {
+    it(`fully settles ${awards} awarded seats and 50 trait shares below the 11.5M hard cap (${pool} ETH recorded pool)`, async function () {
+      report(`${pool} ETH / ${awards} awards`, await measureLevelOneAdvance(pool, awards));
+    });
+  }
 });

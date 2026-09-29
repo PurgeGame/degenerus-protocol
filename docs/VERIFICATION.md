@@ -1,5 +1,7 @@
 # Build and verification
 
+Evidence rows below refer to their stated revisions, not automatically to the current tree.
+
 ## Reproduce in a clean checkout
 
 Use the lockfiles, pinned compiler configuration and submodules. CI pins Node 20
@@ -10,53 +12,116 @@ snapshot hashes first, before anything patches addresses. The submodule step fet
 
 ```sh
 sha256sum -c docs/audit/source-sha256.txt
+python3 scripts/audit-snapshot.py
 npm ci
 git submodule update --init --recursive
 ```
 
-Both test fixtures rewrite `contracts/ContractAddresses.sol`. The grouped Foundry
-runner saves the exact original bytes and restores them in `finally`, including on
-failure or Ctrl-C. Hardhat still requires a disposable checkout. Do not run both
-runners against the same source directory or overwrite another runner's pins.
+The snapshot checker also detects missing scope entries and new or changed test
+inputs. After recording the changed revision's verification status, maintainers
+can refresh its identity with `python3 scripts/audit-snapshot.py --write`.
+Refreshing hashes does not run tests or change a failing result into a pass.
+
+Both test fixtures rewrite `contracts/ContractAddresses.sol`. The maintained
+Foundry and Hardhat runners save the exact original bytes and restore them in
+`finally`, including on failure or Ctrl-C. Use separate disposable checkouts for
+concurrent campaigns; do not overwrite another runner's pins. Raw Hardhat/npm
+commands bypass that restoration and should only run in a disposable checkout.
 
 ### Foundry
 
 The full test tree exceeds the practical memory budget of a single compilation.
-The committed runner discovers all Solidity tests, rejects unassigned test files,
-and runs seven bounded compile units with a separate Foundry cache. Helper sources
-remain available to every group. It preserves the configured 1,000 fuzz runs and
-256 invariant runs at depth 128; splitting compilation does not lower those limits.
+The runner discovers all Solidity tests, rejects unassigned test files,
+and keeps seven logical groups with a separate Foundry cache. The integration/gas
+group defaults to batches of at most 20 source roots; the other six groups retain
+their existing boundaries. `--list` reports the current physical batches.
+Helper sources remain available to every group. Splitting compilation does not
+lower the configured 1,000 fuzz runs or global 256 invariant runs at depth 128.
+Source-specific overrides still apply: `AdvanceLiveness` intentionally uses 64 × 100
+by default and now explicitly restores 1,000 × 256 in the deep profile. Verify the
+actual run/call metrics; setting a profile alone did not override its inline defaults.
 
 ```sh
 make test-foundry
 # Inspect or select compile groups:
 python3 scripts/test-foundry-groups.py --list
 python3 scripts/test-foundry-groups.py --group integration-gas
+# Use a smaller limit when another process is consuming memory:
+python3 scripts/test-foundry-groups.py --group integration-gas --max-files 5
+# Cold transaction isolation used by the final gas campaign and CI:
+FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group integration-gas --max-files 5 --threads 1
 # A focused compile rather than just a post-compilation test filter:
 python3 scripts/test-foundry-groups.py --file test/repro/TerminalAffiliateKnownWord.t.sol
 ```
 
-Raw logs and exact file lists default to `.audit-test-logs/foundry`; `summary.json`
-records each exit code and result. `--log-dir` changes the evidence directory.
-Unknown options are forwarded to `forge test`. CI uses the same grouped runner.
+Raw logs and exact file lists default to `.audit-test-logs/foundry`. Each invocation
+gets a unique directory containing commands, tool version, relevant environment,
+actual patched input hashes (including reference `.hex` bytecode), logs and a summary. The top-level `summary.json`
+appends results across invocations, so a retry does not erase earlier failures.
+Reported counts are executions: imported helper suites can repeat between batches.
+Missing totals, zero executed suites/tests, a reported test failure, source drift,
+or a failing process all fail the runner. SIGINT/SIGTERM stop its child process group
+before restoring address pins. `--log-dir` changes the evidence directory.
+Unknown options are forwarded to `forge test`. CI runs the driver control tests and
+preserves Foundry evidence even on failure. `make test-assurance-tools` runs the
+control tests locally without compiling Solidity.
+
+CI separates the six ordinary groups (at most ten roots, one thread, isolation
+disabled) from integration/gas (at most five roots, one thread, isolation enabled).
+The latter preserves cold transaction boundaries used by the recorded gas checks.
+The unqualified local target uses your environment; pass the explicit settings
+above when reproducing cold gas measurements.
+
+Snapshot checks verify archive checksums too, including during a source-hash refresh.
+CI uses `npm ci` and fails if the lockfile cannot be installed.
 
 ### Hardhat
 
 ```sh
 make test-hardhat
-npm run test:stat
-git checkout -- contracts/ContractAddresses.sol
+# Inspect the same file order used by hardhat.config.js:
+python3 scripts/test-hardhat-groups.py --list
+# Select one or more files; additional --file arguments are supported:
+python3 scripts/test-hardhat-groups.py --file test/stat/SurfaceRegression.test.js
 ```
 
-`make test-hardhat` runs the eleven `check-*` gates and then `npx hardhat test` over the
-whole tree; that is the figure in the evidence table. `npm test` runs only the
+`make test-hardhat` runs the eleven `check-*` gates and then the maintained Python
+runner over the full configured tree. The default is one test file per process;
+`--max-files` changes the batch size. Larger shared EDR processes exhausted the
+recorded 6 GiB limit, even when individual files passed. The liveness fixture now
+caches its expensive common public setup without removing assertions.
+
+Evidence defaults to `.audit-test-logs/hardhat` with append-safe unique histories.
+A Node preload captures actual standard-JSON compiler inputs before compilation,
+including fixture-triggered clean/rebuilds and failed compiles. It records compiler
+and API-module hashes, checks source contents against the run's expected identity,
+and identifies cached inputs separately from fresh compiler invocations. Missing
+or ambiguous totals, no passing tests, failures, source drift or process errors fail
+the runner. Controls include a transient source change followed by restoration;
+checking only the final files would miss that case.
+
+Historical rows explicitly identify their command; `npm test` runs only the
 unit/integration/deploy/access/edge globs plus three gas files and reports fewer tests.
 `npm run test:stat` needs `python3` on PATH: two of its suites spawn
 `scripts/data/derive_5_tables.py` (stdlib-only) as the canonical generator of the
-Degenerette payout constants. It runs fully green at the current revision: the `v36.0 SURF-03`
-check now pins the moved remainder roll, and `STAT-03` (the legacy empty-bucket skip rate) is
-skipped as superseded by the craps / FLIP split and the future fill draw. Earlier revisions
-below record those two as accepted reds.
+Degenerette payout constants. Historical September 27 runs passed their enabled
+statistical tests: the `v36.0 SURF-03` check pins the moved remainder roll, and
+`STAT-03` (the legacy empty-bucket skip rate) remains skipped as superseded by the
+craps / FLIP split and future fill draw. Earlier results do not certify subsequent fixes.
+
+### Deep and symbolic checks
+
+```sh
+FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group invariants --max-files 5 --threads 1
+```
+
+The scheduled/manual CI jobs run deep invariants independently from Halmos. A
+symbolic timeout therefore does not prevent the invariant job from starting.
+Halmos is pinned to 0.3.3; its configured campaign currently has five unresolved
+timeouts and must still fail. Log uploads use `always()` and the piped symbolic
+command enables `pipefail`. Source annotations and assertion/loop bounds are part
+of the proof scope, not evidence of universal EVM correctness. The Foundry installer
+still selects a moving nightly; record the exact version used with each run.
 
 ### Static analysis
 
@@ -71,7 +136,7 @@ cargo install aderyn   # or: npm install -g @cyfrin/aderyn
 aderyn . -o aderyn-report.md
 ```
 
-The current local Slither run explicitly selected `--compile-force-framework hardhat
+The historical local Slither run explicitly selected `--compile-force-framework hardhat
 --ignore-compile` after compilation; this avoids auto-selecting Foundry without its
 required build-info output.
 
@@ -112,7 +177,7 @@ Use the `CrapsGasTest`, `CrapsKeeperBudgetGasTest`, `RoundDrainChunkGas` and
 `test/gas/Advance*Gas` suites for reachable worst cases. Include finalizing seats, cold state and combined
 advance calls. Test gas caps must not be raised simply to make a regression pass.
 
-## Current evidence — 2026-09-27, one daily jackpot battle for paid and awarded entries
+## Historical evidence — 2026-09-27, one daily jackpot battle for paid and awarded entries
 
 On top of `9ee8986d`. Paid and awarded jackpot entries play one battle on the craps table:
 - The daily request locks the paid field and the Added allocation.

@@ -6,44 +6,15 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
-/// @title V56SecUnmanipulable -- the SEC-01 PRIMARY proof: the v56.0 afking system (buy + open) is
-///        unmanipulable via strategic sub/unsub churn. Both a stateful churn-fuzz invariant AND all
-///        named repros (CONTEXT D-02) against the FROZEN v56 subject.
-///
-/// @notice The shipped streak is COMPUTE-ON-READ with decay — there is NO settle day. `_afkingStreak`
-///   (GameAfkingModule.sol:778) returns 0 when `covered + 1 < currentDay` (decay-on-read: miss one funded
-///   day and the streak is gone), else `_streakBaseOf(sub) + (covered - afkingStartDay)`. The per-day reward
-///   is the `pendingFlip` accumulator (100 whole FLIP / delivered buy, the slot-0 quest reward) pulled
-///   via the permissionless CEI `claimAfkingFlip` (zero-before-credit at :1277). The affiliate base accrues
-///   7%-of-spend whole-FLIP per delivered buy and PERSISTS across unsub (:315) — drained AFFILIATE-only,
-///   read-and-zero, at `drainAffiliateBase` (:1300).
-///
-/// @notice The delivery model the harness exercises: each delivered day is a STAGE buy (stamps the pending
-///   box + accrues pendingFlip/affiliateBase + advances the covered high-water) FOLLOWED BY an open (the
-///   no-orphan guard, :892, skips a sub with a pending unopened box, so the box must be opened before the
-///   next day's buy). Strategic churn = unsub/re-sub/claim sequenced around that buy+open.
-///
-/// @notice The designed-against vectors (each a legible "this exact vector is closed" regression):
-///   1. Affiliate re-claim churn — sub/unsub/re-sub neither forfeits nor duplicates the accrued base; the
-///      total drained EQUALS honest continuous accrual.
-///   2. Streak gap dodge — a gap day earns nothing (the base day shifts forward, the streak freezes; a live
-///      run never resets); the streak advances ONLY on delivered days, and a sub-ending finalize hands the
-///      earned streak back intact (anchored at the day before the sub ended).
-///   3. pendingFlip double-claim CEI idempotency (Task 2).
-///   4. The surviving finalize hooks write the decay-applied streak BEFORE the slot delete (Task 2). The
-///      membership credential is the AFKing Subscription Token (sub <=> coin), enforced only at subscribe (NoCoin) and at
-///      the coin's SeatInUse seat lock; there is no per-level validity horizon and no crossing
-///      refresh/evict branch to hook into, so the former pass-eviction finalize hook is gone (the
-///      "no eviction on a level crossing" property it stood for is proven directly by
-///      AfKingSubscription.t.sol's `testPasslessCoinHolderProcessedNoEviction`).
-///
-/// @dev Reuses the funded-sub + seated + new-day STAGE harness ported from the v56-migrated
-///   V55SetMutationOpenE / V55RevertFreeEvCap (the fulfill-first `_settleGame`/`_settleClean` from
-///   V56AfkingGasMarginal, an accumulating-`t` warp so the simulated day advances across a multi-day loop).
-///   Copies the v56 Sub-slot offset block + the SEC-01 probe accessors VERBATIM from V56AfkingGasMarginal
-///   (NOT the stale v55 offsets). Seeded-fuzz deterministic (`foundry.toml [fuzz] seed=0xdeadbeef`); the
-///   assertions are an unseeded-invariant subset of the seeded closure (Pitfall 5). Test-only: ZERO
-///   contracts/*.sol mutation.
+/// @title Subscription churn accounting and streak regressions
+/// @notice Claim/cancel/upsert receipts are measured from wallet, claimable and next-day stake
+///      deltas, including implicit payouts. Paid plus pending rewards reconcile to actual funded
+///      deliveries; each affiliate recipient is checked separately. Honest and churn controls
+///      share a timeline, while random lootbox returns and later coinflip outcomes are outside
+///      the subscription-principal comparison. Other cases cover streak handback, no-orphan
+///      processing, the affiliate-only drain and claim idempotency.
+/// @dev Uses real funded subscriptions and production buy/open/claim/cancel paths. Storage
+///      probes read the current packed Sub layout. Only test fixtures grant membership seats.
 contract V56SecUnmanipulable is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
@@ -82,70 +53,38 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     // =========================================================================
-    // Repro 1 — affiliate re-claim churn (affiliateBase persists: forfeit-nothing-gain-nothing)
+    // Repro 1 — affiliate re-claim churn (automatic payments conserve earned principal)
     // =========================================================================
 
-    /// @notice A churning sub (buy -> unsub -> re-sub -> buy ...) accrues EXACTLY the same total affiliateBase
-    ///         as an honest continuous sub over the same number of delivered buys.
-    /// @dev DEF-380-04-FC4 (finding-candidate routed to the council, 382+ PRIME/ASYMMETRY sweep).
-    ///      SKIPPED against the frozen subject c4d48008: this test's stated model — "affiliateBase PERSISTS
-    ///      byte-identical across the unsub tombstone; the cancel never touches affiliateBase/pendingFlip"
-    ///      — is contradicted by the FROZEN cancel branch. At c4d48008 the dailyQuantity==0 cancel path
-    ///      AUTO-CLAIMS before tombstoning (GameAfkingModule:349-369): it pays the sub its pendingFlip
-    ///      (zeroed at :355) and DRAINS affiliateBase to the upline tree via
-    ///      IDegenerusAffiliate.claim(drainOne) (:367-369), so `_affiliateBaseOf(churner)` reads 0 right
-    ///      after the unsub (observed 0 != 140). The anti-manipulation PROPERTY the test targets
-    ///      (no positive-EV from churn) plausibly still holds — the base is paid OUT to the upline on each
-    ///      cancel rather than persisted in-slot, so a churner cannot out-accrue an honest sub — but
-    ///      proving it now requires tracking the drained-to-upline total across both arms (the affiliate
-    ///      claim/credit events), a structural rewrite of the churn-accounting model against changed cancel
-    ///      semantics, NOT a stale slot/event that can be mechanically re-pointed. Whether drain-on-cancel
-    ///      preserves the no-farm invariant is exactly the asymmetry the council should adjudicate.
-    ///      Recorded in the v62 regression baseline (repository history), "Known behavior-divergence". The contract is NOT modified.
+    /// @notice Compare actual paid-plus-pending obligations on one timeline. Cancellation pays
+    ///      both ledgers automatically; re-subscribing on that day must neither buy nor pay twice.
     function testAffiliateReClaimChurnEqualsHonestContinuous() public {
-        vm.skip(true); // DEF-380-04-FC4 — frozen cancel drains affiliateBase to upline (not persist); council adjudicates the no-farm property
-        address honest = makeAddr("aff_honest");
-        address churner = makeAddr("aff_churn");
-        _grantSeat(honest);
-        _grantSeat(churner);
-
-        uint256 D = 3;
-
-        // HONEST arm: one continuous sub, deliver D buys (buy + open each day).
-        _fundPool(honest, 50 ether);
-        _subscribeLootbox(honest, 1);
-        for (uint256 d; d < D; d++) {
-            _deliverDay(_singleton(honest), uint256(keccak256(abi.encode("affH", d))) | 1);
-        }
-        uint256 honestBase = _affiliateBaseOf(honest);
-        assertGt(honestBase, 0, "honest: base accrued (non-vacuous)");
-
-        // CHURN arm: deliver D buys, but unsub immediately after each buy and re-sub before the next; the
-        // running base must SURVIVE every unsub tombstone (the same slot is re-used so the accrued base is
-        // never deleted between cycles — the persist property).
-        _fundPool(churner, 50 ether);
-        _subscribeLootbox(churner, 1);
-        for (uint256 d; d < D; d++) {
-            _deliverDay(_singleton(churner), uint256(keccak256(abi.encode("affC", d))) | 1);
-            uint32 baseBeforeUnsub = _affiliateBaseOf(churner);
-            assertGt(baseBeforeUnsub, 0, "churn: base accrued by the delivered buy (non-vacuous)");
-
-            // Unsub (tombstone) AFTER the buy — the base must survive the tombstone byte-identically.
-            vm.prank(churner);
-            game.subscribe(address(0), false, false, 0, address(0));
-            assertEq(_affiliateBaseOf(churner), baseBeforeUnsub, "unsub did NOT flush affiliateBase (persists across unsub)");
-
-            // Re-subscribe (re-uses the in-place slot, base preserved) for the next day's delivery.
-            if (d + 1 < D) {
-                _fundPool(churner, 50 ether);
-                _subscribeLootbox(churner, 1);
-                assertEq(_affiliateBaseOf(churner), baseBeforeUnsub, "re-sub did NOT reset affiliateBase (persists across re-sub)");
+        ChurnLedger memory honest = _newChurnLedger("aff_honest");
+        ChurnLedger memory churn = _newChurnLedger("aff_churn");
+        _observeChurnAction(honest, 0);
+        _observeChurnAction(churn, 0);
+        for (uint256 d; d < 3; ++d) {
+            _deliverLedgerDay(honest, churn, uint256(keccak256(abi.encode("aff", d))) | 1);
+            assertGt(_affiliateBaseOf(churn.player), 0, "cancel must drain an earned affiliate obligation");
+            _observeChurnAction(churn, 2);
+            _observeChurnAction(churn, 1); // auto-paid pendingFlip cannot be claimed again
+            _observeChurnAction(churn, 3); // duplicate sub IDs cannot reclaim the auto-paid base
+            if (d != 2) {
+                uint256 bought = churn.delivered;
+                _observeChurnAction(churn, 0);
+                assertEq(churn.delivered, bought, "same-day re-subscribe cannot manufacture another buy");
             }
         }
-
-        // FORFEIT-NOTHING-GAIN-NOTHING: the churner's total accrued base EQUALS the honest continuous
-        // accrual over the same delivered-buy count — churn manufactured no extra base and lost none.
-        assertEq(_affiliateBaseOf(churner), honestBase, "churn total accrued base == honest continuous accrual (no positive-EV from churn)");
+        _observeChurnAction(honest, 1);
+        _observeChurnAction(honest, 3);
+        _assertChurnLedger(honest);
+        _assertChurnLedger(churn);
+        assertGt(churn.playerPaid, 0, "cancellation really paid the subscriber");
+        assertGt(churn.affiliatePaid, 0, "cancellation really paid all uplines");
+        assertEq(churn.delivered, honest.delivered, "controls received the same paid deliveries");
+        assertEq(churn.spent, honest.spent, "controls paid the same funding cost");
+        assertEq(churn.playerPaid, honest.playerPaid, "churn preserves total earned slot-0 principal");
+        assertEq(churn.affiliatePaid, honest.affiliatePaid, "churn preserves total earned affiliate principal");
     }
 
     /// @notice The affiliateBase drain entrypoint is AFFILIATE-only: a non-AFFILIATE caller can never drain
@@ -268,74 +207,176 @@ contract V56SecUnmanipulable is DeployProtocol {
     // Stateful churn-fuzz invariant — no churn sequence beats honest continuous accrual
     // =========================================================================
 
-    /// @notice Drive a random {sub, unsub, buy, claim, open} churn sequence and assert two global invariants:
-    ///         (a) the cumulative FLIP the churner can pull (already-claimed + still-pending) is <= the
-    ///             honest continuous accrual over the SAME number of delivered buys (100 whole FLIP per
-    ///             delivered buy; churn can only DELAY or LOSE a day, never manufacture one);
-    ///         (b) the effective streak span (covered - afkingStartDay) never exceeds the churner's
-    ///             funded-delivered-day count (it credits no non-delivered day).
-    ///         The churner and an honest control run side-by-side through the same day sequence; per day the
-    ///         random byte chooses whether the churner unsubs/re-subs/claims around that day's buy+open.
+    /// @notice Measure every claim, cancel and upsert using actual asset deltas. Principal
+    ///      accounting is per funded delivery: missed buys and lootbox/coinflip outcome variance
+    ///      are not manufactured rewards, and a final balance after different claim days is not
+    ///      a valid comparison of subscription accrual.
     function testFuzzChurnNeverBeatsHonestContinuous(uint16 actions) public {
-        uint256 D = 4;
-        address honest = makeAddr("fz_honest");
-        address churner = makeAddr("fz_churn");
-        _grantSeat(honest);
-        _grantSeat(churner);
-        _fundPool(honest, 80 ether);
-        _subscribeLootbox(honest, 1);
-        _fundPool(churner, 80 ether);
-        _subscribeLootbox(churner, 1);
-
-        uint256 churnClaimed; // whole FLIP pulled out of the churner's pendingFlip via claimAfkingFlip
-
-        for (uint256 d; d < D; d++) {
-            // Deliver the day to both arms: STAGE buy + open (the honest control always delivers; the churner
-            // delivers only if it currently has an in-set sub).
-            address[] memory both = _subscriberIndexOf(churner) != 0 ? _pair(honest, churner) : _singleton(honest);
-            _deliverDay(both, uint256(keccak256(abi.encode("fz", actions, d))) | 1);
-
-            // The churner's random actions AROUND the day's buy+open: nibble per day.
-            uint8 act = uint8((actions >> (d * 4)) & 0x0F);
-            if ((act & 0x1) != 0 && _subscriberIndexOf(churner) != 0) {
-                churnClaimed += _pendingFlipOf(churner);
-                game.claimAfkingFlip(_singleton(churner)); // zeroes pendingFlip; a re-claim later finds 0
-            }
-            if ((act & 0x2) != 0 && _subscriberIndexOf(churner) != 0) {
-                vm.prank(churner); // unsub (tombstone) — base + pendingFlip persist
-                game.subscribe(address(0), false, false, 0, address(0));
-            }
-            if ((act & 0x4) != 0 && _subscriberIndexOf(churner) == 0) {
-                _fundPool(churner, 80 ether);
-                _subscribeLootbox(churner, 1); // re-sub fresh + re-fund
+        ChurnLedger memory honest = _newChurnLedger("fz_honest");
+        ChurnLedger memory churn = _newChurnLedger("fz_churn");
+        _observeChurnAction(honest, 0);
+        _observeChurnAction(churn, 0);
+        for (uint256 d; d < 4; ++d) {
+            _deliverLedgerDay(honest, churn, uint256(keccak256(abi.encode("fz", actions, d))) | 1);
+            uint8 act = uint8(actions >> (d * 4)) & 15;
+            if (act & 1 != 0) _observeChurnAction(churn, 1);
+            if (act & 2 != 0 && _dailyQtyOf(churn.player) != 0) _observeChurnAction(churn, 2);
+            if (act & 4 != 0) _observeChurnAction(churn, 0); // active upsert also auto-pays pendingFlip
+            if (act & 8 != 0) _observeChurnAction(churn, 3);
+            _assertChurnLedger(honest);
+            _assertChurnLedger(churn);
+            if (_dailyQtyOf(churn.player) != 0) {
+                uint32 covered = _afkCoveredOf(churn.player);
+                uint32 start = _afkingStartOf(churn.player);
+                assertLe(start, covered, "run start cannot exceed delivered high-water");
+                assertLe(covered, game.currentDayView(), "streak cannot cover a future day");
             }
         }
+        _observeChurnAction(honest, 1);
+        _observeChurnAction(honest, 3);
+        _observeChurnAction(churn, 1);
+        _observeChurnAction(churn, 3);
+        _assertChurnLedger(honest);
+        _assertChurnLedger(churn);
+        assertGt(churn.delivered, 0, "the comparison contains funded churn deliveries");
+        assertEq(churn.playerPaid * honest.delivered, honest.playerPaid * churn.delivered,
+            "claim/cancel/upsert timing cannot manufacture slot-0 principal per paid buy");
+        assertEq(churn.affiliatePaid * honest.spent, honest.affiliatePaid * churn.spent,
+            "churn cannot manufacture affiliate principal per funded ETH");
+        assertLe(churn.delivered, 5, "at most one paid buy per each of five participating days");
+    }
 
-        // (a) NO MANUFACTURING: a sub accrues at most ONE slot-0 (100 FLIP) per day it participates,
-        //     each backed by an mp-debited paid buy — the same-day guard caps a sub at one buy/day, and a
-        //     cancel tombstone only reclaims at the NEXT advance (never mid-day), so churn can never stack
-        //     two buys onto one day. The churner participated on at most (D+1) distinct days (the join-day
-        //     cover-buy + the D delivered days), so its total reachable FLIP is bounded by (D+1)·100. The
-        //     OLD "churn <= honest absolute" bound was wrong: the honest control's lootbox boxes can be
-        //     open-throttle-skipped (a paid day it simply doesn't buy), so honest can accrue LESS — that is
-        //     honest losing a buy, not the churner gaining a free one (per-ETH they are identical). Each
-        //     reachable total is a whole-FLIP multiple (no fractional manufactured credit).
-        uint256 churnReachable = churnClaimed + _pendingFlipOf(churner);
-        assertLe(churnReachable, (D + 1) * SLOT0_FLIP_PER_BUY, "no sub exceeds one slot-0 (100 FLIP) per participating day (no manufacturing)");
-        assertEq(churnReachable % SLOT0_FLIP_PER_BUY, 0, "churn reachable is a whole-FLIP multiple of the 100/paid-buy reward (no manufactured fractional credit)");
+    struct ChurnLedger {
+        address player;
+        address[3] upline;
+        address relayer;
+        uint256 delivered;
+        uint256 lastDay;
+        uint256 spent;
+        uint256 affiliateEarned;
+        uint256 playerPaid;
+        uint256 affiliatePaid;
+    }
 
-        // (b) The compute-on-read streak credits no non-delivered / non-existent day. The streak inputs are
-        //     `afkingStartDay` and the `covered` high-water (`_afkingStreak = base + (covered - start)`); the
-        //     contract advances `covered` ONLY on a debit-delivered day and never past the current day. So
-        //     for the churner: afkingStartDay <= covered <= currentDay — the span never reaches into a
-        //     non-delivered future day, and the realizable FLIP (bound (a)) caps the economic value.
-        if (_subscriberIndexOf(churner) != 0) {
-            uint32 cov = _afkCoveredOf(churner);
-            uint32 st = _afkingStartOf(churner);
-            uint32 today = game.currentDayView();
-            assertLe(uint256(st), uint256(cov), "afkingStartDay <= covered (the run base never exceeds its delivered high-water)");
-            assertLe(uint256(cov), uint256(today), "covered <= currentDay (the streak credits no non-existent future day)");
+    function _newChurnLedger(string memory name) private returns (ChurnLedger memory ledger) {
+        ledger.player = makeAddr(name);
+        ledger.relayer = makeAddr(string.concat(name, "_relayer"));
+        for (uint256 i; i < 3; ++i) ledger.upline[i] = makeAddr(string.concat(name, vm.toString(i)));
+        vm.prank(ledger.player);
+        affiliate.referPlayer(bytes32(uint256(uint160(ledger.upline[0]))));
+        vm.prank(ledger.upline[0]);
+        affiliate.referPlayer(bytes32(uint256(uint160(ledger.upline[1]))));
+        vm.prank(ledger.upline[1]);
+        affiliate.referPlayer(bytes32(uint256(uint160(ledger.upline[2]))));
+        _grantSeat(ledger.player);
+        _fundPool(ledger.player, 80 ether);
+    }
+
+    /// @dev Read all spendable FLIP plus the not-yet-settled next-day stake. Observations bracket
+    ///      one transaction at one timestamp, so intervening coinflip outcomes cannot pollute them.
+    function _flipAssets(address who) private view returns (uint256) {
+        return coin.balanceOfWithClaimable(who) + coinflip.coinflipAmount(who);
+    }
+
+    function _ledgerRecipient(ChurnLedger memory ledger, uint256 i) private pure returns (address) {
+        return i == 0 ? ledger.player : i == 4 ? ledger.relayer : ledger.upline[i - 1];
+    }
+
+    /// @dev 0 subscribe/upsert, 1 player claim, 2 cancel (both automatic claims), 3 affiliate
+    ///      claim with repeated IDs. Exact recipient deltas also reject payment to the relayer.
+    function _observeChurnAction(ChurnLedger memory ledger, uint8 action) private {
+        uint256[5] memory beforeAssets;
+        uint256[5] memory beforePresale;
+        for (uint256 i; i < 5; ++i) {
+            address recipient = _ledgerRecipient(ledger, i);
+            beforeAssets[i] = _flipAssets(recipient);
+            beforePresale[i] = game.presaleBoxCreditOf(recipient);
         }
+        bool presale = game.lootboxPresaleActiveFlag();
+        uint256 fundingBefore = game.afkingFundingOf(ledger.player);
+        uint256 price = game.mintPrice();
+        uint256 playerOwed = action == 3 ? 0 : uint256(_pendingFlipOf(ledger.player)) * 1 ether;
+        uint256 base = action == 2 || action == 3 ? _affiliateBaseOf(ledger.player) : 0;
+        // Upserting a tombstone has nothing pending; an active upsert pays under its old terms.
+        if (action == 0 && _dailyQtyOf(ledger.player) == 0) playerOwed = 0;
+        vm.recordLogs();
+        if (action == 0 || action == 2) {
+            vm.prank(ledger.player);
+            game.subscribe(address(0), false, false, action == 0 ? 1 : 0, address(0));
+        } else if (action == 1) {
+            vm.prank(ledger.relayer);
+            game.claimAfkingFlip(_pair(ledger.player, ledger.player));
+        } else {
+            vm.prank(ledger.relayer);
+            affiliate.claim(_pair(ledger.player, ledger.player));
+        }
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256[5] memory expected;
+        expected[0] = playerOwed;
+        expected[2] = (base * 20 / 100) * 1 ether;
+        expected[3] = (base * 5 / 100) * 1 ether;
+        expected[1] = base * 1 ether - expected[2] - expected[3];
+        for (uint256 i; i < 5; ++i) {
+            uint256 received = _flipAssets(_ledgerRecipient(ledger, i)) - beforeAssets[i];
+            assertEq(received, expected[i], "all automatic/explicit payments must reach the exact entitled recipient");
+            uint256 presaleDelta = game.presaleBoxCreditOf(_ledgerRecipient(ledger, i)) - beforePresale[i];
+            assertEq(presaleDelta, i == 0 && presale ? playerOwed * 0.0025 ether / (100 ether) : 0,
+                "automatic settlement grants presale credit once and only to the subscriber");
+            if (i == 0) ledger.playerPaid += received;
+            else if (i < 4) ledger.affiliatePaid += received;
+        }
+        _accountDeliveries(ledger, logs, fundingBefore, price);
+        _assertChurnLedger(ledger);
+    }
+
+    function _deliverLedgerDay(ChurnLedger memory honest, ChurnLedger memory churn, uint256 word) private {
+        uint256 honestFunding = game.afkingFundingOf(honest.player);
+        uint256 churnFunding = game.afkingFundingOf(churn.player);
+        uint256 price = game.mintPrice();
+        vm.recordLogs();
+        _deliverDay(_pair(honest.player, churn.player), word);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(game.mintPrice(), price, "fixture keeps a stable price while comparing paid delivery units");
+        _accountDeliveries(honest, logs, honestFunding, price);
+        _accountDeliveries(churn, logs, churnFunding, price);
+        _assertChurnLedger(honest);
+        _assertChurnLedger(churn);
+    }
+
+    function _accountDeliveries(ChurnLedger memory ledger, Vm.Log[] memory logs, uint256 fundingBefore, uint256 price)
+        private
+    {
+        bytes32 delivered = keccak256("AfkingDelivered(address,uint256)");
+        bytes32 cover = keccak256("LootBoxBuy(address,uint48,uint256)");
+        uint256 cost;
+        uint256 count;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2
+                || address(uint160(uint256(logs[i].topics[1]))) != ledger.player) continue;
+            if (logs[i].topics[0] == cover) {
+                cost += abi.decode(logs[i].data, (uint256));
+            } else if (logs[i].topics[0] == delivered) {
+                uint256 packed = abi.decode(logs[i].data, (uint256));
+                uint256 day = uint24(packed >> 128);
+                assertGt(day, ledger.lastDay, "a delivered buy cannot repeat an already-funded day");
+                ledger.lastDay = day;
+                cost += uint128(packed);
+                ++count;
+            }
+        }
+        assertEq(fundingBefore - game.afkingFundingOf(ledger.player), cost,
+            "delivery ledger is backed by actual ETH funding debits");
+        assertEq(cost, count * price, "one-unit lootbox subscription buys exactly one priced unit per delivery");
+        ledger.delivered += count;
+        ledger.spent += cost;
+        ledger.affiliateEarned += (cost * 1000 / price * 7 / 100) * 1 ether;
+    }
+
+    function _assertChurnLedger(ChurnLedger memory ledger) private view {
+        assertEq(ledger.playerPaid + uint256(_pendingFlipOf(ledger.player)) * 1 ether,
+            ledger.delivered * SLOT0_FLIP_PER_BUY * 1 ether, "paid plus pending includes every automatic player payment");
+        assertEq(ledger.affiliatePaid + uint256(_affiliateBaseOf(ledger.player)) * 1 ether,
+            ledger.affiliateEarned, "paid plus pending includes every automatic upline payment");
     }
 
     // =========================================================================

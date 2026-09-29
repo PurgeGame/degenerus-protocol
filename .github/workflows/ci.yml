@@ -28,6 +28,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Audit snapshot identity and assurance runner tests
+        run: make check-audit-snapshot test-assurance-tools
+
       # via-IR + optimizer_runs=1000 over the full protocol peaks above the ~7GB
       # hosted-runner RAM, so forge build was being OOM-killed (exit 143) mid-compile.
       # Add swap to give the compile headroom; it slows but no longer dies.
@@ -51,7 +54,7 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Install npm deps (OpenZeppelin, etc.)
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Deployment configuration regression tests
         run: npx mocha test/deploy/OptionalConfig.test.js
@@ -73,8 +76,44 @@ jobs:
       - name: Source-drift gates
         run: make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 
-      - name: forge test
-        run: python3 scripts/test-foundry-groups.py -vvv
+      - name: Foundry regressions and default invariants
+        run: FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group repro-symbolic --group fuzz-1 --group fuzz-2 --group fuzz-3 --group fuzz-4 --group invariants --max-files 10 --threads 1 -vvv
+
+      - name: Cold integration and gas tests
+        run: FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group integration-gas --max-files 5 --threads 1 -vvv
+
+      - name: Preserve Foundry evidence, including failed batches
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundry-evidence
+          path: .audit-test-logs/foundry/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  hardhat:
+    name: Hardhat tests in bounded batches
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: npm ci
+      - name: Full configured Hardhat selection
+        run: python3 scripts/test-hardhat-groups.py
+      - name: Preserve Hardhat evidence, including failed batches
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardhat-evidence
+          path: .audit-test-logs/hardhat/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   slither:
     name: Slither (static analysis, non-blocking)
@@ -85,7 +124,7 @@ jobs:
         with:
           submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
-      - run: npm ci || npm install
+      - run: npm ci
       - name: Run Slither
         uses: crytic/slither-action@v0.4.0
         with:
@@ -101,7 +140,7 @@ jobs:
         with:
           submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
-      - run: npm ci || npm install
+      - run: npm ci
       - name: Install Aderyn
         run: cargo install aderyn || npm install -g @cyfrin/aderyn
       - name: Run Aderyn
@@ -111,7 +150,7 @@ jobs:
           name: aderyn-report
           path: aderyn-report.md
 
-  # Strong-but-slow guarantees the per-PR gate skips: the 35 Halmos symbolic proofs
+  # Strong-but-slow guarantees the per-PR gate skips: the configured Halmos symbolic checks
   # and the deep-profile invariant sweep (runs=1000/depth=256, ~8x the per-PR budget).
   # Runs on the weekly schedule and on manual dispatch — a proof or deep invariant that
   # regresses fails here instead of silently shipping green. (The mutation campaign is
@@ -119,7 +158,7 @@ jobs:
   # exceeds the 6h job ceiling — it is run locally/overnight and its kill-rate evidence
   # is committed to the audit pack.)
   deep-guarantees:
-    name: Halmos proofs + deep invariant sweep (scheduled / manual)
+    name: Halmos proofs (scheduled / manual)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 330
@@ -129,13 +168,50 @@ jobs:
           submodules: recursive
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Install npm deps (OpenZeppelin, etc.)
-        run: npm ci || npm install
+        run: npm ci
       - name: Install Halmos
-        run: pip install --upgrade halmos
+        run: pip install halmos==0.3.3
       - name: Configure deterministic Foundry deployment addresses
         run: node scripts/lib/patchForFoundry.js
       - name: Halmos symbolic proofs
-        run: FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --solver-timeout-assertion 120000
+        run: |
+          set -o pipefail
+          mkdir -p .audit-test-logs/halmos
+          FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --solver-timeout-assertion 120000 --solver-threads 2 --json-output .audit-test-logs/halmos/results.json --dump-smt-queries --dump-smt-directory .audit-test-logs/halmos/queries 2>&1 | tee .audit-test-logs/halmos/output.log
+      - name: Preserve symbolic evidence, including unresolved queries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: halmos-evidence
+          path: .audit-test-logs/halmos/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  deep-invariants:
+    name: Deep invariant sweep (scheduled / manual)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: npm ci
       - name: Deep invariant sweep (runs=1000 / depth=256)
-        run: FOUNDRY_PROFILE=deep forge test --match-path 'test/fuzz/invariant/*.inv.t.sol'
+        run: FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group invariants --max-files 5 --threads 1
+      - name: Preserve deep-invariant evidence, including failed batches
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-invariant-evidence
+          path: .audit-test-logs/foundry/
+          include-hidden-files: true
+          if-no-files-found: ignore

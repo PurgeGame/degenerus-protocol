@@ -21,7 +21,7 @@
 coordinator and key hash, the LINK token, the LINK/ETH feed, stETH, the ENS reverse registrar
 and the CREATOR address. The ENS registrar receives a best-effort raw `setName(string)` call
 from the constructors of Coinflip, DeityPass, Parimutuel, AFKingSubscriptionToken and
-RecordBounty, skipped when the pin is zero. The deployment order has 31 entries;
+RecordBounty, skipped when the pin is zero. The deployment order has 32 entries;
 the Vault also creates its two share tokens. `DegenerusGameLens` and `DeityBoonViewer`
 are in scope but are not entries in that deployment sequence. Third-party renderers,
 Chainlink, LINK and stETH have distinct trust boundaries described in Security.
@@ -163,22 +163,32 @@ credited lifetime mint levels, or holds a deity pass. The latter two checks use 
 record and skip the current-level call. Awarded passes and vault comps retain their funded
 entitlement without a newcomer charge.
 
-The word rolls one multiplier for the whole pool, `(paid units x 8,000 + Added) x m`: 90% at
-0.5x, 9% at 3x, 0.9% at 20x and 0.1% at 100x, a 1x mean. Awards come from Added alone, one per
-10,000 FLIP, at most 500. The Game draws them in chunks of up to 150: each draw picks an eligible
-level uniformly among the 99 unminted levels above the mint ceiling, then an entry uniformly in
-its queue, with replacement, so a wallet drawn twice holds two seats. It batch-reads the
+At lock, 5% of unrolled gross Added funds the high-roller reserve. The word rolls one
+multiplier for the remaining pool, `(paid units x 8,000 + Added - floor(Added / 20)) x m`:
+90% at 0.5x, 9% at 3x, 0.9% at 20x and 0.1% at 100x, a 1x mean. Awards come from gross
+Added alone, one per 10,000 FLIP, at most 500. The Game draws them in chunks of up to 150:
+each visit picks uniformly among nonempty eligible levels in the 99 unminted levels above
+the mint ceiling, chooses a starting queue position, then walks every holder at that level
+once, wrapping at the end. Levels are selected with replacement between visits, so a wallet
+can hold multiple awarded seats. Chunk boundaries preserve the unfinished visit. It batch-reads the
 distinct wallets' saved boards and appends one packed word per entry; the battle makes no
 storage callbacks. The chunk that reaches the target seals the field: each unit's bankroll is
-half its share of the pool, rounded down to 300 FLIP (at least 1,800), the rest of the share is
-its bounty, and the dust stays in the pot. Only the fee-funded bankroll is booked as craps
-action and comped 2%, once, at seal. Every seat throws the same dice; an award keys its scatter,
+half its share of the main pool, rounded down to 300 FLIP (at least 1,800), its bounty is
+bounded by that bankroll, and the dust stays in the pot. Each paid seat gets one place in
+the Added-funded main allocation. Extra high units receive a separate, fee-only allocation
+under the same pool multiplier. Only the base seats' fee-funded bankroll is booked as craps
+action and comped 2%, once, at seal. Extra high fees earn comps equal to 9.6% of their
+pre-roll at-risk value (all extra fees for a sole high seat, half for a contested high field),
+and do not enter the action books. Every seat throws the same dice; an award keys its scatter,
 survival coin and shooter boost to its own bet id. Seats settle through the table's normal
 resolver, paid then day tickets then awards, on 1,500 work units per call; the sealing call
 first charges its draw (110 units plus 10 per entry) and settles on the rest. The last seat
 finalizes the field once: the best run takes the pot, a contested high lane pays its winner,
 and the pot winner can claim RIU (5% of the progressive at a 25x peak, 10% at 120x, with the
-pass/liquid split) and the biggest Dice Run record (100x floor, strict improvement). Warm-up
+pass/liquid split) and the biggest Dice Run record (100x floor, strict improvement).
+After all seats settle, a separate 1-in-10 draw pays the accumulated high-roller reserve
+to one uniformly sampled paid high seat, excluding sDGNRS; empty eligible fields carry the
+reserve forward. This award is Coinflip credit and creates no extra action, comps or passes. Warm-up
 and skipped days have no paid field; their award-only battle uses the day's otherwise unused
 remainder-seven slot, which the lapse sweep never walks. The worst settle call is bounded near
 8.6M gas and a full draw chunk measures up to 7.2M; see
@@ -320,26 +330,35 @@ and [economic disclosures](../ECONOMIC_DISCLOSURES.md) for dilution and timing.
 - Entropy-dependent processing has the documented freeze boundaries; caller gas cannot choose work.
 - Pool writes, unchecked arithmetic and advance-chain external calls remain covered by the source manifests.
 
-### Decimator claim entropy
+### Decimator settlement entropy
 
-A decimator round packs its pool, total qualifying burn and a 32-bit claim seed into one
+A decimator round packs its pool, total qualifying burn and a 32-bit settlement seed into one
 mapping-value slot. The seed is the low 32 bits of `keccak(word, DECIMATOR_BOX_TAG)`, so
-no other consumer of the day word shares its bits; the claim-box root re-hashes it with
+no other consumer of the day word shares its bits; the settlement-box root re-hashes it with
 the tag and the fixed round level, and the box resolver then mixes the winning owner.
 Winner selection still uses the full word before the snapshot.
 
 ### Decimator records and settlement
 
 Each burner's record is an entry in its (level, denominator, subbucket) list: owner,
-weight and base in one slot. A per-player pointer, reused every window, finds the entry for
-later burns; a better bucket empties the old position and re-appends the entry. Each
-subbucket slot holds the pro-rata total and the list length. After the draw, `mineFlip`
-settles winning entries in list order (oldest level, denominators 2-12, positions
-ascending) on whatever budget the box legs left, before the craps leg, and pays one
-knee-pro-rated bounty. It idles under the RNG lock, the liveness trigger and game over.
-The permissionless claim `claimDecimatorJackpot(lvl, denom, position)` settles any one
-winning entry and stays open after game over. The walk defers whole half-passes to
-`whalePassClaims`; the claim applies them immediately.
+weight and base in one slot. A per-player pointer, reused every window, finds the entry
+for later burns; a better bucket empties the old position and re-appends the entry.
+Each subbucket slot holds the pro-rata total and the list length.
+
+After the draw, `mineFlip` is the only settlement path. If no box opened, its walk
+settles winning entries in list order: oldest level, denominators 2–12, then ascending
+positions. The leg receives 2,030 walk units less the units already spent scanning the
+box legs. It charges each settlement after execution for its frame, deferred passes and
+actual lootbox outcome, plus a one-time first-settlement cost. Work starts only while
+budget remains, so the final settlement can cross the budget by at most one settlement.
+A settling call earns one work-pro-rated bounty; the craps leg runs only if no decimator
+entry settled. The walk idles during the RNG lock, the liveness trigger and game over.
+
+Each settled win credits half as claimable ETH and routes the remainder through the
+lootbox award. Whole half-passes are recorded in `whalePassClaims` for later redemption
+through `claimWhalePass`; remaining lootbox backing enters the pending future-pool buffer
+while frozen and the live future pool otherwise. There is no individual decimator claim
+entry point.
 
 ### High-roller jackpot reserve
 

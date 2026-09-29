@@ -52,10 +52,14 @@ contract AdvanceLiveness is DeployProtocol {
         targetSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: sels}));
     }
 
-    /// Pinned below the default profile: each step runs a snapshot-isolated liveness check
+    /// Keep the quick default campaign: each step runs a snapshot-isolated liveness check
     /// (up to 250 cranks plus a craps-probe cycle), so 64 x 100 already takes minutes.
+    /// Inline default settings override the inherited deep profile too; explicitly restore
+    /// deep's full 1000 x 256 campaign here and verify the executed run/call totals.
     /// forge-config: default.invariant.runs = 64
     /// forge-config: default.invariant.depth = 100
+    /// forge-config: deep.invariant.runs = 1000
+    /// forge-config: deep.invariant.depth = 256
     function invariant_advanceLiveness() public view {
         if (handler.ghost_violations() == 0) return;
         AdvanceLivenessHandler.Violation memory v = handler.firstViolation();

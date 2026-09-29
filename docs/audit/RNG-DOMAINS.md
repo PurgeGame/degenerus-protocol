@@ -1,6 +1,7 @@
 # Randomness inputs and domain separation
 
-Reviewed 2026-09-21 against the working-tree snapshot in `snapshot.json`.
+Initially reviewed 2026-09-21; Decimator and jackpot battle descriptions updated
+against `3c79c1486` on 2026-09-28. See `snapshot.json` for the supplied source identity.
 The trust boundary is request → fulfillment → consumption: hashing supplies
 domain separation, not fresh entropy or protection for inputs chosen after a word
 is known. Existing commitment guards remain necessary.
@@ -70,7 +71,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Presale box | packed `H(word, PRESALE_BOX_TAG, player, uint48(index))` | One record per owner/index; amount excluded |
 | Redemption box | `H(chunkWord, player, REDEMPTION_BOX_TAG)` | Chunk word advances by `H(word)`; upstream redemption word fixed |
 | AFKing box | `H(word, player, AFKING_BOX_TAG, stampedDay)` | Day recorded before fulfillment; amount excluded |
-| Decimator claim box | `H(roundWord, DECIMATOR_BOX_TAG, level)` then direct box resolver | Full 256-bit snapshot in the second round slot; no truncated seed or cross-round reuse |
+| Decimator claim box | `H(uint256(roundSeed), DECIMATOR_BOX_TAG, level)` then direct box resolver | `roundSeed = uint32(H(fullWord, DECIMATOR_BOX_TAG))`, stored in the packed round slot; level separates rounds, owner separates direct reward boxes; the snapshot retains 32 bits, not 256 |
 | Direct reward box | `H(callerDerivedWord, player)` | Decimator/ETH bet caller binds the relevant level or bet; this is not an independent raw-word consumer |
 | Box secondary draws | `BOX_*_SPIN_TAG`, `BOX_PASS_ROUND_TAG`, `FLIP_ROUND_TAG` | Derive from that box's root; stake only sizes payout |
 | Degenerette result board | packed `H(word, uint32(index), QUICK_PLAY_SALT)` for spin 0; add `uint8(spin)` for later spins | **Shared by all ETH/FLIP players and bets in an RNG period**, including different stakes, hero symbols and currencies. Only ETH/FLIP bets use it; WWXRP is not a bet currency |
@@ -85,7 +86,9 @@ named constants in the consumer; full string hashes are constant expressions.
 | Daily trait board | `H(word, TRAIT_BOARD_TAG)` | Four disjoint six-bit slices of a tagged word; one board per day, re-rolled identically by the day's later legs |
 | Hero symbol | `H(heroEntropy, HERO_SYMBOL_TAG, day)` | Committed day and effective distribution |
 | Jackpot recipient sampling | bucket root + trait + source salt + pull | Source salts distinguish ETH/current/early-bird/purchase draws; prize size excluded |
-| Fill draw | `H(word', level, FAR_FUTURE_FLIP_TAG)` | `word'` is the day word, or on level 1's purchase days `H(word, LEVEL_ONE_FILL_SALT)` (the salt keeps it apart from that day's trait-matched FLIP draw); `level` is the highest minted level (the purchase level, or level + 1 on a jackpot day) |
+| Jackpot battle field | `H(word', level, FAR_FUTURE_FLIP_TAG)`, then `H(battleWord, visitOrdinal)` | `word'` is the day word, or on level 1's purchase days `H(word, LEVEL_ONE_FILL_SALT)`; each visit chooses an eligible level and circular start, then walks that level once; continuation preserves the visit across chunks |
+| Jackpot pool multiplier | `H(battleWord, JACKPOT_MULT_TAG)` | Fixed battle root; the 5% high-reserve contribution is removed before this multiplier |
+| High-roller reserve gate / recipient | `H(battleWord, HIGH_RESERVE_DRAW_TAG, slot)` / `H(battleWord, HIGH_RESERVE_WINNER_TAG, slot<<32 \| eligibleOrdinal)` | One field-wide 1-in-10 gate; reservoir sampling over canonical paid high seats, excluding sDGNRS; resumable cursor and nominee, no caller-chosen candidate |
 | BAF winner list | `H(word, BAF_WINNERS_TAG)` then ordinal chain | Fixed qualified cohorts |
 | BAF ticket award | `H(word, level, BAF_TICKET_TAG, winnerOrdinal)` | Previous awards cannot move this root |
 | Daily / level quests | `H(word, DAILY_QUEST_TAG)` / `H(word, LEVEL_QUEST_TAG)` | Global quests; forced-type policy unchanged |
@@ -130,8 +133,9 @@ recipient identities. `JackpotEightWinnerGroups.t.sol` compares ticket winners
 under different award budgets. `RandomnessSeedInputs.t.sol` compares production
 box resolutions after changing only amount. `DegeneretteFreezeResolution.t.sol`
 checks shared boards across owners, currencies, stakes and bet ids;
-`DegeneretteFlipRoundAntiGrind.t.sol` checks payout invariance under batch changes. `DecimatorEntropy.t.sol` checks full-word
-snapshot storage and the actual claim-box delegatecall for words sharing their low
-32 bits and for different rounds.
+`DegeneretteFlipRoundAntiGrind.t.sol` checks payout invariance under batch changes.
+`DecimatorEntropy.t.sol` checks the full-word-derived, tagged 32-bit snapshot and
+the actual claim-box delegatecall for words sharing their low 32 bits and for
+different rounds. It does not establish 256 bits of retained claim-box entropy.
 See the current verification report for execution status; the inventory itself
 is not a proof of statistical independence or an external audit clearance.

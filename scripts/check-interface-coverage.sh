@@ -31,7 +31,10 @@ MAPPINGS=(
   "contracts/interfaces/IDegenerusCoin.sol:IDegenerusCoin|contracts/FLIP.sol:FLIP"
   "contracts/interfaces/IDegenerusGame.sol:IDegenerusGame|contracts/DegenerusGame.sol:DegenerusGame"
   "contracts/interfaces/IDegenerusJackpots.sol:IDegenerusJackpots|contracts/DegenerusJackpots.sol:DegenerusJackpots"
+  "contracts/interfaces/IDegenerusParimutuel.sol:IDegenerusParimutuel|contracts/DegenerusParimutuel.sol:DegenerusParimutuel"
   "contracts/interfaces/IDegenerusQuests.sol:IDegenerusQuests|contracts/DegenerusQuests.sol:DegenerusQuests"
+  # CRAPS serves settlement itself and delegates lifecycle/views through its fallback.
+  "contracts/interfaces/IJackpotBattle.sol:IJackpotBattle|contracts/CrapsBattle.sol:CrapsBattle+contracts/JackpotBattle.sol:JackpotBattle"
   "contracts/interfaces/IsDGNRS.sol:IsDGNRS|contracts/sDGNRS.sol:sDGNRS"
   "contracts/interfaces/IVaultCoin.sol:IVaultCoin|contracts/FLIP.sol:FLIP"
   # IDegenerusGameModules.sol contains the 12 module interfaces. Each module is deployed
@@ -51,6 +54,30 @@ MAPPINGS=(
   "contracts/interfaces/IDegenerusGameModules.sol:IGameAfkingModule|contracts/modules/GameAfkingModule.sol:GameAfkingModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameFoilPackModule|contracts/modules/DegenerusGameFoilPackModule.sol:DegenerusGameFoilPackModule"
 )
+
+# Fail closed when a new interface has not been assigned an implementation. The two
+# external dependencies have no production implementation in this repository.
+python3 - "${MAPPINGS[@]}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+mapped = {entry.split('|', 1)[0] for entry in sys.argv[1:]}
+external = {
+    'contracts/interfaces/IStETH.sol:IStETH',
+    'contracts/interfaces/IVRFCoordinator.sol:IVRFCoordinator',
+}
+declared = set()
+for path in Path('contracts/interfaces').glob('*.sol'):
+    source = re.sub(r'/\*.*?\*/|//[^\n]*', '', path.read_text(), flags=re.S)
+    declared.update(f'{path}:{name}' for name in re.findall(r'\binterface\s+(\w+)', source))
+missing = declared - mapped - external
+stale = mapped | external
+stale -= declared
+if missing or stale:
+    print(f'Interface map drift: unmapped={sorted(missing)}, stale={sorted(stale)}', file=sys.stderr)
+    sys.exit(1)
+PY
 
 # Extract "<selector>\t<signature>" rows from `forge inspect ... methods` output.
 get_methods() {
@@ -101,10 +128,21 @@ for mapping in "${MAPPINGS[@]}"; do
   iface="${mapping%|*}"
   impl="${mapping#*|}"
   iface_name="${iface#*:}"
-  impl_name="${impl#*:}"
+  impl_name=""
 
   iface_methods=$(get_methods "$iface")
-  impl_methods=$(get_methods "$impl")
+  impl_methods=""
+  IFS='+' read -ra impl_targets <<< "$impl"
+  for target in "${impl_targets[@]}"; do
+    methods=$(get_methods "$target")
+    if [[ -z "$methods" ]]; then
+      printf "%bFAIL%b no methods extracted from implementation %s\n" "$RED" "$NC" "$target"
+      exit 1
+    fi
+    impl_methods+="$methods"$'\n'
+    [[ -z "$impl_name" ]] || impl_name+="+"
+    impl_name+="${target#*:}"
+  done
 
   if [[ -z "$iface_methods" ]]; then
     printf "%bWARN%b %-45s no methods extracted from interface\n" "$YELLOW" "$NC" "$iface_name"
@@ -153,7 +191,7 @@ for mapping in "${MAPPINGS[@]}"; do
     printf "%bMISS%b %-45s -> %-25s (%d real, %d dead of %d)\n" \
       "$RED" "$NC" "$iface_name" "$impl_name" "$real_count" "$dead_count" "$count"
     printf '%s' "$real_bugs" | awk -F'\t' 'NF>1 { printf "       %bBUG%b   %s  %s  (has call site in contracts/)\n", "\033[0;31m", "\033[0m", $1, $2 }'
-    printf '%s' "$dead_decls" | awk -F'\t' 'NF>1 { printf "       %bDEAD%b  %s  %s  (no call site — safe to delete)\n", "\033[1;33m", "\033[0m", $1, $2 }'
+    printf '%s' "$dead_decls" | awk -F'\t' 'NF>1 { printf "       %bDEAD%b  %s  %s  (no local call site)\n", "\033[1;33m", "\033[0m", $1, $2 }'
   else
     printf "%bDEAD%b %-45s -> %-25s (%d dead declarations, no call site)\n" \
       "$YELLOW" "$NC" "$iface_name" "$impl_name" "$dead_count"
@@ -171,14 +209,15 @@ if [[ $missing_total -gt 0 ]]; then
   printf "%bFAIL%b %d unimplemented interface function(s) with active call sites — will revert at runtime\n" "$RED" "$NC" "$missing_total"
 fi
 if [[ $dead_total -gt 0 ]]; then
-  printf "%bWARN%b %d dead interface declaration(s) — no call site, safe to remove\n" "$YELLOW" "$NC" "$dead_total"
+  printf "%bFAIL%b %d declared function(s) lack implementations, even without local call sites\n" "$RED" "$NC" "$dead_total"
 fi
 if [[ $warn_total -gt 0 ]]; then
   printf "%bWARN%b %d interface(s) could not be inspected\n" "$YELLOW" "$NC" "$warn_total"
 fi
 
-# Fail only on real bugs or inspection failures. Dead declarations are a warning.
-if [[ $missing_total -gt 0 || $warn_total -gt 0 ]]; then
+# An unused declaration can still be used by an external integration. Its absence
+# is an interface mismatch even if this repository contains no matching call site.
+if [[ $missing_total -gt 0 || $warn_total -gt 0 || $dead_total -gt 0 ]]; then
   exit 1
 fi
 exit 0

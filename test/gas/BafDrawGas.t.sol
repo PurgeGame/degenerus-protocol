@@ -30,12 +30,7 @@ contract BafDrawGas is DeployProtocol {
     }
 
     function _warpToDay(uint24 d) internal {
-        vm.warp(
-            (uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) *
-                1 days +
-                82_620 +
-                1
-        );
+        vm.warp((uint256(d - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);
     }
 
     function _mint(address who, uint256 amount) internal {
@@ -47,7 +42,7 @@ contract BafDrawGas is DeployProtocol {
     function _measuredDeposit(address who) internal returns (uint256 used) {
         vm.prank(who);
         uint256 g0 = gasleft();
-        coinflip.depositCoinflip(address(0), 100 ether);
+        coinflip.depositCoinflip{gas: 11_500_000 - (21_000 + 68 * 16)}(address(0), 100 ether);
         used = g0 - gasleft();
     }
 
@@ -58,27 +53,96 @@ contract BafDrawGas is DeployProtocol {
     ///         Ceilings carry slim headroom and trip on any regression that puts
     ///         cold state, an external call, or a write back on the hot path.
     function testNormalDepositGasProfile() public {
-        _mint(alice, 1_000 ether);
+        _normalProfile(true);
+    }
 
-        uint256 first = _measuredDeposit(alice);
-        uint256 repeatSameDay = _measuredDeposit(alice);
+    function testNormalDepositWarmSingleTransactionRegression() public {
+        (uint256 first, uint256 sameDay, uint256 nextDay) = this.measureWarmDepositProfile();
+        assertLe(first, 92_000, "first-ever warm deposit ceiling");
+        assertLe(sameDay, 23_500, "same-day warm repeat ceiling");
+        assertLe(nextDay, 46_500, "next-day warm repeat ceiling");
+    }
+
+    function measureWarmDepositProfile() external returns (uint256, uint256, uint256) {
+        require(msg.sender == address(this), "test self-call only");
+        // Nested calls remain in ONE transaction even under --isolate, preserving
+        // the original warm regression's setup, mint and repeated-deposit state.
+        return _normalProfile(false);
+    }
+
+    function _normalProfile(bool cold) private returns (uint256 first, uint256 sameDay, uint256 nextDay) {
+        _mint(alice, 1000 ether);
+        if (cold) {
+            _coolDeposit();
+            vm.record();
+        }
+        first = _measuredDeposit(alice);
+        if (cold) assertLe(first, 92_000 + _depositColdAllowance(), "cold first-ever deposit ceiling");
+        if (cold) {
+            _coolDeposit();
+            vm.record();
+        }
+        sameDay = _measuredDeposit(alice);
+        if (cold) assertLe(sameDay, 23_500 + _depositColdAllowance(), "cold same-day repeat ceiling");
         _warpToDay(3);
-        uint256 repeatNextDay = _measuredDeposit(alice);
-
+        if (cold) {
+            _coolDeposit();
+            vm.record();
+        }
+        nextDay = _measuredDeposit(alice);
+        if (cold) assertLe(nextDay, 46_500 + _depositColdAllowance(), "cold next-day repeat ceiling");
+        assertEq(coin.balanceOf(alice), 700 ether, "all three deposits burn their principal");
+        assertEq(coinflip.coinflipAmount(alice), 100 ether, "last deposit funds the next day's stake");
         emit log_named_uint("deposit_gas_first_ever", first);
-        emit log_named_uint("deposit_gas_repeat_same_day", repeatSameDay);
-        emit log_named_uint("deposit_gas_repeat_next_day", repeatNextDay);
+        emit log_named_uint("deposit_gas_repeat_same_day", sameDay);
+        emit log_named_uint("deposit_gas_repeat_next_day", nextDay);
+        // depositCoinflip(address(0),100 ether): 68 bytes; conservatively price
+        // every calldata byte as nonzero when adding intrinsic transaction gas.
+        uint256 intrinsic = 21_000 + 68 * 16;
+        assertLt(first + intrinsic, 11_500_000, "first deposit transaction cap");
+        assertLt(sameDay + intrinsic, 11_500_000, "same-day deposit transaction cap");
+        assertLt(nextDay + intrinsic, 11_500_000, "next-day deposit transaction cap");
+    }
 
-        assertLe(first, 92_000, "first-ever deposit ceiling");
-        assertLe(repeatSameDay, 23_500, "same-day repeat ceiling");
-        assertLe(repeatNextDay, 46_500, "next-day repeat ceiling");
+    /// @dev Estimate only the transaction-state delta over the retained warm budget:
+    /// 2k per cold storage read, 2.8k per fresh rather than dirty rewrite, and 2.6k
+    /// per external account. Count the actual access footprint, independently cap
+    /// its size, and report this allowance separately from measured execution gas.
+    function _depositColdAllowance() private returns (uint256 allowance) {
+        address[6] memory accounts = [
+            address(coinflip), address(coin), address(game), address(quests), address(recordBounty), address(jackpots)
+        ];
+        uint256 reads;
+        uint256 writes;
+        for (uint256 i; i < accounts.length; ++i) {
+            (bytes32[] memory r, bytes32[] memory w) = vm.accesses(accounts[i]);
+            reads += r.length;
+            writes += w.length;
+        }
+        assertLe(reads, 32, "deposit storage-read footprint expanded");
+        assertLe(writes, 16, "deposit storage-write footprint expanded");
+        allowance = reads * 2000 + writes * 2800 + accounts.length * 2600;
+        emit log_named_uint("deposit_cold_storage_reads", reads);
+        emit log_named_uint("deposit_cold_storage_writes", writes);
+        emit log_named_uint("deposit_estimated_transaction_state_allowance", allowance);
+    }
+
+    function _coolDeposit() private {
+        // --isolate also resets original SSTORE values between calls. These cold
+        // marks independently prevent setup/mint reads from warming the measurement.
+        vm.cool(address(coinflip));
+        vm.cool(address(coin));
+        vm.cool(address(game));
+        vm.cool(address(quests));
+        vm.cool(address(recordBounty));
+        vm.cool(address(jackpots));
     }
 
     /// @notice Armed-day entry costs: the first entry pays the header's zero->nonzero
     ///         write; every later entry pays a fresh entry slot + header rewrite.
     function testArmedDayEntryGasProfile() public {
-        _mint(alice, 1_000 ether);
-        _mint(bob, 1_000 ether);
+        _mint(alice, 1000 ether);
+        _mint(bob, 1000 ether);
 
         // Un-armed baseline for the same shapes (fresh players, same day).
         uint256 baseFirst = _measuredDeposit(alice);
@@ -111,20 +175,14 @@ contract BafDrawGas is DeployProtocol {
     function _installEntries(uint24 day, uint32 n) internal {
         uint256 cum;
         for (uint32 i; i < n; ++i) {
-            cum += 100 + (uint256(keccak256(abi.encode(day, i))) % 1_000);
+            cum += 100 + (uint256(keccak256(abi.encode(day, i))) % 1000);
             address p = address(uint160(uint256(keccak256(abi.encode("p", i)))));
             uint256 key = (uint256(day) << 32) | i;
             vm.store(
-                address(coinflip),
-                keccak256(abi.encode(key, ENTRY_SLOT)),
-                bytes32((uint256(uint160(p)) << 96) | cum)
+                address(coinflip), keccak256(abi.encode(key, ENTRY_SLOT)), bytes32((uint256(uint160(p)) << 96) | cum)
             );
         }
-        vm.store(
-            address(coinflip),
-            keccak256(abi.encode(uint256(day), HEADER_SLOT)),
-            bytes32((uint256(n) << 96) | cum)
-        );
+        vm.store(address(coinflip), keccak256(abi.encode(uint256(day), HEADER_SLOT)), bytes32((uint256(n) << 96) | cum));
         vm.prank(GAME);
         coinflip.armBafDraw(day);
 
@@ -163,8 +221,8 @@ contract BafDrawGas is DeployProtocol {
 
         // Logarithmic envelope: 512 = 16 << 5 (5 extra probes), 4096 = 512 << 3
         // (3 extra probes). A linear walk would blow these by orders of magnitude.
-        assertLe(g512, g16 + 5 * 3_000, "512 within 5 extra probes of 16");
-        assertLe(g4096, g512 + 3 * 3_000, "4096 within 3 extra probes of 512");
+        assertLe(g512, g16 + 5 * 3000, "512 within 5 extra probes of 16");
+        assertLe(g4096, g512 + 3 * 3000, "4096 within 3 extra probes of 512");
         assertLe(g4096, 80_000, "absolute resolution ceiling at 4096 entries");
     }
 }

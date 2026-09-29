@@ -80,7 +80,7 @@ contract CrapsArithmeticSymbolicTest is Test {
     }
 
     // ------------------------------------------------------------------------------------
-    // _shooterBoostTerms: the eight rows decode to the documented table; past seven it is zero.
+    // _shooterBoostTerms: exact scheduled rows, including the rotation-funded 18% final uplift.
     // ------------------------------------------------------------------------------------
 
     function check_shooterBoostTerms_table(uint256 placed) public view {
@@ -91,8 +91,14 @@ contract CrapsArithmeticSymbolicTest is Test {
         if (placed >= 8) {
             assert(t == 0);
         } else {
-            assert(chance <= 15 && chance >= 5);
-            assert(uplift <= 33 && uplift >= 20);
+            // Explicit branches keep the independent rows readable and avoid symbolic
+            // memory indexing, which this Halmos version does not implement.
+            uint256 expectedChance = placed == 0 ? 15 : placed == 1 ? 14 : placed == 2 ? 12
+                : placed == 3 ? 11 : placed == 4 ? 9 : placed == 5 ? 8 : placed == 6 ? 6 : 5;
+            uint256 expectedUplift = placed == 0 ? 32 : placed <= 4 ? 29
+                : placed == 5 ? 24 : placed == 6 ? 23 : 18;
+            assert(chance == expectedChance);
+            assert(uplift == expectedUplift);
             // Both terms fall (weakly) as more chips are placed.
             if (placed < 7) {
                 uint256 n = craps.shooterBoostTerms(placed + 1);
@@ -103,7 +109,8 @@ contract CrapsArithmeticSymbolicTest is Test {
     }
 
     // ------------------------------------------------------------------------------------
-    // _tierPick / _routineWeight: every draw is a tier 0..2; the day's weight is in [6, 24].
+    // _tierPick / _routineWeight: five ordinary windows, each with weight 1, 2 or 4.
+    // The separately funded jackpot is excluded. Matching bookends share their tier.
     // ------------------------------------------------------------------------------------
 
     function check_tierPick_inRange(uint256 word, uint256 period) public view {
@@ -113,7 +120,32 @@ contract CrapsArithmeticSymbolicTest is Test {
 
     function check_routineWeight_bounds(uint256 word) public view {
         uint256 w = craps.routineWeightOf(word);
-        assert(w >= 6 && w <= 24);
+        assert(w >= 5 && w <= 20);
+    }
+
+    function check_routineWeight_matchesFiveWindowPricing(uint256 word) public view {
+        assert(craps.BONUS_PERIODS_PER_DAY() == 6);
+        uint256 bookendTier = craps.tierPickAt(word, 0);
+        assert(craps.tierPickAt(word, 4) == bookendTier);
+        uint256 expected = 2 * (1 << bookendTier);
+        expected += 1 << craps.tierPickAt(word, 1);
+        expected += 1 << craps.tierPickAt(word, 2);
+        expected += 1 << craps.tierPickAt(word, 3);
+        assert(craps.routineWeightOf(word) == expected);
+    }
+
+    /// @dev Concrete keccak replays accompany the symbolic hash abstraction. The original
+    ///      solver model selected word 0, but its abstract hash values are not a real preimage:
+    ///      actual word 0 has weight 9. Word 36 really reaches the former bound's violation.
+    function test_routineWeightConcreteBoundaries() public view {
+        assertEq(craps.routineWeightOf(0), 9);
+        assertEq(craps.routineWeightOf(36), 5);
+        assertEq(craps.routineWeightOf(537), 20);
+    }
+
+    function test_shooterBoostAllRows() public view {
+        for (uint256 placed; placed < 16; ++placed) check_shooterBoostTerms_table(placed);
+        assertEq(craps.shooterBoostTerms(7), (18 << 8) | 5);
     }
 
     // ------------------------------------------------------------------------------------

@@ -70,7 +70,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         if (_fresh()) _applyTerminalWord();
         vm.recordLogs();
         uint256 before = gasleft();
-        game.advanceGame{gas: 16_777_216 - 21_064}();
+        game.advanceGame{gas: 11_500_000 - 21_064}();
         uint256 used = before - gasleft() + 21_064;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 winners;
@@ -89,7 +89,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         assertEq(refunds, 600 ether, "30 paid refunds; genesis has no refund basis");
         assertEq(rngApplied, 0, "the payout runs on the recorded terminal word");
         assertEq(game.claimableWinningsOf(address(0xAFF1)), 88 ether, "affiliate gets 2% after refunds");
-        assertLt(used, 15_000_000, "terminal transaction exceeds review target");
+        assertLt(used, 11_500_000, "terminal transaction exceeds review target");
     }
 
     /// @dev The ending's first transaction sends its own terminal request; the coordinator
@@ -105,13 +105,13 @@ abstract contract ColdTerminalFixture is DeployProtocol {
     }
 
     /// @dev A delivered terminal word is applied in its own transaction: the word itself, the
-    ///      derived words of every skipped day (each settling that day's coinflips), the
-    ///      terminal day's coinflips, any pending redemption and the reserved lootbox index.
+    ///      derived words of every skipped day and the reserved lootbox index. Terminal
+    ///      application records the ETH-bound words without settling optional FLIP work.
     function _applyTerminalWord() private {
         uint24 day = game.currentDayView();
         vm.recordLogs();
         uint256 before = gasleft();
-        game.advanceGame{gas: 16_777_216 - 21_064}();
+        game.advanceGame{gas: 11_500_000 - 21_064}();
         uint256 used = before - gasleft() + 21_064;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 applied;
@@ -133,7 +133,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
                 "skipped days derive from the terminal word"
             );
         }
-        assertLt(used, 15_000_000, "terminal word application exceeds review target");
+        assertLt(used, 11_500_000, "terminal word application exceeds review target");
     }
 }
 

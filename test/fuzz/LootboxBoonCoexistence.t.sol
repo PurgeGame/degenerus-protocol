@@ -197,6 +197,18 @@ contract LootboxBoonCoexistence is DeployProtocol {
         vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
+    /// @dev Every preservation assertion must follow one real, consumed box.
+    ///      A rejected or blocked sweep is a failed fixture, never a passing case.
+    function _openSeededBox(address player, uint48 index) internal {
+        bytes32 orderSlot = _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player);
+        assertFalse(game.rngLocked(), "seeded boon fixture must be unlocked");
+        assertGt(uint256(vm.load(address(game), orderSlot)), 0, "seeded box must exist");
+        vm.prank(player);
+        uint256 opened = game.openBoxes(type(uint256).max);
+        assertEq(opened, 1, "preservation proof must actually open its one box");
+        assertEq(uint256(vm.load(address(game), orderSlot)), 0, "seeded order must be consumed");
+    }
+
     // ──────────────────────────────────────────────────────────────────────
     // Tests
     // ──────────────────────────────────────────────────────────────────────
@@ -232,15 +244,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
 
             _setupLootbox(player, index, 10 ether, 1, currentDay, vrfWord);
 
-            vm.prank(player);
-            try game.openBoxes(type(uint256).max) {
-                // Count emitted LootBoxReward events by checking boonPacked state changes
-                // (events are hard to count in Foundry without vm.expectEmit, but we can
-                // check if any non-coinflip boon tier was written)
-            } catch {
-                // Some opens may revert due to rngLocked or other guards — skip
-                continue;
-            }
+            _openSeededBox(player, index);
 
             // Check if any additional boon was written
             uint8 purchaseTier = _readPurchaseTier(player);
@@ -279,11 +283,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         // Setup lootbox with fuzzed VRF word
         _setupLootbox(player, 999, 10 ether, 1, currentDay, vrfWord);
 
-        vm.prank(player);
-        try game.openBoxes(type(uint256).max) {} catch {
-            // Revert is acceptable (e.g., rngLocked contention)
-            return;
-        }
+        _openSeededBox(player, 999);
 
         // After open, coinflip tier must still be >= 1
         // (it can increase if lootbox rolled a higher-tier coinflip boon, but never decrease)
@@ -320,10 +320,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         uint256 vrfWord = uint256(keccak256("deterministic_boon_test"));
         _setupLootbox(player, 888, 10 ether, 1, currentDay, vrfWord);
 
-        vm.prank(player);
-        try game.openBoxes(type(uint256).max) {} catch {
-            return;
-        }
+        _openSeededBox(player, 888);
 
         // Both tiers must be >= 1 (can only increase, never wiped by cross-category application)
         assertTrue(_readCoinflipTier(player) >= 1, "Coinflip tier preserved after lootbox open");
@@ -359,10 +356,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
             uint8 purchaseBefore = _readPurchaseTier(player);
             uint8 lootboxBefore = _readLootboxTier(player);
 
-            vm.prank(player);
-            try game.openBoxes(type(uint256).max) {} catch {
-                continue;
-            }
+            _openSeededBox(player, index);
 
             // Check if a non-coinflip boon was applied
             uint8 purchaseAfter = _readPurchaseTier(player);

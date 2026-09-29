@@ -17,8 +17,10 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     uint48 private constant GENESIS_INDEX = 1;
     uint256 private constant CUSTOM_SIZE = 10 ether;
     uint256 private constant BOX_ORDER = (uint256(3) << 24) | ((CUSTOM_SIZE / 1e12) << 32);
-    // Verified DGNRS / ETH-spin-with-DGNRS-recirc / DGNRS under BOX_OPEN_TAG.
-    uint256 private constant RNG_WORD = 1844449;
+    // Verified against the single-symbol spin: parent DGNRS / score-6 ETH spin
+    // with a DGNRS recirculation / parent DGNRS. The assertions below require all
+    // three nonzero batches and distinguish live-pool pricing after the child.
+    uint256 private constant RNG_WORD = 204344;
 
     bytes32 private constant DGNRS_BATCH_SIG = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
     bytes32 private constant LOOTBOX_OPENED_SIG =
@@ -69,7 +71,6 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     }
 
     function testParentDgnrsIsSettledAndSnapshotReloadedAcrossNestedEthSpin() public {
-        vm.skip(true, "single-symbol Degenerette supersession: RNG_WORD was hand-picked to make the nested ETH spin win DGNRS under the old per-gold-count tables and spin derivation. Under the shared table and the new player/result draws that word yields two batches, not three: both parent DGNRS wins still pay in full and the pool stays solvent, but the nested child win is gone, so the fresh-vs-stale pricing check has nothing to distinguish (one batch's debit is below the three-sig-fig floor). A scan of words 1..1199 found no replacement. The ordering property is UNPROVEN until a new word is pinned -- this is lost coverage, not a passing result");
         vm.deal(PLAYER, 31 ether);
         vm.prank(PLAYER);
         game.purchase{value: 30 ether}(PLAYER, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);

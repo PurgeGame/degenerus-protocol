@@ -1,4 +1,11 @@
-.PHONY: test test-foundry test-hardhat check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete coverage-check invariant-test invariant-build invariant-clean
+.PHONY: test test-foundry test-hardhat check-audit-snapshot test-assurance-tools check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete coverage-check invariant-test invariant-build invariant-clean
+
+# Identity only: test results are recorded separately in the audit readiness report.
+check-audit-snapshot:
+	@python3 scripts/audit-snapshot.py
+
+test-assurance-tools:
+	@python3 -m unittest discover -s test/unit -p 'test_*.py'
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
@@ -104,11 +111,10 @@ coverage-check:
 test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 	@python3 scripts/test-foundry-groups.py $(ARGS)
 
-# Run Hardhat tests. The Hardhat fixture also rewrites contracts/ContractAddresses.sol
-# with its predicted addresses and does not restore it; treat the checkout as disposable
-# or run `git checkout -- contracts/ContractAddresses.sol` afterwards.
+# Run Hardhat in fresh file batches, record actual compiler inputs, and restore
+# the exact original address pins on completion, failure or handled interruption.
 test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
-	@npx hardhat test $(ARGS)
+	@python3 scripts/test-hardhat-groups.py $(ARGS)
 
 # Run both suites
 test: test-foundry test-hardhat

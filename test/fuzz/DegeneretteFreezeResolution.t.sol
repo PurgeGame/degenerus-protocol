@@ -631,78 +631,94 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // DGAS-05 Test 7: DGNRS award stays PER SPIN (not batched)
     // =========================================================================
 
-    /// @notice Prove the ETH 6+ match DGNRS award is applied PER SPIN, not folded
-    ///         into the cross-bet flush. _awardDegeneretteDgnrs reads poolBalance
-    ///         FRESH per call and transfers a fraction of it, so the per-spin award
-    ///         DRAINS the pool spin-by-spin: award_k = poolBalance_k * bps * cappedBet
-    ///         / (10_000 * 1e18), poolBalance_{k+1} = poolBalance_k - award_k. A
-    ///         batched (single fresh read) implementation would compute every award
-    ///         off the SAME initial balance, yielding a strictly LARGER total. The
-    ///         test resolves an all-6+-match ETH bet, replays the per-spin draining
-    ///         off the live Reward poolBalance, and asserts the player's sDGNRS gain
-    ///         equals the per-spin (path-dependent) sum — proving it was NOT batched.
-    /// @dev DEF-380-04-FC2 (finding-candidate routed to the council, 382+ PRIME/Degenerette sweep).
-    ///      SKIPPED against the frozen subject c4d48008: the per-spin replay model here is keyed on
-    ///      the MATCH count (6/7/8 matches -> DEGEN_DGNRS_6/7/8_BPS = 400/800/1500) and fires on
-    ///      `matches >= 6`. The frozen contract keys the award on the composite activity SCORE
-    ///      s = A + 2*H (DegeneretteModule:95, :697 `_score`), firing on `s >= 7` and keying the
-    ///      bps on the SCORE tier (DEGEN_DGNRS_7/8/9_BPS = 400/800/1500 at :210-212, :736-737).
-    ///      Score != match count once the hero-quadrant bonus H is non-zero (a 6-match + hero spin
-    ///      scores s=8, not 6), so the test's match-keyed draining replay diverges from the actual
-    ///      score-keyed per-spin draining (observed 18.4e27 actual vs 21.8e27 replayed). The
-    ///      per-spin (non-batched) draining PROPERTY the test targets still holds in the frozen
-    ///      source (poolBalance is read fresh each call at :1185); only the harness's bps-keying
-    ///      dimension is stale. Re-deriving requires mirroring the full `_score` A+2H composition
-    ///      and the score-keyed bps per spin — a structural rewrite whose correctness is exactly
-    ///      what the council's Degenerette/PRIME sweep should adjudicate, not a mechanical slot
-    ///      or constant fix. Recorded in REGRESSION-BASELINE-v62.md "Known behavior-divergence".
-    ///      The contract is NOT modified.
+    /// @notice Two independently replayed score-7 ETH spins must debit successively smaller
+    ///      Reward balances. Nested box awards are accounted separately, including other pools.
+    /// @dev Offline Keccak search: index 1, word 18422, symbol 0, 25 spins have S7 at spin 0
+    ///      and spin 11, with every other score below 7. The reference checks all 25 emitted
+    ///      player tickets, scores and gold counts, so the vector cannot silently become vacuous.
     function testDgnrsAwardStaysPerSpin() public {
-        vm.skip(true); // DEF-380-04-FC2 — match-keyed replay vs frozen score-keyed award; council adjudicates
-        // Find a word where the spin-0 ticket matches >= 6 on MULTIPLE spins (so the
-        // DGNRS award fires more than once and the per-spin draining is observable).
-        _seedFuturePrizePool(1_000_000 ether); // large pool: no ETH cap interference
-
         uint48 index = 1;
-        (uint256 word, uint32 ticket, uint8 sixPlusSpins) = _findMultiSixMatchWord(index);
-        require(sixPlusSpins >= 2, "need >= 2 six-plus-match spins for per-spin draining proof");
-
-        uint128 perTicket = 1 ether; // DGNRS cappedBet caps at 1 ether
-        uint8 spins = 8;
-        uint64 betId = _placeBet(CURRENCY_ETH, perTicket, spins, ticket);
+        uint256 word = 18422;
+        uint8 symbol = 0;
+        uint8 spinCount = 25;
+        uint64 betId = _placeBet(CURRENCY_ETH, 1 ether, spinCount, symbol);
+        assertEq(DQ.stake(_betPacked(betId)), 1 ether, "unboosted stake reaches the DGNRS cap exactly");
         _seedFuturePrizePool(1_000_000 ether);
         _injectLootboxRngWord(index, word);
-
-        // Snapshot the live Reward poolBalance + the player's sDGNRS BEFORE resolve.
-        uint256 rewardPoolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
-        require(rewardPoolBefore > 0, "Reward pool must be funded at deploy");
-        uint256 sdgnrsBefore = sdgnrs.balanceOf(player);
-
         _advanceLootboxRngIndexByOne();
+
+        uint256[5] memory poolsBefore;
+        for (uint8 i; i < 5; ++i) poolsBefore[i] = sdgnrs.poolBalance(sDGNRS.Pool(i));
+        uint256 rewardBefore = poolsBefore[uint8(sDGNRS.Pool.Reward)];
+        assertGt(rewardBefore, 0, "Reward pool is funded");
+        uint256 playerBefore = sdgnrs.balanceOf(player);
+        uint256 treasuryBefore = sdgnrs.balanceOf(address(sdgnrs));
         vm.recordLogs();
         game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(_betPacked(betId), 0, "the real sweep consumed the placed bet");
 
-        uint256 sdgnrsGain = sdgnrs.balanceOf(player) - sdgnrsBefore;
+        (, uint32 firstHouse, bytes memory spins) = _decodeResolved(logs, index, betId);
+        assertEq(spins.length, uint256(spinCount) * 5, "all committed spins resolved");
+        assertEq(firstHouse, Ref.house(word, uint32(index), 0, false), "independent first house ticket");
+        uint256 qualifiers;
+        for (uint8 i; i < spinCount; ++i) {
+            uint32 expectedPlayer = Ref.player(word, uint32(index), symbol, i, false);
+            (uint8 score, uint8 gold) = Ref.score(expectedPlayer, Ref.house(word, uint32(index), i, false), symbol >> 3);
+            (uint32 actualPlayer, uint8 actualScore, uint8 actualGold) = DQ.spinAt(spins, i);
+            assertEq(actualPlayer, expectedPlayer, "independent player ticket for every spin");
+            assertEq(actualScore, score, "independent composite score for every spin");
+            assertEq(actualGold, gold, "independent gold count for every spin");
+            if (score >= 7) {
+                assertTrue(i == 0 || i == 11, "the deterministic high-score positions remain pinned");
+                assertEq(score, 7, "both qualifying spins use the S7 tier");
+                ++qualifiers;
+            }
+        }
+        assertEq(qualifiers, 2, "two nonzero awards make stale-pool pricing observable");
+        (uint256[] memory awards, uint256 expectedParent, uint256 staleParent) = _replayDgnrsPerSpin(rewardBefore, spins);
+        assertLt(expectedParent, staleParent, "fresh per-spin depletion differs from a single initial balance");
+        uint256 nested = _assertDgnrsPoolTransfers(logs, awards, poolsBefore);
+        assertEq(sdgnrs.balanceOf(player) - playerBefore, expectedParent + nested,
+            "player balance reconciles independent parent awards plus separately itemized child awards");
+        assertEq(treasuryBefore - sdgnrs.balanceOf(address(sdgnrs)), expectedParent + nested,
+            "treasury debits exactly the full parent and child award total");
+        emit log_named_uint("dgnrs_parent_per_spin", expectedParent);
+        emit log_named_uint("dgnrs_parent_stale_hypothetical", staleParent);
+        emit log_named_uint("dgnrs_nested_box_awards", nested);
+    }
 
-        // Replay the PER-SPIN draining: per match-count of each 6+ spin (from the resolved
-        // event's packed spins), award_k = pool_k * bps(match) * 1e18 / (10_000 * 1e18); pool
-        // drains each award.
-        (, , bytes memory spinsData) = _decodeResolved(logs, index, betId);
-        (uint256 expectedPerSpinSum, uint256 expectedBatchedSum) =
-            _replayDgnrsPerSpin(rewardPoolBefore, spinsData);
-
-        // The per-spin (path-dependent, draining) sum must match exactly.
-        assertEq(sdgnrsGain, expectedPerSpinSum,
-            "DGAS-04: DGNRS gain == per-spin draining sum (reads poolBalance fresh per spin)");
-
-        // And it must be STRICTLY LESS than a hypothetical single-batched-read sum,
-        // proving the award was NOT folded into one fresh read.
-        assertLt(expectedPerSpinSum, expectedBatchedSum,
-            "DGAS-04: per-spin draining is strictly less than a single-read batch (not batched)");
-
-        emit log_named_uint("dgnrs_per_spin_sum", expectedPerSpinSum);
-        emit log_named_uint("dgnrs_batched_hypothetical", expectedBatchedSum);
+    /// @dev Parent high-score awards precede this bet's recirculated box. Verify each parent
+    ///      transfer separately; then reconcile any child transfers by pool and final balances.
+    ///      Child amounts are itemized here, not assumed absent or priced as parent-spin awards.
+    function _assertDgnrsPoolTransfers(Vm.Log[] memory logs, uint256[] memory awards, uint256[5] memory poolsBefore)
+        private view returns (uint256 nested)
+    {
+        bytes32 transferSig = keccak256("PoolTransfer(uint8,address,uint256)");
+        uint256[5] memory debited;
+        uint256 parent;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(sdgnrs) || logs[i].topics.length != 3
+                || logs[i].topics[0] != transferSig) continue;
+            uint256 pool = uint256(logs[i].topics[1]);
+            address recipient = address(uint160(uint256(logs[i].topics[2])));
+            uint256 paid = abi.decode(logs[i].data, (uint256));
+            assertEq(recipient, player, "each reward in the isolated bet goes to its owner");
+            assertLt(pool, 5, "known pool identifier");
+            debited[pool] += paid;
+            if (parent < awards.length) {
+                assertEq(pool, uint8(sDGNRS.Pool.Reward), "parent high-score awards debit Reward");
+                assertEq(paid, awards[parent], "each parent spin prices the remaining Reward balance");
+                ++parent;
+            } else {
+                nested += paid;
+            }
+        }
+        assertEq(parent, awards.length, "every independently replayed parent award was actually transferred");
+        for (uint8 i; i < 5; ++i) {
+            assertEq(poolsBefore[i] - sdgnrs.poolBalance(sDGNRS.Pool(i)), debited[i],
+                "every parent/child transfer reconciles to its actual pool debit");
+        }
     }
 
     // =========================================================================
@@ -804,10 +820,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // DGAS-05 Internal Helpers
     // =========================================================================
 
-    /// @dev DGNRS award bps per match tier (DegeneretteModule:203-205).
-    uint256 private constant DEGEN_DGNRS_6_BPS = 400;
-    uint256 private constant DEGEN_DGNRS_7_BPS = 800;
-    uint256 private constant DEGEN_DGNRS_8_BPS = 1500;
+    /// @dev Reward-pool percentages for the current composite score tiers S7/S8/S9.
+    uint256 private constant DEGEN_DGNRS_7_BPS = 400;
+    uint256 private constant DEGEN_DGNRS_8_BPS = 800;
+    uint256 private constant DEGEN_DGNRS_9_BPS = 1500;
 
     /// @dev Read claimablePool (uint128 in slot 1, byte 16 -> high 128 bits).
     function _readClaimablePool() internal view returns (uint256) {
@@ -976,59 +992,26 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         }
     }
 
-    /// @dev Find a word where the spin-0 greedy-self ticket lands >= 6 matches on
-    ///      multiple spins (so the DGNRS award fires more than once -> the per-spin
-    ///      poolBalance draining is observable). Returns (word, ticket, sixPlusSpins).
-    function _findMultiSixMatchWord(uint48 index)
-        internal
-        pure
-        returns (uint256 word, uint32 ticket, uint8 sixPlusSpins)
-    {
-        for (uint256 k; k < 20_000; ++k) {
-            uint256 candidate = uint256(keccak256(abi.encodePacked("dgnrs_multi_six", k)));
-            uint32 t = _resultTicketForSpin(index, candidate, 0); // self-match on spin 0 = 8/8
-            uint8 cnt;
-            for (uint8 s; s < 8; ++s) {
-                if (_countMatchesLocal(t, _resultTicketForSpin(index, candidate, s)) >= 6) ++cnt;
-            }
-            if (cnt > sixPlusSpins) {
-                sixPlusSpins = cnt;
-                word = candidate;
-                ticket = t;
-                if (sixPlusSpins >= 2) return (word, ticket, sixPlusSpins);
-            }
-        }
-    }
-
-    /// @dev Replay the per-spin DGNRS award from a bet's packed `spins` (score is the SAME
-    ///      composite quantity the old per-spin DegeneretteResult event carried under the name
-    ///      `matches` -- "Field name retained for the off-chain indexer" -- so this is a
-    ///      mechanical re-source, not a semantic change). NOTE: this replay is deliberately kept
-    ///      match(6/7/8)-keyed with bps 400/800/1500, matching this test's ORIGINAL (and per the
-    ///      DEF-380-04-FC2 note below, already-known-divergent) model; the contract itself keys
-    ///      the real award on score>=7 with bps 400/800/1500 at scores 7/8/9. Per-spin (draining):
-    ///      award_k = pool_k * bps(match) / 10_000; pool_{k+1} = pool_k - award_k. Batched
-    ///      (hypothetical single read): every award off the SAME initial pool.
+    /// @dev Called only after every emitted ticket/score/gold tuple has passed the independent
+    ///      reference replay. Each award uses the pool left by earlier awards; stake is one ETH.
     function _replayDgnrsPerSpin(uint256 poolStart, bytes memory spins)
-        internal
-        pure
-        returns (uint256 perSpinSum, uint256 batchedSum)
+        internal pure returns (uint256[] memory awards, uint256 perSpinSum, uint256 staleSum)
     {
         uint256 n = spins.length / 5;
+        awards = new uint256[](n);
+        uint256 count;
         uint256 runningPool = poolStart;
         for (uint256 i; i < n; ++i) {
-            (, uint8 score, ) = DQ.spinAt(spins, i);
-            if (score < 6) continue;
-            uint256 bps = score == 6 ? DEGEN_DGNRS_6_BPS : score == 7 ? DEGEN_DGNRS_7_BPS : DEGEN_DGNRS_8_BPS;
-            // cappedBet = min(perTicket, 1 ether) == 1 ether; reward = pool * bps * 1e18 / (10_000 * 1e18).
-            uint256 perSpinReward = (runningPool * bps) / 10_000;
-            uint256 batchedReward = (poolStart * bps) / 10_000;
-            if (perSpinReward != 0) {
-                perSpinSum += perSpinReward;
-                runningPool -= perSpinReward; // pool drains (fresh read next spin)
-            }
-            batchedSum += batchedReward;
+            (, uint8 score,) = DQ.spinAt(spins, i);
+            if (score < 7) continue;
+            uint256 bps = score == 7 ? DEGEN_DGNRS_7_BPS : score == 8 ? DEGEN_DGNRS_8_BPS : DEGEN_DGNRS_9_BPS;
+            uint256 reward = runningPool * bps / 10_000;
+            awards[count++] = reward;
+            perSpinSum += reward;
+            runningPool -= reward;
+            staleSum += poolStart * bps / 10_000;
         }
+        assembly ("memory-safe") { mstore(awards, count) }
     }
 
     // =========================================================================

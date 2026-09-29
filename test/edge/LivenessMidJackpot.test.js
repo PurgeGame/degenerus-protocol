@@ -174,15 +174,23 @@ describe("LivenessMidJackpot", function () {
     throw new Error("Failed to enter jackpot phase");
   }
 
+  // Reuse the expensive public lifecycle prefix. Replaying thousands of ticket
+  // writes from the deployment snapshot in each case retains excessive EDR state.
+  // Each test still starts at the same real, freshly entered jackpot phase.
+  async function deployAtJackpot() {
+    const fixture = await deployFullProtocol();
+    await driveIntoJackpotPhase(fixture);
+    return fixture;
+  }
+
   // ---------------------------------------------------------------------
   // Tests
   // ---------------------------------------------------------------------
 
   it("liveness is paused on entry to a real jackpot phase (deadman not fired)", async function () {
-    const fixture = await loadFixture(deployFullProtocol);
+    const fixture = await loadFixture(deployAtJackpot);
     const { game } = fixture;
 
-    await driveIntoJackpotPhase(fixture);
     expect(await game.jackpotPhase()).to.equal(true);
 
     // Just entered: dailyIdx tracks currentDay, so the deadman has not fired
@@ -195,10 +203,9 @@ describe("LivenessMidJackpot", function () {
   });
 
   it("productive pause holds at exactly the 30-day stall (deadman not yet fired)", async function () {
-    const fixture = await loadFixture(deployFullProtocol);
+    const fixture = await loadFixture(deployAtJackpot);
     const { game } = fixture;
 
-    await driveIntoJackpotPhase(fixture);
     expect(await game.jackpotPhase()).to.equal(true);
 
     // Warp the stall (currentDay - dailyIdx) to exactly 30: the deadman is a
@@ -216,10 +223,9 @@ describe("LivenessMidJackpot", function () {
   });
 
   it("VRF-death deadman overrides the jackpot pause once the stall exceeds 30 days", async function () {
-    const fixture = await loadFixture(deployFullProtocol);
+    const fixture = await loadFixture(deployAtJackpot);
     const { game } = fixture;
 
-    await driveIntoJackpotPhase(fixture);
     expect(await game.jackpotPhase()).to.equal(true);
 
     // Warp the stall to 31 days: deadman fires. jackpotPhaseFlag is still set,
@@ -237,10 +243,9 @@ describe("LivenessMidJackpot", function () {
   });
 
   it("advanceGame does not revert mid-jackpot when the deadman has fired", async function () {
-    const fixture = await loadFixture(deployFullProtocol);
+    const fixture = await loadFixture(deployAtJackpot);
     const { game, deployer, mockVRF } = fixture;
 
-    await driveIntoJackpotPhase(fixture);
     expect(await game.jackpotPhase()).to.equal(true);
 
     // Warp well past the deadman while still in jackpot phase.
@@ -255,10 +260,9 @@ describe("LivenessMidJackpot", function () {
   });
 
   it("deadman drives the stalled jackpot to terminal game-over fund release", async function () {
-    const fixture = await loadFixture(deployFullProtocol);
+    const fixture = await loadFixture(deployAtJackpot);
     const { game, deployer, mockVRF } = fixture;
 
-    await driveIntoJackpotPhase(fixture);
     expect(await game.jackpotPhase()).to.equal(true);
     expect(await game.gameOver()).to.equal(false);
 

@@ -728,12 +728,29 @@ contract DeadVrfEndingTest is DeployProtocol {
     ///      in the write slot, never drawn. The sweep starves the batch at every depth (the
     ///      worker itself, or the nested round drain inside it).
     function test_starvedPreSwapBatchCannotCloseTheSwapWindow() public {
+        _checkStarvedPreSwapBatch(false);
+    }
+
+    /// @dev A coordinator can refuse the new request. That makes the dangerous fall-through
+    ///      cheaper: the swap latch would still close, even though no request ID is installed.
+    ///      Keep this affordable witness as well as the successful-request regression.
+    function test_starvedPreSwapBatchWithRefusingCoordinatorCannotCloseTheSwapWindow() public {
+        _checkStarvedPreSwapBatch(true);
+    }
+
+    function _checkStarvedPreSwapBatch(bool refusing) private {
         DeadVrfSeeder s = _seeder();
         s.seedDeadlineWithLandedCohort(LVL, 0xB0B5);
         for (uint160 i = 1; i <= 24; ++i) s.seedQueued(TLVL, false, address(0xD00D0000 + i), 60, 0);
         uint32 erinAt = s.seedQueued(TLVL, true, erin, 2, 0);
         _restore();
         assertTrue(game.livenessTriggered(), "deadline passed, caught up, VRF alive");
+        if (refusing) {
+            vm.mockCallRevert(
+                address(mockVRF), abi.encodeWithSelector(MockVRFCoordinator.requestRandomWords.selector),
+                abi.encodeWithSignature("Error(string)", "coordinator refuses request")
+            );
+        }
         uint256 req0 = mockVRF.lastRequestId();
         uint256 snap = vm.snapshotState();
 
@@ -746,19 +763,23 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertEq(swapped, 0, "a batch call leaves the swap window open");
         assertGt(readLen, 0, "one batch does not drain the read side");
         uint256 requestGas;
-        for (uint256 i; i < 50 && mockVRF.lastRequestId() == req0; ++i) {
+        for (uint256 i; i < 50 && swapped == 0; ++i) {
             g0 = gasleft();
             game.advanceGame();
             requestGas = g0 - gasleft();
+            (,, swapped) = _terminalQueues();
         }
-        assertGt(mockVRF.lastRequestId(), req0, "the terminal request went out");
+        assertEq(swapped, 1, "full-gas reference reaches the terminal request attempt");
+        if (refusing) assertEq(mockVRF.lastRequestId(), req0, "refused request installs no ID");
+        else assertGt(mockVRF.lastRequestId(), req0, "the terminal request went out");
         vm.revertToState(snap);
 
         // A survivor ran the batch and must leave the window open with no request. A revert whose
-        // limit's 1/64 reserve (with margin) covers the whole swap-and-request call is the
-        // non-vacuity witness: the module kept enough gas after the batch failed to have sent
-        // the terminal request, had it swallowed the failure.
+        // limit's 1/64 reserve (with margin) covers the whole swap-and-request attempt is an
+        // affordable witness. Both successful and refused requests must have a witness;
+        // swallowing failure could close the swap window without its committed cohort.
         uint256 witnessGas;
+        uint256 affordableWitnessGas;
         uint256 leakGas;
         uint256 step = batchGas / 128;
         for (uint256 g = batchGas; g > step * 8; g -= step) {
@@ -767,9 +788,10 @@ contract DeadVrfEndingTest is DeployProtocol {
                 (,, swapped) = _terminalQueues();
                 if (leakGas == 0 && (swapped != 0 || mockVRF.lastRequestId() != req0)) leakGas = g;
             } catch (bytes memory err) {
+                if (err.length == 4 && bytes4(err) == DegenerusGameStorage.EmptyRevert.selector) witnessGas = g;
                 if (g / 66 > requestGas) {
                     assertEq(bytes4(err), DegenerusGameStorage.EmptyRevert.selector, "no error of its own");
-                    witnessGas = g;
+                    affordableWitnessGas = g;
                 }
             }
             vm.revertToState(snap);
@@ -777,12 +799,15 @@ contract DeadVrfEndingTest is DeployProtocol {
         emit log_named_uint("batchGas", batchGas);
         emit log_named_uint("requestGas", requestGas);
         emit log_named_uint("witnessGas", witnessGas);
+        emit log_named_uint("affordableWitnessGas", affordableWitnessGas);
         emit log_named_uint("leakGas", leakGas);
-        assertGt(witnessGas, 0, "a starved batch left enough gas to send the terminal request");
+        assertGt(witnessGas, 0, "a real batch failure reached the no-own-error guard");
+        assertGt(affordableWitnessGas, 0, "a starved batch could afford the terminal request attempt");
 
         // End to end: a starved call first (the leak if one exists, else the witness), then full
         // gas. The read side drains, the write cohort swaps in and draws on the terminal word.
         try game.advanceGame{gas: leakGas != 0 ? leakGas : witnessGas}() {} catch {}
+        if (refusing) vm.clearMockedCalls();
         for (uint256 i; i < 80 && !game.gameOver(); ++i) {
             game.advanceGame();
             _answer(mockVRF);

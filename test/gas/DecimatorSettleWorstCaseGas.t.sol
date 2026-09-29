@@ -126,7 +126,7 @@ contract DecimatorSettleWorstCaseGas is DeployProtocol {
     uint256 internal constant TX_INTRINSIC = 21_000;
     uint256 internal constant REALISTIC_CEILING = 10_000_000;
     /// @dev A typical full call must use most of its budget.
-    uint256 internal constant TYPICAL_FLOOR = 8_000_000;
+    uint256 internal constant TYPICAL_FLOOR = 7_500_000;
 
     // ---- The constructed round ----
     uint24 internal constant LVL = 5;

@@ -1,292 +1,137 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//
-// LBX-02 — v38 FORMAL RE-DEFER (carry-forward from v37.0 §9.NN.iv).
-//
-// Goal: empirical pin for "v37.0 LBX-01 saves 20-50 gas on tickets-path".
-//
-// Phase 269 attempted this and was blocked by a structural fixture-coverage
-// gap: the existing reachOpenableLootbox harness cannot deterministically
-// reach the tickets-path branch with the same gas envelope pre- vs
-// post-LBX-01 without a Phase-266-GAS-01-style synthetic fixture. The
-// closure-of-record at Phase 269 was the analytical worst-case derivation
-// (per feedback_gas_worst_case.md); v37.0 audit FINDINGS-v37.0.md §9.NN.iv
-// recorded the carry-forward.
-//
-// Path-of-investigation for v39+ pickup:
-//   (1) Build a deterministic lootbox-state fixture that lands on the
-//       tickets-path branch. The existing reachOpenableLootbox helper
-//       walks the production path which is non-deterministic on branch
-//       selection without VRF rigging.
-//   (2) Capture gasUsed pre- vs post-LBX-01 against the same fixture seed.
-//   (3) Pin PER_OPEN_GAS_DELTA_BOUND for the tickets-path at the
-//       observed delta (analytical estimate: 20-50 gas saved per LBX-01
-//       Phase 269 commit `8fd5c2e1` -14/+1 LOC plus signature cascade).
-//
-// Status at v38 close: FORMAL_RE_DEFER_TO_V39_PLUS. Closure recorded in
-// audit/FINDINGS-v38.0.md §9.NN.iv. Analytical worst-case load-bearing
-// per feedback_gas_worst_case.md remains the v38 acceptance.
-//
-// Phase 266 GAS-01 — entry-point gas regression for the lootbox-open path
-// after the lootbox-path entropy refactor.
-//
-// Methodology per `feedback_gas_worst_case.md`:
-//   1. Derive theoretical worst-case bound from opcode-by-opcode walk FIRST.
-//   2. HEAD-only measurement at the 3 lootbox entry points.
-//   3. REF-CAPTURE protocol: first run prints measured values for executor
-//      to pin into the literal constants; subsequent runs assert |measured -
-//      REF| <= ENTRY_POINT_DELTA_TOLERANCE AND (measured - REF) <=
-//      PER_OPEN_GAS_DELTA_BOUND.
-//
-// Lifecycle reachability: lootbox open requires (a) a purchase that allocates
-// lootboxes, (b) a `requestLootboxRng()` outside the daily advance window that
-// requests VRF entropy for the lootbox index, (c) `mockVRF.fulfillRandomWords`
-// for the lootbox request id, then (d) the permissionless sweep
-// `openBoxes(maxCount)` — the per-(player,index) `openBox` entry point is
-// gone. `openBoxes(1)` opens exactly one ready entry (the first entry of a
-// call always runs regardless of its cost, per DegenerusGameLootboxModule's
-// `openHumanBoxes`), which is alice's sole queued entry in this fixture —
-// the closest surviving equivalent of the old single-player open. The
-// simulator's purchase/advance state machine may not always permit step (b) or
-// (c) (e.g. when the activity threshold isn't met or the daily-advance window
-// blocks lootbox-RNG requests). The soft-skip pattern follows the existing
-// `test/gas/AdvanceGameGas.test.js:1014` precedent — fixture-coverage gaps
-// are reported with diagnostic messages so a regression that closes off a
-// reachable path is visible.
-//
-// ============================================================================
-// THEORETICAL WORST-CASE DERIVATION (Phase 266 lootbox-open envelope — GAS-01)
-// ============================================================================
-//
-// Per-open seed-derivation cost (single-keccak-per-resolution + inline bit-slice):
-//   + keccak256(abi.encode(rngWord, player, day, amount))     ~  80 gas
-//     (entry-point keccak; preserved from pre-refactor per RESEARCH.md
-//      Open Question 2; MSTORE × 4 + KECCAK256(128 bytes))
-//   + per-consumer inline shifts (uint8 / uint16 / uint24 + masks)
-//                                                              ~ 6-12 gas each × 7 consumers ≈ 70-90 gas
-//   + per-consumer % small modulo                              ~  8 gas each × 7 consumers ≈ 56 gas
-//   - SAVED: 5 entropyStep calls × ~20-30 gas each            ≈ 100-150 gas per resolution
-//   - SAVED: 1 dead L1585 entropyStep advance × ~20-30 gas    ≈  25 gas (WWXRP path; per Open Question 3)
-//   + ETH-amount-second branch: + 1 hash2 keccak (~80 gas) for seed2 chunk (Option A)
-//
-// Net per-open delta:
-//   single-amount path:        +(80 + 90 + 56) - (100..150) - 25  =  -(0..40) to +101 gas typical
-//   ETH-amount-second branch:  same + (80 gas for seed2)          =  +60 to +180 gas typical
-//
-// GAS-01 envelope: ±300 gas per-open. Headroom 2× over typical theoretical
-// worst case (180 gas). The 2× margin absorbs compiler-codegen variance and
-// any measurement noise from cold/warm SLOAD interleaving outside the
-// entropy-derivation hot path.
-//
-// ============================================================================
-// REFERENCE-CAPTURE PROTOCOL
-// ============================================================================
-// Each `*_GAS_REF` constant is a positive integer pinned from a one-time HEAD
-// measurement after the Wave 1 contract refactor lands.
-//
-// On first run, the test prints (per reachable entry point):
-//   [REF-CAPTURE] OPEN_LOOTBOX_GAS_REF             = <gasNumber>
-//   [REF-CAPTURE] RESOLVE_LOOTBOX_DIRECT_GAS_REF   = <gasNumber>
-// The executor pins each captured value into the matching literal constant
-// (replacing 0 with the captured integer). Subsequent runs assert
-//   |measured - REF| <= ENTRY_POINT_DELTA_TOLERANCE   (codegen-variance band)
-// AND
-//   (measured - REF) <= PER_OPEN_GAS_DELTA_BOUND      (refactor envelope per GAS-01)
-//
-// Phase 266 audit baseline: v35.0 closure HEAD `5db8682b`.
+// Current public openBoxes gas witnesses. These replace the never-pinned historical
+// entropy-refactor benchmark: no pre/post micro-optimization delta is claimed.
+// Real purchases and VRF callbacks create one ordinary box or the maximum 100-box
+// order. Each measured receipt is a separate cold transaction, including intrinsic
+// gas, with a 10M normal target and an absolute 11.5M owner ceiling. A first-entry
+// 100-box overshoot is intentional production behavior and must fit that ceiling.
 
-const PER_OPEN_GAS_DELTA_BOUND       = 300;       // GAS-01 ±300 gas per-open
-const ENTRY_POINT_DELTA_TOLERANCE    = 2000;      // ±2000 gas per-site tolerance vs pinned REF (codegen variance)
-const OPEN_LOOTBOX_GAS_REF             = 0;       // executor-pinned post REF-CAPTURE first run
-// OPEN_FLIP_LOOTBOX_GAS_REF removed (v47): openFlipLootBox surface deleted.
-const RESOLVE_LOOTBOX_DIRECT_GAS_REF   = 0;       // executor-pinned post REF-CAPTURE first run
-
-import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
+import { readFileSync } from "node:fs";
+import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
-import { boSmalls } from "../helpers/boxOrder.js";
-import {
-  eth,
-  advanceToNextDay,
-  getEvents,
-  getLastVRFRequestId,
-  ZERO_BYTES32,
-} from "../helpers/testUtils.js";
+import { boCustom, boSmalls, boCount } from "../helpers/boxOrder.js";
+import { eth, advanceToNextDay, getLastVRFRequestId, ZERO_BYTES32 } from "../helpers/testUtils.js";
 
-const ZERO_ADDRESS = hre.ethers.ZeroAddress;
-const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
+const NORMAL_GAS_TARGET = 10_000_000n;
+const AUDIT_GAS_CEILING = 11_500_000n;
+const WORD = 266266n;
+const MASK48 = (1n << 48n) - 1n;
+const layout = JSON.parse(readFileSync(new URL("../../scripts/layout/golden/DegenerusGame.json", import.meta.url), "utf8"));
+const root = (name) => {
+  const entry = layout.find((item) => item.label === name);
+  if (!entry) throw new Error(`Missing verified storage root: ${name}`);
+  return BigInt(entry.slot);
+};
+const slot = (key, base) => hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
+  ["uint256", "uint256"], [key, base],
+));
+async function read(game, position) {
+  return BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), position));
+}
+async function indexOf(game) { return (await read(game, root("lootboxRngPacked"))) & MASK48; }
+async function orderOf(game, index, player) {
+  return read(game, slot(BigInt(player), BigInt(slot(index, root("lootboxOrder")))));
+}
+async function wordOf(game, index) { return read(game, slot(index, root("lootboxRngWordByIndex"))); }
 
-// ----------------------------------------------------------------------------
-// Lifecycle helpers — adapted from test/gas/AdvanceGameGas.test.js
-// (lootbox path 2 try/catch precedent at L1014/L1027).
-// ----------------------------------------------------------------------------
+async function readyDailyFixture() {
+  const f = await deployFullProtocol();
+  await f.mockVRF.fundSubscription(1, eth(100));
+  await advanceToNextDay();
+  for (let calls = 0; calls < 50 && !(await f.game.rngLocked()); calls++) {
+    await f.game.connect(f.deployer).advanceGame();
+  }
+  expect(await f.game.rngLocked(), "daily request must engage").to.equal(true);
+  const request = await getLastVRFRequestId(f.mockVRF);
+  expect(request, "fresh real VRF request").to.be.gt(0n);
+  await f.mockVRF.fulfillRandomWords(request, 0xB007n);
+  for (let calls = 0; calls < 100 && await f.game.rngLocked(); calls++) {
+    await f.game.connect(f.deployer).advanceGame();
+  }
+  expect(await f.game.rngLocked(), "daily work must finish within its bound").to.equal(false);
+  await f.game.openBoxes(1000);
+  expect(await f.game.level(), "fixed live game level").to.equal(0n);
+  expect(await f.game.boxesPending(), "fixture starts with no ready entries").to.equal(false);
+  return f;
+}
 
-/** Buy `n` full tickets (`n × 400` qty) at level-0 intro price (0.01 ETH each). */
-async function buyFullTickets(game, buyer, n, totalEth) {
-  return game.connect(buyer).purchase(
-    ZERO_ADDRESS,
-    BigInt(n) * 400n,
-    0n,
-    ZERO_BYTES32,
-    MintPaymentKind.DirectEth,
-    false,
-    { value: eth(totalEth) },
+async function purchase(f, player, packed, nominal) {
+  // A real ticket purchase supplies the ordinary activity score; no storage seeding.
+  await f.game.connect(player).purchase(
+    player.address, 400n, packed, ZERO_BYTES32, 0, false, { value: nominal + eth(0.01) },
   );
 }
 
-/** Purchase `n` small boxes at level-0 (a small is 1x the level price, 0.01 ETH). */
-async function buyLootboxes(game, buyer, n, totalEth) {
-  return game.connect(buyer).purchase(
-    ZERO_ADDRESS,
-    0n,
-    boSmalls(BigInt(n)),
-    ZERO_BYTES32,
-    MintPaymentKind.DirectEth,
-    false,
-    { value: eth(totalEth) },
-  );
+async function prepare(f, buyers, count, singleCustom) {
+  const index = await indexOf(f.game);
+  for (const buyer of buyers) {
+    await purchase(f, buyer, singleCustom ? boCustom(eth(1)) : boSmalls(count), eth(1));
+    expect(boCount(await orderOf(f.game, index, buyer.address)), "exact committed box count").to.equal(count);
+  }
+  expect(await wordOf(f.game, index), "purchases precede revelation").to.equal(0n);
+  expect(await f.game.openBoxes.staticCall(1), "unready boxes cannot be consumed").to.equal(0n);
+  await f.game.connect(f.deployer).requestLootboxRng();
+  const request = await getLastVRFRequestId(f.mockVRF);
+  await f.mockVRF.fulfillRandomWords(request, WORD);
+  expect(await wordOf(f.game, index), "delivered word is bound to the original index").to.equal(WORD);
+  expect(await indexOf(f.game)).to.equal(index + 1n);
+  expect(await f.game.boxesPending(), "measured entry is ready").to.equal(true);
+  // A later unworded order must survive every measured opening and the final replay probe.
+  await purchase(f, f.alice, boSmalls(1), eth(0.01));
+  const nextOrder = await orderOf(f.game, index + 1n, f.alice.address);
+  expect(boCount(nextOrder)).to.equal(1n);
+  return { index, nextOrder };
 }
 
-/**
- * Drive the lifecycle to a state where lootbox VRF has been requested AND
- * fulfilled, returning the lootbox index whose `rngWord` is now non-zero.
- * Returns `null` when the simulator state denies lootbox-RNG reachability
- * (matches AdvanceGameGas L1014/L1027 soft-skip precedent).
- */
-async function reachOpenableLootbox(fixture) {
-  const { game, deployer, mockVRF, alice } = fixture;
-
-  // 1. Purchase lootboxes (allocates lootboxOrder[index][alice]).
-  try {
-    await buyLootboxes(game, alice, 20, 0.2);
-  } catch (err) {
-    return { reason: `lootbox purchase failed: ${err.message.slice(0, 80)}` };
-  }
-
-  // 2. Request lootbox RNG (only callable outside the daily advance window).
-  let lbRequestId;
-  try {
-    await game.connect(deployer).requestLootboxRng();
-    lbRequestId = await getLastVRFRequestId(mockVRF);
-  } catch (err) {
-    return { reason: `requestLootboxRng failed: ${err.message.slice(0, 80)}` };
-  }
-
-  // 3. Fulfill VRF.
-  try {
-    await mockVRF.fulfillRandomWords(lbRequestId, 266266n);
-  } catch (err) {
-    return { reason: `fulfillRandomWords failed: ${err.message.slice(0, 80)}` };
-  }
-
-  return { reason: null };
-}
-
-/** Find a lootbox index for `player` whose stored ETH amount is non-zero AND
- *  whose `lootboxRngWordByIndex[index]` is non-zero (i.e. openable). Probes a
- *  small index range — if nothing matches, returns `null`. */
-async function findOpenableEthIndex(game, player) {
-  for (let i = 0; i < 64; i++) {
-    let amount;
-    try {
-      amount = await game.lootboxEth(i, player.address);
-    } catch (_) {
-      break;
+async function measureOpen(f, state, player, count) {
+  // One step pays for the genesis afking-ring scan; the second reaches the human entry.
+  expect(await f.game.connect(f.carol).openBoxes.staticCall(2, { gasLimit: AUDIT_GAS_CEILING }),
+    "the first queued entry must open in full").to.equal(count);
+  const receipt = await (await f.game.connect(f.carol).openBoxes(2, { gasLimit: AUDIT_GAS_CEILING })).wait();
+  expect(receipt.gasUsed, "owner's hard transaction ceiling").to.be.lte(AUDIT_GAS_CEILING);
+  expect(receipt.gasUsed, "normal public-opening witness").to.be.lte(NORMAL_GAS_TARGET);
+  expect(await orderOf(f.game, state.index, player.address), "measured order fully consumed").to.equal(0n);
+  expect(await orderOf(f.game, state.index + 1n, f.alice.address), "unrevealed next-index order survives").to.equal(state.nextOrder);
+  const summaries = [];
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== (await f.game.getAddress()).toLowerCase()) continue;
+    for (const iface of [f.lootboxModule.interface, f.degeneretteModule.interface]) {
+      let parsed;
+      try { parsed = iface.parseLog(log); } catch { continue; }
+      if (parsed && ["LootBoxOpened", "BoxSpin"].includes(parsed.name)) summaries.push(parsed);
     }
-    if (amount === undefined || amount === null) continue;
-    if (BigInt(amount) === 0n) continue;
-    let rngWord;
-    try {
-      rngWord = await game.lootboxRngWordByIndex(i);
-    } catch (_) {
-      continue;
-    }
-    if (BigInt(rngWord) === 0n) continue;
-    return i;
   }
-  return null;
+  expect(summaries.length, "every consumed box publishes its actual resolution").to.be.gte(Number(count));
+  for (const event of summaries) expect(event.args.player).to.equal(player.address);
+  console.log(`      [OPEN-BOXES] boxes=${count} gas=${receipt.gasUsed} hard-headroom=${AUDIT_GAS_CEILING - receipt.gasUsed}`);
+  return receipt;
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
-describe("Phase 266 GAS-01 — lootbox-open entry-point gas regression at v36.0 HEAD", function () {
+describe("LootboxOpenGas — current public opening and maximum-size order", function () {
   this.timeout(600_000);
   after(function () { restoreAddresses(); });
 
-  describe("openBox (ETH lootbox) — per-open gas envelope ±300 gas", function () {
-    it(`gasUsed within ENTRY_POINT_DELTA_TOLERANCE of pinned REF; per-open delta <= ${PER_OPEN_GAS_DELTA_BOUND}`, async function () {
-      const fixture = await loadFixture(deployFullProtocol);
-      const { game, alice } = fixture;
-
-      const probe = await reachOpenableLootbox(fixture);
-      if (probe.reason !== null) {
-        console.warn(`[GAS-01 openBox] soft-skip — ${probe.reason} (matches AdvanceGameGas L1014/L1027 precedent)`);
-        this.skip();
-        return;
-      }
-
-      const index = await findOpenableEthIndex(game, alice);
-      if (index === null) {
-        console.warn(`[GAS-01 openBox] soft-skip — no openable ETH lootbox index found for alice in probe range`);
-        this.skip();
-        return;
-      }
-
-      // openBox(player, index) is gone; openBoxes(1) opens exactly one ready
-      // entry (alice's, the sole queued entry at this point in the fixture)
-      // via the permissionless in-order sweep.
-      const tx = await game.connect(alice).openBoxes(1);
-      const receipt = await tx.wait();
-      const measured = Number(receipt.gasUsed);
-
-      console.log(`[REF-CAPTURE] OPEN_LOOTBOX_GAS_REF             = ${measured}`);
-
-      if (OPEN_LOOTBOX_GAS_REF > 0) {
-        const drift = Math.abs(measured - OPEN_LOOTBOX_GAS_REF);
-        expect(
-          drift <= ENTRY_POINT_DELTA_TOLERANCE,
-          `openBox drift ${drift} > tolerance ${ENTRY_POINT_DELTA_TOLERANCE}; measured ${measured} vs REF ${OPEN_LOOTBOX_GAS_REF}`,
-        ).to.equal(true);
-
-        const perOpenDelta = measured - OPEN_LOOTBOX_GAS_REF;
-        expect(
-          perOpenDelta <= PER_OPEN_GAS_DELTA_BOUND,
-          `openBox per-open delta ${perOpenDelta} > ${PER_OPEN_GAS_DELTA_BOUND} (re-derive worst case before re-pinning)`,
-        ).to.equal(true);
-      } else {
-        console.log(`[GAS-01 openBox] REF placeholder is 0 — pin ${measured} into OPEN_LOOTBOX_GAS_REF and re-run.`);
-      }
-    });
+  it("opens one committed ordinary box in a cold transaction below 10M", async function () {
+    const f = await loadFixture(readyDailyFixture);
+    const state = await prepare(f, [f.alice], 1n, true);
+    await measureOpen(f, state, f.alice, 1n);
+    expect(await f.game.boxIndexComplete(state.index)).to.equal(true);
+    expect(await f.game.openBoxes.staticCall(1000), "no replay and no opening of the later unworded order").to.equal(0n);
+    expect(await orderOf(f.game, state.index + 1n, f.alice.address)).to.equal(state.nextOrder);
   });
 
-  // openFlipLootBox (FLIP lootbox) per-open gas envelope — REMOVED (v47): the
-  // FLIP-lootbox surface (openFlipLootBox + the game.lootboxFlip view) was
-  // removed (terminal-paradox closure). The openBox describe above exercises the
-  // same _resolveLootboxCommon body and provides the primary GAS-01 measurement.
-  // Removed-by-design, not skipped.
-
-  describe("resolveLootboxDirect (decimator/claim path) — per-open gas envelope ±300 gas", function () {
-    it(`gasUsed within ENTRY_POINT_DELTA_TOLERANCE of pinned REF; per-open delta <= ${PER_OPEN_GAS_DELTA_BOUND}`, async function () {
-      // resolveLootboxDirect is invoked via cross-module delegatecall from the
-      // jackpot decimator path; it has no public entry point in DegenerusGame.
-      // The gas envelope is dominated by the same _resolveLootboxCommon body
-      // exercised by openBox above, plus a thin `_lootboxEvMultiplierBps`
-      // wrapper. Direct gas measurement requires a delegatecall harness, which
-      // is structurally different from the user-callable openBox path.
-      // Per `feedback_gas_worst_case.md` the theoretical-worst-case header
-      // bounds this entry point's regression contribution; the empirical pin
-      // is satisfied by the openBox measurement above (same _resolveLootboxCommon
-      // body). Soft-skip the empirical run with the diagnostic note.
-      console.warn(
-        `[GAS-01 resolveLootboxDirect] soft-skip — no public-entry-point harness available; ` +
-        `theoretical-worst-case header bounds this surface's regression. The shared ` +
-        `_resolveLootboxCommon body is exercised by the openBox empirical measurement above; ` +
-        `resolveLootboxDirect adds only the activity-score multiplier wrapper (~50-150 gas).`,
-      );
-      console.log(`[REF-CAPTURE] RESOLVE_LOOTBOX_DIRECT_GAS_REF   = (deferred — see soft-skip note)`);
-      this.skip();
-    });
+  it("opens two maximum 100-box orders in separate bounded cold transactions without skipping the second owner", async function () {
+    const f = await loadFixture(readyDailyFixture);
+    const state = await prepare(f, [f.alice, f.bob], 100n, false);
+    const bobOrder = await orderOf(f.game, state.index, f.bob.address);
+    const first = await measureOpen(f, state, f.alice, 100n);
+    expect(await orderOf(f.game, state.index, f.bob.address), "budget break preserves the next owner").to.equal(bobOrder);
+    expect(await f.game.boxIndexComplete(state.index)).to.equal(false);
+    const second = await measureOpen(f, state, f.bob, 100n);
+    expect(second.blockNumber).to.be.gt(first.blockNumber);
+    expect(await f.game.boxIndexComplete(state.index)).to.equal(true);
+    expect(await f.game.openBoxes.staticCall(1000), "no duplicate opening").to.equal(0n);
   });
 });

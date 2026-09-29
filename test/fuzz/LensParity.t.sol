@@ -356,12 +356,35 @@ contract LensParityTest is Test {
     function testFuzz_decBucketTotal(uint24 lvl, uint8 denom, uint8 subBucket, uint192 totalBurn, uint32 length)
         public
     {
-        denom = uint8(bound(denom, 0, 12));
-        subBucket = uint8(bound(subBucket, 0, 12));
+        denom = uint8(bound(denom, 2, 12));
+        subBucket = uint8(bound(subBucket, 0, denom - 1));
         harness.setDecBucketTotal(lvl, denom, subBucket, totalBurn, length);
         (uint256 t, uint32 l) = lens.decBucketTotal(game, lvl, denom, subBucket);
         assertEq(t, totalBurn, "bucket total");
         assertEq(l, length, "bucket length");
+    }
+
+    function test_decBucketTotalRejectsAliasedSubbucket() public {
+        harness.setDecBucketTotal(5, 6, 0, 123 ether, 1);
+        (uint256 total, uint32 length) = lens.decBucketTotal(game, 5, 6, 0);
+        assertEq(total, 123 ether);
+        assertEq(length, 1);
+        // Without a bounds check, (5, 13) reads the exact storage slot of (6, 0).
+        vm.expectRevert(bytes4(keccak256("E()")));
+        lens.decBucketTotal(game, 5, 5, 13);
+    }
+
+    function testFuzz_decBucketTotalRejectsInvalidDenominator(uint24 lvl, uint8 denom, uint8 subBucket) public {
+        vm.assume(denom < 2 || denom > 12);
+        vm.expectRevert(bytes4(keccak256("E()")));
+        lens.decBucketTotal(game, lvl, denom, subBucket);
+    }
+
+    function testFuzz_decBucketTotalRejectsInvalidSubbucket(uint24 lvl, uint8 denom, uint8 subBucket) public {
+        denom = uint8(bound(denom, 2, 12));
+        subBucket = uint8(bound(subBucket, denom, 255));
+        vm.expectRevert(bytes4(keccak256("E()")));
+        lens.decBucketTotal(game, lvl, denom, subBucket);
     }
 
     /// @notice A raw decimator list entry, read independent of any pointer — decEntryAt names

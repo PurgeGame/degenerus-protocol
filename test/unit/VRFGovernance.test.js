@@ -816,41 +816,51 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("tie condition", function () {
     it("equal approve and reject weights leave proposal Active (neither execute nor kill)", async function () {
-      const { admin, mockVRF, deployer, alice, sdgnrs, game } =
+      const { admin, mockVRF, deployer, alice, bob, carol, sdgnrs, dgnrs } =
         await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
-
-      // Give deployer and alice equal sDGNRS
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
-      await giveSDGNRS(sdgnrs, game, alice.address, eth("1000"));
-
-      // Create 21h stall
-      await createStall(45);
-
-      // Deployer creates proposal
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
-
-      // Deployer votes approve
-      await admin.connect(deployer).vote(1, true);
-
-      // Proposal should still be Active after one approve vote
-      // (may or may not execute depending on threshold vs weight ratio)
-      // At 60% threshold with deployer holding ~50% of circ, may not execute
-      // Let's check and only proceed with tie test if still Active
-      const [, , , , tieState1, , aw1, rw1] = await admin.proposals(1);
-      if (Number(tieState1) !== 0) {
-        // If already executed (deployer has >60% circ), skip tie test
-        // This can happen if deployer is the majority holder
-        return;
+      const subId = await admin.subscriptionId();
+      // Three equal eligible holders: either first vote is below the initial 50%.
+      // The third holder abstains; the first two form an exact, nonzero tie.
+      for (const owner of [deployer, alice, bob]) {
+        await dgnrs.connect(deployer).unwrapTo(owner.address, eth("1000"));
+        expect(await sdgnrs.balanceOf(owner.address)).to.equal(eth("1000"));
       }
+      expect(await sdgnrs.votingSupply()).to.equal(eth("3000"));
+      expect(await sdgnrs.balanceOf(carol.address)).to.equal(0n);
+      await createStall(45);
+      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("tie-key"));
+      const id = await admin.proposalCount();
+      expect((await admin.proposals(id))[2]).to.equal(3000n);
+      expect(await admin.threshold(id)).to.equal(5000n);
 
-      // Alice votes reject with equal weight
-      await admin.connect(alice).vote(1, false);
+      await expect(admin.connect(deployer).vote(id, true))
+        .to.emit(admin, "VoteCast").withArgs(id, deployer.address, true, eth("1000"));
+      const first = await admin.proposals(id);
+      expect(first[4], "first vote must leave room for the opposing vote").to.equal(0n);
+      expect(first[6]).to.equal(1000n);
+      expect(first[7]).to.equal(0n);
+      await expect(admin.connect(alice).vote(id, false))
+        .to.emit(admin, "VoteCast").withArgs(id, alice.address, false, eth("1000"));
+      expect(await admin.voteWeight(id, deployer.address)).to.equal(1000n);
+      expect(await admin.voteWeight(id, alice.address)).to.equal(1000n);
+      expect(await admin.votes(id, deployer.address)).to.equal(1n);
+      expect(await admin.votes(id, alice.address)).to.equal(2n);
+      expect((await admin.proposals(id))[4]).to.equal(0n);
 
-      // Verify proposal is still Active -- tie means neither execute nor kill
-      const [, , , , tieState2, , approveWeight, rejectWeight] = await admin.proposals(1);
-      expect(approveWeight).to.equal(rejectWeight, "Weights should be equal (tie)");
-      expect(tieState2).to.equal(0, "Proposal should remain Active on tie");
+      // Decay below either side's weight, then actually poke resolution. Equality,
+      // rather than insufficient quorum, must keep both execute and kill closed.
+      await advanceTime(3 * ONE_DAY);
+      expect(await admin.threshold(id)).to.equal(3000n);
+      expect(1000n * 10000n).to.be.gte(3000n * 3000n);
+      await admin.connect(carol).vote(id, true);
+      const tied = await admin.proposals(id);
+      expect(tied[6]).to.equal(1000n);
+      expect(tied[7]).to.equal(1000n);
+      expect(tied[4], "nonzero tie remains Active even after both sides clear quorum").to.equal(0n);
+      expect(await admin.canExecute(id)).to.equal(false);
+      expect(await admin.subscriptionId()).to.equal(subId);
+      expect(await admin.coordinator()).to.equal(vrfAddr);
     });
   });
 

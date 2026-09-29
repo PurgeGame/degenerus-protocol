@@ -1,7 +1,7 @@
 {
-  "date": "2026-09-27",
-  "status": "committed revision audit handoff; not an audited deployment",
-  "base_commit": "0889affc138fdcbfca90e36b35e5ed8d722ec2b4",
+  "date": "2026-09-29",
+  "status": "working-tree source identity; verification status is recorded separately",
+  "base_commit": "ab95963ac4a10f31a9bca7274107d95e86cfec65",
   "source_file_count": 66,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -28,7 +28,6 @@
     "contracts/JackpotBattle.sol",
     "contracts/LootboxCraps.sol",
     "contracts/WWXRP.sol",
-    "contracts/sDGNRS.sol",
     "contracts/interfaces/ICoinflip.sol",
     "contracts/interfaces/IDegenerusAffiliate.sol",
     "contracts/interfaces/IDegenerusCoin.sol",
@@ -68,6 +67,7 @@
     "contracts/modules/DegenerusGamePayoutUtils.sol",
     "contracts/modules/DegenerusGameWhaleModule.sol",
     "contracts/modules/GameAfkingModule.sol",
+    "contracts/sDGNRS.sol",
     "contracts/storage/CrapsBattleStorage.sol",
     "contracts/storage/DegenerusGameStorage.sol"
   ],
@@ -88,11 +88,12 @@
     "Makefile",
     ".github/workflows/ci.yml",
     "scripts/test-foundry-groups.py",
-    "scripts/check-deployment-sizes.js"
+    "scripts/check-deployment-sizes.js",
+    "scripts/test-hardhat-groups.py"
   ],
   "hash_algorithm": "SHA-256",
   "hashes_file": "source-sha256.txt",
-  "verification": "docs/VERIFICATION.md: current evidence for the 2026-09-27 revision (one daily jackpot battle for paid and awarded entries with a fixed 8,000-FLIP fee and a shared 1,000-roll slip budget; 40B lifetime DGNRS unwrap cap; terminal resilience and bare pinned calls; caught-up-day deadline rule; one daily board, jackpot fill stage and flat foil table), earlier evidence retained; docs/audit/AUDIT-READINESS-2026-09-21.md addenda; see the evidence archives.",
+  "verification": "docs/VERIFICATION.md: build, runner and evidence instructions; docs/audit/AUDIT-READINESS-2026-09-21.md; see the evidence archives. Snapshot hashes establish file identity, not that tests pass.",
   "verification_inputs_hashes_file": "verification-sha256.txt",
   "evidence_archive": "evidence-2026-09-21.tar.gz",
   "evidence_archive_sha256": "651a9e9da46db10565535cc7d949134905b7bd772022e5539c98025e1b6c0855",

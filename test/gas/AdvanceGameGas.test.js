@@ -16,6 +16,9 @@ import {
 
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
+const NORMAL_GAS_TARGET = 10_000_000n;
+const UNLIKELY_GAS_TARGET = 11_000_000n;
+const AUDIT_GAS_CEILING = 11_500_000n;
 
 /**
  * AdvanceGame Gas Benchmark Tests
@@ -61,7 +64,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
     );
     for (const { name, gasUsed } of sorted) {
       const gasStr = gasUsed.toLocaleString().padStart(14);
-      const flag = gasUsed > 15_000_000n ? " !!!" : "";
+      const flag = gasUsed > AUDIT_GAS_CEILING ? " !!!" : "";
       console.log(`  ${name.padEnd(48)} ${gasStr}${flag}`);
     }
 
@@ -71,13 +74,10 @@ describe("AdvanceGame Gas Benchmarks", function () {
       console.log(
         `  Peak: ${max.name} = ${max.gasUsed.toLocaleString()} gas`
       );
-      if (max.gasUsed > 30_000_000n) {
-        console.log("  CRITICAL: Peak exceeds 30M block gas limit!");
-      } else if (max.gasUsed > 15_000_000n) {
-        console.log("  WARNING: Peak exceeds 15M gas target!");
-      } else {
-        console.log("  All paths within safe gas limits.");
-      }
+      const tier = max.gasUsed <= NORMAL_GAS_TARGET ? "normal (<=10M)"
+        : max.gasUsed <= UNLIKELY_GAS_TARGET ? "unlikely (<=11M)"
+        : max.gasUsed <= AUDIT_GAS_CEILING ? "extreme (<=11.5M)" : "OVER HARD CEILING";
+      console.log(`  Observed maximum tier: ${tier}.`);
     }
     console.log("=".repeat(72));
     console.log("");
@@ -126,6 +126,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
   function recordGas(name, receipt) {
     const gasUsed = receipt.gasUsed;
+    expect(gasUsed, `${name}: transaction exceeds the 11.5M hard ceiling`).to.be.lte(AUDIT_GAS_CEILING);
     gasResults.push({ name, gasUsed });
     console.log(`      Gas: ${gasUsed.toLocaleString()}`);
   }
@@ -1278,7 +1279,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       if (stageReceipts.has(11n)) {
         const r = stageReceipts.get(11n);
         recordGas("WC: Daily Split Call 1 (stage=11)", r);
-        expect(r.gasUsed).to.be.lt(16_000_000n);
+        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
         console.log(`      Call 1 gas: ${r.gasUsed.toLocaleString()}`);
       } else {
         console.log("      (Stage 11 not captured in this cycle)");
@@ -1288,7 +1289,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       if (stageReceipts.has(8n)) {
         const r = stageReceipts.get(8n);
         recordGas("WC: Daily Split Call 2 (stage=8)", r);
-        expect(r.gasUsed).to.be.lt(16_000_000n);
+        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
         console.log(`      Call 2 gas: ${r.gasUsed.toLocaleString()}`);
       } else if (stageReceipts.has(11n)) {
         // Stage 11 captured but no stage 8 — pool below split threshold
@@ -1364,7 +1365,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       if (stageReceipts.has(11n)) {
         const r = stageReceipts.get(11n);
         recordGas("WC: Early-Burn ETH (stage=11)", r);
-        expect(r.gasUsed).to.be.lt(16_000_000n);
+        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
         console.log(`      Early-burn gas: ${r.gasUsed.toLocaleString()}`);
       } else {
         console.log("      (Stage 11 not captured)");
@@ -1373,7 +1374,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       if (stageReceipts.has(8n)) {
         const r = stageReceipts.get(8n);
         recordGas("WC: Early-Burn Resume (stage=8)", r);
-        expect(r.gasUsed).to.be.lt(16_000_000n);
+        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
         console.log(`      Early-burn resume gas: ${r.gasUsed.toLocaleString()}`);
       }
     });
@@ -1439,7 +1440,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       if (stageReceipts.has(11n)) {
         const r = stageReceipts.get(11n);
         recordGas("WC: Terminal Jackpot Call 1 (stage=11)", r);
-        expect(r.gasUsed).to.be.lt(16_000_000n);
+        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
         console.log(`      Terminal call 1 gas: ${r.gasUsed.toLocaleString()}`);
       } else {
         console.log("      (Terminal call 1 not captured)");
@@ -1448,7 +1449,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       if (stageReceipts.has(8n)) {
         const r = stageReceipts.get(8n);
         recordGas("WC: Terminal Jackpot Call 2 (stage=8)", r);
-        expect(r.gasUsed).to.be.lt(16_000_000n);
+        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
         console.log(`      Terminal call 2 gas: ${r.gasUsed.toLocaleString()}`);
       } else if (stageReceipts.has(11n)) {
         console.log("      (No resume — single-call path used)");
@@ -1466,12 +1467,12 @@ describe("AdvanceGame Gas Benchmarks", function () {
 // at 305 players, max-scale pool — the maximally-loaded advanceGame path
 // across the v35.0 source tree) and records the margin explicitly.
 //
-// The existing section-16 SC-1/2a/2b assertions pin the ceiling at 16M gas
-// (`expect(r.gasUsed).to.be.lt(16_000_000n)`); the analytic worst-case
+// The section-16 SC-1/2a/2b assertions now enforce the owner's 11.5M hard
+// transaction ceiling. The historical analytic worst-case
 // projection (~15.075M expected; 30M / 15.075M ≈ 1.99×) is the basis for the
 // ≥1.99× margin disclosed in REQUIREMENTS.md SURF-05. The per-pull-level
 // resample helper introduces a per-call delta of ~75-110K (Plan 264-02 Task
-// 2), negligible vs the 16M absolute ceiling.
+// 2). Historical projections do not replace the current hard-cap assertions.
 //
 // This describe block runs the SC-1 fixture, captures the maximum gasUsed
 // across the captured stages, and asserts the margin is ≥ 1.99 at HEAD.
@@ -1635,6 +1636,7 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
       }
     }
 
+    expect(maxGas, "measured advance exceeds the 11.5M hard ceiling").to.be.lte(AUDIT_GAS_CEILING);
     const margin = Number(MAX_BLOCK_GAS) / Number(maxGas);
     console.log(`      [Phase 264 SURF-05] worst-case stage = ${maxStage}, gasUsed = ${maxGas.toLocaleString()}, margin = ${margin.toFixed(3)}× (required ≥ ${REQUIRED_MARGIN})`);
 
@@ -1668,7 +1670,7 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
 // is non-Decimator (no lootbox opens — typical for STAGE_PURCHASE_DAILY,
 // STAGE_TICKETS_WORKING, STAGE_TRANSITION_DONE, etc.); for Decimator-bearing
 // stages (STAGE_JACKPOT_COIN_TICKETS), the bound expands to 29K worst-case
-// inside the existing 16M absolute ceiling — margin shifts by ≤ 0.001× from
+// inside the historical envelope — margin shifts by ≤ 0.001× from
 // 1.99× per the analytic projection (29K / 15.075M ≈ 0.0019).
 // ===========================================================================
 
