@@ -7,9 +7,9 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///        score consumer migrated from the bps activity-score domain to whole points that is NOT part of the
 ///        later curve reshape.
 ///
-/// @notice The other three migrated consumers (FLIP decimator multiplier + bucket, century quantity
-///   bonus, _minScoreForBucket) were subsequently reshaped onto the steep-ramp/long-tail curves in
-///   ActivityCurveLib; their behavior is validated by ConsumerPointEquivalence. The affiliate lootbox taper was
+/// @notice The other migrated consumers (the FLIP decimator multiplier and the century quantity bonus)
+///   were subsequently reshaped onto the steep-ramp/long-tail curves in ActivityCurveLib; their behavior
+///   is validated by ConsumerPointEquivalence. The affiliate lootbox taper was
 ///   left unchanged, so its migration fix still stands and is pinned here: the taper starts at 100 points (not
 ///   the old 10_000 bps threshold) and floors at 25% by 255 points.
 ///

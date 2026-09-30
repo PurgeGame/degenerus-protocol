@@ -95,8 +95,8 @@ contract FLIP {
     /// @notice Emitted when a player burns FLIP during a decimator window.
     /// @param player The burner's address.
     /// @param amountBurned The amount burned (18 decimals).
-    /// @param bucket The effective bucket weight assigned (lower = more valuable).
-    event DecimatorBurn(address indexed player, uint256 amountBurned, uint8 bucket);
+    /// @param entryId The wallet's accumulated battle entry id.
+    event DecimatorBurn(address indexed player, uint256 amountBurned, uint64 entryId);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The account tied to the escrow: the original transfer sender when routed to VAULT via _transfer, address(0) on a direct mint to VAULT, or the calling contract (GAME/VAULT) for vaultEscrow/tombstoneAtGameOver.
@@ -176,10 +176,6 @@ contract FLIP {
 
     /// @dev Maximum sDGNRS backing spent once per decimator opening.
     uint256 private constant SDGNRS_DECIMATOR_CAP = 500_000 ether;
-
-    /// @dev Minimum bucket for normal and level-100 decimators.
-    uint8 private constant DECIMATOR_MIN_BUCKET_NORMAL = 5;
-    uint8 private constant DECIMATOR_MIN_BUCKET_100 = 2;
 
     /// @dev Max base amount eligible for decimator boon boost.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
@@ -802,16 +798,17 @@ contract FLIP {
         amount = backing < SDGNRS_DECIMATOR_CAP ? backing : SDGNRS_DECIMATOR_CAP;
         amount = coinflip.consumeFlipForSalvage(player, amount);
 
-        _recordDecimatorBurn(player, amount, lvl);
+        _recordDecimatorBurn(player, amount, lvl, 0);
     }
 
     /// @notice Burn FLIP during an active Decimator window to accrue weighted participation.
     /// @dev SECURITY: Burns BEFORE downstream calls (CEI pattern).
-    ///      Quest rewards are added to the base amount before bucket calculation.
-    ///      Bucket determines jackpot weight (lower = better odds).
+    ///      Quest and boon bonuses add chips before the degen and entry-day multipliers.
     /// @param player Player address to burn for (address(0) = msg.sender).
     /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 FLIP).
-    function decimatorBurn(address player, uint256 amount) external {
+    /// @param chips The entry's board as a normal battle entry takes it (zero to seven named
+    ///        chips, the dice scattering the rest); each burn sets it, so the last one counts.
+    function decimatorBurn(address player, uint256 amount, uint32 chips) external {
         address caller;
         if (player == address(0) || player == msg.sender) {
             caller = msg.sender;
@@ -826,18 +823,18 @@ contract FLIP {
 
         if (!degenerusGame.decWindow()) revert NotDecimatorWindow();
         // Key burns by the resolution level: burns during window level N land
-        // in level N+1's lists, where the jackpot resolves at the N→N+1 bump.
+        // in level N+1's battle, where the jackpot resolves at the N→N+1 bump.
         uint24 lvl = degenerusGame.level() + 1;
 
         uint256 consumed = _consumeCoinflipShortfall(caller, amount);
         // CEI: burn before any downstream calls after coinflip consumption
         _burn(caller, amount - consumed);
 
-        _recordDecimatorBurn(caller, amount, lvl);
+        _recordDecimatorBurn(caller, amount, lvl, chips);
     }
 
-    /// @dev Shared quest, activity, boon and bucket accounting after the funding leg is burned.
-    function _recordDecimatorBurn(address caller, uint256 amount, uint24 lvl) private {
+    /// @dev Shared quest, activity, boon and battle-chip accounting after the funding leg is burned.
+    function _recordDecimatorBurn(address caller, uint256 amount, uint24 lvl, uint32 chips) private {
         // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
         (uint256 questReward,,, bool completed) = questModule.handleDecimator(caller, amount);
         uint256 baseAmount = amount + (completed ? questReward : 0);
@@ -845,9 +842,7 @@ contract FLIP {
         // Activity score bonus (whole points); the curve self-saturates at its cap.
         uint256 bonusPoints = degenerusGame.playerActivityScore(caller);
 
-        uint256 decBurnMultBps = ActivityCurveLib.decMultBps(bonusPoints);
-        uint8 minBucket = (lvl % 100 == 0) ? DECIMATOR_MIN_BUCKET_100 : DECIMATOR_MIN_BUCKET_NORMAL;
-        uint8 bucket = ActivityCurveLib.decBucket(bonusPoints, minBucket);
+        uint256 decBurnMultBps = ActivityCurveLib.decBattleMultBps(bonusPoints);
 
         // Decimator boon: percent boost on base amount (capped to 50k FLIP).
         uint16 boonBps = degenerusGame.consumeDecimatorBoon(caller);
@@ -857,9 +852,9 @@ contract FLIP {
             baseAmount += boost;
         }
 
-        uint8 bucketUsed = degenerusGame.recordDecBurn(caller, lvl, bucket, baseAmount, decBurnMultBps);
+        uint64 entryId = degenerusGame.recordDecBurn(caller, lvl, baseAmount, decBurnMultBps, chips);
 
-        emit DecimatorBurn(caller, amount, bucketUsed);
+        emit DecimatorBurn(caller, amount, entryId);
     }
 
 }

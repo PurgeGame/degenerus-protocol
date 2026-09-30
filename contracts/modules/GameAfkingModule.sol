@@ -387,10 +387,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant OPEN_WEIGHT_BUDGET = OPEN_BATCH * OPEN_ITEM_WEIGHT;
 
     /// @dev The decimator leg's walk budget, in the same units, less what the box legs scanned.
-    ///      Its settles are charged by measured in-batch cost (DegenerusGameDecimatorModule), so
-    ///      the budget is sized on the bound itself: 2,030 units x 4.7k, plus one settle's
-    ///      overshoot (at most ~60 units) and the router's tail, stays within 10M gas.
-    uint256 internal constant DEC_WALK_BUDGET = 2_030;
+    ///      The module prices each run, insert, rank and credit at its measured worst case, so the
+    ///      leg takes the same envelope as the box legs, and a scan that spent part of it leaves the
+    ///      leg only the rest. Only the last item can cross it, and a Decimator run is bounded at
+    ///      64 shooters and 511 rolls: at most 126 units with a fresh insert and a full sift, so
+    ///      every call, router tail included, stays under 10M. Measured full calls land near 6M
+    ///      because every price covers its worst case.
+    uint256 internal constant DEC_WALK_BUDGET = 1_920;
 
     /// @dev THE CRAPS LEG'S FLAT REWARD — one FLIP for shutting a window or walking a field,
     ///      whichever the crank found to do. Flat rather than pro-rated because the two jobs are
@@ -2062,10 +2065,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev THE DECIMATOR LEG. The walk lives in the decimator module (delegatecall runs it in
     ///      this Game's storage, the same nested pattern as the human sweep). BARE: the walk idles
-    ///      on its own gates and prices every settle before running it, so a call that fails did
-    ///      so for gas and takes the whole crank with it.
+    ///      on its own gates and charges each piece of work after it runs, so a call that fails
+    ///      did so for gas and takes the whole crank with it.
     /// @param budgetUnits Walk units the box legs left of the call's weight budget.
-    /// @return settled Winning entries settled.
+    /// @return settled Work items processed: runs (tails included), the ranking and payouts.
     /// @return unitsUsed Walk units the leg spent.
     /// @return moved Whether the settle cursor advanced.
     function _decimatorSettle(

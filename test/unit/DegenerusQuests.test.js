@@ -17,7 +17,7 @@ import {
  * ==========================
  * Covers:
  *  - rollDailyQuest (onlyGame)
- *    - happy path: returns (true, [questTypes], false)
+ *    - happy path: stores the rolled quest types
  *    - slot 0 is always MINT_ETH (type 1)
  *    - slot 1 is different from slot 0
  *    - emits QuestSlotRolled for both slots
@@ -34,20 +34,21 @@ import {
  *  - Progress versioning (stale progress reset)
  *
  * Quest Type Constants (from contract):
- *   0 = MINT_FLIP, 1 = MINT_ETH, 2 = FLIP, 3 = AFFILIATE,
- *   4 = RESERVED, 5 = DECIMATOR, 6 = LOOTBOX, 7 = DEGENERETTE_ETH,
- *   8 = DEGENERETTE_FLIP
+ *   0 = UNROLLED, 1 = MINT_ETH, 2 = FLIP, 3 = AFFILIATE,
+ *   4 = FOIL, 5 = DECIMATOR, 6 = LOOTBOX, 7 = DEGENERETTE_ETH,
+ *   8 = DEGENERETTE_FLIP, 9 = MINT_FLIP
  */
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 const QUEST_TYPE_MINT_ETH = 1;
+const QUEST_TYPE_MINT_FLIP = 9;
 const QUEST_TYPE_FLIP = 2;
 const QUEST_TYPE_AFFILIATE = 3;
 const QUEST_TYPE_LOOTBOX = 6;
 const QUEST_SLOT0_REWARD = eth(100);
-const QUEST_RANDOM_REWARD = eth(200);
+const QUEST_RANDOM_REWARD = eth(100);
 const QUEST_FLIP_TARGET = eth(2000); // 2 * 1000 FLIP
 
 // ---------------------------------------------------------------------------
@@ -110,36 +111,26 @@ async function callAsGame(hreEthers, game, quests, fnName, args) {
  * Slot 0 is always MINT_ETH. Slot 1 depends on entropy.
  * We brute-force an entropy that gives us a desired slot 1 type.
  *
- * This is a best-effort helper; returns null if not found within 50k iterations.
+ * Each rejected candidate is reverted so the write-once day guard cannot hide it.
+ * Read the stored quests: rollDailyQuest no longer returns quest types.
  */
 async function rollQuestWithBonusType(hreEthers, game, quests, day, targetBonusType) {
   const gameAddr = await game.getAddress();
   await hreEthers.provider.send("hardhat_impersonateAccount", [gameAddr]);
-  await hreEthers.provider.send("hardhat_setBalance", [
-    gameAddr,
-    "0x1000000000000000000",
-  ]);
+  await hreEthers.provider.send("hardhat_setBalance", [gameAddr, "0x1000000000000000000"]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
-
-  let found = null;
-  for (let i = 0n; i < 50000n; i++) {
-    try {
-      const [, questTypes] = await quests
-        .connect(gameSigner)
-        .rollDailyQuest.staticCall(day, i, false, false, false);
-      if (Number(questTypes[1]) === targetBonusType) {
-        // Actually roll it
-        await quests.connect(gameSigner).rollDailyQuest(day, i, false, false, false);
-        found = { entropy: i, questTypes };
-        break;
-      }
-    } catch {
-      // skip
+  try {
+    for (let entropy = 0n; entropy < 256n; entropy++) {
+      const snapshot = await hreEthers.provider.send("evm_snapshot", []);
+      await quests.connect(gameSigner).rollDailyQuest(day, entropy, false, false, false);
+      const active = await quests.getActiveQuests();
+      if (Number(active[1].questType) === targetBonusType) return;
+      await hreEthers.provider.send("evm_revert", [snapshot]);
     }
+    throw new Error(`No quest type ${targetBonusType} reached for day ${day}`);
+  } finally {
+    await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   }
-
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
-  return found;
 }
 
 // ---------------------------------------------------------------------------
@@ -434,12 +425,9 @@ describe("DegenerusQuests", function () {
         "handlePurchase", [alice.address, 2, 0, 0, 0, 0]
       );
       const [reward, , streak, completed] = result;
-      if (completed) {
-        // Slot 0 reward is QUEST_SLOT0_REWARD = 100 FLIP
-        // (may also include slot 1 if auto-completed)
-        expect(reward).to.be.gte(QUEST_SLOT0_REWARD);
-        expect(streak).to.be.gte(1n);
-      }
+      expect(completed, "slot 0 must complete").to.be.true;
+      expect(reward).to.be.gte(QUEST_SLOT0_REWARD);
+      expect(streak).to.equal(1n);
     });
 
     it("handles zero quantity without revert", async function () {
@@ -500,8 +488,10 @@ describe("DegenerusQuests", function () {
 
     it("returns false completed when no FLIP quest active", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
-      // Roll quest that might not have FLIP in slot 1
-      await rollQuestAsGame(hre.ethers, game, quests, 2n, 0n);
+      // Force MINT_FLIP in slot 1, so neither daily slot is a FLIP quest.
+      await rollQuestAsGame(hre.ethers, game, quests, 2n, 0n, true);
+      const active = await quests.getActiveQuests();
+      expect(Number(active[1].questType)).to.equal(QUEST_TYPE_MINT_FLIP);
       // We call handleFlip; if FLIP is not in any slot, returns false
       const { result } = await callHandlerAsCoin(
         hre.ethers,
@@ -511,21 +501,19 @@ describe("DegenerusQuests", function () {
         [alice.address, eth(1000)]
       );
       const [, , , completed] = result;
-      // Whether or not FLIP is active, it should not revert
-      expect(typeof completed).to.equal("boolean");
+      expect(completed).to.be.false;
     });
 
     it("accumulates flip progress and emits QuestProgressUpdated", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
       // Find entropy that gives FLIP as slot 1
-      const found = await rollQuestWithBonusType(
+      await rollQuestWithBonusType(
         hre.ethers,
         game,
         quests,
         5n,
         QUEST_TYPE_FLIP
       );
-      if (!found) this.skip();
 
       const { tx } = await callHandlerAsCoin(
         hre.ethers,
@@ -541,14 +529,13 @@ describe("DegenerusQuests", function () {
 
     it("completing FLIP quest after MINT_ETH earns QUEST_RANDOM_REWARD", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
-      const found = await rollQuestWithBonusType(
+      await rollQuestWithBonusType(
         hre.ethers,
         game,
         quests,
         6n,
         QUEST_TYPE_FLIP
       );
-      if (!found) this.skip();
 
       // First complete slot 0 (MINT_ETH)
       await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
@@ -569,21 +556,19 @@ describe("DegenerusQuests", function () {
         [alice.address, QUEST_FLIP_TARGET]
       );
       const [reward, , , completed] = result;
-      if (completed) {
-        expect(reward).to.be.gte(QUEST_RANDOM_REWARD);
-      }
+      expect(completed, "slot 1 must complete").to.be.true;
+      expect(reward).to.equal(QUEST_RANDOM_REWARD);
     });
 
     it("slot 1 FLIP cannot complete before slot 0", async function () {
       const { quests, coin, game, alice } = await loadFixture(deployFullProtocol);
-      const found = await rollQuestWithBonusType(
+      await rollQuestWithBonusType(
         hre.ethers,
         game,
         quests,
         7n,
         QUEST_TYPE_FLIP
       );
-      if (!found) this.skip();
 
       // Try to complete slot 1 without completing slot 0
       const { result } = await callHandlerAsCoin(
@@ -940,11 +925,10 @@ describe("DegenerusQuests", function () {
       const evs = await getEvents(tx, quests, "QuestCompleted");
       expect(evs.length).to.be.gte(1);
       const slot0Ev = evs.find((e) => Number(e.args.slot) === 0);
-      if (slot0Ev) {
-        expect(slot0Ev.args.player).to.equal(alice.address);
-        expect(slot0Ev.args.streak).to.equal(1n);
-        expect(slot0Ev.args.reward).to.equal(QUEST_SLOT0_REWARD);
-      }
+      expect(slot0Ev, "slot 0 completion event must exist").to.not.be.undefined;
+      expect(slot0Ev.args.player).to.equal(alice.address);
+      expect(slot0Ev.args.streak).to.equal(1n);
+      expect(slot0Ev.args.reward).to.equal(QUEST_SLOT0_REWARD);
     });
   });
 
@@ -1229,7 +1213,7 @@ describe("DegenerusQuests", function () {
         quests,
         QUEST_TYPE_AFFILIATE
       );
-      if (!ok) this.skip();
+      expect(ok, "affiliate level quest must be reached").to.be.true;
       await makeLevelQuestEligible(hre.ethers, game, alice.address);
 
       const view = await quests.getPlayerLevelQuestView(alice.address);

@@ -27,6 +27,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         rngLockedFlag = true;
         rngWordCurrent = word;
         decWindowOpen = true;
+        if (opening) decBattleRounds[lvl + 1].openedDay = _simulatedDayIndex();
         decDayOneActive = opening;
         lastPurchaseDay = opening;
         if (opening) _setPrizePools(10 ether, 20 ether);
@@ -48,24 +49,24 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         lastPurchaseDay = false;
     }
 
-    /// @dev sDGNRS's live entry, if its pointer's window is `lvl` (its only reachable
-    ///      window) — otherwise no entry was ever recorded there.
-    function entry(uint24 lvl) external view returns (uint192 burn, uint8 bucket) {
-        DecPointer memory p = decPointer[ContractAddresses.SDGNRS];
-        if (p.lvl != lvl) return (0, 0);
-        DecEntry memory e = decEntry[_decEntryKey(p.lvl, p.bucket, p.subBucket, p.position)];
-        return (uint192(uint256(e.weightMilli) * 1e15), p.bucket);
+    function entryFor(uint24 lvl, address owner) external view returns (uint64 id, uint256 stack) {
+        uint256 packed = decBattleEntries[lvl][owner];
+        return (uint64(packed), packed >> 96);
     }
 
-    function _decEntryKey(uint24 lvl, uint8 denom, uint8 sub, uint32 position) private pure returns (uint256) {
-        return (uint256(lvl) << 48) | (uint256(denom) << 40) | (uint256(sub) << 32) | uint256(position);
+    function entry(uint24 lvl) external view returns (uint256 stack, uint64 id) {
+        uint256 packed = decBattleEntries[lvl][ContractAddresses.SDGNRS];
+        (stack, id) = (packed >> 96, uint64(packed));
     }
+
 }
 
 contract SdgnrsAutoDecimatorTest is DeployProtocol {
     address private constant HOUSE = ContractAddresses.SDGNRS;
     uint256 private constant CAP = 500_000 ether;
-    bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(address,uint256,uint8)");
+    bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(address,uint256,uint64)");
+    bytes32 private constant RECORDED_EVENT =
+        keccak256("DecBurnRecorded(address,uint24,uint64,uint256,uint256,uint256,uint32)");
     bytes32 private constant SETTLED_EVENT = keccak256("CoinflipDayResolved(uint24,bool,uint16,uint128)");
     bytes32 private constant QUEST_EVENT = keccak256("QuestSlotRolled(uint24,uint8,uint8,uint8,uint24)");
     AutoDecimatorGameHarness private harness;
@@ -110,15 +111,51 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         return coin.autoDecimatorBurn(resolutionLevel);
     }
 
+    /// @dev The single DecBurnRecorded of one burn: its base (burn plus bonuses) and credited chips.
+    function _recorded(Vm.Log[] memory logs) private view returns (uint256 base, uint256 credited) {
+        uint256 found;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == RECORDED_EVENT) {
+                (base, credited,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint32));
+                ++found;
+            }
+        }
+        assertEq(found, 1, "one recorded burn");
+    }
+
     function _burned(Vm.Log[] memory logs) private view returns (uint256 amount, uint256 count) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(coin) && logs[i].topics[0] == BURN_EVENT) {
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), HOUSE);
-                (uint256 spent,) = abi.decode(logs[i].data, (uint256, uint8));
+                (uint256 spent,) = abi.decode(logs[i].data, (uint256, uint64));
                 amount += spent;
                 ++count;
             }
         }
+    }
+
+    function test_ManualBurnUsesFullMultiplierAndLateTopupDecay() public {
+        address player = makeAddr("manual-decimator");
+        _prepare(21, 4, 3, true);
+        harness.applyOpeningWord(21);
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500)));
+        vm.prank(address(game)); coin.mintForGame(player, 4_000_000 ether);
+        vm.recordLogs();
+        vm.prank(player); coin.decimatorBurn(player, 2_000_000 ether, 0);
+        (uint256 firstBase, uint256 firstCredit) = _recorded(vm.getRecordedLogs());
+        (uint64 id, uint256 first) = harness.entryFor(5, player);
+        assertGt(id, 0);
+        assertEq(first, firstCredit);
+        assertEq(first, firstBase * ActivityCurveLib.decBattleMultBps(game.playerActivityScore(player)) / 10_000);
+        _warp(23);
+        vm.recordLogs();
+        vm.prank(player); coin.decimatorBurn(player, 2_000_000 ether, 0);
+        (uint256 topupBase,) = _recorded(vm.getRecordedLogs());
+        (uint64 again, uint256 total) = harness.entryFor(5, player);
+        uint256 mult = ActivityCurveLib.decBattleMultBps(game.playerActivityScore(player));
+        assertEq(again, id);
+        assertEq(total, first + topupBase * mult * 81 / 1_000_000);
+        assertEq(coin.balanceOf(player), 0);
     }
 
     function test_OpeningBurnsCarryBeforeCrapsAndCompletesTodaysQuest() public {
@@ -141,17 +178,12 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         uint256 questReward = coinflip.coinflipAmount(HOUSE);
         assertGt(questReward, 0, "quest pays a next-day flip credit");
 
-        // The same quest reward also boosts the decimator base, under the normal cap.
         uint256 base = CAP + questReward;
-        // Day-one burns are exempt from the last-purchase-day debuff, so the opening
-        // bonus lands whole.
-        uint256 multiplier = ActivityCurveLib.decMultBps(game.playerActivityScore(HOUSE)) * 12_000 / 10_000;
-        // The multiplier covers the first 500k FLIP of base; base beyond it counts 1x.
-        uint256 multipliedBase = base <= 500_000 ether ? base : 500_000 ether;
-        uint256 expected = multipliedBase * multiplier / 10_000 + (base - multipliedBase);
-        (uint192 weight, uint8 bucket) = harness.entry(5);
-        assertEq(weight, expected, "quest reward and opening bonus enter normal weight math");
-        assertEq(bucket, ActivityCurveLib.decBucket(game.playerActivityScore(HOUSE), 5));
+        uint256 multiplier = ActivityCurveLib.decBattleMultBps(game.playerActivityScore(HOUSE));
+        uint256 expected = base * multiplier / 10_000;
+        (uint256 weight, uint64 id) = harness.entry(5);
+        assertEq(weight, expected, "quest reward enters day-zero chip math");
+        assertEq(id, 1);
 
         uint256 settleIndex = type(uint256).max;
         uint256 questIndex = type(uint256).max;
@@ -174,15 +206,15 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
         uint256 backing = coinflip.previewSalvageFlipBacking(HOUSE);
-        (uint192 weight,) = harness.entry(5);
+        (uint256 weight,) = harness.entry(5);
         harness.applyOpeningWord(21);
         assertEq(coinflip.previewSalvageFlipBacking(HOUSE), backing);
-        (uint192 afterWeight,) = harness.entry(5);
+        (uint256 afterWeight,) = harness.entry(5);
         assertEq(afterWeight, weight);
 
         _prepare(22, 14, 3, true);
         harness.applyOpeningWord(22);
-        (uint192 nextWeight,) = harness.entry(15);
+        (uint256 nextWeight,) = harness.entry(15);
         assertGt(nextWeight, 0, "a later window receives its own entry");
     }
 
@@ -204,9 +236,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         (uint256 spent, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(spent, CAP);
         assertEq(count, 1);
-        (uint192 weight,) = harness.entry(5);
+        (uint256 weight,) = harness.entry(5);
         assertGt(weight, 0, "entry uses resolution level after request-time promotion");
-        (uint192 previousWeight,) = harness.entry(4);
+        (uint256 previousWeight,) = harness.entry(4);
         assertEq(previousWeight, 0, "cached purchase level is not the resolution level");
         assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0);
     }
@@ -221,9 +253,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // returns early; the second reaches rngGate and the opening-day decimator entry.
         game.advanceGame();
         game.advanceGame();
-        (uint192 weight,) = harness.entry(100);
+        (uint256 weight,) = harness.entry(100);
         assertGt(weight, 0);
-        (uint192 previousWeight,) = harness.entry(99);
+        (uint256 previousWeight,) = harness.entry(99);
         assertEq(previousWeight, 0);
     }
 
@@ -240,7 +272,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         harness.applyOpeningWord(22);
         assertTrue(game.decWindow());
         assertGt(coinflip.previewSalvageFlipBacking(HOUSE), CAP);
-        (uint192 weight,) = harness.entry(5);
+        (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
     }
 
@@ -248,7 +280,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _fund(400_000 ether);
         _prepare(21, 4, 3, false);
         harness.applyOpeningWord(21);
-        (uint192 weight,) = harness.entry(5);
+        (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
         assertGt(coinflip.previewSalvageFlipBacking(HOUSE), CAP);
         assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0);
@@ -257,7 +289,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     function test_EmptyBackingSkipsAndStillOpensCraps() public {
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
-        (uint192 weight,) = harness.entry(5);
+        (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
         assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0);
     }
@@ -273,7 +305,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         (, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(count, 0, "advance settles the loss before attempting entry");
         assertEq(coinflip.previewSalvageFlipBacking(HOUSE), 0, "loss applied before sizing entry");
-        (uint192 weight,) = harness.entry(5);
+        (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
     }
 

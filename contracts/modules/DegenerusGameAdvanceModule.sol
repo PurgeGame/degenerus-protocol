@@ -1242,7 +1242,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             decPoolWei = (memFuture * 10) / 100;
         }
 
-        if (decPoolWei != 0) {
+        // Seal even a zero-pool event so every entered battle reaches a final result.
+        if (decPoolWei != 0 || decBattleRounds[lvl].count != 0) {
             uint256 returnWei = IDegenerusGame(address(this)).runDecimatorJackpot(decPoolWei, lvl, rngWord);
             uint256 spend = decPoolWei - returnWei;
             memFuture -= spend;
@@ -1882,7 +1883,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE
             .delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector, lvl));
         if (!ok) _revertDelegate(data);
-        if (data.length < 64) revert EmptyReturn();
         (finished, worked) = abi.decode(data, (bool, bool));
         if (finished && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == MID_DAY_FUTURE_POOL) {
             // A daily retry may have committed current-level buys while the next-level
@@ -2120,7 +2120,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             dailyTicketBudgetsPacked |= _JACKPOT_BATTLE_PENDING;
         }
 
-        // Decimator day-one bonus window closes at the next fresh daily request.
+        // Decimator opening-day quest / auto-entry latch closes at the next fresh daily request.
         // A retry re-requests the SAME day's word, so it must not clear the latch.
         // Runs before the window-open branch below, so the arming request itself
         // (clear-then-set) leaves the latch armed.
@@ -2167,8 +2167,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameStorage {
             uint24 mod10 = lvl % 10;
             if ((mod10 == 4 && mod100 != 94) || mod100 == 99) {
                 decWindowOpen = true;
-                // Arm the day-one burn bonus: recordDecBurn grants the boosted
-                // weight until the next fresh daily request clears the latch.
+                decBattleRounds[lvl + 1].openedDay = _simulatedDayIndex();
+                // Arm the opening-day quest and protocol auto-entry.
                 decDayOneActive = true;
             } else if (decWindowOpen && ((mod10 == 5 && mod100 != 95) || mod100 == 0)) {
                 decWindowOpen = false;

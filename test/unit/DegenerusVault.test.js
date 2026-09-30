@@ -15,6 +15,14 @@ import {
 
 // MintPaymentKind enum values
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
+const INITIAL_SUPPLY = 1_000_000_000_000n * 10n ** 18n;
+
+// The vault creates DGVF first and DGVE second in its constructor.
+async function shareToken(vault, nonce) {
+  return hre.ethers.getContractAt("DegenerusVaultShare", hre.ethers.getCreateAddress({
+    from: await vault.getAddress(), nonce,
+  }));
+}
 
 describe("DegenerusVault", function () {
   after(() => restoreAddresses());
@@ -40,21 +48,16 @@ describe("DegenerusVault", function () {
 
     it("DGVF share token has correct name and symbol", async function () {
       const { vault } = await loadFixture(deployFullProtocol);
-      // The DGVF token is deployed by the vault constructor; we can't directly get it
-      // but we can test via previewCoin (which will return 0 with zero supply balance)
-      // Just verify vault is deployed correctly
-      expect(await vault.getAddress()).to.be.a("string");
+      const dgvf = await shareToken(vault, 1);
+      expect(await dgvf.name()).to.equal("Degenerus Vault Flip");
+      expect(await dgvf.symbol()).to.equal("DGVF");
     });
 
     it("DGVE share token initial supply is 1 trillion", async function () {
-      const { vault } = await loadFixture(deployFullProtocol);
-      // isVaultOwner checks ethShare totalSupply; deployer has initial supply
-      // If deployer has >30%, vault should return true
-      const { deployer } = await loadFixture(deployFullProtocol);
-      // Deployer received initial 1T supply (from DegenerusVaultShare constructor)
-      // isVaultOwner should be true for deployer
-      const isOwner = await vault.isVaultOwner(deployer.address);
-      expect(isOwner).to.be.true;
+      const { vault, deployer } = await loadFixture(deployFullProtocol);
+      const dgve = await shareToken(vault, 2);
+      expect(await dgve.totalSupply()).to.equal(INITIAL_SUPPLY);
+      expect(await dgve.balanceOf(deployer.address)).to.equal(INITIAL_SUPPLY);
     });
 
     it("isVaultOwner returns false for zero-balance address", async function () {
@@ -126,24 +129,26 @@ describe("DegenerusVault", function () {
   // 3. isVaultOwner
   // ---------------------------------------------------------------------------
   describe("isVaultOwner", function () {
-    it("returns true for account holding >30% of DGVE supply", async function () {
+    it("returns true for account holding all DGVE supply", async function () {
       const { vault, deployer } = await loadFixture(deployFullProtocol);
       // deployer holds 100% of initial supply
       expect(await vault.isVaultOwner(deployer.address)).to.be.true;
     });
 
-    it("returns false for account holding <= 30% of DGVE supply", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
+    it("returns false for account holding 30% of DGVE supply", async function () {
+      const { vault, deployer, alice } = await loadFixture(deployFullProtocol);
+      const dgve = await shareToken(vault, 2);
+      await dgve.connect(deployer).transfer(alice.address, INITIAL_SUPPLY * 30n / 100n);
       expect(await vault.isVaultOwner(alice.address)).to.be.false;
     });
 
-    it("30% boundary: account with exactly 30% should NOT qualify (requires >30%)", async function () {
-      // This is a logic test - balance * 10 > supply * 3
-      // 30% means balance * 10 == supply * 3, so NOT > 3, returns false
-      // We can verify via the formula indirectly through isVaultOwner behavior
-      const { vault } = await loadFixture(deployFullProtocol);
-      // Just confirm the function exists and works
-      expect(typeof vault.isVaultOwner).to.equal("function");
+    it("requires strictly more than 50.1% of DGVE supply", async function () {
+      const { vault, deployer, alice } = await loadFixture(deployFullProtocol);
+      const dgve = await shareToken(vault, 2);
+      await dgve.connect(deployer).transfer(alice.address, INITIAL_SUPPLY * 501n / 1000n);
+      expect(await vault.isVaultOwner(alice.address)).to.be.false;
+      await dgve.connect(deployer).transfer(alice.address, 1n);
+      expect(await vault.isVaultOwner(alice.address)).to.be.true;
     });
   });
 
@@ -187,9 +192,9 @@ describe("DegenerusVault", function () {
         .burnCoin(INITIAL_SUPPLY);
       const evClaim = await getEvent(tx, vault, "Claim");
       expect(evClaim.args.sharesBurned).to.equal(INITIAL_SUPPLY);
-      // After refill, deployer should have 1T new shares
-      // (we verify via previewCoin not reverting)
-      await expect(vault.previewCoin(1n)).to.not.be.reverted;
+      const dgvf = await shareToken(vault, 1);
+      expect(await dgvf.totalSupply()).to.equal(INITIAL_SUPPLY);
+      expect(await dgvf.balanceOf(deployer.address)).to.equal(INITIAL_SUPPLY);
     });
   });
 
@@ -227,10 +232,15 @@ describe("DegenerusVault", function () {
       await alice.sendTransaction({ to: vaultAddr, value: eth("10") });
 
       // Deployer holds 100% DGVE, so burning some should give proportional ETH
-      const smallBurn = eth("1"); // burn 1 DGVE out of 1T
-      const [ethOut] = await vault.previewEth(smallBurn);
-      // ETH out should be proportional: 10 ETH * 1 / 1T = effectively 0 (very small)
-      expect(ethOut).to.be.gte(0n);
+      const shares = INITIAL_SUPPLY / 4n;
+      const [ethOut, stEthOut] = await vault.previewEth(shares);
+      expect(ethOut).to.equal(eth("2.5"));
+      expect(stEthOut).to.equal(0n);
+      await expect(vault.connect(deployer).burnEth(shares))
+        .to.changeEtherBalances([vault, deployer], [-eth("2.5"), eth("2.5")]);
+      const dgve = await shareToken(vault, 2);
+      expect(await dgve.totalSupply()).to.equal(INITIAL_SUPPLY - shares);
+      expect(await dgve.balanceOf(deployer.address)).to.equal(INITIAL_SUPPLY - shares);
     });
 
     it("refill mechanism: burning all DGVE shares mints 1T new shares", async function () {
@@ -241,7 +251,9 @@ describe("DegenerusVault", function () {
         .burnEth(INITIAL_SUPPLY);
       const evClaim = await getEvent(tx, vault, "Claim");
       expect(evClaim.args.sharesBurned).to.equal(INITIAL_SUPPLY);
-      await expect(vault.previewEth(1n)).to.not.be.reverted;
+      const dgve = await shareToken(vault, 2);
+      expect(await dgve.totalSupply()).to.equal(INITIAL_SUPPLY);
+      expect(await dgve.balanceOf(deployer.address)).to.equal(INITIAL_SUPPLY);
     });
   });
 
@@ -264,13 +276,29 @@ describe("DegenerusVault", function () {
       ).to.be.revertedWithCustomError(vault, "Insufficient");
     });
 
-    it("returns proportional coin for a small burn (initial reserve is non-zero)", async function () {
-      const { vault } = await loadFixture(deployFullProtocol);
-      // FLIP has a non-zero vaultMintAllowance at deployment, so the reserve
-      // is non-zero from the start. The result will be > 0 for any non-zero amount.
-      const result = await vault.previewCoin(eth("1"));
-      // Burn 1 token out of 1T supply: result is tiny but proportional
-      expect(result).to.be.gte(0n);
+    it("returns zero before vault FLIP emissions arrive", async function () {
+      const { vault, coin } = await loadFixture(deployFullProtocol);
+      expect(await coin.vaultMintAllowance()).to.equal(0n);
+      expect(await vault.previewCoin(eth("1"))).to.equal(0n);
+    });
+
+    it("previews and pays proportional FLIP from a funded reserve", async function () {
+      const { vault, coin, game, deployer } = await loadFixture(deployFullProtocol);
+      const gameAddr = await game.getAddress();
+      await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
+      await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0x1000000000000000000"]);
+      try {
+        await coin.connect(await hre.ethers.getSigner(gameAddr)).vaultEscrow(eth("1000"));
+      } finally {
+        await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
+      }
+      const shares = INITIAL_SUPPLY / 4n;
+      expect(await vault.previewCoin(shares)).to.equal(eth("250"));
+      await expect(vault.connect(deployer).burnCoin(shares))
+        .to.changeTokenBalance(coin, deployer, eth("250"));
+      expect(await coin.vaultMintAllowance()).to.equal(eth("750"));
+      const dgvf = await shareToken(vault, 1);
+      expect(await dgvf.totalSupply()).to.equal(INITIAL_SUPPLY - shares);
     });
   });
 
@@ -314,9 +342,8 @@ describe("DegenerusVault", function () {
 
     it("reverts when flipOut exceeds total available reserve", async function () {
       const { vault, coin } = await loadFixture(deployFullProtocol);
-      // The vault has a non-zero initial reserve (from FLIP vaultMintAllowance).
-      // To exceed it, request more than the total coin reserve.
-      // Use a very large amount that cannot be in the reserve.
+      // The genesis allowance is zero, so any positive requested output
+      // exceeds the available reserve.
       const HUGE = hre.ethers.parseEther("1000000000"); // 1 billion FLIP
       await expect(
         vault.previewBurnForCoinOut(HUGE)
@@ -462,18 +489,15 @@ describe("DegenerusVault", function () {
   // 11. DegenerusVaultShare (DGVF/DGVE) token functionality
   // ---------------------------------------------------------------------------
   describe("DegenerusVaultShare (share token)", function () {
-    it("DGVE initial supply is minted to creator", async function () {
-      const { vault, deployer } = await loadFixture(deployFullProtocol);
-      // Indirectly verified by isVaultOwner returning true for deployer
-      expect(await vault.isVaultOwner(deployer.address)).to.be.true;
-    });
-
     it("non-vault cannot call vaultMint on share token", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
-      // We can't directly access the share token contract address, but we
-      // can verify vault access control by attempting a direct call via game impersonation
-      // which is tested in deposit tests
-      expect(true).to.be.true;
+      for (const nonce of [1, 2]) {
+        const share = await shareToken(vault, nonce);
+        await expect(share.connect(alice).vaultMint(alice.address, eth("1")))
+          .to.be.revertedWithCustomError(share, "Unauthorized");
+        expect(await share.totalSupply()).to.equal(INITIAL_SUPPLY);
+        expect(await share.balanceOf(alice.address)).to.equal(0n);
+      }
     });
   });
 

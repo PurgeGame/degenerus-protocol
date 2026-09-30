@@ -3,9 +3,8 @@
 // LootboxAutoResolveSeedUniqueness.test.js — Phase 275 Wave 2 TST-LBX-AR-04
 //
 // Per D-275-TST-04-01: direct-call seed-uniqueness chi-square + cross-pair
-// independence + cross-slice independence across the 4 upstream auto-resolve
+// independence + cross-slice independence across the 3 upstream auto-resolve
 // callers:
-//   (a) DecimatorModule — settleDecimatorWinners, single-shot per settled entry
 //   (b) DegeneretteModule:786 — single-shot per payout
 //   (c) sDGNRS:672 — single-shot per redemption; upstream
 //       entropy = keccak(rngWord, player)
@@ -14,7 +13,7 @@
 //
 // The chi-square verifies bit-slice independence of `bits[224..255]` (the
 // Bernoulli slice consumed by both manual + auto-resolve branches per
-// D-275-HOIST-01). The keccak-chain seed-uniqueness across the 4 callers is
+// D-275-HOIST-01). The keccak-chain seed-uniqueness across the 3 callers is
 // analytically attested in 275-A-PLAN.md T-275-02 threat-model; this stat
 // test provides empirical confirmation that bits[224..255] are uncorrelated
 // across distinct caller-shape input sets.
@@ -55,17 +54,6 @@ function deriveSeed(rngWord, player, redemption = false) {
     redemption ? [rngWord, player, REDEMPTION_BOX_TAG] : [rngWord, player]
   );
   return BigInt(hre.ethers.keccak256(encoded));
-}
-
-function makeCallerASeeds(N) {
-  // DecimatorModule: distinct rngWord per call (per-level storage simulated).
-  const seeds = [];
-  for (let i = 0; i < N; i++) {
-    const rngWord = BigInt(hre.ethers.keccak256("0x" + ("d1" + i.toString(16).padStart(62, "0"))));
-    const player = "0x" + (BigInt(0x1000) + BigInt(i)).toString(16).padStart(40, "0");
-    seeds.push(deriveSeed(rngWord, player));
-  }
-  return seeds;
 }
 
 function makeCallerBSeeds(N) {
@@ -113,13 +101,12 @@ function makeCallerDSeeds(N) {
   return seeds;
 }
 
-describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR-04 chi-square across 4 upstream callers", function () {
+describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR-04 chi-square across 3 upstream callers", function () {
   this.timeout(600_000);
 
-  describe("Per-caller chi² uniformity of bits[224..255] % 100 at N=10K per caller (DecimatorModule / DegeneretteModule / sDGNRS / DegenerusGame redemption-loop)", function () {
+  describe("Per-caller chi² uniformity of bits[224..255] % 100 at N=10K per caller (DegeneretteModule / sDGNRS / DegenerusGame redemption-loop)", function () {
     const N = 10_000;
     const CALLERS = [
-      { id: "a-DecimatorModule", gen: makeCallerASeeds },
       { id: "b-DegeneretteModule", gen: makeCallerBSeeds },
       { id: "c-sDGNRS", gen: makeCallerCSeeds },
       { id: "d-DegenerusGame-1721-redemption-loop-L1769", gen: makeCallerDSeeds },
@@ -160,12 +147,11 @@ describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR
     });
   });
 
-  describe("Cross-caller pairwise independence — same-index sliceA vs sliceB across the 6 caller pairs", function () {
+  describe("Cross-caller pairwise independence — same-index sliceA vs sliceB across the 3 caller pairs", function () {
     const N = 10_000;
 
-    it("pairwise mean-correlation |E[sliceA*sliceB] - E[sliceA]*E[sliceB]| < 50 across all 6 pairs (N=10K)", function () {
+    it("pairwise mean-correlation |E[sliceA*sliceB] - E[sliceA]*E[sliceB]| < 50 across all 3 pairs (N=10K)", function () {
       const callers = [
-        makeCallerASeeds(N),
         makeCallerBSeeds(N),
         makeCallerCSeeds(N),
         makeCallerDSeeds(N),
@@ -174,8 +160,8 @@ describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR
         seeds.map((s) => Number(((s >> 224n) & 0xffffffffn) % 100n))
       );
 
-      for (let i = 0; i < 4; i++) {
-        for (let j = i + 1; j < 4; j++) {
+      for (let i = 0; i < callers.length; i++) {
+        for (let j = i + 1; j < callers.length; j++) {
           const a = slicesPerCaller[i];
           const b = slicesPerCaller[j];
           let sumA = 0;
@@ -205,7 +191,7 @@ describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR
     const N = 10_000;
 
     it("|E[sliceBernoulli * sliceRange] - E[sliceBernoulli] * E[sliceRange]| < 50 at N=10K (FINDINGS-v39.0.md §4(b) cross-slice independence extended to auto-resolve)", function () {
-      const seeds = makeCallerASeeds(N);
+      const seeds = makeCallerBSeeds(N);
       let sumB = 0;
       let sumR = 0;
       let sumProd = 0;

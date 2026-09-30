@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+// Permanently skipped historical cases were retired in the test review.
+// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
@@ -192,36 +195,6 @@ contract KeeperFaucetResistance is DeployProtocol {
         assertEq(coinflip.coinflipAmount(sybil), preStake, "no reward from a not-ready box index");
     }
 
-    // =========================================================================
-    // GAS-05 v55 ROUTER round-trip guards (the mineFlip() open afking-box hot corner + the
-    //          advance-leg bounty the buy now rides).
-    //
-    // The structural faucet risk is the OPEN small-batch corner: below the OPEN_KNEE the per-box reward
-    // is pro-rated (unit * k / KNEE), so a self-cranker opening a tiny batch of OWN afking boxes earns a
-    // fraction of `unit` — which the OPEN_KNEE pro-rate exists to keep strictly below the real one-box tx
-    // gas. These guards prove the reward valued at the 0.5-gwei peg is below the REAL gas of the identical
-    // work at every realistic market price (>=1 gwei), judged against REAL prevailing gas + flip-credit
-    // illiquidity (NOT the 0.5-gwei peg ref). The reward is OBSERVED off the mineFlip credit delta, never
-    // measured gas, and the credit is illiquid coinflip flip-credit, never a liquid/withdrawable balance.
-    // =========================================================================
-
-    /// @notice GAS-05 (open hot corner, BELOW-KNEE k=3): a self-cranker stamps 3 OWN afking boxes (via the
-    ///         STAGE) then opens them through `mineFlip()`'s open leg; the OBSERVED reward valued back at
-    ///         the 0.5-gwei peg is STRICTLY below the REAL gas the identical open work burns at the >=1 gwei
-    ///         market floor. k=3 < OPEN_KNEE is the hottest pro-rated corner (reward = unit * 3 / KNEE). Each
-    ///         k value runs in its OWN test (one new-day STAGE cycle per fixture — multiple cycles cross the
-    ///         level-0 liveness timeout); the fuzz below sweeps the full 1..2*KNEE range.
-    function testRouterOpenSelfKeeperRoundTripNonPositiveBelowKnee() public {
-        vm.skip(true, "357-00b D-12 supersession: the round-trip faucet-resistance harness subscribes ungrounded subs to measure keeper round-trips; the grounded subscribe changes the STAGE-first-buy economics; re-proven by V56SubHardening + V56AfkingGasMarginal (the gas marginals)");
-        _assertOpenRoundTripNonPositive(3);
-    }
-
-    /// @notice GAS-05 (open hot corner, AT/ABOVE-KNEE k=12): the flat at-knee regime (reward = unit, since
-    ///         min(12, KNEE) == KNEE). The reward valued at the peg stays strictly below the real open gas.
-    function testRouterOpenSelfKeeperRoundTripNonPositiveAboveKnee() public {
-        vm.skip(true, "357-00b D-12 supersession: the round-trip faucet-resistance harness subscribes ungrounded subs to measure keeper round-trips; the grounded subscribe changes the STAGE-first-buy economics; re-proven by V56SubHardening + V56AfkingGasMarginal (the gas marginals)");
-        _assertOpenRoundTripNonPositive(12);
-    }
 
     /// @dev Stamp k afking boxes, open them via mineFlip's open leg, and assert the OBSERVED reward (the
     ///      credit delta) valued at the peg is strictly below the real open gas at 1 gwei + 20 gwei.
@@ -261,106 +234,6 @@ contract KeeperFaucetResistance is DeployProtocol {
         );
     }
 
-    /// @notice GAS-05 open-corner fuzz: across fuzzed realistic submission prices and fuzzed small batch
-    ///         sizes (1..2*OPEN_KNEE, spanning below + at/above the knee), the flat-per-tx open reward at
-    ///         the 0.5-gwei peg is ALWAYS below the real open gas — the round-trip cannot be pushed positive
-    ///         by choosing the batch size or the gas price (the reward never reads tx.gasprice).
-    function testFuzz_RouterOpenRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei, uint8 kSel) public {
-        vm.skip(true, "357-00b D-12 supersession: the round-trip faucet-resistance harness subscribes ungrounded subs to measure keeper round-trips; the grounded subscribe changes the STAGE-first-buy economics; re-proven by V56SubHardening + V56AfkingGasMarginal (the gas marginals)");
-        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
-        uint256 k = (uint256(kSel) % (2 * OPEN_KNEE)) + 1; // 1 .. 2*KNEE
-
-        (address[] memory subs, uint32 stampDay) = _stampKAfkingBoxes(k, 0);
-
-        address opener = makeAddr("openRT_fuzz");
-        vm.deal(opener, 1000 ether);
-        uint256 preStake = coinflip.coinflipAmount(opener);
-        vm.prank(opener);
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        uint256 gasUsed = gasBefore - gasleft();
-        uint256 stakeDelta = coinflip.coinflipAmount(opener) - preStake;
-
-        for (uint256 i; i < k; ++i) {
-            assertEq(_lastOpenedDayOf(subs[i]), stampDay, "open fuzz non-vacuity: each afking box opened");
-        }
-        assertGt(stakeDelta, 0, "open-leg reward positive");
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        assertLt(
-            rewardEthAtPeg,
-            gasUsed * gasPriceWei,
-            "WR-01 open: round-trip <= 0 at every fuzzed realistic gas price > 0.5 gwei"
-        );
-    }
-
-    /// @notice GAS-05 (advance leg — the buy rides it): the flat-per-tx mineFlip() advance reward valued
-    ///         at the 0.5-gwei peg is strictly below the REAL gas the mineFlip() advance-leg tx burns at
-    ///         the >=1 gwei floor. In v55 the per-sub buy folded into advanceGame's STAGE, so the buy reward
-    ///         IS the advance bounty (`unit * ADVANCE_RATIO_NUM * mult`); a farmer driving the advance funds
-    ///         real subscription buys (each bounded once/day/sub) far in excess of the bounty. The reward is
-    ///         OBSERVED directly off the mineFlip() credit delta.
-    function testRouterAdvanceSelfKeeperRoundTripNonPositive() public {
-        vm.skip(true, "357-00b D-12 supersession: the round-trip faucet-resistance harness subscribes ungrounded subs to measure keeper round-trips; the grounded subscribe changes the STAGE-first-buy economics; re-proven by V56SubHardening + V56AfkingGasMarginal (the gas marginals)");
-        // Healthy funded subs so the advance-leg STAGE does real buy work; then make advance due.
-        _setupHealthyBuyingSubs(3, "advRT_");
-        vm.warp(block.timestamp + 1 days);
-        assertTrue(game.advanceDue(), "pre: a fresh day-advance is due (the buy rides this advance leg)");
-
-        address keeper = makeAddr("advRT_keeper");
-        vm.deal(keeper, 1000 ether);
-        uint256 pre = coinflip.coinflipAmount(keeper);
-
-        vm.prank(keeper);
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        uint256 gasUsed = gasBefore - gasleft();
-
-        uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
-        assertGt(stakeDelta, 0, "mineFlip advance leg pays a positive bounty (the buy rides it)");
-
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-
-        // ROUND-TRIP <= 0 at the >=1 gwei market floor + a 20 gwei spot.
-        assertLt(
-            rewardEthAtPeg,
-            gasUsed * 1 gwei,
-            "WR-01 advance leg: flat reward-at-peg < real advance gas at the 1 gwei floor"
-        );
-        assertLt(
-            rewardEthAtPeg,
-            gasUsed * 20 gwei,
-            "WR-01 advance leg: round-trip strictly negative at a realistic 20 gwei price"
-        );
-    }
-
-    /// @notice GAS-05 advance-leg fuzz: across fuzzed realistic submission prices the observed advance
-    ///         reward at the 0.5-gwei peg is always below the real mineFlip() advance-leg gas —
-    ///         price-independent reward.
-    function testFuzz_RouterAdvanceRoundTripNonPositiveAcrossGasPrices(uint256 gasPriceWei) public {
-        vm.skip(true, "357-00b D-12 supersession: the round-trip faucet-resistance harness subscribes ungrounded subs to measure keeper round-trips; the grounded subscribe changes the STAGE-first-buy economics; re-proven by V56SubHardening + V56AfkingGasMarginal (the gas marginals)");
-        gasPriceWei = bound(gasPriceWei, 1 gwei, 2000 gwei);
-
-        _setupHealthyBuyingSubs(3, "advRTf_");
-        vm.warp(block.timestamp + 1 days);
-        assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
-
-        address keeper = makeAddr("advRTf_keeper");
-        vm.deal(keeper, 1000 ether);
-        uint256 pre = coinflip.coinflipAmount(keeper);
-        vm.prank(keeper);
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        uint256 gasUsed = gasBefore - gasleft();
-        uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
-        assertGt(stakeDelta, 0, "mineFlip advance leg pays a positive bounty");
-
-        uint256 rewardEthAtPeg = (stakeDelta * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
-        assertLt(
-            rewardEthAtPeg,
-            gasUsed * gasPriceWei,
-            "WR-01 advance leg: round-trip <= 0 at every fuzzed realistic gas price > 0.5 gwei"
-        );
-    }
 
     /// @notice GUARD-the-guard / test-mirror sync: the advance reward mineFlip() actually credits equals
     ///         the LIVE break-even unit times ADVANCE_RATIO_NUM times the day-epoch stall mult. This binds

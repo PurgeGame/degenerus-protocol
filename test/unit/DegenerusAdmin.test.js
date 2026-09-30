@@ -501,14 +501,13 @@ describe("DegenerusAdmin", function () {
       ).to.be.revertedWithCustomError(admin, "ProposalNotActive");
     });
 
-    it("votingSupply returns reasonable value", async function () {
+    it("votingSupply excludes the undistributed pools and wrapper allocation at genesis", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      // After deployment, voting supply may be 0 or positive
       const supply = await sdgnrs.votingSupply();
-      expect(supply).to.be.gte(0n);
+      expect(supply).to.equal(0n);
     });
 
-    it("threshold returns 6000 for fresh proposal (day 0)", async function () {
+    it("threshold returns zero for a non-existent proposal", async function () {
       const { admin } = await loadFixture(deployFullProtocol);
       // Threshold for non-existent proposal: createdAt=0, elapsed=block.timestamp (huge) → 0
       // This is expected — expired proposals have 0 threshold

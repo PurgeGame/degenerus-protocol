@@ -678,7 +678,7 @@ describe("DGNRS", function () {
     it("returns 0 initially when no FLIP deposited", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
       const reserve = await sdgnrs.flipReserve();
-      expect(reserve).to.be.gte(0n);
+      expect(reserve).to.equal(0n);
     });
   });
 

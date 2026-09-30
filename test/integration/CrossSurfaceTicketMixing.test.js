@@ -49,7 +49,6 @@ import { expect } from "chai";
 import hre from "hardhat";
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
   deployFullProtocol,
@@ -60,7 +59,8 @@ import {
   getLastVRFRequestId,
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
-import { boSmalls } from "../helpers/boxOrder.js";
+import { readyDailyFixture } from "../helpers/readyDailyFixture.js";
+import { boCustom } from "../helpers/boxOrder.js";
 
 const MINT_MODULE_SOURCE_PATH = path.resolve(
   process.cwd(),
@@ -289,57 +289,6 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       }
     });
 
-    it("[03d] the `JackpotTicketWin` event definition (field types + indexed markers) is unchanged across the Phase 278 wave — Phase 278 shifts emitted VALUES only", function () {
-      // Phase 278 (D-278-EVT-UNIFY-01) is explicit: the event signature /
-      // topic-hash is UNCHANGED — only the emitted ticketCount VALUES shift from
-      // scaled to whole. The pre-Phase-278 state is HEAD's parent of the Wave 1
-      // contract commit; the `bool roundedUp` 7th field was added in Phase 277,
-      // BEFORE this phase, so it is part of the unchanged pre-278 baseline.
-      // Wave 1 contract commit is 8a81a87c; its parent is the pre-278 state.
-      let pre278Source;
-      try {
-        pre278Source = execSync(
-          "git show 8a81a87c~1:contracts/modules/DegenerusGameJackpotModule.sol",
-          { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
-        );
-      } catch (_) {
-        // Soft-skip if the pre-278 commit is unreachable (shallow clone).
-        console.warn(
-          "[TST-CLEAN-03] pre-278 baseline 8a81a87c~1 unreachable — soft-skipping event-def byte-identity check"
-        );
-        this.skip();
-        return;
-      }
-      const currentSource = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
-
-      // Extract the `event JackpotTicketWin(...)` declaration body from each.
-      function extractEventDecl(source) {
-        const idx = source.indexOf("event JackpotTicketWin(");
-        expect(idx, "event JackpotTicketWin declaration not found").to.be.greaterThan(
-          -1
-        );
-        const semi = source.indexOf(");", idx);
-        return source
-          .slice(idx, semi + 2)
-          .replace(/\s+/g, " ")
-          .trim();
-      }
-      // Normalize the audited Phase-481 ABI rename (JackpotTicketWin field
-      // labels ticketLevel/ticketCount/ticketIndex -> entryLevel/entryCount/
-      // entryIndex) into the pre-278 baseline. The guard still enforces that
-      // the field TYPES, indexed markers, order, and count are byte-identical
-      // (topic0-stable) — Phase 481 renames labels only, not the signature.
-      const preDecl = extractEventDecl(pre278Source)
-        .replace(/\bticketLevel\b/g, "entryLevel")
-        .replace(/\bticketCount\b/g, "entryCount")
-        .replace(/\bticketIndex\b/g, "entryIndex");
-      const curDecl = extractEventDecl(currentSource);
-      expect(
-        curDecl,
-        "JackpotTicketWin event definition (types + indexed markers) must be byte-identical to the pre-278 baseline (modulo the audited Phase-481 field-label rename) — Phase 278 changes emitted values only, not the signature"
-      ).to.equal(preDecl);
-    });
-
     it("[03e] the compiled JackpotTicketWin ABI fragment carries the 7-field post-Phase-277 signature with exactly 3 indexed params", async function () {
       const artifact = await hre.artifacts.readArtifact(
         "DegenerusGameJackpotModule"
@@ -377,102 +326,36 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     // every open. Only `_queueEntriesScaled` (the mint-boost path) ever writes a
     // non-zero `rem`.
     //
-    // FIXTURE_COVERAGE_GAP (carried-forward harness limitation, NOT a Phase 278
-    // regression): the 278-02 plan's `<action>` calls for ALL THREE RNG-driven
-    // surfaces (manual lootbox, auto-resolve lootbox, jackpot ticket-roll) plus
-    // a mint-boost open to be driven full-stack through their real entry
-    // points. The current test harness can deterministically drive ONLY the
-    // manual `openBox` entry point end-to-end (v47: the `openFlipLootBox`
-    // FLIP-lootbox entry point was removed — terminal-paradox closure):
-    //   - `resolveLootboxDirect` has NO public DegenerusGame entry point — it is
-    //     a cross-module delegatecall target only (documented in
-    //     test/gas/LootboxOpenGas.test.js: "no public-entry-point harness
-    //     available").
-    //   - `resolveRedemptionLootbox` requires sDGNRS staking + a burn-redemption
-    //     submission to reach; the harness has no redemption-flow fixture.
-    //   - `_awardJackpotTickets` / `_jackpotTicketRoll` are PRIVATE — reachable
-    //     only through the jackpot-phase daily-advance path, which the
-    //     simulator cannot deterministically land on without VRF rigging
-    //     (the same documented LBX-02 / Phase 269 GAS-01 fixture-coverage gap
-    //     cited in test/gas/LootboxOpenGas.test.js and the FIXTURE-COVERAGE
-    //     NOTE in test/unit/LootboxConsolation.test.js TST-WX-04).
-    //   - VRF-rigging to force a per-resolution seed's bit-slice (needed to
-    //     hit a specific Bernoulli outcome / non-zero `frac`) is not supported
-    //     by the harness.
-    // Per that precedent body, this block uses:
-    //   [CROSS-01a/b] the live-state `provider.getStorage` read driven through
-    //     the REAL `openBox` entry point full-stack — the PRIMARY assertion
-    //     for the surfaces the harness CAN reach (manual lootbox path), with a
-    //     soft-skip if the simulator denies lootbox-RNG reachability (matching
-    //     the LootboxOpenGas.test.js `reachOpenableLootbox` soft-skip precedent).
-    //   [CROSS-01c] a slot-math self-validation: the derived slot's `owed`
-    //     cross-checks against the public `entriesOwedView` accessor.
-    //   [CROSS-01d] the source-structural `extractBody` proof (DEMOTED to a
-    //     secondary cross-check per D-278-TST-CROSS-DEPTH-01) that the 3
-    //     RNG-driven surfaces all route through `_queueEntries` (whole, no rem
-    //     write) while `_queueEntriesScaled` is the sole rem-byte writer — this
-    //     is the structural coverage for the auto-resolve + jackpot-roll
-    //     surfaces the live-state harness cannot reach.
-    // -----------------------------------------------------------------------
-
-    // Buy `n` lootboxes at the level-0 intro price (mirrors
-    // test/gas/LootboxOpenGas.test.js `buyLootboxes`).
-    async function buyLootboxes(game, buyer, n, totalEth) {
-      return game
-        .connect(buyer)
-        .purchase(hre.ethers.ZeroAddress, 0n, boSmalls(BigInt(n)), ZERO_BYTES32, 0,false,  {
-          value: eth(totalEth),
-        });
-    }
-
-    // Drive the lifecycle to a state where lootbox VRF has been requested AND
-    // fulfilled (mirrors test/gas/LootboxOpenGas.test.js `reachOpenableLootbox`).
     async function reachOpenableLootbox(fixture) {
       const { game, deployer, mockVRF, alice } = fixture;
-      try {
-        await buyLootboxes(game, alice, 20, 0.2);
-      } catch (err) {
-        return { reason: `lootbox purchase failed: ${err.message.slice(0, 80)}` };
-      }
-      let lbRequestId;
-      try {
-        await game.connect(deployer).requestLootboxRng();
-        lbRequestId = await getLastVRFRequestId(mockVRF);
-      } catch (err) {
-        return { reason: `requestLootboxRng failed: ${err.message.slice(0, 80)}` };
-      }
-      try {
-        await mockVRF.fulfillRandomWords(lbRequestId, 278278n);
-      } catch (err) {
-        return {
-          reason: `fulfillRandomWords failed: ${err.message.slice(0, 80)}`,
-        };
-      }
-      return { reason: null };
-    }
-
-    // Find an openable ETH lootbox index for `player` (non-zero stored ETH +
-    // non-zero rngWord). Mirrors LootboxOpenGas.test.js `findOpenableEthIndex`.
-    async function findOpenableEthIndex(game, player) {
-      for (let i = 0; i < 64; i++) {
-        let amount;
-        try {
-          amount = await game.lootboxEth(i, player.address);
-        } catch (_) {
-          break;
+      const layout = JSON.parse(fs.readFileSync("scripts/layout/golden/DegenerusGame.json", "utf8"));
+      const root = layout.find((entry) => entry.label === "lootboxRngPacked");
+      expect(root, "current RNG cursor storage root").to.not.be.undefined;
+      const index = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), root.slot)) & ((1n << 48n) - 1n);
+      await game.connect(alice).purchase(alice.address, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
+      await game.connect(deployer).requestLootboxRng();
+      const request = await getLastVRFRequestId(mockVRF);
+      const artifact = await hre.artifacts.readArtifact("DegenerusGameLootboxModule");
+      const iface = new hre.ethers.Interface(artifact.abi);
+      // Choose a ticket-paying outcome, reverting each trial. The regression must
+      // exercise a nonzero award, not pass because this box rolled another reward.
+      for (let word = 1n; word <= 64n; word++) {
+        const snapshot = await hre.ethers.provider.send("evm_snapshot", []);
+        await mockVRF.fulfillRandomWords(request, word);
+        const receipt = await (await game.openBoxes(hre.ethers.MaxUint256)).wait();
+        const ticketAward = receipt.logs.some((log) => {
+          try {
+            const ev = iface.parseLog(log);
+            return ev?.name === "LootBoxOpened" && ev.args.player === alice.address && ev.args.futureTickets > 0n;
+          } catch { return false; }
+        });
+        await hre.ethers.provider.send("evm_revert", [snapshot]);
+        if (ticketAward) {
+          await mockVRF.fulfillRandomWords(request, word);
+          return index;
         }
-        if (amount === undefined || amount === null) continue;
-        if (BigInt(amount) === 0n) continue;
-        let rngWord;
-        try {
-          rngWord = await game.lootboxRngWordByIndex(i);
-        } catch (_) {
-          continue;
-        }
-        if (BigInt(rngWord) === 0n) continue;
-        return i;
       }
-      return null;
+      throw new Error("fixture did not find a nonzero ordinary-box ticket award");
     }
 
     // Resolve the live `entriesOwedPacked` slot for `player` at `lvl` by
@@ -539,32 +422,10 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     });
 
     it("[CROSS-01b] live-state: driving the REAL `openBox` entry point full-stack leaves the shared `entriesOwedPacked` `rem` byte at 0 (whole-ticket path never writes rem)", async function () {
-      const fixture = await loadFixture(deployFullProtocol);
+      const fixture = await loadFixture(readyDailyFixture);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
-
-      const probe = await reachOpenableLootbox(fixture);
-      if (probe.reason !== null) {
-        // Soft-skip — the simulator state denied lootbox-RNG reachability.
-        // Matches the LootboxOpenGas.test.js `reachOpenableLootbox` soft-skip
-        // precedent: fixture-coverage gaps are reported, not silently passed.
-        console.warn(
-          `[TST-CROSS-01b] soft-skip — ${probe.reason} (matches ` +
-            `LootboxOpenGas.test.js reachOpenableLootbox soft-skip precedent; ` +
-            `the structural cross-check [CROSS-01d] still covers the rem-byte invariant)`
-        );
-        this.skip();
-        return;
-      }
-
-      const index = await findOpenableEthIndex(game, alice);
-      if (index === null) {
-        console.warn(
-          "[TST-CROSS-01b] soft-skip — no openable ETH lootbox index found for alice in probe range"
-        );
-        this.skip();
-        return;
-      }
+      const index = await reachOpenableLootbox(fixture);
 
       // Snapshot the shared slot BEFORE the open across the plausible target
       // levels (the lootbox roll picks a target level >= currentLevel).
@@ -611,17 +472,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         ).to.equal(0);
         if (after.owed > 0n) sawWholeTicketAward = true;
       }
-      // The open should have queued whole tickets somewhere in the watched
-      // range (the lootbox ticket path produced a non-zero whole count). If it
-      // did not (e.g. the roll picked a non-ticket reward), that is still a
-      // valid run — the rem-byte invariant above is the load-bearing assertion.
-      if (!sawWholeTicketAward) {
-        console.warn(
-          "[TST-CROSS-01b] note — openBox did not queue whole tickets in the " +
-            "watched level range (non-ticket lootbox reward roll); the rem == 0 " +
-            "invariant still held across all watched levels"
-        );
-      }
+      expect(sawWholeTicketAward, "ordinary box must award nonzero tickets").to.be.true;
     });
 
     it("[CROSS-01c] slot-math self-validation: the derived `entriesOwedPacked` slot's `owed` field round-trips against the public `entriesOwedView` accessor", async function () {
@@ -752,40 +603,10 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     });
 
     it("[CROSS-01e] live-state: driving the REAL `openBox` full-stack delivers owed-entries == the entries basis (~4x the pre-fix whole count) at the roll level", async function () {
-      // emit == queue + ~4x behavioral proof for the lootbox leg: the post-Bernoulli
-      // whole count routes through `wholeTicketsToEntries(whole)` into the entries-
-      // denominated `entriesOwedPacked` sink, so the owed-entries delta at the roll
-      // level is exactly `whole << 2` (4 entries per whole ticket) — four times the
-      // pre-fix `scaledTickets/100` whole count. `_jackpotTicketRoll` (PRIVATE,
-      // VRF-rigging-gated) is NOT driven full-stack here (carried-forward
-      // FIXTURE_COVERAGE_GAP); its identical converter + basis path is proven
-      // deterministically by the PrizeLegEntriesDelivery forge regression.
-      const fixture = await loadFixture(deployFullProtocol);
+      const fixture = await loadFixture(readyDailyFixture);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
-
-      const probe = await reachOpenableLootbox(fixture);
-      if (probe.reason !== null) {
-        // Soft-skip — the simulator denied lootbox-RNG reachability (matches the
-        // [CROSS-01b] / LootboxOpenGas.test.js reachOpenableLootbox precedent). The
-        // deterministic entries-basis coverage is carried by the
-        // PrizeLegEntriesDelivery forge proof + the structural [CROSS-01d].
-        console.warn(
-          `[TST-CROSS-01e] soft-skip — ${probe.reason} (deterministic entries-basis ` +
-            `coverage carried by the PrizeLegEntriesDelivery forge proof + [CROSS-01d])`
-        );
-        this.skip();
-        return;
-      }
-
-      const index = await findOpenableEthIndex(game, alice);
-      if (index === null) {
-        console.warn(
-          "[TST-CROSS-01e] soft-skip — no openable ETH lootbox index found for alice in probe range"
-        );
-        this.skip();
-        return;
-      }
+      const index = await reachOpenableLootbox(fixture);
 
       // Fresh fixture: alice has 0 owed-entries everywhere (proven by [CROSS-01a]).
       // Pin before == 0 across the plausible target-level band so the post-open owed
@@ -814,7 +635,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       for (const log of receipt.logs) {
         try {
           const parsed = lbIface.parseLog(log);
-          if (parsed && parsed.name === "LootBoxOpened") {
+          if (parsed && parsed.name === "LootBoxOpened" && parsed.args.player === alice.address) {
             opened = parsed;
             break;
           }
@@ -822,15 +643,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
           // not a LootBoxOpened log — skip
         }
       }
-      if (opened === null) {
-        // wasSpin roll (WWXRP / FLIP-spin / ETH-spin) suppresses LootBoxOpened — a
-        // valid deterministic outcome with no ticket-queue delta to assert here.
-        console.warn(
-          "[TST-CROSS-01e] note — openBox emitted no LootBoxOpened (spin roll); no " +
-            "ticket-entry delta to measure on this deterministic seed"
-        );
-        return;
-      }
+      expect(opened, "ticket-paying fixture must emit LootBoxOpened").to.not.equal(null);
+      expect(opened.args.futureTickets, "ticket award must be nonzero").to.be.gt(0n);
 
       const rollLevel = BigInt(opened.args.futureLevel);
       const scaledTickets = BigInt(opened.args.futureTickets);
@@ -870,23 +684,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
           `${expectedEntries} (roundedUp=${roundedUp})`
       ).to.equal(expectedEntries);
 
-      if (scaledTickets === 0n) {
-        // The deterministic roll awarded no scaled tickets; the delta == 0 invariant
-        // held but the ~4x delivery is vacuous on this seed — the non-zero converter
-        // + basis coverage is carried by the PrizeLegEntriesDelivery forge proof.
-        console.warn(
-          "[TST-CROSS-01e] note — deterministic roll awarded 0 scaled tickets; " +
-            "owed-entries delta correctly 0 (non-zero 4x delivery proven in the " +
-            "PrizeLegEntriesDelivery forge regression)"
-        );
-      } else {
-        const wholeAwarded = roundedUp ? wholeFloor + 1n : wholeFloor;
-        console.warn(
-          `[TST-CROSS-01e] openBox delivered ${delta} owed-entries at level ` +
-            `${rollLevel} (scaledTickets=${scaledTickets}, whole=${wholeAwarded}, ` +
-            `roundedUp=${roundedUp}) — 4x the pre-fix whole count ${wholeAwarded}`
-        );
-      }
+
     });
   });
 });

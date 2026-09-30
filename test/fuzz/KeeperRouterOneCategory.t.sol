@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+// Permanently skipped historical cases were retired in the test review.
+// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -180,40 +183,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertTrue(progressed, "non-vacuity: the advance leg ran (advance consumed or rngLock engaged)");
     }
 
-    /// @notice OPEN branch: advance NOT due + an afking-stamped box pending (RNG-ready, un-opened) ->
-    ///         `mineFlip()` takes the `else` open leg and credits EXACTLY ONCE. (The afking open is
-    ///         reachable ONLY via mineFlip — the module's standalone autoOpen selector collides with the
-    ///         human autoOpen(uint256) and is not re-exposed on the Game.)
-    function testOpenBranchCreditsExactlyOnce() public {
-        vm.skip(true, "357-00b D-12 supersession: the one-category router harness subscribes an ungrounded sub then routes the STAGE buy/open; the grounded subscribe perturbs the single-category early-return + open-credit path; re-proven by V56AfkingGasMarginal + V56SubHardening");
-        // A funded LOOTBOX-mode sub gets a stamped afking box via the STAGE (deity-passed so it survives
-        // any level crossing — orthogonal to the router-branch property).
-        address sub = makeAddr("open1_afk_sub");
-        _grantDeityPass(sub);
-        _subscribeLootbox(sub, 1);
-        _fundPool(sub, 5 ether);
-        _runStageNewDay(0x0BACED01); // stamp the afking box (lastAutoBoughtDay set, day word landed)
-
-        // Settle so advance is NOT due and we are not locked (the open leg is the `else` arm, reachable
-        // only when !advanceDue; the open leg also no-ops during rngLock).
-        _settleGame(0x0BACED02);
-        assertFalse(game.advanceDue(), "pre: settled (advance not due, the open leg is reachable)");
-        assertFalse(game.rngLocked(), "pre: settled (not locked)");
-
-        uint32 stampDay = _lastBoughtDayOf(sub);
-        assertGt(stampDay, 0, "pre: an afking box is stamped (RNG-ready)");
-        assertTrue(_lastOpenedDayOf(sub) < stampDay, "pre: the afking box is un-opened (pending)");
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.mineFlip();
-
-        // The open leg credited exactly once.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "OPEN branch: exactly one mineFlip creditFlip to the keeper");
-
-        // Non-vacuity: the stamped afking box actually opened (its open marker advanced to the stamp day).
-        assertEq(_lastOpenedDayOf(sub), stampDay, "non-vacuity: the open leg materialized the afking box");
-    }
 
     /// @notice GAMEOVER idle crank reverts: post-gameover the advance predicate stays true (dailyIdx
     ///         freezes) but the only remaining advance work is the one-time 30-day final sweep. With no
@@ -318,50 +287,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
         );
     }
 
-    /// @notice D-03 ONE-CATEGORY structural early-return (the load-bearing no-stack property): a single
-    ///         `mineFlip()` tx credits EXACTLY ONE category. When advance is due it credits the advance
-    ///         leg ONCE and does NOT additionally open a pending afking box in the SAME tx (the `else` arm
-    ///         is unreachable when the `if (advanceDue)` arm is taken). Proven by: stage a pending afking
-    ///         box AND make advance due, then assert the single mineFlip credits once AND leaves the
-    ///         afking box unopened (the open leg never ran — no stacking).
-    function testOneCategoryEarlyReturnNoStack() public {
-        vm.skip(true, "357-00b D-12 supersession: the one-category router harness subscribes an ungrounded sub then routes the STAGE buy/open; the grounded subscribe perturbs the single-category early-return + open-credit path; re-proven by V56AfkingGasMarginal + V56SubHardening");
-        // Stage a pending afking box first (on a settled day).
-        address sub = makeAddr("nostack_afk_sub");
-        _grantDeityPass(sub);
-        _subscribeLootbox(sub, 1);
-        _fundPool(sub, 5 ether);
-        _runStageNewDay(0x0FACE01);
-        _settleGame(0x0FACE02);
-        uint32 stampDay = _lastBoughtDayOf(sub);
-        assertGt(stampDay, 0, "pre: an afking box is stamped");
-        assertTrue(_lastOpenedDayOf(sub) < stampDay, "pre: the afking box is pending (un-opened)");
-
-        // Now ALSO make advance due — via a LARGE multi-player read-slot backlog (advanceDue() is TRUE
-        // when the read slot is non-empty + not fully processed). The backlog exceeds the per-batch write
-        // budget so the mid-day partial-drain advance WORKS but does NOT finish (mult==1, no NotTimeYet),
-        // and a warp cannot drive a fresh new-day advance here (the idle fixture's day index saturates
-        // after the STAGE day — 351-02). The structural early-return takes the advance arm (XOR), so the
-        // pending afking box is NOT opened in this same tx.
-        uint24 readKey = _readKey(uint24(game.level()) + 1);
-        for (uint256 i; i < 200; i++) {
-            _seedReadSlotTickets(readKey, makeAddr(string(abi.encodePacked("nostack_backlog_", _u(i)))), 3);
-        }
-        _setTicketsFullyProcessed(false);
-        assertTrue(game.advanceDue(), "pre: advance is due (the `if` arm will be taken, not the open `else`)");
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.mineFlip();
-
-        // Exactly ONE category credited (the advance leg) — no second open-leg credit.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ONE-CATEGORY: exactly one credit (advance), no stacked open credit");
-        // The pending afking box was NOT opened this tx (the `else` open arm never ran — XOR).
-        assertTrue(
-            _lastOpenedDayOf(sub) < stampDay,
-            "ONE-CATEGORY: the pending afking box stayed unopened (advance arm taken, open arm not stacked)"
-        );
-    }
 
     /// @notice D-03 UNREWARDED escape: the standalone parametered HUMAN `game.openBoxes(count)` runs the
     ///         human box leg (a queued human box opens) but credits NOTHING (only `mineFlip` credits).

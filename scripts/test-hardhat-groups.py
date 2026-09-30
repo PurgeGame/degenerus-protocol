@@ -111,6 +111,9 @@ def discover(config):
             raise ValueError("Hardhat paths.tests must be a literal path")
         tests = Path(value[2])
     files = [p for folder in order for p in sorted((tests / folder).rglob("*.test.js"))]
+    unassigned = set(tests.rglob("*.test.js")) - set(files)
+    if unassigned:
+        raise ValueError("Unassigned Hardhat test sources: " + ", ".join(map(str, sorted(unassigned))))
     return order, files
 
 

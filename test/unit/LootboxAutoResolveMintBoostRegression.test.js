@@ -1,41 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//
-// LootboxAutoResolveMintBoostRegression.test.js — Phase 275 Wave 2 TST-LBX-AR-06
-//
-// Mint-boost path UNTOUCHED regression per D-40N-MINTBOOST-OUT-01:
-//   - `DegenerusGameMintModule.sol:1142` continues to call
-//     `_queueEntriesScaled(buyer, targetLevel, adjustedQty, false)` for
-//     boost-derived fractional ticket awards (D-275-NOOP-01).
-//   - The lootbox `_settleLootboxRoll` refactor touches ONLY
-//     `DegenerusGameLootboxModule.sol`: MintModule + Storage stay byte-identical
-//     to the committed HEAD (pre-working-tree-change) tree. (The original v39
-//     `6a7455d1` pin is obsolete — 16+ milestones of unrelated contract changes
-//     have shipped since; the live invariant is "this refactor does not bleed
-//     into MintModule/Storage", anchored at HEAD.)
-//   - `_rollRemainder` (defined in MintModule:642) is still consumed by the
-//     mint-boost activation paths (MintModule:443/489/742/820).
-//
-// TEST STRATEGY:
-//   No deterministic fixture exists for end-to-end mint-boost activation at
-//   the required state granularity. Per the LBX-02 fixture-coverage-gap
-//   precedent, this test uses source-level structural proofs PLUS byte-
-//   identity assertions against the v39 baseline to anchor the
-//   D-40N-MINTBOOST-OUT-01 invariant. The structural proofs guarantee:
-//     (a) Mint-boost callsite at MintModule:1142 still uses _queueEntriesScaled.
-//     (b) _rollRemainder is still defined + invoked in MintModule.
-//     (c) MintModule + Storage are byte-identical to the committed HEAD tree
-//         (the lootbox refactor lives only in the working tree's
-//         DegenerusGameLootboxModule.sol).
-//
-// CROSS-CITES:
-//   - D-40N-MINTBOOST-OUT-01 (mint-boost path UNTOUCHED in v40)
-//   - D-275-NOOP-01 (no edits to DegenerusGameStorage.sol or DegenerusGameMintModule.sol)
-//   - TST-LBX-AR-06 per .planning/REQUIREMENTS.md
+// Structural guards for the current mint-boost queue and remainder paths.
+// Runtime behavior is covered by the mint/lootbox Foundry suites. Historical
+// comparisons with HEAD are retired: they cannot detect a committed regression.
 
 import { expect } from "chai";
 import fs from "node:fs";
 import path from "node:path";
-import { execSync, execFileSync } from "node:child_process";
 
 const MINT_MODULE_PATH = path.resolve(
   process.cwd(),
@@ -49,28 +19,6 @@ const LOOTBOX_MODULE_PATH = path.resolve(
   process.cwd(),
   "contracts/modules/DegenerusGameLootboxModule.sol"
 );
-
-// Byte-identity baseline = committed HEAD. The lootbox `_settleLootboxRoll`
-// refactor lives only in the working tree (DegenerusGameLootboxModule.sol +
-// ContractAddresses.sol); MintModule + Storage must remain byte-identical to
-// the committed tree, proving the refactor does not bleed into them. (The
-// original v39 `6a7455d1` pin is obsolete — those files legitimately diverged
-// across 16+ intervening milestones.)
-const BASELINE = "HEAD";
-
-// The byte-identity guards discriminate audited from unaudited drift only on a
-// CLEAN tree. When the target file carries uncommitted local modifications, the
-// drift IS the in-review working diff — inspected directly at commit approval,
-// where these guards re-arm against the new HEAD. Skip rather than fail there:
-// encoding a large in-review diff as string normalizations (the Phase-481/483
-// pattern) does not scale and decays to dead weight once the diff is committed.
-function dirtyVsHead(relPath) {
-  return (
-    execFileSync("git", ["status", "--porcelain", "--", relPath], {
-      encoding: "utf8",
-    }).trim().length > 0
-  );
-}
 
 describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-06", function () {
   this.timeout(30_000);
@@ -155,113 +103,7 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
     });
   });
 
-  describe("Byte-identity assertions: MintModule + Storage UNCHANGED by the lootbox refactor (D-275-NOOP-01 + D-40N-MINTBOOST-OUT-01)", function () {
-    it("[03a] DegenerusGameMintModule.sol byte-identical to committed HEAD (untouched by the lootbox refactor)", function () {
-      if (dirtyVsHead("contracts/modules/DegenerusGameMintModule.sol")) {
-        this.skip(); // in-review working diff; guard re-arms at the next commit
-      }
-      const baseline = execSync(
-        `git show ${BASELINE}:contracts/modules/DegenerusGameMintModule.sol`,
-        { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
-      );
-      const current = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      // Normalize the audited Phase-481 ABI rename (event TicketsBought ->
-      // EntriesBought + field ticketQuantity -> entryQuantityScaled) AND the
-      // audited Phase-483 FF-salvage entry-granularity diff (the
-      // sellFarFutureTickets / previewSellFarFutureTickets / _removeFarFutureTickets
-      // -> *Entries renames plus the 5-site coupled entry-granular value change:
-      // input now ENTRIES not whole tickets, faceWei = price * n / 4, and the
-      // budget/ticket floors at one entry = oneTicketWei / 4) into the committed-
-      // HEAD baseline. Any OTHER drift (e.g. the lootbox refactor touching
-      // MintModule) still fails this byte-identity guard.
-      const normBaseline = baseline
-        .replace(/TicketsBought/g, "EntriesBought")
-        .replace(/ticketQuantity/g, "entryQuantityScaled")
-        // Phase-483 FF-salvage renames (selector + internal helper)
-        .replace(/sellFarFutureTickets/g, "sellFarFutureEntries")
-        .replace(/previewSellFarFutureTickets/g, "previewSellFarFutureEntries")
-        .replace(/_removeFarFutureTickets/g, "_removeFarFutureEntries")
-        // Phase-483 FF-salvage entry-granularity value + doc changes (5-site coupled)
-        .replace(
-          "/// @return totalFaceWei Sum of priceForLevel(L) * n over all lines (the bundle's face value).",
-          "/// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face)."
-        )
-        .replace(
-          "///      (so no _resolvePlayer here). Mass-sells WHOLE far-future tickets (6 <= d = L - currentLevel\n    ///      <= 100) for ONE aggregated current-level mint (a normal recycled Claimable mint) + a cash",
-          "///      (so no _resolvePlayer here). Mass-sells far-future ticket ENTRIES (4 entries = 1 whole ticket;\n    ///      6 <= d = L - currentLevel <= 100) for ONE aggregated current-level mint (a normal recycled\n    ///      Claimable mint) + a cash"
-        )
-        .replace(
-          "if (totalBudget < oneTicketWei) revert E(); // too small to deliver even 1 whole ticket",
-          "if (totalBudget < oneTicketWei / 4) revert E(); // too small to deliver even 1 entry"
-        )
-        .replace(
-          "        // Debit the seller's far entries (owed is in entries, 4 per whole ticket; swap-pop on full\n        // sell-out) and credit the buyer the same entries. Distances were validated by _quoteFarFutureSwap;\n        // sequential processing handles duplicate levels (a later same-level line reads the decremented\n        // balance and reverts if it over-sells; only the line that zeroes the packed slot pops).\n        for (uint256 i; i < len; ) {\n            uint24 L = uint24(levels[i]);\n            uint32 entries = uint32(quantities[i]) * 4;",
-          "        // Debit the seller's far entries (quantities[i] IS the entry count, 4 per whole ticket; swap-pop on\n        // full sell-out) and credit the buyer the same entries. Distances were validated by\n        // _quoteFarFutureSwap; sequential processing handles duplicate levels (a later same-level line reads\n        // the decremented balance and reverts if it over-sells; only the line that zeroes the packed slot pops).\n        for (uint256 i; i < len; ) {\n            uint24 L = uint24(levels[i]);\n            uint32 entries = uint32(quantities[i]);"
-        );
-      expect(
-        normBaseline,
-        "MintModule.sol drifted from committed HEAD beyond the audited Phase-481 ABI rename + Phase-483 FF-salvage entry-granularity diff"
-      ).to.equal(current);
-    });
-
-    it("[03b] DegenerusGameStorage.sol byte-identical to committed HEAD (untouched by the lootbox refactor)", function () {
-      if (dirtyVsHead("contracts/storage/DegenerusGameStorage.sol")) {
-        this.skip(); // in-review working diff; guard re-arms at the next commit
-      }
-      const baseline = execSync(
-        `git show ${BASELINE}:contracts/storage/DegenerusGameStorage.sol`,
-        { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
-      );
-      const current = fs.readFileSync(STORAGE_PATH, "utf8");
-      // Normalize the audited Phase-481 ABI rename (the three queue events
-      // Tickets*Queued* -> Entries*Queued* + their fields + NatSpec) into the
-      // committed-HEAD baseline. Any OTHER drift still fails this guard.
-      const normBaseline = baseline
-        .replace(/TicketsQueued/g, "EntriesQueued")
-        .replace(/uint32 quantityScaled/g, "uint32 entriesScaled")
-        .replace(/uint32 quantity(?=\r?\n)/g, "uint32 entries")
-        .replace(/uint32 ticketsPerLevel/g, "uint32 entriesPerLevel")
-        .replace(
-          "Emitted when whole tickets are queued for a buyer at a specific level.",
-          "Emitted when entries are queued for a buyer at a specific level."
-        )
-        .replace(
-          "Emitted when scaled (fractional) tickets are queued for a buyer.",
-          "Emitted when scaled entries (entries × QTY_SCALE) are queued for a buyer."
-        )
-        .replace(
-          "Emitted when tickets are queued across a contiguous range of levels.",
-          "Emitted when entries are queued across a contiguous range of levels."
-        )
-        // Normalize the audited Phase-482 Degenerette dead-mode repack: the
-        // degeneretteBets packed-layout doc block is rewritten (the dead
-        // mode/isRandom/hasCustom bits stripped, the live fields repacked into
-        // the freed space — encoding-only, no slot move). Any OTHER drift still
-        // fails this byte-identity guard.
-        .replace(
-          `    /// - [0]        mode (1=full ticket)
-    /// - [1]        isRandom
-    /// - [2..33]    customTraits (packed 4×8-bit quadrants)
-    /// - [34..41]   ticketCount (uint8, used as "spin count" for Degenerette)
-    /// - [42..43]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
-    /// - [44..171]  amountPerSpin (uint128)
-    /// - [172..219] RNG index (uint48)
-    /// - [220..235] activity score bps (uint16)
-    /// - [236]      hasCustom`,
-          `    /// - [0..31]    customTraits (packed 4×8-bit quadrants)
-    /// - [32..39]   spinCount (uint8)
-    /// - [40..41]   currency (0=ETH,1=FLIP,2=unsupported,3=WWXRP)
-    /// - [42..169]  amountPerSpin (uint128)
-    /// - [170..201] RNG index (uint32)
-    /// - [202..217] activity score bps (uint16)
-    /// - [218..219] heroQuadrant (always-on hero quadrant, 0..3)`
-        );
-      expect(
-        normBaseline,
-        "Storage.sol drifted from committed HEAD beyond the audited Phase-481+482 changes"
-      ).to.equal(current);
-    });
-
+  describe("Scaled queue ownership across mint and lootbox modules", function () {
     it("[03c] LootboxModule auto-resolve branch swap keeps `_queueEntriesScaled` absent from LootboxModule + present in MintModule", function () {
       const lootbox = fs.readFileSync(LOOTBOX_MODULE_PATH, "utf8");
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");

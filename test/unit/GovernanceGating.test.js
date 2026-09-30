@@ -100,7 +100,7 @@ async function advanceGameOneDay(game, caller, mockVRF) {
   await game.connect(caller).advanceGame();
   const reqId = await getLastVRFRequestId(mockVRF);
   if (reqId > 0n) {
-    await fulfillVRF(mockVRF, reqId, BigInt(Math.floor(Math.random() * 1e15)));
+    await fulfillVRF(mockVRF, reqId, BigInt(hre.ethers.keccak256(hre.ethers.toBeHex(reqId, 32))));
   }
   // Loop until RNG is unlocked (daily processing fully complete).
   for (let i = 0; i < 30; i++) {

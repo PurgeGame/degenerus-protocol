@@ -168,24 +168,24 @@ interface IDegenerusGameJackpotModule {
 interface IDegenerusGameDecimatorModule {
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.
-    /// @param lvl Current game level.
-    /// @param bucket Player's chosen denominator (2-12).
+    /// @param lvl Resolution level (current game level + 1).
     /// @param baseAmount Burn amount before multiplier.
     /// @param multBps Multiplier in basis points (10000 = 1x).
-    /// @return bucketUsed The bucket actually used (may differ from requested if not an improvement).
+    /// @param chips The entry's board: zero to seven named chips, as a normal battle takes them.
+    /// @return entryId The wallet's accumulated battle entry.
     function recordDecBurn(
         address player,
         uint24 lvl,
-        uint8 bucket,
         uint256 baseAmount,
-        uint256 multBps
-    ) external returns (uint8 bucketUsed);
+        uint256 multBps,
+        uint32 chips
+    ) external returns (uint64 entryId);
 
-    /// @notice Snapshot Decimator jackpot winners for deferred claims.
+    /// @notice Seal a Decimator battle for bounded run and payout settlement.
     /// @param poolWei Total ETH prize pool for this level.
     /// @param lvl Level number being resolved.
     /// @param rngWord VRF-derived randomness seed.
-    /// @return returnAmountWei Amount to return (non-zero if no winners or already snapshotted).
+    /// @return returnAmountWei Amount to return (no entries or this round was already sealed).
     function runDecimatorJackpot(
         uint256 poolWei,
         uint24 lvl,
@@ -193,9 +193,9 @@ interface IDegenerusGameDecimatorModule {
     ) external returns (uint256 returnAmountWei);
 
 
-    /// @notice mineFlip's decimator leg: settle winning entries in list order within a walk budget.
+    /// @notice Bounded progress over sealed battle runs, ranking, and ETH credits.
     /// @param budgetUnits Walk units the leg may spend.
-    /// @return settled Entries settled.
+    /// @return settled Work items completed, including losing runs.
     /// @return unitsUsed Walk units spent.
     /// @return moved Whether the settle cursor advanced.
     function settleDecimatorWinners(
@@ -436,13 +436,12 @@ interface IDegenerusGameLootboxModule {
     /// @param amount Amount associated with the lootbox
     /// @param rngWord Random word for lootbox resolution
     /// @param activityScore Frozen activity score in whole points for the EV multiplier (caller-snapshotted)
-    /// @return workUnits The box's work in shared walk units, charged by its outcome
     function resolveLootboxDirect(
         address player,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
-    ) external payable returns (uint256 workUnits);
+    ) external payable;
 
     /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool
     ///         credit, 5-ETH chunked resolution) — delegatecall target of the Game's thin stub.
@@ -501,8 +500,6 @@ interface IDegenerusGameBoonModule {
     /// @param currentLevel Open level (level + 1)
     /// @param seed Player-mixed entry seed; box i draws off a (nonceBase + i)-tagged derivative
     /// @param nonceBase Global box position of this batch's first box within its entry
-    /// @return boonWork What the draw did, packed: bits 0-63 activity awards delivered, bits 64-127
-    ///         other boons drawn, bit 128 set when the expired-boon sweep ran
     function rollBoxBoons(
         address player,
         uint256 perBoxBudget,
@@ -511,7 +508,7 @@ interface IDegenerusGameBoonModule {
         uint24 currentLevel,
         uint256 seed,
         uint256 nonceBase
-    ) external payable returns (uint256 boonWork);
+    ) external payable;
 
     /// @notice Draw boons for a mixed box order in one delegatecall
     /// @param player Box owner

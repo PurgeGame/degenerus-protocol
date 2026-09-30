@@ -905,25 +905,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      produces `base + 0..4` (80%) or `base + 5..50` (20%), so a fixed 51-wide lane is
     ///      exhaustive. A touched-lane bitmap makes settlement proportional to distinct winning
     ///      levels rather than scanning all 51 lanes.
-    /// @dev Walk-unit prices (1 unit ~= 4.7k gas) of a directly resolved box's parts, each the
-    ///      in-batch marginal cost of that part for a fresh winner (see `_boxWorkUnits`); what a
-    ///      batch touches once is the decimator leg's per-call price. Pinned by
-    ///      test/gas/DecimatorSettleWorstCaseGas.t.sol.
-    uint256 private constant BOX_BASE_UNITS = 9;
-    uint256 private constant BOX_SPIN_UNITS = 2;
-    uint256 private constant BOX_BOON_UNITS = 6;
-    uint256 private constant BOX_SWEEP_UNITS = 2;
-    uint256 private constant BOX_LANE_UNITS = 18;
-    uint256 private constant BOX_DGNRS_UNITS = 7;
-    uint256 private constant BOX_FLIP_UNITS = 6;
-    uint256 private constant BOX_WWXRP_UNITS = 5;
-    uint256 private constant BOX_PASS_UNITS = 16;
-    uint256 private constant BOX_ACTIVITY_UNITS = 16;
-    /// @dev The Boon module's `rollBoxBoons` return packing: activity awards in bits 0-63, other
-    ///      boons drawn in bits 64-127, the expired-boon sweep in bit 128.
-    uint256 private constant BOON_WORK_OTHER_SHIFT = 64;
-    uint256 private constant BOON_WORK_SWEPT = uint256(1) << 128;
-
     struct BoxAcc {
         uint256 flip;
         uint256 dgnrs;
@@ -939,8 +920,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // delivered in ONE call at the end — a winning box does not reach out to Craps on its own.
         uint32 passNormal;
         uint32 passHigh;
-        // Rolls resolved as a Degenerette spin, for the direct resolver's work charge.
-        uint32 spins;
     }
 
     /// @dev Resolution context for one entry, carried as a single memory struct rather than a
@@ -1029,17 +1008,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev One box's boon draw, for the resolvers that settle a single box outside the
-    ///      entry sweep (afking covers, decimator/degenerette auto-resolve, ETH-spin recirc,
+    ///      entry sweep (afking covers, degenerette auto-resolve, ETH-spin recirc,
     ///      sDGNRS redemption chunks). Identical draw to the entry path's per-tier call;
     ///      `seed` is the box's own player-specific resolution seed, drawn at nonce 0.
-    /// @return boonWork What the draw did, packed as `rollBoxBoons` returns it.
-    function _rollSingleBoxBoons(
-        address player,
-        uint256 amount,
-        uint24 currentLevel,
-        uint256 seed
-    ) private returns (uint256 boonWork) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE
+    function _rollSingleBoxBoons(address player, uint256 amount, uint24 currentLevel, uint256 seed) private {
+        (bool ok,) = ContractAddresses.GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoons.selector,
@@ -1053,7 +1026,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 )
             );
         if (!ok) revert EmptyRevert();
-        boonWork = abi.decode(data, (uint256));
     }
 
     /// @dev Settle an entry's remaining accumulated rewards: one call per fungible lane, one
@@ -1592,7 +1564,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @notice Resolve a lootbox directly for decimator/degenerette wins (no RNG wait needed)
+    /// @notice Resolve a lootbox directly for degenerette wins (no RNG wait needed)
     /// @dev Rolls full boons + passes via the common resolver over the STATIC table — this
     ///      path's open timing is claimant-controlled, so no live eligibility may reach the
     ///      draw; ineligible drawn types are discarded at delivery (`_deliverBoon`). Emits
@@ -1601,31 +1573,26 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Player address to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
-    /// @param activityScore Whole-point activity score frozen at commitment by the caller — decimator
-    ///        claims pass the min score of the winning decimator bucket (sealed at burn);
+    /// @param activityScore Whole-point activity score frozen at commitment by the caller —
     ///        degenerette passes the score snapshotted at bet time. Never a live read.
-    /// @return workUnits The box's work in shared walk units, charged by what it did (see
-    ///         `_boxWorkUnits`), so a caller walking a budget pays for this box's real outcome
-    ///         rather than for the heaviest one. Zero when `amount` is zero.
     // payable: reachable from the payable redemption path via an ETH-spin's recirc
     // (`resolveEthSpinFromBox` -> `_resolveLootboxDirect`); delegatecall preserves the
     // in-flight msg.value, so a non-payable callvalue guard here would revert the claim.
     function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore)
         external
         payable
-        returns (uint256 workUnits)
     {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (the amount==0 early-return path).
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (amount == 0) return 0;
+        if (amount == 0) return;
 
         uint24 currentLevel = level + 1;
         // Freeze-safe seed: only the committed rngWord — which the caller domain-separates per
-        // resolution (Degenerette mixes the immutable betId, the decimator passes its per-level
-        // word) — and the player feed it. No live, post-word-reveal input enters the seed, so
-        // neither claim timing nor a futurePrizePool nudge can re-roll the outcome. No live day is
-        // read here either — boon expiry uses the boon path's own currentDay.
+        // resolution (Degenerette mixes the immutable betId) — and the player feed it. No live,
+        // post-word-reveal input enters the seed, so neither claim timing nor a futurePrizePool
+        // nudge can re-roll the outcome. No live day is read here either — boon expiry uses the
+        // boon path's own currentDay.
         uint256 seed = EntropyLib.hash2(rngWord, uint256(uint160(player)));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
@@ -1646,32 +1613,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // The boon draw the box's 10% haircut paid for. The common resolver takes the
         // haircut for EVERY caller, so every caller must also draw — the entry sweep does
         // it per tier; the single-box resolvers do it here.
-        workUnits = _boxWorkUnits(acc, _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed));
-    }
-
-    /// @dev One directly resolved box's work in shared walk units (1 unit ~= 4.7k gas), read off
-    ///      what the box actually did, each part at its in-batch marginal cost for a fresh winner:
-    ///      - BASE is the resolution itself: target and EV reads with the per-level EV-cap write,
-    ///        the boon context and the summary event;
-    ///      - SPIN is a roll resolved as a Degenerette spin, at the dearest spin;
-    ///      - BOON is a boon drawn other than the activity award, and SWEEP the expired-boon sweep;
-    ///      - LANE is one ticket level written, with a new owner position and a new queue word;
-    ///      - DGNRS, FLIP, WWXRP and PASS are each paid-out lane's external credit;
-    ///      - ACTIVITY is an activity award with its longest quest re-sync.
-    /// @param boonWork The boon draw's outcome, packed as `rollBoxBoons` returns it.
-    function _boxWorkUnits(BoxAcc memory acc, uint256 boonWork) private pure returns (uint256 units) {
-        units = BOX_BASE_UNITS + uint64(boonWork) * BOX_ACTIVITY_UNITS
-            + uint64(boonWork >> BOON_WORK_OTHER_SHIFT) * BOX_BOON_UNITS + uint256(acc.spins) * BOX_SPIN_UNITS;
-        if (boonWork & BOON_WORK_SWEPT != 0) units += BOX_SWEEP_UNITS;
-        uint256 lanes = acc.ticketTouched;
-        while (lanes != 0) {
-            lanes &= lanes - 1;
-            units += BOX_LANE_UNITS;
-        }
-        if (acc.dgnrs != 0) units += BOX_DGNRS_UNITS;
-        if (acc.flip != 0) units += BOX_FLIP_UNITS;
-        if (acc.wwxrp != 0) units += BOX_WWXRP_UNITS;
-        if ((acc.passNormal | acc.passHigh) != 0) units += BOX_PASS_UNITS;
+        _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed);
     }
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
@@ -1895,7 +1837,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      GAME_LOOTBOX_MODULE delegatecall (the box materialization is private to this
     ///      module — `resolveAfkingBox` is the one seam that binds a caller-passed day word;
     ///      `resolveLootboxDirect` reads no day at all and takes the committed word its caller
-    ///      passes — the Degenerette's betId-mixed word or the decimator's per-level word).
+    ///      passes — the Degenerette's betId-mixed word).
     /// @param player Box owner (resolved by the GameAfkingModule open-leg from the sub).
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
     /// @param day The boundary-pinned PROCESS day stamped at process (frozen in the seed).
@@ -2115,7 +2057,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
         acc.dgnrs += dgnrsOut;
         acc.wwxrp += wwxrpOut;
-        if (wasSpin) ++acc.spins;
 
         // Collapsed onto a whole 100-FLIP multiple, EV-preserving, above the threshold where
         // the granule is a small slice of the award; a minimum box at the milestone price

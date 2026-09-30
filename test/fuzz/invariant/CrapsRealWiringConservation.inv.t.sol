@@ -79,15 +79,8 @@ contract CrapsRealWiringConservation is DeployProtocol {
         );
     }
 
-    function invariant_ledgerExercised() public view {
-        handler.ghost_flipBurnedIn();
-        handler.ghost_subsidies();
-        handler.ghost_passSeatValue();
-        handler.ghost_creditedOut();
-        handler.ghost_creditsOverBound();
-        handler.ghost_compsGranted();
-        handler.ghost_compGrantsRefused();
-    }
+
+
 
     function afterInvariant() public view {
         assertGt(handler.ghost_creditedOut(), 0, "vacuous: no settlement ever credited stake");

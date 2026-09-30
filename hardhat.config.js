@@ -15,6 +15,7 @@ const TEST_DIR_ORDER = [
   "edge",
   "validation",
   "gas",
+  "stat",
 ];
 
 subtask(TASK_TEST_GET_TEST_FILES).setAction(async (args, hre) => {

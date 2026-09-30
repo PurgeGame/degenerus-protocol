@@ -118,7 +118,6 @@ class HardhatGroupsDriverTest(unittest.TestCase):
     def test_default_order_comes_from_config_and_each_file_gets_a_process(self):
         first = self.sources("first", 2)
         second = self.sources("second", 1)
-        self.sources("not-in-config", 1)
         done = self.run_driver()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         rows = self.rows()
@@ -131,6 +130,15 @@ class HardhatGroupsDriverTest(unittest.TestCase):
         self.assertEqual(meta["test_dir_order"], ["second", "first"])
         self.assertEqual(meta["original_pins_sha256"], meta["pins_restored_sha256"])
         self.assertIn("hardhat", meta["versions"])
+
+    def test_unassigned_test_directory_fails_instead_of_silently_omitting_it(self):
+        self.sources("first", 1)
+        paths = self.sources("not-in-config", 1)
+        done = self.run_driver("--list")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("Unassigned Hardhat test sources", done.stderr)
+        self.assertIn(paths[0], done.stderr)
+        self.assertFalse((self.root / "calls.json").exists())
 
     def test_override_and_flags_preserve_explicit_order(self):
         paths = self.sources("first", 3)

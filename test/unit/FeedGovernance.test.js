@@ -193,10 +193,7 @@ describe("Feed Governance", function () {
       ).to.be.revertedWithCustomError(admin, "AlreadyHasActiveProposal");
     });
 
-    it("reverts with GameOver when game is over", async function () {
-      // This would require ending the game — skip for now, covered by VRF governance tests
-      // The check is the same: gameAdmin.gameOver()
-    });
+    // The terminal GameOver rejection runs with the real drain in edge/GameOver.test.js.
   });
 
   // =========================================================================
@@ -256,17 +253,7 @@ describe("Feed Governance", function () {
   // 4. voteFeedSwap
   // =========================================================================
   describe("voteFeedSwap", function () {
-    it("reverts with FeedHealthy if feed recovered", async function () {
-      const { admin, deployer } = await loadFixture(deployFullProtocol);
-
-      // Propose with zero feed (unhealthy)
-      await admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS);
-
-      // Now somehow the feed becomes healthy... but since it's zero, it won't.
-      // Test the check by first setting a feed, making it stale, proposing, then refreshing it
-      // This is hard to test with zero feed — but the code path is checked.
-      // The important thing is that voteFeedSwap checks _feedHealthy(linkEthPriceFeed)
-    });
+    // Recovery is exercised below in "Auto-cancellation on feed recovery".
 
     it("reverts with ProposalNotActive for non-existent proposal", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);

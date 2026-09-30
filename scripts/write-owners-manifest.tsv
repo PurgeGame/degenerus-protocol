@@ -19,7 +19,7 @@ OWNER	boxCursor	modules/DegenerusGameLootboxModule.sol	openHumanBoxes persists t
 HELPER	centuryBonusUsed	storage/DegenerusGameStorage.sol	_setCenturyUsedFor stamps (level<<224|used); the x00 bonus cap mutator
 OWNER	claimablePool	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding release liability: pool -= payout in tandem with the per-player debit
 OWNER	claimablePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots adds the level-transition claimableDelta after crediting winners; one of the paired liability writers
-OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_creditDecJackpotClaimCore moves the lootbox half of a decimator claim out of the reserved pool (pool -= lootboxPortion) when it becomes a box, not claimable ETH
+OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_releaseToFuture moves an all-tails round, or the pass money fixed at ranking, from the reservation to the (frozen-aware) future pool
 OWNER	claimablePool	modules/DegenerusGameDegeneretteModule.sol	_addClaimableEth pairs pool += with _creditClaimable for Degenerette ETH wins; same identity as every other crediting site
 OWNER	claimablePool	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain adds deity refunds and the terminal affiliate share; handleFinalSweep zeroes it after debiting VAULT/SDGNRS/GNRUS (terminal, GO_SWEPT latch guards later withdraws)
 OWNER	claimablePool	modules/DegenerusGameJackpotModule.sol	jackpot payouts (_processDailyEth liabilityDelta, golden ticket, yield surplus) add liability in tandem with _creditClaimable
@@ -143,7 +143,7 @@ OWNER	vrfRequestId	modules/DegenerusGameAdvanceModule.sol	request paths set the 
 OWNER	vrfRequestId	modules/DegenerusGameGameOverModule.sol	updateVrfCoordinatorAndSub re-issues an in-flight request on the new coordinator and stores the new id (the old fulfilment is rejected by mismatch)
 INIT	vrfSubscriptionId	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
 OWNER	whalePassClaims	modules/DegenerusGameBoonModule.sol	_activateWhalePass adds two half-passes with a checked add (an overflow reverts rather than drops, unreachable at the 100-box cap); the whale module drains
-OWNER	whalePassClaims	modules/DegenerusGameDecimatorModule.sol	_awardDecimatorLootbox += deferred half-passes; accrual-only
+OWNER	whalePassClaims	modules/DegenerusGameDecimatorModule.sol	settleDecimatorWinners awards whole half passes to every other winner once a share buys one; accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameFoilPackModule.sol	_payFoilTier += 1 on tier 8; accrual-only
 OWNER	whalePassClaims	modules/DegenerusGameJackpotModule.sol	golden ticket += half-passes; accrual-only
 OWNER	whalePassClaims	modules/DegenerusGamePayoutUtils.sol	_queueWhalePassClaimCore += full half-passes (shared utility); accrual-only
@@ -155,11 +155,9 @@ OWNER	ticketRound	modules/DegenerusGameFoilPackModule.sol	drainRounds advances t
 OWNER	ticketSeats	modules/DegenerusGameFoilPackModule.sol	drainRounds records the seats still holding entries when a chunk ends (queue indices plus one, queue order) so the next chunk re-seats them without rescanning holes
 OWNER	ticketSeats	modules/DegenerusGameMintModule.sol	_drainSeatedSurvivors pops seats it drains by index below the seat floor; processFutureTicketBatch clears it on an empty queue
 OWNER	ticketSeats	storage/DegenerusGameStorage.sol	_releaseTicketQueue clears the seats with the drained queue
-OWNER	decBucketOffsetPacked	modules/DegenerusGameDecimatorModule.sol	runDecimatorJackpot freezes winning subbuckets at the resolved level
-OWNER	decEntry	modules/DegenerusGameDecimatorModule.sol	recordDecBurn appends or adds to a burner's list entry and empties the old one on migration; _settleDecEntry empties it on settlement
-OWNER	decPointer	modules/DegenerusGameDecimatorModule.sol	recordDecBurn points a player at their entry on the first burn in a window and on migration
-OWNER	decSettleCursor	modules/DegenerusGameDecimatorModule.sol	settleDecimatorWinners advances the settle walk's place
 OWNER	terminalAffiliate	modules/DegenerusGameAdvanceModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; handleGameOverDrain reads it
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameJackpotModule.sol	pricing latches even half-pass units from exact early-bird surplus; settlement consumes once with no pool movement
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameGameOverModule.sol	terminal drain cancels any pending early-bird pass prize
 OWNER	earlyTicketLevel	modules/DegenerusGameAdvanceModule.sol	first fresh daily or mid-day request after the goal freezes this absolute next-level pool and permanently closes its far-future queue to later entries
+OWNER	decBattleOwners	modules/DegenerusGameDecimatorModule.sol	recordDecBurn names the owner once, on a wallet's first burn of the event; never rewritten
+OWNER	decBattleQueue	modules/DegenerusGameDecimatorModule.sol	Sealing appends FIFO rounds; completion advances head (clears the queue when it was the last)

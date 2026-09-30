@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {DeadVrfSeeder} from "../fuzz/DeadVrfEnding.t.sol";
+import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 

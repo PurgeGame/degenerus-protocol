@@ -1,7 +1,8 @@
 # Randomness inputs and domain separation
 
 Initially reviewed 2026-09-21; Decimator and jackpot battle descriptions updated
-against `3c79c1486` on 2026-09-28. See `snapshot.json` for the supplied source identity.
+against `3c79c1486` on 2026-09-28, and the Decimator entries for the battle rewrite on
+2026-09-29. See `snapshot.json` for the supplied source identity.
 The trust boundary is request → fulfillment → consumption: hashing supplies
 domain separation, not fresh entropy or protection for inputs chosen after a word
 is known. Existing commitment guards remain necessary.
@@ -13,9 +14,8 @@ is known. Existing commitment guards remain necessary.
   changing an earlier bucket's award does not shift subsequent buckets.
 - Ordinary lootbox size, presale value, redemption chunk value and AFKing amount
   no longer enter box seeds. Amounts still determine awards and applicable tables.
-- Decimator claim snapshots store the low 32 bits of `keccak(word, DECIMATOR_BOX_TAG)`
-  in their existing packed slot; claim-box roots re-hash that seed with the tag and the
-  fixed level before the owner is mixed in.
+- Decimator battle snapshots retain the full 256-bit word. Distinct dice, board,
+  final-coin and tie tags separate draws; dice exclude entry identity, the other roots include it.
 - Craps bounty boost uses the immutable window identifier instead of the battle
   key containing financial terms.
 - BAF ticket awards derive by fixed winner ordinal instead of consuming one
@@ -70,8 +70,8 @@ named constants in the consumer; full string hashes are constant expressions.
 | Presale box | packed `H(word, PRESALE_BOX_TAG, player, uint48(index))` | One record per owner/index; amount excluded |
 | Redemption box | `H(chunkWord, player, REDEMPTION_BOX_TAG)` | Chunk word advances by `H(word)`; upstream redemption word fixed |
 | AFKing box | `H(word, player, AFKING_BOX_TAG, stampedDay)` | Day recorded before fulfillment; amount excluded |
-| Decimator claim box | `H(uint256(roundSeed), DECIMATOR_BOX_TAG, level)` then direct box resolver | `roundSeed = uint32(H(fullWord, DECIMATOR_BOX_TAG))`, stored in the packed round slot; level separates rounds, owner separates direct reward boxes; the snapshot retains 32 bits, not 256 |
-| Direct reward box | `H(callerDerivedWord, player)` | Decimator/ETH bet caller binds the relevant level or bet; this is not an independent raw-word consumer |
+| Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.final-coin.v1`, `.tie.v1`; dice omit entry id, others include it; engine survival/boost uses frozen owner |
+| Direct reward box | `H(callerDerivedWord, player)` | ETH bet caller binds the relevant bet; this is not an independent raw-word consumer |
 | Box secondary draws | `BOX_*_SPIN_TAG`, `BOX_PASS_ROUND_TAG`, `FLIP_ROUND_TAG` | Derive from that box's root; stake only sizes payout |
 | Degenerette result board | packed `H(word, uint32(index), QUICK_PLAY_SALT)` for spin 0; add `uint8(spin)` for later spins | **Shared by all ETH/FLIP players and bets in an RNG period**, including different stakes, hero symbols and currencies. Only ETH/FLIP bets use it; WWXRP is not a bet currency |
 | Degenerette player ticket | `H(H(word, index, heroSymbol, spin), PLAYER_TICKET_TAG)` | Shared across owners, bet ids, stakes and spin counts for the same hero; different heroes regenerate the other cells; no settlement inputs |
@@ -133,8 +133,7 @@ under different award budgets. `RandomnessSeedInputs.t.sol` compares production
 box resolutions after changing only amount. `DegeneretteFreezeResolution.t.sol`
 checks shared boards across owners, currencies, stakes and bet ids;
 `DegeneretteFlipRoundAntiGrind.t.sol` checks payout invariance under batch changes.
-`DecimatorEntropy.t.sol` checks the full-word-derived, tagged 32-bit snapshot and
-the actual claim-box delegatecall for words sharing their low 32 bits and for
-different rounds. It does not establish 256 bits of retained claim-box entropy.
+`DecimatorBattle.t.sol` checks real-engine replay from the shared full-word dice seed,
+final-coin exclusion, payout conservation and settlement invariance across batch sizes.
 See [Verification](../VERIFICATION.md) to run these tests and understand their
 limits. This inventory does not establish statistical independence.

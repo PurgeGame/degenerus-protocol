@@ -378,17 +378,12 @@ describe("Default Referral Codes", function () {
   // 7. Edge cases
   // =========================================================================
   describe("Edge cases", function () {
-    it("default code for address(1) resolves correctly (not REF_CODE_LOCKED)", async function () {
-      const { affiliate } = await loadFixture(deployFullProtocol);
-      // address(1) default code == bytes32(1) == REF_CODE_LOCKED
-      // But referPlayer uses _resolveCodeOwner which checks affiliateCode first,
-      // then derives address(1) — this is address(1), not a real user, so it should
-      // technically resolve. In practice nobody owns address(1).
+    it("address(1)'s code is stored as the locked sentinel and resolves to the vault", async function () {
+      const { affiliate, alice, vault } = await loadFixture(deployFullProtocol);
       const code = "0x0000000000000000000000000000000000000000000000000000000000000001";
-      // This is the REF_CODE_LOCKED sentinel — referPlayer should handle it.
-      // _resolveCodeOwner will find affiliateCode[code].owner == address(0),
-      // then derive address(1) which is nonzero. But address(1) is a precompile, not a player.
-      // The contract doesn't block it — edge case accepted.
+      await expect(affiliate.connect(alice).referPlayer(code))
+        .to.emit(affiliate, "Affiliate").withArgs(0, code, alice.address);
+      expect(await affiliate.getReferrer(alice.address)).to.equal(await vault.getAddress());
     });
 
     it("invalid code in high-byte range still reverts in referPlayer", async function () {

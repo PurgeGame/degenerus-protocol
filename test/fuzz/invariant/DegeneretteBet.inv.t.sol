@@ -97,32 +97,6 @@ contract DegeneretteBetInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Degenerette bet resolution does not increase game ETH balance
-    /// @dev After resolving a bet, the game balance should not exceed
-    ///      (deposits - claims + initial balance). This catches ETH minting bugs.
-    function invariant_noEthCreation() public view {
-        // If no bets were resolved, skip
-        if (degHandler.ghost_betsResolved() == 0) return;
-
-        // ETH payout from Degenerette should not exceed ETH wagered into Degenerette
-        // (Degenerette is EV-negative by design: ROI is 90-99.9%)
-        // However, individual resolutions CAN pay out more than wagered (jackpots).
-        // The key invariant is pool-level: futurePrizePool tracks correctly.
-        // This is already covered by solvency, so we check a weaker form:
-        // total claims (game + degenerette) <= total deposits
-        uint256 totalIn = gameHandler.ghost_totalDeposited()
-            + degHandler.ghost_totalEthWagered();
-        uint256 totalOut = gameHandler.ghost_totalClaimed()
-            + degHandler.ghost_totalEthPayout();
-
-        assertGe(totalIn, totalOut, "Degenerette: ETH creation detected");
-    }
-
-    /// @notice Canary: Degenerette handler is operational
-    function invariant_degeneretteCanary() public view {
-        assertTrue(address(degHandler) != address(0), "DegeneretteHandler not deployed");
-        assertTrue(address(game).code.length > 0, "Game has no code");
-    }
 
     /// @notice Non-vacuity lever: the run MUST place at least one real Degenerette bet, else the
     ///         solvency invariant proves nothing about betting. Runs once after the full sequence.
@@ -136,16 +110,5 @@ contract DegeneretteBetInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Diagnostic call/ghost summary (always passes; inspect with -vv).
-    function invariant_callSummary() public view {
-        console.log("--- DegeneretteBet Call Summary ---");
-        console.log("  calls_placeBet:    ", degHandler.calls_placeBet());
-        console.log("  calls_resolveBet:  ", degHandler.calls_resolveBet());
-        console.log("  ghost_betsPlaced:  ", degHandler.ghost_betsPlaced());
-        console.log("  ghost_betsResolved:", degHandler.ghost_betsResolved());
-        console.log("  ghost_betsFailed:  ", degHandler.ghost_betsFailed());
-        console.log("  ghost_ethWagered:  ", degHandler.ghost_totalEthWagered());
-        console.log("  ghost_ethPayout:   ", degHandler.ghost_totalEthPayout());
-        console.log("  game_deposited:    ", gameHandler.ghost_totalDeposited());
-    }
+
 }

@@ -409,20 +409,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
     });
   });
 
-  // -------------------------------------------------------------------------
-  // TST-HOFIX-05 — ZEROS OUT (placeholder documentation per HOFIX-AUDIT)
-  // -------------------------------------------------------------------------
-  describe("TST-HOFIX-05 — additional FIX-HOFIX-SWEEP-NN regression", function () {
-    it("ZEROS OUT — Phase 285 HOFIX-AUDIT broad sweep (D-285-AUDIT-SCOPE-01) surfaced 0 additional GAPs beyond F-41-02 (dailyHeroWagers); no additional surfaces to regress", function () {
-      // Per .planning/phases/285-day-index-read-audit-hero-override-fix-hofix/
-      // 285-01-HOFIX-AUDIT.md §3: 5 day-keyed storage maps + 31
-      // _simulatedDayIndex() callsites enumerated; 1 GAP (dailyHeroWagers,
-      // covered by FIX-HOFIX-01 → superseded by Phase 288 FIX-JPSURF-01); 0
-      // FIX-HOFIX-SWEEP-NN required. Placeholder kept so REQUIREMENTS.md
-      // TST-HOFIX-05 row maps to a concrete test ID; no real assertion.
-      expect(true).to.equal(true);
-    });
-  });
+
 });
 
 // =============================================================================

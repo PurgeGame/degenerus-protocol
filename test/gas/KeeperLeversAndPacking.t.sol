@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+// Permanently skipped historical cases were retired in the test review.
+// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -165,49 +168,6 @@ contract KeeperLeversAndPacking is DeployProtocol {
         );
     }
 
-    // =========================================================================
-    // GAS-03 — homogeneous per-work-type fns (SOURCE-PRESENCE, v55-reframed)
-    // =========================================================================
-
-    /// @notice GAS-03: the game work fns are homogeneous per work-type — degeneretteResolve resolves bets
-    ///         only (parallel arrays grouped by player), autoOpen opens boxes only (parameterless cursor).
-    ///         The v49 `batchPurchase(address[],uint256[],uint8[])` parallel-array grouping is DROPPED
-    ///         (removed surface, D-351-02 — the v55 per-sub buy iterates the in-context `_subscribers`
-    ///         set in `processSubscriberStage`, no calldata array).
-    function testGas03HomogeneitySourcePresence() public {
-        // v56 DROP (356-07, removed/adapted surface): this source-presence gate asserts
-        // `function autoOpen(uint256 maxCount)` exists on DegenerusGame, but the v56 LIVE-01 redesign
-        // (commit 86a2d6c8) unified the human box-open into `openBoxes(maxCount)` + `drainAfkingBoxes`,
-        // dropping the standalone `autoOpen` source string. The v56 homogeneous-per-work-type open surface
-        // (openBoxes valve + selector isolation) is proven against the v56 source by V56AfkingGasMarginal's
-        // LIVE-01 cases. (Dropped `view` to call the vm.skip cheatcode.)
-        vm.skip(true, "v56: autoOpen unified into openBoxes valve; homogeneity re-proven in V56AfkingGasMarginal LIVE-01");
-        string memory game_ = _strippedGame();
-        string memory afking = _stripComments(vm.readFile(AFKING_SRC));
-
-        // degeneretteResolve: parallel arrays (players[] + betIds[]) grouped by player.
-        assertGt(_countOccurrences(game_, "function degeneretteResolve("), 0, "GAS-03: degeneretteResolve present");
-        assertGt(_countOccurrences(game_, "address[] calldata players"), 0, "GAS-03: degeneretteResolve players[] grouping");
-        assertGt(_countOccurrences(game_, "uint64[] calldata betIds"), 0, "GAS-03: degeneretteResolve betIds[] grouping");
-
-        // autoOpen: homogeneous box-only work with a parameterless cursor walk (uint256 maxCount).
-        assertGt(_countOccurrences(game_, "function autoOpen(uint256 maxCount)"), 0, "GAS-03: autoOpen(maxCount) homogeneous box cursor");
-
-        // Homogeneity: exactly ONE degeneretteResolve and ONE autoOpen definition (no fused dispatcher).
-        assertEq(_countOccurrences(game_, "function degeneretteResolve("), 1, "GAS-03: single degeneretteResolve (no mixed-work dispatcher)");
-        assertEq(_countOccurrences(game_, "function autoOpen(uint256 maxCount)"), 1, "GAS-03: single autoOpen (homogeneous)");
-
-        // v55: the per-sub buy is the in-context STAGE `processSubscriberStage`, homogeneous and iterating
-        // the `_subscribers` set (NOT a calldata-array batch).
-        assertGt(
-            _countOccurrences(afking, "function processSubscriberStage("),
-            0,
-            "GAS-03 (v55): processSubscriberStage present (the per-sub STAGE, in-context set iteration)"
-        );
-
-        // D-351-02 DROP: the v49 batchPurchase parallel-array signature is REMOVED.
-        assertEq(_countOccurrences(game_, "function batchPurchase("), 0, "D-351-02: batchPurchase parallel-array fn REMOVED");
-    }
 
     // =========================================================================
     // GAS-04 — Sub 1-slot + boxCursor uint48 + no new hot-path storage (SOURCE-PRESENCE)

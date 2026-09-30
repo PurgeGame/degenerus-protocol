@@ -204,12 +204,12 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "recordDecBurn(address,uint24,uint8,uint256,uint256)",
+                "recordDecBurn(address,uint24,uint256,uint256,uint32)",
                 buyer,
                 uint24(0),
-                uint8(0),
                 uint256(1),
-                uint256(10_000)
+                uint256(10_000),
+                uint32(0)
             )
         );
         assertFalse(ok, "recordDecBurn rejected non-coin caller");
@@ -366,9 +366,10 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o4, ) = address(coin).call(
             abi.encodeWithSignature(
-                "decimatorBurn(address,uint256)",
+                "decimatorBurn(address,uint256,uint32)",
                 buyer,
-                uint256(1)
+                uint256(1),
+                uint32(0)
             )
         );
         vm.prank(buyer);
@@ -1133,8 +1134,9 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o3, ) = address(vault).call(
             abi.encodeWithSignature(
-                "coinDecimatorBurn(uint256)",
-                uint256(1)
+                "coinDecimatorBurn(uint256,uint32)",
+                uint256(1),
+                uint32(0)
             )
         );
         vm.prank(buyer);

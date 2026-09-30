@@ -429,7 +429,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -1261,38 +1260,28 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                    DECIMATOR JACKPOT LOGIC                                             |
       +========================================================================================+*/
 
-    /// @notice Record a Decimator burn for jackpot eligibility.
-    /// @dev Access: COIN contract only (enforced in module).
-    ///      Signature: recordDecBurn(address player, uint24 lvl, uint8 bucket, uint256 baseAmount,
-    ///      uint256 multBps) — the player, the current game level, the player's chosen denominator
-    ///      (2-12), the burn amount before multiplier, and the multiplier in basis points
-    ///      (10000 = 1x). The signature matches the module function exactly (identical selector),
-    ///      so the calldata forwards as-is — re-encoding here would cost contract-size headroom for
-    ///      no behavior change.
-    /// @return bucketUsed The bucket actually used (may differ from requested if not an improvement).
-    function recordDecBurn(
-        address,
-        uint24,
-        uint8,
-        uint256,
-        uint256
-    ) external returns (uint8 bucketUsed) {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DECIMATOR_MODULE
-            .delegatecall(msg.data);
+    /// @notice Add chips to a wallet's accumulated Decimator battle entry (COIN only).
+    function recordDecBurn(address, uint24, uint256, uint256, uint32) external returns (uint64) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert EmptyReturn();
-        return abi.decode(data, (uint8));
+        return abi.decode(data, (uint64));
     }
 
-    /// @notice Snapshot Decimator jackpot winners for deferred settlement.
+    /// @notice Progress sealed Decimator battles, including during RNG locks; idles after game over.
+    function settleDecimatorWinners(uint256) external returns (uint256, uint256, bool) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        return abi.decode(data, (uint256, uint256, bool));
+    }
+
+    /// @notice Seal a Decimator battle for bounded run and payout settlement.
     /// @dev Access: Game-only (self-call).
     ///      Signature: runDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) — the
-    ///      total ETH prize pool for this level, the level number being resolved, and the
+    ///      total ETH prize pool for this level, the level being resolved, and the
     ///      VRF-derived randomness seed. The signature matches the module function exactly
     ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
     ///      contract-size headroom for no behavior change.
-    /// @return returnAmountWei Amount to return (non-zero if no winners or already snapshotted).
+    /// @return returnAmountWei Amount to return (no entries or this round was already sealed).
     function runDecimatorJackpot(
         uint256,
         uint24,
@@ -1303,7 +1292,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_DECIMATOR_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -1325,7 +1313,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_JACKPOT_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -1348,7 +1335,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             .GAME_JACKPOT_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        if (data.length == 0) revert EmptyReturn();
         return abi.decode(data, (uint256));
     }
 
@@ -2350,7 +2336,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Check if decimator window is currently open.
     function decWindow() external view returns (bool) {
-        return decWindowOpen;
+        return decWindowOpen && !gameOver;
     }
 
     /// @notice Selected jackpot duration: one day for turbo, otherwise three days.

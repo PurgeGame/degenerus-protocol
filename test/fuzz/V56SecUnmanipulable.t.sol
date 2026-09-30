@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+// Permanently skipped historical cases were retired in the test review.
+// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -448,37 +451,6 @@ contract V56SecUnmanipulable is DeployProtocol {
         assertEq(_dailyQtyOf(p), 0, "hook A: the slot is tombstoned (dailyQuantity == 0) AFTER the finalize handed the streak back");
     }
 
-    /// @notice Hook (B) cancel-reclaim (load-bearing ordering): an in-set tombstone is reclaimed by the next
-    ///         STAGE — `_finalizeAfking` (:912) runs BEFORE `delete _subOf[player]` (:915). After the reclaim,
-    ///         the record is deleted (subscriberIndex == 0); the SubscriptionExpired reason-2 event confirms
-    ///         the cancel-reclaim path executed (the finalize is in that branch, ahead of the delete).
-    function testFinalizeHookB_CancelReclaimBeforeDelete() public {
-        // 357-00b DROP (D-12 supersession): the v55-era setup tombstoned an UNGROUNDED sub
-        // (subscribe-before-any-buy, no pending box) to drive the STAGE cancel-reclaim path. Under the
-        // 357-00 D-12 gate (MustPurchaseToBeginAfking) an ungrounded sub can no longer be created — and
-        // grounding p (fund-before-subscribe) stamps a pending box that the no-orphan guard then protects,
-        // suppressing the reclaim branch. The finalize-before-delete invariant this proved is re-proven by
-        // the GREEN hooks A (explicit-cancel-before-tombstone) and D (funding-kill-before-remove) — both of
-        // which finalize ahead of the slot mutation. Re-proven GREEN by V56SubHardening (the D-12 gate) +
-        // the surviving finalize hooks.
-        vm.skip(true, "357-00b D-12 supersession: cannot tombstone an ungrounded sub; finalize-before-delete covered by hooks A/D + V56SubHardening");
-        address p = makeAddr("hookB");
-        address keep = makeAddr("hookB_keep");
-        _grantSeat(p);
-        _grantSeat(keep);
-        _subscribeLootbox(p, 1);
-        _subscribeLootbox(keep, 1);
-        vm.prank(p);
-        game.subscribe(address(0), false, false, 0, address(0));
-        assertGt(_subscriberIndexOf(p), 0, "p still in-set as a tombstone pre-reclaim");
-
-        vm.recordLogs();
-        _runStageNewDay(0xB0B0); // the STAGE reclaims the tombstone (finalize -> delete)
-        _settleClean(0xB0B1);
-
-        assertGt(_countExpired(p, 2), 0, "hook B: cancel-reclaim fired (SubscriptionExpired reason 2)");
-        assertEq(_subscriberIndexOf(p), 0, "hook B: _subOf record deleted AFTER the finalize (removed from set)");
-    }
 
     // Hook (C) pass-eviction crossing was DROPPED: the per-level validity horizon, the crossing
     // refresh/evict branch, and `_passHorizonOf` are all deleted — membership now ends only via cancel,

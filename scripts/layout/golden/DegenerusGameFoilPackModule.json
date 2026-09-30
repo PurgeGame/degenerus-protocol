@@ -546,34 +546,34 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "decEntry",
+    "label": "decBattleOwners",
     "offset": 0,
     "slot": 40,
-    "typeLabel": "mapping(uint256 => struct DegenerusGameStorage.DecEntry)"
+    "typeLabel": "mapping(uint256 => address)"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "decBucketBurnTotal",
+    "label": "decBattleRounds",
     "offset": 0,
     "slot": 41,
-    "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.DecSubbucket[13][13])"
+    "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.DecBattleRound)"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "decClaimRounds",
+    "label": "decBattleHeap",
     "offset": 0,
     "slot": 42,
-    "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.DecClaimRound)"
+    "typeLabel": "mapping(uint256 => struct DegenerusGameStorage.DecBattleNode)"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "decBucketOffsetPacked",
+    "label": "decBattleEntries",
     "offset": 0,
     "slot": 43,
-    "typeLabel": "mapping(uint24 => uint64)"
+    "typeLabel": "mapping(uint24 => mapping(address => uint256))"
   },
   {
     "bytes": "32",
@@ -969,18 +969,10 @@
   },
   {
     "bytes": "32",
-    "encoding": "mapping",
-    "label": "decPointer",
+    "encoding": "inplace",
+    "label": "decBattleQueue",
     "offset": 0,
     "slot": 75,
-    "typeLabel": "mapping(address => struct DegenerusGameStorage.DecPointer)"
-  },
-  {
-    "bytes": "32",
-    "encoding": "inplace",
-    "label": "decSettleCursor",
-    "offset": 0,
-    "slot": 76,
-    "typeLabel": "struct DegenerusGameStorage.DecSettleCursor"
+    "typeLabel": "uint256"
   }
 ]

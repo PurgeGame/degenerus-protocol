@@ -263,7 +263,7 @@ describe("Coinflip", function () {
           break;
         }
       }
-      if (!found) this.skip();
+      expect(found, "deterministic reward-percent seed must be found").to.equal(true);
     });
 
     it("rewardPercent is 150 when roll == 1 (seedWord % 20 == 1)", async function () {
@@ -284,7 +284,7 @@ describe("Coinflip", function () {
           break;
         }
       }
-      if (!found) this.skip();
+      expect(found, "deterministic reward-percent seed must be found").to.equal(true);
     });
 
     it("recordPool grows by 2000 FLIP per resolved day", async function () {

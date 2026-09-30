@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+// Permanently skipped historical cases were retired in the test review.
+// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -88,28 +91,6 @@ contract AfKingConcurrency is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
     }
 
-    // =========================================================================
-    // Task 1 -- The STAGE buys every active funded sub exactly once (no double, no miss)
-    // =========================================================================
-
-    /// @notice v55 set-mutation core: a full STAGE cycle (a new-day advanceGame) buys every active
-    ///         funded sub EXACTLY ONCE -- the per-sub `lastAutoBoughtDay` stamp advances to the
-    ///         process day and the buy is idempotent across the chunked partial-drain advance calls.
-    function testStageBuysEverySubExactlyOnce() public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        uint256 N = 6;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "once_");
-
-        _snapshotBought(subs);
-        _runStageNewDay(0xABC0); // advance one new day -> processSubscriberStage(50) stamps the set
-
-        uint32 today = _stampDay(subs[0]); // the day every sub was stamped this cycle
-        assertGt(today, 0, "the STAGE stamped a process day");
-        for (uint256 i; i < N; i++) {
-            assertEq(_lastBoughtDayOf(subs[i]), today, "sub processed exactly this cycle");
-            assertEq(_countBoughtFor(subs[i]), 1, "sub bought EXACTLY ONCE by the STAGE (no double-buy)");
-        }
-    }
 
     /// @notice v55 daily reset gate (AdvanceModule:305-309): a STAGE run drives `_subCursor` to the
     ///         set end and sets `subsFullyProcessed = true` (afking done for THIS day). The
@@ -143,130 +124,6 @@ contract AfKingConcurrency is DeployProtocol {
         assertEq(_subCursorVal(), 0, "reset rewound the cursor to 0 (set re-walked from the start)");
     }
 
-    /// @notice v55 idempotency backstop: a sub already stamped this cycle (lastAutoBoughtDay >=
-    ///         processDay) is SKIPPED by GameAfkingModule.sol:598, never re-stamped, even though the
-    ///         STAGE is driven across multiple advance calls within the day. Drives two STAGE passes
-    ///         on the SAME day (no day advance between them) and asserts no second buy.
-    function testLastAutoBoughtDayBackstopBlocksRepeatBuySameDay() public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        address[] memory subs = _setupHealthyBuyingSubs(1, "backstop_");
-        address sub = subs[0];
-
-        address[] memory one = new address[](1);
-        one[0] = sub;
-        _snapshotBought(one);
-        _runStageNewDay(0xBA1);
-        assertEq(_countBoughtFor(sub), 1, "first STAGE bought the sub once");
-        uint32 stamped = _lastBoughtDayOf(sub);
-        assertGt(stamped, 0, "lastAutoBoughtDay stamped");
-
-        _fundPool(sub, 1 ether);
-        // Re-run the STAGE on the SAME process day (no warp): drive advanceGame again. The day-stamp
-        // backstop must prevent a second buy.
-        _snapshotBought(one);
-        _settleGame(0xBA2); // re-enter advance on the same day; subsFullyProcessed already true today
-        assertEq(_countBoughtFor(sub), 0, "lastAutoBoughtDay backstop: NO second buy same day");
-        assertEq(_lastBoughtDayOf(sub), stamped, "lastAutoBoughtDay unchanged by the same-day re-run");
-    }
-
-    // =========================================================================
-    // TST-04 -- in-place cancel-tombstone + STAGE reclaim (H-CANCEL-SWAP-MISS)
-    // =========================================================================
-
-    /// @notice H-CANCEL-SWAP-MISS direct repro on the game-resident set. The OLD swap-pop-at-cancel
-    ///         relocated the set TAIL into a freed slot; if that freed slot sat BEHIND a chunked
-    ///         cursor, the relocated tail (still pending) was pushed behind the cursor and SKIPPED for
-    ///         the day. v55's in-place tombstone (subscribe(_,0)) moves no one, so the still-pending
-    ///         tail is never relocated; the STAGE reclaim swap-pops the tombstone WITHOUT advancing
-    ///         the cursor, re-reading the mover at the freed slot this pass.
-    function testCancelDoesNotStrandPendingTail() public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        uint256 N = 8;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "strand_");
-
-        // Cancel an EARLY-index sub (its tombstone sits ahead of the bulk of the set). The reclaim
-        // will swap-pop the tail occupant into this slot; that occupant must still be processed.
-        address cancelled = subs[0];
-        address tail = subs[N - 1];
-        vm.prank(cancelled);
-        game.subscribe(address(0), false, false, 0, address(0)); // in-place tombstone
-        assertEq(_dailyQtyOf(cancelled), 0, "cancel wrote the in-place sentinel");
-        assertGt(_subscriberIndexOf(cancelled), 0, "v55: cancel relocates no one -- still in set");
-
-        vm.recordLogs();
-        _runStageNewDay(0xCA1);
-        _drainLogs();
-
-        // The tombstone was reclaimed; the swap-pop occupant (and every other active sub) still bought.
-        assertEq(_subscriberIndexOf(cancelled), 0, "tombstone reclaimed out of the set");
-        assertEq(_countExpiredFor(cancelled, 2), 1, "reclaim emitted SubscriptionExpired(player,2)");
-        uint32 today = _lastBoughtDayOf(tail);
-        assertGt(today, 0, "the STAGE ran a process day");
-        assertEq(_countBoughtFor(tail), 1, "H-CANCEL-SWAP-MISS resolved: swap-pop occupant still bought");
-
-        uint256 activeBought;
-        for (uint256 i; i < N; i++) {
-            if (subs[i] == cancelled) continue;
-            assertEq(_lastBoughtDayOf(subs[i]), today, "every active sub processed (no miss)");
-            activeBought++;
-        }
-        assertEq(activeBought, N - 1, "all N-1 still-active subs bought this cycle");
-    }
-
-    /// @notice TST-04 swap-pop occupant no-skip (the load-bearing CONSENT-02 property): cancelling an
-    ///         EARLY sub leaves it as an in-place tombstone; the STAGE's reclaim branch swap-pops it
-    ///         and the moved occupant is re-read at THIS index this pass (the continue WITHOUT a
-    ///         cursor advance, GameAfkingModule.sol:586-594) -- it is NOT skipped.
-    function testCancelSwapPopOccupantStillProcessed() public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        uint256 N = 5;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "swap_");
-        address mover = subs[N - 1];
-
-        vm.prank(subs[0]);
-        game.subscribe(address(0), false, false, 0, address(0)); // in-place tombstone
-        assertGt(_subscriberIndexOf(subs[0]), 0, "v55: cancel is an in-place tombstone -- still in the set");
-        assertEq(_dailyQtyOf(subs[0]), 0, "cancel wrote the in-place sentinel");
-
-        vm.recordLogs();
-        _runStageNewDay(0x5A1);
-        _drainLogs();
-
-        assertEq(_subscriberIndexOf(subs[0]), 0, "tombstone swap-popped at reclaim (removed from set)");
-        assertEq(_countExpiredFor(subs[0], 2), 1, "reclaim emitted SubscriptionExpired(player,2) at the swap-pop");
-        assertEq(_countBoughtFor(mover), 1, "reclaim swap-pop occupant still processed this pass (NON-VACUOUS no-skip)");
-        assertEq(_countBoughtFor(subs[0]), 0, "cancelled sub not processed");
-    }
-
-    /// @notice v55 cancel-reclaim ALWAYS deletes the full Sub record (the v47 `preservePaidWindow`
-    ///         carve-out is gone -- AFSUB-01 retired the FLIP-prepaid window): a cancelled sub whose
-    ///         record holds any non-zero stored value (validThroughLevel) has it zeroed at the deferred
-    ///         STAGE reclaim, with no opt-in preservation path.
-    function testCancelReclaimAlwaysDeletesSubRecord() public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        address[] memory subs = _setupHealthyBuyingSubs(1, "reclaim_delete_");
-        address sub = subs[0];
-
-        // Stamp a non-zero validThroughLevel so we can verify the reclaim deletes the FULL record.
-        _setValidThroughLevel(sub, 999);
-        assertEq(_validThroughLevelOf(sub), 999, "pre-cancel: validThroughLevel = 999");
-
-        vm.prank(sub);
-        game.subscribe(address(0), false, false, 0, address(0)); // tombstone
-        assertGt(_subscriberIndexOf(sub), 0, "tombstone in set after cancel (deferred reclaim)");
-        assertEq(_validThroughLevelOf(sub), 999, "pre-reclaim: validThroughLevel readable");
-
-        vm.recordLogs();
-        _runStageNewDay(0xDE1);
-        _drainLogs();
-        assertEq(_countExpiredFor(sub, 2), 1, "reclaim emitted SubscriptionExpired(player,2)");
-        assertEq(_subscriberIndexOf(sub), 0, "sub removed from set at reclaim");
-
-        // The FULL record is deleted at reclaim (no preserve-vs-delete fork).
-        assertEq(_dailyQtyOf(sub), 0, "dailyQuantity zeroed at reclaim");
-        assertEq(_validThroughLevelOf(sub), 0, "validThroughLevel zeroed at reclaim (no preserve path)");
-        assertEq(_flagsOf(sub), 0, "flags zeroed at reclaim");
-    }
 
     /// @notice TST-04: reactivating a still-in-set tombstone (before any STAGE reclaims it) flips it
     ///         back to active IN PLACE with NO duplicate set membership (idempotent `_addToSet`).
@@ -296,49 +153,6 @@ contract AfKingConcurrency is DeployProtocol {
         assertEq(_countBoughtFor(sub), 1, "reactivated sub buys as a normal active sub");
     }
 
-    /// @notice TST-04: across a series of cancels the in-place tombstones persist until the next STAGE
-    ///         reaches them. The NET set effect (after the reclaiming STAGE) equals the old
-    ///         immediate-swap-pop -- the set shrinks by exactly the cancel count, no dead slots.
-    function testNoDeadSlotBuildupAcrossCancels() public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        uint256 baseline = _subscribersLen();
-        uint256 N = 6;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "build_");
-        assertEq(_subscribersLen(), baseline + N, "all N added to the set");
-
-        vm.prank(subs[0]);
-        game.subscribe(address(0), false, false, 0, address(0));
-        vm.prank(subs[1]);
-        game.subscribe(address(0), false, false, 0, address(0));
-        vm.prank(subs[2]);
-        game.subscribe(address(0), false, false, 0, address(0));
-        assertEq(
-            _subscribersLen(),
-            baseline + N,
-            "v55: cancel does not shrink the set (in-place tombstones stay until reclaimed)"
-        );
-
-        for (uint256 i = 3; i < N; i++) _fundPool(subs[i], 1 ether);
-        vm.recordLogs();
-        _runStageNewDay(0xB01);
-        _drainLogs();
-        assertEq(_countExpiredFor(subs[0], 2), 1, "tombstone 0 reclaimed");
-        assertEq(_countExpiredFor(subs[1], 2), 1, "tombstone 1 reclaimed");
-        assertEq(_countExpiredFor(subs[2], 2), 1, "tombstone 2 reclaimed");
-        assertEq(
-            _subscribersLen(),
-            baseline + N - 3,
-            "after the reclaiming STAGE the set shrank by exactly the 3 cancels (no dead slots)"
-        );
-
-        // Every surviving set slot has a consistent 1-indexed back-pointer (no zero-address dead slot).
-        uint256 count = _subscribersLen();
-        for (uint256 i; i < count; i++) {
-            address at = _subscriberAt(i);
-            assertTrue(at != address(0), "no zero-address dead slot in the iteration set");
-            assertEq(_subscriberIndexOf(at), i + 1, "each set slot's 1-indexed back-pointer is consistent");
-        }
-    }
 
     /// @notice TST-04: a cancelled sub's stranded afking ETH stays withdrawable (game-resident
     ///         afkingFunding -- `withdrawAfkingFunding`).
@@ -363,119 +177,6 @@ contract AfKingConcurrency is DeployProtocol {
         assertEq(sub.balance - balBefore, fundedBefore, "stranded afking ETH returned to the cancelled sub");
     }
 
-    // =========================================================================
-    // TST-04 -- swap-pop invariant under pass-eviction (H-CANCEL-SWAP-MISS re-derivation)
-    // =========================================================================
-
-    /// @notice CONSENT-01: the swap-pop invariant (membership ⟺ packed-index != 0) holds under
-    ///         AFSUB-03 pass-eviction too. A no-pass crossing eviction routes through the SAME
-    ///         tombstone-then-reclaim shape as cancel: `sub.dailyQuantity=0; _removeFromSet(player);
-    ///         continue` WITHOUT advancing the cursor (GameAfkingModule.sol:619-628). The
-    ///         H-CANCEL-SWAP-MISS class structurally cannot reproduce because the swap-pop occupant is
-    ///         processed at this slot this pass.
-    function testPassEvictionPreservesSwapPopInvariant() public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        uint256 N = 6;
-        // NO deity (the no-pass eviction precondition): _passHorizonOf(subs[i]) = 0 for all i.
-        address[] memory subs = _setupNoPassBuyingSubs(N, "evict_swap_");
-
-        // Force the crossing on ALL of them: validThroughLevel = 0, bump game.level to 1. Every sub
-        // EVICTS this STAGE (not refresh).
-        for (uint256 i; i < N; i++) _setValidThroughLevel(subs[i], 0);
-        _bumpGameLevelToAtLeastOne();
-
-        address tail = subs[N - 1];
-        assertGt(_subscriberIndexOf(tail), 0, "tail sub starts in the iterable set");
-
-        vm.recordLogs();
-        _runStageOnce();
-        _drainLogs();
-
-        // Every test sub evicted: the swap-pop occupant at each freed slot was re-evaluated this pass.
-        for (uint256 i; i < N; i++) {
-            assertEq(_countExpiredFor(subs[i], 1), 1, "AFSUB-03 pass-eviction emitted SubscriptionExpired(.,1)");
-            assertEq(_subscriberIndexOf(subs[i]), 0, "evicted sub swap-popped out of the iterable set");
-            assertEq(_dailyQtyOf(subs[i]), 0, "evicted sub dailyQuantity zeroed (tombstoned)");
-        }
-    }
-
-    /// @notice TST-04: H-CANCEL-SWAP-MISS re-derivation under MIXED pass-eviction + refresh. Grant
-    ///         deity to ODD-indexed subs so they survive the crossing (REFRESH branch); EVEN indices
-    ///         have no pass and EVICT. Under the swap-pop-at-eviction shape the relocated tail would
-    ///         have been pushed behind the cursor and SKIPPED; under v55's tombstone-then-reclaim the
-    ///         eviction relocates no one mid-pass and every surviving sub is processed.
-    function testPassEvictionMixedDoesNotStrandSurvivors() public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        uint256 N = 8;
-        // NO deity at subscribe; grant it selectively below.
-        address[] memory subs = _setupNoPassBuyingSubs(N, "evict_mix_");
-
-        // Grant deity to ODD-indexed subs only so they REFRESH; even indices EVICT.
-        for (uint256 i = 1; i < N; i += 2) _grantDeityPass(subs[i]);
-        for (uint256 i; i < N; i++) _setValidThroughLevel(subs[i], 0);
-        _bumpGameLevelToAtLeastOne();
-
-        vm.recordLogs();
-        _runStageOnce();
-        _drainLogs();
-
-        uint32 today = _lastBoughtDayOf(subs[1]);
-        assertGt(today, 0, "the STAGE ran a process day");
-        for (uint256 i; i < N; i++) {
-            if (i % 2 == 1) {
-                assertEq(_lastBoughtDayOf(subs[i]), today, "deity-holding sub processed (no miss from an eviction swap-pop)");
-                assertGt(_subscriberIndexOf(subs[i]), 0, "deity-holding sub stays in set");
-            } else {
-                assertEq(_dailyQtyOf(subs[i]), 0, "no-pass sub evicted (tombstone)");
-                assertEq(_subscriberIndexOf(subs[i]), 0, "no-pass sub swap-popped out");
-            }
-        }
-    }
-
-    /// @notice TST-04 fuzz: over an arbitrary mix of cancels among N funded subs, the reclaiming STAGE
-    ///         leaves the set membership-consistent (every survivor in-set + bought once; every
-    ///         cancelled sub reclaimed out), independent of the cancel ordering.
-    function testFuzzCancelOrderingPreservesMembership(uint8 cancelMask) public {
-        vm.skip(true, "357-00b D-12 supersession: grounded subscribe stamps a box (no-orphan-protected) + IS the first buy, so the ungrounded-tombstone/STAGE-first-buy/swap-pop setup cannot be constructed; re-proven by V56SubHardening (crossing eviction) + V56SecUnmanipulable (finalize hooks A/C/D, no-orphan)");
-        uint256 N = 6;
-        address[] memory subs = _setupHealthyBuyingSubs(N, "fuzzcancel_");
-
-        bool[] memory cancelled = new bool[](N);
-        uint256 cancelCount;
-        for (uint256 i; i < N; i++) {
-            if ((cancelMask >> i) & 1 == 1) {
-                cancelled[i] = true;
-                cancelCount++;
-                vm.prank(subs[i]);
-                game.subscribe(address(0), false, false, 0, address(0)); // in-place tombstone
-            }
-        }
-
-        uint256 lenBefore = _subscribersLen();
-        vm.recordLogs();
-        _runStageNewDay(uint256(keccak256(abi.encode(cancelMask))) & 0xFFFFFF);
-        _drainLogs();
-
-        uint32 today;
-        for (uint256 i; i < N; i++) {
-            if (!cancelled[i]) {
-                today = _lastBoughtDayOf(subs[i]);
-                break;
-            }
-        }
-        for (uint256 i; i < N; i++) {
-            if (cancelled[i]) {
-                assertEq(_subscriberIndexOf(subs[i]), 0, "cancelled sub reclaimed out of the set");
-                assertEq(_countExpiredFor(subs[i], 2), 1, "cancelled sub emitted CancelReclaim");
-            } else {
-                assertGt(_subscriberIndexOf(subs[i]), 0, "survivor stays in the set");
-                if (today > 0) {
-                    assertEq(_lastBoughtDayOf(subs[i]), today, "survivor processed this STAGE (no miss)");
-                }
-            }
-        }
-        assertEq(_subscribersLen(), lenBefore - cancelCount, "set shrank by exactly the cancel count (no dead slots)");
-    }
 
     // =========================================================================
     // Internal helpers

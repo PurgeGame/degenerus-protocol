@@ -58,7 +58,6 @@ import { expect } from "chai";
 import hre from "hardhat";
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
 
 const MODULE_SOURCE_PATH = path.resolve(
   process.cwd(),
@@ -74,7 +73,6 @@ const STORAGE_PATH = path.resolve(
 );
 
 // v38 closure baseline SHA (per .planning/STATE.md "Last Shipped Milestone").
-const V38_BASELINE = "06623edb";
 
 // Extract the top-level positional args of the first `_resolveLootboxCommon(...)`
 // call within a function-body slice. Paren-depth-aware so `uint32(index)` stays
@@ -204,25 +202,6 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
   });
 
   describe("TST-REG-02 — mint-boost fractional path UNCHANGED at v39", function () {
-    // SUPERSEDED by the v40.0 SURF-03 block in test/stat/SurfaceRegression.test.js:
-    // Phase 278 reworded the _rollRemainder NatSpec comment in
-    // DegenerusGameMintModule.sol (the dead `entropyStep` name dropped), so
-    // byte-identity vs the v38 baseline 06623edb no longer holds. The
-    // _rollRemainder code itself is unchanged — only the comment moved — and
-    // the v40.0 SURF-03 gate re-protects the MintModule body against the v39
-    // baseline 6a7455d1 with the comment reword excluded.
-    it.skip("[02a] DegenerusGameMintModule.sol byte-identical to baseline 06623edb (G23)", function () {
-      // Mirror G23 from the plan: cmp the file against baseline.
-      const result = execSync(
-        `cmp <(git show ${V38_BASELINE}:contracts/modules/DegenerusGameMintModule.sol) contracts/modules/DegenerusGameMintModule.sol; echo "exit=$?"`,
-        { encoding: "utf8", shell: "/bin/bash" }
-      );
-      expect(
-        result.includes("exit=0"),
-        `MintModule.sol drifted from baseline ${V38_BASELINE} (result: ${result.trim()})`
-      ).to.equal(true);
-    });
-
     it("[02b] MintModule still calls `_queueEntriesScaled` for boost-derived fractional ticket awards", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       // The mint-boost callsite uses _queueEntriesScaled with rngBypass=true

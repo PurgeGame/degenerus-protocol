@@ -43,9 +43,15 @@ contract JackpotCommitmentSeeder is DegenerusGame {
         // its ordinary queue sink stopped enforcing the request lock.
         whalePassClaims[attacker] = 4;
         claimablePool = 12 ether;
-        decClaimRounds[5] = DecClaimRound(12 ether, 1 ether, 123);
-        decEntry[(uint256(5) << 48) | (uint256(2) << 40)] = DecEntry(attacker, 1000, 1000);
-        decBucketBurnTotal[5][2][0] = DecSubbucket(1 ether, 1);
+        decBattleRounds[5].poolWei = 12 ether;
+        decBattleRounds[5].phase = 2;
+        decBattleRounds[5].winners = 1;
+        decBattleRounds[5].champion = 1;
+        decBattleOwners[(uint256(5) << 64) | 1] = attacker;
+        decBattleEntries[5][attacker] = (uint256(1 ether) << 96) | 1;
+        decBattleHeap[0].head = 1;
+        decBattleQueue = 5 | (uint256(5) << 24);
+
     }
 }
 
@@ -122,8 +128,6 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         game.purchaseWhalePass{value: 20 ether}(ATTACKER, 1, bytes32(0));
         vm.expectRevert(RNG_LOCKED);
         game.claimWhalePass(ATTACKER);
-        vm.expectRevert(RNG_LOCKED);
-        game.claimDecimatorJackpot(5, 2, 0);
         uint32[] memory levels = new uint32[](1);
         levels[0] = 9;
         uint256[] memory quantities = new uint256[](1);

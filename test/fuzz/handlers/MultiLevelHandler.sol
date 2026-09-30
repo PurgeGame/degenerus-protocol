@@ -51,6 +51,7 @@ contract MultiLevelHandler is Test {
     constructor(DegenerusGame game_, MockVRFCoordinator vrf_, uint256 numActors) {
         game = game_;
         vrf = vrf_;
+        ghost_maxLevel = game_.level();
         for (uint256 i = 0; i < numActors; i++) {
             address actor = address(uint160(0xAA000 + i));
             actors.push(actor);

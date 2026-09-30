@@ -181,29 +181,33 @@ interface IDegenerusGame {
 
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.
-    /// @param lvl Current game level.
-    /// @param bucket Player's chosen denominator (2-12).
+    /// @param lvl Resolution level (current game level + 1).
     /// @param baseAmount Burn amount before multiplier.
     /// @param multBps Multiplier in basis points (10000 = 1x).
-    /// @return bucketUsed The bucket actually used (may differ from requested if not an improvement).
+    /// @param chips The entry's board: zero to seven named chips, as a normal battle takes them.
+    /// @return entryId The wallet's accumulated battle entry.
     function recordDecBurn(
         address player,
         uint24 lvl,
-        uint8 bucket,
         uint256 baseAmount,
-        uint256 multBps
-    ) external returns (uint8 bucketUsed);
+        uint256 multBps,
+        uint32 chips
+    ) external returns (uint64 entryId);
 
-    /// @notice Snapshot Decimator jackpot winners for deferred claims.
+    /// @notice Seal a Decimator battle for bounded run and payout settlement.
     /// @param poolWei Total ETH prize pool for this level.
     /// @param lvl Level number being resolved.
     /// @param rngWord VRF-derived randomness seed.
-    /// @return returnAmountWei Amount to return (non-zero if no winners or already snapshotted).
+    /// @return returnAmountWei Amount to return (no entries or this round was already sealed).
     function runDecimatorJackpot(
         uint256 poolWei,
         uint24 lvl,
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
+
+    /// @notice Progress sealed Decimator runs or ETH credits without a keeper bounty.
+    function settleDecimatorWinners(uint256 budgetUnits)
+        external returns (uint256 settled, uint256 unitsUsed, bool moved);
 
     /// @notice Execute BAF jackpot via JackpotModule delegatecall.
     /// @param poolWei Total ETH prize pool for BAF.

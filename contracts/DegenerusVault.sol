@@ -104,7 +104,7 @@ interface ICoinflipPlayerActions {
 /// @notice Interface for FLIP decimator burn used by DegenerusVault.
 interface ICoinPlayerActions {
     /// @notice Burn FLIP for decimator jackpot eligibility.
-    function decimatorBurn(address player, uint256 amount) external;
+    function decimatorBurn(address player, uint256 amount, uint32 chips) external;
 }
 
 /// @dev The craps table's player surface. The vault is seated automatically at every bonus
@@ -878,9 +878,10 @@ contract DegenerusVault {
 
     /// @notice Burn coins in the decimator for the vault
     /// @param amount Amount of coins to burn
+    /// @param chips The vault entry's board: zero to seven named chips, as a normal battle takes them
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function coinDecimatorBurn(uint256 amount) external onlyVaultOwner {
-        flipPlayer.decimatorBurn(address(this), amount);
+    function coinDecimatorBurn(uint256 amount, uint32 chips) external onlyVaultOwner {
+        flipPlayer.decimatorBurn(address(this), amount, chips);
     }
 
     /// @notice Configure coinflip auto-rebuy for the vault

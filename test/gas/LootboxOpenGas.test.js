@@ -10,9 +10,10 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { readFileSync } from "node:fs";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
-import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
+import { restoreAddresses } from "../helpers/deployFixture.js";
 import { boCustom, boSmalls, boCount } from "../helpers/boxOrder.js";
-import { eth, advanceToNextDay, getLastVRFRequestId, ZERO_BYTES32 } from "../helpers/testUtils.js";
+import { readyDailyFixture } from "../helpers/readyDailyFixture.js";
+import { eth, getLastVRFRequestId, ZERO_BYTES32 } from "../helpers/testUtils.js";
 
 const NORMAL_GAS_TARGET = 10_000_000n;
 const AUDIT_GAS_CEILING = 11_500_000n;
@@ -36,26 +37,6 @@ async function orderOf(game, index, player) {
 }
 async function wordOf(game, index) { return read(game, slot(index, root("lootboxRngWordByIndex"))); }
 
-async function readyDailyFixture() {
-  const f = await deployFullProtocol();
-  await f.mockVRF.fundSubscription(1, eth(100));
-  await advanceToNextDay();
-  for (let calls = 0; calls < 50 && !(await f.game.rngLocked()); calls++) {
-    await f.game.connect(f.deployer).advanceGame();
-  }
-  expect(await f.game.rngLocked(), "daily request must engage").to.equal(true);
-  const request = await getLastVRFRequestId(f.mockVRF);
-  expect(request, "fresh real VRF request").to.be.gt(0n);
-  await f.mockVRF.fulfillRandomWords(request, 0xB007n);
-  for (let calls = 0; calls < 100 && await f.game.rngLocked(); calls++) {
-    await f.game.connect(f.deployer).advanceGame();
-  }
-  expect(await f.game.rngLocked(), "daily work must finish within its bound").to.equal(false);
-  await f.game.openBoxes(1000);
-  expect(await f.game.level(), "fixed live game level").to.equal(0n);
-  expect(await f.game.boxesPending(), "fixture starts with no ready entries").to.equal(false);
-  return f;
-}
 
 async function purchase(f, player, packed, nominal) {
   // A real ticket purchase supplies the ordinary activity score; no storage seeding.

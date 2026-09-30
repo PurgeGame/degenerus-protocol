@@ -3,14 +3,14 @@ pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
-import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
+import {DegenerusVault, DegenerusVaultShare} from "../../../contracts/DegenerusVault.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title VaultHandler -- Handler for vault deposit/withdraw operations in invariant tests
 /// @notice Wraps burnCoin/burnEth with bounded inputs, tracks share math consistency.
-/// @dev Targets the NEVER-FUZZED vault share math: shares never exceed assets, no rounding exploit.
+/// @dev Tracks successful burns and full-supply refills against the production vault.
 ///      In Foundry tests, the test contract (0x7FA9...) is CREATOR and holds initial vault shares.
 ///      The handler prank-calls as the test contract (creator) for burn operations.
 contract VaultHandler is Test {
@@ -27,6 +27,12 @@ contract VaultHandler is Test {
     uint256 public ghost_depositsTriggered;
     uint256 public ghost_burnEthSuccess;
     uint256 public ghost_burnCoinSuccess;
+    uint256 public ghost_totalDeposited;
+    uint256 public ghost_ethRefills;
+    uint256 public ghost_coinRefills;
+
+    DegenerusVaultShare public ethShare;
+    DegenerusVaultShare public flipShare;
 
     // --- Call counters ---
     uint256 public calls_burnEth;
@@ -58,6 +64,8 @@ contract VaultHandler is Test {
         coin = coin_;
         vrf = vrf_;
         creator = creator_;
+        flipShare = DegenerusVaultShare(vm.computeCreateAddress(address(vault_), 1));
+        ethShare = DegenerusVaultShare(vm.computeCreateAddress(address(vault_), 2));
 
         for (uint256 i = 0; i < numActors; i++) {
             address actor = address(uint160(0xE0000 + i));
@@ -67,33 +75,40 @@ contract VaultHandler is Test {
     }
 
     /// @notice Burn DGVE shares for ETH (acts as creator)
-    /// @param amount Raw amount of DGVE shares to burn (bounded to small fraction)
+    /// @param amount Raw shares; includes full burns to exercise supply refill.
     function burnEth(uint256 amount) external {
         calls_burnEth++;
 
-        // Preview how much ETH we'd get (reverts if 0 shares or 0 reserve)
-        amount = bound(amount, 1, 1e18); // Burn a tiny fraction of 1T supply
+        uint256 held = ethShare.balanceOf(creator);
+        if (held == 0) return;
+        amount = amount % 8 == 0 ? held : bound(amount, 1, held);
+        uint256 supplyBefore = ethShare.totalSupply();
 
         vm.prank(creator);
         try vault.burnEth(amount) returns (uint256 ethOut, uint256 stEthOut) {
             ghost_burnEthSuccess++;
             ghost_ethBurned += amount;
             ghost_ethReceived += ethOut + stEthOut;
+            if (amount == supplyBefore) ghost_ethRefills++;
         } catch {}
     }
 
     /// @notice Burn DGVF shares for FLIP (acts as creator)
-    /// @param amount Raw amount of DGVF shares to burn (bounded to small fraction)
+    /// @param amount Raw shares; includes full burns to exercise supply refill.
     function burnCoin(uint256 amount) external {
         calls_burnCoin++;
 
-        amount = bound(amount, 1, 1e18);
+        uint256 held = flipShare.balanceOf(creator);
+        if (held == 0) return;
+        amount = amount % 8 == 0 ? held : bound(amount, 1, held);
+        uint256 supplyBefore = flipShare.totalSupply();
 
         vm.prank(creator);
         try vault.burnCoin(amount) returns (uint256 flipOut) {
             ghost_burnCoinSuccess++;
             ghost_coinBurned += amount;
             ghost_coinReceived += flipOut;
+            if (amount == supplyBefore) ghost_coinRefills++;
         } catch {}
     }
 
@@ -120,6 +135,7 @@ contract VaultHandler is Test {
             MintPaymentKind.DirectEth, false
         ) {
             ghost_depositsTriggered++;
+            ghost_totalDeposited += cost;
         } catch {}
     }
 

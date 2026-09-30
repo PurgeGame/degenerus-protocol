@@ -20,8 +20,8 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 //   T1  a VRF stall that recovers past the purchase deadline does not fire liveness before the
 //       next advance's backfill credits the skipped days (unit + integration).
 //   T2  terminal routing is irreversible: sDGNRS redemption waits (EndingPending) while liveness
-//       reads true before game over; mineFlip's decimator leg idles under both liveness and game
-//       over, so no decimator entry settles once the ending has begun; the foil drain's terminal
+//       reads true before game over; sealed Decimator battles remain settleable through the ending
+//       and receive a full claim window after their last completion; the foil drain's terminal
 //       flag keys on the ending latch, not the liveness predicate.
 //   T3  a vault DGVE burn whose afking shortfall exceeds the game's ETH is paid ETH + stETH.
 //   T4  the terminal jackpot pays exact shares: one wei in the pot moves a winner by wei, not a
@@ -197,20 +197,48 @@ contract ReviewClaimSeeder is DegenerusGame {
     ///      denom 2 / sub 0 / position 0 — also where the settle cursor starts, so mineFlip's
     ///      leg reaches it directly rather than walking from level 5.
     function seedDecRound(uint24 lvl, address player, uint96 poolWei) external {
-        decClaimRounds[lvl].poolWei = poolWei;
-        decClaimRounds[lvl].totalBurn = 100 * 1e15;
-        decClaimRounds[lvl].rngWord = 7;
-        decBucketOffsetPacked[lvl] = 0; // denom 2 wins sub 0
-        decEntry[_decEntryKey(lvl, 2, 0, 0)] = DecEntry({owner: player, weightMilli: 100, baseMilli: 100});
-        decBucketBurnTotal[lvl][2][0] = DecSubbucket({totalBurn: 100 * 1e15, length: 1});
-        decSettleCursor = DecSettleCursor({lvl: lvl, denom: 2, position: 0});
+        decBattleRounds[lvl].poolWei = poolWei;
+        decBattleRounds[lvl].phase = 2;
+        decBattleRounds[lvl].count = 1;
+        decBattleRounds[lvl].winners = 1;
+        decBattleRounds[lvl].champion = 1;
+        decBattleOwners[(uint256(lvl) << 64) | 1] = player;
+        decBattleEntries[lvl][player] = (uint256(1 ether) << 96) | 1;
+        decBattleHeap[0].head = 1;
+        decBattleQueue = uint256(lvl) | uint256(lvl) << 24;
         // Back the credit a settle would write (claimablePool is the ledger total).
         claimablePool += uint128(poolWei);
     }
 
+    function seedLosingKeeperRun(uint24 lvl) external {
+        uint24 day = _simulatedDayIndex();
+        dailyIdx = day; purchaseStartDay = day;
+        rngLockedFlag = false; ticketsFullyProcessed = true; subsFullyProcessed = true;
+        _afkingResetDay = day;
+        DecBattleRound storage round = decBattleRounds[lvl];
+        // Eight losing runs: enough work for one knee credit (15 units) at the measured prices.
+        round.phase = 1; round.winners = 0; round.champion = 0; round.capacity = 1; round.count = 8;
+        for (uint160 i = 2; i <= 8; ++i) decBattleOwners[(uint256(lvl) << 64) | i] = address(i);
+        uint256 word;
+        while (!_allTails(word, lvl, 8)) ++word;
+        round.rngWord = word;
+    }
+
+    function _allTails(uint256 word, uint24 lvl, uint64 n) private pure returns (bool) {
+        for (uint64 id = 1; id <= n; ++id) {
+            if (uint256(keccak256(abi.encode(keccak256("decimator.battle.final-coin.v1"), word, lvl, id))) & 1 != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     function setGameOver() external {
         gameOver = true;
+        _goWrite(GO_TIME_SHIFT, GO_TIME_MASK, block.timestamp - 31 days);
     }
+
+    function swept() external view returns (bool) { return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0; }
 
     /// @dev Mirrors GameAfkingModule._decimatorSettle's delegatecall, isolated from mineFlip's
     ///      other legs so the leg's own liveness/game-over gate is exercised directly.
@@ -232,10 +260,6 @@ contract ReviewClaimSeeder is DegenerusGame {
             }
         }
         (settled, unitsUsed, moved) = abi.decode(data, (uint256, uint256, bool));
-    }
-
-    function _decEntryKey(uint24 lvl, uint8 denom, uint8 sub, uint32 position) private pure returns (uint256) {
-        return (uint256(lvl) << 48) | (uint256(denom) << 40) | (uint256(sub) << 32) | uint256(position);
     }
 }
 
@@ -263,26 +287,42 @@ contract DecimatorLegEndingIdleTest is DeployProtocol {
         vm.etch(address(game), realCode);
     }
 
-    /// @notice mineFlip's decimator leg idles under liveness pending, and keeps idling after
-    ///         game over: once the ending has begun, the entry stays unsettled.
-    function test_legIdlesUnderLivenessAndAfterGameOver() public {
-        uint256 before = game.claimableWinningsOf(winner);
-
+    function test_LosingRunStillPaysOneKeeperBounty() public {
         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
-        (uint256 settled1, , bool moved1) = ReviewClaimSeeder(payable(address(game))).settleDecOne(1000);
+        ReviewClaimSeeder(payable(address(game))).seedLosingKeeperRun(DLVL);
         vm.etch(address(game), realCode);
-        assertEq(settled1, 0, "the leg idles while liveness is pending");
-        assertFalse(moved1, "the cursor does not move either");
-
-        _over();
-
-        vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
-        (uint256 settled2, , bool moved2) = ReviewClaimSeeder(payable(address(game))).settleDecOne(1000);
-        vm.etch(address(game), realCode);
-        assertEq(settled2, 0, "the leg settles nothing after game over either");
-        assertFalse(moved2, "still no cursor movement");
-        assertEq(game.claimableWinningsOf(winner), before, "the leg never pays this entry");
+        assertFalse(game.advanceDue());
+        address keeper = makeAddr("battle-keeper");
+        uint256 before = coinflip.coinflipAmount(keeper);
+        vm.prank(keeper); game.mineFlip();
+        assertGt(coinflip.coinflipAmount(keeper), before, "tails run still earns work bounty");
+        assertEq(game.claimableWinningsOf(winner), 0, "tails has no ETH credit");
     }
+
+    function test_legCreditsDuringLiveness() public {
+        uint256 before = game.claimableWinningsOf(winner);
+        (uint256 settled, , bool moved) = game.settleDecimatorWinners(1000);
+        assertEq(settled, 1); assertTrue(moved);
+        assertEq(game.claimableWinningsOf(winner), before + 1 ether);
+    }
+
+    function test_legIdlesAfterGameOver() public {
+        _over();
+        uint256 before = game.claimableWinningsOf(winner);
+        (uint256 settled, uint256 units, bool moved) = game.settleDecimatorWinners(1500);
+        assertEq(settled, 0); assertEq(units, 0); assertFalse(moved);
+        assertEq(game.claimableWinningsOf(winner), before, "no credit after game over");
+    }
+
+    function test_SweepDoesNotWaitForPendingBattle() public {
+        _over();
+        game.advanceGame(); // Terminal deadline passed; the queued battle does not hold the sweep.
+        vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+        assertTrue(ReviewClaimSeeder(payable(address(game))).swept(), "sweep ran with a battle queued");
+        vm.etch(address(game), realCode);
+        assertEq(game.claimableWinningsOf(winner), 0, "the unsettled battle credits nothing");
+    }
+
 }
 
 interface IReviewCoinflipMock {

@@ -804,10 +804,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @notice Thrown when a deity boon is requested before the preceding day's RNG word has landed.
     error RngNotReady();
 
-    /// @dev `rollBoxBoons` return packing: the other-boon count's shift and the sweep flag.
-    uint256 private constant BOON_WORK_OTHER_SHIFT = 64;
-    uint256 private constant BOON_WORK_SWEPT = uint256(1) << 128;
-
     /// @notice Draw boons for every box in one opened entry.
     /// @dev Delegatecall entrypoint from the Lootbox module; runs in the Game's storage context.
     ///      ONE call covers the whole entry: the caller passes how many boxes it rolled and the
@@ -825,10 +821,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @param seed Player-mixed entry seed; box i draws off `hash2(seed, nonceBase + i)`.
     /// @param nonceBase Global box position of this batch's first box within its entry, so two
     ///        tiers of one entry can never share a draw index (and therefore a roll value).
-    /// @return boonWork What the draw did, for a caller that charges work by outcome, packed:
-    ///         bits 0-63 the activity awards delivered (each re-syncs the recipient's quest
-    ///         streak), bits 64-127 the other boons drawn (delivered or discarded), and bit 128
-    ///         set when the expired-boon sweep ran.
     function rollBoxBoons(
         address player,
         uint256 perBoxBudget,
@@ -837,14 +829,13 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint24 currentLevel,
         uint256 seed,
         uint256 nonceBase
-    ) external payable returns (uint256 boonWork) {
+    ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (perBoxBudget == 0 || boxCount == 0) return 0;
+        if (perBoxBudget == 0 || boxCount == 0) return;
 
-        (uint256 expectedPerBoon, uint24 currentDay, bool swept) = _boxBoonContext(player, currentLevel);
-        if (swept) boonWork = BOON_WORK_SWEPT;
-        if (expectedPerBoon == 0) return boonWork;
-        (uint256 activityAwards, uint256 otherBoons) = _rollBoxBoonLane(
+        (uint256 expectedPerBoon, uint24 currentDay) = _boxBoonContext(player, currentLevel);
+        if (expectedPerBoon == 0) return;
+        _rollBoxBoonLane(
             player,
             perBoxBudget,
             boxCount,
@@ -854,7 +845,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             expectedPerBoon,
             currentDay
         );
-        boonWork |= activityAwards | (otherBoons << BOON_WORK_OTHER_SHIFT);
     }
 
     /// @notice Draw boons for every populated tier in one mixed box order.
@@ -871,7 +861,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (countsPacked == 0) return;
 
-        (uint256 expectedPerBoon, uint24 currentDay, ) = _boxBoonContext(player, currentLevel);
+        (uint256 expectedPerBoon, uint24 currentDay) = _boxBoonContext(player, currentLevel);
         if (expectedPerBoon == 0) return;
 
         uint256 nonceBase;
@@ -898,29 +888,23 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     }
 
     /// @dev Clear expiry and derive the immutable-for-this-entry normalization once.
-    /// @return expectedPerBoon Half the table's average max value (zero: no draw).
-    /// @return currentDay The day index boons are stamped with.
-    /// @return swept Whether the expired-boon sweep ran (the player held boons).
     function _boxBoonContext(
         address player,
         uint24 currentLevel
-    ) private returns (uint256 expectedPerBoon, uint24 currentDay, bool swept) {
+    ) private returns (uint256 expectedPerBoon, uint24 currentDay) {
 
         // Expiry cleanup runs ONCE for the entry, not once per box: it is a property of the
         // player's held boons, which no draw below changes in a way that would re-arm it.
         BoonPacked storage bp = boonPacked[player];
-        if (bp.slot0 != 0 || bp.slot1 != 0) {
-            checkAndClearExpiredBoon(player);
-            swept = true;
-        }
+        if (bp.slot0 != 0 || bp.slot1 != 0) checkAndClearExpiredBoon(player);
 
         // Pool stats are constant across the entry — same player, same level — so the exact
         // closed form is evaluated once rather than walking the static value table per box.
         uint256 avgMaxValue = _boonAvgMaxValue(currentLevel);
-        if (avgMaxValue == 0) return (0, 0, swept);
+        if (avgMaxValue == 0) return (0, 0);
 
         expectedPerBoon = (avgMaxValue * LOOTBOX_BOON_UTILIZATION_BPS) / 10_000;
-        if (expectedPerBoon == 0) return (0, 0, swept);
+        if (expectedPerBoon == 0) return (0, 0);
         currentDay = _simulatedDayIndex();
     }
 
@@ -934,19 +918,21 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint256 nonceBase,
         uint256 expectedPerBoon,
         uint24 currentDay
-    ) private returns (uint256 activityAwards, uint256 otherBoons) {
+    ) private {
         uint256 totalChance = (perBoxBudget * BOON_PPM_SCALE) / expectedPerBoon;
         if (totalChance > BOON_PPM_SCALE) totalChance = BOON_PPM_SCALE;
-        if (totalChance == 0) return (0, 0);
+        if (totalChance == 0) return;
 
         for (uint256 i; i < boxCount; ) {
             uint256 roll = uint32(EntropyLib.hash2(seed, nonceBase + i) >> 120) %
                 BOON_PPM_SCALE;
             if (roll < totalChance) {
-                uint8 boonType = _boonFromRoll((roll * BOON_WEIGHT_TOTAL) / totalChance);
-                if (boonType >= BOON_ACTIVITY_10 && boonType <= BOON_ACTIVITY_50) ++activityAwards;
-                else ++otherBoons;
-                _deliverBoon(player, boonType, currentDay, originalAmount);
+                _deliverBoon(
+                    player,
+                    _boonFromRoll((roll * BOON_WEIGHT_TOTAL) / totalChance),
+                    currentDay,
+                    originalAmount
+                );
             }
             unchecked {
                 ++i;

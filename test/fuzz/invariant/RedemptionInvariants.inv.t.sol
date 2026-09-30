@@ -9,7 +9,9 @@ import {WrapperPathHandler} from "../handlers/WrapperPathHandler.sol";
 import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 
 /// @title RedemptionInvariants -- Proves gambling burn redemption system invariants
-/// @notice 7 invariants encoding Phase 44 corrected properties (INV-01 through INV-07).
+/// @notice Current redemption solvency, supply, wrapper backing and claim invariants.
+/// @dev Per-day reservation sums and the supply cap are checked by RedemptionAccounting.
+///      Legacy scalar slots and never-updated ghost counters are not current properties.
 ///         Exercises the full burn-resolve-claim lifecycle via RedemptionHandler and VRFHandler.
 /// @dev Run: forge test --match-contract RedemptionInvariants -vv
 ///      Default profile: 256 runs, depth 128, fail_on_revert=false, show_metrics=true.
@@ -17,12 +19,6 @@ contract RedemptionInvariants is DeployProtocol {
     RedemptionHandler public handler;
     VRFHandler public vrfHandler;
     WrapperPathHandler public wrapperHandler;
-
-    // Storage slot constants for internal sDGNRS state
-    uint256 private constant SLOT_PENDING_FLIP = 10;
-    uint256 private constant SLOT_SUPPLY_SNAPSHOT = 13;
-    uint256 private constant SLOT_PERIOD_INDEX = 14;
-    uint256 private constant SLOT_PERIOD_BURNED = 15;
 
     function setUp() public {
         _deployProtocol();
@@ -69,20 +65,6 @@ contract RedemptionInvariants is DeployProtocol {
         );
     }
 
-    // =========================================================================
-    //                     INV-03: PERIOD INDEX MONOTONICITY
-    // =========================================================================
-
-    /// @notice Period index monotonically increases (never decreases).
-    /// @dev The handler's ghost_periodIndexDecreased counter increments if
-    ///      the redemptionPeriodIndex ever decreases between observations.
-    function invariant_periodIndexMonotonic() public view {
-        assertEq(
-            handler.ghost_periodIndexDecreased(),
-            0,
-            "INV-03: redemption period index decreased"
-        );
-    }
 
     // =========================================================================
     //                      INV-04: SUPPLY CONSISTENCY
@@ -185,23 +167,6 @@ contract RedemptionInvariants is DeployProtocol {
         );
     }
 
-    // =========================================================================
-    //                      INV-05: 50% CAP ENFORCEMENT
-    // =========================================================================
-
-    /// @notice 50% cap enforced per period: no burn exceeds half the period snapshot.
-    /// @dev Reads internal storage via vm.load since these fields have no public getters.
-    function invariant_fiftyPercentCap() public view {
-        uint256 snapshot = uint256(vm.load(address(sdgnrs), bytes32(uint256(SLOT_SUPPLY_SNAPSHOT))));
-        uint256 burned = uint256(vm.load(address(sdgnrs), bytes32(uint256(SLOT_PERIOD_BURNED))));
-        if (snapshot > 0) {
-            assertLe(
-                burned,
-                snapshot / 2,
-                "INV-05: period burned exceeds 50% of supply snapshot"
-            );
-        }
-    }
 
     // =========================================================================
     //                        INV-06: ROLL BOUNDS
@@ -218,123 +183,6 @@ contract RedemptionInvariants is DeployProtocol {
         );
     }
 
-    // =========================================================================
-    //                    INV-07: AGGREGATE TRACKING
-    // =========================================================================
-
-    /// @notice pendingRedemptionEthValue tracks sum of individual claims (bounded dust).
-    /// @dev Verifies two aggregate tracking properties:
-    ///      1. ETH: segregated <= balance + stETH (overlap with INV-01 via different path)
-    ///      2. FLIP: reserved <= balance + tolerance (generous 1 ether dust bound)
-    function invariant_aggregateTracking() public view {
-        // ETH tracking: segregated <= balance + stETH
-        uint256 segregatedEth = sdgnrs.pendingRedemptionEthValue();
-        uint256 ethBal = address(sdgnrs).balance;
-        uint256 stethBal = mockStETH.balanceOf(address(sdgnrs));
-        assertGe(
-            ethBal + stethBal,
-            segregatedEth,
-            "INV-07: ETH aggregate tracking exceeds balance"
-        );
-
-        // FLIP tracking: reserved <= available + tolerance
-        uint256 pendingFlip = uint256(vm.load(address(sdgnrs), bytes32(uint256(SLOT_PENDING_FLIP))));
-        uint256 flipBal = coin.balanceOf(address(sdgnrs));
-        // Dust bound: O(N * 99) wei per period. With 5 actors and ~256 runs,
-        // max dust ~ 5 * 99 * 256 = 126720 wei. Use generous 1 ether bound.
-        if (pendingFlip > 0) {
-            assertGe(
-                flipBal + 1 ether,
-                pendingFlip,
-                "INV-07: FLIP aggregate tracking exceeds balance + tolerance"
-            );
-        }
-    }
-
-    // =========================================================================
-    //                    INV-07b: FLIP CLAIMED MONOTONIC
-    // =========================================================================
-
-    /// @notice Cumulative FLIP claimed is monotonically non-decreasing.
-    /// @dev ghost_totalFlipClaimed only increases (claims add, never subtract).
-    ///      This ensures no accounting underflow in FLIP claim tracking.
-    function invariant_flipClaimedMonotonic() public view {
-        // ghost_totalFlipClaimed is only ever incremented (+=), never decremented.
-        // If it were to decrease, the uint256 would underflow and revert in the handler.
-        // This invariant documents the monotonic property explicitly.
-        // Additionally verify it is bounded by a reasonable upper limit:
-        // total FLIP claimed cannot exceed the initial FLIP balance of sDGNRS
-        // plus any credited flips (generous bound: initial coin supply).
-        uint256 claimed = handler.ghost_totalFlipClaimed();
-        // Monotonicity is enforced by the += operator (underflow reverts in 0.8.x).
-        // Boundedness: claimed should not exceed total FLIP ever in the system.
-        // We use a generous bound: 1e30 (matches FLIP initial supply order of magnitude).
-        assertLe(
-            claimed,
-            1e30,
-            "INV-07b: cumulative FLIP claimed exceeds system maximum"
-        );
-    }
-
-    // =========================================================================
-    //                  INV-08: LOOTBOX SPLIT CONSERVATION
-    // =========================================================================
-
-    /// @notice ethDirect + lootboxEth always sums to totalRolledEth for every claim.
-    /// @dev Tracks cumulative split values via RedemptionClaimed event parsing in the handler.
-    ///      ghost_totalRolledEth = ghost_totalEthDirect + ghost_totalLootboxEth by construction,
-    ///      but this invariant verifies the accounting is consistent across all handler calls.
-    function invariant_lootboxSplitConservation() public view {
-        assertEq(
-            handler.ghost_totalEthDirect() + handler.ghost_totalLootboxEth(),
-            handler.ghost_totalRolledEth(),
-            "INV-08: ethDirect + lootboxEth != totalRolledEth (split conservation violated)"
-        );
-    }
-
-    // =========================================================================
-    //                           CANARY
-    // =========================================================================
-
-    /// @notice Canary: sDGNRS is properly deployed and has code
-    function invariant_canary() public view {
-        assertTrue(address(sdgnrs) != address(0), "sDGNRS not deployed");
-        assertTrue(address(sdgnrs).code.length > 0, "sDGNRS has no code");
-    }
-
-    // =========================================================================
-    //                         CALL SUMMARY
-    // =========================================================================
-
-    /// @notice Logs call counts and ghost variables for debugging.
-    /// @dev Always passes -- purely diagnostic. Check output with -vv flag.
-    function invariant_callSummary() public view {
-        console.log("--- RedemptionHandler Call Summary ---");
-        console.log("  calls_burn:           ", handler.calls_burn());
-        console.log("  calls_advanceDay:     ", handler.calls_advanceDay());
-        console.log("  calls_claim:          ", handler.calls_claim());
-        console.log("  calls_triggerGameOver: ", handler.calls_triggerGameOver());
-        console.log("--- Ghost Variables ---");
-        console.log("  ghost_totalBurned:    ", handler.ghost_totalBurned());
-        console.log("  ghost_periodsResolved:", handler.ghost_periodsResolved());
-        console.log("  ghost_claimCount:     ", handler.ghost_claimCount());
-        console.log("  ghost_totalEthClaimed:", handler.ghost_totalEthClaimed());
-        console.log("  ghost_totalFlipClaimed:", handler.ghost_totalFlipClaimed());
-        console.log("  ghost_doubleClaim:    ", handler.ghost_doubleClaim());
-        console.log("  ghost_rollOutOfBounds:", handler.ghost_rollOutOfBounds());
-        console.log("  ghost_periodIdxDecr:  ", handler.ghost_periodIndexDecreased());
-        console.log("--- Split Tracking (INV-08) ---");
-        console.log("  ghost_totalEthDirect: ", handler.ghost_totalEthDirect());
-        console.log("  ghost_totalLootboxEth:", handler.ghost_totalLootboxEth());
-        console.log("  ghost_totalRolledEth: ", handler.ghost_totalRolledEth());
-        console.log("--- VRFHandler ---");
-        console.log("  ghost_vrfFulfillments:", vrfHandler.ghost_vrfFulfillments());
-        console.log("--- WrapperPathHandler ---");
-        console.log("  ghost_unwraps:        ", wrapperHandler.ghost_unwraps());
-        console.log("  ghost_wrappedBurns:   ", wrapperHandler.ghost_wrappedBurns());
-        console.log("  ghost_postGoBurns:    ", wrapperHandler.ghost_postGameOverBurns());
-        console.log("  yearSweepRan:         ", wrapperHandler.ghost_yearSweepRan());
-    }
 
     // =========================================================================
     //        FOCUSED: wrapper paths traverse deterministically (non-vacuity)

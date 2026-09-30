@@ -1,13 +1,8 @@
 /**
- * Phase 46: Game Theory Paper Parity Tests
- *
- * Verifies every number, formula, rate, and threshold mentioned in the game
- * theory paper matches the corresponding contract constant or calculation.
- *
- * This is a "sanity check" suite -- the kind of tests that would have caught
- * the level 90 price miss before it reached production.
- *
- * Requirements: PAR-01 through PAR-18
+ * Economic examples checked against deployed contracts and production libraries.
+ * Literal-only arithmetic assertions were removed: they did not read production
+ * constants and could stay green after the corresponding economics changed.
+ * This suite checks the examples below, not every number in a historical paper.
  */
 
 import hre from "hardhat";
@@ -43,10 +38,6 @@ async function deployWithTester() {
 
 describe("Paper Parity (Phase 46)", function () {
   after(restoreAddresses);
-
-  // =========================================================================
-  // PAR-01: PriceLookupLib prices at every tier boundary
-  // =========================================================================
 
   describe("PAR-01: PriceLookupLib price tiers", function () {
     // Expected prices for every tier boundary
@@ -130,10 +121,6 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  // =========================================================================
-  // PAR-02: Ticket cost formula
-  // =========================================================================
-
   describe("PAR-02: Ticket cost formula costWei = (priceWei * qty) / 400", function () {
     it("1 full ticket (qty=400) costs exactly priceWei", async function () {
       const { game, alice } = await loadFixture(deployWithTester);
@@ -186,10 +173,6 @@ describe("Paper Parity (Phase 46)", function () {
         .purchase(alice.address, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
     });
   });
-
-  // =========================================================================
-  // PAR-03: Prize pool split BPS
-  // =========================================================================
 
   describe("PAR-03: Prize pool split BPS", function () {
     it("ticket purchase: 90% next pool, 10% future pool", async function () {
@@ -248,166 +231,14 @@ describe("Paper Parity (Phase 46)", function () {
       expect(nextDelta + futureDelta).to.equal(lootboxAmount, "100% to pools, rake-free");
     });
 
-    it("lootbox split is 90/10 future/next with no vault diversion", async function () {
-      // The as-built lootbox split has no presale-specific variant:
-      // LOOTBOX_SPLIT_FUTURE_BPS (9000) + LOOTBOX_SPLIT_NEXT_BPS (1000) = 10000, 100% to pools.
-      expect(9000 + 1000).to.equal(10000);
-    });
   });
-
-  // =========================================================================
-  // PAR-04: Jackpot day structure (physical cap 3, settled over 1 or 3 days)
-  // =========================================================================
-
-  // JACKPOT_DAYS and DAILY_CURRENT_BPS_MIN/MAX are private constants in
-  // JackpotModule/AdvanceModule. Values verified through source code inspection at
-  // contracts/modules/DegenerusGameAdvanceModule.sol:92 and
-  // contracts/modules/DegenerusGameJackpotModule.sol:143-144.
-  describe("PAR-04: Jackpot day structure", function () {
-    it("JACKPOT_DAYS = 3 (standard physical duration)", async function () {
-      // The constant JACKPOT_DAYS is internal (=3) in JackpotModule and MintModule.
-      // We verify it through the documented game behavior: levels settle their jackpot in 1 or 3 physical days.
-      // The constant is 3 as confirmed by source inspection.
-      // This is a static assertion based on contract source.
-      expect(3).to.equal(3, "JACKPOT_DAYS should be 3");
-    });
-
-    it("base daily jackpot BPS range: min=600 (6%), max=1400 (14%)", async function () {
-      // DAILY_CURRENT_BPS_MIN = 600
-      // DAILY_CURRENT_BPS_MAX = 1400
-      // Source: JackpotModule lines 143-144
-      // These define the base random percentage; the middle physical day doubles it
-      expect(600).to.be.gte(600);
-      expect(1400).to.be.lte(1400);
-      // Percentage range: 6% to 14%
-      expect(600 / 100).to.equal(6, "Min daily jackpot should be 6%");
-      expect(1400 / 100).to.equal(14, "Max daily jackpot should be 14%");
-    });
-
-    it("final physical day pays 100% of remaining current pool", async function () {
-      // On the final physical day, the entire remaining current pool is distributed.
-      // This is implicit in the code: the final draw uses FINAL_DAY_SHARES_PACKED
-      // and distributes 100% of whatever remains.
-      // Verified by code path: payDailyJackpot final day branch.
-      expect(true).to.be.true;
-    });
-  });
-
-  // =========================================================================
-  // PAR-05: Jackpot bucket shares
-  // =========================================================================
-
-  // Jackpot share values are constant packed expressions in JackpotModule, not dynamic
-  // computations. The static reconstruction of the packed values below verifies the
-  // BPS allocations are encoded correctly. This is adequate because the shares are
-  // compile-time constants -- no runtime logic to exercise.
-  describe("PAR-05: Jackpot bucket shares", function () {
-    it("daily shares (days 1-4): 20/20/20/20 BPS per trait bucket + 20% solo", async function () {
-      // DAILY_JACKPOT_SHARES_PACKED = uint64(2000) * 0x0001000100010001
-      // Each 16-bit segment = 2000 BPS = 20% per trait bucket (4 buckets = 80%)
-      // Remaining 20% goes to entropy-selected solo bucket
-      const packedVal = 2000n * 0x0001000100010001n;
-      const b0 = packedVal & 0xFFFFn;
-      const b1 = (packedVal >> 16n) & 0xFFFFn;
-      const b2 = (packedVal >> 32n) & 0xFFFFn;
-      const b3 = (packedVal >> 48n) & 0xFFFFn;
-
-      expect(Number(b0)).to.equal(2000, "Bucket 0 = 20%");
-      expect(Number(b1)).to.equal(2000, "Bucket 1 = 20%");
-      expect(Number(b2)).to.equal(2000, "Bucket 2 = 20%");
-      expect(Number(b3)).to.equal(2000, "Bucket 3 = 20%");
-      // Sum = 8000 BPS = 80%; remaining 20% is solo bucket
-      expect(Number(b0 + b1 + b2 + b3)).to.equal(8000);
-    });
-
-    it("final day shares: 60/13.33/13.33/13.34 BPS", async function () {
-      // FINAL_DAY_SHARES_PACKED =
-      //   (uint64(6000)) |
-      //   (uint64(1333) << 16) |
-      //   (uint64(1333) << 32) |
-      //   (uint64(1334) << 48);
-      const packed =
-        6000n | (1333n << 16n) | (1333n << 32n) | (1334n << 48n);
-
-      const b0 = packed & 0xFFFFn;
-      const b1 = (packed >> 16n) & 0xFFFFn;
-      const b2 = (packed >> 32n) & 0xFFFFn;
-      const b3 = (packed >> 48n) & 0xFFFFn;
-
-      expect(Number(b0)).to.equal(6000, "Solo bucket = 60%");
-      expect(Number(b1)).to.equal(1333, "Bucket 1 = 13.33%");
-      expect(Number(b2)).to.equal(1333, "Bucket 2 = 13.33%");
-      expect(Number(b3)).to.equal(1334, "Bucket 3 = 13.34%");
-      expect(Number(b0 + b1 + b2 + b3)).to.equal(10000, "Sum = 100%");
-    });
-  });
-
-  // =========================================================================
-  // PAR-06: Activity score components and caps
-  // =========================================================================
 
   describe("PAR-06: Activity score components and caps", function () {
-    it("streak: max 50% (50 points * 100 BPS)", async function () {
-      // playerActivityScore: streakPoints = streak > 50 ? 50 : streak
-      // bonusBps = streakPoints * 100
-      expect(50 * 100).to.equal(5000, "Max streak = 5000 BPS = 50%");
-    });
-
-    it("mint count: max 25% (25 points * 100 BPS)", async function () {
-      // _mintCountBonusPoints returns max 25 (100% participation)
-      // bonusBps += mintCountPoints * 100
-      expect(25 * 100).to.equal(2500, "Max mint count = 2500 BPS = 25%");
-    });
-
-    it("quest streak: max 100% (100 points * 100 BPS)", async function () {
-      // questStreak capped at 100
-      // bonusBps += questStreak * 100
-      expect(100 * 100).to.equal(10000, "Max quest = 10000 BPS = 100%");
-    });
-
-    it("affiliate bonus: max 50% (50 points * 100 BPS)", async function () {
-      // AFFILIATE_BONUS_MAX = 50 (in DegenerusAffiliate)
-      // bonusBps += affiliateBonusPointsBest * 100
-      expect(50 * 100).to.equal(5000, "Max affiliate = 5000 BPS = 50%");
-    });
-
-    it("whale pass 10-level: +10% bonus", async function () {
-      // bundleType == 1 => bonusBps += 1000
-      expect(1000).to.equal(1000, "10-level whale pass = +10%");
-    });
-
-    it("whale pass 100-level: +40% bonus", async function () {
-      // bundleType == 3 => bonusBps += 4000
-      expect(4000).to.equal(4000, "100-level whale pass = +40%");
-    });
-
-    it("deity pass: +80% bonus", async function () {
-      // DEITY_PASS_ACTIVITY_BONUS_BPS = 8000
-      expect(8000).to.equal(8000, "Deity pass = +80%");
-    });
-
-    it("max with whale 100-level: 50+25+100+50+40 = 265%", async function () {
-      const maxBps = 5000 + 2500 + 10000 + 5000 + 4000;
-      expect(maxBps).to.equal(26500, "Max with whale pass = 265%");
-    });
-
-    it("max with deity pass: 50+25+100+50+80 = 305%", async function () {
-      // Deity pass gives full streak (50) + full count (25) automatically
-      const maxBps = 5000 + 2500 + 10000 + 5000 + 8000;
-      expect(maxBps).to.equal(30500, "Max with deity pass = 305%");
-    });
 
     it("contract returns 0 for zero-address player", async function () {
       const { game } = await loadFixture(deployWithTester);
       const score = await game.playerActivityScore(ZERO_ADDRESS);
       expect(score).to.equal(0);
-    });
-
-    it("pass holders get floor streak (50) and floor count (25)", async function () {
-      // PASS_STREAK_FLOOR_POINTS = 50
-      // PASS_MINT_COUNT_FLOOR_POINTS = 25
-      expect(50).to.equal(50, "Pass streak floor = 50");
-      expect(25).to.equal(25, "Pass count floor = 25");
     });
 
     it("on-chain: whale bundle holder gets floor bonuses via playerActivityScore()", async function () {
@@ -444,112 +275,6 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  // =========================================================================
-  // PAR-07: Lootbox EV breakpoints
-  // =========================================================================
-
-  // EV constants are private in LootboxModule (contracts/modules/DegenerusGameLootboxModule.sol:321-329).
-  // Verified through source code inspection and behavioral testing in unit/DegenerusGame.test.js.
-  // The _lootboxEvMultiplierFromScore function uses these exact constants; static assertion
-  // is the correct approach because the EV computation is private and cannot be called externally.
-  describe("PAR-07: Lootbox EV breakpoints (90%->100% at 0-60%, 100%->145% at 60-400%)", function () {
-    it("EV minimum at 0% activity: 90% (9000 BPS)", async function () {
-      // LOOTBOX_EV_MIN_BPS = 9_000
-      expect(9000).to.equal(9000);
-    });
-
-    it("EV neutral at 60% activity: 100% (10000 BPS)", async function () {
-      // ACTIVITY_SCORE_NEUTRAL_BPS = 6_000 (60%)
-      // LOOTBOX_EV_NEUTRAL_BPS = 10_000
-      expect(6000).to.equal(6000, "Neutral score = 60%");
-      expect(10000).to.equal(10000, "Neutral EV = 100%");
-    });
-
-    it("EV maximum at 400%+ activity: 145% (14500 BPS)", async function () {
-      // LOOTBOX_EV_ACTIVITY_MAX_BPS = 40_000 (400%)
-      // LOOTBOX_EV_MAX_BPS = 14_500
-      expect(40000).to.equal(40000, "Max activity = 400%");
-      expect(14500).to.equal(14500, "Max EV = 145%");
-    });
-
-    it("EV linear interpolation: 0-60% maps linearly to 90%-100%", async function () {
-      // From contract: score <= neutral => min + (neutral-min) * score / neutral
-      // At score 3000 (30%): EV = 9000 + (10000-9000) * 3000/6000 = 9000 + 500 = 9500 (95%)
-      const score = 3000;
-      const ev =
-        9000 + Math.floor(((10000 - 9000) * score) / 6000);
-      expect(ev).to.equal(9500, "30% activity = 95% EV");
-    });
-
-    it("EV linear interpolation: 60-400% maps linearly to 100%-145%", async function () {
-      // From contract: score > neutral => neutral_ev + (max_ev-neutral_ev) * (score-neutral) / (max-neutral)
-      // At score 23000 (230%, midpoint): EV = 10000 + (14500-10000) * (23000-6000)/(40000-6000)
-      const score = 23000;
-      const ev =
-        10000 +
-        Math.floor(((14500 - 10000) * (score - 6000)) / (40000 - 6000));
-      expect(ev).to.equal(12250, "230% activity = 122.5% EV");
-    });
-  });
-
-  // =========================================================================
-  // PAR-08: Affiliate commission rates
-  // =========================================================================
-
-  // Affiliate commission rates are private constants in DegenerusAffiliate.sol:198-200.
-  // Behavioral verification of affiliate payouts is covered in unit/DegenerusAffiliate.test.js
-  // and unit/AffiliateHardening.test.js.
-  describe("PAR-08: Affiliate commission rates", function () {
-    it("fresh ETH L1-3: 25% (2500 BPS)", async function () {
-      // REWARD_SCALE_FRESH_L1_3_BPS = 2_500
-      expect(2500).to.equal(2500, "Fresh L1-3 = 25%");
-    });
-
-    it("fresh ETH L4+: 20% (2000 BPS)", async function () {
-      // REWARD_SCALE_FRESH_L4P_BPS = 2_000
-      expect(2000).to.equal(2000, "Fresh L4+ = 20%");
-    });
-
-    it("recycled ETH: 5% (500 BPS)", async function () {
-      // REWARD_SCALE_RECYCLED_BPS = 500
-      expect(500).to.equal(500, "Recycled = 5%");
-    });
-  });
-
-  // =========================================================================
-  // PAR-09: Affiliate tier structure
-  // =========================================================================
-
-  // Affiliate tier percentages (20% upline1, 4% upline2) are hardcoded in
-  // DegenerusAffiliate.payAffiliate(). Behavioral verification of the multi-tier
-  // payout chain is covered in unit/DegenerusAffiliate.test.js.
-  describe("PAR-09: Affiliate tier structure (direct -> upline1 at 20% -> upline2 at 4%)", function () {
-    it("upline1 receives 20% of scaled affiliate amount", async function () {
-      // From payAffiliate: "Pay upline1 (20% of scaled amount)"
-      // upline1Share = scaledAmount * 20 / 100
-      const base = 10000;
-      const upline1 = Math.floor(base * 20 / 100);
-      expect(upline1).to.equal(2000, "Upline1 = 20% of base");
-    });
-
-    it("upline2 receives 20% of upline1 share = 4% of base", async function () {
-      // From payAffiliate: "Pay upline2 (20% of upline1 share = 4%)"
-      const base = 10000;
-      const upline1 = Math.floor(base * 20 / 100);
-      const upline2 = Math.floor(upline1 * 20 / 100);
-      expect(upline2).to.equal(400, "Upline2 = 4% of base");
-    });
-
-    it("max kickback: 25%", async function () {
-      // MAX_KICKBACK_PCT = 25
-      expect(25).to.equal(25, "Max kickback = 25%");
-    });
-  });
-
-  // =========================================================================
-  // PAR-10: Whale bundle pricing
-  // =========================================================================
-
   describe("PAR-10: Whale bundle pricing", function () {
     it("early price (levels 0-3): 2.4 ETH", async function () {
       // WHALE_BUNDLE_EARLY_PRICE = 2.4 ether
@@ -566,19 +291,7 @@ describe("Paper Parity (Phase 46)", function () {
         });
     });
 
-    it("standard price (level 4+): 4 ETH", async function () {
-      // WHALE_BUNDLE_STANDARD_PRICE = 4 ether
-      // At levels x49/x99, standard price of 4 ETH applies
-      expect(ethers.parseEther("4")).to.equal(
-        ethers.parseEther("4"),
-        "Standard whale price = 4 ETH"
-      );
-    });
   });
-
-  // =========================================================================
-  // PAR-11: Lazy pass pricing
-  // =========================================================================
 
   describe("PAR-11: Lazy pass pricing", function () {
     it("flat 0.24 ETH at levels 0-2", async function () {
@@ -603,16 +316,6 @@ describe("Paper Parity (Phase 46)", function () {
         ethers.parseEther("0.02") * 5n + // levels 5-9
         ethers.parseEther("0.04") * 4n; // levels 10-13
       expect(cost).to.equal(expected);
-    });
-
-    it("lazy pass covers exactly 10 levels", async function () {
-      // LAZY_PASS_LEVELS = 10
-      expect(10).to.equal(10, "Lazy pass = 10 levels");
-    });
-
-    it("lazy pass: 4 tickets per level", async function () {
-      // LAZY_PASS_ENTRIES_PER_LEVEL = 4
-      expect(4).to.equal(4, "Lazy pass tickets/level = 4");
     });
 
     it("lazy pass cost at various starting levels", async function () {
@@ -645,10 +348,6 @@ describe("Paper Parity (Phase 46)", function () {
       expect(cost95).to.equal(expected95, "Lazy pass cost starting at level 95");
     });
   });
-
-  // =========================================================================
-  // PAR-12: Deity pass T(n) pricing
-  // =========================================================================
 
   describe("PAR-12: Deity pass T(n) pricing (24 + k*(k+1)/2 ETH)", function () {
     it("first deity pass (k=0): 24 ETH", async function () {
@@ -701,147 +400,8 @@ describe("Paper Parity (Phase 46)", function () {
         .purchaseDeityPass(carol.address, 2, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
-    it("T(n) formula verified for k=0..5", async function () {
-      const base = 24n;
-      const prices = [];
-      for (let k = 0n; k <= 5n; k++) {
-        const tn = (k * (k + 1n)) / 2n;
-        prices.push((base + tn) * ethers.parseEther("1"));
-      }
-      // k=0: 24, k=1: 25, k=2: 27, k=3: 30, k=4: 34, k=5: 39
-      expect(prices[0]).to.equal(ethers.parseEther("24"));
-      expect(prices[1]).to.equal(ethers.parseEther("25"));
-      expect(prices[2]).to.equal(ethers.parseEther("27"));
-      expect(prices[3]).to.equal(ethers.parseEther("30"));
-      expect(prices[4]).to.equal(ethers.parseEther("34"));
-      expect(prices[5]).to.equal(ethers.parseEther("39"));
-    });
   });
 
-  // =========================================================================
-  // PAR-13: Coinflip payout distribution
-  // =========================================================================
-
-  // Coinflip constants are private in Coinflip.sol:121-122.
-  // The payout distribution (5%/90%/5%) and mean ~1.97x are verified through
-  // mathematical reconstruction of the payout formula. Behavioral testing
-  // is in unit/Coinflip.test.js.
-  describe("PAR-13: Coinflip payout distribution (5%/90%/5% tiers)", function () {
-    it("5% chance for 50% bonus (unlucky: 1.5x total payout)", async function () {
-      // roll == 0 out of 20 = 5%: rewardPercent = 50
-      // Total payout = principal + principal * 50/100 = 1.5x
-      expect(1 / 20).to.equal(0.05);
-      expect(50).to.equal(50, "Unlucky bonus = 50%");
-    });
-
-    it("5% chance for 150% bonus (lucky: 2.5x total payout)", async function () {
-      // roll == 1 out of 20 = 5%: rewardPercent = 150
-      // Total payout = principal + principal * 150/100 = 2.5x
-      expect(1 / 20).to.equal(0.05);
-      expect(150).to.equal(150, "Lucky bonus = 150%");
-    });
-
-    it("90% normal range: [78%, 115%] bonus (1.78x - 2.15x total)", async function () {
-      // COINFLIP_EXTRA_MIN_PERCENT = 78
-      // COINFLIP_EXTRA_RANGE = 38
-      // rewardPercent = (seedWord % 38) + 78 => [78, 115]
-      expect(78).to.equal(78, "Min normal bonus = 78%");
-      expect(78 + 38 - 1).to.equal(115, "Max normal bonus = 115%");
-    });
-
-    it("mean reward ~96.85% bonus (COINFLIP_REWARD_MEAN_BPS=9685)", async function () {
-      // Expected reward in BPS: 9685 = 96.85% bonus = ~1.9685x total payout
-      // Weighted mean: 5%*50 + 5%*150 + 90%*96.5(midpoint) = 2.5+7.5+86.85 = 96.85
-      expect(9685).to.equal(9685, "Mean reward = 96.85 BPS scaled");
-      // Verify the midpoint of normal range
-      const normalMid = 78 + 38 / 2;
-      expect(normalMid).to.be.closeTo(97, 1);
-    });
-
-    it("total EV breakdown: ~1.97x mean payout on wins", async function () {
-      // 5% * 1.5x + 5% * 2.5x + 90% * mean(1.78x, 2.15x)
-      // = 0.05*1.5 + 0.05*2.5 + 0.90*1.965
-      // = 0.075 + 0.125 + 1.7685 = 1.9685x
-      const ev =
-        0.05 * 1.5 + 0.05 * 2.5 + 0.9 * ((1.78 + 2.15) / 2);
-      expect(ev).to.be.closeTo(1.9685, 0.001);
-    });
-  });
-
-  // =========================================================================
-  // PAR-14: Yield distribution split
-  // =========================================================================
-
-  // Yield distribution BPS (2300/2300/4600 + 800 buffer) are private constants
-  // in DegenerusGame.sol. The split is verified statically and reconciled with the
-  // paper's 50/25/25 description (paper describes the theoretical split of the 92%
-  // that is distributed: 46/23/23 normalizes to ~50/25/25). On-chain yield
-  // distribution testing is covered in unit/DegenerusVault.test.js.
-  describe("PAR-14: Yield distribution split (23%/23%/46%/8%)", function () {
-    it("vault share: 23% (2300 BPS)", async function () {
-      // stakeholderShare = (yieldPool * 2300) / 10_000
-      expect(2300).to.equal(2300, "Vault = 23%");
-    });
-
-    it("DGNRS share: 23% (2300 BPS)", async function () {
-      // Same stakeholderShare for both vault and DGNRS
-      expect(2300).to.equal(2300, "DGNRS = 23%");
-    });
-
-    it("future pool share: 46% (4600 BPS)", async function () {
-      // futureShare = (yieldPool * 4600) / 10_000
-      expect(4600).to.equal(4600, "Future pool = 46%");
-    });
-
-    it("buffer (unextracted): 8%", async function () {
-      // 23 + 23 + 46 = 92%, remaining 8% is buffer
-      const extracted = 2300 + 2300 + 4600;
-      expect(extracted).to.equal(9200, "Extracted = 92%");
-      expect(10000 - extracted).to.equal(800, "Buffer = 8%");
-    });
-
-    it("all shares sum to 92% (8% intentional buffer)", async function () {
-      expect(2300 + 2300 + 4600).to.equal(9200);
-    });
-  });
-
-  // =========================================================================
-  // PAR-15: FLIP entry cost
-  // =========================================================================
-
-  // PRICE_COIN_UNIT = 1000 ether is a private constant in DegenerusGameStorage.
-  // The arithmetic is verified statically; behavioral verification of FLIP ticket
-  // purchases is covered in unit/DegenerusGame.test.js and unit/FLIP.test.js.
-  describe("PAR-15: FLIP entry cost (250 FLIP = 1 entry, 1000 FLIP = 1 full ticket)", function () {
-    it("PRICE_COIN_UNIT = 1000 ether (1000 FLIP with 18 decimals)", async function () {
-      // PRICE_COIN_UNIT = 1000 ether in DegenerusGameStorage
-      const unit = ethers.parseEther("1000");
-      expect(unit).to.equal(ethers.parseEther("1000"));
-    });
-
-    it("1 entry costs PRICE_COIN_UNIT/4 = 250 FLIP", async function () {
-      // coinCost = (quantity * (PRICE_COIN_UNIT / 4)) / TICKET_SCALE
-      // 1 entry = qty 100 (TICKET_SCALE=100):
-      // coinCost = (100 * 250 ether) / 100 = 250 ether = 250 FLIP
-      const pricePerEntry = ethers.parseEther("1000") / 4n;
-      expect(pricePerEntry).to.equal(ethers.parseEther("250"));
-    });
-
-    it("1 full ticket (4 entries, qty=400) costs 1000 FLIP", async function () {
-      // coinCost = (400 * (1000 ether / 4)) / 100 = (400 * 250 ether) / 100 = 1000 ether
-      const qty = 400n;
-      const ticketScale = 100n;
-      const priceUnit = ethers.parseEther("1000");
-      const cost = (qty * (priceUnit / 4n)) / ticketScale;
-      expect(cost).to.equal(ethers.parseEther("1000"));
-    });
-  });
-
-  // =========================================================================
-  // PAR-16: Degenerette base payouts and ROI curve
-  // =========================================================================
-
-  // Exercise the current single-symbol table through the production math harness.
   describe("PAR-16: Degenerette base payouts and ROI curve", function () {
     let math;
     before(async function () {
@@ -870,40 +430,7 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  // =========================================================================
-  // PAR-17: Pass capital injection splits
-  // =========================================================================
-
   describe("PAR-17: Pass capital injection splits", function () {
-    it("whale/deity level 0: 30% next / 70% future", async function () {
-      // WhaleModule: level == 0 => nextShare = (totalPrice * 3000) / 10_000
-      // futurePrizePool += totalPrice - nextShare
-      const total = 10000n;
-      const next = (total * 3000n) / 10000n;
-      const future = total - next;
-      expect(Number(next)).to.equal(3000, "Next = 30%");
-      expect(Number(future)).to.equal(7000, "Future = 70%");
-    });
-
-    it("whale/deity level 1+: 5% next / 95% future", async function () {
-      // WhaleModule: level != 0 => nextShare = (totalPrice * 500) / 10_000
-      const total = 10000n;
-      const next = (total * 500n) / 10000n;
-      const future = total - next;
-      expect(Number(next)).to.equal(500, "Next = 5%");
-      expect(Number(future)).to.equal(9500, "Future = 95%");
-    });
-
-    it("lazy pass all levels: 10% future / 90% next", async function () {
-      // WhaleModule: LAZY_PASS_TO_FUTURE_BPS = 1000 (10%)
-      // futureShare = (totalPrice * 1000) / 10_000
-      // nextShare = totalPrice - futureShare
-      const total = 10000n;
-      const future = (total * 1000n) / 10000n;
-      const next = total - future;
-      expect(Number(future)).to.equal(1000, "Future = 10%");
-      expect(Number(next)).to.equal(9000, "Next = 90%");
-    });
 
     it("whale bundle at level 0 actually splits 30/70", async function () {
       const { game, alice } = await loadFixture(deployWithTester);
@@ -931,46 +458,7 @@ describe("Paper Parity (Phase 46)", function () {
     });
   });
 
-  // =========================================================================
-  // PAR-18: Future ticket odds
-  // =========================================================================
-
-  // Future ticket roll logic uses private constants in DegenerusGameLootboxModule.sol.
-  // The 80%/20% split and offset ranges [0,4]/[5,50] are verified statically.
-  // Behavioral testing would require VRF fulfillment to observe actual ticket
-  // level assignments.
-  describe("PAR-18: Future ticket odds (80% near k in [0,4], 20% far k in [5,50])", function () {
-    it("80% near future: 0-4 levels ahead", async function () {
-      // _rollTargetLevel: rangeRoll < 20 => far (20%), else near (80%)
-      // Near: levelOffset = entropy % 5 => [0, 4]
-      expect(80).to.equal(80, "Near probability = 80%");
-      // Near offset range: 0 to 4 (inclusive)
-      expect(5 - 1).to.equal(4, "Max near offset = 4");
-    });
-
-    it("20% far future: 5-50 levels ahead", async function () {
-      // Far: levelOffset = (entropy % 46) + 5 => [5, 50]
-      expect(20).to.equal(20, "Far probability = 20%");
-      expect(5).to.equal(5, "Min far offset = 5");
-      expect(46 + 5 - 1).to.equal(50, "Max far offset = 50");
-    });
-
-    it("roll logic: rangeRoll = entropy % 100; < 20 = far, >= 20 = near", async function () {
-      // 20 out of 100 = 20%
-      expect(20 / 100).to.equal(0.2, "20% far threshold");
-      expect(80 / 100).to.equal(0.8, "80% near probability");
-    });
-  });
-
-  // =========================================================================
-  // Bonus: Cross-cutting formula consistency checks
-  // =========================================================================
-
   describe("Cross-cutting formula consistency", function () {
-    it("all BPS constants use 10000 denominator", async function () {
-      // Various BPS values should all be relative to 10000
-      expect(10000).to.equal(10000);
-    });
 
     it("price table is monotonically non-decreasing", async function () {
       const { priceTester } = await loadFixture(deployWithTester);
@@ -991,66 +479,5 @@ describe("Paper Parity (Phase 46)", function () {
       }
     });
 
-    it("deity pass prices are strictly increasing", async function () {
-      const base = 24n;
-      // Triangular through paid k=23 (300 ETH), then doubling from that anchor.
-      const curve = (k) => (k <= 23n ? base + (k * (k + 1n)) / 2n : 300n << (k - 23n));
-      let prevPrice = 0n;
-      for (let k = 0n; k < 30n; k++) {
-        const price = curve(k) * ethers.parseEther("1");
-        expect(price).to.be.gt(
-          prevPrice,
-          `Deity pass price not increasing at k=${k}`
-        );
-        prevPrice = price;
-      }
-    });
-
-    it("24th paid deity pass costs 300 ETH, then doubles through the 30th at 19,200 ETH", async function () {
-      const curve = (k) => (k <= 23n ? 24n + (k * (k + 1n)) / 2n : 300n << (k - 23n));
-      expect(curve(23n)).to.equal(300n);
-      expect(curve(24n)).to.equal(600n);
-      expect(curve(29n)).to.equal(19200n);
-    });
-
-    it("coinflip minimum deposit: 100 FLIP", async function () {
-      // Coinflip: MIN = 100 ether
-      expect(ethers.parseEther("100")).to.equal(ethers.parseEther("100"));
-    });
-
-    it("PRICE_COIN_UNIT consistent across all contracts (1000 ether)", async function () {
-      // Verified in source: DegenerusGameStorage, Coinflip, DGNRS,
-      // DegenerusQuests, DegenerusAdmin all define PRICE_COIN_UNIT = 1000 ether
-      const unit = ethers.parseEther("1000");
-      expect(unit).to.equal(1000n * 10n ** 18n);
-    });
   });
 });
-
-// ---------------------------------------------------------------------------
-// Paper Parity Verification Summary
-// ---------------------------------------------------------------------------
-// All 18 PAR requirements verified. Verification methods:
-//
-// ON-CHAIN (actual contract interaction):
-//   PAR-01: PriceLookupTester.priceForLevel() at 30+ levels
-//   PAR-02: game.purchase() with exact costWei amounts
-//   PAR-03: Pool delta verification after ticket/lootbox purchases
-//   PAR-06: game.playerActivityScore() after whale bundle purchase
-//   PAR-10: game.purchaseWhalePass() at 2.4 ETH
-//   PAR-11: game.purchaseLazyPass() at 0.24 ETH + PriceLookupTester
-//   PAR-12: game.purchaseDeityPass() for k=0,1,2 with exact prices
-//   PAR-17: Pool delta verification after whale bundle purchase
-//
-// STATIC + SOURCE VERIFICATION (private constants):
-//   PAR-04: JACKPOT_DAYS, DAILY_CURRENT_BPS_MIN/MAX (private)
-//   PAR-05: Packed share constants reconstructed and verified
-//   PAR-07: Lootbox EV breakpoint constants (private)
-//   PAR-08: Affiliate commission rate constants (private)
-//   PAR-09: Affiliate tier percentages (hardcoded in payAffiliate)
-//   PAR-13: Coinflip payout constants (private)
-//   PAR-14: Yield distribution BPS (private, reconciled with paper)
-//   PAR-15: PRICE_COIN_UNIT arithmetic verification
-//   PAR-16: Degenerette packed payouts + ROI curve BPS (private)
-//   PAR-18: Future ticket roll logic constants (private)
-// ---------------------------------------------------------------------------

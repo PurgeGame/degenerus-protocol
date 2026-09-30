@@ -220,7 +220,7 @@ describe("DegenerusJackpots", function () {
   // =========================================================================
   describe("recordBafFlip - leaderboard maintenance", function () {
     it("inserts new player into top-4 in sorted order", async function () {
-      const { jackpots, coinflip, alice, bob, carol, dan } = await loadFixture(
+      const { game, jackpots, coinflip, alice, bob, carol, dan } = await loadFixture(
         deployFullProtocol
       );
       const lvl = 10;
@@ -230,23 +230,19 @@ describe("DegenerusJackpots", function () {
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, dan.address, lvl, eth(100));
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, lvl, eth(400));
 
-      // Run jackpot to verify ordering; top should be alice (500)
-      // We can verify via running the jackpot (which reads top-4)
-      // For now, verify by running a zero-pool jackpot just to trigger the read path
-      // Actually, we inspect via the jackpot resolution: slice A goes to top bettor.
-      // The top bettor should be alice.
-      // We check this via runBafJackpot returning alice in winners.
-      // Non-zero-address winners may be credited from far-future tickets;
-      // leaderboard-only prizes to address(0) candidates are returned.
+      // Inspect the actual payout without reloading the fixture (which erases the board).
       const { result } = await runBafJackpotAsGame(
         hre.ethers,
-        (await loadFixture(deployFullProtocol)).game,
+        game,
         jackpots,
         eth(100),
         lvl,
         1n
-      ).catch(() => ({ result: null }));
-      // Primary test: no revert during leaderboard operations
+      );
+      expect(result.winners[0]).to.equal(alice.address);
+      expect(result.amounts[0]).to.equal(eth(10));
+      expect([carol.address, dan.address]).to.include(result.winners[1]);
+      expect(result.amounts[1]).to.equal(eth(5));
     });
 
     it("updates existing player score when they flip more", async function () {

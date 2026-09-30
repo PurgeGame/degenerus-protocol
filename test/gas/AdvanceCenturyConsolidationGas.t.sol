@@ -111,14 +111,9 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
                 _seedBucketDistinct(target, trait, 4, uint160(0xC3700000 + round * 16));
             }
         }
-        // A qualifying burn in every subbucket makes all 11 selected reads nonzero. The snapshot
-        // draw only reads totalBurn; length is set to 1 for an internally consistent record even
-        // though no settle runs in this fixture.
-        for (uint8 denominator = 2; denominator <= 12; ++denominator) {
-            for (uint8 sub; sub < denominator; ++sub) {
-                decBucketBurnTotal[100][denominator][sub] = DecSubbucket({totalBurn: 1 ether, length: 1});
-            }
-        }
+        // Sealing is constant work regardless of the entrant population.
+        decBattleRounds[100].count = 1_000_000;
+
     }
 }
 
@@ -377,16 +372,16 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
                 }
                 if (!found) recipients[distinct++] = who;
             }
-            if (topic == keccak256("DecimatorResolved(uint24,uint64,uint256,uint256)")) {
+            if (topic == keccak256("DecimatorResolved(uint24,uint256,uint256,uint64)")) {
                 ++decimator;
-                (, uint256 pool, uint256 burn) = abi.decode(logs[i].data, (uint64, uint256, uint256));
+                (, uint256 pool, uint64 count) = abi.decode(logs[i].data, (uint256, uint256, uint64));
                 // All dimensions draw from the same pre-BAF future snapshot.
                 assertLe(
                     pool > expectedPool * 3 / 2 ? pool - expectedPool * 3 / 2 : expectedPool * 3 / 2 - pool,
                     1,
                     "actual pool must match threshold fixture"
                 );
-                assertEq(burn, 11 ether, "all eleven denominators must contribute");
+                assertEq(count, 1_000_000, "the original entrant count is sealed without a field scan");
             }
             if (topic == keccak256("YieldSurplusDistributed(uint256)")) {
                 ++yieldEvents;

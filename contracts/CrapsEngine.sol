@@ -45,6 +45,31 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, player, boost);
     }
 
+    /// @notice `settleSlip` with no goal, under the caller's shooter cap and roll budget. The
+    ///         Decimator bounds its runs this way. Both are clamped to the engine's own limits.
+    /// @param bounds The shooter cap in the low 16 bits and the roll budget above them. A budget
+    ///        under `_MAX_ROLLS` is exact: the run stops at that many rolls, and chips still on
+    ///        the table in the cut hand count at face value when the high point is sampled.
+    function settleSlipBounded(
+        uint256 packedChips,
+        uint256 chipFlip,
+        uint256 scatterHash,
+        uint256 scatterCount,
+        bytes32 seed,
+        uint256 bankroll,
+        address player,
+        uint256 boost,
+        uint256 bounds
+    ) external pure returns (SlipResult memory r) {
+        uint256 cap = bounds & 0xFFFF;
+        uint256 rollBudget = bounds >> 16;
+        if (cap > _MAX_SLIP_HANDS) cap = _MAX_SLIP_HANDS;
+        if (rollBudget > _SLIP_ROLL_BUDGET) rollBudget = _SLIP_ROLL_BUDGET;
+        Bets memory board = _boardFrom(packedChips, chipFlip);
+        _scatterInto(board, scatterHash, chipFlip, scatterCount);
+        r = _settleSlip(board, seed, bankroll, 0, cap, rollBudget, player, boost);
+    }
+
     /// @notice `settleSlip` with the table's MERIT COMPOSITE (`_rankOf`) in the fifth word, in
     ///         place of the escalated units the table never reads. What `CrapsBattle` calls: the
     ///         comparator runs here, beside the dice, instead of in the table's bytecode.

@@ -83,28 +83,8 @@ contract CrapsRngSeal is DeployProtocol {
         );
     }
 
-    // =========================================================================
-    // SURVEILLANCE (non-asserting reads so forge surfaces the counters)
-    // =========================================================================
 
-    function invariant_sealExercised() public view {
-        handler.ghost_daysOpened();
-        handler.ghost_entries();
-        handler.ghost_dayTickets();
-        handler.ghost_customBattles();
-        handler.ghost_arms();
-        handler.ghost_armsWhileDailyLocked();
-        handler.ghost_armsWhileMidDayInFlight();
-        handler.ghost_armsWithLiveRequest();
-        handler.ghost_postArmAmendAttempts();
-        handler.ghost_settlesWithWord();
-        handler.ghost_settleAttemptsWithoutWord();
-        handler.ghost_inWindowCrapsActions();
-        handler.ghost_midDayInWindowCrapsActions();
-        handler.ghost_fulfilments();
-        handler.ghost_keeps();
-        handler.ghost_wordsLandedOnArmedIndices();
-    }
+
 
     // =========================================================================
     // NON-VACUITY

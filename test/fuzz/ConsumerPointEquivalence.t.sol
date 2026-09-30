@@ -6,14 +6,13 @@ import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
 
 /// @title ConsumerPointEquivalenceTest -- validates the reshaped activity-score consumer curves.
 ///
-/// @notice The five value curves (decimator/terminal multiplier, Degenerette ROI, WWXRP total-RTP, century
+/// @notice The five value curves (WWXRP activity multiplier, Degenerette ROI, WWXRP total-RTP, century
 ///   bonus, lootbox EV) share one shape: a steep early ramp to vA at the old cap K, a shallow middle leg to vB
 ///   at the seg-B knee (500), then a near-flat crawl to MAX at the effective cap (30000), flat beyond. Each
 ///   curve's MIN (score-0) and MAX (cap) are pinned by its golden waypoints below (the WWXRP curve carries the
-///   rigged 70%->120% endpoints). The two decimator bucket ladders share an absolute threshold table whose
-///   inverse seals the decimator-claim EV score.
+///   rigged 70%->120% endpoints). The Decimator battle's chip multiplier is pinned by its own anchors.
 ///
-/// @dev The shared math (multiplier, bucket ladder + inverse, century) lives in ActivityCurveLib and is exercised
+/// @dev The shared math (multiplier, battle multiplier, century) lives in ActivityCurveLib and is exercised
 ///   DIRECTLY here. The in-place curves (ROI/WWXRP in DegeneretteModule, lootbox EV in DegenerusGameStorage) are
 ///   mirrored to the shipped formula and pinned to independently-derived golden waypoints, plus shape properties
 ///   (monotonic non-decreasing, continuity at every knee, MIN/MAX exact, ROI strictly sub-100%). Test-only:
@@ -180,58 +179,12 @@ contract ConsumerPointEquivalenceTest is DeployProtocol {
         assertEq(_ev(500), 14390, "ev @SEG_B");
     }
 
-    // =========================================================================
-    // Bucket ladder + inverse + floor clamps
-    // =========================================================================
-
-    /// @notice The absolute bucket ladder reaches each bucket at its threshold, is monotonic non-increasing, and
-    ///         floors per path (2 for century/terminal, 5 for normal). The pre-clamp removal is proven: a high
-    ///         score (1000) now reaches bucket 2 on floor-2 paths.
-    function test_BucketLadder_AndFloors() public pure {
-        // Floor-2 path (century / terminal): full ladder reachable.
-        assertEq(ActivityCurveLib.decBucket(0, 2), 12, "bucket @0");
-        assertEq(ActivityCurveLib.decBucket(9, 2), 12, "bucket below first threshold");
-        assertEq(ActivityCurveLib.decBucket(10, 2), 11, "bucket @10");
-        assertEq(ActivityCurveLib.decBucket(30, 2), 10, "bucket @30");
-        assertEq(ActivityCurveLib.decBucket(55, 2), 9, "bucket @55");
-        assertEq(ActivityCurveLib.decBucket(85, 2), 8, "bucket @85");
-        assertEq(ActivityCurveLib.decBucket(120, 2), 7, "bucket @120");
-        assertEq(ActivityCurveLib.decBucket(180, 2), 6, "bucket @180");
-        assertEq(ActivityCurveLib.decBucket(250, 2), 5, "bucket @250");
-        assertEq(ActivityCurveLib.decBucket(300, 2), 4, "bucket @300");
-        assertEq(ActivityCurveLib.decBucket(500, 2), 3, "bucket @500");
-        assertEq(ActivityCurveLib.decBucket(1000, 2), 2, "bucket @1000 (floor-2 reaches best)");
-        assertEq(ActivityCurveLib.decBucket(30000, 2), 2, "bucket saturates at floor");
-
-        // Just-below-threshold edges (no off-by-one).
-        assertEq(ActivityCurveLib.decBucket(249, 2), 6, "249 -> bucket 6");
-        assertEq(ActivityCurveLib.decBucket(999, 2), 3, "999 -> bucket 3");
-
-        // Normal path floors at 5: nothing below bucket 5 regardless of score.
-        assertEq(ActivityCurveLib.decBucket(250, 5), 5, "normal floor reached at 250");
-        assertEq(ActivityCurveLib.decBucket(300, 5), 5, "normal floor holds");
-        assertEq(ActivityCurveLib.decBucket(1000, 5), 5, "normal floor holds at high score");
-        assertEq(ActivityCurveLib.decBucket(0, 5), 12, "normal base at 0");
-
-        // Monotonic non-increasing in score (floor-2 path).
-        uint8 prev = ActivityCurveLib.decBucket(0, 2);
-        for (uint256 s = 1; s <= 1200; s++) {
-            uint8 b = ActivityCurveLib.decBucket(s, 2);
-            assertLe(b, prev, "bucket monotonic non-increasing");
-            prev = b;
-        }
-    }
-
-    /// @notice minScoreForBucket is the exact pre-floor inverse of the ladder: it returns the threshold for each
-    ///         bucket, and feeding that threshold back through decBucket returns the same bucket.
-    function test_BucketInverse_RoundTrip() public pure {
-        for (uint8 b = 2; b <= 12; b++) {
-            uint16 s = ActivityCurveLib.minScoreForBucket(b);
-            assertEq(ActivityCurveLib.decBucket(s, 2), b, "inverse round-trips through forward ladder");
-        }
-        assertEq(ActivityCurveLib.minScoreForBucket(12), 0, "inverse @12");
-        assertEq(ActivityCurveLib.minScoreForBucket(5), 250, "inverse @5");
-        assertEq(ActivityCurveLib.minScoreForBucket(2), 1000, "inverse @2");
+    function test_BattleCurveAnchors() public pure {
+        assertEq(ActivityCurveLib.decBattleMultBps(0), 10_000);
+        assertEq(ActivityCurveLib.decBattleMultBps(235), 17_049);
+        assertEq(ActivityCurveLib.decBattleMultBps(500), 19_000);
+        assertEq(ActivityCurveLib.decBattleMultBps(30_000), 20_000);
+        assertEq(ActivityCurveLib.decBattleMultBps(type(uint256).max), 20_000);
     }
 
     // =========================================================================

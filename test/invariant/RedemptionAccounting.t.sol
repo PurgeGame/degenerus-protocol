@@ -7,10 +7,10 @@ import {RedemptionHandler} from "../fuzz/handlers/RedemptionHandler.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title RedemptionAccounting -- 13 invariant_INV_NN_* functions for v44 sStonk per-day source
-/// @notice Mechanizes INV-01..12 from 304-SPEC §1 plus the v44.0 single-pool invariant INV-13
-///         added at Phase 305 (D-305-SENTINEL-01). Every invariant asserts after every handler
-///         action; EXACT-equality assertions on INV-02..05 are sound per D-305-GWEI-SNAP-01
+/// @title RedemptionAccounting -- Current per-day redemption accounting properties
+/// @notice Retains applicable historical INV identifiers and newer fallback checks.
+///         Obsolete INV-03 and duplicate INV-05 were retired; see docs/TEST_REVIEW.md.
+///         EXACT-equality assertions on INV-02 and INV-04 use D-305-GWEI-SNAP-01
 ///         (gcd(1e9, 100) = 100 → gwei-aligned × roll / 100 is exact for any integer roll).
 /// @dev Run:
 ///        FOUNDRY_PROFILE=deep forge test --match-path "test/invariant/RedemptionAccounting.t.sol"
@@ -141,25 +141,10 @@ contract RedemptionAccounting is DeployProtocol {
         );
     }
 
-    // =====================================================================
-    //              INV-03: FLIP conservation (EXACT)
-    // =====================================================================
-
-    /// @notice INV-03 — 304-SPEC §1 lines 118-139. The redemption FLIP leg keeps NO aggregate
-    ///         reserve scalar: the redeemed slice is removed from sDGNRS's backing at SUBMIT
-    ///         (withdrawRedeemedFlip) and escrowed per-(redeemer, day) as PendingRedemption.flipEscrow,
-    ///         so single-counting is structural (each submit reads backing already net of prior escrows)
-    ///         — there is no `pendingRedemptionFlip` cumulative scalar or per-day `flipBase` field to
-    ///         diverge. Conservation across submit→resolve→claim (slice removed at submit, minted to the
-    ///         redeemer only on a winning resolving-day coinflip, else forfeited) is exercised by the
-    ///         StakedStonkRedemption FLIP-escrow tests, not here.
-    /// @dev Retained as a documented no-op so the §3.F attestation matrix keeps its INV-03 row;
-    ///      asserting against a deleted storage slot would be vacuous (always zero).
-    function invariant_INV_03_FlipConservationExact() public view {
-        // No-op: the redemption-FLIP reserve was removed in v47 (settled at submit). See NatSpec.
-        // Touch state read-only so the function body is non-trivial under the view mutability.
-        assertTrue(address(sdgnrs) != address(0), "INV-03: harness wiring");
-    }
+    // INV-03's former aggregate FLIP reserve was removed. Submit/claim escrow
+    // conservation is covered by StakedStonkRedemption.t.sol's
+    // testRedeemFlipRemovedFromBackingAtSubmit and escrow win/loss tests.
+    // Do not count a harness-address assertion as a conservation invariant.
 
     // =====================================================================
     //              INV-04: Per-day base correctness (EXACT)
@@ -192,41 +177,8 @@ contract RedemptionAccounting is DeployProtocol {
         }
     }
 
-    // =====================================================================
-    //          INV-05: Per-day cumulative correctness (EXACT)
-    // =====================================================================
 
-    /// @notice INV-05 — 304-SPEC §1 lines 165-187. Reorganization of INV-02 that asserts the
-    ///         cumulative-vs-per-day-sum identity directly. Same expected value as INV-02
-    ///         since both compute the same RHS; reproduced as a separate invariant fn so
-    ///         §3.F attestation matrix has 13 distinct test_id rows to cite.
-    function invariant_INV_05_PerDayCumulativeCorrectness() public view {
-        uint256 expected;
-        uint256 len = handler.getDaysWrittenCount();
-        uint256 bound = len < SCAN_CAP ? len : SCAN_CAP;
-        uint256 actorN = handler.getActorCount();
-        for (uint256 i = 0; i < bound; i++) {
-            uint32 d = handler.getDayWritten(i);
-            if (!handler.ghost_dayResolved(d)) {
-                // v47 Unresolved: the MAX (175%) payout is segregated at submit.
-                (uint64 ethBase, , ) = _readPendingByDay(d);
-                expected += (uint256(ethBase) * 1e9 * MAX_ROLL) / 100;
-            } else {
-                (uint16 roll) = sdgnrs.redemptionPeriods(uint24(d));
-                for (uint256 j = 0; j < actorN; j++) {
-                    address actor = handler.getActor(j);
-                    if (handler.ghost_claimDone(d, actor)) continue;
-                    (uint96 ev, , ) = sdgnrs.pendingRedemptions(actor, uint24(d));
-                    expected += (uint256(ev) * uint256(roll)) / 100;
-                }
-            }
-        }
-        assertEq(
-            sdgnrs.pendingRedemptionEthValue(),
-            expected,
-            "INV-05: cumulative scalar diverged from per-day reconstruction"
-        );
-    }
+
 
     // =====================================================================
     //          INV-06: No cross-player roll manipulation

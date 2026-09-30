@@ -5,10 +5,11 @@ import "forge-std/Test.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
 /// @title PrecisionBoundary -- Zero-rounding boundary tests (PREC-02)
-/// @notice Proves no input combination allows zero-cost actions while producing non-zero output.
-///         Tests pure math formulas extracted from protocol contracts.
+/// @notice Arithmetic bounds for explicit model assumptions, plus production price-library checks.
 /// @dev Does NOT duplicate existing ShareMathInvariants or VaultShareMath tests.
 ///      Focuses specifically on: minimum viable amounts, ceil-floor round-trips, BPS floor bounds.
+// Most tests exercise local arithmetic models rather than the contract operations.
+// Production changes require the contract-backed vault/redemption/purchase suites.
 contract PrecisionBoundaryTest is Test {
     // =========================================================================
     // Constants (mirrored from protocol)
@@ -102,9 +103,8 @@ contract PrecisionBoundaryTest is Test {
 
         uint256 claimValue = (uint256(reserve) * 1) / uint256(supply);
         // claimValue can be 0 if reserve < supply, but this is expected:
-        // In that case burning 1 share returns 0 (rounding down). The vault
-        // prevents this via supply management (REFILL_SUPPLY).
-        // Test with realistic vault state:
+        // In that case burning 1 share returns 0 (rounding down); refill does
+        // not prevent this. This model checks only the reserve >= supply regime:
         if (reserve >= supply) {
             assertTrue(claimValue > 0, "burn 1 share should yield > 0 when reserve >= supply");
         }
@@ -220,29 +220,7 @@ contract PrecisionBoundaryTest is Test {
     }
 
     // =========================================================================
-    // 4. Decimator Cap Boundary: effectiveAmount > 0
-    // =========================================================================
-
-    /// @notice At the cap boundary, effectiveAmount is non-zero
-    function test_decimator_atCapBoundary_effectiveAmountNonZero() public pure {
-        uint256 DECIMATOR_MULTIPLIER_CAP = 500 * PRICE_COIN_UNIT;
-
-        // Scenario: base burned so far just below the cap, baseAmount = 1 FLIP, multBps = 15000 (1.5x)
-        uint256 prevBase = DECIMATOR_MULTIPLIER_CAP - 1;
-        uint256 baseAmount = PRICE_COIN_UNIT; // 1 full FLIP
-        uint256 multBps = 15_000;
-
-        // Replicate _decEffectiveAmount: only the base that fits under the cap is multiplied
-        uint256 remaining = DECIMATOR_MULTIPLIER_CAP - prevBase; // = 1 wei
-        uint256 multiplied = baseAmount <= remaining ? baseAmount : remaining;
-        uint256 effectiveAmount = (multiplied * multBps) / BPS_DENOMINATOR + (baseAmount - multiplied);
-        assertTrue(effectiveAmount > 0, "effectiveAmount must be > 0 at cap boundary");
-        assertTrue(effectiveAmount >= baseAmount, "the 1x remainder never falls below base");
-        assertTrue(effectiveAmount <= (baseAmount * multBps) / BPS_DENOMINATOR, "cap only reduces the multiplied share");
-    }
-
-    // =========================================================================
-    // 5. Coinflip Minimum Stake: Principal Always Returned
+    // 4. Coinflip Minimum Stake: Principal Always Returned
     // =========================================================================
 
     /// @notice At minimum stake, payout includes principal even if reward rounds to 0
@@ -265,7 +243,7 @@ contract PrecisionBoundaryTest is Test {
     }
 
     // =========================================================================
-    // 6. Auto-Rebuy: Below Ticket Price = No Tickets
+    // 5. Auto-Rebuy: Below Ticket Price = No Tickets
     // =========================================================================
 
     /// @notice When weiAmount < ticketPrice, baseTickets == 0
@@ -284,7 +262,7 @@ contract PrecisionBoundaryTest is Test {
     }
 
     // =========================================================================
-    // 7. BPS Division: Maximum Dust Bound
+    // 6. BPS Division: Maximum Dust Bound
     // =========================================================================
 
     /// @notice For any BPS calculation, dust is bounded by BPS_DENOMINATOR - 1

@@ -64,19 +64,6 @@ contract VRFPathInvariants is DeployProtocol {
         );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // TEST-02: Stall-to-Recovery State Machine
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /// @notice Stall-to-recovery transitions are valid: a coordinator swap preserves
-    ///         the lock state, gap days have words after resume
-    function invariant_stallRecoveryValid() public view {
-        assertEq(
-            handler.ghost_stateViolations(),
-            0,
-            "VRFPath: invalid stall-to-recovery state transition"
-        );
-    }
 
     /// @notice A coordinator swap never flips rngLocked in either direction: a daily
     ///         request in flight keeps the lock until the re-issued word lands (freeze
@@ -102,17 +89,6 @@ contract VRFPathInvariants is DeployProtocol {
         );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // Canary
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /// @notice Confirms handler is deployed and being exercised
-    function invariant_handlerCanary() public view {
-        assertTrue(
-            address(handler.game()) != address(0),
-            "VRFPath: handler game reference is zero"
-        );
-    }
 
     /// @notice Runs after each call sequence: at least one fresh index allocation
     ///         happened (lootboxRngIndex initializes to 1), so the TEST-01 detection

@@ -350,7 +350,16 @@ describe("GameOver", function () {
       ).to.be.reverted;
     });
 
-    it("purchaseDeityPass still works after gameOver (no explicit guard in whale module)", async function () {
+    it("feed-swap proposals revert with GameOver after the terminal drain", async function () {
+      const { game, admin, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      await advanceTime(SECONDS_912_DAYS + 86400);
+      await triggerGameOverAtLevel0(game, deployer, mockVRF);
+      expect(await game.gameOver()).to.be.true;
+      await expect(admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS))
+        .to.be.revertedWithCustomError(admin, "GameOver");
+    });
+
+    it("purchaseDeityPass reverts with GameOver after the terminal drain", async function () {
       const { game, deployer, alice, mockVRF } = await loadFixture(
         deployFullProtocol
       );
@@ -358,17 +367,11 @@ describe("GameOver", function () {
       await advanceTime(SECONDS_912_DAYS + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
-      // Deity pass purchase goes through whale module which doesn't check gameOver.
-      // But the refundable flag won't be set because gameOver=true now.
-      // Check if it reverts or succeeds - handle either case.
-      try {
-        await game
+      expect(await game.gameOver()).to.be.true;
+      await expect(game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
-        // If it succeeds, verify no refund flag set
-      } catch {
-        // If it reverts (e.g., some other guard), that's acceptable too
-      }
+          .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) }))
+        .to.be.revertedWithCustomError(game, "GameOver");
     });
   });
 

@@ -118,6 +118,11 @@ contract DegeneretteHandler is Test {
 
         // Try to resolve the newest unresolved bet
         PlacedBet memory bet = actorBets[currentActor][count - 1];
+        // Another actor's global sweep may already have resolved this entry.
+        if (game.degeneretteBetInfo(bet.index, bet.betId) == 0) {
+            actorBets[currentActor].pop();
+            return;
+        }
 
         // Fill the bet's lootbox word so the sweep's resolve RNG-ready gate is satisfiable, and
         // force the active lootbox index past the bet's index so the sweep's finalized-index
@@ -131,12 +136,16 @@ contract DegeneretteHandler is Test {
 
         vm.prank(currentActor);
         try game.openBoxes(type(uint256).max) {
-            ghost_betsResolved++;
             uint256 claimableAfter = game.claimableWinningsOf(currentActor);
             if (claimableAfter > claimableBefore) {
                 ghost_totalEthPayout += (claimableAfter - claimableBefore);
             }
-            actorBets[currentActor].pop();
+            // A successful openBoxes call may do no work or stop before this bet.
+            // Count an observed nonzero -> zero transition, not merely a call.
+            if (game.degeneretteBetInfo(bet.index, bet.betId) == 0) {
+                ghost_betsResolved++;
+                actorBets[currentActor].pop();
+            }
         } catch {
             ghost_resolvesFailed++;
         }

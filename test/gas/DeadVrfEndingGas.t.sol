@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {DeadVrfSeeder} from "../fuzz/DeadVrfEnding.t.sol";
+import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
 
 contract DeadVrfGasSeeder is DeadVrfSeeder {
     function seedRegistry(uint24 lvl, uint256 count) external {

@@ -96,7 +96,7 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag      |
  * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)      |
  * | [30:31] ticketRedemptionOpen     bool     FLIP ticket purchase window latch     |
- * | [31:32] decDayOneActive          bool     Decimator day-one burn bonus latch    |
+ * | [31:32] decDayOneActive          bool     Decimator opening-day quest / auto-entry latch    |
  * +---------------------------------------------------------------------------------+
  *   Total: 32 bytes used (0 bytes padding -- FULL)
  *
@@ -352,8 +352,6 @@ abstract contract DegenerusGameStorage {
     error NotStarted();
     /// @notice Thrown when a delegatecall reverts with empty returndata.
     error EmptyRevert();
-    /// @notice Thrown when a delegatecall returns empty data where a value was required.
-    error EmptyReturn();
     /// @notice Thrown when a native or token transfer fails.
     error TransferFailed();
     /// @notice Thrown when a balance or pool draw would underflow its backing.
@@ -523,11 +521,11 @@ abstract contract DegenerusGameStorage {
     ///      purchase/advance paths already SLOAD, so the gate costs no additional cold slot access.
     bool internal ticketRedemptionOpen;
 
-    /// @dev Decimator day-one burn bonus latch. Set by the RNG request that opens the
+    /// @dev Decimator opening-day quest / auto-entry latch. Set by the RNG request that opens the
     ///      decimator window (the x4/x99 level increment); cleared by the next fresh daily
-    ///      request (the same-day VRF retry does not clear it). While set, recordDecBurn
-    ///      grants the day-one weight multiplier. Occupies slot-0 byte [31:32], which the
-    ///      request path already writes, so set/clear ride existing slot-0 stores.
+    ///      request (the same-day VRF retry does not clear it). The opening-day quest and
+    ///      protocol auto-entry use this latch; battle chip timing uses openedDay instead.
+    ///      Occupies slot-0 byte [31:32], already written by the request path.
     bool internal decDayOneActive;
 
     // =========================================================================
@@ -2240,7 +2238,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Pending whale pass claims from large lootbox wins (>5 ETH).
     ///      Stores number of half whale passes (100 entries each = 100 levels × 1 entry per half-pass).
-    ///      Unified storage for all deferred lootbox rewards (BAF, jackpot, decimator).
+    ///      Unified storage for all deferred half-pass rewards (BAF, jackpot, decimator).
     mapping(address => uint256) internal whalePassClaims;
 
     // =========================================================================
@@ -3044,94 +3042,40 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // All decimator logic is consolidated into the DecimatorModule.
 
-    /// @dev One burner's record in a decimator subbucket list: the list entry IS the record, so the
-    ///      settle walk reads owner and weight from the one slot it visits. A zero slot is settled,
-    ///      migrated away, or past the list's end.
-    struct DecEntry {
-        /// @notice The burner; every payout from this entry credits it.
-        address owner;
-        /// @notice Effective (multiplied) burn weight, in thousandths of a FLIP (each burn's weight
-        ///         floored to the unit; saturating).
-        uint64 weightMilli;
-        /// @notice Base FLIP burned at this level before any multiplier, in thousandths of a FLIP
-        ///         (each burn floored to the unit; saturating). The activity multiplier applies to
-        ///         the first DECIMATOR_MULTIPLIER_CAP of THIS figure, not of the weight above; the
-        ///         saturation point (4.29M FLIP) sits above that cap, so it never moves the math.
-        uint32 baseMilli;
+    /// @dev Frozen event and bounded settlement cursors. Phase: 0 entry, 1 runs, 2 payouts, 3 done.
+    struct DecBattleRound {
+        uint128 poolWei;
+        uint64 count;
+        uint24 openedDay;
+        uint8 phase;
+        uint8 capacity;
+        uint8 winners;
+        uint8 paid;
+        uint256 rngWord;
+        uint64 cursor;
+        uint64 champion;
+        uint24 next;
     }
 
-    /// @dev Where a player's entry for their most recent decimator window sits. Reused every
-    ///      window (only one is open at a time): a pointer naming another level means the player
-    ///      has not burned in the current one.
-    struct DecPointer {
-        /// @notice Resolution level of the window the entry belongs to.
-        uint24 lvl;
-        /// @notice Denominator (2-12); may improve to a lower one during the window.
-        uint8 bucket;
-        /// @notice Deterministic subbucket from hash(player, lvl, bucket), range 0..(bucket-1).
-        uint8 subBucket;
-        /// @notice Position in the (lvl, bucket, subBucket) list.
-        uint32 position;
+    /// @dev One retained heads result. Its score is the exact 512-bit stack x normalized peak
+    ///      (common denominator 3000 ether): `low` is the low word, `head` holds the high word
+    ///      above the 64-bit entry id. A stack stays under 2^160, so the high word fits in 192 bits.
+    ///      Equal scores order by a random tiebreak recomputed from the id.
+    struct DecBattleNode {
+        uint256 low;
+        uint256 head;
     }
 
-    /// @dev One subbucket's aggregate: the pro-rata denominator and the length of its entry list.
-    ///      Both change on the same burn, so they share the slot the burn already writes. The draw
-    ///      snapshots the winning totals into the round; settlement empties entries but leaves these
-    ///      totals as they stood at the draw.
-    struct DecSubbucket {
-        /// @notice Total effective burn in the subbucket, in wei (each entry's weight x 1e15).
-        uint192 totalBurn;
-        /// @notice Entries appended to this subbucket's list.
-        uint32 length;
-    }
-
-    /// @dev The settle walk's place: the level whose winning lists are being walked, the
-    ///      denominator within it, and the next position in that denominator's winning list.
-    struct DecSettleCursor {
-        uint24 lvl;
-        uint8 denom;
-        uint32 position;
-    }
-
-    /// @dev Snapshot of a decimator jackpot for settlement. All three fields pack
-    ///      into ONE slot (96 + 128 + 32 = 256 bits).
-    struct DecClaimRound {
-        /// @notice ETH prize pool the round's winners settle against. uint96 (7.9e28 wei = 7.9e10 ETH,
-        ///         far above any reachable pool).
-        uint96 poolWei;
-        /// @notice Total qualifying burn across winning subbuckets (denominator for
-        ///         pro-rata). Sum of per-burn effective amounts: the base is the FLIP
-        ///         burned plus a boon of up to 50% on at most 50k FLIP of it, then the
-        ///         activity multiplier (up to 1.7833x, x1.2 on day one) applies to the
-        ///         player's first DECIMATOR_MULTIPLIER_CAP of BASE burn at the level;
-        ///         base beyond the cap counts 1x. Supply-capped
-        ///         at uint128; realistic per-level totals sit ~1e8x under it.
-        uint128 totalBurn;
-        /// @notice Stored seed for the settle-time lootbox draw only: the low 32 bits of
-        ///         keccak(word, DECIMATOR_BOX_TAG), so no other consumer of the day word
-        ///         shares these bits. The winning subbuckets are selected from the FULL VRF
-        ///         word at snapshot and stored separately in decBucketOffsetPacked, so this
-        ///         never gates winner selection. Its sole consumer (resolveLootboxDirect)
-        ///         re-hashes it with the round level and the winner address — no
-        ///         player-controlled input — so 32 bits of post-fulfillment-revealed entropy
-        ///         cannot be ground or predicted.
-        uint32 rngWord;
-    }
-
-    /// @dev Decimator subbucket lists, one slot per entry, keyed by _decEntryKey(lvl, denom, sub, pos).
-    mapping(uint256 => DecEntry) internal decEntry;
-
-    /// @dev Aggregate and list length per level/denom/subbucket.
-    ///      Array sized [13][13] to allow direct indexing (denom 0-12, sub 0-12).
-    mapping(uint24 => DecSubbucket[13][13]) internal decBucketBurnTotal;
-
-    /// @dev Decimator round snapshots per level, persistent — no expiry on prior rounds.
-    mapping(uint24 => DecClaimRound) internal decClaimRounds;
-
-    /// @dev Packed winning subbucket per denominator for a level.
-    ///      4 bits each for denom 2..12 (44 bits total, fits in uint64).
-    ///      Layout: bits 0-3 = denom 2, bits 4-7 = denom 3, etc.
-    mapping(uint24 => uint64) internal decBucketOffsetPacked;
+    /// @dev Four mapping roots replace the four retired bucket-system roots without moving
+    ///      unrelated storage. Owners are keyed (level << 64) | id, ids beginning at one; an
+    ///      entry packs its id (bits 0..63), its chosen board's thirty chip bits (64..93) and its
+    ///      accumulated stack (virtual-chip wei, bits 96..255).
+    mapping(uint256 => address) internal decBattleOwners;
+    mapping(uint24 => DecBattleRound) internal decBattleRounds;
+    /// @dev The leaderboard of the round at the head of the queue, keyed by heap position. The
+    ///      FIFO settles one round at a time, so every round reuses these slots.
+    mapping(uint256 => DecBattleNode) internal decBattleHeap;
+    mapping(uint24 => mapping(address => uint256)) internal decBattleEntries;
 
     // =========================================================================
     // Degenerette Hero Wager Tracking (Daily)
@@ -4121,13 +4065,8 @@ abstract contract DegenerusGameStorage {
     ///      every existing delegatecall slot. Cleared at settlement or game over.
     uint256 internal earlyBirdWhalePasses;
 
-    /// @dev Each player's pointer to their entry in their most recent decimator window.
-    ///      Appended to preserve every existing delegatecall slot.
-    mapping(address => DecPointer) internal decPointer;
-
-    /// @dev Where mineFlip's decimator leg resumes. Appended to preserve every existing
-    ///      delegatecall slot.
-    DecSettleCursor internal decSettleCursor;
+    /// @dev FIFO of sealed Decimator battles: head in bits 0..23, tail in 24..47.
+    uint256 internal decBattleQueue;
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

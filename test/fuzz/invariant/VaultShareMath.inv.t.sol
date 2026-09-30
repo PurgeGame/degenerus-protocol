@@ -10,17 +10,10 @@ import {FLIP} from "../../../contracts/FLIP.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title VaultShareMathInvariant -- Proves vault share math consistency under deposit/withdraw
-/// @notice NEVER PREVIOUSLY FUZZED for deposit/withdraw operations. The existing VaultShare
-///         invariant only checks coin supply consistency from the outside; this test drives
-///         actual burnCoin/burnEth operations against the vault.
-///
-///         Invariants tested:
-///         1. After any burn, share supply decreases by exactly the burned amount
-///         2. ETH received from burnEth <= vault ETH+stETH balance before burn
-///         3. FLIP received from burnCoin <= vault FLIP reserve before burn
-///         4. Refill mechanism: supply never reaches zero (always >= REFILL_SUPPLY after full burn)
-///         5. No rounding exploit: burning 1 share never yields more than proportional assets
+/// @notice Drives partial and full burns; reconciles both share supplies against
+///         successful burns and refill counts, and checks game solvency and ETH outflows.
 contract VaultShareMathInvariant is DeployProtocol {
+    uint256 private constant INITIAL_SUPPLY = 1_000_000_000_000 ether;
     VaultHandler public vaultHandler;
     GameHandler public gameHandler;
     VRFHandler public vrfHandler;
@@ -48,33 +41,22 @@ contract VaultShareMathInvariant is DeployProtocol {
         targetContract(address(vaultHandler));
     }
 
-    /// @notice Vault ETH balance is non-negative and consistent with obligations
-    /// @dev After burnEth, vault should not have negative reserves
-    function invariant_vaultEthBalanceConsistent() public view {
-        uint256 vaultBal = address(vault).balance;
-        // ETH balance is always >= 0 (uint), but check it hasn't drained below expected
-        assertGe(vaultBal, 0, "Vault ETH balance underflow (impossible but sanity check)");
-    }
-
-    /// @notice FLIP supply consistency still holds after vault burn operations
-    /// @dev The fundamental identity: totalSupply + vaultMintAllowance == supplyIncUncirculated
-    function invariant_coinSupplyConsistencyAfterVaultOps() public view {
-        uint256 total = coin.totalSupply();
-        uint256 allowance = coin.vaultMintAllowance();
-        uint256 combined = coin.supplyIncUncirculated();
-
-        assertEq(
-            total + allowance,
-            combined,
-            "VaultShareMath: FLIP supply consistency violated after vault operations"
-        );
+    /// @notice Burned shares disappear; full burns mint exactly the refill supply.
+    function invariant_shareSupplyReconciles() public view {
+        assertEq(vaultHandler.ethShare().totalSupply() + vaultHandler.ghost_ethBurned(),
+            INITIAL_SUPPLY * (1 + vaultHandler.ghost_ethRefills()), "DGVE burn/refill accounting");
+        assertEq(vaultHandler.flipShare().totalSupply() + vaultHandler.ghost_coinBurned(),
+            INITIAL_SUPPLY * (1 + vaultHandler.ghost_coinRefills()), "DGVF burn/refill accounting");
+        // These handlers never transfer shares. Supply and the sole holder must agree.
+        assertEq(vaultHandler.ethShare().balanceOf(address(this)), vaultHandler.ethShare().totalSupply());
+        assertEq(vaultHandler.flipShare().balanceOf(address(this)), vaultHandler.flipShare().totalSupply());
     }
 
     /// @notice Ghost: total ETH received from vault burns <= total ETH deposited into protocol
     /// @dev Vault receives ETH from game jackpots. Total claims from vault cannot exceed
     ///      total ETH ever deposited into the game.
     function invariant_vaultEthClaimsLessThanDeposits() public view {
-        uint256 totalGameDeposits = gameHandler.ghost_totalDeposited();
+        uint256 totalGameDeposits = gameHandler.ghost_totalDeposited() + vaultHandler.ghost_totalDeposited();
         uint256 totalVaultEthOut = vaultHandler.ghost_ethReceived();
 
         assertGe(
@@ -87,7 +69,7 @@ contract VaultShareMathInvariant is DeployProtocol {
     /// @notice ETH solvency invariant still holds under vault operations
     /// @dev The game contract must remain solvent even while vault is burning shares
     function invariant_gameSolvencyUnderVaultOps() public view {
-        uint256 gameBalance = address(game).balance;
+        uint256 gameBalance = address(game).balance + mockStETH.balanceOf(address(game));
         // Canonical obligation set (pending buffer in, dead post-GO pools out) -- SolvencyObligations.
         uint256 obligations = SolvencyObligations.obligations(game);
 
@@ -98,10 +80,25 @@ contract VaultShareMathInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Canary: vault and coin contracts are deployed
-    function invariant_vaultMathCanary() public view {
-        assertTrue(address(vault) != address(0), "Vault not deployed");
-        assertTrue(address(coin) != address(0), "Coin not deployed");
-        assertTrue(address(vault).code.length > 0, "Vault has no code");
+    function test_partialAndFullBurnsAreExercised() public {
+        vaultHandler.burnEth(1);
+        vaultHandler.burnCoin(1);
+        invariant_shareSupplyReconciles();
+        vaultHandler.burnEth(0); // explicit full-burn branch
+        vaultHandler.burnCoin(0);
+        assertEq(vaultHandler.ghost_burnEthSuccess(), 2);
+        assertEq(vaultHandler.ghost_burnCoinSuccess(), 2);
+        assertEq(vaultHandler.ghost_ethRefills(), 1);
+        assertEq(vaultHandler.ghost_coinRefills(), 1);
+        invariant_shareSupplyReconciles();
+    }
+
+    function test_shareOracleRejectsMissingBurn() public {
+        vaultHandler.burnEth(1);
+        assertEq(vaultHandler.ghost_burnEthSuccess(), 1);
+        vm.mockCall(address(vaultHandler.ethShare()),
+            abi.encodeWithSelector(vaultHandler.ethShare().totalSupply.selector), abi.encode(INITIAL_SUPPLY));
+        vm.expectRevert();
+        this.invariant_shareSupplyReconciles();
     }
 }

@@ -97,30 +97,8 @@ contract RngWindowFreeze is DeployProtocol {
         );
     }
 
-    // =========================================================================
-    // SURVEILLANCE: emit the freeze counters at end-of-run (mirrors RngIndexDrainOrdering)
-    // =========================================================================
 
-    /// @notice Non-asserting read of the ghost counters so forge surfaces the freeze metrics
-    ///         (windows-opened / in-window-actions / per-action coverage) alongside the property. Mirrors
-    ///         RngIndexDrainOrdering's branch-coverage-surveillance — coverage is diagnostic, not a gate
-    ///         (the non-vacuity GATE lives in afterInvariant + the focused test below).
-    function invariant_freezeWindowExercised() public view {
-        handler.ghost_windowsOpened();
-        handler.ghost_inWindowActions();
-        handler.calls_openWindow();
-        handler.calls_inWindowPlacement();
-        handler.calls_inWindowPurchase();
-        handler.calls_inWindowOpenBoxes();
-        handler.calls_closeWindow();
-        handler.ghost_midDayWindowsOpened();
-        handler.ghost_midDayInWindowActions();
-        handler.calls_openMidDayWindow();
-        handler.calls_midDayPlacement();
-        handler.calls_midDayPurchase();
-        handler.calls_midDayOpenBoxes();
-        handler.calls_closeMidDayWindow();
-    }
+
 
     // =========================================================================
     // NON-VACUITY GATE: the campaign actually opened the window and fired in-window actions

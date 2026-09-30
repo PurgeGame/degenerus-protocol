@@ -5,7 +5,7 @@
 | Component | Responsibility |
 | --- | --- |
 | `DegenerusGame` + 12 game modules | Purchases, ticket materialization, advance/VRF, jackpots, lootboxes, side-games and terminal distribution. The twelve delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, FoilPack, GameOver, Jackpot, Lootbox, Mint and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
-| `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Jackpot to Whale for early-bird and quadrant pass awards; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Decimator, Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
+| `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Jackpot to Whale for early-bird and quadrant pass awards; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
 | `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
 | `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip`, `settleRanked` and `settleBattle` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls `settleBattle`, which plays a seat's whole run (board, scatter, shooter boost and rotation) under the shared 1,000-roll budget and also returns the battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder), so the comparator lives in the engine, not the table |
 | `JackpotBattle` | `JackpotBattle is CrapsBattleStorage`, deployed after `CrapsEngine` and reached only by `CrapsBattle`'s fallback delegatecall, so it runs in the table's storage: it locks the daily jackpot battle's field at the RNG request, draws and appends its awarded entries, seals the field and serves its views. The table's normal resolver settles and pays every seat |
@@ -136,7 +136,7 @@ read every L+1 ticket queued before the last-purchase request.
 Unminted levels are drawn by wallet, one queue lane per wallet registration. Under the RNG
 lock, a player far-future append reverts when it is a new registration (it would add a
 lane); a top-up only raises an owed count and is allowed. Lootbox resolutions that run under the lock (Degenerette bets,
-Decimator claims, sDGNRS redemption claims, foil claims) revert in those cases; the player
+sDGNRS redemption claims, foil claims) revert in those cases; the player
 can retry once the word lands.
 
 Daily board: every day rolls one winning board (four traits plus the day's hero), which
@@ -330,35 +330,41 @@ for dilution and timing, and `SdgnrsCenturyRecycle` for the accounting tests.
 - Entropy-dependent processing has the documented freeze boundaries; caller gas cannot choose work.
 - Pool writes, unchecked arithmetic and advance-chain external calls remain covered by the source manifests.
 
-### Decimator settlement entropy
+### Decimator battle
 
-A decimator round packs its pool, total qualifying burn and a 32-bit settlement seed into one
-mapping-value slot. The seed is the low 32 bits of `keccak(word, DECIMATOR_BOX_TAG)`, so
-no other consumer of the day word shares its bits; the settlement-box root re-hashes it with
-the tag and the fixed round level, and the box resolver then mixes the winning owner.
-Winner selection still uses the full word before the snapshot.
+The periodic Decimator is a shared-dice craps battle paid in ETH and half whale passes. The old
+bucket lottery, migrations, pro-rata burn shares and lootbox settlement have been removed.
+See [Decimator battle](DECIMATOR-BATTLE.md) for the rules, ABI and accounting details.
 
-### Decimator records and settlement
+Each wallet accumulates one event entry. Every burn locks its degen multiplier and its
+`0.9^dayOffset` timing factor at burn time. Degen reaches 1.9x at 500 and 2x at 30,000;
+there is no burn-size cap on that multiplier. Existing quest and boon chip bonuses remain.
+The window opening protocol day is stamped by Advance, independent of the first burn.
 
-Each burner's record is an entry in its (level, denominator, subbucket) list: owner,
-weight and base in one slot. A per-player pointer, reused every window, finds the entry
-for later burns; a better bucket empties the old position and re-appends the entry.
-Each subbucket slot holds the pro-rata total and the list length.
+At the closing request, the window closes before the word is known. Consolidation seals
+the full 256-bit word, pool and entrant count and appends the event to a FIFO. Each run uses
+one-fifth of its starting stack as its initial board wager, doubles every three shooters,
+and has no cash-out or goal. A run ends at bust, after 64 shooters or at 511 rolls. Shared event dice drive separately scattered boards and the
+existing owner-specific survival/boost draws. Absolute high point ranks the run, including
+its starting bankroll. A separately tagged final coin disqualifies tails before insertion.
 
-After the draw, `mineFlip` is the only settlement path. If no box opened, its walk
-settles winning entries in list order: oldest level, denominators 2–12, then ascending
-positions. The leg receives 2,030 walk units less the units already spent scanning the
-box legs. It charges each settlement after execution for its frame, deferred passes and
-actual lootbox outcome, plus a one-time first-settlement cost. Work starts only while
-budget remains, so the final settlement can cross the budget by at most one settlement.
-A settling call earns one work-pro-rated bounty; the craps leg runs only if no decimator
-entry settled. The walk idles during the RNG lock, the liveness trigger and game over.
+A bounded min-heap retains the best `min(100, ceil(N/10))` heads. Once all runs finish,
+5% of the pool is the first-place bonus; 95% is split among all actual winners, including
+first. First absorbs rounding dust and takes half its amount in whole half whale passes.
+Once an equal share buys a half pass, the other places alternate between ETH and half
+passes. The money that buys passes returns to the future pool once, at ranking. If every
+coin is tails, the whole reservation returns. Both moves use the pending buffer during a
+freeze.
 
-Each settled win credits half as claimable ETH and routes the remainder through the
-lootbox award. Whole half-passes are recorded in `whalePassClaims` for later redemption
-through `claimWhalePass`; remaining lootbox backing enters the pending future-pool buffer
-while frozen and the live future pool otherwise. There is no individual decimator claim
-entry point.
+The keeper leg receives at most 1,920 work units less prior box scanning, charges actual
+roll and heap work, and permits at most one bounded run to overshoot. Final ranking and
+credits use separate bounded calls. `settleDecimatorWinners` provides a permissionless,
+unrewarded progress path during RNG locks. Settlement stops at game over; the ending
+does not wait for the battle queue. Uncredited reservations remain in `claimablePool`
+until the final sweep releases them.
+
+The sealed pool is already reserved in `claimablePool`; per-winner credits do not add it
+again. The round's pool and payout cursor track assignment without a duplicate reserve counter.
 
 ### High-roller jackpot reserve
 

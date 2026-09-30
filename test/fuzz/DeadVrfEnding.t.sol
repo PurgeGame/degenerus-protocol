@@ -9,6 +9,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {DeadVrfSeeder} from "./helpers/DeadVrfSeeder.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -147,122 +148,6 @@ contract DeadVrfLivenessTest is Test {
         h.seedMiddayRequest(sent);
         assertTrue(h.vrfDead(), "a mid-day request past the deadman is dead");
         assertTrue(h.liveness(), "deterministic exit stays reachable");
-    }
-}
-
-/// @dev Etch overlay to seed an exact dead-VRF terminal state; every measured call still runs
-///      the production DegenerusGame runtime (restored after seeding).
-contract DeadVrfSeeder is DegenerusGame, BucketSeed {
-    function seedEarlyBirdPasses(uint256 halves) external { earlyBirdWhalePasses = halves; }
-    function pendingEarlyBirdPasses() external view returns (uint256) { return earlyBirdWhalePasses; }
-    function seedDeadStall(uint24 lvl) external {
-        uint24 day = _simulatedDayIndex();
-        purchaseStartDay = day - 10;
-        dailyIdx = day - 15;
-        level = lvl;
-        jackpotPhaseFlag = false;
-        lastPurchaseDay = false;
-        phaseTransitionActive = false;
-        rngLockedFlag = true;
-        rngWordCurrent = 0;
-        vrfRequestId = 777;
-        rngRequestTime = uint48(block.timestamp - 15 days) & ~uint48(1);
-        ticketsFullyProcessed = true;
-        prizePoolFrozen = false;
-    }
-
-    function seedCreated(uint24 lvl, uint8 trait, address player, uint256 n) external {
-        _seedBucket(lvl, trait, player, n);
-    }
-
-    function seedQueued(uint24 lvl, bool writeSide, address player, uint32 entries, uint8 rem)
-        external
-        returns (uint32 posPlusOne)
-    {
-        uint24 rk = writeSide ? _tqWriteKey(lvl) : _tqReadKey(lvl);
-        _seedQueued(rk, lvl, player, (uint80(entries) << 8) | uint80(rem));
-        posPlusOne = entryOwnerPosition[rk][player];
-    }
-
-    function seedFoil(uint24 lvl, uint24 resolveDay, address player) external returns (uint256 index) {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        uint256 ownerIdx = owners.length;
-        owners.push(EntryOwner(player, 0));
-        foilBuyers[resolveDay].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
-        index = foilBuyers[resolveDay].length - 1;
-        if (resolveDay > foilLastResolveDay) foilLastResolveDay = resolveDay;
-        if (foilDrainDay == 0 || foilDrainDay > resolveDay) foilDrainDay = resolveDay;
-    }
-
-    function deadState()
-        external
-        view
-        returns (uint256 pot, uint256 total, uint256 created, uint256 uncreated, uint256 traits, uint256 left)
-    {
-        return (deadPot, deadTotal, deadCreated, deadUncreated, deadTraitCount, deadUncreatedLeft);
-    }
-
-    function sealedDay() external view returns (uint24) {
-        return dailyIdx;
-    }
-
-    /// @dev Day `s` (30 days ago) is stuck in processing with its word delivered (and, if
-    ///      `applied`, already recorded); nothing has sealed since, so the deadman has fired.
-    function seedStuckDay(uint24 lvl, uint256 word, bool applied) external returns (uint24 s) {
-        uint24 day = _simulatedDayIndex();
-        s = day - 30;
-        purchaseStartDay = s - 5;
-        dailyIdx = s - 1;
-        level = lvl;
-        jackpotPhaseFlag = false;
-        lastPurchaseDay = false;
-        phaseTransitionActive = false;
-        rngLockedFlag = true;
-        rngWordCurrent = word;
-        vrfRequestId = 777;
-        rngRequestTime = uint48(block.timestamp - 30 days) & ~uint48(1);
-        rngWordByDay[s] = applied ? word : 0;
-        ticketsFullyProcessed = true;
-        prizePoolFrozen = false;
-        // The stuck request's reserved lootbox index, not yet worded.
-        uint48 idx = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, idx + 1);
-    }
-
-    function vrfDeadView() external view returns (bool) {
-        return _vrfDead();
-    }
-
-    /// @dev Past the purchase deadline at the start of a caught-up day with no word, VRF alive.
-    ///      A mid-day request committed the read side and its lootbox word has landed.
-    function seedDeadlineWithLandedCohort(uint24 lvl, uint256 boxWord) external {
-        uint24 day = _simulatedDayIndex();
-        purchaseStartDay = day - 31;
-        dailyIdx = day - 1;
-        level = lvl;
-        jackpotPhaseFlag = false;
-        lastPurchaseDay = false;
-        phaseTransitionActive = false;
-        rngLockedFlag = false;
-        rngWordCurrent = 0;
-        vrfRequestId = 0;
-        rngRequestTime = 0;
-        ticketsFullyProcessed = true;
-        prizePoolFrozen = false;
-        lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1] = boxWord;
-    }
-
-    function terminalQueues(uint24 lvl) external view returns (uint256 readLen, uint256 writeLen, uint256 swapped) {
-        return (
-            ticketQueue[_tqReadKey(lvl)].length,
-            ticketQueue[_tqWriteKey(lvl)].length,
-            _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK)
-        );
-    }
-
-    /// @dev Entries (and remainder) still owed at registry position `posPlusOne`.
-    function owedAt(uint24 lvl, uint32 posPlusOne) external view returns (uint256) {
-        return (_entryRecord(lvl, posPlusOne) >> 160) & ((uint256(1) << 40) - 1);
     }
 }
 

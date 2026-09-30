@@ -5,7 +5,7 @@
 // EV-neutrality via LootboxBernoulliTester direct-call is justified by D-275-HOIST-01:
 // the hoisted Bernoulli math is byte-identical between manual + auto-resolve branches,
 // so the v39 TST-WT EV-neutrality proof carries verbatim. Integration coverage of the
-// actual auto-resolve callers (the decimator settle walk + resolveRedemptionLootbox) lands
+// actual auto-resolve callers (Degenerette resolveLootboxDirect + resolveRedemptionLootbox) lands
 // in TST-LBX-AR-03 (silent cold-bust) and TST-LBX-AR-05 (rem-byte snapshot).
 //
 // Heavy-MC validation of the auto-resolve Bernoulli round-up at N=10K seeds per

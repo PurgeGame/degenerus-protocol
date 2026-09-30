@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+// Permanently skipped historical cases were retired in the test review.
+// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -281,79 +284,6 @@ contract OpenWalkCompositionGas is DeployProtocol {
         assertLt(gasUsed, 200_000, "the drained-ring NoWork probe is O(1) (the counter gate, not a ring scan)");
     }
 
-    // =========================================================================
-    // (5) Worst surviving mix: pending box behind a full skip wall + human backlog
-    // =========================================================================
-
-    /// @notice SKIPPED post box-order-migration: this fixture parks ONE pending afking box behind
-    ///         a skip wall specifically so the crank's afking leg materializes a real open
-    ///         (`opened > 0`) in the measured call. mineFlip's open leg now hands the human sweep a
-    ///         nonzero budget ONLY when the afking leg opened NOTHING (`opened == 0`), so a call
-    ///         that opens the wall box no longer stacks a human sweep in the same tx — the "skip
-    ///         wall crossing + a full human sweep in one call" worst case this test measured is
-    ///         structurally unreachable now (a deliberate gas-safety change, not a regression).
-    ///         See the file header's `_autoOpen` note and the vm.skip reason below.
-    function testWorstMixSkipWallPlusHumanSweepComposition() public {
-        string memory prefix = "wmix_";
-        _setupFundedSubs(RING_1000_NEW_SUBS, prefix, 50 ether, false);
-        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w1"))) | 1);
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "c1"))) | 1);
-        uint256 ringSize = _subscriberCount();
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain1"))));
-        game.openBoxes(ringSize + 1000);
-        require(_countPendingAfking() == 0, "fixture: ring fully drained pre-human-buys");
-
-        for (uint256 i; i < HUMAN_BUYERS_FOR_FULL_SWEEP; ++i) {
-            address buyer = makeAddr(string(abi.encodePacked(prefix, "human_", _u(i))));
-            vm.deal(buyer, 1 ether);
-            vm.prank(buyer);
-            game.purchase{value: LOOTBOX_MIN}(buyer, 0, BoxOrderLib.boCustom(LOOTBOX_MIN), bytes32(0), MintPaymentKind.DirectEth, false);
-        }
-
-        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w2"))) | 1);
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "c2"))) | 1);
-        require(!game.advanceDue(), "fixture: clean after the second stage");
-        uint256 pendingAfterRestamp = _countPendingAfking();
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain2"))));
-        game.openBoxes(pendingAfterRestamp + 2);
-        require(_countPendingAfking() == 0, "fixture: ring fully drained again");
-
-        // SKIP (box-order migration): GameAfkingModule's mineFlip open leg now gates the human
-        // sweep on `opened == 0` for the AFKING leg (GameAfkingModule.sol, the
-        // `humanSteps = opened == 0 ? ... : 0` branch) — once the afking leg materializes ANY
-        // real box (as this fixture's parked wall-box forces), the human sweep gets ZERO budget
-        // and does not run in the same call at all. The "skip-wall crossing + a stacked human
-        // sweep in one tx" composition this test measured is therefore structurally unreachable
-        // post-migration (a deliberate gas-safety change, not a regression — see the "legs stop
-        // sharing a call" comment at the mineFlip open leg). The opened==0 (scan-only, no afking
-        // open) composition is already covered by testDrainedScanPlusHumanSweepComposition.
-        vm.skip(true, "box-order migration: human sweep now gates on afking opened==0; this fixture forces an afking open, so the stacked composition it measured no longer occurs in one tx");
-
-        // Park ONE pending box behind a full skip wall: re-arm the day markers of the first
-        // FUNDED sub (ring indices 0-1 are the unfunded deploy subs, never stamped; index 2
-        // is the first grounded fixture sub), point the open cursor just past it, and set
-        // the pending counter to 1 so the gate opens — the walk must cross ~997 skips and
-        // wrap before it can afford the open.
-        address wallBox = _subscriberAt(2);
-        uint32 stampDay = _lastBoughtDayOf(wallBox);
-        require(rngWordByDay(stampDay) != 0, "fixture: the wall box's stamp-day word landed");
-        _pokeSubOpenedDay(wallBox, stampDay - 1);
-        _pokeOpenCursorAndPendingCount(3, 1);
-
-        _coolProtocol();
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "measure"))));
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        uint256 gasUsed = gasBefore - gasleft();
-
-        // Non-vacuity: the walk really crossed the wall and materialized the parked box.
-        assertEq(_lastOpenedDayOf(wallBox), stampDay, "the skip-walled box was opened");
-
-        emit log_named_uint("worst_mix_skip_wall_plus_human_sweep_gas", gasUsed);
-        emit log_named_uint("intrinsic_tx_gas_context", INTRINSIC_TX_GAS);
-
-        assertLt(gasUsed + INTRINSIC_TX_GAS, 10_000_000, "the worst weighted mix stays under the 10M normal-path target");
-    }
 
     // =========================================================================
     // (4) Afking open marginal (dense ring, ready boxes)

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+// Permanently skipped historical cases were retired in the test review.
+// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
+
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -382,33 +385,6 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertTrue(sawNonZeroFund, "afkingSnapshot non-vacuity: at least one player held a non-zero afking funding");
     }
 
-    /// @notice The STAGE-driven autoBuy produces the expected buy outcome: a funded LOOTBOX-mode sub
-    ///         processed by the required-path STAGE (a new-day advanceGame) is stamped bought-today
-    ///         (lastAutoBoughtDay == the process day). In v55 the per-sub buy folded into the STAGE
-    ///         (Δ4 — the standalone `afKing.autoBuy` that consumed `keeperSnapshot` is GONE), so the
-    ///         identical-outcome claim is reframed onto the STAGE: a funded sub buys exactly once.
-    function testStageDrivenAutoBuyStampsSubBoughtToday() public {
-        vm.skip(true, "357-00b D-12 supersession: asserts the STAGE-driven auto-buy stamps the sub bought-today on an ungrounded subscribe; the grounded subscribe already stamps at subscribe; re-proven by V56AfkingGasMarginal + V56SubHardening (D-12 funded grounding)");
-        // A funded LOOTBOX-mode sub (deity-passed so it survives any level crossing — set-mutation/
-        // pass-gating is orthogonal here). The STAGE runs the buy in advanceGame's pre-RNG window.
-        address sub = makeAddr("snap_autobuy_sub");
-        _grantDeityPass(sub);
-        vm.prank(sub);
-        // (player=self, drainCredit=false, lootbox mode, dailyQty=1, reinvestPct=0, fundingSource=self)
-        game.subscribe(address(0), false, false, 1, address(0));
-        vm.prank(sub);
-        game.setOperatorApproval(address(game), true);
-        _fundAfking(sub, 5 ether);
-
-        uint32 boughtBefore = _lastAutoBoughtDayOf(sub);
-
-        // Drive the STAGE for a new day (the buy leg that v55 folded into advanceGame).
-        _runStageNewDay(0x5AB0);
-
-        // Outcome: the sub was bought this STAGE (its lastAutoBoughtDay advanced to the process day).
-        uint32 boughtAfter = _lastAutoBoughtDayOf(sub);
-        assertGt(boughtAfter, boughtBefore, "the STAGE-driven buy stamped the sub bought-today (identical outcome)");
-    }
 
     /// @notice GASOPT-01 (per-entry owed drain) same-results: a MULTI-PLAYER far-future ticket backlog
     ///         drains every player's owed to ZERO through the advance-driven private

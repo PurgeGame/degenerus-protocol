@@ -28,9 +28,8 @@ pragma solidity 0.8.34;
  * @title ActivityCurveLib
  * @notice Pure activity-score reward curves shared across the Degenerus contracts.
  * @dev All functions are internal and pure, so the compiler inlines them with no
- *      runtime call boundary. Centralizing the math keeps the decimator multiplier and
- *      bucket ladder identical between FLIP and the decimator module, and gives the
- *      manual mint's century bonus one home — one source of truth.
+ *      runtime call boundary. Shared curves price battle chips, WWXRP rewards,
+ *      manual century mints and foil boosts.
  *
  *      Value-curve shape: a steep early ramp to vA at the seg-A knee K, a shallow middle
  *      leg to vB at ACTIVITY_SEG_B_KNEE_POINTS, then a long near-flat crawl to MAX at
@@ -60,7 +59,7 @@ library ActivityCurveLib {
     uint256 internal constant ACTIVITY_EFFECTIVE_CAP_POINTS = 30_000;
 
     // -------------------------------------------------------------------------
-    // Decimator / terminal-dec burn multiplier (bps; 10000 = 1x)
+    // Legacy activity curve retained by WWXRP (bps; 10000 = 1x)
     // -------------------------------------------------------------------------
 
     uint256 internal constant MULT_MIN_BPS = 10_000; // 1.0x at score 0 (no-boost gate)
@@ -69,7 +68,7 @@ library ActivityCurveLib {
     uint256 internal constant MULT_VB_BPS = 17_676; // ~1.768x at the seg-B knee (98%)
     uint256 internal constant MULT_MAX_BPS = 17_833; // 1.7833x at the effective cap
 
-    /// @notice Decimator burn multiplier in bps from a whole-point activity score.
+    /// @notice Original activity multiplier retained for WWXRP reward scaling.
     function decMultBps(uint256 score) internal pure returns (uint256) {
         if (score == 0) return MULT_MIN_BPS;
         if (score <= MULT_K_POINTS) {
@@ -91,6 +90,19 @@ library ActivityCurveLib {
             MULT_VB_BPS +
             ((score - ACTIVITY_SEG_B_KNEE_POINTS) * (MULT_MAX_BPS - MULT_VB_BPS)) /
             (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
+    }
+
+    /// @notice Battle-only degen multiplier: keep the early knee, reach 1.9x at 500,
+    ///         then 2x at 30,000. WWXRP retains decMultBps above.
+    function decBattleMultBps(uint256 score) internal pure returns (uint256) {
+        if (score <= MULT_K_POINTS) return MULT_MIN_BPS + score * (MULT_VA_BPS - MULT_MIN_BPS) / MULT_K_POINTS;
+        if (score <= ACTIVITY_SEG_B_KNEE_POINTS) {
+            return MULT_VA_BPS + (score - MULT_K_POINTS) * (19_000 - MULT_VA_BPS)
+                / (ACTIVITY_SEG_B_KNEE_POINTS - MULT_K_POINTS);
+        }
+        if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return 20_000;
+        return 19_000 + (score - ACTIVITY_SEG_B_KNEE_POINTS) * 1_000
+            / (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
     // -------------------------------------------------------------------------
@@ -162,63 +174,4 @@ library ActivityCurveLib {
             (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
-    // -------------------------------------------------------------------------
-    // Decimator bucket ladder (lower bucket = better odds)
-    // -------------------------------------------------------------------------
-
-    /// @dev Bucket at score 0 (worst odds).
-    uint8 internal constant BUCKET_BASE = 12;
-
-    // Absolute score to REACH each bucket. decBucket() and minScoreForBucket() are
-    // exact inverses of this table — keep the two in lockstep when tuning.
-    uint16 internal constant BUCKET_T11 = 10;
-    uint16 internal constant BUCKET_T10 = 30;
-    uint16 internal constant BUCKET_T9 = 55;
-    uint16 internal constant BUCKET_T8 = 85;
-    uint16 internal constant BUCKET_T7 = 120;
-    uint16 internal constant BUCKET_T6 = 180;
-    uint16 internal constant BUCKET_T5 = 250;
-    uint16 internal constant BUCKET_T4 = 300;
-    uint16 internal constant BUCKET_T3 = 500;
-    uint16 internal constant BUCKET_T2 = 1_000;
-
-    /// @notice Decimator bucket from an activity score, clamped up to `minBucket`.
-    /// @param score The activity score to bucket.
-    /// @param minBucket Per-path floor (5 on normal levels, 2 on century/terminal).
-    /// @return bucket The decimator bucket (2-11, or `BUCKET_BASE` floored to `minBucket`).
-    function decBucket(
-        uint256 score,
-        uint8 minBucket
-    ) internal pure returns (uint8 bucket) {
-        if (score >= BUCKET_T2) bucket = 2;
-        else if (score >= BUCKET_T3) bucket = 3;
-        else if (score >= BUCKET_T4) bucket = 4;
-        else if (score >= BUCKET_T5) bucket = 5;
-        else if (score >= BUCKET_T6) bucket = 6;
-        else if (score >= BUCKET_T7) bucket = 7;
-        else if (score >= BUCKET_T8) bucket = 8;
-        else if (score >= BUCKET_T9) bucket = 9;
-        else if (score >= BUCKET_T10) bucket = 10;
-        else if (score >= BUCKET_T11) bucket = 11;
-        else bucket = BUCKET_BASE;
-        if (bucket < minBucket) bucket = minBucket;
-    }
-
-    /// @notice Minimum activity score that lands a burn in `bucket` (the pre-floor
-    ///         inverse of decBucket). Seals the lootbox EV score at decimator-claim time.
-    /// @dev Defined over bucket ∈ [2,11]; bucket >= BUCKET_BASE returns 0. decBucket never
-    ///      assigns 0 or 1, so those inputs fall through to the bucket-2 threshold.
-    function minScoreForBucket(uint8 bucket) internal pure returns (uint16) {
-        if (bucket >= BUCKET_BASE) return 0;
-        if (bucket == 11) return BUCKET_T11;
-        if (bucket == 10) return BUCKET_T10;
-        if (bucket == 9) return BUCKET_T9;
-        if (bucket == 8) return BUCKET_T8;
-        if (bucket == 7) return BUCKET_T7;
-        if (bucket == 6) return BUCKET_T6;
-        if (bucket == 5) return BUCKET_T5;
-        if (bucket == 4) return BUCKET_T4;
-        if (bucket == 3) return BUCKET_T3;
-        return BUCKET_T2; // bucket <= 2
-    }
 }

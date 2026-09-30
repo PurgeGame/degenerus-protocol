@@ -7,7 +7,8 @@ import {Test} from "forge-std/Test.sol";
 /// @notice Mirrors the claim-time split in sDGNRS._claimRedemptionFor: 50/50
 ///         direct/lootbox during a live game, with the dust-lootbox drop — when the lootbox half
 ///         lands below the 0.01 ETH floor it is forfeited to sDGNRS's claimable instead of paid out.
-///         The full rolled amount always leaves the contract across the three legs. Fuzzes all inputs.
+///         This is a local arithmetic model, not execution of the redemption contract.
+///         Contract-backed coverage lives in StakedStonkRedemption and RedemptionAccounting.
 /// @dev Run: forge test --match-contract RedemptionSplitTest -vv
 contract RedemptionSplitTest is Test {
     uint256 constant MAX_DAILY_REDEMPTION_EV = 160 ether;

@@ -417,11 +417,14 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("unwrapTo VRF stall guard", function () {
     it("unwrapTo works normally (rngLocked=false)", async function () {
-      const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("100");
 
+      const wrapperBefore = await dgnrs.balanceOf(deployer.address);
+      const stakedBefore = await sdgnrs.balanceOf(alice.address);
       await dgnrs.connect(deployer).unwrapTo(alice.address, amount);
-      // Should succeed — rngLockedFlag is false
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(wrapperBefore - amount);
+      expect(await sdgnrs.balanceOf(alice.address)).to.equal(stakedBefore + amount);
     });
 
     it("unwrapTo reverts when rngLocked is true", async function () {

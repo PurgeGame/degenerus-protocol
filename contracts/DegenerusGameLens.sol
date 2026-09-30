@@ -44,7 +44,7 @@ interface IDegenerusGameLensSource {
 ///         the game's `extsload` raw-slot reader. Decodes the packed records that have
 ///         no per-field getters on the game (EIP-170 headroom lives here for free):
 ///         the full afking Sub record, the per-level affiliate DGNRS pool, decimator
-///         entries with their subbucket aggregates, foil-pack
+///         battle entries, sealed rounds and eligible winner heaps, foil-pack
 ///         records, and a per-component activity-score breakdown.
 ///
 ///         Deployment-decoupled periphery: not referenced by ContractAddresses, takes
@@ -198,13 +198,20 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 cursePoints; // subtracted, floored at 0, before the hard cap
     }
 
-    /// @notice A player's decimator entry in their most recent window (decPointer + decEntry).
+    /// @notice The permanent accumulated entry for one wallet and event.
     struct DecBurnEntry {
-        uint192 burn; // effective weight, wei
-        uint8 bucket; // 0 = the player's most recent window is not this level
-        uint8 subBucket;
-        uint32 position; // in the (lvl, bucket, subBucket) list
-        bool claimed; // settled (the entry is empty)
+        uint64 entryId;
+        address owner;
+        uint256 stack;
+        uint32 chips; // the chosen board, in the normal battles' thirty-bit encoding
+    }
+
+    /// @notice A retained heads result: the exact 512-bit score and its full ordering key
+    ///         (192-bit random tiebreak above the 64-bit entry id).
+    struct DecWinner {
+        uint256 high;
+        uint256 low;
+        uint256 key;
     }
 
     /// @notice A player's foil-pack record for a cycle level (foilRecord[lvl][player]).
@@ -491,94 +498,87 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                          DECIMATOR                                   |
       +======================================================================+*/
 
-    /// @notice A player's decimator entry for a level, readable while that level is the player's
-    ///         most recent window (the pointer is reused each window; DecBurnRecorded carries
-    ///         every entry's position for older levels).
-    function decBurnOf(
-        address game,
-        uint24 lvl,
-        address player
-    ) external view returns (DecBurnEntry memory e) {
-        uint256 base;
+    function decBurnOf(address game, uint24 lvl, address player)
+        external view returns (DecBurnEntry memory e)
+    {
+        uint256 packed = _decEntryWord(game, lvl, player);
+        e.entryId = uint64(packed);
+        if (e.entryId == 0) return e;
+        e.owner = player;
+        e.stack = packed >> 96;
+        e.chips = uint32(packed >> 64);
+    }
+
+    function decEntryAt(address game, uint24 lvl, uint64 id)
+        public view returns (address owner, uint256 stack, uint32 chips)
+    {
+        if (id == 0) return (address(0), 0, 0);
+        uint256 root;
+        assembly { root := decBattleOwners.slot }
+        owner = address(uint160(_sload(game, _mapSlot((uint256(lvl) << 64) | id, root))));
+        if (owner == address(0)) return (owner, 0, 0);
+        uint256 packed = _decEntryWord(game, lvl, owner);
+        return (owner, packed >> 96, uint32(packed >> 64));
+    }
+
+    function _decEntryWord(address game, uint24 lvl, address player) private view returns (uint256) {
+        uint256 root;
+        assembly { root := decBattleEntries.slot }
+        return _sload(game, _mapSlot(player, uint256(_mapSlot(uint256(lvl), root))));
+    }
+
+    function decBattleRoundOf(address game, uint24 lvl)
+        public view returns (DecBattleRound memory r)
+    {
+        uint256 root;
+        assembly { root := decBattleRounds.slot }
+        uint256 slot = uint256(_mapSlot(uint256(lvl), root));
+        uint256 word = _sload(game, bytes32(slot));
+        r.poolWei = uint128(word);
+        r.count = uint64(word >> 128);
+        r.openedDay = uint24(word >> 192);
+        r.phase = uint8(word >> 216);
+        r.capacity = uint8(word >> 224);
+        r.winners = uint8(word >> 232);
+        r.paid = uint8(word >> 240);
+        r.rngWord = _sload(game, bytes32(slot + 1));
+        word = _sload(game, bytes32(slot + 2));
+        r.cursor = uint64(word);
+        r.champion = uint64(word >> 64);
+        r.next = uint24(word >> 128);
+    }
+
+    /// @notice A retained HEADS entry. Heap order is NOT finish order; champion is in the round.
+    /// @dev Absolute peak is (high * 2**256 + low) / (3000 ether), without overflow or truncation.
+    ///      One leaderboard is reused round after round, so it is readable only while `lvl` is at
+    ///      the head of the settlement queue; finished rounds are in their DecimatorRanked and
+    ///      DecimatorClaimed events.
+    function decWinnerAt(address game, uint24 lvl, uint8 index)
+        external view returns (DecWinner memory node)
+    {
+        DecBattleRound memory r = decBattleRoundOf(game, lvl);
+        bytes32 queueSlot;
+        uint256 root;
         assembly {
-            base := decPointer.slot
+            queueSlot := decBattleQueue.slot
+            root := decBattleHeap.slot
         }
-        uint256 p = _sload(game, _mapSlot(player, base));
-        if (uint24(p) != lvl) return e;
-        e.bucket = uint8(p >> 24);
-        e.subBucket = uint8(p >> 32);
-        e.position = uint32(p >> 40);
-        (, uint256 weightWei) = _decEntryAt(game, lvl, e.bucket, e.subBucket, e.position);
-        e.burn = uint192(weightWei);
-        e.claimed = weightWei == 0;
+        if (index >= r.winners || uint24(_sload(game, queueSlot)) != lvl) revert E();
+        uint256 slot = uint256(_mapSlot(uint256(index), root));
+        node.low = _sload(game, bytes32(slot));
+        uint256 head = _sload(game, bytes32(slot + 1));
+        node.high = head >> 64;
+        node.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), r.rngWord, lvl, uint64(head))))
+            & ~uint256(type(uint64).max)) | uint64(head);
     }
 
-    /// @notice One decimator list entry: its owner and effective weight in wei. A zero weight is
-    ///         settled, migrated away, or past the list's end.
-    function decEntryAt(
-        address game,
-        uint24 lvl,
-        uint8 denom,
-        uint8 subBucket,
-        uint32 position
-    ) external view returns (address owner, uint256 weightWei) {
-        return _decEntryAt(game, lvl, denom, subBucket, position);
-    }
-
-    function _decEntryAt(
-        address game,
-        uint24 lvl,
-        uint8 denom,
-        uint8 subBucket,
-        uint32 position
-    ) private view returns (address owner, uint256 weightWei) {
-        uint256 base;
-        assembly {
-            base := decEntry.slot
-        }
-        uint256 key = (uint256(lvl) << 48) |
-            (uint256(denom) << 40) |
-            (uint256(subBucket) << 32) |
-            uint256(position);
-        uint256 w = _sload(game, _mapSlot(key, base));
-        owner = address(uint160(w));
-        weightWei = uint256(uint64(w >> 160)) * 1e15;
-    }
-
-    /// @notice Aggregated decimator burn for a level/denominator/subbucket — the
-    ///         pro-rata denominator a claim divides by — and the length of its entry list.
-    function decBucketTotal(
-        address game,
-        uint24 lvl,
-        uint8 denom,
-        uint8 subBucket
-    ) external view returns (uint256 totalBurn, uint32 length) {
-        // Only live denominators and their subbuckets are valid; reject storage aliases.
-        if (denom < 2 || denom > 12 || subBucket >= denom) revert E();
-        uint256 base;
-        assembly {
-            base := decBucketBurnTotal.slot
-        }
-        // mapping(uint24 => DecSubbucket[13][13]): [denom] strides 13 slots, [subBucket] one.
-        uint256 arrBase = uint256(_mapSlot(uint256(lvl), base));
-        uint256 w = _sload(game, bytes32(arrBase + uint256(denom) * 13 + subBucket));
-        totalBurn = uint192(w);
-        length = uint32(w >> 192);
-    }
-
-    /// @notice Where mineFlip's decimator leg resumes: the level, denominator and position of
-    ///         the next winning entry it visits (all zero before its first step).
-    function decSettleCursorOf(
-        address game
-    ) external view returns (uint24 lvl, uint8 denom, uint32 position) {
+    function decSettleCursorOf(address game)
+        external view returns (uint24 head, uint24 tail)
+    {
         bytes32 slot;
-        assembly {
-            slot := decSettleCursor.slot
-        }
-        uint256 w = _sload(game, slot);
-        lvl = uint24(w);
-        denom = uint8(w >> 24);
-        position = uint32(w >> 32);
+        assembly { slot := decBattleQueue.slot }
+        uint256 word = _sload(game, slot);
+        return (uint24(word), uint24(word >> 24));
     }
 
     /// @notice Find the first matching owner index in a bounded page of a trait bucket.

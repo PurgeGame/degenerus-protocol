@@ -74,7 +74,14 @@ FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
 CI runs the other six Foundry groups with isolation disabled, at most ten roots
 per batch and one thread. The default fuzz campaign uses 1,000 runs; default
 invariants use 256 runs at depth 128, with per-suite overrides visible in source.
-`npm test` selects fewer files than the maintained Hardhat runner.
+`npm test` uses the maintained Hardhat runner, including all statistical files.
+Discovery fails if a JavaScript test is outside the configured directories.
+`npm run agent:test` runs the separate local agent unit suite when the ignored
+`agent/` working tree is present; it is not part of the public checkout. Focused `npm run test:*`
+commands use raw Hardhat and therefore bypass runner-level pin restoration.
+
+See [the test usefulness review](TEST_REVIEW.md) for retired checks, repaired
+fixtures and the distinction between model, structural and runtime coverage.
 
 Gas expectations, including transaction intrinsic gas, are <=10M for ordinary
 calls, <=11M for unusual calls and <=11.5M for extreme cases. No transaction may
