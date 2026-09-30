@@ -279,8 +279,8 @@ contract JackpotBattleTest is CrapsPins {
     function testFuzz_JackpotRunStopsInsideItsRollCeiling(uint256 word, bool detached, bool latched) public view {
         uint256 bound = uint256(day) * 8 + (detached ? 7 : 6);
         Craps.SlipResult memory r = _endlessRun(bound, latched ? 5e39 : 5e40, word);
-        assertGe(r.totalRolls, 1_000, "stopped short of the budget");
-        assertLe(r.totalRolls, 1_511, "passed the budget plus one full hand");
+        assertGe(r.totalRolls, 600, "stopped short of the budget");
+        assertLe(r.totalRolls, 1_111, "passed the budget plus one full hand");
         if (latched) {
             assertEq(uint8(r.stop), uint8(Craps.SlipStop.Goal), "latched run must keep its Goal");
             assertGe(r.bankrollOut, 5e39, "reserve breached");
@@ -297,8 +297,8 @@ contract JackpotBattleTest is CrapsPins {
     ) public view {
         uint256 bound = custom ? (uint256(1) << 40) + word % 1000 : uint256(day) * 8 + 1 + period % 5;
         Craps.SlipResult memory r = _endlessRun(bound, latched ? 5e39 : 5e40, word);
-        assertGe(r.totalRolls, 1_000, "stopped short of the shared budget");
-        assertLe(r.totalRolls, 1_511, "passed the shared ceiling");
+        assertGe(r.totalRolls, 600, "stopped short of the shared budget");
+        assertLe(r.totalRolls, 1_111, "passed the shared ceiling");
         assertEq(uint8(r.stop), uint8(latched ? Craps.SlipStop.Goal : Craps.SlipStop.Bust));
         if (latched) assertGe(r.bankrollIn, 5e39, "latched goal lost its reserve");
         else assertEq(r.bankrollIn, 0, "a pre-goal bound paid a bust");

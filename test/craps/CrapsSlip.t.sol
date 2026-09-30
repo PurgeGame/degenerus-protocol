@@ -261,8 +261,7 @@ contract CrapsSlipTest is CrapsPins {
         bytes32 seed = craps.seedFor(idx);
         bank = r.bankrollIn;
         for (uint256 h = 0; h < r.ledger.length; ++h) {
-            uint256 q = 1 << (h / craps.ESC_HANDS());
-            if (q > 0xFFFF) q = 0xFFFF;
+            uint256 q = craps.escOf(h);
             uint256 need = q * stake;
             if (bank < need) {
                 assertGe(bank * 2, need, "played a hand below the second-chance floor");
@@ -276,8 +275,7 @@ contract CrapsSlipTest is CrapsPins {
             r.stop == CrapsOracle.SlipStop.Bust && r.handsPlayed < cap
                 && r.totalRolls < craps.SLIP_ROLL_BUDGET()
         ) {
-            uint256 q = 1 << (r.ledger.length / craps.ESC_HANDS());
-            if (q > 0xFFFF) q = 0xFFFF;
+            uint256 q = craps.escOf(r.ledger.length);
             if (bank * 2 >= q * stake) {
                 // Not a hard bust — the run was in the second-chance band and the coin lost.
                 assertTrue(!_survivalCoin(seed, r.ledger.length, player), "busted on a surviving coin");
@@ -645,7 +643,7 @@ contract CrapsSlipTest is CrapsPins {
             assertEq(r.unitsPlayed, units, "units != sum of mandatory multipliers");
 
             if (r.stop == CrapsOracle.SlipStop.Bust) {
-                uint256 due = uint256(UW) * (uint256(1) << (r.handsPlayed / craps.ESC_HANDS()));
+                uint256 due = uint256(UW) * craps.escOf(r.handsPlayed);
                 assertLt(r.bankrollOut, due, "bust with the mandatory round still affordable");
                 sawBust = true;
             } else if (r.stop == CrapsOracle.SlipStop.Goal) {
@@ -680,8 +678,7 @@ contract CrapsSlipTest is CrapsPins {
             // engine may never play one that opened below half the round.
             uint256 bank = r.bankrollIn;
             for (uint256 h = 0; h < r.ledger.length; ++h) {
-                uint256 q = 1 << (h / craps.ESC_HANDS());
-                if (q > 0xFFFF) q = 0xFFFF;
+                uint256 q = craps.escOf(h);
                 uint256 need = q * stake;
                 if (bank < need) {
                     assertGe(bank * 2, need, "a coin fired below half a round");
@@ -693,8 +690,7 @@ contract CrapsSlipTest is CrapsPins {
             }
             // A second-chance bust is the stop round in the band with a lost coin — and it zeroes.
             if (r.stop == CrapsOracle.SlipStop.Bust) {
-                uint256 q = 1 << (r.ledger.length / craps.ESC_HANDS());
-                if (q > 0xFFFF) q = 0xFFFF;
+                uint256 q = craps.escOf(r.ledger.length);
                 if (bank * 2 >= q * stake) {
                     assertTrue(!_survivalCoin(seed, r.ledger.length, address(0)), "busted on a surviving coin");
                     assertEq(r.bankrollOut, 0, "a second-chance bust kept money");

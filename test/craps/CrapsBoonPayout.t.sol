@@ -146,7 +146,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
     ///      word, because seats are seeded individually and two slips would be two different runs.
     ///      Sweeps seeds until it has both a paying run and a busted one, so the pair covers the
     ///      credit case and the "a bust stays a bust" case on real settlements. The sweep is WIDE
-    ///      because the escalator doubles every three shooters: busts are the common outcome and
+    ///      because the escalator doubles every few shooters: busts are the common outcome and
     ///      a paying run at this depth takes a search.
     function test_theBoonLiftsPaidByExactlyItsBonusAndNeverTouchesWon() public {
         uint256 shift = craps.BET_BOON_SHIFT();
@@ -376,7 +376,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
     ///      Each leg runs twice off one snapshot: once with the boon and once with the slice
     ///      cleared, so the comparison is the SAME run rather than two different ones.
     ///
-    ///      THE DICE ARE SEARCHED, NOT THE TICKET. The escalator doubles every three shooters, so
+    ///      THE DICE ARE SEARCHED, NOT THE TICKET. The escalator keeps doubling the wager, so
     ///      most words bust every window of the day and a day that busts everywhere proves nothing
     ///      about a lift. The ticket and its terms are held fixed and the settlement word is swept
     ///      until TWO DISTINCT windows have been caught paying — which is the whole claim, because

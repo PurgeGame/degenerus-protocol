@@ -362,7 +362,7 @@ contract CrapsEconomicsTest is CrapsPins {
         //
         // The seven chips carry no edge — asserted to the wei above — so all of that retention is
         // the THREE THROWN chips, multiplied by how much action the run puts through. That is the
-        // escalator's doing: a wager that doubles every three shooters forces a run to move many
+        // escalator's doing: a wager that doubles every few shooters forces a run to move many
         // times its own bankroll across the table, and a per-round edge measured against the
         // action is a large number measured against the bankroll. The old five-shooter run turned
         // over far less and its raw result cleared the burn, which is why the deletion used to be

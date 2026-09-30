@@ -103,16 +103,17 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         levelDgnrsPacked[lvl] = uint256(allocation) | (uint256(claimed) << 128);
     }
 
-    function setDecEntry(uint24 lvl, uint64 id, address owner, uint160 stack, uint32 chips) external {
-        decBattleOwners[(uint256(lvl) << 64) | id] = owner;
-        decBattleEntries[lvl][owner] = (uint256(stack) << 96) | (uint256(chips) << 64) | id;
+    function setDecEntry(uint24 lvl, uint64 id, address owner, uint64 stackFlip, uint32 chips) external {
+        decBattlePlayers[owner] = (uint256(lvl) << 64) | id;
+        decBattleEntries[(uint256(lvl) << 64) | id] =
+            (uint256(stackFlip) << 190) | (uint256(chips) << 160) | uint256(uint160(owner));
     }
 
     function setDecRound(uint24 lvl, DecBattleRound calldata round) external {
         decBattleRounds[lvl] = round;
     }
 
-    function setDecNode(uint8 index, DecBattleNode calldata node) external {
+    function setDecNode(uint8 index, uint256 node) external {
         decBattleHeap[index] = node;
     }
 
@@ -324,15 +325,21 @@ contract LensParityTest is Test {
         assertEq(c, claimed, "claimed");
     }
 
-    function testFuzz_decBurnOf(uint24 lvl, uint64 id, address p, uint160 stack, uint32 chips) public {
+    function testFuzz_decBurnOf(uint24 lvl, uint64 id, address p, uint64 stackFlip, uint32 chips) public {
         id = uint64(bound(id, 1, type(uint64).max));
         vm.assume(p != address(0));
         chips = uint32(bound(chips, 0, 0x3FFFFFFF));
-        harness.setDecEntry(lvl, id, p, stack, chips);
+        harness.setDecEntry(lvl, id, p, stackFlip, chips);
         DegenerusGameLens.DecBurnEntry memory e = lens.decBurnOf(game, lvl, p);
+        uint256 stack = uint256(stackFlip) * 1 ether;
         assertEq(e.entryId, id); assertEq(e.owner, p); assertEq(e.stack, stack); assertEq(e.chips, chips);
         (address o, uint256 s, uint32 c) = lens.decEntryAt(game, lvl, id);
         assertEq(o, p); assertEq(s, stack); assertEq(c, chips);
+        // The wallet slot names only its latest event; the earlier entry still reads by id.
+        harness.setDecEntry(lvl ^ 1, 1, p, 1, 0);
+        assertEq(lens.decBurnOf(game, lvl, p).entryId, 0);
+        (o,,) = lens.decEntryAt(game, lvl, id);
+        assertEq(o, p);
     }
 
     function testFuzz_decRound(uint24 lvl, DegenerusGameLens.DecBattleRound memory r) public {
@@ -340,20 +347,20 @@ contract LensParityTest is Test {
         assertEq(abi.encode(lens.decBattleRoundOf(game, lvl)), abi.encode(r));
     }
 
-    function testFuzz_decWinner(uint24 lvl, uint8 index, uint256 word, uint256 low, uint192 high, uint64 id) public {
+    function testFuzz_decWinner(uint24 lvl, uint8 index, uint256 word, uint192 score, uint64 id) public {
         vm.assume(lvl != 0);
         index = uint8(bound(index, 0, 99));
         DegenerusGameLens.DecBattleRound memory r;
         r.winners = index + 1;
         r.rngWord = word;
         harness.setDecRound(lvl, r);
-        harness.setDecNode(index, DegenerusGameStorage.DecBattleNode(low, (uint256(high) << 64) | id));
+        harness.setDecNode(index, (uint256(score) << 64) | id);
         // The shared leaderboard answers only for the round at the head of the queue.
         harness.setDecQueue(lvl ^ 1, lvl ^ 1);
         vm.expectRevert(); lens.decWinnerAt(game, lvl, index);
         harness.setDecQueue(lvl, lvl);
         DegenerusGameLens.DecWinner memory w = lens.decWinnerAt(game, lvl, index);
-        assertEq(w.high, high); assertEq(w.low, low);
+        assertEq(w.score, score);
         uint256 tie = uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), word, lvl, id)));
         assertEq(w.key, (tie & ~uint256(type(uint64).max)) | id);
         vm.expectRevert(); lens.decWinnerAt(game, lvl, index + 1);

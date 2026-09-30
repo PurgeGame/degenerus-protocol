@@ -53,8 +53,8 @@ contract DecimatorBattleGasTest is Test {
                 uint256 used = gasBefore - gasleft();
                 assertGt(work, 0);
                 assertTrue(moved);
-                // The 1,920-unit clamp plus at most one item past it (a bounded run is <= 126).
-                assertLe(units, 1920 + 126, "bounded single-run budget overshoot");
+                // The 2,500-unit clamp plus at most one item past it (a bounded run is <= 108).
+                assertLe(units, 2500 + 108, "bounded single-run budget overshoot");
                 assertLe(used * 10, units * 4700 * 9, "every call within 90% of its charge");
                 assertLt(used, 10_000_000, "decimator keeper leg gas ceiling");
                 if (used > peakGas) peakGas = used;

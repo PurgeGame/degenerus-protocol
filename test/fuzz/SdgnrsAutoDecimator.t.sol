@@ -49,14 +49,16 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         lastPurchaseDay = false;
     }
 
-    function entryFor(uint24 lvl, address owner) external view returns (uint64 id, uint256 stack) {
-        uint256 packed = decBattleEntries[lvl][owner];
-        return (uint64(packed), packed >> 96);
+    /// @dev The wallet's entry for `lvl` (zero if its latest entry is another event); stack in wei.
+    function entryFor(uint24 lvl, address owner) public view returns (uint64 id, uint256 stack) {
+        uint256 latest = decBattlePlayers[owner];
+        if (uint24(latest >> 64) != lvl) return (0, 0);
+        id = uint64(latest);
+        stack = (decBattleEntries[(uint256(lvl) << 64) | id] >> 190) * 1 ether;
     }
 
     function entry(uint24 lvl) external view returns (uint256 stack, uint64 id) {
-        uint256 packed = decBattleEntries[lvl][ContractAddresses.SDGNRS];
-        (stack, id) = (packed >> 96, uint64(packed));
+        (id, stack) = entryFor(lvl, ContractAddresses.SDGNRS);
     }
 
 }
@@ -180,7 +182,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
         uint256 base = CAP + questReward;
         uint256 multiplier = ActivityCurveLib.decBattleMultBps(game.playerActivityScore(HOUSE));
-        uint256 expected = base * multiplier / 10_000;
+        uint256 expected = base * multiplier / 10_000 / 1 ether * 1 ether; // whole FLIP of chips
         (uint256 weight, uint64 id) = harness.entry(5);
         assertEq(weight, expected, "quest reward enters day-zero chip math");
         assertEq(id, 1);

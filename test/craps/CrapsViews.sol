@@ -64,6 +64,7 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant SLIP_ROLL_BUDGET = _SLIP_ROLL_BUDGET;
     uint256 public constant SLIP_ROLL_CEILING = _SLIP_ROLL_CEILING;
     uint256 public constant ESC_HANDS = _ESC_HANDS;
+    uint256 public constant ESC_FAST_FROM = _ESC_FAST_FROM;
     uint256 public constant ESC_CAP = _ESC_CAP;
     uint256 public constant SCHED_BANK_MULT = _SCHED_BANK_MULT;
     uint256 public constant SCHED_GOAL = _SCHED_GOAL;

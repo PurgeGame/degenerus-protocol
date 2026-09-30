@@ -300,23 +300,27 @@ contract CrapsHighWaterTest is CrapsPins {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // C. THE ESCALATOR — three shooters a doubling, two ceilings.
+    // C. THE ESCALATOR — three shooters a doubling, then one, to uint32.max.
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev THE ESCALATOR, at every boundary the handoff names: shooters 0-2 wager 1x, 3-5 wager
-    ///      2x, 93-95 wager 2,147,483,648x, and 96 onward wagers `uint32.max`.
-    function test_theEscalatorDoublesEveryThreeShootersToUint32Max() public view {
+    /// @dev THE ESCALATOR, at every boundary: shooters 0-2 wager 1x, 3-5 wager 2x, 29 wagers 512x,
+    ///      and from 30 every shooter doubles, so 51 wagers 2,147,483,648x and 52 onward
+    ///      wagers `uint32.max`.
+    function test_theEscalatorDoublesEveryThreeShootersThenEveryShooterToUint32Max() public view {
         assertEq(craps.escOf(0), 1, "shooter 0");
         assertEq(craps.escOf(2), 1, "shooter 2");
         assertEq(craps.escOf(3), 2, "shooter 3");
         assertEq(craps.escOf(5), 2, "shooter 5");
         assertEq(craps.escOf(6), 4, "shooter 6");
-        assertEq(craps.escOf(93), 2_147_483_648, "shooter 93");
-        assertEq(craps.escOf(95), 2_147_483_648, "shooter 95");
-        assertEq(craps.escOf(96), craps.ESC_CAP(), "shooter 96");
+        assertEq(craps.escOf(29), 512, "shooter 29");
+        assertEq(craps.escOf(30), 1024, "shooter 30: every shooter doubles from here");
+        assertEq(craps.escOf(31), 2048, "shooter 31");
+        assertEq(craps.escOf(51), 2_147_483_648, "shooter 51");
+        assertEq(craps.escOf(52), craps.ESC_CAP(), "shooter 52");
         assertEq(craps.escOf(511), craps.ESC_CAP(), "the last shooter the cap allows");
         assertEq(craps.ESC_CAP(), type(uint32).max, "the ceiling moved");
         assertEq(craps.ESC_HANDS(), 3, "the doubling period moved");
+        assertEq(craps.ESC_FAST_FROM(), 30, "the every-shooter doubling point moved");
 
         // MONOTONE, never past the ceiling, and never zero, across the whole hand range. A zero
         // would be a free round; a wrapped shift is what would produce one.
@@ -326,22 +330,23 @@ contract CrapsHighWaterTest is CrapsPins {
             assertGe(q, prev, "the escalator went down");
             assertLe(q, craps.ESC_CAP(), "the escalator passed its ceiling");
             assertGt(q, 0, "the escalator handed out a free round");
-            assertEq(q, h / 3 >= 32 ? craps.ESC_CAP() : (uint256(1) << (h / 3)), "a rung moved");
+            uint256 shift = h < 30 ? h / 3 : 10 + (h - 30);
+            assertEq(q, shift >= 32 ? craps.ESC_CAP() : (uint256(1) << shift), "a rung moved");
             prev = q;
         }
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // D. THE HARD BOUNDS — 512 shooters, 1,000 rolls, a 1,511-roll ceiling.
+    // D. THE HARD BOUNDS — 512 shooters, 600 rolls, a 1,111-roll ceiling.
     // ════════════════════════════════════════════════════════════════════════
 
     /// @dev THE STATED CEILING IS NOT THE BUDGET. The budget is judged BETWEEN shooters, so the
     ///      last shooter it admits may still run a whole hand of its own: the absolute total is
-    ///      `1_000 - 1 + 512 = 1_511`.
+    ///      `600 - 1 + 512 = 1_111`.
     function test_theAbsoluteRollCeilingIsTheBudgetPlusOneWholeHand() public view {
-        assertEq(craps.SLIP_ROLL_BUDGET(), 1_000, "the scheduled budget moved");
+        assertEq(craps.SLIP_ROLL_BUDGET(), 600, "the scheduled budget moved");
         assertEq(craps.MAX_ROLLS(), 512, "one hand's own cap moved");
-        assertEq(craps.SLIP_ROLL_CEILING(), 1_511, "the absolute ceiling moved");
+        assertEq(craps.SLIP_ROLL_CEILING(), 1_111, "the absolute ceiling moved");
         assertEq(
             craps.SLIP_ROLL_CEILING(),
             craps.SLIP_ROLL_BUDGET() - 1 + craps.MAX_ROLLS(),

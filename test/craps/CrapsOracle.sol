@@ -83,19 +83,21 @@ contract CrapsOracle {
     uint256 public constant MAX_SESSION_HANDS = 1024;
 
     /// @notice Shared production roll budget, independently pinned for oracle comparisons.
-    /// @dev Judged between shooters: the last hand finishes whole, giving a 1,511-roll ceiling.
-    uint256 public constant SLIP_ROLL_BUDGET = 1_000;
+    /// @dev Judged between shooters: the last hand finishes whole, giving a 1,111-roll ceiling.
+    uint256 public constant SLIP_ROLL_BUDGET = 600;
 
     /// @notice THE ABSOLUTE TOTAL-ROLL CEILING: the budget is judged BETWEEN shooters, so the
     ///         last shooter it admits may still run a whole hand of its own.
     uint256 public constant SLIP_ROLL_CEILING = SLIP_ROLL_BUDGET - 1 + MAX_ROLLS;
 
     /// @notice Shooters between each mandatory doubling of a slip's base wager.
-    /// @dev The escalator: shooters 0-2 wager 1x the board, 3-5 wager 2x, and so on, capped at
-    ///      `ESC_CAP`. A slip that cannot cover the doubled wager stops between shooters with its
-    ///      remainder intact. Deterministic in the hand ordinal, so the whole run is still
-    ///      recomputable from the base-board ledger alone.
+    /// @dev The escalator: shooters 0-2 wager 1x the board, 3-5 wager 2x, and so on until
+    ///      `ESC_FAST_FROM`, then every shooter doubles, capped at `ESC_CAP`. A slip that cannot
+    ///      cover the doubled wager stops between shooters with its remainder intact.
+    ///      Deterministic in the hand ordinal, so the whole run is still recomputable from the
+    ///      base-board ledger alone.
     uint256 public constant ESC_HANDS = 3;
+    uint256 public constant ESC_FAST_FROM = 30;
 
     /// @notice The escalator ceiling, in base-board units.
     uint256 public constant ESC_CAP = type(uint32).max;
@@ -976,12 +978,13 @@ contract CrapsOracle {
     }
 
     /// @dev THE ESCALATOR: the mandatory wager for shooter `hand`, in base-board units — doubling
-    ///      every `ESC_HANDS` shooters, capped at `ESC_CAP`. Surviving the table
-    ///      means outracing this: a slip cannot flat-grind forever, because the floor under its
-    ///      wager keeps rising.
+    ///      every `ESC_HANDS` shooters, then every shooter from `ESC_FAST_FROM`, capped at
+    ///      `ESC_CAP`. Surviving the table means outracing this: a slip cannot flat-grind forever,
+    ///      because the floor under its wager keeps rising.
     function _escOf(uint256 hand) private pure returns (uint256 esc) {
         unchecked {
-            uint256 shift = hand / ESC_HANDS;
+            uint256 slow = hand < ESC_FAST_FROM ? hand : ESC_FAST_FROM;
+            uint256 shift = slow / ESC_HANDS + (hand - slow);
             esc = shift < 32 ? 1 << shift : ESC_CAP;
             if (esc > ESC_CAP) esc = ESC_CAP;
         }

@@ -343,8 +343,9 @@ The window opening protocol day is stamped by Advance, independent of the first 
 
 At the closing request, the window closes before the word is known. Consolidation seals
 the full 256-bit word, pool and entrant count and appends the event to a FIFO. Each run uses
-one-fifth of its starting stack as its initial board wager, doubles every three shooters,
-and has no cash-out or goal. A run ends at bust, after 64 shooters or at 511 rolls. Shared event dice drive separately scattered boards and the
+one-fifth of its starting stack as its initial board wager, doubles every three shooters
+(every shooter from shooter 30),
+and has no cash-out or goal. A run ends at bust, after 48 shooters or at exactly 511 rolls. Shared event dice drive separately scattered boards and the
 existing owner-specific survival/boost draws. Absolute high point ranks the run, including
 its starting bankroll. A separately tagged final coin disqualifies tails before insertion.
 
@@ -356,7 +357,7 @@ passes. The money that buys passes returns to the future pool once, at ranking. 
 coin is tails, the whole reservation returns. Both moves use the pending buffer during a
 freeze.
 
-The keeper leg receives at most 1,920 work units less prior box scanning, charges actual
+The keeper leg receives at most 2,500 work units less prior box scanning, charges actual
 roll and heap work, and permits at most one bounded run to overshoot. Final ranking and
 credits use separate bounded calls. `settleDecimatorWinners` provides a permissionless,
 unrewarded progress path during RNG locks. Settlement stops at game over; the ending

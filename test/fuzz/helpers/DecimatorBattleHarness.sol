@@ -20,10 +20,9 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
         return decBattleRounds[lvl];
     }
 
-    /// @dev A retained node as the Lens reports it: exact score words and the full ordering key.
+    /// @dev A retained node as the Lens reports it: its score and the full ordering key.
     struct Node {
-        uint256 high;
-        uint256 low;
+        uint256 score;
         uint256 key;
     }
 
@@ -34,19 +33,19 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
     }
 
     function nodeOf(uint24 lvl, uint8 i) external view returns (Node memory n) {
-        DecBattleNode storage stored = decBattleHeap[i];
-        uint64 id = uint64(stored.head);
-        n.high = stored.head >> 64;
-        n.low = stored.low;
+        uint256 stored = decBattleHeap[i];
+        uint64 id = uint64(stored);
+        n.score = stored >> 64;
         n.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), decBattleRounds[lvl].rngWord, lvl, id)))
             & ~uint256(type(uint64).max)) | id;
     }
 
+    /// @dev The stack in wei of virtual chips, as the Lens reports it.
     function entryOf(uint24 lvl, uint64 id) external view returns (Entry memory e) {
-        e.owner = decBattleOwners[(uint256(lvl) << 64) | id];
-        uint256 packed = decBattleEntries[lvl][e.owner];
-        e.stack = packed >> 96;
-        e.chips = uint32(packed >> 64);
+        uint256 entry = decBattleEntries[(uint256(lvl) << 64) | id];
+        e.owner = address(uint160(entry));
+        e.stack = (entry >> 190) * 1 ether;
+        e.chips = uint32((entry >> 160) & 0x3FFFFFFF);
     }
 
     function passesOf(address p) external view returns (uint256) {

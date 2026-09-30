@@ -193,18 +193,17 @@ contract ReviewClaimSeeder is DegenerusGame {
         _afkingResetDay = day;
     }
 
-    /// @dev A resolved decimator round at `lvl` where `player` holds the whole winning burn, at
-    ///      denom 2 / sub 0 / position 0 — also where the settle cursor starts, so mineFlip's
-    ///      leg reaches it directly rather than walking from level 5.
+    /// @dev A ranked decimator round at `lvl` whose lone winner is `player`, at the head of the
+    ///      queue, so mineFlip's leg pays it directly.
     function seedDecRound(uint24 lvl, address player, uint96 poolWei) external {
         decBattleRounds[lvl].poolWei = poolWei;
         decBattleRounds[lvl].phase = 2;
         decBattleRounds[lvl].count = 1;
         decBattleRounds[lvl].winners = 1;
         decBattleRounds[lvl].champion = 1;
-        decBattleOwners[(uint256(lvl) << 64) | 1] = player;
-        decBattleEntries[lvl][player] = (uint256(1 ether) << 96) | 1;
-        decBattleHeap[0].head = 1;
+        decBattlePlayers[player] = (uint256(lvl) << 64) | 1;
+        decBattleEntries[(uint256(lvl) << 64) | 1] = (uint256(1) << 190) | uint256(uint160(player));
+        decBattleHeap[0] = 1;
         decBattleQueue = uint256(lvl) | uint256(lvl) << 24;
         // Back the credit a settle would write (claimablePool is the ledger total).
         claimablePool += uint128(poolWei);
@@ -218,7 +217,7 @@ contract ReviewClaimSeeder is DegenerusGame {
         DecBattleRound storage round = decBattleRounds[lvl];
         // Eight losing runs: enough work for one knee credit (15 units) at the measured prices.
         round.phase = 1; round.winners = 0; round.champion = 0; round.capacity = 1; round.count = 8;
-        for (uint160 i = 2; i <= 8; ++i) decBattleOwners[(uint256(lvl) << 64) | i] = address(i);
+        for (uint160 i = 2; i <= 8; ++i) decBattleEntries[(uint256(lvl) << 64) | i] = i;
         uint256 word;
         while (!_allTails(word, lvl, 8)) ++word;
         round.rngWord = word;

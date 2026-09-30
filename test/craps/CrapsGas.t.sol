@@ -67,12 +67,12 @@ contract CrapsGasTest is CrapsPins {
 
     uint256 internal constant TABLES = 24;
     /// @dev The bankroll, in base-board rounds, that funds a run all the way to its 512-shooter
-    ///      cap. The escalator doubles every three shooters and tops out at
-    ///      `uint32.max` from shooter 96, so the whole book is
-    ///      `3 * (2^32 - 1) + 416 * (2^32 - 1)`, a little under 1.8e12 rounds — three orders of
-    ///      magnitude past anything the schedule can hand a player, which is exactly what makes
-    ///      it the engine's worst case rather than a reachable one.
-    uint256 internal constant CAP_ROUNDS_TO_SHOOTER_CAP = 1_800_000_000_000;
+    ///      cap. The escalator doubles every three shooters to shooter 30, then every shooter,
+    ///      and wagers `uint32.max` from shooter 52, so the whole book is about 461 * 2^32, just
+    ///      under 1.98e12 rounds — three orders of magnitude past anything the schedule can hand a
+    ///      player, which is exactly what makes it the engine's worst case rather than a
+    ///      reachable one.
+    uint256 internal constant CAP_ROUNDS_TO_SHOOTER_CAP = 2_000_000_000_000;
 
     address internal player = makeAddr("player");
 
@@ -161,7 +161,7 @@ contract CrapsGasTest is CrapsPins {
             craps.SLIP_ROLL_BUDGET() - 1 + craps.MAX_ROLLS(),
             "the stated ceiling is not budget - 1 + one whole hand"
         );
-        assertEq(craps.SLIP_ROLL_CEILING(), 1511, "the roll ceiling moved");
+        assertEq(craps.SLIP_ROLL_CEILING(), 1111, "the roll ceiling moved");
     }
 
     /// @dev And the real surface: a max-legal slip (ten rounds of the board) placed and settled

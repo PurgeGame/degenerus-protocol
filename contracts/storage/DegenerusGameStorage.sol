@@ -3057,25 +3057,19 @@ abstract contract DegenerusGameStorage {
         uint24 next;
     }
 
-    /// @dev One retained heads result. Its score is the exact 512-bit stack x normalized peak
-    ///      (common denominator 3000 ether): `low` is the low word, `head` holds the high word
-    ///      above the 64-bit entry id. A stack stays under 2^160, so the high word fits in 192 bits.
-    ///      Equal scores order by a random tiebreak recomputed from the id.
-    struct DecBattleNode {
-        uint256 low;
-        uint256 head;
-    }
-
     /// @dev Four mapping roots replace the four retired bucket-system roots without moving
-    ///      unrelated storage. Owners are keyed (level << 64) | id, ids beginning at one; an
-    ///      entry packs its id (bits 0..63), its chosen board's thirty chip bits (64..93) and its
-    ///      accumulated stack (virtual-chip wei, bits 96..255).
-    mapping(uint256 => address) internal decBattleOwners;
+    ///      unrelated storage. An entry is keyed (level << 64) | id, ids beginning at one, and packs
+    ///      its owner (bits 0..159), its chosen board's thirty chip bits (160..189) and its
+    ///      accumulated stack in whole FLIP of virtual chips (190..255). A wallet's slot, reused
+    ///      window after window, holds its latest entry's level (bits 64..87) and id (0..63).
+    mapping(uint256 => uint256) internal decBattleEntries;
     mapping(uint24 => DecBattleRound) internal decBattleRounds;
-    /// @dev The leaderboard of the round at the head of the queue, keyed by heap position. The
-    ///      FIFO settles one round at a time, so every round reuses these slots.
-    mapping(uint256 => DecBattleNode) internal decBattleHeap;
-    mapping(uint24 => mapping(address => uint256)) internal decBattleEntries;
+    /// @dev The leaderboard of the round at the head of the queue, keyed by heap position: a
+    ///      node is its score (whole-FLIP stack x normalized peak) above the 64-bit entry id, and
+    ///      equal scores order by a random tiebreak recomputed from the id. The FIFO settles one
+    ///      round at a time, so every round reuses these slots.
+    mapping(uint256 => uint256) internal decBattleHeap;
+    mapping(address => uint256) internal decBattlePlayers;
 
     // =========================================================================
     // Degenerette Hero Wager Tracking (Daily)

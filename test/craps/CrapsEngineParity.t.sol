@@ -20,12 +20,14 @@ contract InlineCrapsReference is Craps {
 /// @dev The engine moved out of the table without changing a roll. The digest below was taken
 ///      from the inline engine at `e013043d9` — `_boardFrom`, `_scatterInto`, `_settleSlip`
 ///      compiled into CrapsBattle — over exactly this generator: four hundred slips across every
-///      board shape, chip size, scatter count, bankroll, goal, owner and boost row. Preserve that
-///      historical digest under its original limit, and compare today's engine to the inline
-///      reference with the shared 1,000-roll budget. Runs ending before that budget stay identical.
+///      board shape, chip size, scatter count, bankroll, goal, owner and boost row, under its
+///      original limit. It was re-pinned once, when every shooter began doubling from shooter 30:
+///      the prior digest (0x2385...45e9) is reproduced exactly by setting `_ESC_FAST_FROM` out of
+///      reach and the budget back to 1,000. Today's engine is compared to the inline reference with
+///      the shared 600-roll budget. Runs ending before that budget stay identical.
 contract CrapsEngineParity is Test {
     bytes32 internal constant INLINE_ENGINE_DIGEST =
-        0x2385761337a93f4816ad870b1564f9a05f7e5bdeb8f9c532adbd9af0794945e9;
+        0xd4365dfc05d13cb831ae67b9f226d2c30829d927dfcc8946d84f0914bbba09a7;
 
     /// forge-config: default.fuzz.runs = 64
     function testFuzz_directAndRankedRunsUseSharedRollCeiling(bytes32 seed, bool latched) public {
@@ -35,8 +37,8 @@ contract CrapsEngineParity is Test {
         uint256 chips = 3 | (3 << 9) | (3 << 12) | (1 << 15);
         Craps.SlipResult memory direct = e.settleSlip(chips, 1, 0, 0, seed, 1e40, goal, address(1), 0);
         Craps.SlipResult memory ranked = e.settleRanked(chips, 1, 0, 0, seed, 1e40, goal, address(1), 0);
-        assertGe(direct.totalRolls, 1_000, "stopped before the shared budget");
-        assertLe(direct.totalRolls, 1_511, "passed the shared ceiling");
+        assertGe(direct.totalRolls, 600, "stopped before the shared budget");
+        assertLe(direct.totalRolls, 1_111, "passed the shared ceiling");
         assertEq(ranked.totalRolls, direct.totalRolls, "ranked entry used different bounds");
         assertEq(ranked.handsPlayed, direct.handsPlayed);
         assertEq(ranked.bankrollOut, direct.bankrollOut);
@@ -63,15 +65,15 @@ contract CrapsEngineParity is Test {
                 packed, chipFlip, uint256(keccak256(abi.encode(h, "scatter"))), n, seed, bankroll, goal, player, boost
             );
             Craps.SlipResult memory current = ref.run(
-                packed, chipFlip, uint256(keccak256(abi.encode(h, "scatter"))), n, seed, bankroll, goal, player, boost, 1_000
+                packed, chipFlip, uint256(keccak256(abi.encode(h, "scatter"))), n, seed, bankroll, goal, player, boost, 600
             );
             assertEq(keccak256(abi.encode(r)), keccak256(abi.encode(current)), "shared-budget inline parity");
             Craps.SlipResult memory legacy = ref.run(
                 packed, chipFlip, uint256(keccak256(abi.encode(h, "scatter"))), n, seed, bankroll, goal, player, boost, 8_192
             );
-            assertLe(r.totalRolls, 1_511);
+            assertLe(r.totalRolls, 1_111);
             assertLe(r.totalRolls, legacy.totalRolls, "lower limit lengthened the run");
-            if (legacy.totalRolls < 1_000) {
+            if (legacy.totalRolls < 600) {
                 assertEq(keccak256(abi.encode(r)), keccak256(abi.encode(legacy)), "short run changed");
             }
             acc = uint256(

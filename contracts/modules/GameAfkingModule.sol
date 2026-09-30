@@ -387,13 +387,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant OPEN_WEIGHT_BUDGET = OPEN_BATCH * OPEN_ITEM_WEIGHT;
 
     /// @dev The decimator leg's walk budget, in the same units, less what the box legs scanned.
-    ///      The module prices each run, insert, rank and credit at its measured worst case, so the
-    ///      leg takes the same envelope as the box legs, and a scan that spent part of it leaves the
-    ///      leg only the rest. Only the last item can cross it, and a Decimator run is bounded at
-    ///      64 shooters and 511 rolls: at most 126 units with a fresh insert and a full sift, so
-    ///      every call, router tail included, stays under 10M. Measured full calls land near 6M
-    ///      because every price covers its worst case.
-    uint256 internal constant DEC_WALK_BUDGET = 1_920;
+    ///      The module prices each run at the heaviest board's dice, so real fields use well under
+    ///      their charge: measured full calls run 7.3M on mixed boards and at most 8.2M on a field
+    ///      of the heaviest board. A scan that spent part of it leaves the leg only the rest. Only
+    ///      the last item can cross it, and a Decimator run is bounded at 48 shooters and exactly
+    ///      511 rolls: at most 108 units with a fresh insert and a full sift, so every item at its
+    ///      pinned 90% bounds a call at ~11.0M.
+    uint256 internal constant DEC_WALK_BUDGET = 2_500;
 
     /// @dev THE CRAPS LEG'S FLAT REWARD — one FLIP for shutting a window or walking a field,
     ///      whichever the crank found to do. Flat rather than pro-rated because the two jobs are

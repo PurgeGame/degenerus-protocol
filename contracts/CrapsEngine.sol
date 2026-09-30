@@ -93,8 +93,8 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @dev bankrollIn becomes the rounded payment; unitsPlayed becomes the unscaled merit rank.
     ///      Every seat of a field throws the same dice. An awarded entry keys its board scatter,
     ///      survival coin and shooter boost to its own bet id rather than its wallet, so repeat
-    ///      awards to one wallet stay separate runs. Every field uses the shared 1,000-roll
-    ///      between-shooter budget and 1,511-roll absolute ceiling.
+    ///      awards to one wallet stay separate runs. Every field uses the shared 600-roll
+    ///      between-shooter budget and 1,111-roll absolute ceiling.
     function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
         uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (SlipResult memory r)
     {

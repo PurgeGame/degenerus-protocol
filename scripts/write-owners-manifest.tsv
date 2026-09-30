@@ -159,5 +159,6 @@ OWNER	terminalAffiliate	modules/DegenerusGameAdvanceModule.sol	_handleGameOverPa
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameJackpotModule.sol	pricing latches even half-pass units from exact early-bird surplus; settlement consumes once with no pool movement
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameGameOverModule.sol	terminal drain cancels any pending early-bird pass prize
 OWNER	earlyTicketLevel	modules/DegenerusGameAdvanceModule.sol	first fresh daily or mid-day request after the goal freezes this absolute next-level pool and permanently closes its far-future queue to later entries
-OWNER	decBattleOwners	modules/DegenerusGameDecimatorModule.sol	recordDecBurn names the owner once, on a wallet's first burn of the event; never rewritten
+OWNER	decBattleEntries	modules/DegenerusGameDecimatorModule.sol	recordDecBurn writes an entry's owner, board and stack; only its own wallet's burns rewrite it, and settlement only reads it
+OWNER	decBattlePlayers	modules/DegenerusGameDecimatorModule.sol	recordDecBurn points a wallet at its latest entry; a new event's first burn repoints it, and settlement never reads it
 OWNER	decBattleQueue	modules/DegenerusGameDecimatorModule.sol	Sealing appends FIFO rounds; completion advances head (clears the queue when it was the last)

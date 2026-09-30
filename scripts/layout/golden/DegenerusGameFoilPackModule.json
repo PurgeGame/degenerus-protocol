@@ -546,10 +546,10 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "decBattleOwners",
+    "label": "decBattleEntries",
     "offset": 0,
     "slot": 40,
-    "typeLabel": "mapping(uint256 => address)"
+    "typeLabel": "mapping(uint256 => uint256)"
   },
   {
     "bytes": "32",
@@ -565,15 +565,15 @@
     "label": "decBattleHeap",
     "offset": 0,
     "slot": 42,
-    "typeLabel": "mapping(uint256 => struct DegenerusGameStorage.DecBattleNode)"
+    "typeLabel": "mapping(uint256 => uint256)"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "decBattleEntries",
+    "label": "decBattlePlayers",
     "offset": 0,
     "slot": 43,
-    "typeLabel": "mapping(uint24 => mapping(address => uint256))"
+    "typeLabel": "mapping(address => uint256)"
   },
   {
     "bytes": "32",

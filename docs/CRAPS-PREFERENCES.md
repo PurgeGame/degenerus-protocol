@@ -112,7 +112,7 @@ Every seat throws the same dice. Seats settle through the table's normal resolve
 
 - An awarded seat keys its scatter, survival coin and shooter boost to its own bet id rather than to the wallet. Repeat awards to one wallet are therefore separate runs.
 - Each advance settles seats on a 1,500-unit work budget. The call that seals the field first charges its own draw (110 units plus 10 per entry) against that budget and settles on the rest.
-- Every run has the shared 1,000-roll between-shooter budget (1,511-roll ceiling), like every slip.
+- Every run has the shared 600-roll between-shooter budget (1,111-roll ceiling), like every slip.
 
 Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat finalizes the field once:
 

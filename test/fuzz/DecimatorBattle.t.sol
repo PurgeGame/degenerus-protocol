@@ -8,7 +8,6 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /// @dev Makes ranking tests cheap while asserting the exact engine inputs. The real engine
 ///      is separately exercised by shared-dice replay, batching and gas tests.
@@ -26,7 +25,7 @@ contract DecimatorEngineProbe {
     ) external pure returns (Craps.SlipResult memory r) {
         uint256 named;
         for (uint256 i; i < 30; i += 3) named += (chips >> i) & 7;
-        require(chip == 60 && count == 10 - named && bankroll == 3000 ether && bounds == (511 << 16 | 64));
+        require(chip == 60 && count == 10 - named && bankroll == 3000 ether && bounds == (511 << 16 | 48));
         // The normal battles' shooter-boost row (Craps._shooterBoostTerms).
         require(boost == (0x1205170618081D091D0B1D0C1D0E200F >> (named << 4)) & 0xFFFF);
         r.peakBankroll = bankroll + board % (1_000_000 ether);
@@ -48,7 +47,7 @@ contract DecimatorFlatProbe {
     }
 }
 
-/// @dev Peaks far past 2^96 so stack x peak overflows 256 bits and the high score word is live.
+/// @dev Peaks far past anything the engine's bounds admit, so every score hits its cap.
 contract DecimatorHugePeakProbe {
     function settleSlipBounded(uint256, uint256, uint256 board, uint256, bytes32, uint256, address, uint256, uint256)
         external
@@ -289,11 +288,9 @@ contract DecimatorBattleTest is Test {
                     3000 ether,
                     address(uint160(id)),
                     (32 << 8) | 15,
-                    (511 << 16) | 64
+                    (511 << 16) | 48
                 );
-            (uint256 hi, uint256 lo) = Math.mul512(h.entryOf(LVL, id).stack, run.peakBankroll);
-            assertEq(node.high, hi);
-            assertEq(node.low, lo);
+            assertEq(node.score, h.entryOf(LVL, id).stack / 1 ether * run.peakBankroll);
             assertGe(run.peakBankroll, 3000 ether);
         }
     }
@@ -329,12 +326,12 @@ contract DecimatorBattleTest is Test {
         DecimatorBattleHarness.Node memory root = h.nodeOf(LVL, 0);
         for (uint8 i = 1; i < 100; ++i) {
             DecimatorBattleHarness.Node memory node = h.nodeOf(LVL, i);
-            if (node.low < root.low) root = node;
+            if (node.score < root.score) root = node;
         }
         for (uint64 id = 1; id <= 1001; ++id) {
             if (!_heads(777, LVL, id) || h.balanceOf(address(uint160(id))) != 0 || id == round.champion) continue;
             uint256 peak = 3000 ether + uint256(keccak256(abi.encode(BOARD, uint256(777), LVL, id))) % (1_000_000 ether);
-            assertLe(h.entryOf(LVL, id).stack * peak, root.low);
+            assertLe(h.entryOf(LVL, id).stack / 1 ether * peak, root.score);
         }
     }
 
@@ -480,27 +477,29 @@ contract DecimatorBattleTest is Test {
         assertLt(reusedUnits, freshUnits, "reused slots are charged less than fresh ones");
     }
 
-    /// @dev A hot round from the 200,000-run simulation: entry 98 of round 259 (two named chips) ran
-    ///      626 rolls and 54 shooters unbounded. The Decimator's bounds stop it at exactly 511 rolls;
-    ///      a smaller shooter cap stops it at that shooter; oversized bounds clamp to the engine's.
+    /// @dev The longest run of the 200,000-run simulation: entry 200 of round 404 (a fully random
+    ///      board) ran 430 rolls and 35 shooters unbounded, inside the Decimator's own bounds. Any
+    ///      roll bound under 512 cuts exactly, as the Decimator's 511 does: 400 stops this run at
+    ///      exactly 400 rolls; a smaller shooter cap stops it at that shooter; oversized bounds
+    ///      clamp to the engine's.
     function test_RunBoundsCapRollsAndShooters() public {
         CrapsEngine engine = CrapsEngine(ContractAddresses.CRAPS_ENGINE);
-        uint256 word = uint256(keccak256(abi.encode("round200k", uint256(259))));
+        uint256 word = uint256(keccak256(abi.encode("round200k", uint256(404))));
         bytes32 seed = keccak256(abi.encode(DICE, word, LVL));
-        uint256 board = uint256(keccak256(abi.encode(BOARD, word, LVL, uint64(98))));
-        address owner = address(uint160(98) + 0x1000);
-        uint256 boost = (0x1205170618081D091D0B1D0C1D0E200F >> (2 << 4)) & 0xFFFF;
-        Craps.SlipResult memory free = engine.settleSlip(2, 60, board, 8, seed, 3000 ether, 0, owner, boost);
-        assertEq(free.totalRolls, 626);
-        assertEq(free.handsPlayed, 54);
-        Craps.SlipResult memory run = engine.settleSlipBounded(2, 60, board, 8, seed, 3000 ether, owner, boost, (511 << 16) | 64);
-        assertEq(run.totalRolls, 511, "exact roll cap");
-        assertLe(run.handsPlayed, 64);
+        uint256 board = uint256(keccak256(abi.encode(BOARD, word, LVL, uint64(200))));
+        address owner = address(uint160(200) + 0x1000);
+        uint256 boost = 0x1205170618081D091D0B1D0C1D0E200F & 0xFFFF;
+        Craps.SlipResult memory free = engine.settleSlip(0, 60, board, 10, seed, 3000 ether, 0, owner, boost);
+        assertEq(free.totalRolls, 430);
+        assertEq(free.handsPlayed, 35);
+        Craps.SlipResult memory run = engine.settleSlipBounded(0, 60, board, 10, seed, 3000 ether, owner, boost, (400 << 16) | 40);
+        assertEq(run.totalRolls, 400, "exact roll cap");
+        assertLe(run.handsPlayed, 40);
         assertGe(run.peakBankroll, 3000 ether);
-        Craps.SlipResult memory short = engine.settleSlipBounded(2, 60, board, 8, seed, 3000 ether, owner, boost, (511 << 16) | 20);
+        Craps.SlipResult memory short = engine.settleSlipBounded(0, 60, board, 10, seed, 3000 ether, owner, boost, (400 << 16) | 20);
         assertEq(short.handsPlayed, 20, "shooter cap");
         Craps.SlipResult memory clamped =
-            engine.settleSlipBounded(2, 60, board, 8, seed, 3000 ether, owner, boost, type(uint256).max);
+            engine.settleSlipBounded(0, 60, board, 10, seed, 3000 ether, owner, boost, type(uint256).max);
         assertEq(abi.encode(clamped), abi.encode(free), "oversized bounds clamp to the engine limits");
     }
 
@@ -561,31 +560,46 @@ contract DecimatorBattleTest is Test {
         assertEq(h.reserved(), 4 ether);
     }
 
-    function test_StackPastTheFieldReverts() public {
-        _burn(h, address(1), LVL, type(uint160).max, 10_000);
+    /// @dev Whole FLIP of chips: a burn's credit rounds down to a whole FLIP, and one that rounds
+    ///      to zero reverts.
+    function test_StackCountsWholeFlip() public {
+        _burn(h, address(1), LVL, 1000 ether + 0.9 ether, 10_000);
+        assertEq(h.entryOf(LVL, 1).stack, 1000 ether);
         vm.prank(ContractAddresses.COIN);
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL, 1, 10_000, 0);
+        h.recordDecBurn(address(2), LVL, 0.9 ether, 10_000, 0);
     }
 
-    function test_Exact512BitRankingSupportsHugeBurns() public {
+    /// @dev Past 2^66 FLIP the stack saturates: later burns still record, and the owner and board
+    ///      beside it are untouched.
+    function test_StackSaturatesInsteadOfWrapping() public {
+        uint256 cap = ((uint256(1) << 66) - 1) * 1 ether;
+        _burn(h, address(1), LVL, type(uint160).max, 10_000);
+        assertEq(h.entryOf(LVL, 1).stack, cap);
+        vm.prank(ContractAddresses.COIN);
+        assertEq(h.recordDecBurn(address(1), LVL, type(uint160).max, 20_000, 3), 1);
+        DecimatorBattleHarness.Entry memory e = h.entryOf(LVL, 1);
+        assertEq(e.stack, cap);
+        assertEq(e.owner, address(1));
+        assertEq(e.chips, 3);
+        assertEq(h.roundOf(LVL).count, 1);
+    }
+
+    /// @dev A peak past the engine's bounds saturates the score: equal capped scores fall to the
+    ///      tiebreak, and settlement completes.
+    function test_ScoreSaturatesInsteadOfWrapping() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorHugePeakProbe).runtimeCode);
         uint256 word;
         while (!_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
-        // The largest stack the 160-bit field holds; far past any uint128 FLIP supply.
-        uint256 huge = type(uint160).max;
-        _burn(h, address(1), LVL, huge, 10_000);
+        _burn(h, address(1), LVL, type(uint160).max, 10_000);
         _burn(h, address(2), LVL, 1000 ether, 10_000);
         h.seal(LVL, 1 ether, word);
         _drain(h, 1500);
-        // One place: entry 2 (also past 256 bits) loses to entry 1 on the high word alone.
         assertEq(h.roundOf(LVL).winners, 1);
-        assertEq(h.roundOf(LVL).champion, 1);
-        uint256 peak = (uint256(1) << 200) + uint256(keccak256(abi.encode(BOARD, word, LVL, uint64(1)))) % (1_000_000 ether);
-        (uint256 hi, uint256 lo) = Math.mul512(huge, peak);
-        assertEq(h.nodeOf(LVL, 0).high, hi);
-        assertEq(h.nodeOf(LVL, 0).low, lo);
-        assertGt(hi, 0, "the high score word is exercised");
+        uint64 champion = _tieKey(word, LVL, 1) > _tieKey(word, LVL, 2) ? 1 : 2;
+        assertEq(h.roundOf(LVL).champion, champion);
+        assertEq(h.nodeOf(LVL, 0).score, (uint256(1) << 192) - 1);
+        assertEq(h.balanceOf(address(uint160(champion))), 1 ether);
     }
 
     function testFuzz_WinnerQuotaAndConservation(uint8 population, uint256 word, uint96 pool) public {

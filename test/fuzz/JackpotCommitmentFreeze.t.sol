@@ -47,9 +47,9 @@ contract JackpotCommitmentSeeder is DegenerusGame {
         decBattleRounds[5].phase = 2;
         decBattleRounds[5].winners = 1;
         decBattleRounds[5].champion = 1;
-        decBattleOwners[(uint256(5) << 64) | 1] = attacker;
-        decBattleEntries[5][attacker] = (uint256(1 ether) << 96) | 1;
-        decBattleHeap[0].head = 1;
+        decBattlePlayers[attacker] = (uint256(5) << 64) | 1;
+        decBattleEntries[(uint256(5) << 64) | 1] = (uint256(1) << 190) | uint256(uint160(attacker));
+        decBattleHeap[0] = 1;
         decBattleQueue = 5 | (uint256(5) << 24);
 
     }

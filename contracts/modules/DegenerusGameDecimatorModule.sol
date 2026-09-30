@@ -49,41 +49,49 @@ interface IDecimatorCrapsEngine {
 ///      keepers process older fields. No transaction walks the unbounded entrant population.
 contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     uint256 private constant SCALE = 3000 ether;
-    uint256 private constant MAX_BUDGET = 1920;
+    uint256 private constant MAX_BUDGET = 2500;
     bytes32 private constant DICE_TAG = keccak256("decimator.battle.dice.v1");
     bytes32 private constant BOARD_TAG = keccak256("decimator.battle.board.v1");
     bytes32 private constant COIN_TAG = keccak256("decimator.battle.final-coin.v1");
     bytes32 private constant TIE_TAG = keccak256("decimator.battle.tie.v1");
 
     // Keeper work units (4.7k gas each), charged after each piece of work from its outcome and
-    // sized on measured worst cases: the call frame with a first cursor write (~37k inside
-    // mineFlip's delegatecall), a tails coin (~0.8k), a heads run's fixed cost (~18k) plus its
-    // dice (<= 723 gas a roll on any board), a filling insert into fresh (~46k) or reused (~13k)
-    // slots, a heap level (~14.5k), a root reject (~5k), a scanned leaf with tiebreaks (~5.3k)
-    // an ETH credit to an empty balance (~30.5k), and a half-pass award with its share of the
-    // pool move (~23k fresh, plus ~10k once a call). DecimatorPricing.t.sol pins every call,
-    // real dice and worst heap shapes alike, at or under 90% of its charge.
+    // sized on worst cases: the call frame with a first cursor write (~37k inside mineFlip's
+    // delegatecall), a tails coin (~0.8k), a heads run's fixed cost with its one entry read plus
+    // its dice (<= 723 gas a roll on any board), a filling insert into a fresh or reused node
+    // slot, a heap level, a root reject, a scanned leaf, an ETH credit to an empty balance
+    // (~30.5k), and a half-pass award with its share of the pool move (~23k fresh, plus ~10k once
+    // a call). DecimatorPricing.t.sol pins every call, real dice and worst heap shapes alike, at
+    // or under 90% of its charge with each call's storage cold, as a keeper transaction finds it.
     uint256 private constant CALL_UNITS = 9;
     uint256 private constant TAILS_UNITS = 1;
-    uint256 private constant RUN_UNITS = 5;
+    uint256 private constant RUN_UNITS = 4;
     uint256 private constant ROLLS_PER_UNIT = 6;
-    uint256 private constant INSERT_UNITS = 4;
-    uint256 private constant INSERT_FRESH_UNITS = 11;
-    uint256 private constant MOVE_UNITS = 4;
-    uint256 private constant REJECT_UNITS = 2;
+    uint256 private constant INSERT_UNITS = 2;
+    uint256 private constant INSERT_FRESH_UNITS = 6;
+    uint256 private constant MOVE_UNITS = 2;
+    uint256 private constant REJECT_UNITS = 1;
     uint256 private constant RANK_UNITS = 8;
-    uint256 private constant RANK_NODE_UNITS = 2;
+    uint256 private constant RANK_NODE_UNITS = 1;
     uint256 private constant CREDIT_UNITS = 8;
     uint256 private constant PASS_UNITS = 6;
 
-    // A run stops at bust, after 64 shooters, or at exactly 511 rolls. Sized on 200,000 simulated
-    // shared-dice runs over every board size: none reached 64 shooters and 10 (5e-5, in 2 of 1,000
-    // rounds) reached 511 rolls. The pair bounds a heads run at 126 units, per-shooter cost included.
-    uint256 private constant RUN_BOUNDS = (511 << 16) | 64;
+    // A run stops at bust, after 48 shooters, or at exactly 511 rolls, the longest cut the engine
+    // makes exactly (a roll budget of 512 or more is judged between shooters). A safety bound for
+    // the budget, not a rule of play: none of 200,000 simulated shared-dice runs over every board
+    // size came near it (the longest ran 430 rolls and 36 shooters), and 70 of 286 million engine
+    // runs across every strategy reached 511 rolls. The pair bounds a heads run at 108 units,
+    // per-shooter cost included.
+    uint256 private constant RUN_BOUNDS = (511 << 16) | 48;
 
-    // An entry word: id in bits 0..63, the chosen board's thirty chip bits at 64, the stack above.
-    uint256 private constant CHIPS_SHIFT = 64;
-    uint256 private constant STACK_SHIFT = 96;
+    // An entry word: owner in bits 0..159, the chosen board's thirty chip bits at 160, and the
+    // stack in whole FLIP of virtual chips in the top 66 bits.
+    uint256 private constant CHIPS_SHIFT = 160;
+    uint256 private constant STACK_SHIFT = 190;
+    uint256 private constant MAX_STACK = (1 << 66) - 1;
+    // A node's score sits above the 64-bit id. The engine's roll and shooter bounds keep a peak far
+    // below 2^126 wei, so no real score reaches the cap; stack and score saturate rather than wrap.
+    uint256 private constant MAX_SCORE = (1 << 192) - 1;
 
     event DecBurnRecorded(
         address indexed player,
@@ -119,22 +127,27 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint24 day = _simulatedDayIndex();
         if (round.openedDay == 0 || day < round.openedDay) revert E();
         uint256 factor = _dayFactor(day - round.openedDay);
-        // Multiply timing first to avoid overflow for very large, heavily decayed burns.
-        uint256 credited = Math.mulDiv(baseAmount, factor * multBps, 1 ether * 10_000);
+        // Whole FLIP of chips. Multiply timing first to avoid overflow for very large, heavily
+        // decayed burns.
+        uint256 credited = Math.mulDiv(baseAmount, factor * multBps, 1 ether * 10_000 * 1 ether);
         if (credited == 0) revert E();
-        mapping(address => uint256) storage entries = decBattleEntries[lvl];
-        uint256 packed = entries[player];
-        id = uint64(packed);
-        if (id == 0) {
+        // The wallet slot finds a top-up; a new window's first burn overwrites it. Settlement reads
+        // only the entry, so an older round still in the queue keeps its own.
+        uint256 latest = decBattlePlayers[player];
+        uint256 stack;
+        if (uint24(latest >> 64) == lvl) {
+            id = uint64(latest);
+            stack = decBattleEntries[_entryKey(lvl, id)] >> STACK_SHIFT;
+        } else {
             id = ++round.count;
-            decBattleOwners[_entryKey(lvl, id)] = player;
+            decBattlePlayers[player] = (uint256(lvl) << 64) | id;
         }
-        uint256 stack = (packed >> STACK_SHIFT) + credited;
-        // 2^160 wei of chips is ~10^12 times FLIP's uint128 supply ceiling; the guard keeps the
-        // packed word and the 512-bit score exact without bounding any realistic burn history.
-        if (stack >> 160 != 0) revert E();
-        entries[player] = (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | id;
-        emit DecBurnRecorded(player, lvl, id, baseAmount, credited, stack, chips);
+        stack += credited;
+        // 2^66 FLIP is far past FLIP's supply; saturating keeps any history out of the other fields.
+        if (stack > MAX_STACK) stack = MAX_STACK;
+        decBattleEntries[_entryKey(lvl, id)] =
+            (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | uint256(uint160(player));
+        emit DecBurnRecorded(player, lvl, id, baseAmount, credited * 1 ether, stack * 1 ether, chips);
     }
 
     /// @dev A normal battle's board rules: at most three chips on a leg, seven named in all, and
@@ -229,10 +242,10 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             uint256 winners = round.winners;
             uint256 paid = round.paid;
             (uint256 base, uint256 champ, uint256 champPasses, uint256 perEth,, bool passMode) = _payTerms(round);
-            mapping(uint256 => DecBattleNode) storage heap = decBattleHeap;
+            mapping(uint256 => uint256) storage heap = decBattleHeap;
             while (paid < winners && unitsUsed < budgetUnits) {
-                uint64 id = uint64(heap[paid].head);
-                address owner = decBattleOwners[_entryKey(lvl, id)];
+                uint64 id = uint64(heap[paid]);
+                address owner = address(uint160(decBattleEntries[_entryKey(lvl, id)]));
                 // Position 0 is the champion (moved there at ranking): half passes, the rest ETH.
                 if (paid == 0) {
                     if (champPasses != 0) {
@@ -295,10 +308,10 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         // The final coin is independent of the run, so tails skips the engine: the run cannot place
         // and anyone can replay it from the sealed word with a free call to the pure engine.
         if (uint256(keccak256(abi.encode(COIN_TAG, word, lvl, id))) & 1 == 0) return (TAILS_UNITS, winners);
-        address owner = decBattleOwners[_entryKey(lvl, id)];
-        uint256 entry = decBattleEntries[lvl][owner];
+        uint256 entry = decBattleEntries[_entryKey(lvl, id)];
+        address owner = address(uint160(entry));
         // The board was checked at burn, so settlement only counts its named chips.
-        uint256 chips = uint32(entry >> CHIPS_SHIFT);
+        uint256 chips = (entry >> CHIPS_SHIFT) & 0x3FFFFFFF;
         uint256 named = _named(chips);
         // Exactly 1/5 starting bankroll on the ten-chip board: the named chips, the dice scattering
         // the rest, and the normal battles' shooter boost for that many named chips (the
@@ -316,73 +329,61 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             RUN_BOUNDS
         );
         emit DecimatorRun(lvl, id, result.peakBankroll);
-        (uint256 high, uint256 low) = Math.mul512(entry >> STACK_SHIFT, result.peakBankroll);
-        (units, winners) = _insert(lvl, word, capacity, winners, low, (high << 64) | id);
+        (uint256 high, uint256 score) = Math.mul512(entry >> STACK_SHIFT, result.peakBankroll);
+        if (high != 0 || score > MAX_SCORE) score = MAX_SCORE;
+        (units, winners) = _insert(lvl, word, capacity, winners, (score << 64) | id);
         return (units + RUN_UNITS + (result.totalRolls + ROLLS_PER_UNIT - 1) / ROLLS_PER_UNIT, winners);
     }
 
     /// @dev Min heap: the weakest retained eligible entry is at the root. At most 100 nodes. A
     ///      filling insert takes the next position; the first round ever to reach it pays for
     ///      fresh slots, every later round reuses them.
-    function _insert(uint24 lvl, uint256 word, uint256 capacity, uint256 size, uint256 low, uint256 head)
+    function _insert(uint24 lvl, uint256 word, uint256 capacity, uint256 size, uint256 node)
         private
         returns (uint256 units, uint256)
     {
-        mapping(uint256 => DecBattleNode) storage heap = decBattleHeap;
+        mapping(uint256 => uint256) storage heap = decBattleHeap;
         uint256 pos;
         uint256 base = INSERT_UNITS;
         if (size < capacity) {
             pos = size;
-            if (heap[pos].head == 0) base = INSERT_FRESH_UNITS;
+            if (heap[pos] == 0) base = INSERT_FRESH_UNITS;
             ++size;
             while (pos != 0) {
                 uint256 parent = (pos - 1) / 2;
-                uint256 pLow = heap[parent].low;
-                uint256 pHead = heap[parent].head;
-                if (!_less(word, lvl, low, head, pLow, pHead)) break;
-                heap[pos].low = pLow;
-                heap[pos].head = pHead;
+                uint256 p = heap[parent];
+                if (!_less(word, lvl, node, p)) break;
+                heap[pos] = p;
                 pos = parent;
                 units += MOVE_UNITS;
             }
         } else {
-            if (!_less(word, lvl, heap[0].low, heap[0].head, low, head)) return (REJECT_UNITS, size);
+            if (!_less(word, lvl, heap[0], node)) return (REJECT_UNITS, size);
             while (true) {
                 uint256 child = pos * 2 + 1;
                 if (child >= size) break;
-                uint256 cLow = heap[child].low;
-                uint256 cHead = heap[child].head;
+                uint256 c = heap[child];
                 if (child + 1 < size) {
-                    uint256 dLow = heap[child + 1].low;
-                    uint256 dHead = heap[child + 1].head;
-                    if (_less(word, lvl, dLow, dHead, cLow, cHead)) {
+                    uint256 d = heap[child + 1];
+                    if (_less(word, lvl, d, c)) {
                         ++child;
-                        cLow = dLow;
-                        cHead = dHead;
+                        c = d;
                     }
                 }
-                if (!_less(word, lvl, cLow, cHead, low, head)) break;
-                heap[pos].low = cLow;
-                heap[pos].head = cHead;
+                if (!_less(word, lvl, c, node)) break;
+                heap[pos] = c;
                 pos = child;
                 units += MOVE_UNITS;
             }
         }
-        heap[pos].low = low;
-        heap[pos].head = head;
+        heap[pos] = node;
         return (units + base, size);
     }
 
-    /// @dev Exact 512-bit score order (the high 192 bits sit above the id in `head`), then the
-    ///      random tiebreak, then the entry id.
-    function _less(uint256 word, uint24 lvl, uint256 aLow, uint256 aHead, uint256 bLow, uint256 bHead)
-        private
-        pure
-        returns (bool)
-    {
-        if (aHead >> 64 != bHead >> 64) return aHead >> 64 < bHead >> 64;
-        if (aLow != bLow) return aLow < bLow;
-        return _tieKey(word, lvl, uint64(aHead)) < _tieKey(word, lvl, uint64(bHead));
+    /// @dev Score order (the bits above the id), then the random tiebreak, then the entry id.
+    function _less(uint256 word, uint24 lvl, uint256 a, uint256 b) private pure returns (bool) {
+        if (a >> 64 != b >> 64) return a >> 64 < b >> 64;
+        return _tieKey(word, lvl, uint64(a)) < _tieKey(word, lvl, uint64(b));
     }
 
     function _tieKey(uint256 word, uint24 lvl, uint64 id) private pure returns (uint256) {
@@ -398,34 +399,29 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             emit DecimatorRanked(lvl, 0, 0);
             return units;
         }
-        mapping(uint256 => DecBattleNode) storage heap = decBattleHeap;
+        mapping(uint256 => uint256) storage heap = decBattleHeap;
         uint256 word = round.rngWord;
         // Every internal node of the min-heap is below a child, so the maximum is a leaf.
         uint256 i = winners / 2;
         uint256 best = i;
-        uint256 bestLow = heap[i].low;
-        uint256 bestHead = heap[i].head;
+        uint256 bestNode = heap[i];
         for (++i; i < winners; ++i) {
-            uint256 low = heap[i].low;
-            uint256 head = heap[i].head;
-            if (_less(word, lvl, bestLow, bestHead, low, head)) {
+            uint256 node = heap[i];
+            if (_less(word, lvl, bestNode, node)) {
                 best = i;
-                bestLow = low;
-                bestHead = head;
+                bestNode = node;
             }
         }
         // Payouts need no heap order: the champion takes position 0, where they pay it first.
         if (best != 0) {
-            heap[best].low = heap[0].low;
-            heap[best].head = heap[0].head;
-            heap[0].low = bestLow;
-            heap[0].head = bestHead;
+            heap[best] = heap[0];
+            heap[0] = bestNode;
         }
-        round.champion = uint64(bestHead);
+        round.champion = uint64(bestNode);
         round.phase = 2;
         (,,,, uint256 recycled,) = _payTerms(round);
         if (recycled != 0) _releaseToFuture(recycled);
-        emit DecimatorRanked(lvl, uint64(bestHead), uint8(winners));
+        emit DecimatorRanked(lvl, uint64(bestNode), uint8(winners));
         return units + (winners - winners / 2) * RANK_NODE_UNITS;
     }
 

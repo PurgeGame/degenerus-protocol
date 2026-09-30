@@ -90,11 +90,13 @@ contract Craps {
     ///      shooter cap alone leaves a bounded-but-huge worst case (cap x _MAX_ROLLS rolls); with
     ///      this budget the hard ceiling is `_SLIP_ROLL_CEILING` rolls however the dice fall.
     ///      Hitting it is an ordinary stop between shooters; every shooter still settles whole,
-    ///      and the budget never cuts a hand mid-roll.
-    uint256 internal constant _SLIP_ROLL_BUDGET = 1_000;
+    ///      and the budget never cuts a hand mid-roll. A safety bound, not a rule of play: with
+    ///      every shooter doubling from `_ESC_FAST_FROM`, none of 286 million simulated runs
+    ///      across every strategy reached it (the longest ran 575 rolls and 37 shooters).
+    uint256 internal constant _SLIP_ROLL_BUDGET = 600;
 
     /// @notice Shooter cap on a bet slip. A run does not stop when it wins — it latches the goal
-    ///         and plays on — so it needs room past the escalator ceiling at shooter 96. Either
+    ///         and plays on — so it needs room past the escalator ceiling at shooter 52. Either
     ///         this cap or `_SLIP_ROLL_BUDGET` ends a run, whichever the dice reach first.
     uint256 internal constant _MAX_SLIP_HANDS = 512;
 
@@ -104,16 +106,22 @@ contract Craps {
     uint256 internal constant _SLIP_ROLL_CEILING = _SLIP_ROLL_BUDGET - 1 + _MAX_ROLLS;
 
     /// @notice Shooters between each mandatory doubling of a slip's base wager.
-    /// @dev The escalator: shooters 0-2 wager 1x the board, 3-5 wager 2x, 6-8 wager 4x, and so on,
-    ///      capped at `_ESC_CAP`. A slip that cannot cover the doubled wager stops between
-    ///      shooters with its remainder intact. Deterministic in the hand ordinal, so the whole
-    ///      run is still recomputable from the base board and the seed alone.
+    /// @dev The escalator: shooters 0-2 wager 1x the board, 3-5 wager 2x, 6-8 wager 4x, and so on
+    ///      until `_ESC_FAST_FROM`, after which every shooter doubles, capped at `_ESC_CAP`. A
+    ///      slip that cannot cover the doubled wager stops between shooters with its remainder
+    ///      intact. Deterministic in the hand ordinal, so the whole run is still recomputable
+    ///      from the base board and the seed alone.
     uint256 internal constant _ESC_HANDS = 3;
 
-    /// @notice The escalator ceiling, in base-board units. A 16-bit lane would flatten the
-    ///         mandatory wager from the 48th shooter on, which would cap the RUN rather than the
-    ///         dice; at `uint32.max` the escalator is the binding term for as long as a slip can
-    ///         survive it — shooters 93-95 wager 2,147,483,648x and 96 onward wagers the ceiling.
+    /// @notice The shooter from which every shooter doubles the wager. Shooter 30 wagers 1,024x
+    ///         either way. About one run in five hundred gets there in the Decimator's shared-dice
+    ///         simulation, and the high-water model's goal and progressive rates are unchanged by
+    ///         the switch, so it only ends the longest runs sooner.
+    uint256 internal constant _ESC_FAST_FROM = 30;
+
+    /// @notice The escalator ceiling, in base-board units. At `uint32.max` the escalator is the
+    ///         binding term for as long as a slip can survive it — shooter 51 wagers
+    ///         2,147,483,648x and 52 onward wagers the ceiling.
     uint256 internal constant _ESC_CAP = type(uint32).max;
 
     /// @dev The slip loop's own cursor, one stack word (see the note in `_settleSlip`):
@@ -739,16 +747,18 @@ contract Craps {
     }
 
     /// @dev THE ESCALATOR: the mandatory wager for shooter `hand`, in base-board units — doubling
-    ///      every `_ESC_HANDS` shooters, capped at `_ESC_CAP`. Surviving the table means
-    ///      outracing this: a slip cannot flat-grind forever, because the floor under its wager
-    ///      keeps rising.
+    ///      every `_ESC_HANDS` shooters, then every shooter from `_ESC_FAST_FROM`, capped at
+    ///      `_ESC_CAP`. Surviving the table means outracing this: a slip cannot flat-grind
+    ///      forever, because the floor under its wager keeps rising.
     ///
     ///      The shift is never taken past 31. The ceiling fits a uint32, so a 32nd doubling has
     ///      already passed it — which makes the branch exact rather than defensive, and keeps a
     ///      wide hand cap from shifting a literal off the end of the word.
     function _escOf(uint256 hand) internal pure returns (uint256 esc) {
         unchecked {
-            uint256 shift = hand / _ESC_HANDS;
+            uint256 shift = hand < _ESC_FAST_FROM
+                ? hand / _ESC_HANDS
+                : hand - _ESC_FAST_FROM + _ESC_FAST_FROM / _ESC_HANDS;
             esc = shift < 32 ? 1 << shift : _ESC_CAP;
         }
     }

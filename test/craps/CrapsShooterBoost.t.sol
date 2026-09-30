@@ -363,7 +363,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         for (uint256 h = 0; h < 40; ++h) {
             CrapsOracle.Outcome memory o = oracle.resolveHand(b, oracle.handSeed(seed, h));
             if (o.profit == 0) continue;
-            uint256 q = 1 << (h / craps.ESC_HANDS());
+            uint256 q = craps.escOf(h);
             if (q < 2) continue;
             uint256 floorFirst = q * (o.returned + (o.profit * pct) / 100);
             uint256 floorAfter = q * o.returned + (q * o.profit * pct) / 100;
@@ -413,8 +413,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         CrapsOracle oracle = craps.oracle();
         uint256 stake = craps.stakeFor(b);
         for (uint256 h = 0; h < cap; ++h) {
-            uint256 q = 1 << (h / craps.ESC_HANDS());
-            if (q > 0xFFFF) q = 0xFFFF;
+            uint256 q = craps.escOf(h);
             uint256 need = q * stake;
             if (bankroll * 2 < need) return bankroll;
             if (bankroll < need) {

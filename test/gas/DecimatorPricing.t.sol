@@ -105,7 +105,7 @@ contract DecimatorPricingTest is Test {
     function test_RealEngineCallsWithinCharge() public {
         for (uint256 salt = 1; salt <= 3; ++salt) {
             _field(700, salt, true, 0);
-            _settleAll(1920);
+            _settleAll(2500);
         }
         _field(300, 9, true, 0);
         _settleAll(10); // one item per call: the call frame plus a single run, rank or credit
@@ -113,8 +113,9 @@ contract DecimatorPricingTest is Test {
         assertLt(maxCallGas, 10_000_000, "a full keeper leg stays under 10M");
     }
 
-    /// @dev The hottest round of the 200,000-run simulation (round 259: nine of its 200 entries ran
-    ///      600+ rolls unbounded), rebuilt exactly, so capped 511-roll runs settle through the module.
+    /// @dev A hot round of the 200,000-run simulation (round 259: two of its 200 entries ran past
+    ///      400 rolls, 24 past 300), rebuilt exactly, so its longest runs settle through the
+    ///      module.
     function test_HotRoundCappedRunsWithinCharge() public {
         uint24 lvl = nextLevel; // level 5, the simulation's
         nextLevel += 10;
@@ -136,7 +137,7 @@ contract DecimatorPricingTest is Test {
         }
         vm.stopPrank();
         h.seal(again, 50 ether, uint256(keccak256(abi.encode("round200k", uint256(259)))));
-        _settleAll(1920);
+        _settleAll(2500);
         _report("hot round, full calls");
     }
 
@@ -148,7 +149,7 @@ contract DecimatorPricingTest is Test {
         _field(1000, 300, false, 0);
         _settleAll(10);
         _field(1000, 301, false, 0);
-        _settleAll(1920);
+        _settleAll(2500);
         _report("whale pass payouts");
     }
 
@@ -160,7 +161,7 @@ contract DecimatorPricingTest is Test {
                 _field(1000, 100 + pass * 10 + shape, false, shape);
                 _settleAll(10);
                 _field(1000, 200 + pass * 10 + shape, false, shape);
-                _settleAll(1920);
+                _settleAll(2500);
             }
         }
         _report("heap shapes");

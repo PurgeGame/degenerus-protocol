@@ -198,7 +198,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 cursePoints; // subtracted, floored at 0, before the hard cap
     }
 
-    /// @notice The permanent accumulated entry for one wallet and event.
+    /// @notice A wallet's accumulated entry for one event; `stack` in wei of virtual chips.
     struct DecBurnEntry {
         uint64 entryId;
         address owner;
@@ -206,11 +206,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint32 chips; // the chosen board, in the normal battles' thirty-bit encoding
     }
 
-    /// @notice A retained heads result: the exact 512-bit score and its full ordering key
-    ///         (192-bit random tiebreak above the 64-bit entry id).
+    /// @notice A retained heads result: its score and its full ordering key (192-bit random
+    ///         tiebreak above the 64-bit entry id).
     struct DecWinner {
-        uint256 high;
-        uint256 low;
+        uint256 score;
         uint256 key;
     }
 
@@ -498,33 +497,25 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                          DECIMATOR                                   |
       +======================================================================+*/
 
+    /// @dev The wallet slot names only its latest event; an earlier one reads by id (decEntryAt).
     function decBurnOf(address game, uint24 lvl, address player)
         external view returns (DecBurnEntry memory e)
     {
-        uint256 packed = _decEntryWord(game, lvl, player);
-        e.entryId = uint64(packed);
-        if (e.entryId == 0) return e;
-        e.owner = player;
-        e.stack = packed >> 96;
-        e.chips = uint32(packed >> 64);
+        uint256 root;
+        assembly { root := decBattlePlayers.slot }
+        uint256 latest = _sload(game, _mapSlot(player, root));
+        if (uint24(latest >> 64) != lvl) return e;
+        e.entryId = uint64(latest);
+        (e.owner, e.stack, e.chips) = decEntryAt(game, lvl, e.entryId);
     }
 
     function decEntryAt(address game, uint24 lvl, uint64 id)
         public view returns (address owner, uint256 stack, uint32 chips)
     {
-        if (id == 0) return (address(0), 0, 0);
-        uint256 root;
-        assembly { root := decBattleOwners.slot }
-        owner = address(uint160(_sload(game, _mapSlot((uint256(lvl) << 64) | id, root))));
-        if (owner == address(0)) return (owner, 0, 0);
-        uint256 packed = _decEntryWord(game, lvl, owner);
-        return (owner, packed >> 96, uint32(packed >> 64));
-    }
-
-    function _decEntryWord(address game, uint24 lvl, address player) private view returns (uint256) {
         uint256 root;
         assembly { root := decBattleEntries.slot }
-        return _sload(game, _mapSlot(player, uint256(_mapSlot(uint256(lvl), root))));
+        uint256 entry = _sload(game, _mapSlot((uint256(lvl) << 64) | id, root));
+        return (address(uint160(entry)), (entry >> 190) * 1 ether, uint32((entry >> 160) & 0x3FFFFFFF));
     }
 
     function decBattleRoundOf(address game, uint24 lvl)
@@ -549,7 +540,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     }
 
     /// @notice A retained HEADS entry. Heap order is NOT finish order; champion is in the round.
-    /// @dev Absolute peak is (high * 2**256 + low) / (3000 ether), without overflow or truncation.
+    /// @dev Absolute peak in wei is score / 3000 (a whole-FLIP stack times the peak normalized to
+    ///      a 3000-FLIP start).
     ///      One leaderboard is reused round after round, so it is readable only while `lvl` is at
     ///      the head of the settlement queue; finished rounds are in their DecimatorRanked and
     ///      DecimatorClaimed events.
@@ -564,12 +556,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             root := decBattleHeap.slot
         }
         if (index >= r.winners || uint24(_sload(game, queueSlot)) != lvl) revert E();
-        uint256 slot = uint256(_mapSlot(uint256(index), root));
-        node.low = _sload(game, bytes32(slot));
-        uint256 head = _sload(game, bytes32(slot + 1));
-        node.high = head >> 64;
-        node.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), r.rngWord, lvl, uint64(head))))
-            & ~uint256(type(uint64).max)) | uint64(head);
+        uint256 stored = _sload(game, _mapSlot(uint256(index), root));
+        node.score = stored >> 64;
+        node.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), r.rngWord, lvl, uint64(stored))))
+            & ~uint256(type(uint64).max)) | uint64(stored);
     }
 
     function decSettleCursorOf(address game)

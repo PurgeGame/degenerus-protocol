@@ -22,9 +22,14 @@ Each burn adds:
 
 ```
 base = amount + completed quest bonus + consumed Decimator boon bonus
-chips = floor(base × degenMultBps × dayFactor / (10,000 × 10^18))
+chips = floor(base × degenMultBps × dayFactor / (10,000 × 10^18 × 10^18))   (whole FLIP)
 startingStack += chips
 ```
+
+Chips count in whole FLIP, so a burn's credit rounds down to a whole FLIP (under 0.1% of the
+1,000-FLIP minimum). A stack saturates at 2^66 − 1 FLIP, far past FLIP's supply; a burn past it
+still records but adds nothing, and cannot spill into the other packed fields. Events and the
+Lens report chips in wei.
 
 Existing quest rewards still credit Coinflip; their chip addition and the existing boon
 bonus (which applies to at most 50,000 base FLIP per burn) are retained. The protocol's
@@ -55,27 +60,31 @@ bounded by the 24-bit day offset. A burn that rounds to zero chips reverts atomi
 Entry closes before the resolving VRF word is known. The sealed round stores its full word,
 entrant count and ETH pool. All entries use the same event dice. Each plays ten chips: the
 ones its board names, the dice scattering the rest, with total opening wager equal to
-one-fifth of its starting stack. Wagers double every three shooters. Existing owner-specific
-survival draws remain, and the shooter-profit boost follows the normal battles' row for the
+one-fifth of its starting stack. Wagers double every three shooters, and every shooter from the
+31st (shooter 30) on, as in every craps battle. Existing owner-specific survival draws remain,
+and the shooter-profit boost follows the normal battles' row for the
 number of named chips (`Craps._shooterBoostTerms`): a fully random board keeps the natural
 15% chance of a 32% boost, and each named chip trades some of it away. There is no rotating
 boost. There is no goal, protected bankroll, payout for surviving bankroll or cash-out.
-A run ends at bust, after 64 shooters, or at exactly 511 rolls, and is ranked by the
+A run ends at bust, after 48 shooters, or at exactly 511 rolls, and is ranked by the
 highest virtual bankroll it reached. Nothing is wagered or returned: the bankroll exists only to
 score the run. When the roll cap stops a hand mid-way, chips still on the table count at face
-value for that last reading. The bounds come from 200,000 simulated shared-dice runs over every
-board size: none reached 64 shooters and 10 (in 2 of 1,000 rounds) reached 511 rolls. They
-bound a run's gas, not any payout. The engine exposes them as `settleSlipBounded(..., bounds)`; a replay must pass the
-same `(511 << 16) | 64`.
+value for that last reading. 511 is the longest cut the engine makes exactly; a roll budget of
+512 or more is judged between shooters. The bounds are a safety limit for the gas budget, set
+where runs essentially never reach them: none of 200,000 simulated shared-dice runs over every
+board size came near (the longest ran 430 rolls and 36 shooters), and 70 of 286 million engine
+runs across every strategy reached 511 rolls. The engine exposes them as
+`settleSlipBounded(..., bounds)`; a replay must pass the same `(511 << 16) | 48`.
 
 Ranking uses the highest bankroll at a **completed shooter boundary**, including the
-initial bankroll; a run the roll cap stops mid-hand takes its last reading at the cut. Busting later does not erase the high point. To avoid a wager-type cap on
-large burns, the engine runs in normalized units: 3,000 starting FLIP and ten 60-FLIP chips.
-The exact 512-bit product of original starting stack and normalized peak determines ranking;
-the common denominator is 3,000 FLIP. It introduces no truncation in comparisons. A stack is
-held in 160 bits (a burn that would cross 2^160 wei of chips reverts; that is about 10^12
-times FLIP's uint128 supply ceiling), so the product's high word always fits the 192 bits a
-retained node gives it. This normalized process defines the virtual chips' rounding behavior.
+initial bankroll; a run the roll cap stops mid-hand takes its last reading at the cut.
+Busting later does not erase the high point. To avoid a wager-type cap on large burns, the
+engine runs in normalized units: 3,000 starting FLIP and ten 60-FLIP chips. The score is the
+whole-FLIP starting stack times the normalized peak (the common denominator is 3,000 FLIP), so
+comparisons carry no truncation beyond the stack's whole-FLIP rounding. The run bounds keep a
+peak far below 2^126 wei, so a real score stays well inside the 192 bits a node gives it; a
+score past them would saturate, not wrap, and equal capped scores fall to the tiebreak. This
+normalized process defines the virtual chips' rounding behavior.
 
 After each run, a separately tagged fair coin controls eligibility. **Tails never enters the
 leaderboard and gets no prize**, even with the highest raw peak. Heads compete for places.
@@ -140,8 +149,10 @@ eligible entries, with at most six heap moves. Total settlement work grows with 
 per-call work stays bounded. The entry count is a checked `uint64`, rather than a configured
 population cap. No implementation can process literally infinite players in finite time.
 
-The keeper leg uses at most 1,920 work units (4.7k gas each) minus prior box-scan work, the
-same envelope as the box legs, and may finish one bounded item beyond it. Every piece of work
+The keeper leg uses at most 2,500 work units (4.7k gas each) minus prior box-scan work, and may
+finish one bounded item beyond it. Runs are priced at the heaviest board's dice, so mixed fields
+use well under their charge: full calls measure about 7.3M gas on mixed boards and at most
+8.2M on a field of the heaviest board. Every piece of work
 is charged after it runs, by its outcome and at its measured worst case: the call frame, a
 tails coin, a heads run's fixed cost plus one unit per six rolls, a filling insert (fresh or
 reused slots priced apart), each heap level, a root reject, each scanned leaf and each ETH
@@ -168,12 +179,15 @@ No ETH is pushed to winners during settlement; the existing claim flow applies.
   same worker and its existing work-priced bounty.
 - `DecimatorBurn` now emits a `uint64 entryId` instead of a bucket.
 - `DecBurnRecorded` reports event, entry, base amount (burn plus quest and boon bonuses),
-  credited chips, cumulative stack and the board the burn set. Storage keeps one owner slot
-  per entry id and one word per wallet packing id, board and stack; a retained node is two
-  slots (the score's low word, then its high word above the entry id), and the tiebreak is
-  recomputed from the id when two scores are equal. The FIFO settles one round at a time, so a
-  single leaderboard is reused round after round: only the first round to reach a position
-  pays for fresh slots, and a filling insert is charged by whether its slot was fresh.
+  credited chips, cumulative stack and the board the burn set. Storage keeps one word per
+  entry, keyed by event and id, packing owner, board and whole-FLIP stack, which is all a run
+  reads. A wallet's own slot holds only its latest event and id, to find its entry for a
+  top-up; it is reused window after window, and settlement never reads it, so a new window's
+  entry cannot disturb an older round still in the queue. A retained node is one slot, the
+  score above the entry id, and the tiebreak is recomputed from the id when two scores are
+  equal. The FIFO settles one round at a time, so a single leaderboard is reused round after
+  round: only the first round to reach a position pays for a fresh slot, and a filling insert
+  is charged by whether its slot was fresh.
 - `DecimatorResolved` reports event, full word, pool and entrant count.
 - `DecimatorRun` reports each heads run's normalized peak. Tails skip the engine and log
   nothing: the coin and the run both replay from the sealed word and entry id. A missing run
@@ -181,14 +195,15 @@ No ETH is pushed to winners during settlement; the existing claim flow applies.
   the round's `cursor`.
 - `DecimatorRanked` reports champion id and actual winner count.
 - `DecimatorClaimed` reports each payout: the ETH credited and the half passes queued (one of the two is zero, except the champion's). `PlayerCredited` also fires for ETH.
-- Lens: `decBurnOf` and `decEntryAt` (owner, stack and board), `decBattleRoundOf`,
-  `decWinnerAt` (the exact high/low score words and the full ordering key; answers only while
-  the round is at the head of the queue, since the next round reuses the slots; finished
-  rounds are recorded by their `DecimatorRanked` and `DecimatorClaimed` events), `decSettleCursorOf`.
-  Winner indices expose heap order, not display rank. Sort by the high/low/key tuple for a
-  leaderboard; the round explicitly identifies first. Entry records remain readable across
-  later windows. An event with no entrants is never written, so `phase == 0` alone does not
-  mean a window is open; read `decWindow()` and the level.
+- Lens: `decBurnOf` (a wallet's entry for its latest event only) and `decEntryAt` (owner,
+  stack and board by event and id, readable for every event), `decBattleRoundOf`,
+  `decWinnerAt` (the score and the full ordering key; the absolute peak in wei is score / 3000;
+  answers only while the round is at the head of the queue, since the next round reuses the
+  slots; finished rounds are recorded by their `DecimatorRanked` and `DecimatorClaimed` events),
+  `decSettleCursorOf`. Winner indices expose heap order, not display rank. Sort by the
+  score/key pair for a leaderboard; the round explicitly identifies first. An event with no
+  entrants is never written, so `phase == 0` alone does not mean a window is open; read
+  `decWindow()` and the level.
 
 The shared Game storage replaces only retired Decimator roots at slots 40–43 and 75;
 the unused final slot 76 is removed.
