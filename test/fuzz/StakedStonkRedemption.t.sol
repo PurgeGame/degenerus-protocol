@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -200,8 +201,8 @@ contract StakedStonkRedemption is DeployProtocol {
         view
         returns (uint64 ethBase, uint64 supplySnapshot, uint64 burned)
     {
-        bytes32 slot = keccak256(abi.encode(uint256(day), uint256(SLOT_PENDING_BY_DAY)));
-        uint256 raw = uint256(vm.load(address(sdgnrs), slot));
+        bytes32 slot = bytes32(SLOT_PENDING_BY_DAY);
+        uint256 raw = uint256(RecyclingState.pending(address(sdgnrs), uint24(day)));
         ethBase = uint64(raw);
         supplySnapshot = uint64(raw >> 64);
         burned = uint64(raw >> 128);
@@ -290,8 +291,8 @@ contract StakedStonkRedemption is DeployProtocol {
         // Pre-burn snapshot of every day's packed slot.
         uint256[7] memory rawPre;
         for (uint32 d = windowStart; d <= windowEnd; d++) {
-            bytes32 slot = keccak256(abi.encode(uint256(d), uint256(SLOT_PENDING_BY_DAY)));
-            rawPre[d - windowStart] = uint256(vm.load(address(sdgnrs), slot));
+            bytes32 slot = bytes32(SLOT_PENDING_BY_DAY);
+            rawPre[d - windowStart] = uint256(RecyclingState.pending(address(sdgnrs), uint24(d)));
         }
 
         // Burn — must succeed (gambling path; not gameOver / not rngLocked / not livenessTriggered
@@ -317,8 +318,8 @@ contract StakedStonkRedemption is DeployProtocol {
         // Negative assertion: every OTHER day in the window byte-identical pre/post.
         for (uint32 d = windowStart; d <= windowEnd; d++) {
             if (d == dayPre) continue;
-            bytes32 slot = keccak256(abi.encode(uint256(d), uint256(SLOT_PENDING_BY_DAY)));
-            uint256 rawPost = uint256(vm.load(address(sdgnrs), slot));
+            bytes32 slot = bytes32(SLOT_PENDING_BY_DAY);
+            uint256 rawPost = uint256(RecyclingState.pending(address(sdgnrs), uint24(d)));
             assertEq(rawPost, rawPre[d - windowStart], "burn: non-current-day pendingByDay slot mutated");
         }
     }
@@ -580,7 +581,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // Seed pendingByDay[dayD] with supplySnapshot = 1000 whole tokens (cap = 500).
         // v47 DayPending packing: (ethBase, supplySnapshot, burned) — flipBase field removed.
         uint256 packed = _packPendingByDay(0, 1000, 0);
-        bytes32 slotPbD = keccak256(abi.encode(uint256(dayD), uint256(SLOT_PENDING_BY_DAY)));
+        bytes32 slotPbD = bytes32(SLOT_PENDING_BY_DAY);
         vm.store(address(sdgnrs), slotPbD, bytes32(packed));
 
         // Pre-stamp the sentinel so the INV-13 guard inside burn does NOT trip the
@@ -716,7 +717,7 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 cumulativeEthPre = sdgnrs.pendingRedemptionEthValue();
         uint32 sentinelPre = sdgnrs.pendingResolveDay();
         // pendingByDay[day] packed slot snapshot
-        bytes32 pbdSlot = keccak256(abi.encode(uint256(day), uint256(SLOT_PENDING_BY_DAY)));
+        bytes32 pbdSlot = bytes32(SLOT_PENDING_BY_DAY);
         uint256 pbdRawPre = uint256(vm.load(address(sdgnrs), pbdSlot));
 
         // Reverting call

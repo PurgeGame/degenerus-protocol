@@ -97,6 +97,12 @@ contract WaterHarness is CrapsViews {
         w.bankroll = uint128(bankrollFlip * 1 ether);
         w.goal = uint128(bankrollFlip * SCHED_GOAL * 1 ether);
         w.played = (bankrollFlip / _SCHED_BANK_MULT) * 1 ether;
+        // Synthetic scheduled fields must enter the real completion registry.
+        _slotIndex[slot] = 1;
+        (bool registered,) = address(this).call(
+            abi.encodeWithSignature("registerRngSlot(uint48,uint64,bytes32)", uint48(0), slot, key)
+        );
+        require(registered, "synthetic field registration");
         _scoreBattle(w, score, seat, 0);
     }
 
@@ -129,7 +135,7 @@ contract CrapsHighWaterTest is CrapsPins {
         _installPins();
         craps = new WaterHarness();
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }
 
@@ -541,7 +547,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         _installPins();
         craps = new WaterHarness();
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);
@@ -571,7 +577,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
     function test_customFiveAndTwentyXTargetsTakeTheBareEngine() public {
         uint16[2] memory goals = [uint16(5), 20];
         for (uint256 g = 0; g < 2; ++g) {
-            uint64 slot = _copycat(goals[g], uint48(90 + g), uint256(keccak256(abi.encode("copycat", g))));
+            uint64 slot = _copycat(goals[g], uint48(g & 1), uint256(keccak256(abi.encode("copycat", g))));
             uint256 betId = (uint256(slot) << 64) | 1;
             CrapsBattle.Settlement memory s = craps.settlementAt(betId);
 
@@ -620,7 +626,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         uint256 poolBefore = craps.progressivePool();
         uint256 armsBefore = coinflip.diceRunArms();
 
-        uint64 slot = _copycat(20, 95, uint256(keccak256("custom-money")));
+        uint64 slot = _copycat(20, 1, uint256(keccak256("custom-money")));
         vm.recordLogs();
         craps.resolveSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();

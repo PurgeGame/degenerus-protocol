@@ -21,7 +21,7 @@ contract FlipRedeemWindowTest is DeployProtocol {
     uint256 private constant SLOT_0 = 0;
     uint256 private constant JACKPOT_PHASE_SHIFT = 120; // byte 15: jackpotPhaseFlag
     uint256 private constant RNG_LOCKED_SHIFT = 152; // byte 19: rngLockedFlag
-    uint256 private constant WINDOW_OPEN_SHIFT = 240; // byte 30: ticketRedemptionOpen
+    uint256 private constant WINDOW_OPEN_SHIFT = 240; // byte 30: _ticketRedemptionOpen()
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
 
     // levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).

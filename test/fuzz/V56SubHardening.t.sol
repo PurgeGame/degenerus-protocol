@@ -582,6 +582,7 @@ contract V56SubHardening is DeployProtocol {
     }
 
     function _settleGame(uint256 vrfWord) internal {
+        _finishReadConsumers();
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
@@ -592,6 +593,7 @@ contract V56SubHardening is DeployProtocol {
     }
 
     function _settleClean(uint256 vrfWord) internal {
+        _finishReadConsumers();
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);

@@ -39,7 +39,7 @@ check-raw-selectors:
 
 # ── RNG-window consumer drift gate ──────────────────────────────────────
 # Mechanizes the v45 freeze north-star: every read/write of a VRF-word storage
-# variable (rngWordCurrent / rngWordByDay / lootboxRngWordByIndex / the
+# variable (rngWordCurrent / rngWordByDay / lootboxRngWord / the
 # lootboxRngPacked cursor) must be registered + classified in
 # scripts/rng-window-manifest.tsv, and the runtime freeze net
 # (RngWindowFreezeHandler) must enumerate the manifest's FROZEN_SET. A new/moved

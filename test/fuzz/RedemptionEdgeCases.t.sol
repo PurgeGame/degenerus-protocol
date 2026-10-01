@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -201,8 +202,8 @@ abstract contract RedemptionEdgeCasesBase is DeployProtocol {
         view
         returns (uint64 ethBase, uint64 supplySnapshot, uint64 burned)
     {
-        bytes32 slot = keccak256(abi.encode(uint256(day), uint256(SLOT_PENDING_BY_DAY)));
-        uint256 raw = uint256(vm.load(address(sdgnrs), slot));
+        bytes32 slot = bytes32(SLOT_PENDING_BY_DAY);
+        uint256 raw = uint256(RecyclingState.pending(address(sdgnrs), uint24(day)));
         ethBase = uint64(raw);
         supplySnapshot = uint64(raw >> 64);
         burned = uint64(raw >> 128);
@@ -1121,7 +1122,7 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         // v47 DayPending packing: (ethBase << 0) | (supplySnapshot << 64) | (burned << 128)
         // — the former per-day flipBase field was removed, so supplySnapshot moved to bit 64.
         uint256 packed = (uint256(1000) << 64);
-        bytes32 slotPbD = keccak256(abi.encode(uint256(dayD), uint256(SLOT_PENDING_BY_DAY)));
+        bytes32 slotPbD = bytes32(SLOT_PENDING_BY_DAY);
         vm.store(address(sdgnrs), slotPbD, bytes32(packed));
 
         // Also pre-set pendingResolveDay = dayD so the INV-13 sentinel check passes inside burn.

@@ -200,7 +200,7 @@ contract CrapsEconomicsTest is CrapsPins {
 
         for (uint256 i = 0; i < n; ++i) {
             (uint256 betId, uint64 slot) =
-                _run(b, bankMult, goalMult, uint48(20_000 + i), uint256(keccak256(abi.encode("flipev", i))));
+                _run(b, bankMult, goalMult, uint48(i & 1), uint256(keccak256(abi.encode("flipev", i))));
             (uint256 won, uint256 paid) = craps.previewSettlement(betId);
             if (paid != 0) expectedWon += won;
             expectedCredit += paid;
@@ -239,7 +239,7 @@ contract CrapsEconomicsTest is CrapsPins {
         uint256 creditedBefore = coinflip.totalCredited();
 
         for (uint256 i = 0; i < 600; ++i) {
-            uint48 idx = uint48(30_000 + i);
+            uint48 idx = uint48(i & 1);
             (uint256 betId, uint64 slot) =
                 _run(b, bankMult, goalMult, idx, uint256(keccak256(abi.encode("netburn", i))));
 
@@ -308,14 +308,16 @@ contract CrapsEconomicsTest is CrapsPins {
         // searching the word, which is the only free variable a seat has.
         bool sawFairDraw;
         for (uint256 i = 0; i < 64 && !sawFairDraw; ++i) {
+            uint256 trialSnapshot = vm.snapshotState();
             (uint256 id,) = _run(
-                _board(2), 2, uint16(GOAL_FAR_MULT), uint48(50_000 + i),
+                _board(2), 2, uint16(GOAL_FAR_MULT), uint48(i & 1),
                 uint256(keccak256(abi.encode("fairdraw", i)))
             );
             Craps.Bets memory drawn = craps.drawnBoardOf(id);
-            if (oracle.theoFor(drawn) != 0) continue;
+            if (oracle.theoFor(drawn) != 0) { vm.revertToStateAndDelete(trialSnapshot); continue; }
             sawFairDraw = true;
             assertEq(oracle.stakeFor(drawn), uint256(PLAYED) * 1 ether, "a fair draw is not the whole round");
+            vm.revertToStateAndDelete(trialSnapshot);
         }
         assertTrue(sawFairDraw, "no legal ticket drew a zero-edge board: the invariant may still hold");
 
@@ -334,7 +336,7 @@ contract CrapsEconomicsTest is CrapsPins {
 
         for (uint256 i = 0; i < 400; ++i) {
             (uint256 betId, uint64 slot) = _run(
-                b, bankMult, goalMult, uint48(60_000 + i), uint256(keccak256(abi.encode("fairburn", i)))
+                b, bankMult, goalMult, uint48(i & 1), uint256(keccak256(abi.encode("fairburn", i)))
             );
             (uint256 won, uint256 paid) = craps.previewSettlement(betId);
             craps.resolveSlot(slot, WHOLE_FIELD);

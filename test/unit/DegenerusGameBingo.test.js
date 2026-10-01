@@ -2,7 +2,7 @@ import { expect } from "chai";
 import hre from "hardhat";
 import * as bucketSeed from "../helpers/bucketSeed.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
-import { execSync } from "node:child_process";
+import { compiledStorageSlot as deriveStorageSlot } from "../helpers/storageLayout.js";
 import {
   deployFullProtocol,
   restoreAddresses,
@@ -17,24 +17,7 @@ const ZERO_SLOTS = Array(8).fill(0);
 let lvlTraitEntrySlot;
 let bingoClaimedSlot;
 
-function deriveStorageSlot(variable) {
-  const output = execSync(
-    "FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge inspect " +
-      "contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage " +
-      "storageLayout 2>/dev/null"
-  ).toString();
 
-  for (const line of output.split("\n")) {
-    if (!line.includes(variable)) continue;
-    const cells = line.split("|").map((cell) => cell.trim());
-    const labelIndex = cells.indexOf(variable);
-    if (labelIndex !== -1 && /^[0-9]+$/.test(cells[labelIndex + 2] ?? "")) {
-      return BigInt(cells[labelIndex + 2]);
-    }
-  }
-
-  throw new Error(`Could not derive storage slot for ${variable}`);
-}
 
 function wordHex(value) {
   return `0x${BigInt(value).toString(16).padStart(64, "0")}`;
@@ -45,7 +28,7 @@ function traitBucketSlot(level, trait, baseSlot) {
     hre.ethers.keccak256(
       hre.ethers.AbiCoder.defaultAbiCoder().encode(
         ["uint24", "uint256"],
-        [level, baseSlot]
+        [BigInt(level) & 1n, baseSlot]
       )
     )
   );
@@ -136,9 +119,9 @@ function bingoEvents(receipt, bingo) {
 }
 
 describe("DegenerusGame simple bingo", function () {
-  before(function () {
-    lvlTraitEntrySlot = deriveStorageSlot("lvlTraitEntry");
-    bingoClaimedSlot = deriveStorageSlot("bingoClaimed");
+  before(async function () {
+    lvlTraitEntrySlot = await deriveStorageSlot("lvlTraitEntry");
+    bingoClaimedSlot = await deriveStorageSlot("bingoClaimed");
     expect(lvlTraitEntrySlot).to.equal(8n);
     expect(bingoClaimedSlot).to.equal(51n);
   });
@@ -434,7 +417,17 @@ describe("DegenerusGame simple bingo", function () {
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
   });
 
-  it("expires an unclaimed bingo once the level advances past it, but the current level still claims", async function () {
+  it("retains a completed level's bingo until its buffer is actually reassigned", async function () {
+    const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+    const gameAddress = await game.getAddress();
+    const bingo = await bingoAtGame(game);
+    await seedBingo(gameAddress, 90, 10, [alice.address]);
+    await setLevel(gameAddress, 91);
+    await bingo.connect(alice).claimBingo(alice.address, 90, 10, ZERO_SLOTS);
+    expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
+  });
+
+  it("expires an unclaimed bingo only after its buffer is reassigned, while the other parity still claims", async function () {
     const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
     const gameAddress = await game.getAddress();
     const bingo = await bingoAtGame(game);
@@ -444,6 +437,7 @@ describe("DegenerusGame simple bingo", function () {
     await seedBingo(gameAddress, expiredLevel, symbol, [alice.address]);
     await seedBingo(gameAddress, currentLevel, symbol, [alice.address]);
     await setLevel(gameAddress, currentLevel);
+    await seedBingo(gameAddress, expiredLevel + 2, symbol, []);
 
     await expect(
       bingo

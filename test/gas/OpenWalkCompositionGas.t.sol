@@ -208,7 +208,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         require(_countPendingAfking() == 0, "fixture: ring fully drained pre-human-buys");
 
         // 90 distinct human buyers queue a minimal lootbox (LOOTBOX_MIN, no ticket leg) at the
-        // CURRENT (not-yet-finalized) lootbox RNG index — each is a fresh boxPlayers[idx] entry.
+        // CURRENT (not-yet-finalized) lootbox RNG index — each is a fresh boxPlayers[idx & 1] entry.
         for (uint256 i; i < HUMAN_BUYERS_FOR_FULL_SWEEP; ++i) {
             address buyer = makeAddr(string(abi.encodePacked(prefix, "human_", _u(i))));
             vm.deal(buyer, 1 ether);
@@ -367,7 +367,19 @@ contract OpenWalkCompositionGas is DeployProtocol {
         _coolProtocol();
         // The crank has a craps arm now, so a drained RING is not a drained CRANK until the table
         // is quiet too — otherwise this probe measures the craps leg finding a window to shut.
-        _quietCrapsTable();
+        // Quieting a scheduled table can itself request another word. Fulfill and
+        // publish that request, then finish its consumers before measuring NoWork.
+        for (uint256 i; i < 64; ++i) {
+            _quietCrapsTable();
+            _fulfillPending(uint256(keccak256(abi.encode(prefix, "quiet", i))) | 1);
+            _settleClean(uint256(keccak256(abi.encode(prefix, "quiet-clean", i))) | 1);
+            _finishReadConsumers();
+            if (!game.advanceDue() && !game.isRngFulfilled() && !game.rngLocked()) {
+                (bool moved,) = crapsBattle.keepScheduled(type(uint64).max);
+                if (!moved) break;
+            }
+        }
+        _coolProtocol();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "probe"))));
         uint256 gasBefore = gasleft();
         (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
@@ -435,6 +447,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     }
 
     function _settleGame(uint256 vrfWord) internal {
+        _finishReadConsumers();
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);

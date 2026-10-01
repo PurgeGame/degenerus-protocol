@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -80,7 +81,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     }
 
     function _index() private view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _order(uint48 index) private view returns (uint256) {
@@ -255,16 +256,17 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled);
         mockVRF.fulfillRandomWords(request, WORD);
-        assertEq(_index(), index + 1);
+        game.advanceGame(); // publish the delivered midday word
+        assertEq(_index(), (index ^ 1));
         uint256 initialFuture = game.futurePrizePoolView();
         if (laterPurchase) {
             _buy(2 ether);
             assertGt(game.futurePrizePoolView(), initialFuture, "second public purchase changed live cash inventory");
-            assertGt(_order(index + 1), 0, "second purchase remains an unrevealed order");
+            assertGt(_order((index ^ 1)), 0, "second purchase remains an unrevealed order");
         }
         assertEq(_order(index), committed);
         assertEq(game.level(), 0, "fixed live denomination");
-        uint256 nextOrder = _order(index + 1);
+        uint256 nextOrder = _order((index ^ 1));
         Balances memory beforeState = _balances();
         Expected memory e = _reference(beforeState.future, beforeState.pools[2]);
         assertGt(e.cash, 0);
@@ -306,7 +308,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         assertEq(sdgnrs.balanceOf(KEEPER), 0);
         assertEq(coinflip.coinflipAmount(KEEPER), 0);
         assertEq(_order(index), 0);
-        assertEq(_order(index + 1), nextOrder, "unrevealed second purchase survives child settlement");
+        assertEq(_order((index ^ 1)), nextOrder, "unrevealed second purchase survives child settlement");
         assertEq(game.openBoxes(type(uint256).max), 0, "spent parent and child cannot replay");
         assertEq(keccak256(abi.encode(_balances())), keccak256(abi.encode(afterState)), "replay has no balance effects");
 

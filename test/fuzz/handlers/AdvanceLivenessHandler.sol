@@ -7,6 +7,7 @@ import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.so
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
+import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
 /// @title AdvanceLivenessHandler — drives the advance chain and checks a LIVENESS post-condition.
 ///
@@ -389,7 +390,12 @@ contract AdvanceLivenessHandler is Test {
             bool turbo = (uint8(uint256(vm.load(address(game), bytes32(SLOT0))) >> 184) & JACKPOT_TURBO) != 0;
             uint24 lvl = _level();
             bool ffNonEmpty = _queueLen(lvl + 2 | TICKET_FAR_FUTURE_BIT) != 0;
-            vm.prank(ContractAddresses.CRAPS);
+            // A funded donor's credit waives the empty-queue gates, as the retired craps exemption did.
+            address probe = address(uint160(0xC4A95));
+            MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(block.timestamp);
+            vm.prank(ContractAddresses.ADMIN);
+            game.creditMiddayRng(probe, 1 ether);
+            vm.prank(probe);
             (bool ok,) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
             if (ok) {
                 probeFlags = 1;
@@ -423,7 +429,18 @@ contract AdvanceLivenessHandler is Test {
             if (game.gameOver()) return (true, bytes4(0), cranks);
             _fulfillPending();
             (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-            if (!ok) return (true, _sel(ret), cranks);
+            if (!ok) {
+                bytes4 stopped = _sel(ret);
+                // Advance can be idle while this session still has required consumers.
+                // Stop after they finish: unrelated stamped boxes/scheduled upkeep and
+                // optional fresh requests are outside this word's completion predicate.
+                if (stopped == E_NOT_TIME_YET && !_sessionComplete()) {
+                    (bool worked, bytes memory routerRet) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                    if (worked) continue;
+                    if (_sel(routerRet) != bytes4(keccak256("NoWork()"))) return (true, _sel(routerRet), cranks);
+                }
+                return (true, stopped, cranks);
+            }
         }
         return (false, bytes4(0), cranks);
     }
@@ -434,7 +451,7 @@ contract AdvanceLivenessHandler is Test {
         if (sel != E_NOT_TIME_YET) return _snapshot(V_TERMINAL_REVERT, sel, cranks, phase);
         uint24 wallDay = game.currentDayView();
         if (_wordByDay(wallDay) == 0 || game.rngLocked()) return _snapshot(V_NOT_SEALED, sel, cranks, phase);
-        if (!_ticketsFullyProcessed() && _rngRequestTime() == 0) {
+        if (!_ticketsFullyProcessed() && !_requestActive()) {
             return _snapshot(V_STAGED_NO_WORKER, sel, cranks, phase);
         }
         if (game.advanceDue()) return _snapshot(V_ADVANCE_DUE_LIES, sel, cranks, phase);
@@ -629,6 +646,14 @@ contract AdvanceLivenessHandler is Test {
 
     function _ticketsFullyProcessed() internal view returns (bool) {
         return (uint256(vm.load(address(game), bytes32(SLOT0))) >> 192) & 1 != 0;
+    }
+
+    function _requestActive() internal view returns (bool) {
+        return uint256(vm.load(address(game), bytes32(SLOT0))) & (uint256(1) << 254) != 0;
+    }
+
+    function _sessionComplete() internal view returns (bool) {
+        return uint256(vm.load(address(game), bytes32(SLOT0))) & (uint256(1) << 248) != 0;
     }
 
     function _rngRequestTime() internal view returns (uint256) {

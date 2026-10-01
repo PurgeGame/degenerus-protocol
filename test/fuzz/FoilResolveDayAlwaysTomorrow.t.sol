@@ -47,6 +47,7 @@ contract FoilResolveDayAlwaysTomorrow is DeployProtocol {
         _advanceUntilUnlocked();
         assertEq(_dailyIdx(), R, "sealed R");
 
+        _finishReadConsumers();
         game.advanceGame();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
         game.advanceGame();
@@ -65,6 +66,7 @@ contract FoilResolveDayAlwaysTomorrow is DeployProtocol {
         address late = makeAddr("foil_late");
         _buy(late);
         _assertResolvesTomorrow(late, W);
+        _finishReadConsumers();
         _t += 1 days;
         vm.warp(_t);
         assertEq(game.rngWordForDay(W + 1), 0, "W+1 unrequested before its own day");
@@ -111,9 +113,9 @@ contract FoilResolveDayAlwaysTomorrow is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (!game.advanceDue() && !game.rngLocked() && !game.boxesPending()) return;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (!game.advanceDue() && !game.rngLocked() && !game.boxesPending()) return;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }

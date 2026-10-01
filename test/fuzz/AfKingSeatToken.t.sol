@@ -54,6 +54,7 @@ contract AfKingSeatToken is DeployProtocol {
 
     /// @dev Complete a full day: advance -> VRF fulfill -> drain to unlock.
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
@@ -65,6 +66,7 @@ contract AfKingSeatToken is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
     }
 
     function _isActive(address who) internal view returns (bool active) {

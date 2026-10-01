@@ -1,14 +1,13 @@
 // Test-side seeding and decoding of the packed trait buckets via hardhat_setStorageAt.
 //
-// lvlTraitEntry[lvl][trait] (slot 8) is a uint256[] whose length word holds the occurrence
-// count and whose data words hold eight uint32 lanes each; a lane is a position in the
-// per-level owner registry lvlEntryOwner[lvl] (slot 67). Seeding a bucket therefore appends
-// every holder to the registry and writes the lanes that name those positions.
+// Trait headers hold a uint32 count and seven uint32 tail lanes. Full data words have eight lanes.
+// The full buffer level and per-parity bitmap gate validity; registries remain per actual level.
 import hre from "hardhat";
 
 const TRAIT_SLOT = 8n;
 const OWNER_SLOT = 67n;
 const LANE_MASK = 0xffffffffn;
+const TRAIT_BITMAP_SLOT = 76n;
 
 const pad32 = (v) => hre.ethers.toBeHex(BigInt(v), 32);
 
@@ -21,7 +20,7 @@ function mapSlot(key, base) {
 }
 
 function bucketLengthSlot(lvl, trait, traitSlot = TRAIT_SLOT) {
-  return mapSlot(lvl, traitSlot) + BigInt(trait);
+  return mapSlot(BigInt(lvl) & 1n, traitSlot) + BigInt(trait);
 }
 
 function ownerLengthSlot(lvl, ownerSlot = OWNER_SLOT) {
@@ -59,10 +58,20 @@ async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
   }
   await setStorage(addr, ownersLen, ownerCount);
 
+  const stampShift = 112n + (BigInt(lvl) & 1n) * 24n;
+  const stamps = await getStorage(addr, 5n);
+  const bitmapSlot = (opts.traitBitmapSlot ?? TRAIT_BITMAP_SLOT) + (BigInt(lvl) & 1n);
+  const sameLevel = ((stamps >> stampShift) & 0xffffffn) === BigInt(lvl);
+  const bits = sameLevel ? await getStorage(addr, bitmapSlot) : 0n;
+  await setStorage(addr, bitmapSlot, bits | (1n << BigInt(trait)));
+  await setStorage(addr, 5n, (stamps & ~(0xffffffn << stampShift)) | (BigInt(lvl) << stampShift));
   const lenSlot = bucketLengthSlot(lvl, trait, traitSlot);
-  await setStorage(addr, lenSlot, BigInt(holders.length));
+  const fullWords = Math.floor(lanes.length / 8);
+  let tail = 0n;
+  for (let j = fullWords * 8; j < lanes.length; ++j) tail |= (lanes[j] & LANE_MASK) << BigInt(32 * (j & 7));
+  await setStorage(addr, lenSlot, BigInt(holders.length) | (tail << 32n));
   const base = dataBase(lenSlot);
-  for (let w = 0; w * 8 < lanes.length; ++w) {
+  for (let w = 0; w < fullWords; ++w) {
     let word = 0n;
     for (let j = 0; j < 8 && w * 8 + j < lanes.length; ++j) {
       word |= (lanes[w * 8 + j] & LANE_MASK) << BigInt(32 * j);
@@ -120,13 +129,16 @@ async function readTraitBucket(addr, lvl, trait, opts = {}) {
   const traitSlot = opts.traitSlot ?? TRAIT_SLOT;
   const ownerSlot = opts.ownerSlot ?? OWNER_SLOT;
   const lenSlot = bucketLengthSlot(lvl, trait, traitSlot);
-  const len = Number(await getStorage(addr, lenSlot));
+  const stamp = ((await getStorage(addr, 5n)) >> (112n + (BigInt(lvl) & 1n) * 24n)) & 0xffffffn;
+  const header = await getStorage(addr, lenSlot);
+  const bits = await getStorage(addr, (opts.traitBitmapSlot ?? TRAIT_BITMAP_SLOT) + (BigInt(lvl) & 1n));
+  const len = stamp !== BigInt(lvl) || !(bits & (1n << BigInt(trait))) ? 0 : Number(header & LANE_MASK);
   const base = dataBase(lenSlot);
   const ownersData = dataBase(ownerLengthSlot(lvl, ownerSlot));
   const out = [];
   let word = 0n;
   for (let i = 0; i < len; ++i) {
-    if (i % 8 === 0) word = await getStorage(addr, base + BigInt(i >> 3));
+    if (i % 8 === 0) word = (i >> 3) === Math.floor(len / 8) ? header >> 32n : await getStorage(addr, base + BigInt(i >> 3));
     const lane = (word >> BigInt(32 * (i & 7))) & LANE_MASK;
     const owner = (await getStorage(addr, ownersData + lane)) & ((1n << 160n) - 1n);
     out.push(hre.ethers.getAddress("0x" + owner.toString(16).padStart(40, "0")));
@@ -137,6 +149,7 @@ async function readTraitBucket(addr, lvl, trait, opts = {}) {
 export {
   TRAIT_SLOT,
   OWNER_SLOT,
+  TRAIT_BITMAP_SLOT,
   bucketLengthSlot,
   ownerLengthSlot,
   seedTraitBucket,

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
@@ -49,7 +50,7 @@ contract KeeperNonBrick is DeployProtocol {
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low 128
     ///      bits) is the box-owed signal that replaced the removed lootboxEthBase mapping.
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
@@ -112,7 +113,7 @@ contract KeeperNonBrick is DeployProtocol {
 
         // Seed lootboxRngIndex = 1 (word stays 0 until injected) so the daily-index reads are well-formed.
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(INDEX);
+        RecyclingState.seedWriteBuffer(address(game), INDEX);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
     }
 

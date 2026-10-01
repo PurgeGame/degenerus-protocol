@@ -33,6 +33,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
 
     /// @dev Complete a full day: advanceGame -> VRF fulfill -> drain to unlock.
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -43,6 +44,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
     }
 
     /// @dev Seal the current day (fresh lastVrfProcessed) and fund players.

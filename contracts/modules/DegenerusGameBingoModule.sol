@@ -141,9 +141,9 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // already filled for a future level qualifies on ownership alone. claimBingo
         // only READS lvlTraitEntry (never writes it) and writes only its own claim flag,
         // so this cannot corrupt VRF state (freeze-safe). The only level gate is the expiry:
-        // a level's bingo dies when the next level starts.
+        // a level's bingo closes when L+2 actually takes over its ticket buffer.
         if (gameOver) revert GameOver();
-        if (lvl < level) revert BingoExpired();
+        if (_ticketLevelRetired(lvl)) revert BingoExpired();
         if (symbol >= 32) revert InvalidSymbol();
         if (bingoClaimed[lvl][player]) revert AlreadyClaimed();
 
@@ -155,14 +155,13 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // traitId = (quadrant << 6) | (c << 3) | symInQ. Guard the index against the
         // array length BEFORE the read so a bad index fails closed with one clean
         // custom error (no bare Panic(0x32)).
-        uint256[][256] storage levelBuckets = lvlTraitEntry[lvl];
         uint256 traitBase = (uint256(quadrant) << 6) | uint256(symInQ);
         for (uint256 c = 0; c < 8; ) {
             uint8 traitId = uint8(traitBase | (c << 3));
             uint256 slot = slots[c];
             if (
-                slot >= levelBuckets[traitId].length ||
-                _bucketOwnerAt(lvl, traitId, slot) != player
+                slot >= _bucketLength(lvl, traitId) ||
+                _bucketOwnerAtUnchecked(lvl, traitId, slot) != player
             ) {
                 revert NotSlotOwner();
             }

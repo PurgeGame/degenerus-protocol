@@ -292,9 +292,9 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) break;
+            if (_daySealed()) break;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) break;
+            if (_daySealed()) break;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }
@@ -302,12 +302,18 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (_daySealed()) return;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (_daySealed()) return;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }
+    }
+
+    /// @dev A false advance hint can mean the read cohort must drain first.
+    function _daySealed() internal view returns (bool) {
+        uint24 sealedDay = uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24);
+        return game.currentDayView() == sealedDay && !game.advanceDue() && !game.rngLocked();
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

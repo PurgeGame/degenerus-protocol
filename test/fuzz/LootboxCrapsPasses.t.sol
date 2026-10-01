@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -30,6 +31,7 @@ contract LootboxCrapsPasses is DeployProtocol {
     }
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -40,6 +42,7 @@ contract LootboxCrapsPasses is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
     }
 
     function _nested(uint256 baseSlot, uint48 index, address player) internal pure returns (bytes32) {
@@ -53,7 +56,7 @@ contract LootboxCrapsPasses is DeployProtocol {
     /// @dev box-order migration: the removed per-(player,index) `openBox` read
     ///      lootboxOrder[index][player] straight from the mapping (no discovery queue, no
     ///      "finalized" notion). Its sweep replacement (`openBoxes`) only ever finds a box by
-    ///      walking `boxPlayers[index]`, and only for indices at or below LR_INDEX-1, so this
+    ///      walking `boxPlayers[index & 1]`, and only for indices at or below LR_INDEX-1, so this
     ///      forged setup also enqueues `player` and finalizes+parks the sweep frontier on
     ///      `index` -- every call is self-contained (LR_INDEX and the cursor are unconditionally
     ///      overwritten each time), so the many non-monotonic index sequences the callers below
@@ -62,24 +65,21 @@ contract LootboxCrapsPasses is DeployProtocol {
         uint256 packed = uint256(game.level()) | (uint256(1) << LB_SCORE_SHIFT)
             | (uint256(1) << LB_CUSTOM_COUNT_SHIFT) | ((ethAmount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
         vm.store(address(game), _nested(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
-        vm.store(address(game), _simple(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
+        RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
 
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
+        uint256 len = 0; // one fixture entry; previous case was fully consumed
         bytes32 dataBase = keccak256(abi.encode(lenSlot));
         vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
         vm.store(address(game), lenSlot, bytes32(len + 1));
 
         uint256 mask48 = (uint256(1) << 48) - 1;
-        bytes32 lrSlot = bytes32(SLOT_LOOTBOX_RNG_IDX);
-        uint256 lrPacked = uint256(vm.load(address(game), lrSlot));
-        vm.store(address(game), lrSlot, bytes32((lrPacked & ~mask48) | (uint256(index) + 1)));
+        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
 
         bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
         cur &= ~(mask48 << (7 * 8));
         cur &= ~(mask48 << (13 * 8));
-        cur |= (uint256(index) & mask48) << (13 * 8);
         vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
@@ -106,7 +106,7 @@ contract LootboxCrapsPasses is DeployProtocol {
     {
         for (uint256 i = 1; i < 60; ++i) {
             uint256 w = uint256(keccak256(abi.encode("pass", base, i)));
-            (bool found, uint32 n, uint32 h,) = _open(player, uint48(uint256(base) + i), w, size);
+            (bool found, uint32 n, uint32 h,) = _open(player, uint48(i & 1), w, size);
             if (found) return (w, n, h);
         }
         revert("no box in this sweep reached the pass lane");
@@ -162,7 +162,7 @@ contract LootboxCrapsPasses is DeployProtocol {
         uint256 mixed;
         for (uint48 i = 1; i < 45; ++i) {
             (bool found, uint32 n, uint32 h,) =
-                _open(player, 5000 + i, uint256(keccak256(abi.encode("mix", i))), (uint256(i) % 9 + 1) * 30 ether);
+                _open(player, uint48(i & 1), uint256(keccak256(abi.encode("mix", i))), (uint256(i) % 9 + 1) * 30 ether);
             if (!found) continue;
             ++seen;
             if (n != 0 && h != 0) ++mixed;
@@ -179,11 +179,11 @@ contract LootboxCrapsPasses is DeployProtocol {
         address player = _ready();
         uint256 snap = vm.snapshotState();
         (uint256 word, uint32 n1, uint32 h1) = _findPassWord(player, 6000, 40 ether);
-        uint48 index = 6000;
+        uint48 index = 0;
         // Re-find the exact index the winning word used by replaying the search deterministically.
         for (uint256 i = 1; i < 60; ++i) {
             if (uint256(keccak256(abi.encode("pass", uint48(6000), i))) == word) {
-                index = uint48(6000 + i);
+                index = uint48(i & 1);
                 break;
             }
         }
@@ -212,9 +212,9 @@ contract LootboxCrapsPasses is DeployProtocol {
         uint256 big;
         uint256 small;
         for (uint48 i = 1; i <= n; ++i) {
-            (bool f1,,,) = _open(player, 9000 + i, uint256(keccak256(abi.encode("big", i))), 200 ether);
+            (bool f1,,,) = _open(player, uint48(i & 1), uint256(keccak256(abi.encode("big", i))), 200 ether);
             if (f1) ++big;
-            (bool f2,,,) = _open(player, 20000 + i, uint256(keccak256(abi.encode("small", i))), 3 ether);
+            (bool f2,,,) = _open(player, uint48(i & 1), uint256(keccak256(abi.encode("small", i))), 3 ether);
             if (f2) ++small;
         }
         emit log_named_uint("announced, large boxes", big);
@@ -239,10 +239,10 @@ contract LootboxCrapsPasses is DeployProtocol {
         address player = _ready();
         uint256 snap = vm.snapshotState();
         (uint256 word,,) = _findPassWord(player, 8000, 10 ether);
-        uint48 index = 8000;
+        uint48 index = 0;
         for (uint256 i = 1; i < 60; ++i) {
             if (uint256(keccak256(abi.encode("pass", uint48(8000), i))) == word) {
-                index = uint48(8000 + i);
+                index = uint48(i & 1);
                 break;
             }
         }

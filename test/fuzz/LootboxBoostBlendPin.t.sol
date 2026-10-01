@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -30,6 +32,7 @@ contract LootboxBoostBlendPin is DeployProtocol {
     }
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -40,10 +43,11 @@ contract LootboxBoostBlendPin is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
     }
 
     function _lrIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_IDX))) & 0xFFFFFFFFFFFF);
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _orderWord(uint48 index, address who) internal view returns (uint256) {

@@ -39,8 +39,12 @@ import sys
 # uses the default; the SOLV pool-write gate passes the counted-term set).
 VRF_WORD_IDENTIFIERS = [
     "rngWordCurrent",
+    "_currentRngWord",
     "rngWordByDay",
-    "lootboxRngWordByIndex",
+    "_nudgeCount",
+    "rngFlagsAndNudges",
+    "_rawDailyRngWord",
+    "_lootboxWord",
     "lootboxRngPacked",
     # CROSS-CONTRACT READERS. A satellite that reaches the same words through the game's
     # `extsload` names no storage variable at all — it names a numeric slot — so identifier

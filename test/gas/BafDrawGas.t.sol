@@ -182,7 +182,7 @@ contract BafDrawGas is DeployProtocol {
                 address(coinflip), keccak256(abi.encode(key, ENTRY_SLOT)), bytes32((uint256(uint160(p)) << 96) | cum)
             );
         }
-        vm.store(address(coinflip), keccak256(abi.encode(uint256(day), HEADER_SLOT)), bytes32((uint256(n) << 96) | cum));
+        vm.store(address(coinflip), keccak256(abi.encode(day, HEADER_SLOT)), bytes32((uint256(n) << 96) | cum));
         vm.prank(GAME);
         coinflip.armBafDraw(day);
 

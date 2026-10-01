@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
@@ -128,29 +129,26 @@ contract WhaleBoonExpiry is DeployProtocol {
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
 
         uint256 vrfWord = uint256(keccak256(abi.encode("whaleBoonExpiry", player, index)));
-        vm.store(address(game), _simpleMappingSlot(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
+        RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
 
         // Box-order migration: the removed per-(player,index) `openBox` read lootboxOrder
         // straight from the mapping; its sweep replacement only ever finds a box by walking
-        // boxPlayers[index] (never populated by this forged setup) at or below LR_INDEX-1
+        // boxPlayers[index & 1] (never populated by this forged setup) at or below LR_INDEX-1
         // (never advanced past `index` here either). Enqueue + finalize + park so a
         // full-budget openBoxes() call reaches exactly this one entry.
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
+        uint256 len = 0; // one fixture entry; previous case was fully consumed
         bytes32 dataBase = keccak256(abi.encode(lenSlot));
         vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
         vm.store(address(game), lenSlot, bytes32(len + 1));
 
         uint256 mask48 = (uint256(1) << 48) - 1;
-        bytes32 lrSlot = bytes32(SLOT_LOOTBOX_RNG_IDX);
-        uint256 lrPacked = uint256(vm.load(address(game), lrSlot));
-        vm.store(address(game), lrSlot, bytes32((lrPacked & ~mask48) | (uint256(index) + 1)));
+        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
 
         bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
         cur &= ~(mask48 << (7 * 8));
         cur &= ~(mask48 << (13 * 8));
-        cur |= (uint256(index) & mask48) << (13 * 8);
         vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
@@ -183,7 +181,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         assertEq(whaleDayBefore, currentDay - 5, "whaleDay should be seeded 5 days back");
         assertEq(deityDayBefore, 0, "deityWhaleDay should be seeded at 0 (lootbox-rolled)");
 
-        _triggerSweep(player, 5001);
+        _triggerSweep(player, 1);
 
         assertTrue(_whaleLaneIsZero(player), "lapsed whale lane (bits 200..255) must read 0 after the sweep");
     }
@@ -197,7 +195,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         uint24 currentDay = game.currentDayView();
         _injectWhaleBoon(player, currentDay - 2, 0, 3);
 
-        _triggerSweep(player, 5002);
+        _triggerSweep(player, 0);
 
         (uint24 whaleDayAfter, uint24 deityWhaleDayAfter, uint8 tierAfter) = _readWhaleLane(player);
         assertEq(tierAfter, 3, "whale tier must survive inside the 4-day window");
@@ -217,7 +215,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         uint24 currentDay = game.currentDayView();
         _injectWhaleBoon(player, currentDay, currentDay, 3);
 
-        _triggerSweep(player, 5003);
+        _triggerSweep(player, 1);
 
         (uint24 whaleDaySame, uint24 deityWhaleDaySame, uint8 tierSame) = _readWhaleLane(player);
         assertEq(tierSame, 3, "deity whale boon must survive a same-day sweep");
@@ -229,7 +227,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         uint24 newDay = game.currentDayView();
         assertGt(newDay, currentDay, "day must have advanced past the deity stamp");
 
-        _triggerSweep(player, 5004);
+        _triggerSweep(player, 0);
 
         assertTrue(_whaleLaneIsZero(player), "deity whale lane must clear once currentDay != deityWhaleDay");
     }
@@ -246,7 +244,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         uint24 currentDay = game.currentDayView();
         _injectWhaleBoon(player, currentDay - 4, 0, 3);
 
-        _triggerSweep(player, 5005);
+        _triggerSweep(player, 1);
 
         (uint24 whaleDayAfter, uint24 deityWhaleDayAfter, uint8 tierAfter) = _readWhaleLane(player);
         assertEq(tierAfter, 3, "whale tier must survive exactly at the 4-day boundary");

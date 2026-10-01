@@ -148,7 +148,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
     }
 
     function traitEntryLen(uint24 lvl, uint8 traitId) external view returns (uint256) {
-        return lvlTraitEntry[lvl][traitId].length;
+        return _bucketLength(lvl, traitId);
     }
 
     function traitEntryAt(
@@ -156,7 +156,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         uint8 traitId,
         uint256 i
     ) external view returns (address) {
-        return _bucketOwnerAt(lvl, traitId, i);
+        return _bucketOwnerAtUnchecked(lvl, traitId, i);
     }
 
     function claimableOf(address who) external view returns (uint256) {

@@ -761,7 +761,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
-        "function resolveLootboxDirect(",
+        "function _resolveLootboxDirectCore(",
         "function _resolveRedemptionChunk(",
       ]) {
         const fnIdx = source.indexOf(fnSig);

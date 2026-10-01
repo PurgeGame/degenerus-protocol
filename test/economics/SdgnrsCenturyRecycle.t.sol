@@ -329,7 +329,8 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         vm.prank(ALICE);
         sdgnrs.burn(1_000 ether + 1);
         uint24 day = game.currentDayView();
-        bytes32 slot = keccak256(abi.encode(uint256(day), uint256(7)));
+        bytes32 slot = bytes32(uint256(7)); // retained pendingAggregate; day is stamped in slot 0
+        assertEq(sdgnrs.pendingResolveDay(), day);
         uint256 beforeDay = uint256(vm.load(address(sdgnrs), slot));
         _recycle(100);
         vm.prank(ALICE);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 
@@ -114,6 +115,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///      any pending request -> drain until unlocked, fulfilling any request
     ///      the drain fires. Stops on NotTimeYet().
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         MockVRFCoordinator c = _coord();
         if (!_advanceTolerant()) return;
         uint256 reqId = c.lastRequestId();
@@ -130,6 +132,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
                 _lastFulfilledReqId = r;
             }
         }
+            _finishReadConsumers();
     }
 
     /// @dev Drain the daily flow on the ACTIVE coordinator while rngLocked():
@@ -148,7 +151,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     function _readRngWordCurrent() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
+        return RecyclingState.currentWord(address(game));
     }
 
     function _readVrfRequestId() internal view returns (uint256) {
@@ -156,12 +159,12 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_INDEX)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD_BY_INDEX)));
-        return uint256(vm.load(address(game), slot));
+        return uint256(bytes32(RecyclingState.word(address(game), uint48(index))));
     }
 
     /// @dev Advance state to a daily VRF-request boundary on the ACTIVE
@@ -381,7 +384,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///         preserved slot N via the :1804 mid-day write); Run B fires
     ///         requestLootboxRng and delivers the SAME vrfWord on the ORIGINAL
     ///         coordinator with no rotation. The reserved index N is identical
-    ///         across runs and lootboxRngWordByIndex[N] (== vrfWord) is
+    ///         across runs and _lootboxWord(N) (== vrfWord) is
     ///         byte-identical across runs.
     function testFuzz_RotationFreezeInvariant_MidDay(
         uint256 vrfWord,
@@ -393,7 +396,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         // 256-bit VRF word is 0 only with negligible probability. (1 is a legal
         // mid-day word here -- the mid-day branch writes the index directly and is
         // not subject to the daily rngGate==1 sentinel.)
-        vm.assume(vrfWord != 0);
+        vm.assume(vrfWord > 1);
 
         // Setup runs BEFORE the snapshot so both runs share identical pre-request
         // state (the mid-day-eligible day-2 state + pending lootbox + funded VRF).
@@ -412,7 +415,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
             // met for this iteration) -- filter, mirroring the v43 harness filters.
             vm.assume(false);
         }
-        uint48 reservedIndexA = _readLootboxRngIndex() - 1;
+        uint48 reservedIndexA = (_readLootboxRngIndex() ^ 1);
         // Reserved slot is orphaned-pending (empty) -- not a pre-satisfied tautology.
         if (_lootboxRngWord(reservedIndexA) != 0) {
             vm.assume(false);
@@ -430,7 +433,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         }
         // LR_INDEX preserved across the rotation: the same slot N is still reserved.
         assertEq(
-            _readLootboxRngIndex() - 1,
+            (_readLootboxRngIndex() ^ 1),
             reservedIndexA,
             "rotation must preserve the reserved mid-day index (LR_INDEX frozen)"
         );
@@ -455,7 +458,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         if (_readMidDayFlag() != 1) {
             vm.assume(false);
         }
-        uint48 reservedIndexB = _readLootboxRngIndex() - 1;
+        uint48 reservedIndexB = (_readLootboxRngIndex() ^ 1);
         if (_lootboxRngWord(reservedIndexB) != 0) {
             vm.assume(false);
         }

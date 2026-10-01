@@ -300,7 +300,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
-        "function resolveLootboxDirect(",
+        "function _resolveLootboxDirectCore(",
         "function _resolveRedemptionChunk(",
       ]) {
         const body = extractBody(src, fnSig);

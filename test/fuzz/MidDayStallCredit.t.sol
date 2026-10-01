@@ -42,7 +42,8 @@ contract StallCreditSeeder is DegenerusGame {
     }
 
     function stamps() external view returns (uint48 requestTime, uint256 requestId) {
-        return (rngRequestTime, vrfRequestId);
+        // Logical authority: idle physical IDs are deliberately retained nonzero.
+        return (rngRequestTime, _rngRequestActive() ? vrfRequestId : 0);
     }
 
     function latches() external view returns (bool goLvl, bool goDead) {
@@ -152,14 +153,24 @@ abstract contract StallCreditBase is DeployProtocol {
         revert("harness: day never sealed");
     }
 
-    /// @dev The craps table's mid-day request (exempt from the pending-value gates).
+    /// @dev A mid-day request from a funded donor: the credit waives the pending-value gates, so
+    ///      the request needs no lootbox queue and leaves no craps residue.
     function _middayRequest() internal returns (uint256 id) {
-        vm.prank(ContractAddresses.CRAPS);
-        game.requestLootboxRng();
+        _finishReadConsumers();
+        _donorRequest();
         id = vrf.lastRequestId();
         (uint48 t, uint256 live) = _stamps();
         assertEq(live, id, "harness: mid-day request in flight");
         assertTrue(t != 0, "harness: stamped");
+    }
+
+    function _donorRequest() internal {
+        address donor = makeAddr("midday-donor");
+        mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed
+        vm.prank(ContractAddresses.ADMIN);
+        game.creditMiddayRng(donor, 1 ether);
+        vm.prank(donor);
+        game.requestLootboxRng();
     }
 
     function _warpDays(uint256 n) internal {
@@ -190,7 +201,9 @@ abstract contract StallCreditBase is DeployProtocol {
             _answer();
             (, uint24 idx) = _clock();
             if (!game.rngLocked() && idx == w && game.rngWordForDay(w) != 0) return;
-            assertGt(_adv(), 0, "no advance may take the game-over path");
+            // A read-drain step returns mult 0 too; the level state is the real check.
+            _adv();
+            assertFalse(game.gameOver() || game.livenessTriggered(), "no advance may take the game-over path");
         }
         revert("harness: never caught up");
     }
@@ -219,7 +232,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         _answer();
         assertFalse(game.livenessTriggered(), "a recovered mid-day stall must not read as an unattended gap");
         vm.expectRevert();
-        vm.prank(ContractAddresses.CRAPS);
+        vm.prank(stranger);
         game.requestLootboxRng(); // today holds no word yet: no second mid-day request can replace the stamp
 
         _catchUp(w);
@@ -524,8 +537,8 @@ contract MidDayStallCreditGas is StallCreditBase {
     function test_gas_middayRequestFirst() public {
         _seed(5);
         _sealDay(game.currentDayView());
-        vm.prank(ContractAddresses.CRAPS);
-        game.requestLootboxRng();
+        _finishReadConsumers();
+        _donorRequest();
         _log("GAS middayRequestFirst used/refund");
     }
 
@@ -535,8 +548,8 @@ contract MidDayStallCreditGas is StallCreditBase {
         _middayRequest();
         _answer();
         vm.warp(vm.getBlockTimestamp() + 1 hours); // a later request, not the same second's stamp
-        vm.prank(ContractAddresses.CRAPS);
-        game.requestLootboxRng();
+        _finishReadConsumers();
+        _donorRequest();
         _log("GAS middayRequestAfterAnswer used/refund");
     }
 

@@ -77,6 +77,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         assertTrue(sealBlock != 0, "seal already opened the next level's window");
         assertEq(_generationStart(target + 1), 0, "future window remains unopened");
         uint256 bootstrapStart = _generationStart(1);
+        _finishReadConsumers();
         vm.roll(block.number + 100);
         vm.warp(block.timestamp + 1 days + 1);
         vm.recordLogs();

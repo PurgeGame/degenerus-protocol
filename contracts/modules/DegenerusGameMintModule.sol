@@ -33,7 +33,7 @@ import {
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
-import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./DegenerusGameMintStreakUtils.sol";
+import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -89,7 +89,7 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  *
  * ## Trait Generation
  *
- * Trait tickets are generated per queue entry in _raritySymbolBatch (not from a tokenId):
+ * Trait tickets are generated per queue entry by FoilPack.generateTraitRun:
  * an LCG seeded by keccak256(baseKey, VRF entropyWord, groupIdx) — baseKey packs
  * (level, queueIdx, player, owed) — drives each entry's roll.
  * - Entry index & 3 selects the quadrant/category (0-63, 64-127, 128-191, 192-255)
@@ -117,7 +117,6 @@ contract DegenerusGameMintModule is
 
 
     /// @dev LCG multiplier for trait generation.
-    uint64 private constant TICKET_LCG_MULT = 6364136223846793005;
 
     // -------------------------------------------------------------------------
     // Purchase / Lootbox Constants
@@ -346,6 +345,10 @@ contract DegenerusGameMintModule is
             return (false, true, 0);
         }
 
+        if (!_prepareTicketLevel(lvl)) {
+            (, bool drained) = _drainFoil((WRITES_BUDGET_SAFE * 65) / 100);
+            return (drained, false, WRITES_BUDGET_SAFE);
+        }
         uint256 idx = ticketCursor;
         if (idx >= total && ticketSeats == 0) {
             _releaseTicketQueue(rk);
@@ -354,19 +357,12 @@ contract DegenerusGameMintModule is
             return (false, true, 0);
         }
 
-        // Set up write budget with cold storage scaling on first batch
+        // Uniform budget for every chunk, including the first one.
         uint32 writesBudget = WRITES_BUDGET_SAFE;
-        if (idx == 0) {
-            writesBudget -= (writesBudget * 35) / 100; // 65% scaling for cold storage
-        }
 
         uint32 used;
         uint32 processed; // Track within-player progress
 
-        // Trait-batch scratch buffers shared by every entry this call (zeroed between
-        // entries inside _raritySymbolBatch), so memory does not grow per queue entry.
-        uint32[256] memory counts;
-        uint8[256] memory touchedTraits;
 
         // Snap valve exponent for this target level; constant across the whole
         // queue drain (declarations lock 6 levels out and level commits are gated
@@ -379,7 +375,7 @@ contract DegenerusGameMintModule is
         // whole lane word. Survivors below the seat floor drain entry by entry.
         if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
             (idx, used) = _drainRounds(rk, lvl, writesBudget, idx, total, entropy, shift);
-            used = _drainSeatedSurvivors(queue, lvl, writesBudget, used, entropy, shift, counts, touchedTraits);
+            used = _drainSeatedSurvivors(queue, lvl, writesBudget, used, entropy, shift);
         }
 
         while (idx < total && used < writesBudget) {
@@ -395,9 +391,7 @@ contract DegenerusGameMintModule is
                     processed,
                     entropy,
                     idx,
-                    shift,
-                    counts,
-                    touchedTraits
+                    shift
                 );
             if (writesThis == 0 && !advance) break;
             unchecked {
@@ -426,102 +420,6 @@ contract DegenerusGameMintModule is
         }
     }
 
-    /// @dev Generates trait tickets in batch for a player's ticket awards using LCG-based PRNG.
-    ///      Uses inline assembly for gas-efficient bulk storage writes.
-    /// @param baseKey Encoded key carrying (lvl, queueIdx, player, owed) packed across 256 bits.
-    ///                The owed value in the low 32 bits mutates per emission, so multi-call
-    ///                drains hash distinct seeds across calls on the same player.
-    /// @param startIndex Starting position within this player's owed tickets for this batch.
-    /// @param count Number of ticket entries to process this batch.
-    /// @param entropyWord VRF entropy for trait generation.
-    /// @param ownerIdx The player's position in lvlEntryOwner[lvl]; every lane names it.
-    /// @param counts Caller-allocated all-zero scratch tracking how many times each trait
-    ///               was generated; the touched entries are re-zeroed before return, so one
-    ///               allocation serves every entry of a batch loop.
-    /// @param touchedTraits Caller-allocated scratch listing the traits generated this call
-    ///                      (only the first `touchedLen` entries are read).
-    function _raritySymbolBatch(
-        uint256 baseKey,
-        uint32 startIndex,
-        uint32 count,
-        uint256 entropyWord,
-        uint256 ownerIdx,
-        uint32[256] memory counts,
-        uint8[256] memory touchedTraits
-    ) private returns (uint256 fresh, uint256 dirty) {
-        uint16 touchedLen;
-
-        uint32 endIndex;
-        unchecked {
-            endIndex = startIndex + count;
-        }
-        uint32 i = startIndex;
-
-        // Generate traits in groups of 16, using LCG for deterministic randomness.
-        while (i < endIndex) {
-            uint32 groupIdx = i >> 4;
-
-            // Hash all inputs so player address (stored in baseKey bits 191-32)
-            // reaches the low 32 bits of s. LCG iteration preserves low-bit
-            // independence, so the category bucket — derived from the low 32
-            // bits of s — inherits whatever entropy the seed's low bits carry.
-            uint256 seed = uint256(
-                keccak256(abi.encode(baseKey, entropyWord, groupIdx))
-            );
-            uint64 s = uint64(seed) | 1;
-            uint8 offset = uint8(i & 15);
-            unchecked {
-                s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset);
-            }
-
-            for (uint8 j = offset; j < 16 && i < endIndex; ) {
-                unchecked {
-                    s = s * TICKET_LCG_MULT + 1; // LCG step
-
-                    // Generate trait using weighted distribution, add quadrant offset.
-                    uint8 traitId = DegenerusTraitUtils.traitFromWord(s) +
-                        (uint8(i & 3) << 6);
-
-                    // Track first occurrence of each trait for batch writing.
-                    if (counts[traitId]++ == 0) {
-                        touchedTraits[touchedLen++] = traitId;
-                    }
-                    ++i;
-                    ++j;
-                }
-            }
-        }
-
-        // Extract level from baseKey for storage slot calculation.
-        uint24 lvl = uint24(baseKey >> 224);
-
-        // Calculate the storage slot for this level's trait buckets.
-        // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
-        // with dynamic array elements at keccak256(keccak256(key . slot) + index).
-        // This relies on the standard Solidity storage layout (stable since 0.4.x).
-        // Safe here because the contract is non-upgradeable.
-        uint256 levelSlot;
-        assembly ("memory-safe") {
-            mstore(0x00, lvl)
-            mstore(0x20, lvlTraitEntry.slot)
-            levelSlot := keccak256(0x00, 0x40)
-        }
-
-        // Batch-write the packed lanes, one run per distinct trait.
-        for (uint16 u; u < touchedLen; ) {
-            uint8 traitId = touchedTraits[u];
-            uint32 occurrences = counts[traitId];
-            // Restore the all-zero invariant on the shared scratch buffer.
-            counts[traitId] = 0;
-            (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences);
-            unchecked {
-                fresh += f;
-                dirty += d;
-                ++u;
-            }
-        }
-    }
-
     // -------------------------------------------------------------------------
     // External Entry Point — Current-Level Ticket Batch Processing
     // -------------------------------------------------------------------------
@@ -531,8 +429,8 @@ contract DegenerusGameMintModule is
     /// @dev The unified sweep worker: walks [anchor-1 .. _mintCeiling()] in ascending
     ///      (routed-priority) order, draining each non-empty read queue and continuing
     ///      into the next level whenever one finishes with budget to spare, so no
-    ///      call wastes headroom. The first batch of each fresh level derates the
-    ///      remaining budget by 35% for cold storage access. The per-buy-day foil
+    ///      call wastes headroom. Every chunk uses the same physical-write budget.
+    ///      The per-buy-day foil
     ///      buckets drain on the final leftover. Level switches happen only at queue
     ///      release, so the shared ticketLevel/ticketCursor resume marker is never
     ///      reset mid-queue.
@@ -560,11 +458,7 @@ contract DegenerusGameMintModule is
         // whenever this loads. A stored word is never zero.
         uint256 entropy;
 
-        // Trait-batch scratch buffers shared by every normal entry this call (zeroed
-        // between entries inside _raritySymbolBatch), so memory does not grow per
-        // queue entry. The foil drain runs in a separate module and owns its scratch.
-        uint32[256] memory counts;
-        uint8[256] memory touchedTraits;
+        // Trait generation and its scratch memory live in the pinned foil-pack worker.
 
         // TICKET_SLOT_BIT set on the anchor = the game-over caller's explicit
         // single-key request: the terminal payout samples only drainLevel's trait
@@ -586,6 +480,11 @@ contract DegenerusGameMintModule is
                 continue;
             }
 
+            if (!_prepareTicketLevel(t)) {
+                // Old paid foil may own this parity: let its bounded drain remove the blocker.
+                (, bool drained) = _drainFoil((remaining * 65) / 100);
+                return (false, didWork || drained);
+            }
             if (ticketLevel != t) {
                 ticketLevel = t;
                 ticketCursor = 0;
@@ -594,18 +493,14 @@ contract DegenerusGameMintModule is
                 if (ticketSeats != 0) ticketSeats = 0;
             }
             uint256 idx = ticketCursor;
-            if (idx == 0) {
-                // Fresh level: derate the remaining budget for cold storage access.
-                remaining -= (remaining * 35) / 100;
-            }
             if (remaining == 0) {
                 ticketCursor = uint32(idx);
                 return (false, didWork);
             }
             if (entropy == 0) {
-                entropy = lootboxRngWordByIndex[
-                    uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1
-                ];
+                entropy = _lootboxWord(
+                    _rngReadBuffer()
+                );
             }
 
             uint32 used;
@@ -614,7 +509,7 @@ contract DegenerusGameMintModule is
 
             if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
                 (idx, used) = _drainRounds(rk, t, remaining, idx, total, entropy, shift);
-                used = _drainSeatedSurvivors(queue, t, remaining, used, entropy, shift, counts, touchedTraits);
+                used = _drainSeatedSurvivors(queue, t, remaining, used, entropy, shift);
             }
 
             while (idx < total && used < remaining) {
@@ -630,9 +525,7 @@ contract DegenerusGameMintModule is
                         processed,
                         entropy,
                         idx,
-                        shift,
-                        counts,
-                        touchedTraits
+                        shift
                     );
                 if (writesUsed == 0 && !advance) break;
                 unchecked {
@@ -689,11 +582,7 @@ contract DegenerusGameMintModule is
         // entries atomically; foilDrainDay/foilCursor make a budget-short deferral
         // resumable. Only when BOTH the window and the foil drain are caught up is
         // the sweep finished, so the readiness gate cannot let the jackpot draw
-        // early. A call that ran no queue segment derates the foil room the same way
-        // a fresh level would (its trait-bucket writes are equally cold).
-        if (remaining == WRITES_BUDGET_SAFE) {
-            remaining -= (remaining * 35) / 100;
-        }
+        // early. Slot-value pricing covers cold backing even in a foil-only call.
         (bool foilDone, bool foilDrained) = _drainFoil(remaining);
         didWork = didWork || foilDrained;
         ticketCursor = 0;
@@ -711,8 +600,22 @@ contract DegenerusGameMintModule is
             ticketLevel = marker;
             ticketCursor = 0;
         }
-        uint256 entropy = lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1];
+        uint256 entropy = _lootboxWord(_rngReadBuffer());
         (worked, finished, ) = _processFutureTicketBatch(lvl, entropy);
+    }
+
+    function _prepareTicketLevel(uint24 lvl) internal override returns (bool) {
+        if (_ticketBufferLevel(lvl) == lvl) return true;
+        return _prepareTicketBuffer(lvl);
+    }
+
+    function _prepareTicketBuffer(uint24 lvl) private returns (bool prepared) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameFoilPackModule.prepareTicketLevel.selector, lvl)
+        );
+        if (!ok) _revertDelegate(data);
+        // Pinned FoilPack worker always returns one ABI bool; no user-controlled returndata.
+        assembly ("memory-safe") { prepared := iszero(iszero(mload(add(data, 32)))) }
     }
 
     /// @dev Hand the per-buy-day foil buckets to the foil module on the leftover write
@@ -756,9 +659,7 @@ contract DegenerusGameMintModule is
         uint32 budget,
         uint32 used,
         uint256 entropy,
-        uint8 shift,
-        uint32[256] memory counts,
-        uint8[256] memory touchedTraits
+        uint8 shift
     ) private returns (uint32) {
         uint256 seats = ticketSeats;
         if (seats == 0) return used;
@@ -780,9 +681,7 @@ contract DegenerusGameMintModule is
                     processed,
                     entropy,
                     qi,
-                    shift,
-                    counts,
-                    touchedTraits
+                    shift
                 );
             if (writesThis == 0 && !advance) break;
             used += writesThis;
@@ -843,9 +742,7 @@ contract DegenerusGameMintModule is
         uint32 processed,
         uint256 entropy,
         uint256 queueIdx,
-        uint8 shift,
-        uint32[256] memory counts,
-        uint8[256] memory touchedTraits
+        uint8 shift
     ) private returns (uint32 writesUsed, uint32 take, bool advance) {
         uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
         uint256 record = _entryRecord(lvl, ownerPos);
@@ -895,21 +792,18 @@ contract DegenerusGameMintModule is
         if (take != owed) take &= ~uint32(3);
         if (take == 0) return (0, 0, false);
 
-        (uint256 fresh, uint256 dirty) = _raritySymbolBatch(
-            baseKey,
-            processed,
-            take,
-            entropy,
-            ownerIdx,
-            counts,
-            touchedTraits
+        (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameFoilPackModule.generateTraitRun.selector,
+                baseKey, processed, take, entropy, ownerIdx)
         );
+        if (!ok) _revertDelegate(data);
+        uint256 bucketWrites = abi.decode(data, (uint256));
         emit TraitsGenerated(player, baseKey, take);
 
-        // Charge the actual writes (reserved at their worst above): fresh 3, dirty 1, compute
-        // 1 per 16 occurrences, plus the entry's own bookkeeping.
+        // Slot-value bucket pricing (zero 3 / nonzero 1), compute per sixteen
+        // occurrences, and the entry's own bookkeeping. No first-chunk derate.
         writesUsed =
-            uint32(fresh * 3 + dirty + (take >> 4) + 1) +
+            uint32(bucketWrites + (take >> 4) + 1) +
             baseOv +
             (take == owed ? 1 : 0);
 
@@ -1015,12 +909,12 @@ contract DegenerusGameMintModule is
             // tickets and prize ETH accrue to real-ETH buyers. The target-met condition holds for the
             // whole of lastPurchaseDay, so even a one-day purchase phase still offers that day as a
             // redemption window.
-            if (!ticketRedemptionOpen) {
+            if (!_ticketRedemptionOpen()) {
                 if (
                     rngLockedFlag ||
                     _getNextPrizePool() <= _prizePoolTarget(level + 1)
                 ) revert E();
-                ticketRedemptionOpen = true;
+                _setTicketRedemptionOpen(true);
             }
 
             uint24 cachedLevel = level;
@@ -1085,59 +979,6 @@ contract DegenerusGameMintModule is
         uint256 ethCashWei,
         uint256 flipTokens
     );
-
-    /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
-    /// @dev Read-only twin of sellFarFutureEntries: shares the exact valuation (curve + daily
-    ///      per-player jitter + ETH/FLIP split) the executing path uses, so the displayed offer
-    ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
-    ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
-    ///      counterparty's FLIP inventory. Reverts on an ineligible distance or a zero /
-    ///      non-whole-ticket quantity (entry counts in multiples of 4); does
-    ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no FLIP
-    ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
-    ///      value(flipTokens).
-    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
-    /// @return totalBudget Total ETH the buyer would pay (the -EV offer).
-    /// @return ticketWei Portion delivered as current-level tickets.
-    /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
-    /// @return flipTokens Cash portion delivered as FLIP (burned from the buyer, paid as flip credit).
-    function previewSellFarFutureEntries(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities
-    )
-        external
-        view
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 ethCashWei,
-            uint256 flipTokens
-        )
-    {
-        uint24 cl = _activeTicketLevel();
-        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
-        uint256 seed = _farFutureSeed(player);
-        uint256 cashWei;
-        (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
-            levels,
-            quantities,
-            cl,
-            oneTicketWei,
-            seed
-        );
-        // Display the split for the buyer the executing path would resolve; fall back to sDGNRS as the
-        // nominal counterparty when neither can fund (the preview still shows the -EV offer).
-        address buyer = _resolveSalvageBuyer(totalBudget);
-        if (buyer == address(0)) buyer = ContractAddresses.SDGNRS;
-        (ethCashWei, flipTokens) = _quoteFarFutureFlipSplit(
-            cashWei,
-            oneTicketWei,
-            seed,
-            buyer
-        );
-    }
 
     /// @notice Sell far-future ticket entries (current-level tickets + cash; -EV exit) to sDGNRS, or to
     ///         the vault on the owner-enabled fallback when sDGNRS cannot fund the swap.
@@ -1241,35 +1082,6 @@ contract DegenerusGameMintModule is
         _purchaseFor(player, qty, 0, bytes32(0), MintPaymentKind.Claimable);
 
         emit FarFutureSwap(player, buyer, len, totalBudget, ticketWei, ethCashWei, flipTokens);
-    }
-
-    /// @dev Resolve the salvage-swap counterparty for a budget, fail-closed. sDGNRS first when its OWN
-    ///      claimable covers totalBudget above a >=1 ETH floor; else the vault when its owner has enabled
-    ///      the salvage-buy fallback AND its game-side ETH (claimable + prepaid afking, both backed by
-    ///      claimablePool) covers totalBudget above the owner-set reserve floor; else address(0) (no buyer
-    ///      can fund). The vault owner stages reserve ETH into the afking half via depositAfkingFunding.
-    ///      Shared by the executing path and the preview so the displayed counterparty matches the one
-    ///      charged. The vault config is a freeze-safe owner storage read (never a VRF-window value); the
-    ///      executing swap reverts under rngLockedFlag at its entrypoint, and the view preview may run in
-    ///      the lock because it writes nothing.
-    /// @param totalBudget The -EV ETH budget the buyer must fund above its floor.
-    /// @return buyer The counterparty (sDGNRS, the vault, or address(0) if none can fund).
-    function _resolveSalvageBuyer(uint256 totalBudget) internal view returns (address buyer) {
-        if (_claimableOf(ContractAddresses.SDGNRS) >= totalBudget + 1 ether) {
-            return ContractAddresses.SDGNRS;
-        }
-        (bool enabled, uint256 vaultFloorWei) = IDegenerusVaultOwner(
-            ContractAddresses.VAULT
-        ).salvageBuyConfig();
-        if (
-            enabled &&
-            _claimableOf(ContractAddresses.VAULT) +
-                _afkingOf(ContractAddresses.VAULT) >=
-            totalBudget + vaultFloorWei
-        ) {
-            return ContractAddresses.VAULT;
-        }
-        return address(0);
     }
 
     /// @dev Debit `amount` of a salvage buyer's game-side ETH and book it where solvency stays intact.
@@ -1824,9 +1636,7 @@ contract DegenerusGameMintModule is
             priceWei,
             ticketCost
         );
-        // Box leg gets the leftover fresh ETH; it queues at the SAME current LR_INDEX as
-        // the mint leg's lootbox (LR_INDEX does not advance mid-tx), so both share one
-        // index for co-resolution.
+        // Both box legs use the write buffer; no request swaps it within this purchase.
         _buyPresaleBoxFor(buyer, boxAmount, msg.value - mintFresh);
     }
 
@@ -1882,23 +1692,19 @@ contract DegenerusGameMintModule is
         // Queue at the current lootbox RNG index (shared with a same-tx mint lootbox).
         // The word for the current index is uncommitted until the index advances, so
         // the box is always queued pre-entropy (RNG freeze).
-        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        if (index == 0) revert E();
-        if (lootboxRngWordByIndex[index] != 0) revert E();
+        uint48 index = _rngWriteBuffer();
+        if (_lootboxWord(index) != 0) revert E();
         // One box per (index, player): the buy-time cumulative position (sold) is
         // frozen into the record for the DGNRS-tier roll, so accumulation would make
         // that snapshot ambiguous. Open this box (or wait for the next index) first.
-        if (presaleBoxEth[index][buyer] != 0) revert E();
-
-        // Pack: [bit 255: closing][bits 96:191: soldBefore][bits 0:95: applied].
-        // soldBefore (cumulative box ETH before this buy) freezes the 5-tier DGNRS
-        // curve input so the resolution reads no mutable SLOAD (RNG freeze).
-        presaleBoxEth[index][buyer] =
-            uint256(uint96(applied)) |
-            (uint256(uint96(sold)) << PRESALE_BOX_SOLD_SHIFT) |
-            (closing ? PRESALE_BOX_CLOSING_FLAG : 0);
-        // First box deposit at this index: enqueue for the permissionless auto-open.
-        boxPlayers[index].push(buyer);
+        (bool recorded, bytes memory recordData) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameFoilPackModule.recordPresaleBox.selector, buyer, index,
+                uint256(uint96(applied)) | (uint256(uint96(sold)) << PRESALE_BOX_SOLD_SHIFT)
+                    | (closing ? PRESALE_BOX_CLOSING_FLAG : 0)
+            )
+        );
+        if (!recorded) _revertDelegate(recordData);
 
         presaleBoxEthSold = uint96(sold + applied);
         if (closing) {
@@ -1912,7 +1718,7 @@ contract DegenerusGameMintModule is
             // This crossing buy sits at the highest index any presale box can occupy. The sweep
             // flips presaleDrained once it advances past this index (all presale boxes opened),
             // after which the open paths skip the cold presaleBoxEth SLOAD.
-            presaleCloseIndex = index;
+            presaleCloseBuffer = index;
         }
 
         emit PresaleBoxBuy(buyer, index, applied, closing);

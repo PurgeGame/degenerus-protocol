@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
 
@@ -27,6 +28,7 @@ import {JackpotBattle} from "../../../contracts/JackpotBattle.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
 import {Coinflip} from "../../../contracts/Coinflip.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
+import {IDegenerusGameLootboxModule} from "../../../contracts/interfaces/IDegenerusGameModules.sol";
 import {WWXRP} from "../../../contracts/WWXRP.sol";
 import {DegenerusAffiliate} from "../../../contracts/DegenerusAffiliate.sol";
 import {DegenerusJackpots} from "../../../contracts/DegenerusJackpots.sol";
@@ -44,6 +46,21 @@ import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
 import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
+/// @dev Fixture entrypoint for the actual indexed worker. Inherits Game so its
+/// external calls keep the production dispatch while the fixture is etched.
+contract IndexedReadFixtureDriver is DegenerusGame {
+    function finishIndexedRead() external {
+        require(!rngLockedFlag, "fixture daily still locked");
+        for (uint256 i; i < 100 && !humanReadComplete; ++i) {
+            (bool ok, bytes memory ret) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector, 10_000)
+            );
+            if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
+        require(humanReadComplete, "fixture indexed read did not complete");
+    }
+}
+
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
 /// @notice Deploys all 4 mocks + 30 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
@@ -52,6 +69,46 @@ import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 ///      run `node scripts/...patchForFoundry...` before `forge build` to align
 ///      the predicted CREATE addresses with the ContractAddresses.sol constants).
 abstract contract DeployProtocol is Test {
+    /// @dev Complete indexed boxes/bets without opening independent stamped AFKING
+    /// boxes that a gas fixture deliberately leaves pending for its measured call.
+    function _finishIndexedReadConsumers() internal {
+        if (!game.rngLocked() && game.isRngFulfilled()) game.advanceGame();
+        uint48 read = RecyclingState.readBuffer(address(game));
+        if (RecyclingState.word(address(game), read) == 0) return;
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(IndexedReadFixtureDriver).runtimeCode);
+        IndexedReadFixtureDriver(payable(address(game))).finishIndexedRead();
+        vm.etch(address(game), original);
+        _finishReadCraps(read);
+    }
+    /// @dev Finish the delivered read queue through the production sweep, including empty headers.
+    /// Never forge the completion cursor: binding/lifecycle tests must run every owed effect.
+    function _finishReadBoxes() internal {
+        if (!game.rngLocked() && game.isRngFulfilled()) game.advanceGame();
+        uint48 read = RecyclingState.readBuffer(address(game));
+        if (RecyclingState.word(address(game), read) == 0) return;
+        for (uint256 i; i < 10_000 && !game.boxIndexComplete(read); ++i) game.openBoxes(80);
+        assertTrue(game.boxIndexComplete(read), "fixture read cohort did not drain");
+    }
+
+    /// @dev Finish only the already-delivered read consumers before a fresh request.
+    /// No arms, new request, ticket swap, clock jump or completion-state poke.
+    function _finishReadConsumers() internal {
+        _finishReadBoxes();
+        uint48 read = RecyclingState.readBuffer(address(game));
+        if (RecyclingState.word(address(game), read) == 0) return;
+        _finishReadCraps(read);
+    }
+
+    function _finishReadCraps(uint48 read) private {
+        uint256 flag = uint256(1) << (250 + read);
+        for (uint256 i; i < 512; ++i) {
+            if (uint256(vm.load(address(game), bytes32(uint256(33)))) & flag == 0) return;
+            JackpotBattle(address(crapsBattle)).keepRngCohort(read, 1_888);
+        }
+        fail("fixture delivered Craps cohort did not drain");
+    }
+
     // Mocks
     MockVRFCoordinator public mockVRF;
     MockStETH public mockStETH;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // =============================================================================
 // TicketQueueReleaseGas.t.sol
@@ -80,13 +81,9 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
     }
 
     function _armEntropy(address host) private {
-        // Entropy word for processTicketBatch's lootboxRngWordByIndex[lrIndex-1]
+        // Entropy word for processTicketBatch's _lootboxWord(lrIndex-1)
         // read (lrIndex defaults to 1 → index 0).
-        vm.store(
-            host,
-            keccak256(abi.encode(uint256(0), SLOT_LOOTBOX_RNG_WORD_BY_INDEX)),
-            bytes32(uint256(keccak256("ticket-queue-release-gas-entropy")))
-        );
+        RecyclingState.seedWord(host, uint48(0), bytes32(uint256(keccak256("ticket-queue-release-gas-entropy"))));
     }
 
     /// @dev Finishing call of the private `_processFutureTicketBatch` on a fully-processed

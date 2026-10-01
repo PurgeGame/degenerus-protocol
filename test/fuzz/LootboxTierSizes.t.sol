@@ -17,7 +17,7 @@ contract RateViewer is DegenerusGame {
         view
         returns (uint256 level, uint256 evBps, uint256 boostBps, uint256 adjBps, uint256 distressBps)
     {
-        uint256 w = lootboxOrder[index][who];
+        uint256 w = _boxOrder(index, who);
         level = (w >> LB_LEVEL_SHIFT) & LB_LEVEL_MASK;
         evBps = _lootboxEvMultiplierFromScore((w >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
         boostBps = (w >> LB_BOOST_SHIFT) & LB_BPS_MASK;
@@ -67,7 +67,7 @@ contract LootboxTierSizes is DeployProtocol {
         uint256 m = (uint256(1) << 48) - 1;
         packed &= ~(m << (7 * 8));
         packed &= ~(m << (13 * 8));
-        packed |= (uint256(index) & m) << (13 * 8);
+        require(index < 2, "binary read fixture"); // byte 13 is humanReadComplete, not an index
         vm.store(address(game), slot, bytes32(packed));
     }
 

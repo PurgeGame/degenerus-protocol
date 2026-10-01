@@ -42,7 +42,7 @@ if os.environ.get("EXCLUDE_DIRS"):
 WORD_NAME_RE = re.compile(
     os.environ.get(
         "WORD_NAME_RE",
-        r"\b(?:[A-Za-z_]*[Ww]ord[A-Za-z0-9_]*|entropy|seed|rngSeed|randomWords?|rngWordCurrent|rngWordByDay|lootboxRngWordByIndex)\b",
+        r"\b(?:[A-Za-z_]*[Ww]ord[A-Za-z0-9_]*|entropy|seed|rngSeed|randomWords?|rngWordCurrent|rngWordByDay|lootboxRngWord)\b",
     )
 )
 

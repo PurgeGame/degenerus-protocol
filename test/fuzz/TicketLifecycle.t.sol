@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
@@ -2214,13 +2215,12 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev Read lootboxRngIndex directly from storage slot 34 (low 48 bits of lootboxRngPacked)
     ///      (post V62 lootbox repack: was 35).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 35, post V62 repack: was 36).
+    /// @dev Read _lootboxWord(index) from storage (mapping at slot 35, post V62 repack: was 36).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(34)));
-        return uint256(vm.load(address(game), slot));
+        return RecyclingState.word(address(game), index);
     }
 
     function _assertZeroStranding(uint24 fromLevel, uint24 toLevel) internal view {
@@ -2259,7 +2259,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // ==================== Lootbox Helpers ====================
 
     /// @dev Storage slot for lootboxRngWordByIndex mapping (post V62 lootbox repack: was 36).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
 
     /// @notice Purchase tickets with a lootbox ETH allocation. Returns the lootbox RNG index.
     /// @param who Buyer address
@@ -2324,7 +2324,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      mapping slot = keccak256(abi.encode(uint256(index), uint256(34)))
     function _storeLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
     /// @dev Move LR_INDEX (low 48 bits of lootboxRngPacked, slot 33) past `index` so the open

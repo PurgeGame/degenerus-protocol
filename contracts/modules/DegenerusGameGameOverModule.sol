@@ -26,6 +26,8 @@ pragma solidity 0.8.34;
 
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
+import {IDegenerusGameMintModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {
     IVRFCoordinator,
@@ -70,7 +72,10 @@ interface IFlipTombstone {
  * @notice Handles game over logic including jackpot distribution and final sweeps.
  * @dev Executed via delegatecall from DegenerusGame. Inherits storage layout.
  */
-contract DegenerusGameGameOverModule is DegenerusGameStorage {
+contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
+    uint8 private constant STAGE_GAMEOVER = 0;
+    uint8 private constant STAGE_TICKETS_WORKING = 5;
+
     /// @notice stETH token contract for liquid staking rewards
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
@@ -136,6 +141,224 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     uint256 private constant DEAD_REF_CREATED = 0;
     uint256 private constant DEAD_REF_QUEUED = 1;
 
+    /// @dev Handles the game-over trigger and post-game sweep. Returns (shouldReturn, stage, unlock);
+    ///      unlock is true only after normal payout. shouldReturn asks Advance to emit `stage` and exit.
+    ///      Stages used:
+    ///         STAGE_GAMEOVER -- a step of the ending, the payout, or the final sweep
+    ///         STAGE_TICKETS_WORKING -- a drain or tally batch; the caller retries
+    ///
+    ///      Two endings:
+    ///      - Deterministic, when VRF is dead (_vrfDead: a request unanswered for
+    ///        _VRF_DEAD_TIMEOUT). Latched on first entry and never undone. No entropy at all:
+    ///        tallyDeadVrf counts the terminal level's tickets over as many calls as it needs,
+    ///        then handleGameOverDrain fixes the pot they share (claimDeadVrf).
+    ///      - Normal, for the purchase deadline or the deadman with VRF alive. The terminal word
+    ///        is one this path requests itself after liveness froze purchases, and every
+    ///        cohort at the terminal level draws on it. There is no retry here: if that
+    ///        request goes unanswered for _VRF_DEAD_TIMEOUT the dead ending takes over.
+    function handleGameOverAdvance(uint24 day, uint24 lvl) external returns (bool shouldReturn, uint8 stage, bool unlock) {
+        if (gameOver) {
+            // Post-gameover: check for final sweep (1 month after gameover)
+            handleFinalSweep();
+            return (true, STAGE_GAMEOVER, false);
+        }
+
+        if (!_livenessTriggered()) return (false, 0, false);
+
+        bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0 || _vrfDead();
+
+        // A met pool target rescues a level from the deadline ending, but only before that
+        // ending has started (the drain-level latch below makes it irreversible), and never
+        // from the deadman or a dead VRF.
+        if (
+            !dead && lvl != 0 && _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0
+                && _getNextPrizePool() > _prizePoolTarget(lvl + 1) && !_vrfDeadmanFired()
+        ) {
+            return (false, 0, false);
+        }
+
+        // Record which bucket the ending pays from before anything below can take the RNG
+        // lock: the unlatched _gameOverTicketLevel reads the lock as "the last-purchase request
+        // already promoted level", so the bucket would move between transactions. The
+        // terminal affiliate is fixed with it, before any terminal word exists: a claim landing
+        // between the word and the payout could otherwise turn an empty leaderboard into a
+        // ranked one and move the pool the terminal draw is fed. (The dead ending pays no
+        // affiliate; the latch is harmless there.)
+        uint24 drainLevel = _gameOverTicketLevel(lvl);
+        if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0) {
+            _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, drainLevel == lvl ? 1 : 2);
+            _setRngTerminal();
+            (address top, ) = affiliate.affiliateTop(drainLevel);
+            terminalAffiliate = top;
+        }
+
+        // --- Deterministic ending ---
+        if (dead) {
+            if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) == 0) {
+                _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
+                // Revoke callback authority and discard late entropy, retaining metadata.
+                // The dead latch and unpublished session keep the terminal fallback reachable.
+                _setRngRequestActive(false);
+                _setRngSessionPublished(false);
+                rngWordCurrent = RNG_WORD_WAITING;
+            }
+            if (!tallyDeadVrf(drainLevel)) return (true, STAGE_TICKETS_WORKING, false);
+            handleGameOverDrain(day);
+            return (true, STAGE_GAMEOVER, false);
+        }
+
+        // --- Normal ending ---
+        // The terminal word is always this path's own request, sent after liveness froze entry;
+        // LR_GO_SWAP latches when it goes out. A daily request from before that (the deadman
+        // cutting off a day stuck in processing, or a backlog) never supplies it: its word, once
+        // delivered, only finalizes the lootbox index its request reserved, so the cohort that
+        // request committed still drains on a word requested after it; then the request is
+        // dropped together with the day it was processing, whose jackpot never pays (its funds
+        // stay in the terminal pot). Until delivered it is waited out like any request in flight.
+        if (_rngRequestActive() && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) {
+            uint256 preFreeze = _currentRngWord();
+            if (preFreeze == 0) return (true, STAGE_GAMEOVER, false);
+            _finalizeLootboxRng(preFreeze);
+            if (rngLockedFlag) _clearAppliedNudges();
+            _setRngRequestActive(false);
+            rngLockedFlag = false;
+            return (true, STAGE_GAMEOVER, false);
+        }
+
+        // Terminal scope: the payout samples only lvlTraitEntry[drainLevel], so every probe here
+        // is drainLevel-only; every other windowed cohort is dead value and is never touched.
+        if (rngWordByDay[day] == 0) {
+            if (!_rngRequestActive() || rngWordCurrent == RNG_WORD_WAITING) {
+                // No terminal word yet. Wait out a request in flight: a mid-day lootbox request,
+                // or this path's own terminal request.
+                if (_rngRequestActive()) return (true, STAGE_GAMEOVER, false);
+                if (ticketQueue[_tqReadKey(drainLevel)].length != 0) {
+                    // Before the ending's own swap, the read side is a cohort an earlier request
+                    // committed (a mid-day swap, or a dropped pre-freeze daily request) and its
+                    // word has landed: drain it on that word first, so the write cohort can be
+                    // swapped in behind it before the terminal request. After the swap the read
+                    // side is the ending's own cohort, and it drains only on the terminal word:
+                    // the last delivered word predates it. Without its word the cohort waits for
+                    // the terminal one instead (no swap then; it keeps the read side).
+                    if (
+                        _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
+                            && _lootboxWord(_rngReadBuffer()) != 0
+                            && _terminalDrainBatch(drainLevel)
+                    ) return (true, STAGE_TICKETS_WORKING, false);
+                } else if (
+                    ticketQueue[_tqWriteKey(drainLevel)].length != 0 && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
+                ) {
+                    // ONE terminal swap, ever, and always before the terminal request: every
+                    // entry at drainLevel then predates the terminal word. Without the bound a
+                    // queue created after the word went public could still be drawn.
+                    _swapTicketSlot();
+                }
+                // The swap window closes as the terminal request goes out (sent below, or
+                // retried by later calls if the coordinator refuses it).
+                _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
+            }
+            // Request the terminal word, or apply it once it has landed. Either way this
+            // transaction ends here, so the word's application (which may derive up to a
+            // deadman's worth of skipped days) never shares a transaction with a drain batch.
+            applyTerminalRng(uint48(block.timestamp), day, lvl);
+            return (true, STAGE_GAMEOVER, false);
+        }
+
+        // Terminal word recorded: drain the committed cohort and the foil tail on it, one batch
+        // per transaction. A finishing batch still returns, so the payout runs in its own.
+        if (
+            (ticketQueue[_tqReadKey(drainLevel)].length != 0 || _foilDrainPending())
+                && _terminalDrainBatch(drainLevel)
+        ) {
+            return (true, STAGE_TICKETS_WORKING, false);
+        }
+
+        handleGameOverDrain(day);
+        return (true, STAGE_GAMEOVER, true);
+    }
+
+
+    /// @notice Request the ending's entropy without consulting any read consumer.
+    /// @dev Only the terminal path delegates here, after fixing its payout level and swap.
+    ///      The caller arms a one-shot refusal timer; coordinator failure leaves it unchanged.
+    function requestTerminalRng() public returns (bool requested) {
+        if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0 || _rngRequestActive()) revert E();
+        try vrfCoordinator.requestRandomWords(VRFRandomWordsRequest({
+            keyHash: vrfKeyHash, subId: vrfSubscriptionId,
+            requestConfirmations: VRF_REQUEST_CONFIRMATIONS,
+            callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex""
+        })) returns (uint256 id) {
+            lootboxRngPacked &= ~((LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)
+                | (LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT));
+            _swapRngBuffers();
+            vrfRequestId = id;
+            _setRngRequestActive(true);
+            _setRngSessionPublished(false);
+            rngWordCurrent = RNG_WORD_WAITING;
+            rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+            rngLockedFlag = true;
+            _setDecDayOneActive(false);
+            if (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags)) _setTicketRedemptionOpen(false);
+            requested = true;
+        } catch {}
+    }
+
+    /// @notice Apply the ending's delivered word or request it without normal consumer gates.
+    /// @dev Shared helpers preserve normal daily recording, nudges and gap derivation.
+    function applyTerminalRng(uint48 ts, uint24 day, uint24 lvl) public {
+        uint256 currentWord = _currentRngWord();
+        if (_rngRequestActive() && currentWord != 0) {
+            uint24 first = dailyIdx + 1;
+            if (rngWordByDay[first] != 0) ++first;
+            if (day > first) _backfillGapDays(_rawDailyRngWord(currentWord), first, day);
+            currentWord = _applyDailyRng(day, currentWord);
+            if (lvl != 0) {
+                // Gameover settles the final day's flips but never grants a bonus (0).
+                coinflip.processCoinflipPayouts(0, currentWord, day);
+            }
+            _resolvePendingRedemption(currentWord);
+            _finalizeLootboxRng(currentWord);
+            return;
+        }
+        if (!_rngRequestActive()) {
+            // Arm the failure timer once; coordinator refusals must never move the deadline.
+            // Discard retained entropy before attempting the ending's own fresh request.
+            if (_rngSessionPublished()) {
+                _setRngSessionPublished(false);
+                rngWordCurrent = RNG_WORD_WAITING;
+                rngRequestTime = ts & ~uint48(1);
+            }
+            requestTerminalRng();
+        }
+    }
+
+    /// @dev One terminal drain batch: TICKET_SLOT_BIT on the anchor asks the worker for its
+    ///      single-key terminal mode, draining exactly drainLevel's read side plus the foil
+    ///      tail — every queued ticket at any other level is worthless at game over.
+    ///      FUND-RELEASE FALLBACK: a worker revert that carries an error of its own (an
+    ///      unforeseen error in ticket processing) is swallowed and reported as no batch, so the
+    ///      ending moves on: undrained tickets forfeit trait-bucket eligibility, but terminal fund
+    ///      release is never blocked.
+    ///      A failure that carries NO error of its own (empty return data, or EmptyRevert from a
+    ///      nested module call) is re-raised instead, before the ending's swap and after it. A
+    ///      batch is gas-bounded well under the per-transaction cap, so that is a caller
+    ///      withholding gas. Before the swap, swallowing it would close the one swap window with
+    ///      the write cohort left out. After it, the payout the call falls through to is cheap
+    ///      when no winning bucket is populated yet — a starved call could afford it and forfeit
+    ///      the whole undrained cohort.
+    /// @return ran True if a batch ran, finished or not.
+    function _terminalDrainBatch(uint24 drainLevel) private returns (bool ran) {
+        (bool dOk, bytes memory dData) = ContractAddresses.GAME_MINT_MODULE
+            .delegatecall(
+                abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector, drainLevel | TICKET_SLOT_BIT)
+            );
+        if (!dOk && (dData.length == 0 || (dData.length == 4 && bytes4(dData) == EmptyRevert.selector))) {
+            if (dData.length == 0) revert EmptyRevert();
+            assembly ("memory-safe") { revert(add(dData, 32), mload(dData)) }
+        }
+        return dOk && dData.length >= 64;
+    }
+
     /// @notice Process game over by distributing remaining funds.
     /// @dev Called when the game-over trigger fires: the purchase deadline (365 days at level
     ///      0, 30 after), the 30-day no-seal deadman, or a VRF request unanswered for 14 days.
@@ -155,7 +378,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
     /// @custom:reverts Invariant When distributable funds exist but the RNG word is unavailable (defense-in-depth).
     /// @custom:reverts TransferFailed When an stETH or ETH transfer fails.
-    function handleGameOverDrain(uint24 day) external {
+    function handleGameOverDrain(uint24 day) public virtual {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return; // Already processed
 
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
@@ -321,7 +544,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      chance for the three sinks to receive what they earned in-game.
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts TransferFailed When ETH or stETH transfer fails
-    function handleFinalSweep() external {
+    function handleFinalSweep() public {
         uint256 goTime = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
         if (goTime == 0) return; // Game not over yet
         if (block.timestamp < goTime + 30 days) return; // Too early
@@ -401,7 +624,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///            256 buckets are non-empty.
     /// @param lvl The latched terminal ticket level.
     /// @return finished True once all three stages are done.
-    function tallyDeadVrf(uint24 lvl) external returns (bool finished) {
+    function tallyDeadVrf(uint24 lvl) public returns (bool finished) {
         uint256 stage = deadTallyStage;
         if (stage == 3) return true;
         uint256 units = DEAD_TALLY_UNITS;
@@ -496,7 +719,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         uint256 created;
         uint256 traits;
         for (uint256 t; t < 256; ) {
-            uint256 n = lvlTraitEntry[lvl][t].length;
+            uint256 n = _bucketLength(lvl, t);
             if (n != 0) {
                 created += n;
                 unchecked {
@@ -536,7 +759,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
     ///      credits the holding's owner, never the caller. Open from the dead ending's payout
     ///      until the final sweep. Each reference names one holding; the top byte is its kind:
     ///        DEAD_REF_CREATED (0) — a created ticket: trait at bits 64..71, occurrence index
-    ///          at bits 0..63 of lvlTraitEntry[level][trait]. Pays the trait's equal share of
+    ///          at bits 0..63 of the reference, selecting a holding in the level's trait bucket.
+    ///          Pays the trait's equal share of
     ///          the created pot, divided equally among that trait's tickets.
     ///        DEAD_REF_QUEUED (1) — uncreated queued entries: registry position plus one at
     ///          bits 0..31. Pays pot * weight / total for the position's whole owed balance.
@@ -566,8 +790,8 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             if (kind == DEAD_REF_CREATED) {
                 uint8 trait = uint8(ref >> 64);
                 uint256 k = uint64(ref);
-                uint256 n = lvlTraitEntry[lvl][trait].length;
-                if (k >= n || _bucketOwnerAt(lvl, trait, k) != player) revert E();
+                uint256 n = _bucketLength(lvl, trait);
+                if (k >= n || _bucketOwnerAtUnchecked(lvl, trait, k) != player) revert E();
                 uint256 key = (uint256(trait) << 64) | (k >> 8);
                 uint256 bits = deadClaimed[key];
                 uint256 bit = uint256(1) << (k & 255);
@@ -696,20 +920,12 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
         // the remaining recourse, and a request unanswered _VRF_DEAD_TIMEOUT from its original
         // send reaches the VRF-dead ending.
         if (!rngLockedFlag) {
-            // Mid-day request in flight, lootbox-only or with a swapped ticket cohort alike:
-            // LR_INDEX is preserved, so the new word lands in the same reserved slot via the
-            // mid-day fulfillment branch. `vrfRequestId != 0` is what marks it outstanding: the
-            // mid-day fulfillment clears it, whereas LR_MID_DAY stays set after the word lands
-            // until the ticket batch drains, and _gameOverEntropy's failed-request stamp sets
-            // rngRequestTime with no request in flight — re-issuing then would send a spurious
-            // request whose fulfillment overwrites an already-delivered write-once lootbox word.
-            // A mid-day request re-fired by the vault owner's retry holds the daily lock and takes
-            // the daily branch below.
-            // Nothing in flight: config repoint only.
-            if (vrfRequestId != 0) vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
+            // Reissue only an active unanswered mid-day request. Delivery does not clear
+            // its ID; a delivered word awaiting keeper publication must remain unchanged.
+            if (_rngRequestActive() && rngWordCurrent == RNG_WORD_WAITING) vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
         } else {
             // Daily in flight: KEEP rngLockedFlag=true.
-            if (rngWordCurrent == 0) {
+            if (rngWordCurrent == RNG_WORD_WAITING) {
                 // Daily word not yet delivered: re-request on the new coordinator. The swap spends
                 // the vault owner's single retry (the low bit; the stamp itself does not move): the
                 // retry is the last resort before a swap, and re-armed here it could discard the
@@ -720,7 +936,7 @@ contract DegenerusGameGameOverModule is DegenerusGameStorage {
             }
             // else: daily word already delivered and valid -> preserve it; no re-issue
             // (a fresh callback would be rejected by the advance module's
-            // rngWordCurrent != 0 fulfillment guard).
+            // rngWordCurrent != RNG_WORD_WAITING fulfillment guard).
         }
 
         // Intentional: totalFlipReversals is NOT reset here. Nudges were purchased

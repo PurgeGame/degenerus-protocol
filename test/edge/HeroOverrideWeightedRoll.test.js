@@ -111,7 +111,7 @@
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
-import { execSync } from "node:child_process";
+import { compiledStorageSlot as deriveDailyHeroWagersBaseSlot } from "../helpers/storageLayout.js";
 import {
   deployFullProtocol,
   restoreAddresses,
@@ -199,10 +199,7 @@ const SLOT0_TIMING_FSM = "0x" + (0).toString(16).padStart(64, "0");
 const DAILY_IDX_BIT_SHIFT = 24n;
 const UINT32_MASK = 0xffffffn;
 
-// Storage slot for lootboxRngPacked — gates placeDegeneretteBet at
-// DegenerusGameDegeneretteModule.sol:451 (`if (index == 0) revert E()`).
-const LOOTBOX_RNG_PACKED_SLOT =
-  "0x" + (35).toString(16).padStart(64, "0");
+
 
 // -----------------------------------------------------------------------------
 // Module-level helpers
@@ -242,50 +239,7 @@ function computeChi2Multinomial(observed, expected) {
 // Runs `forge inspect` at test runtime and extracts the storage-layout slot
 // index for `dailyHeroWagers`. Re-validates the Phase 292 §2 EMPTY-diff
 // attestation against the v41 close pin (slot 53). Returns a BigInt.
-function deriveDailyHeroWagersBaseSlot() {
-  let forgeOut;
-  try {
-    forgeOut = execSync(
-      "FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storageLayout 2>/dev/null"
-    ).toString();
-  } catch (err) {
-    throw new Error(
-      `deriveDailyHeroWagersBaseSlot: forge inspect failed — ${err.message}. Ensure foundry is installed and on PATH.`
-    );
-  }
-  let slotIdx = null;
-  for (const line of forgeOut.split("\n")) {
-    if (!line.includes("dailyHeroWagers")) continue;
-    const cells = line.split("|").map((c) => c.trim());
-    for (let k = 0; k < cells.length; k++) {
-      if (cells[k] === "dailyHeroWagers") {
-        if (k + 2 < cells.length) {
-          const candidate = cells[k + 2];
-          if (/^[0-9]+$/.test(candidate)) {
-            slotIdx = candidate;
-          }
-        }
-        break;
-      }
-    }
-    if (slotIdx) break;
-  }
-  if (slotIdx === null) {
-    throw new Error(
-      `deriveDailyHeroWagersBaseSlot: failed to parse slot index from forge output (looking for 'dailyHeroWagers' row). First 400 chars:\n${forgeOut.slice(
-        0,
-        400
-      )}`
-    );
-  }
-  const slot = BigInt(slotIdx);
-  if (slot < 0n) {
-    throw new Error(
-      `deriveDailyHeroWagersBaseSlot: parsed slot=${slot} is negative`
-    );
-  }
-  return slot;
-}
+
 
 // Solidity nested-mapping-with-fixed-array slot derivation:
 //   `dailyHeroWagers` is `mapping(uint32 => uint256[4])` at base slot
@@ -329,20 +283,13 @@ async function readDailyIdx(gameAddr) {
   return Number((word >> DAILY_IDX_BIT_SHIFT) & UINT32_MASK);
 }
 
-// Seed `lootboxRngPacked` low 48 bits to `index` so the bet gate at
-// DegenerusGameDegeneretteModule.sol:451 (`if (index == 0) revert E()`)
-// opens. The companion gate at L452 (`lootboxRngWordByIndex[index] != 0
-// revert RngNotReady()`) passes by default — slot for index=1 is unset.
+// Set the physical write tag in slot 0, preserving every neighboring field.
 async function seedLootboxRngIndex(gameAddr, index = 1) {
-  const provider = hre.ethers.provider;
-  const current = BigInt(await provider.getStorage(gameAddr, LOOTBOX_RNG_PACKED_SLOT));
-  const INDEX_MASK = (1n << 48n) - 1n;
-  const cleared = current & ~INDEX_MASK;
-  const updated = cleared | (BigInt(index) & INDEX_MASK);
+  const slot0 = hre.ethers.toBeHex(0, 32);
+  const current = BigInt(await hre.ethers.provider.getStorage(gameAddr, slot0));
+  const updated = (current & ~(1n << 252n)) | ((BigInt(index) & 1n) << 252n);
   await hre.network.provider.send("hardhat_setStorageAt", [
-    gameAddr,
-    LOOTBOX_RNG_PACKED_SLOT,
-    "0x" + updated.toString(16).padStart(64, "0"),
+    gameAddr, slot0, hre.ethers.toBeHex(updated, 32),
   ]);
 }
 
@@ -426,8 +373,8 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   // assertion fires.
   // ---------------------------------------------------------------------------
   describe("TST-HRROLL setup-and-sanity — JS-replay oracle wiring + forge-inspect storage-layout baseSlot derivation", function () {
-    it("derives dailyHeroWagers base slot from forge inspect storageLayout and asserts the slot index is a non-negative BigInt", function () {
-      const baseSlot = deriveDailyHeroWagersBaseSlot();
+    it("derives dailyHeroWagers base slot from the compiled Hardhat storageLayout and asserts the slot index is a non-negative BigInt", async function () {
+      const baseSlot = await deriveDailyHeroWagersBaseSlot("dailyHeroWagers");
       expect(typeof baseSlot).to.equal("bigint");
       expect(baseSlot >= 0n).to.equal(true);
       console.log(
@@ -735,7 +682,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           const gameAddr = await game.getAddress();
           await seedLootboxRngIndex(gameAddr, 1);
 
-          const baseSlot = deriveDailyHeroWagersBaseSlot();
+          const baseSlot = await deriveDailyHeroWagersBaseSlot("dailyHeroWagers");
 
           // Day D — read dailyIdx from slot 0 byte offset [4:8] per the v41
           // Phase 288 D-288-FIX-SHAPE-01 layout. (`dailyIdx` is internal; no
@@ -1067,7 +1014,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             const fixture = await loadFixture(deployFullProtocol);
             const { game, deployer, mockVRF, alice } = fixture;
             const gameAddr = await game.getAddress();
-            const baseSlot = deriveDailyHeroWagersBaseSlot();
+            const baseSlot = await deriveDailyHeroWagersBaseSlot("dailyHeroWagers");
 
             // Purchase enough tickets to ensure the drain chain enters the
             // purchaseLevel==1 / ticketsFullyProcessed branch that triggers
@@ -1283,7 +1230,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             const fixture = await loadFixture(deployFullProtocol);
             const { game, deployer, mockVRF, alice } = fixture;
             const gameAddr = await game.getAddress();
-            const baseSlot = deriveDailyHeroWagersBaseSlot();
+            const baseSlot = await deriveDailyHeroWagersBaseSlot("dailyHeroWagers");
 
             // Per-iteration distinct seed pattern. Place ≥ 3 non-zero
             // amounts at varying flat-idx positions so the leader is at

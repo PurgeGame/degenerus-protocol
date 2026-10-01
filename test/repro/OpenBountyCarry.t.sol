@@ -155,9 +155,9 @@ contract OpenBountyCarry is DeployProtocol {
 
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < 60; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) break;
+            if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) break;
+            if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }
@@ -165,12 +165,18 @@ contract OpenBountyCarry is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }
+    }
+
+    // advanceDue can defer a new day while delivered read consumers remain.
+    // Continue through the real advance router until this wall day is sealed.
+    function _wallDaySealed() private view returns (bool) {
+        return uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24) == game.currentDayView();
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

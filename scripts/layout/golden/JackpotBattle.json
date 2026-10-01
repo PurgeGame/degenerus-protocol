@@ -190,5 +190,45 @@
     "offset": 0,
     "slot": 23,
     "typeLabel": "mapping(uint64 => struct CrapsBattleStorage.HighRollerDraw)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "_fundedCustomSlots",
+    "offset": 0,
+    "slot": 24,
+    "typeLabel": "uint64[4]"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_rngSlots",
+    "offset": 0,
+    "slot": 25,
+    "typeLabel": "mapping(uint48 => uint64[])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "__rngCohortLayoutGap",
+    "offset": 0,
+    "slot": 26,
+    "typeLabel": "uint48[2]"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "_rngSlotCursor",
+    "offset": 0,
+    "slot": 27,
+    "typeLabel": "uint64[2]"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "_rngPending",
+    "offset": 0,
+    "slot": 28,
+    "typeLabel": "uint64[2]"
   }
 ]

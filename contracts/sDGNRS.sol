@@ -318,7 +318,7 @@ contract sDGNRS {
     ///        bits 0-63   : ethBase    — gwei units (1e9 wei divisor)
     ///        bits 64-127 : supplySnapshot — whole tokens (1e18 raw divisor)
     ///        bits 128-191: burned     — whole tokens (1e18 raw divisor)
-    ///      Resolved days clear via `delete pendingByDay[day]` for storage refund.
+    ///      The pending-day stamp invalidates the retained aggregate after resolution.
     ///
     ///      Bounds (uint64.max = 1.844e19):
     ///        - ethBase: realistic per-day pool ≤ 10k wallets × 160 ETH cap = 1.6e15 gwei,
@@ -340,7 +340,7 @@ contract sDGNRS {
     /// @notice Resolved redemption roll per day (0 = unresolved, 25-175 = resolved).
     mapping(uint24 => uint16) public redemptionPeriods;
 
-    mapping(uint24 => DayPending) internal pendingByDay;
+    DayPending internal pendingAggregate;
 
     /// @notice Supply immediately after the last century refill (initial supply before the first).
     /// @dev All intervening supply reductions are burns. Appended with the century/closure markers
@@ -801,15 +801,15 @@ contract sDGNRS {
 
     /// @notice Check whether day `day` has an unresolved gambling-burn pool.
     /// @param day Wall-clock day to query.
-    /// @return True if `pendingByDay[day]` has a non-zero ETH base.
+    /// @return True if day matches the active pending stamp and its ETH base is nonzero.
     function hasPendingRedemptions(uint24 day) external view returns (bool) {
-        return pendingByDay[day].ethBase != 0;
+        return _pendingResolveDay == day && day != 0 && pendingAggregate.ethBase != 0;
     }
 
     /// @notice Called by game contract to resolve day `dayToResolve`'s gambling-burn pool with a dice roll.
-    /// @dev Writes `redemptionPeriods[dayToResolve]`, emits `RedemptionResolved`, then deletes
-    ///      `pendingByDay[dayToResolve]` for storage refund. Each day's mapping slot is distinct,
-    ///      so no later resolve can overwrite a resolved day's roll.
+    /// @dev Writes the retained per-day result and emits RedemptionResolved, then clears the
+    ///      pending-day stamp. The aggregate payload stays allocated and is initialized on
+    ///      the next pool's first burn; resolved rolls and individual claims remain per day.
     ///      ETH-only: at submit the MAX (175%) payout was physically segregated and tracked in
     ///      pendingRedemptionEthValue; here that reservation is lowered from MAX to the rolled
     ///      amount (accounting only — the over-pull stays in this contract as free backing, no
@@ -820,7 +820,7 @@ contract sDGNRS {
     function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
 
-        DayPending storage pool = pendingByDay[dayToResolve];
+        DayPending storage pool = pendingAggregate;
         // Convert ethBase from gwei back to wei for the cumulative-scalar reconciliation.
         // Drift vs claim-side sums bounded ≤ N gwei per day (within dust tolerance).
         uint256 ethBase = uint256(pool.ethBase) * 1e9;
@@ -831,7 +831,7 @@ contract sDGNRS {
         // ETH, so the reconciliation is skipped as a no-op, but control still falls through to mark the
         // day resolved and clear the sentinel — its FLIP-only claims settle and later gambling burns
         // unblock.
-        if (_pendingResolveDay != dayToResolve) return;
+        if (_pendingResolveDay == 0 || _pendingResolveDay != dayToResolve) return;
         if (ethBase != 0) {
             // Lower the cumulative segregation from the MAX (175%) pulled at submit down to the rolled
             // amount. The MAX − rolled difference is over-pulled ETH that stays as free backing.
@@ -841,13 +841,12 @@ contract sDGNRS {
             _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - segregatedMax + rolledEth);
         }
 
-        // Store per-day result (write before emit before delete)
+        // Store the per-day result before emitting and invalidating the aggregate.
         redemptionPeriods[dayToResolve] = roll;
 
         emit RedemptionResolved(dayToResolve, roll);
 
-        // Storage refund: free the day's pool slot.
-        delete pendingByDay[dayToResolve];
+        // Retain nonzero aggregate backing; the pending-day stamp invalidates it.
 
         // Clear the single-pool sentinel — the early-return above guarantees this resolve
         // targeted the stamped day, so the clear is unconditional.
@@ -1159,9 +1158,12 @@ contract sDGNRS {
         // burns are only permitted to land in today's pool or onto an already-active today's pool.
         uint24 stamp = _pendingResolveDay;
         if (stamp != 0 && stamp != currentPeriod) revert PriorDayUnresolved();
-        if (stamp == 0) _pendingResolveDay = currentPeriod;
+        if (stamp == 0) {
+            pendingAggregate = DayPending(0, uint64(_totalSupply / 1e18), 0);
+            _pendingResolveDay = currentPeriod;
+        }
 
-        DayPending storage pool = pendingByDay[currentPeriod];
+        DayPending storage pool = pendingAggregate;
 
         // 50% supply cap per day — lazy-init the snapshot on the first burn of the day.
         // supplySnapshot stored in whole tokens (1e18 raw divisor): INITIAL_SUPPLY = 1e30 → 1e12

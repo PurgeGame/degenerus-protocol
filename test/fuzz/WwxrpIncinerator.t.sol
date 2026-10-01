@@ -268,6 +268,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         // running day cursor and the drive stalls.
         for (uint256 day = 0; day < 100; day++) {
             if (game.level() >= 2) break;
+            _finishReadConsumers();
             simTime += 1 days + 1;
             vm.warp(simTime);
             _seedNextPrizePool(49.9 ether);
@@ -307,6 +308,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
             // incinerator award. Neither entrant deposits.
             if (currentLevel >= 99) _selfDeposit(depositor, 1_000 ether);
 
+            _finishReadConsumers();
             simTime += 1 days + 1;
             vm.warp(simTime);
 

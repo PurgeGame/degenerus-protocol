@@ -29,26 +29,13 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {
+    IDegenerusGameAdvanceModule,
     IDegenerusGameDecimatorModule,
     IDegenerusGameLootboxModule,
     IDegenerusGameWhaleModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-
-/// @title IGameRouter
-/// @notice Minimal in-context self-call surface the router uses to reach the
-///         Game-proper advance entrypoint. The router runs in the Game's storage
-///         context (delegatecall), so `address(this)` IS the Game;
-///         the self-call re-enters the Game's own `advanceGame` dispatch (which
-///         delegatecalls the AdvanceModule, running the required-path process STAGE
-///         in-context). The signature matches `DegenerusGame.sol`.
-///         Advance-work discovery (`_advanceDue`, the shared storage predicate) and `mintPrice` / `level`
-///         are read in-context (inherited storage/helpers), so they are NOT routed
-///         through here.
-interface IGameRouter {
-    function advanceGame() external returns (uint8 mult);
-}
 
 /// @title ICrapsKeeper
 /// @notice The craps table's keeper surface: ONE call, permissionless on the table — the crank only
@@ -59,6 +46,7 @@ interface IGameRouter {
 ///      bounty-paying caller needs to know.
 interface ICrapsKeeper {
     function keepScheduled(uint64 budgetUnits) external returns (bool progressed, uint64 slot);
+    function keepRngCohort(uint48 index, uint64 budgetUnits) external returns (bool moved, bool settled);
 }
 
 /// @title IQuestCompletionView
@@ -927,7 +915,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///
     ///      Lootbox materialization differs by mode: the daily STAGE writes a gas-light warm
     ///      Sub-stamp box (the EV-cap RMW deferred to OPEN), whereas the cover-buy writes a full
-    ///      INDEXED box resolved off `lootboxRngWordByIndex` — a future word never knowable at
+    ///      INDEXED box resolved off its sealed cohort's live word — a future word never knowable at
     ///      subscribe — so a player-timed subscribe cannot select a pre-revealed seed (a
     ///      `rngWordByDay`-keyed Sub-stamp box would break the RNG-freeze invariant here, since
     ///      subscribe runs after the day's word is public). Pool routing also differs: the STAGE
@@ -1049,7 +1037,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 : uint16(activityScore);
             if (coverBuy) {
                 // Subscribe-time grounding box: a full INDEXED box on the live lootbox index,
-                // resolved off lootboxRngWordByIndex (a future word). Rides the auto-open queue,
+                // resolved off its sealed cohort's live word (a future word). Rides the auto-open queue,
                 // so the markers go box-clean (lastOpenedDay == lastAutoBoughtDay) and the
                 // no-orphan guard never trips on a freshly-subscribed sub.
                 _recordAfkingCoverBox(
@@ -1144,7 +1132,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Write a subscribe-time grounding lootbox as a full INDEXED box on the live lootbox
     ///      index — the cover-buy's freeze-safe box record, mirroring the manual
     ///      `_recordLootboxEntry` minus the boons-off legs (no boost, no distress tally, no
-    ///      mint-day record). The box binds to `lootboxRngWordByIndex[index]` — a future word
+    ///      mint-day record). The box binds to `_lootboxWord(index)` — a future word
     ///      written at the next advance, never knowable at subscribe — and rolls from the LIVE
     ///      open level, so the stored day and purchase-level are pure seed labels (the day-1
     ///      genesis box resolves on its index word at the first advance, unlike `rngWordByDay[1]`,
@@ -1771,7 +1759,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      pick the first category with work; the advance and open bounties can never
     ///      stack in one tx (advance — the expensive leg — never co-runs with an open). NO
     ///      `nonReentrant` guard — the module is afking-never-a-payee: every external call
-    ///      is to a pinned `ContractAddresses.*` [GAME self-call / LootboxModule
+    ///      is to a pinned `ContractAddresses.*` [AdvanceModule delegatecall /
+    ///      GAME RNG-request self-call / LootboxModule
     ///      delegatecall (afking AND human open legs) / DecimatorModule delegatecall (settle
     ///      leg) / COINFLIP], player value flows
     ///      through the game's claimable pull ledger, and the bounty is minted flip-credit
@@ -1791,32 +1780,47 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      flat CRAPS_KEEP_FLAT_FLIP. `mult == 0` (the gameover advance path) pays no
     ///      bounty.
     function mineFlip() external {
+        _runWork(true);
+    }
+
+    /// @notice Standalone advancement, including its prerequisite read drain, without a bounty.
+    function advanceGame() external returns (uint8 mult) {
+        return _runWork(false);
+    }
+
+    /// @dev One dispatcher for both public entries. Workers never call back into either entry.
+    ///      Standalone calls preserve the advance worker's idle/error behavior unless a new day
+    ///      is blocked solely by read consumers; rewarded calls select any available keeper work.
+    function _runWork(bool rewarded) private returns (uint8 mult) {
         uint256 bountyEarned;
         // Category for the unified credit below. The two legs are a strict if/else, so
         // each sets it alongside the bounty it prices; it is read only when one paid.
         uint8 bountyKind;
 
         // (1) advance — highest priority, liveness-critical (TRUE regardless of rngLock).
-        // The self-call re-enters the Game's advanceGame, which runs the required-path
-        // process STAGE in-context; the process bounty rides this 2x·mult.
-        if (_advanceDue()) {
+        // Delegate directly to the worker, preserving the original caller and storage context.
+        if (rewarded ? _advanceDue() : !_advanceNeedsReadDrain()) {
             // Post-gameover dailyIdx freezes, so _advanceDue stays true while the
             // only remaining advance work is the one-time final sweep. Revert the idle
             // no-op (checked BEFORE the advance, so a still-pending sweep runs and commits).
-            if (gameOver && !_finalSweepPending()) revert NoWork();
+            if (rewarded && gameOver && !_finalSweepPending()) revert NoWork();
             // Read pay-eligibility BEFORE the advance — it sees the pre-advance day (the
             // advance bumps dailyIdx). The advance work runs regardless; an ineligible
             // keeper just earns no bounty (real participants get first shot, free cranks
             // are welcome). The bounty unit is likewise priced strictly PRE-advance (the
             // advance mutates level/jackpotPhaseFlag), and only when a bounty can pay.
-            bool eligible = _bountyEligible(msg.sender);
+            bool eligible = rewarded && _bountyEligible(msg.sender);
             uint256 unit;
             if (eligible) {
                 unit =
                     (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
                     _mintPriceInContext();
             }
-            uint8 mult = IGameRouter(address(this)).advanceGame();
+            (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameAdvanceModule.advanceGame.selector)
+            );
+            if (!ok) _revertDelegate(data);
+            mult = abi.decode(data, (uint8));
             if (mult > 0 && eligible) {
                 bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
                 bountyKind = MINER_BOUNTY_ADVANCE;
@@ -1893,7 +1897,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     if (newCarry != carry) _openBountyCarry = newCarry;
                 }
             }
-            // Human-box leg — the multi-index sweep lives in the lootbox module (delegatecall
+            // Human-box leg — the read-buffer sweep lives in the lootbox module (delegatecall
             // runs it in this Game's storage, the same nested pattern as _openAfkingBox's
             // resolveAfkingBox). It counts boxes opened plus bets resolved, not entries: one order can
             // carry up to MAX_BOXES_PER_ORDER boxes.
@@ -1922,9 +1926,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // it rather than reverting NoWork and rolling it back — so the rewarded crank
                 // grinds through a long skip run itself, cumulatively across calls, instead of
                 // rescanning the same prefix forever. Bounty is still paid only for actual opens.
-                // The index snapshot mirrors openHumanBoxes' genesis 0->1 clamp, so the first-ever
-                // no-work probe (unworded index 1) still reads as unchanged and reverts NoWork.
-                uint48 frontierIdx = boxCursorIndex == 0 ? 1 : boxCursorIndex;
+                bool frontierComplete = humanReadComplete;
                 uint48 frontierCur = boxCursor;
                 (bool ok, bytes memory data) = ContractAddresses
                     .GAME_LOOTBOX_MODULE
@@ -1948,11 +1950,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 if (humanOpened != 0) {
                     afkKneeCredit += humanUnits / OPEN_HUMAN_ENTRY_WEIGHT;
                 }
-                uint48 finalFrontierIdx = boxCursorIndex == 0
-                    ? 1
-                    : boxCursorIndex;
-                sweptFrontier =
-                    finalFrontierIdx != frontierIdx || boxCursor != frontierCur;
+                sweptFrontier = humanReadComplete != frontierComplete || boxCursor != frontierCur;
             }
             if (opened > 0) {
                 // Priced after the open legs: box resolution never writes
@@ -1986,14 +1984,22 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     if (k > OPEN_KNEE) k = OPEN_KNEE;
                     bountyEarned = (unit * k) / OPEN_KNEE;
                     bountyKind = MINER_BOUNTY_DECIMATOR;
-                } else if (_crapsKeep(_crapsUnitBudget(spentUnits))) {
-                    bountyEarned = CRAPS_KEEP_FLAT_FLIP;
-                    bountyKind = MINER_BOUNTY_CRAPS_KEEP;
-                } else if (!sweptFrontier && !afkProgress && !decMoved) {
-                    // Nothing opened or settled, the craps table had nothing owed, AND no cursor
-                    // moved (no afking box, no human box, no skip run swept on any leg) — the
-                    // clean no-work signal.
-                    revert NoWork();
+                } else {
+                    (bool readMoved, bool readSettled) = ICrapsKeeper(ContractAddresses.CRAPS).keepRngCohort(
+                        _rngReadBuffer(), _crapsUnitBudget(spentUnits)
+                    );
+                    if (readSettled || (!readMoved && _crapsKeep(_crapsUnitBudget(spentUnits)))) {
+                        bountyEarned = CRAPS_KEEP_FLAT_FLIP;
+                        bountyKind = MINER_BOUNTY_CRAPS_KEEP;
+                    } else if (!readMoved && !sweptFrontier && !afkProgress && !decMoved) {
+                        // Request is its own empty-work stage. Skip-only progress commits without bounty.
+                        // A delegatecall retains the keeper's identity for LINK donation credit.
+                        // Failed/ineligible requests remain an atomic NoWork result.
+                        (bool requested,) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+                            abi.encodeWithSelector(IDegenerusGameAdvanceModule.requestLootboxRng.selector)
+                        );
+                        if (!requested) revert NoWork();
+                    }
                 }
                 // else: a leg advanced its cursor past a skip run — commit it, no bounty.
             }
@@ -2002,10 +2008,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // The single unified bounty: ONE creditFlip, CEI-LAST, after the one-category
         // early-return. Skipped at 0 (e.g. a mult==0 gameover advance); the category
         // still ran, so we return rather than reverting NoWork().
-        if (bountyEarned > 0) {
+        if (rewarded && bountyEarned > 0) {
             coinflip.creditFlip(msg.sender, bountyEarned);
             emit MinerBounty(bountyKind, msg.sender, bountyEarned);
         }
+    }
+
+    /// @dev A fresh daily request cannot reuse the old word until its remaining consumers finish.
+    ///      Ticket and mid-day latch work stays in the advance worker; the other consumers drain here.
+    function _advanceNeedsReadDrain() private view returns (bool) {
+        return _simulatedDayIndex() != dailyIdx && !rngLockedFlag && !_rngRequestActive()
+            && !_livenessTriggered() && ticketsFullyProcessed
+            && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == 0 && !_lootboxReadComplete();
     }
 
     /// @notice Drain up to `count` ready afking boxes (walks `_subOpenCursor`); returns the

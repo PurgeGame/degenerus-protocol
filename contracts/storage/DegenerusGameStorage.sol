@@ -83,7 +83,7 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * | [15:16] jackpotPhaseFlag         bool     Payout mode: purchase(F)/jackpot(T)   |
  * | [16:17] jackpotCounter           uint8    Jackpots processed this level         |
  * | [17:18] lastPurchaseDay          bool     Prize target met flag                 |
- * | [18:19] decWindowOpen            bool     Decimator window latch                |
+ * | [18:19] decimatorFlags          uint8    bit0=window open, bit1=opening day      |
  * | [19:20] rngLockedFlag            bool     Daily RNG lock (jackpot window)       |
  * | [20:21] phaseTransitionActive    bool     Level transition in progress          |
  * | [21:22] gameOver                 bool     Terminal state flag                   |
@@ -95,8 +95,7 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * | [27:28] presaleOver              bool     Coin-presale-box terminal latch       |
  * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag      |
  * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)      |
- * | [30:31] ticketRedemptionOpen     bool     FLIP ticket purchase window latch     |
- * | [31:32] decDayOneActive          bool     Decimator opening-day quest / auto-entry latch    |
+ * | [30:32] rngFlagsAndNudges        uint16   Window, completion and nine-bit nudges |
  * +---------------------------------------------------------------------------------+
  *   Total: 32 bytes used (0 bytes padding -- FULL)
  *
@@ -129,7 +128,7 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  * 4. INITIALIZATION: Default values are set inline. For critical variables:
  *    - purchaseStartDay = deploy day index (set in constructor via GameTimeLib.currentDayIndex())
  *    - jackpotPhaseFlag = false (purchase phase)
- *    - decWindowOpen = false (opens at level 4 jackpot phase start)
+ *    - decimatorFlags = 0 (window opens at level 4 jackpot phase start)
  *    - levelPrizePool[level] is the per-level ratchet target; levelPrizePool[0] is set to
  *      BOOTSTRAP_PRIZE_POOL (50 ether) in the constructor (also the zero-fallback in the view)
  *
@@ -137,9 +136,9 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
  *    `unchecked` blocks in modules are intentional optimizations for safe ops.
  *
  * 6. MAPPING COLLISION: Mappings use keccak256(key . slot), making collisions
- *    computationally infeasible. lvlTraitEntry is a mapping to a fixed array of
- *    dynamic arrays: bucket (level, traitId) has its length at
- *    keccak256(level . slot) + traitId and its lane words at keccak256 of that slot.
+ *    computationally infeasible. lvlTraitEntry maps physical parity to 256 tail-bearing
+ *    headers, validated by the full buffer level and a per-buffer bitmap. A bucket header is at keccak256((level & 1) . slot) + traitId;
+ *    packed occurrence words begin at keccak256(headerSlot).
  *
  * UPGRADE NOTES
  * -----------------------------------------------------------------------------
@@ -213,56 +212,26 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant ROUND_MIN_SEATS = 4;
 
     // ---- Ticket-drain unit bound ------------------------------------------------------------
-    // A drain call does exactly the work its write budget affords — never a function of the
-    // gas the caller supplied — so the safety proof is on the budget. Reserve the worst,
-    // charge the actual: a step starts only if its worst case (table below) fits the
-    // remaining budget, and once done it charges what it did, priced per write at or above
-    // the opcode cost in units of UNIT_GAS_BOUND: a fresh write (22,100 + its read) is 3 units,
-    // a dirty write (5,000 + its read) is 1, a seat exit 1, per-entry compute 1 per 16
-    // occurrences, a round's reveals and loops 4. Every charged unit covers its cost and no step
-    // starts without room for its worst; a call's last step may charge above what it reserved
-    // (charges over-price), but its gas never exceeds the reserve. Hence a call's gas
-    // is at most WRITES_BUDGET_SAFE x UNIT_GAS_BOUND plus the fixed entry/exit overhead, which
-    // test/gas/TicketDrainWorstCaseBound.t.sol pins under the EIP-7825 cap. Worst cases assume
-    // every storage write opens a fresh slot (20,000 + 2,100 cold access) and every read is
-    // cold (2,100): a single-lane append is 2 reads + 2 fresh writes = 48,400.
-    //
-    //   step                         charge   worst gas
-    //   seated round (no split)      38       4 x (len 22,100 + tail 22,100 + next 22,100 + 2 reads)
-    //                                         = 282,000; + 8 exits x 7,100 + reveals/loops 32,851 = 371,651
-    //   split quadrant (extra)       32       8 x 48,400 - 70,500 = 316,700
-    //   seat join                    2        queue + owner/owed reads + zeroing + write-back = 14,200
-    //   dust skip                    1        queue + owner/owed reads + zeroing write = 9,200
-    //   seats word write             3        22,100
-    //   per-entry occurrence, 1..256 6        fresh length + fresh word + 2 reads + lane share = 51,600
-    //   per-entry occurrence, >256   1        fresh word per eight lanes + LCG = 3,200
-    //   foil pack                    83       16 x 48,400 + record/cursor/golden 40,000 = 814,400
-    //
-    // Reveal allowance: retain the old 25,000 loop allowance, subtract only the removed
-    // LOG2's 2,149 gas (128 data bytes), and add 10,000 for the COMPLETE new emitter,
-    // including both LOG4s (2 x (375 + 4 x 375 + 32 x 8) = 4,262), topic packing,
-    // branches, ABI encoding and memory. No credit is taken for the removed owner loop.
-    // See docs/audit/RUN53-FINAL-CONTRACTS.md for the compiler-region cost derivation.
+    // Charge each actual bucket write from its stored value, before replacing stale headers:
+    // zero backing costs three units; nonzero backing costs one. Header-tail storage removes
+    // the separate partial-word write. Bitmap initialization and completed words are priced
+    // by the same rule. No first-call derate or transient markers. A cold read followed by
+    // a warm zero-to-nonzero store costs 22,100 gas; three 10k units cover it and addressing.
+    // The existing compute/admission reserves remain conservative. 900 units plus 1M fixed
+    // overhead give a 10M drain envelope, including startup and record-volume backing growth.
+    // TicketDrainWorstCaseBound pins the arithmetic; chunk and lifecycle fixtures measure it.
     uint256 internal constant UNIT_GAS_BOUND = 10_000;
-
-    /// @dev Write budget per drain call, in units bounded by UNIT_GAS_BOUND (10k gas each at
-    ///      the opcode-level worst case, see the table above). 1,000 units bound a call at 10M
-    ///      plus fixed overhead: a proven 11M ceiling, well under the 16.7M cap; measured
-    ///      chunks land well below it. The cold-level derate keeps a fresh level's first
-    ///      chunk lower still.
-    uint32 internal constant WRITES_BUDGET_SAFE = 1000;
+    uint32 internal constant WRITES_BUDGET_SAFE = 900;
 
     /// @dev Seats in a drain round: one packed lane word per quadrant carries every seat.
     uint256 internal constant ROUND_SEATS = 8;
     /// @dev Color tiers at or above this spread a round's seats across the quadrant's eight
     ///      symbols, one lane per bucket, so the smallest buckets never take a whole round.
     uint8 internal constant ROUND_SPLIT_COLOR = 6;
-    /// @dev Write units per round at UNIT_GAS_BOUND: four quadrant appends at their worst
-    ///      (a fresh length, a fresh tail and a fresh next word each: 282k), eight seat exits
-    ///      (56.8k), direct reveals and the seat loops (32,851): 371,651 -> 38 units.
+    /// @dev Retained conservative admission reserve: four appends, eight seat exits,
+    ///      reveals and seat loops. Actual bucket writes use uniform one-unit charges.
     uint32 internal constant ROUND_UNITS = 38;
-    /// @dev Extra units for a split quadrant: eight single-lane appends at their worst
-    ///      (8 x 48,400) less the whole-word append they replace (70,500): 317k -> 32 units.
+    /// @dev Retained extra admission reserve for eight split appends in one quadrant.
     uint32 internal constant ROUND_SPLIT_UNITS = 32;
     /// @dev Units per seat join: cold queue and combined owner/owed reads, a remainder
     ///      zeroing write and the eventual write-back (14.2k) -> 2 units.
@@ -393,15 +362,15 @@ abstract contract DegenerusGameStorage {
     uint24 internal dailyIdx;
 
     /// @dev Timestamp when the last VRF (Chainlink) request was submitted.
-    ///      Used for timeout detection: rngRequestTime != 0 means a VRF request
-    ///      is in-flight or awaiting processing.
+    ///      Starts at nonzero idle sentinel 1, then retains the last request timestamp.
+    ///      The packed active bit identifies live requests; nonzeroness does not.
     ///
     ///      SECURITY: Timeout mechanism prevents permanent lockup if VRF fails.
     ///      Note: rngLockedFlag (separate bool) controls the daily RNG lock state.
     ///      The LSB doubles as the daily retry-spent flag (0 = retry available, 1 = spent);
     ///      set by the retry (AdvanceModule _finalizeRngRequest) and by a coordinator swap's
     ///      re-issue (GameOverModule updateVrfCoordinatorAndSub); only a fresh request clears it.
-    uint48 internal rngRequestTime;
+    uint48 internal rngRequestTime = 1;
 
     /// @notice Current jackpot level (starts at 0). Purchase phase targets level + 1.
     ///
@@ -431,10 +400,28 @@ abstract contract DegenerusGameStorage {
     ///      to jackpot window. Allows early level completion on high activity.
     bool internal lastPurchaseDay;
 
-    /// @dev Latch to hold decimator window open until RNG is requested.
-    ///      Opens at jackpot phase start for levels 4, 14, 24... (not 94) or 99, 199...
-    ///      Closes when RNG requested during lastPurchaseDay at resolution levels.
-    bool internal decWindowOpen;
+    /// @dev Bit 0 holds the burn window open from x4/x99 until x5/x00 (excluding x94/x95).
+    ///      Bit 1 marks its opening-day quest and auto-entry. The next fresh daily request
+    ///      clears bit 1; a retry preserves it. The flags share byte 18 and remain independent.
+    uint8 internal decimatorFlags;
+    uint8 internal constant DEC_WINDOW_OPEN = 1;
+    uint8 internal constant DEC_DAY_ONE_ACTIVE = 2;
+
+    function _decWindowOpen() internal view returns (bool) {
+        return decimatorFlags & DEC_WINDOW_OPEN != 0;
+    }
+
+    function _decDayOneActive() internal view returns (bool) {
+        return decimatorFlags & DEC_DAY_ONE_ACTIVE != 0;
+    }
+
+    function _setDecWindowOpen(bool open) internal {
+        decimatorFlags = open ? decimatorFlags | DEC_WINDOW_OPEN : decimatorFlags & ~DEC_WINDOW_OPEN;
+    }
+
+    function _setDecDayOneActive(bool active) internal {
+        decimatorFlags = active ? decimatorFlags | DEC_DAY_ONE_ACTIVE : decimatorFlags & ~DEC_DAY_ONE_ACTIVE;
+    }
 
     /// @dev True when daily RNG is locked (jackpot resolution in progress).
     ///      Set when daily VRF is requested, cleared when daily processing completes.
@@ -502,31 +489,70 @@ abstract contract DegenerusGameStorage {
     ///      costs no additional cold slot access on that path.
     bool internal subsFullyProcessed;
 
-    /// @dev One-way "all coin-presale boxes have been opened" flag. False until the auto-open sweep
-    ///      has advanced its cursor PAST presaleCloseIndex — i.e. every box at indices <= the close
-    ///      index is opened, so none can remain. Packed into slot 0, which every open path already
-    ///      SLOADs (`level` / `rngLockedFlag`), so the gate `!presaleDrained` costs no additional
-    ///      cold slot access: once set, the post-presale sweep AND manual opens skip the presaleBoxEth
-    ///      SLOAD. Flipped only by the in-order sweep (never the manual path), so an out-of-order
-    ///      manual open of the closing box cannot trip it early and strand a still-queued box.
-    ///      The flip also pays the Pool.PresaleBox remainder to presaleCloser.
+    /// @dev One-way completion of the closing presale read cohort. Earlier read cohorts
+    ///      were drained before it could be sealed. Flipped only by the ordered sweep,
+    ///      never a manual open. Pays the remaining PresaleBox pool to presaleCloser.
+    ///      Packed into slot0 so opening can skip the presale-balance read once complete.
     bool internal presaleDrained;
 
-    /// @dev FLIP ticket purchase window latch. redeemFlip lazily opens it the moment the prize
-    ///      target is met in the purchase phase (_getNextPrizePool() > _prizePoolTarget(level + 1), with no
-    ///      RNG in flight); it persists through the jackpot days and is cleared in the advance at the
-    ///      final jackpot day's RNG request — the same boundary where new tickets route to the next
-    ///      level. While closed, FLIP ticket purchases revert, so FLIP tickets only ever join a
-    ///      happening jackpot, never an open/stalled purchase phase. Packed into slot 0, which the
-    ///      purchase/advance paths already SLOAD, so the gate costs no additional cold slot access.
-    bool internal ticketRedemptionOpen;
+    /// @dev Slot-0 bytes 30..31. Bits 0/8 preserve the former FLIP redemption-window
+    ///      and RNG-complete bit positions. Nudge bits 1..7 and 9..10 hold 0..256;
+    ///      bit11 is spare, bit12 selects write, bit13 marks terminal; bits14/15 identify
+    ///      an active request / published session. All setters preserve neighboring fields.
+    ///      Complete and published start true; the redemption window and request closed.
+    uint16 internal rngFlagsAndNudges = (uint16(1) << 8) | (uint16(1) << 15);
+    uint16 internal constant RNG_NUDGE_CAP = 256;
+    uint16 private constant RNG_NUDGE_BITS = (uint16(127) << 1) | (uint16(3) << 9);
 
-    /// @dev Decimator opening-day quest / auto-entry latch. Set by the RNG request that opens the
-    ///      decimator window (the x4/x99 level increment); cleared by the next fresh daily
-    ///      request (the same-day VRF retry does not clear it). The opening-day quest and
-    ///      protocol auto-entry use this latch; battle chip timing uses openedDay instead.
-    ///      Occupies slot-0 byte [31:32], already written by the request path.
-    bool internal decDayOneActive;
+    function _ticketRedemptionOpen() internal view returns (bool) { return rngFlagsAndNudges & 1 != 0; }
+    function _setTicketRedemptionOpen(bool on) internal {
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~uint16(1)) | (on ? uint16(1) : 0);
+    }
+    function _rngComplete() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 8) != 0; }
+    function _setRngComplete(bool on) internal {
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 8)) | (on ? uint16(1) << 8 : 0);
+    }
+    /// @dev Retained nonzero request metadata is historical; only this bit grants callback authority.
+    function _rngRequestActive() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 14) != 0; }
+    function _setRngRequestActive(bool on) internal {
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 14)) | (on ? uint16(1) << 14 : 0);
+    }
+    function _rngSessionPublished() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 15) != 0; }
+    function _setRngSessionPublished(bool on) internal {
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 15)) | (on ? uint16(1) << 15 : 0);
+    }
+
+    /// @dev Bit12 selects the accumulating write buffer; the other is sealed read.
+    function _rngWriteBuffer() internal view returns (uint48) { return uint48((rngFlagsAndNudges >> 12) & 1); }
+    function _rngReadBuffer() internal view returns (uint48) { return _rngWriteBuffer() ^ 1; }
+    function _swapRngBuffers() internal {
+        rngFlagsAndNudges ^= uint16(1) << 12;
+        humanReadComplete = false;
+        boxCursor = 0;
+        _setRngComplete(false);
+        _setRngSessionPublished(false);
+    }
+    /// @dev Terminal entry kills unfinished box/bet/Craps consumers, independently of tickets.
+    function _setRngTerminal() internal { rngFlagsAndNudges |= uint16(1) << 13; }
+
+    function _nudgeCount() internal view returns (uint256) {
+        uint16 state = rngFlagsAndNudges;
+        return ((state >> 1) & 127) | (((state >> 9) & 3) << 7);
+    }
+    function _setNudgeCount(uint256 count) internal {
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~RNG_NUDGE_BITS)
+            | uint16((count & 127) << 1) | uint16((count >> 7) << 9);
+    }
+    function _clearAppliedNudges() internal {
+        uint16 old = rngFlagsAndNudges;
+        uint16 cleared = old & ~RNG_NUDGE_BITS;
+        if (old != cleared) rngFlagsAndNudges = cleared;
+    }
+    /// @dev Recover the pre-nudge raw word for gap derivation and replay events.
+    /// The counter stays frozen under the daily lock until the day recorder clears it.
+    function _rawDailyRngWord(uint256 finalWord) internal view returns (uint256 rawWord) {
+        unchecked { rawWord = finalWord - _nudgeCount(); }
+    }
 
     // =========================================================================
     // EVM SLOT 1: Prize Pools
@@ -561,30 +587,38 @@ abstract contract DegenerusGameStorage {
     ///      Direct reads of this variable will get corrupted data.
     uint256 internal prizePoolsPacked;
 
-    /// @dev Latest VRF random word, or 0 if a request is pending.
-    ///      Written by VRF callback; consumed by game logic for randomness.
-    ///
-    ///      SECURITY: 0 indicates pending state. Game logic checks for non-zero.
-    uint256 internal rngWordCurrent;
+    /// @dev Nonzero waiting sentinel; accepted session words are always greater than1.
+    ///      _currentRngWord() reports the waiting sentinel as absence to consumers.
+    uint256 internal constant RNG_WORD_WAITING = 1;
+    /// @dev Nonzero waiting payload avoids a fresh SSTORE in the billed callback.
+    ///      Final words 0/1 are refused and remain pending for the existing request retry.
+    uint256 internal rngWordCurrent = RNG_WORD_WAITING;
 
-    /// @dev Last VRF request ID, used to match fulfillment callbacks.
-    ///      Prevents processing stale or mismatched VRF responses.
+    function _currentRngWord() internal view returns (uint256) {
+        uint256 stored = rngWordCurrent;
+        return stored == RNG_WORD_WAITING ? 0 : stored;
+    }
+
+    /// @dev Retained last VRF request ID, initialized to nonzero idle sentinel 1.
+    ///      Callback authority requires the packed active bit as well as ID matching.
     ///
     ///      SECURITY: Request ID matching prevents replay attacks on RNG.
-    uint256 internal vrfRequestId;
+    uint256 internal vrfRequestId = 1;
 
     /// @dev Number of reverse flips purchased against current RNG word.
     ///      Tracks flip activity for jackpot sizing adjustments. Co-resident with
     ///      lastVrfProcessedTimestamp (both written in _applyDailyRng); bounded by
     ///      supply/RNG_NUDGE_BASE_COST << 2^64 since every nudge burns >= 100 FLIP.
-    uint64 internal totalFlipReversals;
+    uint64 private __nudgeLayoutGap; // Counter moved to slot 0; preserve downstream slot offsets.
 
     /// @dev Timestamp of the last successfully processed VRF word.
     ///      Used by governance to detect VRF stalls (time-based vs day-gap-based); game
     ///      liveness does not read it (a gap behind dailyIdx is itself the stall signal).
     ///      Initialized in wireVrf(), updated in _applyDailyRng(). Shares the slot
-    ///      with totalFlipReversals.
+    ///      with the unused nudge layout gap and ticket buffer stamps.
     uint48 internal lastVrfProcessedTimestamp;
+    /// @dev Even/odd ticket epochs in previously unused slot-5 bytes 14..19.
+    uint48 internal ticketBufferLevels;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
     ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)] [battlePending (1 bit @ 72)]
@@ -616,25 +650,13 @@ abstract contract DegenerusGameStorage {
     ///      function / withdrawAfkingFunding), separating credit from transfer.
     mapping(address => uint256) internal balancesPacked;
 
-    /// @dev Nested mapping: level -> trait ID (0-255) -> packed occurrence lanes.
-    ///      Used for jackpot winner selection: random occurrence index into the trait's
-    ///      bucket, resolved to its owner through lvlEntryOwner[level].
-    ///
-    ///      STRUCTURE: lvlTraitEntry[level][traitId] = uint256[]
-    ///        - the length word holds the OCCURRENCE count, not the word count
-    ///        - data word w (at keccak256(lengthSlot) + w) holds occurrences 8w .. 8w+7
-    ///        - lane j of a word = bits [32j, 32j+32) = uint32 index into lvlEntryOwner[level]
-    ///      A holder with more tickets occupies more lanes (higher win probability).
-    ///      Never index the array with Solidity `[]`; read through _bucketOwnerAt and
-    ///      write through _bucketAppendRun. Every read is length-gated, so an unwritten
-    ///      lane is never resolved.
-    ///
-    ///      STORAGE: Slot for mapping root, then:
-    ///        - keccak256(level . slot) gives the 256-element array of arrays
-    ///        - Each inner array has length at its slot, data at keccak256(slot)
-    ///
-    ///      SECURITY: Array growth bounded by total ticket supply per level.
-    mapping(uint24 => uint256[][256]) internal lvlTraitEntry;
+    /// @dev Two physical trait buffers, keyed by actualLevel & 1. Each header packs
+    ///      a uint32 count and up to seven uint32 owner-index tail lanes above it.
+    ///      Full buffer level plus traitBucketLive validate each header. Completed
+    ///      words hold eight uint32 indices at keccak256(headerSlot).
+    ///      Owner registries remain keyed by actual level. Never treat a header as
+    ///      a Solidity array length; all readers use the validated bucket helpers.
+    mapping(uint24 => uint256[256]) internal lvlTraitEntry;
 
     /// @dev Bit-packed mint history per player.
     ///      Layout defined by constants in BitPackingLib and MintStreakUtils.
@@ -981,7 +1003,12 @@ abstract contract DegenerusGameStorage {
     ///      mirrors the unified sweep's window [purchaseLevel-1 .. _mintCeiling()]; a
     ///      fixed scan of at most three read keys plus the frozen pool's key, not unbounded.
     function _advanceDue() internal view returns (bool) {
-        if (_simulatedDayIndex() != dailyIdx) return true;
+        if (_rngRequestActive() && !rngLockedFlag && rngWordCurrent != RNG_WORD_WAITING) return true;
+        if (_simulatedDayIndex() != dailyIdx) {
+            if (!rngLockedFlag && !_rngRequestActive() && !_livenessTriggered()
+                && !_lootboxReadComplete()) return !ticketsFullyProcessed;
+            return true;
+        }
         if (!ticketsFullyProcessed) {
             uint24 lvl = level;
             uint24 purchaseLevel = (!jackpotPhaseFlag &&
@@ -1516,16 +1543,21 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Load the eight owner indices in the packed word containing occurrence `base`.
-    function _bucketWordAt(uint24 lvl, uint8 trait, uint256 base) internal view returns (uint256 word) {
-        uint256[] storage lanes = lvlTraitEntry[lvl][trait];
+    function _bucketWordAtUnchecked(uint24 lvl, uint8 trait, uint256 base) internal view returns (uint256 word) {
+        uint256 elem = _traitBufferBase(lvl) + trait;
         assembly ("memory-safe") {
-            mstore(0, lanes.slot)
-            word := sload(add(keccak256(0, 32), shr(3, base)))
+            let header := sload(elem)
+            switch eq(shr(3, base), shr(3, and(header, 0xffffffff)))
+            case 1 { word := shr(32, header) }
+            default {
+                mstore(0, elem)
+                word := sload(add(keccak256(0, 32), shr(3, base)))
+            }
         }
     }
 
     /// @dev Resolve one valid lane from an already loaded word; registry index zero is valid.
-    function _bucketOwnerFromWord(uint24 lvl, uint256 word, uint256 k) internal view returns (address owner) {
+    function _bucketOwnerFromWordUnchecked(uint24 lvl, uint256 word, uint256 k) internal view returns (address owner) {
         EntryOwner[] storage owners = lvlEntryOwner[lvl];
         assembly ("memory-safe") {
             let idx := and(shr(shl(5, and(k, 7)), word), 0xffffffff)
@@ -1560,109 +1592,113 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Owner of occurrence `k` in lvlTraitEntry[lvl][trait]. Two reads: the lane word,
     ///      then the registry element it names. No bound check: callers gate on the length.
-    function _bucketOwnerAt(uint24 lvl, uint8 trait, uint256 k) internal view returns (address owner) {
-        uint256[] storage lanes = lvlTraitEntry[lvl][trait];
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        assembly ("memory-safe") {
-            mstore(0x00, lanes.slot)
-            let word := sload(add(keccak256(0x00, 0x20), shr(3, k)))
-            let idx := and(shr(shl(5, and(k, 7)), word), 0xffffffff)
-            mstore(0x00, owners.slot)
-            owner := and(sload(add(keccak256(0x00, 0x20), idx)), 0xffffffffffffffffffffffffffffffffffffffff)
-        }
+    function _bucketOwnerAtUnchecked(uint24 lvl, uint8 trait, uint256 k) internal view returns (address owner) {
+        return _bucketOwnerFromWordUnchecked(lvl, _bucketWordAtUnchecked(lvl, trait, k), k);
     }
 
-    /// @dev Append `occurrences` lanes naming registry position `ownerIdx` to the bucket at
-    ///      `levelSlot + traitId` (levelSlot = keccak256(level . lvlTraitEntry.slot)). The
-    ///      partially filled tail word is read once and completed; every further full word
-    ///      is written whole with the lane replicated across it, so a long run of one trait
-    ///      costs one store per eight occurrences.
+
+    /// @dev Header: uint32 occurrence count, then up to seven low-first uint32 tail lanes.
+    ///      Only complete words reach data storage. The practical per-level bound is below
+    ///      2^32 occurrences per trait; reaching it needs over 536 million word writes.
+    ///      Returns physical writes classified by the slot value before each store.
+    ///      Caller has prepared lvl and provides a uint32 registry index.
     function _bucketAppendRun(
         uint256 levelSlot,
         uint8 traitId,
         uint256 ownerIdx,
-        uint256 occurrences
+        uint256 occurrences,
+        uint24 lvl
     ) internal returns (uint256 fresh, uint256 dirty) {
         assembly ("memory-safe") {
+            let bitmapSlot := add(traitBucketLive.slot, and(lvl, 1))
+            let bits := sload(bitmapSlot)
+            let bit := shl(traitId, 1)
             let elem := add(levelSlot, traitId)
-            let len := sload(elem)
-            sstore(elem, add(len, occurrences))
-            switch len
-            case 0 {
-                fresh := 1
+            let header := sload(elem)
+            switch iszero(header)
+            case 1 { fresh := 1 }
+            default { dirty := 1 }
+            if iszero(and(bits, bit)) {
+                header := 0
+                sstore(bitmapSlot, or(bits, bit))
+                switch iszero(bits)
+                case 1 { fresh := add(fresh, 1) }
+                default { dirty := add(dirty, 1) }
             }
-            default {
-                dirty := 1
-            }
-            mstore(0x00, elem)
-            let w := add(keccak256(0x00, 0x20), shr(3, len))
-            let lane := and(len, 7)
-            // Replicate the owner index once; fill a partial tail in one masked write.
+            let len := and(header, 0xffffffff)
+            let nextLen := add(len, occurrences)
+            let fill := and(len, 7)
+            let tail := shr(32, header)
             let full := mul(ownerIdx, 0x0000000100000001000000010000000100000001000000010000000100000001)
-            if lane {
-                let take := sub(8, lane)
+            mstore(0, elem)
+            let w := add(keccak256(0, 32), shr(3, len))
+            if fill {
+                let room := sub(8, fill)
+                let take := room
                 if lt(occurrences, take) { take := occurrences }
-                let prefix := and(full, sub(shl(shl(5, take), 1), 1))
-                sstore(w, or(sload(w), shl(shl(5, lane), prefix)))
-                dirty := add(dirty, 1)
+                tail := or(tail, shl(shl(5, fill), and(full, sub(shl(shl(5, take), 1), 1))))
                 occurrences := sub(occurrences, take)
-                w := add(w, 1)
+                if eq(take, room) {
+                    switch iszero(sload(w))
+                    case 1 { fresh := add(fresh, 1) }
+                    default { dirty := add(dirty, 1) }
+                    sstore(w, tail)
+                    w := add(w, 1)
+                    tail := 0
+                }
             }
-            // Whole words: the lane replicated eight times.
             for {} gt(occurrences, 7) {} {
+                switch iszero(sload(w))
+                case 1 { fresh := add(fresh, 1) }
+                default { dirty := add(dirty, 1) }
                 sstore(w, full)
-                fresh := add(fresh, 1)
                 w := add(w, 1)
                 occurrences := sub(occurrences, 8)
             }
-            // Leading lanes of a fresh final word.
-            if occurrences {
-                sstore(w, and(full, sub(shl(shl(5, occurrences), 1), 1)))
-                fresh := add(fresh, 1)
-            }
+            if occurrences { tail := and(full, sub(shl(shl(5, occurrences), 1), 1)) }
+            sstore(elem, or(nextLen, shl(32, tail)))
         }
     }
 
-    /// @dev Append `count` distinct lanes, already packed into `lanesWord` at positions
-    ///      0..count-1 (every higher lane zero), to the bucket at `levelSlot + traitId`.
-    ///      A partially filled tail word takes the leading lanes; the rest open a fresh
-    ///      word. At most two stores for any count up to eight.
+    /// @dev Append up to eight packed low-first uint32 owner lanes. Persist the unfinished
+    ///      word in the header and write at most one complete data word. Slot-value write charges.
     function _bucketAppendLanes(
         uint256 levelSlot,
         uint8 traitId,
         uint256 lanesWord,
-        uint256 count
+        uint256 count,
+        uint24 lvl
     ) internal returns (uint256 fresh, uint256 dirty) {
         assembly ("memory-safe") {
+            let bitmapSlot := add(traitBucketLive.slot, and(lvl, 1))
+            let bits := sload(bitmapSlot)
+            let bit := shl(traitId, 1)
             let elem := add(levelSlot, traitId)
-            let len := sload(elem)
-            sstore(elem, add(len, count))
-            switch len
-            case 0 {
-                fresh := 1
+            let header := sload(elem)
+            switch iszero(header)
+            case 1 { fresh := 1 }
+            default { dirty := 1 }
+            if iszero(and(bits, bit)) {
+                header := 0
+                sstore(bitmapSlot, or(bits, bit))
+                switch iszero(bits)
+                case 1 { fresh := add(fresh, 1) }
+                default { dirty := add(dirty, 1) }
             }
-            default {
-                dirty := 1
-            }
-            mstore(0x00, elem)
-            let w := add(keccak256(0x00, 0x20), shr(3, len))
+            let len := and(header, 0xffffffff)
             let fill := and(len, 7)
-            switch fill
-            case 0 {
-                sstore(w, lanesWord)
-                fresh := add(fresh, 1)
+            let tail := shr(32, header)
+            tail := or(tail, shl(shl(5, fill), lanesWord))
+            if gt(add(fill, count), 7) {
+                mstore(0, elem)
+                let w := add(keccak256(0, 32), shr(3, len))
+                switch iszero(sload(w))
+                case 1 { fresh := add(fresh, 1) }
+                default { dirty := add(dirty, 1) }
+                sstore(w, tail)
+                tail := shr(shl(5, sub(8, fill)), lanesWord)
             }
-            default {
-                // Lanes past the tail's free room shift out of the word and land in
-                // the next one.
-                sstore(w, or(sload(w), shl(shl(5, fill), lanesWord)))
-                dirty := add(dirty, 1)
-                let room := sub(8, fill)
-                if gt(count, room) {
-                    sstore(add(w, 1), shr(shl(5, room), lanesWord))
-                    fresh := add(fresh, 1)
-                }
-            }
+            sstore(elem, or(add(len, count), shl(32, tail)))
         }
     }
 
@@ -2167,7 +2203,7 @@ abstract contract DegenerusGameStorage {
     uint96 internal presaleBoxEthSold;
 
     /// @dev Buyer of the 50-ETH-crossing box. Receives the Pool.PresaleBox remainder once the
-    ///      auto-open sweep has advanced past presaleCloseIndex — after EVERY presale box has
+    ///      auto-open sweep has advanced past presaleCloseBuffer — after EVERY presale box has
     ///      drawn, so the remainder is variance dust and no open order can pull another box's
     ///      DGNRS into it. Packs into presaleBoxEthSold's slot (warm at the crossing buy).
     address internal presaleCloser;
@@ -2179,7 +2215,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Presale-box record per RNG index per player. One box per (index, player).
     ///      A box always queues at the current lootbox RNG index and resolves off the
-    ///      SAME committed word lootboxRngWordByIndex[index], domain-separated by the
+    ///      SAME committed word _lootboxWord(index), domain-separated by the
     ///      "PRESALE_BOX" salt. A combined lootbox+box buy shares that one index.
     ///      Packed: [bit 255: closing][bits 96:191: soldBefore][bits 0:95: applied ETH].
     ///      soldBefore (cumulative box ETH before this buy) freezes the DGNRS-tier
@@ -2688,23 +2724,20 @@ abstract contract DegenerusGameStorage {
         return _simulatedDayIndex() > uint24(dailyIdx) + _VRF_DEADMAN_DAYS;
     }
 
-    /// @dev VRF dead: a request has gone _VRF_DEAD_TIMEOUT with no word delivered for it.
-    ///      rngRequestTime is stamped only on a fresh request (the daily retry and a coordinator
-    ///      swap only set its low bit), so the window runs from the original send and nothing
-    ///      can reset it. Judged at the advance: a daily word that was delivered (rngWordCurrent)
-    ///      or applied means VRF works, even if the day processing it never completes (a ticket
-    ///      backlog, or a stage that cannot finish); such a game ends by the deadman instead, on
-    ///      a fresh terminal word. A mid-day request's day already holds its daily word, so an
-    ///      unlocked request is judged by its request ID alone: still outstanding after this
-    ///      window, it is dead — nothing but the vault owner's retry replaces it, and that did not
-    ///      come. The deterministic ending drops its request ID, and its dead latch keeps this
-    ///      predicate true through the tally and after game over. The recorded-word read runs only
-    ///      once a request is a whole window old.
+    /// @dev An active, unanswered request expires from its original timestamp. A delivered
+    ///      word proves VRF is alive even while the keeper has not published it. Retained idle
+    ///      timestamps grant neither callback authority nor a timeout. A refused terminal
+    ///      attempt has no active request, but keeps its one-shot timer and unpublished latch.
     function _vrfDead() internal view returns (bool) {
         uint48 t = rngRequestTime;
-        if (t == 0 || block.timestamp < uint256(t) + _VRF_DEAD_TIMEOUT) return false;
-        if (!rngLockedFlag && (vrfRequestId != 0 || _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0)) return true;
-        return rngWordCurrent == 0 && rngWordByDay[_simulatedDayIndexAt(t)] == 0;
+        if (block.timestamp < uint256(t) + _VRF_DEAD_TIMEOUT) return false;
+        if (!_rngRequestActive()) {
+            if (_rngSessionPublished()) return false;
+            if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0) return true;
+            if (_lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) return false;
+        }
+        return rngWordCurrent == RNG_WORD_WAITING
+            && (!rngLockedFlag || rngWordByDay[_simulatedDayIndexAt(t)] == 0);
     }
 
     /// @dev Returns the day index for a specific timestamp.
@@ -2751,11 +2784,11 @@ abstract contract DegenerusGameStorage {
     uint256 internal vrfSubscriptionId;
 
     // =========================================================================
-    // Lootbox RNG Packed Slot (9 variables in 256/256 bits)
+    // Lootbox RNG Packed Slot (amounts, ticket latches and Craps pending flags)
     // =========================================================================
     //
     // Layout (LSB -> MSB):
-    //   [bits   0:47]   lootboxRngIndex          uint48   (281T indices)
+    //   [bits   0:47]   unused layout gap (the old increasing index)
     //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
@@ -2763,19 +2796,19 @@ abstract contract DegenerusGameStorage {
     //   [bits 224:231]  midDayTicketRngPending   uint8    (0=idle, 1=ordinary, 2=isolated future pool)
     //   [bits 232:239]  gameOverDeadLatched      uint8    (bool flag, 8 bits)
     //   [bits 240:247]  gameOverDrainLevelLatch  uint8    (0=unset, 1=lvl, 2=lvl+1)
-    //   [bits 248:255]  gameOverTerminalRequested uint8   (bool flag, 8 bits)
+    //   [bit 248]       gameOverTerminalRequested bool
+    //   [bit 249]       unused (publication now lives in slot0)
+    //   [bits 250:251]  crapsRngPending           bool per physical buffer
+    //   [bits 252:255]  reserved
 
     /// @dev Packed lootbox RNG state. See layout comment above.
-    ///      Initialized with lootboxRngIndex=1, lootboxRngThreshold=1 ether (scaled=1000),
+    ///      Initialized with lootboxRngThreshold=1 ether (scaled=1000),
     ///      middayMaxBasefeeGwei=5.
     uint256 internal lootboxRngPacked =
-        uint256(1)                                  // lootboxRngIndex = 1
-        | (uint256(1000) << 112)                    // lootboxRngThreshold = 1 ether / 1e15 = 1000
+        (uint256(1000) << 112)                    // lootboxRngThreshold = 1 ether / 1e15 = 1000
         | (uint256(5) << 176);                      // middayMaxBasefeeGwei = 5
 
     // ---- lootboxRng shifts and masks ----
-    uint256 internal constant LR_INDEX_SHIFT = 0;
-    uint256 internal constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;                // 48 bits
     uint256 internal constant LR_PENDING_ETH_SHIFT = 48;
     uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
     uint256 internal constant LR_THRESHOLD_SHIFT = 112;
@@ -2785,7 +2818,7 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LR_MID_DAY_SHIFT = 224;
     uint256 internal constant LR_MID_DAY_MASK = 0xFF;                       // 8 bits
     /// @dev An isolated next-level pool, committed without swapping the ordinary ticket queues.
-    ///      Like an ordinary mid-day batch (1), it pins LR_INDEX - 1 until the drain completes.
+    ///      Like an ordinary mid-day batch (1), it pins the sealed read buffer until the drain completes.
     uint256 internal constant MID_DAY_FUTURE_POOL = 2;
     uint256 internal constant LR_MAX_BASEFEE_SHIFT = 176;
     uint256 internal constant LR_MAX_BASEFEE_MASK = 0xFF;                   // 8 bits
@@ -2798,7 +2831,7 @@ abstract contract DegenerusGameStorage {
     ///      any, goes just before); never cleared. Until then a held daily lock is a pre-freeze
     ///      request, never the terminal word.
     uint256 internal constant LR_GO_SWAP_SHIFT = 248;
-    uint256 internal constant LR_GO_SWAP_MASK = 0xFF;                       // 8 bits
+    uint256 internal constant LR_GO_SWAP_MASK = 1;
 
     /// @dev Ceiling on the tunable mid-day basefee gate, in whole gwei (the field is 8
     ///      bits). Zero disables the gate, letting mid-day requests issue at any price.
@@ -2820,7 +2853,7 @@ abstract contract DegenerusGameStorage {
     ///      redemption bills more than it charged. What bounds the subscription's exposure
     ///      is the mid-day LINK floor rather than this multiple — requests stop below
     ///      MIN_LINK_FOR_LOOTBOX_RNG, leaving that balance to the daily word, which is
-    ///      never gated. The craps table answers to MIN_LINK_FOR_CRAPS_RNG instead, a
+    ///      never gated. A pending craps window answers to MIN_LINK_FOR_CRAPS_RNG instead, a
     ///      reserve sized to one daily word rather than to a queue that can wait for it.
     uint256 internal constant MIDDAY_RNG_CHARGE_MULT = 6;
 
@@ -2941,7 +2974,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev RNG words keyed by lootbox RNG index.
-    mapping(uint48 => uint256) internal lootboxRngWordByIndex;
+    uint256 private __rngWordLayoutGap; // Word now uses rngWordCurrent; preserve downstream slot offsets.
 
     // =========================================================================
     // Deity Boon Tracking
@@ -3687,21 +3720,20 @@ abstract contract DegenerusGameStorage {
     // Human-Box Auto-Open Sweep State
     // =========================================================================
 
-    /// @dev Entry position within boxPlayers[boxCursorIndex] for the box auto-open sweep.
+    /// @dev Entry position within boxPlayers[_rngReadBuffer()] for the box auto-open sweep.
     ///      Persists across calls when a budget runs out mid-index; reset to zero each
     ///      time the sweep fully drains an index and advances the frontier.
     uint48 internal boxCursor;
 
-    /// @dev The sweep's open frontier: the lowest lootbox RNG index not yet fully swept.
-    ///      Monotonic — advances one index at a time as each queue drains, and never
-    ///      moves past an index whose VRF word has not landed (orphan-index guard).
-    uint48 internal boxCursorIndex;
+    /// @dev True only after every box, presale leg and bet in the sealed read buffer finishes.
+    ///      Fresh requests clear it; retries preserve it and the cursor.
+    bool internal humanReadComplete = true;
+    uint40 private __boxFrontierLayoutGap; // Preserve the former six-byte frontier footprint.
 
-    /// @dev RNG index of the coin-presale-box close (the 50-ETH-crossing buy) — the highest index
-    ///      any presale box can occupy. Set once when presaleOver latches. Packs into the cursor
-    ///      slot (free read in the sweep, which already loads boxCursorIndex); the sweep flips
-    ///      presaleDrained once boxCursorIndex advances past it. Zero while presale never closes.
-    uint48 internal presaleCloseIndex;
+    /// @dev Physical buffer holding the final presale purchase. Earlier sessions must already
+    ///      be settled before this one seals. Completing this buffer releases the residual pool.
+    ///      presaleOver distinguishes a real close on buffer0 from the deployment default.
+    uint48 internal presaleCloseBuffer;
 
     /// @dev Once-per-level latch for sDGNRS's automatic whale purchase: the level at which the
     ///      process STAGE already bought (DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs,
@@ -3739,7 +3771,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
     ///      first deposit (the lootboxEth amount == 0 signal). Keyed on the lootbox index,
     ///      which re-couples to the VRF-rotation orphan-index keyspace — the box auto-open
-    ///      walk MUST gate each open on lootboxRngWordByIndex[index] != 0 so an index
+    ///      walk MUST gate each open on _lootboxWord(index) != 0 so an index
     ///      orphaned mid-day by an emergency coordinator rotation is skipped until the
     ///      detect-preserve-re-issue path lands the re-issued word.
     mapping(uint48 => address[]) internal boxPlayers;
@@ -4061,6 +4093,143 @@ abstract contract DegenerusGameStorage {
 
     /// @dev FIFO of sealed Decimator battles: head in bits 0..23, tail in 24..47.
     uint256 internal decBattleQueue;
+
+    /// @dev Bit t identifies a trait header initialized for ticketBufferLevels[parity].
+    ///      Cleared only on successful buffer takeover; owner index zero remains valid.
+    uint256[2] internal traitBucketLive;
+
+    /// @dev Resolved payload markers, masked before every live decode.
+    uint256 internal constant BOX_PROCESSED = uint256(1) << 255;
+    uint256 internal constant BET_PROCESSED = uint256(1) << 255;
+
+    /// @dev The shared session payload is usable by lootbox consumers only after fulfillment.
+    ///      Daily callback stores its final nudge; the keeper publishes readiness and unlock retains it.
+    function _lootboxWord(uint48 buffer) internal view returns (uint256) {
+        return buffer == _rngReadBuffer() && _rngSessionPublished() ? _currentRngWord() : 0;
+    }
+
+    /// @dev References are physical buffer tags, never increasing generations.
+    function _lootboxBufferValid(uint48 buffer) internal pure returns (bool) { return buffer < 2; }
+
+    function _boxOrder(uint48 index, address player) internal view returns (uint256) {
+        if (!_lootboxBufferValid(index)) return 0;
+        uint256 word = lootboxOrder[index & 1][player];
+        return word & BOX_PROCESSED == 0 ? word : 0;
+    }
+
+    /// @dev Called once after a successful NORMAL seal, never by purchases or terminal.
+    ///      Completion was proved before requesting; only fixed queue lengths are reset.
+    function _resetLootboxWriteBuffer(uint48 index) internal {
+        address[] storage boxes = boxPlayers[index & 1];
+        uint256[] storage bets = degeneretteQueue[index & 1];
+        assembly ("memory-safe") { sstore(boxes.slot, 0) sstore(bets.slot, 0) }
+    }
+
+    function _lootboxReadComplete() internal view virtual returns (bool) {
+        return _rngComplete();
+    }
+
+    /// @dev Checked only at consumer-completion transitions, never by a fresh request.
+    function _rngConsumersComplete() internal view returns (bool) {
+        uint256 packed = lootboxRngPacked;
+        if (!_rngSessionPublished() || _currentRngWord() == 0 || !ticketsFullyProcessed
+            || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 || !humanReadComplete) return false;
+        return packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) == 0;
+    }
+
+    /// @dev Daily work must seal too. A delivered word with unpaid consumers is not complete.
+    ///      Reverts in a consumer's effects roll this marker back with the rest of that transaction.
+    function _tryCompleteRng() internal {
+        if (_rngComplete() || rngLockedFlag || _rngRequestActive() || !_rngSessionPublished()) return;
+        if (_rngConsumersComplete()) _setRngComplete(true);
+    }
+    uint256 internal constant LR_CRAPS_PENDING_SHIFT = 250;
+
+    uint256 internal constant BUCKET_COUNT_MASK = type(uint32).max;
+
+    function _ticketBufferLevel(uint24 lvl) internal view returns (uint24 result) {
+        assembly ("memory-safe") {
+            result := and(shr(add(mul(ticketBufferLevels.offset, 8), mul(and(lvl, 1), 24)), sload(ticketBufferLevels.slot)), 0xffffff)
+        }
+    }
+
+    function _setTicketBufferLevel(uint24 lvl) internal {
+        uint256 shift = (lvl & 1) * 24;
+        if (uint24(uint256(ticketBufferLevels) >> shift) != lvl) traitBucketLive[lvl & 1] = 0;
+        ticketBufferLevels = uint48((uint256(ticketBufferLevels) & ~(uint256(type(uint24).max) << shift))
+            | (uint256(lvl) << shift));
+    }
+
+    function _ticketLevelRetired(uint24 lvl) internal view returns (bool) {
+        return _ticketBufferLevel(lvl) > lvl;
+    }
+
+    function _assertReadableTicketLevel(uint24 lvl) internal view {
+        if (_ticketLevelRetired(lvl)) revert E();
+    }
+
+    function _traitBufferBase(uint24 lvl) internal pure returns (uint256 base) {
+        assembly ("memory-safe") {
+            mstore(0, and(lvl, 1))
+            mstore(32, lvlTraitEntry.slot)
+            base := keccak256(0, 64)
+        }
+    }
+
+    function _bucketLength(uint24 lvl, uint256 trait) internal view returns (uint256) {
+        _assertReadableTicketLevel(lvl);
+        return _bucketLengthUnchecked(lvl, trait);
+    }
+
+    /// @dev Caller has validated the level before any empty-bucket/deity branch.
+    function _bucketLengthUnchecked(uint24 lvl, uint256 trait) internal view returns (uint256 count) {
+        uint256 elem = _traitBufferBase(lvl) + trait;
+        assembly ("memory-safe") {
+            let parity := and(lvl, 1)
+            let shift := add(mul(ticketBufferLevels.offset, 8), mul(parity, 24))
+            if eq(and(shr(shift, sload(ticketBufferLevels.slot)), 0xffffff), lvl) {
+                if and(sload(add(traitBucketLive.slot, parity)), shl(trait, 1)) {
+                    count := and(sload(elem), 0xffffffff)
+                }
+            }
+        }
+    }
+
+    /// @dev Constant work; pending paid obligations defer generation without clearing them.
+    function _prepareTicketLevel(uint24 lvl) internal virtual returns (bool) {
+        uint24 old = _ticketBufferLevel(lvl);
+        if (old != 0 && old != lvl && !gameOver && _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0
+            && _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) == 0 && _foilDrainPending()) return false;
+        return _prepareTicketLevelAfterFoil(lvl);
+    }
+
+    /// @dev The chronological foil worker already drained older packs before this buyer.
+    ///      It must not block itself on the current global foil backlog.
+    function _prepareTicketLevelAfterFoil(uint24 lvl) internal returns (bool) {
+        uint24 slot = lvl & 1;
+        uint24 old = _ticketBufferLevel(slot);
+        if (old == lvl) return true;
+        if (old > lvl || lvl == 0) return false;
+        bool terminal = gameOver || _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
+            || _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
+        // The freeze protects the payout cohort. Its first preparation is still required;
+        // unrelated older inventory is outside the established terminal payout scope.
+        if (terminal && lvl != _gameOverTicketLevel(level)) return false;
+        if (old != 0 && !terminal) {
+            // level is completed during purchase phase, live during jackpot phase.
+            if (old > level || (old == level && jackpotPhaseFlag)) return false;
+            if (ticketQueue[_tqReadKey(old)].length != 0 || ticketQueue[_tqWriteKey(old)].length != 0
+                || ticketQueue[_tqFarFutureKey(old)].length != 0) return false;
+            if ((ticketLevel & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) == old
+                && ticketSeats != 0) return false;
+        }
+        if (old != 0 && (ticketLevel & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) == old) {
+            ticketLevel = 0;
+            ticketCursor = 0;
+        }
+        _setTicketBufferLevel(lvl);
+        return true;
+    }
 
     /// @dev The ratchet entry for `lvl` as the growth market must see it: a century level
     ///      reads its pushed achieved pool rather than the overwritten levelPrizePool

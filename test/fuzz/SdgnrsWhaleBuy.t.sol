@@ -428,6 +428,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     function _settleGame(uint256 vrfWord) internal {
+        _finishReadConsumers();
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);

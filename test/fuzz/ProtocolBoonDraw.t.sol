@@ -43,11 +43,11 @@ contract ProtocolBoonFixture is DegenerusGameStorage {
         protocolBoonPools[issuer][day & 1].day = day;
         protocolBoonPools[issuer][day & 1].totalWeight = type(uint64).max;
     }
-    function bet(uint48 index, uint64 id) external view returns (uint256) { return degeneretteQueue[index][id - 1]; }
+    function bet(uint48 index, uint64 id) external view returns (uint256) { return degeneretteQueue[index & 1][id - 1]; }
     function heroWeight(uint24 day, uint8 symbol) external view returns (uint32) {
         return uint32(dailyHeroWagers[day][symbol >> 3] >> ((symbol & 7) * 32));
     }
-    function openIndex() external { _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1); }
+    function openIndex() external { rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12); }
     function clearDeity(uint8 symbol) external { deityBySymbol[symbol] = address(0); }
     function seedBoon(address player, uint24 day) external {
         boonPacked[player].slot1 = (uint256(3) | (uint256(day) << BP_LANE_DAY_SHIFT)) << BP_DEGEN_LANE0_SHIFT;
@@ -125,6 +125,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 1, uint256(987654321))));
     }
     function _finishDailyAdvance(uint256 seed) private {
+        _finishReadConsumers();
         uint256 fulfilled = mockVRF.lastRequestId();
         for (uint256 i; i < 150; ++i) {
             game.advanceGame();

@@ -209,7 +209,7 @@ contract CrapsBattleTest is CrapsPins {
         craps = new BattleHarness();
         // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         // Arming needs today's word in. This one lands on preset 0 with no spread, so the fixed
         // terms below can be named as constants: `% 4 == 0` picks the preset, `(>> 8) % 40 == 0`
         // adds nothing to the seed.
@@ -356,7 +356,7 @@ contract CrapsBattleTest is CrapsPins {
         _placeBattle(carol, _boardC(), LW * 2, LW * 10, 0);
         assertEq(craps.battleOf(craps.battleKeyOf(a)).battleStake, 0, "a friendly battle grew a bounty");
 
-        _closeOn(craps, slot, 4, uint256(keccak256("plain")));
+        _closeOn(craps, slot, 0, uint256(keccak256("plain")));
         craps.resolveSlot(slot, WHOLE_FIELD);
 
         // It RANKS. A zero bounty used to skip the scoreboard entirely, so `resolved` never caught
@@ -408,7 +408,7 @@ contract CrapsBattleTest is CrapsPins {
         }
         assertEq(craps.battleOf(key).entrants, 8, "the custom field did not gather every shape");
 
-        _closeOn(craps, slot, 4, uint256(keccak256("chips")));
+        _closeOn(craps, slot, 0, uint256(keccak256("chips")));
         uint256 round = uint256(C) * 10 * 1 ether;
         for (uint256 placed = 0; placed <= 7; ++placed) {
             assertEq(craps.stakeFor(craps.drawnBoardOf(ids[placed])), round, "a custom board missed ten chips");
@@ -428,7 +428,10 @@ contract CrapsBattleTest is CrapsPins {
         uint64 differentRoundSlot = _openBattle(craps, 300, 4, 5, SU);
         vm.prank(alice);
         keys[3] = craps.battleKeyOf(craps.enterBattle(differentRoundSlot, _boardA(), 1));
+        // Four funded fields fill the cap. Finish one before admitting another.
+        _runSlot(LW * 2, LW * 11, SU, 0, uint256(keccak256("split-terms")));
         keys[4] = craps.battleKeyOf(_placeBattle(alice, _boardA(), LW * 2, LW * 11, SU + 1));
+        _runSlot(LW * 3, LW * 15, SU, 1, uint256(keccak256("split-terms-second")));
         uint64 differentSlot = _openBattle(craps, uint32(LW / 1 ether), 2, 5, SU);
         vm.prank(alice);
         keys[5] = craps.battleKeyOf(craps.enterBattle(differentSlot, _boardA(), 1));
@@ -478,7 +481,7 @@ contract CrapsBattleTest is CrapsPins {
                 _placeBattle(carol, _boardC(), LW * 2, LW * 10, SU)
             );
             uint256 word = uint256(keccak256(abi.encode("verdict", i)));
-            uint64 slot = _closeSlot(LW * 2, LW * 10, SU, uint48(10_000 + i), word);
+            uint64 slot = _closeSlot(LW * 2, LW * 10, SU, uint48(i & 1), word);
             bytes32 key = craps.battleKeyOf(ids[0]);
 
             // The expected verdict, off the engine's own account of each run but ranked by the
@@ -576,7 +579,7 @@ contract CrapsBattleTest is CrapsPins {
         uint256 c = _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU);
         assertEq(flip.burned(alice), (LW * 2 + SUW) * 3, "every entry funded separately");
         uint256 tableWord = uint256(keccak256("twins"));
-        uint64 slot = _closeSlot(LW * 2, LW * 10, SU, 4, tableWord);
+        uint64 slot = _closeSlot(LW * 2, LW * 10, SU, 0, tableWord);
 
         uint64 expected = _tag(tableWord, b) > _tag(tableWord, a) ? uint64(b) : uint64(a);
         if (_tag(tableWord, c) > _tag(tableWord, expected)) expected = uint64(c);
@@ -603,7 +606,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      contract mints FLIP back to anybody.
     function test_aSoloBattleStillPaysItsWinner() public {
         uint256 id = _placeBattle(alice, _boardA(), LW * 2, 0, SU);
-        uint64 slot = _closeSlot(LW * 2, 0, SU, 4, uint256(keccak256("solo")));
+        uint64 slot = _closeSlot(LW * 2, 0, SU, 0, uint256(keccak256("solo")));
 
         uint256 beforeMint = flip.minted(alice);
         PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
@@ -621,7 +624,7 @@ contract CrapsBattleTest is CrapsPins {
     function test_aHalfResolvedFieldPaysNobody() public {
         _placeBattle(alice, _boardA(), LW * 2, 0, SU);
         _placeBattle(bob, _boardB(), LW * 2, 0, SU);
-        uint64 slot = _closeSlot(LW * 2, 0, SU, 4, uint256(keccak256("half")));
+        uint64 slot = _closeSlot(LW * 2, 0, SU, 0, uint256(keccak256("half")));
 
         // Half the field settled is not a verdict, and a verdict is what pays.
         assertEq(_resolveForPots(craps, slot, 1).length, 0, "a half-resolved field paid its leader");
@@ -716,7 +719,7 @@ contract CrapsBattleTest is CrapsPins {
             _placeBattle(bob, _boardB(), LW * 2, LW * 10, SU),
             _placeBattle(carol, _boardC(), LW * 2, LW * 10, SU)
         ];
-        _closeOn(craps, slot, 4, uint256(keccak256("onetx")));
+        _closeOn(craps, slot, 0, uint256(keccak256("onetx")));
 
         uint256 busts;
         uint256 deleted;
@@ -765,7 +768,7 @@ contract CrapsBattleTest is CrapsPins {
             _placeBattle(bob, _boardB(), LW * 2, LW * 10, 0),
             _placeBattle(carol, _boardC(), LW * 2, LW * 10, 0)
         ];
-        _closeOn(craps, slot, 4, uint256(keccak256("onetx")));
+        _closeOn(craps, slot, 0, uint256(keccak256("onetx")));
 
         uint256 busts;
         uint256 deleted;
@@ -794,7 +797,7 @@ contract CrapsBattleTest is CrapsPins {
         uint256 a = _placeBattle(alice, _boardA(), LW * 2, LW * 10, SU);
         uint256 b = _placeBattle(bob, _boardB(), LW * 2, LW * 10, SU);
         uint256 c = _placeBattle(carol, _boardC(), LW * 2, LW * 10, SU);
-        _closeOn(craps, slot, 4, uint256(keccak256("onetx")));
+        _closeOn(craps, slot, 0, uint256(keccak256("onetx")));
 
         (, uint256 paidA) = craps.previewSettlement(a);
         (, uint256 paidB) = craps.previewSettlement(b);
@@ -850,7 +853,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.betOf(betId).chips, expected, "the ten-leg word did not round-trip");
 
         // And it decodes back into a board with the dark leg on it, at this slot's chip.
-        _closeOn(craps, slot, 4, uint256(keccak256("tenleg")));
+        _closeOn(craps, slot, 0, uint256(keccak256("tenleg")));
         Craps.Bets memory drawn = craps.drawnBoardOf(betId);
         assertGe(drawn.dontPass, C, "the dark leg did not survive the decode");
         assertEq(craps.stakeFor(drawn), uint256(L) * 1 ether, "the drawn board is not the whole round");
@@ -1085,7 +1088,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.expectRevert(CrapsBattleStorage.NotYourBet.selector);
         craps.amendSlip(betId, _boardA());
 
-        _closeOn(craps, slot, 4, uint256(keccak256("amended")));
+        _closeOn(craps, slot, 0, uint256(keccak256("amended")));
         // A shut slot refuses the amendment through the same joinability test its entry door
         // uses, so the two can never drift — hence its selector rather than `BetLocked`.
         vm.prank(alice);
@@ -1183,7 +1186,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.expectRevert(CrapsBattleStorage.BadEntryMultiple.selector);
         craps.enterBattle(slot, _boardA(), 2);
 
-        _closeOn(craps, slot, 4, uint256(keccak256("stakes")));
+        _closeOn(craps, slot, 0, uint256(keccak256("stakes")));
 
         // Exactly the multiple — the rounding lands on the single-copy figure and is then copied,
         // so there is no dust between N copies and one run multiplied.
@@ -1223,7 +1226,7 @@ contract CrapsBattleTest is CrapsPins {
             vm.prank(alice);
             uint256 big = craps.enterBattle(slot, _boardA(), 10);
 
-            _closeOn(craps, slot, uint48(20_000 + i), uint256(keccak256(abi.encode("rank", i))));
+            _closeOn(craps, slot, uint48(i & 1), uint256(keccak256(abi.encode("rank", i))));
             (uint256 wonOne,) = craps.previewSettlement(plain);
             craps.resolveSlot(slot, WHOLE_FIELD);
 
@@ -1304,7 +1307,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // Still the same ten-chip round either way: the draw places the complement.
         uint256 plain = _placeBattle(bob, _boardA(), LW * 2, LW * 10, SU);
-        _closeOn(craps, slot, 4, uint256(keccak256("blank-named")));
+        _closeOn(craps, slot, 0, uint256(keccak256("blank-named")));
         assertEq(
             craps.stakeFor(craps.drawnBoardOf(betId)),
             craps.stakeFor(craps.drawnBoardOf(plain)),
@@ -1328,7 +1331,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(flip.burned(alice), LW * 2 + SUW, "money moved on a reshape");
         assertEq(flip.minted(alice), 0, "money moved on a reshape");
 
-        uint64 slot = _runSlot(LW * 2, 0, SU, 4, uint256(keccak256("seat")));
+        uint64 slot = _runSlot(LW * 2, 0, SU, 0, uint256(keccak256("seat")));
         assertTrue(craps.battleOf(_slotKeyOf(slot)).finalized, "the amended seat broke finalization");
     }
 
@@ -1779,7 +1782,7 @@ contract CrapsBattleTest is CrapsPins {
         craps.donate(true, slot - craps.customSlotBase(), donation);
         assertEq(craps.roundBoostFor(donation), 50, "the fixture no longer straddles the rounding step");
 
-        _closeOn(craps, slot, 700, uint256(keccak256("customboost")));
+        _closeOn(craps, slot, 0, uint256(keccak256("customboost")));
         PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
         CrapsBattle.Battle memory info = craps.battleOf(_slotKeyOf(slot));
@@ -2187,11 +2190,12 @@ contract CrapsBattleTest is CrapsPins {
         assertGe(craps.EVENT_LEAD(), 5 minutes, "the lead leaves no room for a fulfilment before reset");
     }
 
-    /// @dev THE EVENT SETTLES BEFORE THE JACKPOT IT PRECEDES. Shutting it asks the game for a
-    ///      lootbox draw, and that request is what carries both the table's dice and the day's
-    ///      pending boxes — so a quarter-hour of lead is the whole window in which the day's
-    ///      biggest race resolves, in front of an audience, before the jackpots go out.
-    function test_theEventShutsIntoTheRunUpAndAsksForTheDraw() public {
+    /// @dev THE EVENT SETTLES BEFORE THE JACKPOT IT PRECEDES. Shutting it binds it to the table
+    ///      the next ordinary lootbox request seals, and that request carries both the table's
+    ///      dice and the day's pending boxes — so a quarter-hour of lead is the whole window in
+    ///      which the day's biggest race resolves, in front of an audience, before the jackpots
+    ///      go out.
+    function test_theEventShutsIntoTheRunUpAndBindsTheNextDraw() public {
         _openDay();
         uint256 periods = craps.BONUS_PERIODS_PER_DAY();
         uint64 eventSlot = _slotAt(periods - 2);
@@ -2201,10 +2205,15 @@ contract CrapsBattleTest is CrapsPins {
         (uint24 day,,) = craps.currentBonusSlot();
         assertEq(day, craps.currentDayIndex(), "the event shut after its own day had turned over");
 
-        // Arming asks the game to draw — the same request that clears the lootbox queue.
+        // Arming binds the live table and asks for nothing; the next ordinary request is the draw.
         uint256 before_ = game.lootboxRngCalls();
-        craps.armWindow(eventSlot);
-        assertEq(game.lootboxRngCalls(), before_ + 1, "shutting the event asked for no draw");
+        uint48 live = craps.currentIndex();
+        uint48 bound = craps.armWindow(eventSlot);
+        assertEq(bound, live, "the event did not bind the live table");
+        assertEq(game.lootboxRngCalls(), before_, "shutting the event made a request of its own");
+        game.requestLootboxRng();
+        assertEq(game.lootboxRngCalls(), before_ + 1, "the ordinary request did not draw the event's table");
+        assertEq(craps.currentIndex(), live ^ 1, "the draw did not seal the event's table");
 
         // And nothing of the day is left taking bets once it has gone.
         for (uint256 p = 0; p < periods; ++p) {
@@ -2299,20 +2308,32 @@ contract CrapsBattleTest is CrapsPins {
     }
 
     /// @dev A window shuts onto the LIVE index — the table whose word cannot exist yet, since the
-    ///      protocol moves the cursor past an index in the same call that requests its word — and
-    ///      the shut's own request moves the cursor on, so the next window shuts onto the next
-    ///      table. The day's word is public from the moment the day opens and settles nothing.
-    function test_aWindowShutsOntoTheLiveIndexAndMovesTheCursor() public {
+    ///      protocol moves the cursor past an index in the same call that requests its word. The
+    ///      shut makes no request and moves nothing: every window shut before the next ordinary
+    ///      request shares the live table, and the request that then seals it moves the cursor, so
+    ///      the next window shuts onto the next table. The day's word is public from the moment
+    ///      the day opens and settles nothing.
+    function test_aWindowShutsOntoTheLiveIndexAndTheNextRequestMovesTheCursor() public {
         _openDay();
         uint48 live = craps.currentIndex();
         _warpPastClose(PER);
 
+        uint256 calls = game.lootboxRngCalls();
         uint48 first = craps.armWindow(_slotAt(PER - 1));
         assertEq(first, live, "shut onto a table other than the live one");
         uint48 index = craps.armWindow(_slotAt(PER));
-        assertEq(index, live + 1, "the second shut did not take the next table");
-        assertEq(craps.currentIndex(), live + 2, "the shuts did not move the cursor past their tables");
+        assertEq(index, live, "a second shut before any request must share the live table");
+        assertEq(craps.currentIndex(), live, "a shut must not move the cursor");
+        assertEq(game.lootboxRngCalls(), calls, "a shut made a request of its own");
         assertEq(craps.wordAt(index), 0, "shut onto a table that had already rolled");
+
+        game.requestLootboxRng(); // any ordinary request seals the shut windows' table
+        assertEq(game.lootboxRngCalls(), calls + 1, "the ordinary request was not made");
+        assertEq(craps.currentIndex(), live ^ 1, "the request must seal the live table");
+
+        _warpPastClose(2);
+        uint48 next = craps.armWindow(_slotAt(2));
+        assertEq(next, live ^ 1, "a window shut after the seal did not take the other buffer");
 
         (, uint48 published,, bool joinable) = craps.bonusWindowOf(PER);
         assertEq(published, index, "the window does not publish the table it took");

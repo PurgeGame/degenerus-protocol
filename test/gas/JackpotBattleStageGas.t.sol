@@ -52,7 +52,7 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
         phaseTransitionActive = false;
         subsFullyProcessed = true;
         _afkingResetDay = day;
-        rngWordCurrent = s.word;
+        rngWordCurrent = s.word < 2 ? RNG_WORD_WAITING : s.word;
         rngWordByDay[day] = s.word;
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
@@ -407,7 +407,7 @@ contract JackpotPhaseSeeder is DegenerusGame {
         prizePoolFrozen = false;
         rngLockedFlag = false;
         rngRequestTime = 0;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 0;
         phaseTransitionActive = false;
         subsFullyProcessed = true;

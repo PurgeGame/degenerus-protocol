@@ -7,11 +7,11 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 /// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state.
 contract BoxQueueViewer is DegenerusGame {
     function lrIndexView() external view returns (uint48) {
-        return uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        return _rngWriteBuffer();
     }
 
     function boxPlayersContains(uint48 index, address who) external view returns (bool) {
-        address[] storage q = boxPlayers[index];
+        address[] storage q = boxPlayers[index & 1];
         for (uint256 i; i < q.length; ++i) {
             if (q[i] == who) return true;
         }
@@ -19,12 +19,12 @@ contract BoxQueueViewer is DegenerusGame {
     }
 
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxOrder[index][who];
+        return _boxOrder(index, who);
     }
 }
 
 /// @title PassBoxAutoOpenEnqueue — WHALE-01: pass-bundled lootboxes must enqueue for auto-open
-/// @notice Mint, presale, and afking-cover lootboxes are enqueued into boxPlayers[index] so the
+/// @notice Mint, presale, and afking-cover lootboxes are enqueued into boxPlayers[index & 1] so the
 ///         permissionless openBoxes() auto-opener resolves them. Pass-bundled lootboxes
 ///         (whale/lazy/deity, created in WhaleModule._recordLootboxEntry) were NOT enqueued, so
 ///         their owner — the only party who can open them (manual openLootBox is operator-gated) —
@@ -33,7 +33,7 @@ contract BoxQueueViewer is DegenerusGame {
 ///         lootbox-resolution-timing by-design ruling for this one box class.
 ///
 ///         This drives the REAL whale-pass purchase and asserts the box is enqueued for
-///         auto-open. PRE-FIX the buyer is absent from boxPlayers[index] and this FAILS; POST-FIX it
+///         auto-open. PRE-FIX the buyer is absent from boxPlayers[index & 1] and this FAILS; POST-FIX it
 ///         is present and this PASSES.
 /// @dev Test-only. No contracts/*.sol is mutated. A read-only viewer is etched (type().runtimeCode,
 ///      no constructor) to inspect the internal boxPlayers/lootboxOrder maps, then real code restored.

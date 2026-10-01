@@ -310,6 +310,7 @@ contract DegenerusGameFoilPackModule is
         if (_foilBoughtThisLevel(buyer, lvl)) revert FoilAlreadyBought();
 
         uint24 day = _simulatedDayIndex();
+        uint24 resolveDay = day + 1;
 
         // Price: ten ticket prices for the level. The fresh ETH the purchase path carved
         // for the foil leg covers it first (overpay ignored); any shortfall runs the
@@ -452,8 +453,6 @@ contract DegenerusGameFoilPackModule is
         // Resolve against tomorrow, like a coinflip deposit. Tomorrow's word cannot exist
         // yet in any state: caught up, locked on a pending request, or re-walking a stall
         // (a stall that outlasts tomorrow derives its word from a VRF word not yet delivered).
-        uint24 resolveDay = day + 1;
-
         // Freeze the record: resolveDay (>= 1), multBps (>= 20000), and the buy-time
         // activity score. The slot is non-zero, so its presence IS the one-per-cycle cap.
         // No signatures are stored — the drain and the claim re-derive the four match
@@ -929,10 +928,93 @@ contract DegenerusGameFoilPackModule is
         uint256[8] ownerIdx;
         uint256 seated;
         uint256 cur;
+        uint24 lvl;
         // Queue lanes are read-only during the call; adjacent seats share this cached word.
         uint256 queueBase;
         uint256 queueWordIndex;
         uint256 queueWord;
+    }
+
+    /// @notice Per-entry trait generation in the Game's storage context, called by Mint.
+    /// @dev Inputs and LCG sequence match Mint's original generator. Keeping this writer
+    ///      here leaves Mint under EIP-170; scratch memory stays local to the delegatecall.
+    ///      Caller has prepared the full level and validated ownerIdx; no external calls.
+    uint64 private constant TICKET_LCG_MULT = 6364136223846793005;
+
+    function generateTraitRun(
+        uint256 baseKey,
+        uint32 startIndex,
+        uint32 count,
+        uint256 entropyWord,
+        uint256 ownerIdx
+    ) external returns (uint256 writes) {
+        uint32[256] memory counts;
+        uint8[256] memory touchedTraits;
+        uint16 touchedLen;
+
+        uint32 endIndex;
+        unchecked {
+            endIndex = startIndex + count;
+        }
+        uint32 i = startIndex;
+
+        // Generate traits in groups of 16, using LCG for deterministic randomness.
+        while (i < endIndex) {
+            uint32 groupIdx = i >> 4;
+
+            // Hash all inputs so player address (stored in baseKey bits 191-32)
+            // reaches the low 32 bits of s. LCG iteration preserves low-bit
+            // independence, so the category bucket — derived from the low 32
+            // bits of s — inherits whatever entropy the seed's low bits carry.
+            uint256 seed = uint256(
+                keccak256(abi.encode(baseKey, entropyWord, groupIdx))
+            );
+            uint64 s = uint64(seed) | 1;
+            uint8 offset = uint8(i & 15);
+            unchecked {
+                s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset);
+            }
+
+            for (uint8 j = offset; j < 16 && i < endIndex; ) {
+                unchecked {
+                    s = s * TICKET_LCG_MULT + 1; // LCG step
+
+                    // Generate trait using weighted distribution, add quadrant offset.
+                    uint8 traitId = DegenerusTraitUtils.traitFromWord(s) +
+                        (uint8(i & 3) << 6);
+
+                    // Track first occurrence of each trait for batch writing.
+                    if (counts[traitId]++ == 0) {
+                        touchedTraits[touchedLen++] = traitId;
+                    }
+                    ++i;
+                    ++j;
+                }
+            }
+        }
+
+        // Extract level from baseKey for storage slot calculation.
+        uint24 lvl = uint24(baseKey >> 224);
+
+        // Calculate the storage slot for this level's trait buckets.
+        // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
+        // with dynamic array elements at keccak256(keccak256(key . slot) + index).
+        // This relies on the standard Solidity storage layout (stable since 0.4.x).
+        // Safe here because the contract is non-upgradeable.
+        uint256 levelSlot = _traitBufferBase(lvl);
+
+        // Batch-write the packed lanes, one run per distinct trait.
+        for (uint16 u; u < touchedLen; ) {
+            uint8 traitId = touchedTraits[u];
+            uint32 occurrences = counts[traitId];
+            // Restore the all-zero invariant on the shared scratch buffer.
+            counts[traitId] = 0;
+            (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, lvl);
+            unchecked {
+                writes += f * 3 + d;
+                ++u;
+            }
+        }
     }
 
     /// @notice Seated round drain (delegatecall target of the mint module's two queue drains).
@@ -959,6 +1041,7 @@ contract DegenerusGameFoilPackModule is
         uint256[] storage queue = ticketQueue[rk];
 
         RoundSeats memory st;
+        st.lvl = lvl;
         st.cur = idx;
         uint256 queueBase;
         assembly ("memory-safe") {
@@ -968,12 +1051,7 @@ contract DegenerusGameFoilPackModule is
         st.queueBase = queueBase;
         st.queueWordIndex = type(uint256).max;
         uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
-        uint256 levelSlot;
-        assembly ("memory-safe") {
-            mstore(0x00, lvl)
-            mstore(0x20, lvlTraitEntry.slot)
-            levelSlot := keccak256(0x00, 0x40)
-        }
+        uint256 levelSlot = _traitBufferBase(lvl);
         uint32 round = ticketRound;
         // The next round starts only if a fully split one still fits the budget, so a call
         // never exceeds its budget even in the rarest roll.
@@ -1096,15 +1174,15 @@ contract DegenerusGameFoilPackModule is
         return used;
     }
 
-    /// @dev A single-lane append, charged at fresh 3 / dirty 1.
-    function _chargeRun(uint256 levelSlot, uint8 trait, uint256 ownerIdx) private returns (uint32) {
-        (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, trait, ownerIdx, 1);
+    /// @dev A single-lane append, charged per physical bucket write.
+    function _chargeRun(uint256 levelSlot, uint8 trait, uint256 ownerIdx, uint24 lvl) private returns (uint32) {
+        (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, trait, ownerIdx, 1, lvl);
         return uint32(f * 3 + d);
     }
 
-    /// @dev A whole-word append, charged at fresh 3 / dirty 1.
-    function _chargeLanes(uint256 levelSlot, uint8 trait, uint256 lanes, uint256 n) private returns (uint32) {
-        (uint256 f, uint256 d) = _bucketAppendLanes(levelSlot, trait, lanes, n);
+    /// @dev A whole-word append, charged per physical bucket write.
+    function _chargeLanes(uint256 levelSlot, uint8 trait, uint256 lanes, uint256 n, uint24 lvl) private returns (uint32) {
+        (uint256 f, uint256 d) = _bucketAppendLanes(levelSlot, trait, lanes, n, lvl);
         return uint32(f * 3 + d);
     }
 
@@ -1130,7 +1208,7 @@ contract DegenerusGameFoilPackModule is
                 uint8 trait = base;
                 if (split) {
                     trait = (base & 0xF8) | uint8((n + rot) & 7);
-                    units += _chargeRun(levelSlot, trait, st.ownerIdx[j]);
+                    units += _chargeRun(levelSlot, trait, st.ownerIdx[j], st.lvl);
                 } else {
                     lanes |= st.ownerIdx[j] << (32 * n);
                 }
@@ -1145,7 +1223,7 @@ contract DegenerusGameFoilPackModule is
             }
         }
         if (!split && n != 0) {
-            units += _chargeLanes(levelSlot, base, lanes, n);
+            units += _chargeLanes(levelSlot, base, lanes, n, st.lvl);
         }
     }
 
@@ -1231,6 +1309,71 @@ contract DegenerusGameFoilPackModule is
         uint256 p2 = offset + 2 < st.seated ? prefix | uint160(st.player[offset + 2]) : 0;
         uint256 p3 = offset + 3 < st.seated ? prefix | uint160(st.player[offset + 3]) : 0;
         emit EntryTraitsRevealed(p0, p1, p2, p3, uint144(uint128(traits)) | (uint144(uint16(mask)) << 128));
+    }
+
+    /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
+    /// @dev Read-only twin of sellFarFutureEntries: shares the exact valuation (curve + daily
+    ///      per-player jitter + ETH/FLIP split) the executing path uses, so the displayed offer
+    ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
+    ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
+    ///      counterparty's FLIP inventory. Reverts on an ineligible distance or a zero /
+    ///      non-whole-ticket quantity (entry counts in multiples of 4); does
+    ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no FLIP
+    ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
+    ///      value(flipTokens).
+    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
+    /// @return totalBudget Total ETH the buyer would pay (the -EV offer).
+    /// @return ticketWei Portion delivered as current-level tickets.
+    /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
+    /// @return flipTokens Cash portion delivered as FLIP (burned from the buyer, paid as flip credit).
+    function previewSellFarFutureEntries(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        external
+        view
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 ethCashWei,
+            uint256 flipTokens
+        )
+    {
+        uint24 cl = _activeTicketLevel();
+        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
+        uint256 seed = _farFutureSeed(player);
+        uint256 cashWei;
+        (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
+            levels,
+            quantities,
+            cl,
+            oneTicketWei,
+            seed
+        );
+        // Display the split for the buyer the executing path would resolve; fall back to sDGNRS as the
+        // nominal counterparty when neither can fund (the preview still shows the -EV offer).
+        address buyer = _resolveSalvageBuyer(totalBudget);
+        if (buyer == address(0)) buyer = ContractAddresses.SDGNRS;
+        (ethCashWei, flipTokens) = _quoteFarFutureFlipSplit(
+            cashWei,
+            oneTicketWei,
+            seed,
+            buyer
+        );
+    }
+
+    /// @dev Payable delegate worker: records the presale leg in the reusable cohort.
+    function recordPresaleBox(address buyer, uint48 index, uint256 word) external payable {
+        if (presaleBoxEth[index & 1][buyer] != 0) revert E();
+        presaleBoxEth[index & 1][buyer] = word;
+        boxPlayers[index & 1].push(buyer);
+    }
+
+    /// @notice Prepare a ticket level with constant work, deferring unsafe buffer takeover.
+    function prepareTicketLevel(uint24 lvl) external payable returns (bool) {
+        return _prepareTicketLevel(lvl);
     }
 
     /// @notice Drain the per-buy-day foil buckets on the leftover write budget.
@@ -1327,6 +1470,13 @@ contract DegenerusGameFoilPackModule is
                     foilCursor = uint32(cursor);
                     return (false, drained);
                 }
+                uint24 packLevel = uint24(bucket[cursor] >> 160);
+                if (!_ticketLevelRetired(packLevel) && !(terminal && packLevel != _gameOverTicketLevel(level))
+                    && !_prepareTicketLevelAfterFoil(packLevel)) {
+                    foilDrainDay = dd;
+                    foilCursor = uint32(cursor);
+                    return (false, drained);
+                }
                 (bool grand, uint32 packUnits) = _resolveFoilBuyer(
                     bucket[cursor],
                     entropy,
@@ -1356,11 +1506,8 @@ contract DegenerusGameFoilPackModule is
                 }
             }
 
-            // Bucket fully drained: advance to the next day. The bucket is left in
-            // place — days are monotonic and both the walk and the pending gate read
-            // only foilDrainDay/foilLastResolveDay, so a passed bucket is unreachable.
-            // (`delete foilBuyers[dd]` would compile into a loop zeroing every
-            // element slot: unbounded gas on a big buy day, bricking the drain.)
+            // Day-keyed foil payload is retained. Moving the low-water cursor releases
+            // access in constant work; never delete the dynamic array at scale.
             unchecked {
                 ++dd;
             }
@@ -1375,7 +1522,9 @@ contract DegenerusGameFoilPackModule is
 
     /// @dev Resolve one queued buyer (the packed level<<160|buyer entry): re-derive
     ///      the four boosted four-quadrant lines via the shared _deriveFoilLines, then
-    ///      file all sixteen traits into the cycle level's trait buckets. No stamp —
+    ///      file all sixteen traits into the cycle level's trait buckets when that level
+    ///      remains eligible for draws. An ending drains unrelated older generation queues
+    ///      without changing the frozen payout buffers. No claim-line stamp —
     ///      the claim re-derives the SAME lines from rngWordByDay[resolveDay] + the
     ///      frozen multBps, so the record stores only (resolveDay, multBps, the buy-time
     ///      activity score) and no line data.
@@ -1394,10 +1543,9 @@ contract DegenerusGameFoilPackModule is
     /// @param touchedTraits Shared scratch: trait IDs touched this call, for the batch write.
     /// @return grandPaid True when this pack pushed the grand, so the caller can charge
     ///         its writes against the batch budget.
-    /// @return units Budget units this pack actually wrote: 3 fixed (record + cursor
-    ///         bookkeeping) plus, per touched trait bucket, 3 per zero-to-nonzero slot write
-    ///         (an empty bucket's length, each fresh data word) and 1 per rewrite of a nonzero
-    ///         slot (a populated bucket's length, the partial tail word), for the caller's room charge.
+    /// @return units Three fixed bookkeeping units plus three per zero-valued slot write
+    ///         and one per nonzero slot write. Includes bitmap initialization, the header
+    ///         and completed data words; stale headers are priced before resetting their value.
     function _resolveFoilBuyer(
         uint256 packedLvlBuyer,
         uint256 entropy,
@@ -1407,6 +1555,10 @@ contract DegenerusGameFoilPackModule is
     ) private returns (bool grandPaid, uint32 units) {
         address buyer = address(uint160(packedLvlBuyer));
         uint24 lvl = uint24(packedLvlBuyer >> 160);
+        // Only the terminal payout level needs generated traits after the ending latches.
+        // Other packs retain their records and daily words for every match/gold pull claim;
+        // consuming their generation queue must not reassign the frozen payout buffer.
+        if (terminal && lvl != _gameOverTicketLevel(level)) return (false, 3);
         uint32[4] memory lines = _deriveFoilLines(
             buyer,
             lvl,
@@ -1414,45 +1566,46 @@ contract DegenerusGameFoilPackModule is
             _foilMultFor(buyer, lvl)
         );
 
-        uint16 touchedLen;
-        for (uint256 i; i < 4; ++i) {
-            uint32 line = lines[i];
-            uint8 tA = uint8(line);
-            uint8 tB = uint8(line >> 8);
-            uint8 tC = uint8(line >> 16);
-            uint8 tD = uint8(line >> 24);
-            if (counts[tA]++ == 0) touchedTraits[touchedLen++] = tA;
-            if (counts[tB]++ == 0) touchedTraits[touchedLen++] = tB;
-            if (counts[tC]++ == 0) touchedTraits[touchedLen++] = tC;
-            if (counts[tD]++ == 0) touchedTraits[touchedLen++] = tD;
-        }
-
-        // Batch-write the sixteen entries into lvlTraitEntry[lvl][traitId] as packed
-        // lanes naming the buyer's registry position, one length update per distinct
-        // trait. Mirrors the mint module's batch writer; re-zeroes the shared scratch so
-        // the next buyer starts clean.
-        uint256 levelSlot;
-        assembly ("memory-safe") {
-            mstore(0x00, lvl)
-            mstore(0x20, lvlTraitEntry.slot)
-            levelSlot := keccak256(0x00, 0x40)
-        }
-        uint256 ownerIdx = (packedLvlBuyer >> 192) - 1;
         units = 3; // record and cursor bookkeeping
-        for (uint16 u; u < touchedLen; ) {
-            uint8 traitId = touchedTraits[u];
-            uint32 occurrences = counts[traitId];
-            counts[traitId] = 0;
-            (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences);
-            unchecked {
-                units += uint32(f * 3 + d);
-                ++u;
+        // Tomorrow's word can land after a turbo transition retired this pack's
+        // inventory. Claims still use its retained record and daily word; never
+        // reassign a newer buffer or let this old generation queue block progress.
+        if (!_ticketLevelRetired(lvl)) {
+            uint16 touchedLen;
+            for (uint256 i; i < 4; ++i) {
+                uint32 line = lines[i];
+                uint8 tA = uint8(line);
+                uint8 tB = uint8(line >> 8);
+                uint8 tC = uint8(line >> 16);
+                uint8 tD = uint8(line >> 24);
+                if (counts[tA]++ == 0) touchedTraits[touchedLen++] = tA;
+                if (counts[tB]++ == 0) touchedTraits[touchedLen++] = tB;
+                if (counts[tC]++ == 0) touchedTraits[touchedLen++] = tC;
+                if (counts[tD]++ == 0) touchedTraits[touchedLen++] = tD;
             }
-        }
 
-        uint256 baseKey = (uint256(lvl) << 224) |
-            (uint256(uint160(buyer)) << 32);
-        emit TraitsGenerated(buyer, baseKey, FOIL_PACK_ENTRIES);
+            // Batch-write the sixteen entries into lvlTraitEntry[lvl][traitId] as packed
+            // lanes naming the buyer's registry position, one length update per distinct
+            // trait. Mirrors the mint module's batch writer; re-zeroes the shared scratch so
+            // the next buyer starts clean.
+            uint256 levelSlot = _traitBufferBase(lvl);
+            uint256 ownerIdx = (packedLvlBuyer >> 192) - 1;
+            for (uint16 u; u < touchedLen; ) {
+                uint8 traitId = touchedTraits[u];
+                uint32 occurrences = counts[traitId];
+                counts[traitId] = 0;
+                (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, lvl);
+                unchecked {
+                    units += uint32(f * 3 + d);
+                    ++u;
+                }
+            }
+
+            uint256 baseKey = (uint256(lvl) << 224) |
+                (uint256(uint160(buyer)) << 32);
+            emit TraitsGenerated(buyer, baseKey, FOIL_PACK_ENTRIES);
+
+        }
 
         // Two or more all-gold tickets: push the grand now rather than wait to be
         // claimed. Runs AFTER the pack's own entries are filed, so the sixteen it just

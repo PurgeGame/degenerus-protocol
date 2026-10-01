@@ -38,6 +38,8 @@ abstract contract CrapsCustomTerms {
     uint256 internal constant _MIN_BANKROLL_FLIP = 300;
     /// @notice Minimum goal, as a multiple of the battle bankroll.
     uint256 internal constant _MIN_BATTLE_GOAL_MULT = 5;
+    /// @notice A funded custom field cannot hold one of the four admission slots indefinitely.
+    uint256 internal constant _MAX_CUSTOM_DURATION = 7 days;
 
     function _customDefinition(
         uint32 played,
@@ -53,10 +55,13 @@ abstract contract CrapsCustomTerms {
         // fits the scoreboard's granule field; the close time is valid; and a high
         // lane is either absent or a real multiple — zero runs no lane, while one is the ordinary
         // seat under another name and would make the two entry modes indistinguishable.
+        bool durationTooLong;
+        unchecked { durationTooLong = uint256(closeTime) - block.timestamp > _MAX_CUSTOM_DURATION; }
         if (
             played == 0 || played % _BONUS_CHIPS != 0 || played > _MAX_ROUND_FLIP || bankMult == 0
                 || bankMult > _MAX_BANKROLL_MULT || goalMult < _MIN_BATTLE_GOAL_MULT || goalMult > _MAX_GOAL_MULT
                 || stakeUnits > _BSTAKE_MAX || closeTime <= block.timestamp
+                || durationTooLong
                 || highRollerMult == 1 || highRollerMult > _MAX_HIGH_MULT
         ) revert BadBattleTerms();
         unchecked {

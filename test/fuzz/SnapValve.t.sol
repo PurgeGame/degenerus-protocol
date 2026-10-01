@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
@@ -13,21 +13,22 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @title SnapValveHarness — drives the REAL processTicketBatch drain with a
 ///        non-zero snapShift. Test-only; NO contracts/*.sol is mutated. Adds only
 ///        seeders, setters, and inspection views over the inherited module.
-contract SnapValveHarness is DegenerusGameMintModule, BucketSeed {
+contract SnapValveHarness is MintBucketSeed {
     /// @dev The mint module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
     function _pastDeadlineTriggered(uint24 today, uint24 idx)
         internal
         view
-        override(DegenerusGameMintModule, DegenerusGameStorage)
+        override
         returns (bool)
     {
         return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
     }
 
     function seedQueue(uint24 lvl, uint256 n, uint32 owedEach, uint8 remEach, uint160 base) external {
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = uint256(keccak256("snapvalve_entropy")) | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = uint256(keccak256("snapvalve_entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
 
         uint24 rk = _tqReadKey(lvl);
         uint256[] storage queue = ticketQueue[rk];
@@ -66,8 +67,9 @@ contract SnapValveHarness is DegenerusGameMintModule, BucketSeed {
     /// @dev Arms the lootbox RNG word processTicketBatch lazily reads as its sweep entropy
     ///      (mirrors the setup seedQueue already performs for the near-key tests).
     function armEntropy(uint256 word) external {
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = word;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = word; _setRngSessionPublished(true); _setRngComplete(false);
     }
 
     function setPending(uint24 lvl, uint8 s) external {

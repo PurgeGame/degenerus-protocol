@@ -43,6 +43,15 @@ interface IDegenerusGameAdvanceModule {
 ///         plus the cold VRF admin surface (deploy wiring + emergency rotation)
 ///         hosted here for the advance module's EIP-170 headroom.
 interface IDegenerusGameGameOverModule {
+    /// @notice Best-effort terminal request, independent of normal read completion.
+    function requestTerminalRng() external returns (bool);
+
+    /// @notice Apply or request the ending's entropy, without a normal-cohort completion gate.
+    function applyTerminalRng(uint48 timestamp, uint24 day, uint24 level) external;
+
+    /// @notice Advance the terminal lifecycle; unlock is requested only after normal payout.
+    function handleGameOverAdvance(uint24 day, uint24 level) external returns (bool shouldReturn, uint8 stage, bool unlock);
+
     /// @notice Configures the Chainlink VRF coordinator and subscription
     /// @param coordinator_ Address of the VRF coordinator contract
     /// @param subId Chainlink VRF subscription ID
@@ -316,22 +325,6 @@ interface IDegenerusGameMintModule {
         uint256[] calldata queueIndices
     ) external;
 
-    /// @notice Quote a far-future salvage swap WITHOUT executing (read-only -EV offer).
-    function previewSellFarFutureEntries(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities
-    )
-        external
-        view
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 ethCashWei,
-            uint256 flipTokens
-        );
-
     /// @notice Buys a credit-gated coin-presale box (msg.value, then claimable + afking shortfall)
     /// @param buyer Player receiving the box
     /// @param boxAmount Requested box ETH (>= 0.01 ETH, pre-clamp)
@@ -437,6 +430,15 @@ interface IDegenerusGameLootboxModule {
     /// @param rngWord Random word for lootbox resolution
     /// @param activityScore Frozen activity score in whole points for the EV multiplier (caller-snapshotted)
     function resolveLootboxDirect(
+        address player,
+        uint256 amount,
+        uint256 rngWord,
+        uint16 activityScore
+    ) external payable;
+
+    /// @notice Resolve a purchased Degenerette win with a 50 ETH score ceiling if allowance remains.
+    /// @dev One combined box per bet; recorded shared usage is clamped to the normal 10 ETH cap.
+    function resolveDegeneretteLootboxDirect(
         address player,
         uint256 amount,
         uint256 rngWord,
@@ -682,6 +684,9 @@ interface IDegenerusGameBingoModule {
 ///      (delegatecall), so msg.sender is preserved end-to-end (the consent gates and
 ///      the bounty payee read the original caller).
 interface IGameAfkingModule {
+    /// @notice Dispatch advancement or its prerequisite read drain without a keeper bounty.
+    function advanceGame() external returns (uint8 mult);
+
     /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)
     ///         or cancel (dailyQuantity == 0, tombstone) for `player`
     ///         (self when 0/msg.sender).
@@ -759,8 +764,32 @@ interface IGameAfkingModule {
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
+    /// @notice Quote a far-future salvage swap WITHOUT executing (read-only -EV offer).
+    function previewSellFarFutureEntries(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        external
+        view
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 ethCashWei,
+            uint256 flipTokens
+        );
+
+    function recordPresaleBox(address buyer, uint48 index, uint256 word) external payable;
+    /// @notice Prepare a ticket level, returning false while takeover is unsafe.
+    function prepareTicketLevel(uint24 lvl) external payable returns (bool);
     /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
     function queuePerpetualTickets(uint24 targetLevel) external;
+
+    /// @notice Materialize a per-entry run using the existing RNG inputs, returning
+    ///         physical bucket-write units. Called by Mint through delegatecall.
+    function generateTraitRun(uint256 baseKey, uint32 startIndex, uint32 count,
+        uint256 entropyWord, uint256 ownerIdx) external returns (uint256 writes);
 
     /// @notice Seated round drain for a ticket queue: eight entries share each trait roll
     ///         and every quadrant is one packed lane word. Delegatecall target of the mint

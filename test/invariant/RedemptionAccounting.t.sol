@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {RedemptionHandler} from "../fuzz/handlers/RedemptionHandler.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -660,8 +661,7 @@ contract RedemptionAccounting is DeployProtocol {
         view
         returns (uint64 ethBase, uint64 supplySnapshot, uint64 burned)
     {
-        bytes32 slot = keccak256(abi.encode(uint256(day), handler.SLOT_PENDING_BY_DAY()));
-        uint256 raw = uint256(vm.load(address(sdgnrs), slot));
+        uint256 raw = uint256(RecyclingState.pending(address(sdgnrs), uint24(day)));
         ethBase = uint64(raw);
         supplySnapshot = uint64(raw >> 64);
         burned = uint64(raw >> 128);

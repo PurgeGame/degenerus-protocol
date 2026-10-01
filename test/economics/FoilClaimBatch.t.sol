@@ -53,6 +53,7 @@ contract FoilClaimBatch is DeployProtocol {
     }
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         _advance();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -483,7 +484,7 @@ contract FoilClaimBatch is DeployProtocol {
     ///      because here overshoot cannot skip a shape we care about.
     function _driveUntilSealedByWarp(uint24 day, uint256 maxDays) internal {
         for (uint256 i; i < maxDays; ++i) {
-            if (game.rngWordForDay(day) != 0) return;
+            if (uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT)))) != 0) return;
             _completeDay(uint256(keccak256(abi.encode("flat-face-day", day, i))));
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }

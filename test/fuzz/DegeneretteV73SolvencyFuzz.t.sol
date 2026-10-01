@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -25,7 +26,7 @@ import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarne
 /// @dev Run: forge test --match-path test/fuzz/DegeneretteV73SolvencyFuzz.t.sol
 contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51;
@@ -52,7 +53,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         vm.deal(player, 1_000_000 ether);
         vm.deal(address(game), 1_000_000 ether);
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
+        RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
         // Big future pool so no ETH-side cap interacts (FLIP/WWXRP don't touch it anyway).
         _seedFuturePrizePool(10_000_000 ether);
@@ -60,7 +61,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
 
     /// forge-config: default.fuzz.runs = 400
     function testFuzz_v73_manualFlipSolvency(uint8 symbol, uint256 word) public {
-        word = bound(word, 1, type(uint256).max);
+        word = bound(word, 2, type(uint256).max);
         symbol %= 32;
         uint128 perTicket = 100 ether;
         vm.prank(address(game));
@@ -171,7 +172,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
 
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {

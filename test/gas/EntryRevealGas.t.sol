@@ -9,6 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract EntryRevealHarness is DegenerusGameStorage {
     function seed(uint32[] memory amounts, uint8 rem, uint256 ownerStart) external {
+        _setTicketBufferLevel(7);
         EntryOwner[] storage owners = lvlEntryOwner[7];
         assembly ("memory-safe") { sstore(owners.slot, ownerStart) }
         for (uint256 i; i < amounts.length; ++i) {
@@ -40,7 +41,7 @@ contract EntryRevealGas is Test {
     bytes private beforeCode;
     bytes private afterCode;
 
-    struct Observation { uint256 gasUsed; bytes32 writes; uint256 inventory; uint256 entries; uint256 reveals; }
+    struct Observation { uint256 gasUsed; bytes32 writes; uint256 inventory; uint256 entries; uint256 reveals; bytes32 buckets; }
 
     function setUp() public {
         h = new EntryRevealHarness();
@@ -63,6 +64,20 @@ contract EntryRevealGas is Test {
                 Vm.StorageAccess memory a = accesses[i].storageAccesses[j];
                 assertEq(a.account, address(h));
                 if (a.isWrite) o.writes = keccak256(abi.encode(o.writes, a.slot, a.previousValue, a.newValue));
+            }
+        }
+        // Physical bucket addresses and level stamps intentionally changed. Compare
+        // every stored logical bucket (including lane order), not raw slot identity.
+        uint256 root = uint256(keccak256(abi.encode(uint256(candidate ? 1 : 7), uint256(8))));
+        for (uint256 trait; trait < 256; ++trait) {
+            uint256 header = uint256(vm.load(address(h), bytes32(root + trait)));
+            uint256 count = candidate ? uint32(header) : header;
+            o.buckets = keccak256(abi.encode(o.buckets, trait, count));
+            uint256 data = uint256(keccak256(abi.encode(root + trait)));
+            for (uint256 laneWord; laneWord < (count + 7) / 8; ++laneWord) {
+                bytes32 word = candidate && laneWord == count / 8 ? bytes32(header >> 32)
+                    : vm.load(address(h), bytes32(data + laneWord));
+                o.buckets = keccak256(abi.encode(o.buckets, word));
             }
         }
         for (uint256 i; i < logs.length; ++i) {
@@ -115,7 +130,7 @@ contract EntryRevealGas is Test {
         a = _observe(false, entropy, 1_000_000);
         assertTrue(vm.revertToStateAndDelete(snapshot));
         b = _observe(true, entropy, 1_000_000);
-        assertEq(b.writes, a.writes, "identical ordered storage writes");
+        assertEq(b.buckets, a.buckets, "same stored bucket lengths and ordered owner lanes");
         assertEq(b.inventory, a.inventory, "same player/trait multiset");
         assertEq(b.entries, a.entries, "same entry count");
     }
@@ -129,8 +144,9 @@ contract EntryRevealGas is Test {
         emit log_named_uint("entries", b.entries);
         emit log_named_uint("drain_before", a.gasUsed);
         emit log_named_uint("drain_after", b.gasUsed);
-        emit log_named_uint("delta", b.gasUsed - a.gasUsed);
-        emit log_named_uint("delta_per_entry_milli", (b.gasUsed - a.gasUsed) * 1000 / b.entries);
+        int256 delta = int256(b.gasUsed) - int256(a.gasUsed);
+        emit log_named_int("delta", delta);
+        emit log_named_int("delta_per_entry_milli", delta * 1000 / int256(b.entries));
     }
 
     function test_Gas_4EntriesPerBuyer() public { _distribution(4); }
@@ -156,7 +172,7 @@ contract EntryRevealGas is Test {
                 emit log_named_uint("chunk_entries_after", b.entries);
                 emit log_named_uint("chunk_gas_before", a.gasUsed);
                 emit log_named_uint("chunk_gas_after", b.gasUsed);
-                assertLe(b.entries, a.entries, "increased charges cannot add rounds");
+                assertGt(b.entries, 0, "uniform pricing must make progress");
                 assertLt(b.gasUsed, 10_000_000);
             }
         }

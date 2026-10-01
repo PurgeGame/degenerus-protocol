@@ -79,8 +79,8 @@ async function registerOwners(addr, ownerRoot, lvl, holders) {
 }
 
 // Replace a packed uint32-lane array (length slot `lenSlot`) with `lanes`.
-async function writeLanes(addr, lenSlot, lanes) {
-  await setSlot(addr, lenSlot, BigInt(lanes.length));
+async function writeLanes(addr, lenSlot, lanes, level = 0n) {
+  await setSlot(addr, lenSlot, BigInt(lanes.length) | (level << 232n));
   const base = arrayData(lenSlot);
   for (let w = 0; w * 8 < lanes.length; ++w) {
     let word = 0n;
@@ -121,11 +121,12 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
 
   await setSlot(gameAddr, mapSlot(VAULT_DEITY_SYMBOL, deityRoot), 0n);
   await setSlot(gameAddr, mapSlot(SDGNRS_DEITY_SYMBOL, deityRoot), 0n);
+  await setSlot(gameAddr, 5n, (await getSlot(gameAddr, 5n)) | (1n << 136n));
   for (const t of traitsOf(WORD)) {
     const owners = Array.from({ length: TRAIT_HOLDERS }, (_, i) => holder(0xace000000n + BigInt(t) * 0x10000n + BigInt(i + 1)));
     owners.forEach((owner) => traitOwners.add(owner.toLowerCase()));
     const positions = await registerOwners(gameAddr, ownerRoot, 1n, owners);
-    await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions.map((pos) => pos - 1n));
+    await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions.map((pos) => pos - 1n), 1n);
   }
   for (let lvl = 2n; lvl <= 100n; ++lvl) {
     const owners = Array.from({ length: FF_HOLDERS }, (_, i) => holder(0xb00000000n + lvl * 0x100n + BigInt(i + 1)));

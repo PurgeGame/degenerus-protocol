@@ -118,7 +118,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.warp(dayStart);
         day = table.currentDayIndex();
         slot = uint64(uint256(day) * 8 + 6);
-        _setIndex(5);
+        _setIndex(1);
         _setDailyWord(day, 123456);
         vm.prank(ContractAddresses.GAME);
         table.openBonusDay();

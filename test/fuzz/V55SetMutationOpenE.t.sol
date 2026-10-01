@@ -17,7 +17,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///        ([[open-e-operator-approval-trust-boundary]]).
 ///
 /// @notice The two open routes are GENUINELY SEPARATE (no selector / queue overlap):
-///   - HUMAN box open: `game.openBoxes(maxCount)` (DegenerusGame.sol:1787) walks `boxPlayers[index]`.
+///   - HUMAN box open: `game.openBoxes(maxCount)` (DegenerusGame.sol:1787) walks `boxPlayers[index & 1]`.
 ///   - AFKING box open: `game.mineFlip()`'s open leg (GameAfkingModule.sol:1000-1009, only when
 ///     !advanceDue) walks `_subscribers` via `_autoOpen`. The afking module's own `autoOpen` selector
 ///     COLLIDES with the human `autoOpen(uint256)` so it is NOT re-exposed on the Game (DegenerusGame.sol

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
@@ -42,7 +44,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
         vm.deal(address(game), 10_000 ether);
-        vm.store(address(game), bytes32(uint256(33)), bytes32(uint256(1)));
+        RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(address(game), bytes32(uint256(2)), bytes32(uint256(10_000 ether) << 128));
     }
 
@@ -59,7 +61,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     }
 
     function _land(uint256 word) private {
-        vm.store(address(game), keccak256(abi.encode(uint48(1), uint256(34))), bytes32(word));
+        RecyclingState.seedWord(address(game), 1, bytes32(word));
     }
 
     /// @dev Resolve exactly one queued bet at index 1 through the sweep and read back its own
@@ -177,14 +179,17 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         ));
     }
 
-    function testInvalidSymbolAndRevealedRoundRejected() public {
+    function testInvalidSymbolRejectedAndNewBetJoinsUnrevealedWriteCohort() public {
         vm.expectRevert(bytes4(keccak256("InvalidBet()")));
         vm.prank(alice);
         game.placeDegeneretteBet{value: 0.005 ether}(address(0), 0, 0.005 ether, 1, 32);
-        _land(1);
-        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        _land(2);
         vm.prank(alice);
         game.placeDegeneretteBet{value: 0.005 ether}(address(0), 0, 0.005 ether, 1, 0);
+        assertEq(DQ.lastBetId(vm, address(game), 2), 1, "new bet binds the write cohort");
+        assertEq(DQ.lastBetId(vm, address(game), 1), 0, "no bet joined the revealed cohort");
+        assertEq(RecyclingState.word(address(game), 1), 2, "read entropy survives the new commitment");
+        assertEq(RecyclingState.word(address(game), 0), 0, "the new bet's word is still hidden");
     }
 
     function testIndependentColorsHeroWeightAndMatchedGold() public view {

@@ -56,6 +56,7 @@ pragma solidity 0.8.34;
 import {IsDGNRS} from "./interfaces/IsDGNRS.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {
+    IDegenerusGameAdvanceModule,
     IDegenerusGameMintModule,
     IDegenerusGameWhaleModule,
     IDegenerusGameLootboxModule,
@@ -281,11 +282,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      - RNG gating ensures fairness (no manipulation during VRF window)
     ///      - Batched processing prevents DoS from large queues
     ///
+    ///      Shares the AFKing work dispatcher with mineFlip, with keeper rewards disabled.
+    ///      If the next day is waiting for old read consumers, this call drains them first.
     ///      The signature matches the module function exactly (identical selector), so the calldata
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function advanceGame() external returns (uint8 mult) {
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ADVANCE_MODULE
+            .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         mult = abi.decode(data, (uint8));
@@ -318,7 +321,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      the bingo settles to `player` (the slot owner), never the caller, so any caller
     ///      may settle any owner's claim (address(0) = msg.sender). Each player may claim
     ///      one bingo reward per level, regardless of which qualifying symbol they use, until
-    ///      the next level starts (then the unclaimed bingo expires).
+    ///      L+2 takes over that level's ticket buffer (then the unclaimed bingo expires).
     ///      Signature: claimBingo(address player, uint24 level, uint8 symbol, uint32[8] slots) —
     ///      the owner to claim for, the level (uint24 storage-key width), the symbol 0-31
     ///      (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions in
@@ -1182,7 +1185,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         day = _simulatedDayIndex();
         uint32 boonPacked = deityBoonPacked[deity];
         usedMask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
-        decimatorOpen = decWindowOpen;
+        decimatorOpen = _decWindowOpen();
         deityPassAvailable = deityPassOwners.length < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
         // The issuance day's menu is fixed by the preceding day's finalized word.
         // Manual gifts need this predecessor. Automatic protocol draws fall back
@@ -1571,38 +1574,28 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return _bountyEligible(who);
     }
 
-    /// @notice O(1) discovery hint: is there an openable box at the current open frontier?
-    /// @dev rngLock/liveness-aware: FALSE during the freeze (the open leg no-ops). Checks the
-    ///      frontier index (boxCursorIndex, clamped to the genesis index 1) against LR_INDEX-1
-    ///      where words land. O(1), no scan; a drained frontier with boxes at a higher finalized
-    ///      index self-heals as the next sweep advances the frontier.
+    /// @notice O(1) discovery hint: does the delivered read cohort still need keeper work?
+    /// @dev Includes empty-frontier skips and Craps-only cohorts, so keepers do not idle
+    ///      while fresh RNG waits for completion. FALSE during the daily lock or liveness.
     function boxesPending() external view returns (bool) {
         if (rngLockedFlag || _livenessTriggered()) return false;
-        uint48 active = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        if (active <= 1) return false;
-        uint48 finalized = active - 1; // words land at LR_INDEX-1 (the just-finalized index)
-        uint48 idx = boxCursorIndex == 0 ? 1 : boxCursorIndex; // the open frontier
-        if (idx > finalized) return false; // swept up to the un-finalized active index
-        if (lootboxRngWordByIndex[idx] == 0) return false; // frontier index not yet worded
-        uint256 effectiveCursor = boxCursorIndex == idx ? boxCursor : 0;
-        return boxPlayers[idx].length + degeneretteQueue[idx].length > effectiveCursor;
+        return _rngSessionPublished() && _currentRngWord() != 0 && !_lootboxReadComplete();
     }
 
-    /// @notice True once the permissionless sweep has fully distributed every box at `index`
-    ///         (the monotonic open frontier boxCursorIndex has advanced past it). The active /
-    ///         finalizing index is not yet complete; indices below the frontier are drained.
-    /// @param index Lootbox RNG index to query.
+    /// @notice Whether boxes and Degenerette bets in the current read buffer have finished.
+    /// @dev Physical tags are reused; this view makes no statement about historical sessions.
+    /// @param index Physical buffer tag (0 or 1).
     function boxIndexComplete(uint48 index) external view returns (bool) {
-        return index < boxCursorIndex;
+        return index == _rngReadBuffer() && humanReadComplete;
     }
 
     /// @notice Permissionless liveness valve: open ready boxes — AFKING boxes FIRST (up to maxCount),
-    ///         then the human-box multi-index sweep with the remaining budget — so any backlog of
+    ///         then the human-box read-buffer sweep with the remaining budget — so any backlog of
     ///         either type clears in caller-sized chunks that stay under the 16.7M per-tx ceiling.
     ///         The caller picks a maxCount their gas affords. For the afking leg maxCount caps boxes
     ///         opened; for the human sweep the remaining budget caps ENTRIES SCANNED (opens + skips),
     ///         which keeps the tx gas-bounded even past a long already-opened / presale-only prefix and
-    ///         lets successive calls catch the open frontier up across many finalized indices.
+    ///         lets successive calls complete the sealed read buffer.
     ///         Unrewarded — only mineFlip() pays a bounty.
     /// @param maxCount Work budget, in box-open-sized units shared across both legs: the
     ///        afking leg spends it on box opens directly; the remainder converts to the human
@@ -1627,7 +1620,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             data,
             (uint256, uint256)
         );
-        // Then human boxes with the remaining budget — the multi-index sweep lives in the
+        // Then human boxes with the remaining budget — the read-buffer sweep lives in the
         // lootbox module (delegatecall runs it in this Game's storage), mirroring the afking
         // leg above. The afking leg's FULL step consumption (opens AND ring-scan skips, in
         // open-step currency) is charged against maxCount, so a long drained-ring scan can
@@ -1794,7 +1787,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         )
     {
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
+            .GAME_FOILPACK_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         return
@@ -1930,9 +1923,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Request lootbox RNG when activity threshold and LINK conditions are met.
     /// @dev Callable by anyone. Reverts if daily RNG has not been consumed, if request
-    ///      windows are locked, or if pending lootbox value is below threshold. The craps
-    ///      table clears the pending-value gates and answers to a lower LINK floor — it buys
-    ///      the word that settles a window already bound to the index it fills, where a lootbox
+    ///      windows are locked, or if pending lootbox value is below threshold. A closed craps
+    ///      window waiting on the write buffer clears the pending-value gates and answers to a
+    ///      lower LINK floor — the word settles a table holding staked FLIP, where a lootbox
     ///      queue can wait for the daily word instead.
     ///      Once the purchase goal is met, the first fresh request also commits the next
     ///      level's future tickets. All normal request gates and charges still apply.
@@ -1972,6 +1965,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return middayRngCredit[account];
     }
 
+    error NudgeCapReached();
+
     /// @notice Pay the quoted FLIP cost to nudge the next daily RNG word by +1.
     /// @dev Cost scales +50% per queued nudge, rounds up to a whole FLIP, and resets after
     ///      the queued nudges are applied. The caller-supplied quote prevents a transaction
@@ -1991,15 +1986,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // winning traits, so a nudge bought here is a post-reveal steer of the final
         // payout rather than an influence on an unknown future word.
         if (_livenessTriggered()) revert E();
-        uint256 reversals = totalFlipReversals;
+        uint256 reversals = _nudgeCount();
+        if (reversals >= RNG_NUDGE_CAP) revert NudgeCapReached();
         uint256 cost = _currentNudgeCost(reversals);
         if (cost != expectedCost) revert NudgeCostChanged();
         coin.burnCoin(msg.sender, cost);
         uint256 newCount = reversals + 1;
-        // Fits uint64: every nudge burns >= RNG_NUDGE_BASE_COST (100 FLIP), so the
-        // count is bounded by supply/1e20 << 2^64. Masked RMW preserves the co-resident
-        // lastVrfProcessedTimestamp.
-        totalFlipReversals = uint64(newCount);
+        // The exact 256 cap fits nine bits; the packed setter preserves neighboring flags.
+        _setNudgeCount(newCount);
         emit ReverseFlip(msg.sender, newCount, cost);
     }
 
@@ -2007,8 +2001,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return queued Number of nudges waiting for the next daily RNG word.
     /// @return cost Whole-FLIP price required by reverseFlip.
     function rngNudgeQuote() external view returns (uint256 queued, uint256 cost) {
-        queued = totalFlipReversals;
-        cost = _currentNudgeCost(queued);
+        queued = _nudgeCount();
+        cost = queued >= RNG_NUDGE_CAP ? 0 : _currentNudgeCost(queued);
     }
 
     /// @dev Calculate nudge cost with compounding.
@@ -2033,10 +2027,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Chainlink VRF callback for random word fulfillment.
     /// @dev Access: VRF coordinator only. Handled inline (not delegated): the body is a few
     ///      SLOADs plus one branch, so keeping it here saves the module delegatecall's cold
-    ///      account access on every fulfillment. Daily RNG stores the word for advanceGame
-    ///      (_applyDailyRng applies queued nudges there); mid-day RNG finalizes the lootbox
-    ///      word directly and clears the request. A zero word is coerced to 1 so it never
-    ///      reads as "unset". Stale/duplicate fulfillments (wrong requestId or word already
+    ///      account access on every fulfillment. Both paths store the final session word.
+    ///      A daily lock adds the frozen nudge count. Final values 0/1 leave the request
+    ///      pending for retry; every accepted word is stored unchanged. Advance publishes
+    ///      the session and retires request authority later. Stale/duplicate fulfillments (wrong requestId or word already
     ///      stored) are ignored, not reverted, so a late coordinator retry never bricks.
     /// @param requestId The request ID to match.
     /// @param randomWords Array containing the random word (length 1).
@@ -2045,22 +2039,24 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256[] calldata randomWords
     ) external {
         if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
-        if (requestId != vrfRequestId || rngWordCurrent != 0) return;
+        uint16 flags;
+        bool daily;
+        assembly ("memory-safe") {
+            let state := sload(rngFlagsAndNudges.slot)
+            flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
+            daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
+        }
+        if (flags & (uint16(1) << 14) == 0 || requestId != vrfRequestId || rngWordCurrent != RNG_WORD_WAITING) return;
 
         uint256 word = randomWords[0];
-        if (word == 0) word = 1;
-
-        if (rngLockedFlag) {
-            // Daily RNG: store for advanceGame processing (nudges applied there)
-            rngWordCurrent = word;
-        } else {
-            // Mid-day RNG: directly finalize lootbox and clear state
-            uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1;
-            lootboxRngWordByIndex[index] = word;
-            emit LootboxRngApplied(index, word, requestId);
-            vrfRequestId = 0;
-            rngRequestTime = 0;
+        // Addition preserves the uniform distribution. The two reserved final values
+        // leave this request waiting for its existing retry path (probability 2 / 2^256).
+        if (daily) {
+            // Decode the frozen nine-bit count from the same slot-0 snapshot: no extra SLOAD.
+            unchecked { word += ((flags >> 1) & 127) | (((flags >> 9) & 3) << 7); }
         }
+        if (word < 2) return;
+        rngWordCurrent = word;
     }
 
     /*+======================================================================+
@@ -2194,6 +2190,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
 
+    /// @notice Pinned table mirrors the authoritative zero/nonzero pending transition.
+    /// @dev Separate parity flags prevent write battles from gating their own request.
+    function setCrapsRngPending(uint48 index, bool pending) external {
+        if (msg.sender != ContractAddresses.CRAPS || index > 1) revert E();
+        assembly ("memory-safe") {
+            let mask := shl(add(LR_CRAPS_PENDING_SHIFT, and(index, 1)), 1)
+            sstore(lootboxRngPacked.slot, or(and(sload(lootboxRngPacked.slot), not(mask)), mul(mask, pending)))
+        }
+        if (pending) {
+            // Write-side battles do not invalidate completion of the preceding read cycle.
+            if (index == _rngReadBuffer()) _setRngComplete(false);
+        } else {
+            _tryCompleteRng();
+        }
+    }
+
     /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
     /// @param index Lootbox RNG index the bet was placed at.
     /// @param betId Bet id within `index` (queue position + 1).
@@ -2202,9 +2214,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint48 index,
         uint64 betId
     ) external view returns (uint256 packed) {
-        uint256[] storage bets = degeneretteQueue[index];
+        if (!_lootboxBufferValid(index)) return 0;
+        uint256[] storage bets = degeneretteQueue[index & 1];
         if (betId == 0 || betId > bets.length) return 0;
-        return bets[betId - 1];
+        uint256 word = bets[betId - 1];
+        return word & BET_PROCESSED == 0 ? word : 0;
     }
 
     /// @notice Check whether lootbox presale mode is currently active.
@@ -2316,10 +2330,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return rngLockedFlag;
     }
 
+    /// @notice True once the previous RNG cycle has finished and a fresh request may be considered.
+    /// @dev Other request rules (funding, price and daily staging) still apply.
+    function rngComplete() external view returns (bool) {
+        return _lootboxReadComplete();
+    }
+
     /// @notice Check if VRF has been fulfilled for current request.
     /// @return True if random word is available for use.
     function isRngFulfilled() external view returns (bool) {
-        return rngWordCurrent != 0;
+        return _rngRequestActive() && rngWordCurrent != RNG_WORD_WAITING;
     }
 
     /// @notice Timestamp of the last successfully processed VRF word.
@@ -2336,7 +2356,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Check if decimator window is currently open.
     function decWindow() external view returns (bool) {
-        return decWindowOpen && !gameOver;
+        return _decWindowOpen() && !gameOver;
     }
 
     /// @notice Selected jackpot duration: one day for turbo, otherwise three days.
@@ -2622,29 +2642,60 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Sample up to 4 trait burn entries from a specific level.
     /// @dev BAF scatter reads a random packed word and rotates its lanes. Tail padding
     ///      is redrawn over valid entries so the last word keeps equal entry weighting.
-    /// @param targetLvl The level to sample from.
+    ///      Bucket and owner-registry data roots are cached once for all four draws.
+    /// @param nextLevel False selects the current level; true selects the next.
     /// @param entropy Random seed (typically VRF word) for trait and offset selection.
     /// @return traitSel Selected trait ID.
     /// @return entries Array of up to 4 entry holder addresses.
-    function sampleTraitEntriesAtLevel(
-        uint24 targetLvl,
+    function sampleTraitEntries(
+        bool nextLevel,
         uint256 entropy
     ) external view returns (uint8 traitSel, address[] memory entries) {
+        uint24 targetLvl = level + (nextLevel ? 1 : 0);
         traitSel = uint8(entropy >> 24);
-        uint256 len = lvlTraitEntry[targetLvl][traitSel].length;
+        if (_ticketLevelRetired(targetLvl)) return (traitSel, new address[](0));
+        uint256 headerSlot = _traitBufferBase(targetLvl) + traitSel;
+        uint256 len = _bucketLengthUnchecked(targetLvl, traitSel);
         if (len == 0) {
             return (traitSel, new address[](0));
         }
+        uint256 header;
+        assembly ("memory-safe") { header := sload(headerSlot) }
 
         uint256 take = len > 4 ? 4 : len;
         entries = new address[](take);
+        // Every draw uses the same bucket and owner registry. Hash their data roots
+        // once, including for a padding redraw that selects a different packed word.
+        uint256 wordsBase;
+        uint256 ownersBase;
+        EntryOwner[] storage owners = lvlEntryOwner[targetLvl];
+        assembly ("memory-safe") {
+            mstore(0, headerSlot)
+            wordsBase := keccak256(0, 32)
+            mstore(0, owners.slot)
+            ownersBase := keccak256(0, 32)
+        }
         PackedTicketSampleLib.Cursor memory cursor;
         uint256 base = PackedTicketSampleLib.begin(cursor, len, entropy >> 40);
-        cursor.word = _bucketWordAt(targetLvl, traitSel, base);
+        uint256 selectedWord;
+        assembly ("memory-safe") {
+            switch eq(shr(3, base), shr(3, len))
+            case 1 { selectedWord := shr(32, header) }
+            default { selectedWord := sload(add(wordsBase, shr(3, base))) }
+        }
         for (uint256 i; i < take; ) {
             (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, len);
-            uint256 word = redrawn ? _bucketWordAt(targetLvl, traitSel, index) : cursor.word;
-            entries[i] = _bucketOwnerFromWord(targetLvl, word, index);
+            uint256 word = selectedWord;
+            assembly ("memory-safe") {
+                if redrawn {
+                    switch eq(shr(3, index), shr(3, len))
+                    case 1 { word := shr(32, header) }
+                    default { word := sload(add(wordsBase, shr(3, index))) }
+                }
+                let ownerIndex := and(shr(shl(5, and(index, 7)), word), 0xffffffff)
+                mstore(add(add(entries, 32), shl(5, i)),
+                    and(sload(add(ownersBase, ownerIndex)), 0xffffffffffffffffffffffffffffffffffffffff))
+            }
             unchecked {
                 ++i;
             }
@@ -2720,14 +2771,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint32 limit,
         address player
     ) external view returns (uint24 count, uint32 nextOffset, uint32 total) {
-        total = uint32(lvlTraitEntry[lvl][trait].length);
+        if (_ticketLevelRetired(lvl)) return (0, 0, 0);
+        total = uint32(_bucketLength(lvl, trait));
         if (offset >= total) return (0, total, total);
 
         uint256 end = offset + limit;
         if (end > total) end = total;
 
         for (uint256 i = offset; i < end; ) {
-            if (_bucketOwnerAt(lvl, trait, i) == player) count++;
+            if (_bucketOwnerAtUnchecked(lvl, trait, i) == player) count++;
             unchecked {
                 ++i;
             }

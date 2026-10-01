@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
@@ -95,7 +96,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     /// @dev lootboxRngPacked at slot 34; index = low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
     ///      first-deposit / box-owed signal that replaced the removed lootboxEthBase (zeroed in
     ///      one SSTORE on open).
@@ -146,6 +147,25 @@ contract KeeperRouterOneCategory is DeployProtocol {
                     _lastFulfilledReqId = reqId;
                 }
             }
+        }
+        _finishReadConsumers();
+    }
+
+    /// @dev A shut craps window is pending work for the next request, so a quiet table has to be
+    ///      sealed and settled too: quiet the keeper's arm walk, then let ordinary requests land the
+    ///      words that settle what it shut, until no window waits on the write buffer.
+    function _quietCrapsTableAndRng(uint256 vrfWord) internal {
+        _quietCrapsTable();
+        for (uint256 i; i < 4; ++i) {
+            uint256 packed = uint256(vm.load(address(game), bytes32(uint256(33))));
+            if (packed & (uint256(1) << (250 + RecyclingState.writeBuffer(address(game)))) == 0) break;
+            game.requestLootboxRng();
+            uint256 reqId = mockVRF.lastRequestId();
+            (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+            if (!fulfilled) mockVRF.fulfillRandomWords(reqId, vrfWord + i);
+            _lastFulfilledReqId = reqId;
+            _settleGame(vrfWord + i);
+            _quietCrapsTable();
         }
     }
 
@@ -224,9 +244,11 @@ contract KeeperRouterOneCategory is DeployProtocol {
         game.openBoxes(1_000);
         // No afking subscriber stamped a box (no STAGE buy was driven), so the open leg has nothing.
 
-        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
-        // asserting an idleness it never set up.
-        _quietCrapsTable();
+        // The crank has a craps arm now, and a shut window makes the next request real work, so a
+        // NoWork probe has to quiet and settle the table too or it is asserting an idleness it
+        // never set up.
+        _quietCrapsTableAndRng(uint256(keccak256("nowork-craps")));
+        assertFalse(game.advanceDue(), "pre: still not due after the table settled");
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(); // GameAfkingModule.NoWork()
@@ -248,9 +270,9 @@ contract KeeperRouterOneCategory is DeployProtocol {
     ///         AfKing.sol).
     function testMintFlipReentrancyStructurallySafeSourceAttest() public view {
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
-        // Scope the attestation to the mineFlip() function body (the router legs).
-        string memory body = _extractFunctionBody(afking, "function mineFlip() external {");
-        assertGt(bytes(body).length, 0, "D-01: mineFlip() body extracted (source-grep repointed, no readFile throw)");
+        // Both public entries use this dispatcher; mineFlip enables its reward gate.
+        string memory body = _extractFunctionBody(afking, "function _runWork(bool rewarded) private returns (uint8 mult) {");
+        assertGt(bytes(body).length, 0, "D-01: shared work dispatcher body extracted");
 
         // (a) The single unified bounty credit is byte-present EXACTLY ONCE in mineFlip (CEI-last after
         // the one-category early-return). This is the ONLY money edge in the router per tx.
@@ -592,24 +614,20 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     /// @dev Active daily lootbox index (low 48 bits of lootboxRngPacked at slot 34).
     function _activeLootboxIndex() internal view returns (uint48) {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        return uint48(packed & 0xFFFFFFFFFFFF);
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
     /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34) by one,
     ///      mirroring requestLootboxRng's pre-increment, so a box queued at the prior index sits at
     ///      LR_INDEX-1 — the finalized index the relocated multi-index sweep reads.
     function _advanceLootboxRngIndexByOne() internal {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        uint80 idx = uint80(packed & 0xFFFFFFFFFFFF);
-        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx + 1);
-        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+        assertGt(RecyclingState.currentWord(address(game)), 1, "fixture delivered word");
     }
 
     /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 56)
@@ -620,16 +638,16 @@ contract KeeperRouterOneCategory is DeployProtocol {
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
         packed &= ~(cursorMask << (13 * 8));  // clear boxCursorIndex field
-        packed |= (uint256(index) & cursorMask) << (13 * 8);
+        require(index < 2, "binary buffer fixture");
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read the raw lootboxOrder word for [index][who] — the box-owed signal, zeroed in one
-    ///      SSTORE on open (replaced the removed lootboxEthBase first-deposit signal).
+    /// @dev Read the live order from its parity buffer; a processed order has no remaining obligation.
     function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT)));
+        bytes32 inner = keccak256(abi.encode(uint256(index & 1), uint256(LOOTBOX_ETH_SLOT)));
         bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+        uint256 order = uint256(vm.load(address(game), leaf));
+        return order & (uint256(1) << 255) == 0 ? order : 0;
     }
 
     // ---- read-slot ticket seeding (force advanceDue via a non-empty current-level read slot) ----

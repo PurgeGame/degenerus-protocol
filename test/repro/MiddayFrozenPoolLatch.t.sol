@@ -6,6 +6,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title MiddayFrozenPoolLatch — a mid-day request that freezes a future pool must release.
 ///
@@ -17,7 +18,7 @@ import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 ///         ticketsFullyProcessed and the latch. The batch that empties the frozen pool must
 ///         therefore report finished itself: once the pool is empty nothing re-enters the
 ///         worker, advanceGame reverts NotTimeYet, and a stuck latch would refuse every
-///         further mid-day request (MidDayActive) until the next day's advance.
+///         further mid-day request (RngNotReady) until the next day's advance.
 ///
 ///         Seen live on day 33 / level 12 (blocks 47223421..47223981).
 ///
@@ -31,10 +32,12 @@ import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 ///                          play drains a day's sealed bucket inside that day's advance chain,
 ///                          so the pending bucket is STAGED (an empty bucket for today, whose
 ///                          word is sealed): it isolates the finished-flag composition.
-///           D  craps     — the craps table's request (exempt from the lootbox pending-value
-///                          gates, so no lootbox is needed) freezes and latches the same way;
-///                          the latch releases the same day.
+///           D  craps     — an ordinary request while a craps window waits on the write buffer
+///                          (which waives the lootbox pending-value gates, so no lootbox is
+///                          needed) freezes and latches the same way; the latch releases the
+///                          same day.
 contract MiddayFrozenPoolLatch is DeployProtocol {
+    uint48 private crapsWindowBuffer;
     address private buyer = address(0xB4A1);
     address private crank = address(0xC4A9);
     address private lateBuyer = address(0x1A7E);
@@ -47,7 +50,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
 
     bytes4 private constant SEL_NOT_TIME_YET = bytes4(keccak256("NotTimeYet()"));
-    bytes4 private constant SEL_MID_DAY_ACTIVE = bytes4(keccak256("MidDayActive()"));
+    bytes4 private constant SEL_RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
 
     function setUp() public {
         _deployProtocol();
@@ -118,11 +121,14 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     // D. The craps table's request, no lootbox pending
     // ---------------------------------------------------------------------
 
-    function testMiddayLatchReleasesAfterCrapsRequest() public {
+    function testMiddayLatchReleasesAfterPendingCrapsWindowRequest() public {
         vm.pauseGasMetering();
         (uint24 ffKey, uint24 day) = _latchMiddayAfterTarget(true);
 
         _fulfillPending();
+        // The window's cohort drains on the delivered word: clear its pending bit as the table does.
+        vm.prank(ContractAddresses.CRAPS);
+        game.setCrapsRngPending(crapsWindowBuffer, false);
         bytes4 last = _crankAdvance(200);
 
         _assertReleased(ffKey, day, last);
@@ -137,6 +143,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     ///      The next mid-day request is therefore the first fresh word after this crossing.
     function _latchMiddayAfterTarget(bool viaCraps) internal returns (uint24 ffKey, uint24 day) {
         uint24 programLevel = _driveToSealedPurchaseDay();
+        _finishReadConsumers();
         ffKey = (programLevel + 2) | TICKET_FAR_FUTURE_BIT;
         assertGt(_queueLen(ffKey), 0, "reachability: the frozen next-level pool must hold entries");
         assertTrue(_ticketsFullyProcessed(), "reachability: the sealed day leaves the read slot drained");
@@ -148,9 +155,12 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         currentOwed = uint32(TicketQueueStorage.owed(address(game), currentKey, buyer) >> 8);
         assertGt(currentOwed, 0, "reachability: current tickets await their own commitment");
         if (viaCraps) {
+            // A shut craps window waiting on the write buffer; an ordinary caller requests.
+            crapsWindowBuffer = uint48(RecyclingState.writeBuffer(address(game)));
             vm.prank(ContractAddresses.CRAPS);
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
-            require(ok, "harness: the craps request must be callable");
+            game.setCrapsRngPending(crapsWindowBuffer, true);
+            vm.prank(crank);
+            game.requestLootboxRng();
         } else {
             _middayRequest();
         }
@@ -174,13 +184,16 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         assertEq(uint32(TicketQueueStorage.owed(address(game), currentKey, lateBuyer) >> 8), 40,
             "post-request current tickets remain queued for a later word");
 
-        // A second mid-day request the same day is accepted (no MidDayActive).
+        // Ticket completion releases MID, but the whole word must finish before
+        // another reservation. Drain its boxes/fields through their real effects.
+        _finishReadConsumers();
+        // A second eligible mid-day request the same day is then accepted.
         vm.prank(buyer);
         game.purchase{value: 2 ether}(buyer, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         vm.prank(crank);
         (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
         if (!ok) {
-            assertTrue(_selector(ret) != SEL_MID_DAY_ACTIVE, "a stuck latch refuses the next request");
+            assertTrue(_selector(ret) != SEL_RNG_NOT_READY, "a stuck latch refuses the next request");
             revert("a second mid-day request must be accepted");
         }
         _fulfillPending();

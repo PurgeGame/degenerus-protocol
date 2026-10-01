@@ -162,12 +162,8 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     // Task 2 — the single exact integer streak path + afking-XOR-manual exclusivity
     // =========================================================================
 
-    /// @notice Exactly one streak source feeds the score at a time. While an afking run is LIVE, the score's
-    ///         quest leg is the compute-on-read `_streakBaseOf + (covered - afkingStartDay)`; after a missed
-    ///         funded day decays the run, the score falls back to the dormant manual streak. The live value
-    ///         and the manual value are chosen to floor to DIFFERENT points (live 9 -> 4, manual 4 -> 2), so a
-    ///         summed-both-sources implementation (4 + 2 = 6) or a stuck-on-one-source implementation would
-    ///         fail: the live phase must read 4 and the post-decay phase must read 2.
+    /// @notice The live run supplies the quest leg, then funding eviction hands the earned
+    ///         streak to the manual decay system. Exactly one source is scored at either point.
     function test_LiveAfkingStreakFeedsScore_XOR() public {
         address p = makeAddr("xor_afker");
         uint16 manualStreak = 4; // dormant manual: floors to 2, distinct from the live value's floor
@@ -197,18 +193,19 @@ contract ActivityScorePointFloorTest is DeployProtocol {
         assertEq(liveScore - DEITY_BASELINE_POINTS, uint256(liveStreak) / 2, "live: the quest leg is floor(liveAfkingStreak/2)");
         assertEq(liveScore - DEITY_BASELINE_POINTS, 4, "live: floor(9/2) = 4 (the live source, not the manual floor(4/2)=2)");
 
-        // Induce a decay gap: advance funded days with NO delivery so the last covered day falls more than one
-        // day behind (covered + 1 < currentDay) and `_liveAfkingStreak` decays to 0.
-        _skipDaysNoDelivery(0x0DECA1);
-        _skipDaysNoDelivery(0x0DECA2);
-        _skipDaysNoDelivery(0x0DECA3);
+        // Remove funding and seal three real days: eviction finalizes the run, and the
+        // returned manual streak follows the rolled-day decay rule.
+        _skipDaysNoDelivery(p, 0x0DECA1);
+        _skipDaysNoDelivery(p, 0x0DECA2);
+        _skipDaysNoDelivery(p, 0x0DECA3);
         assertEq(_liveAfkingStreakOf(p), 0, "the run decayed (live afking streak read is 0 after a missed funded day)");
 
-        // POST-DECAY: the score now reads the dormant manual streak (4 -> floor 2), proving exactly one source
-        // feeds the score — the live value (which floored to 4) is gone, never summed onto the fallback.
+        (uint32 manualAfter, bool afking) = quests.effectiveBaseStreakAndAfking(p);
+        assertFalse(afking, "the underfunded run handed back to manual quests");
         uint256 postScore = game.playerActivityScore(p);
-        assertEq(postScore - DEITY_BASELINE_POINTS, uint256(manualStreak) / 2, "post-decay: the quest leg falls back to floor(manualStreak/2)");
-        assertEq(postScore - DEITY_BASELINE_POINTS, 2, "post-decay: floor(4/2) = 2 (the manual source, not the lapsed live 4)");
+        assertEq(postScore - DEITY_BASELINE_POINTS, uint256(manualAfter) / 2,
+            "post-eviction: only the decay-aware manual quest leg contributes");
+
     }
 
     /// @notice The live afking streak combines through one exact integer path with no fractional intermediate:
@@ -271,10 +268,20 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     }
 
     /// @dev Warp forward one simulated day WITHOUT delivering a buy — manufactures the decay gap.
-    function _skipDaysNoDelivery(uint256 vrfWord) internal {
+    function _skipDaysNoDelivery(address player, uint256 vrfWord) internal {
+        // Removing prepaid ETH (and any jackpot credit) makes the daily buy actually skip.
+        uint256 funded = game.afkingFundingOf(player);
+        vm.prank(player);
+        game.withdrawAfkingFunding(funded);
+        if (game.claimableWinningsOf(player) != 0) {
+            vm.prank(player);
+            game.claimWinnings(player);
+        }
+        uint32 covered = _afkCoveredOf(player);
         uint256 w = uint256(keccak256(abi.encode("skip", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
         _settleClean(uint256(keccak256(abi.encode("skipc", w))) | 1);
+        assertLe(_afkCoveredOf(player), covered, "non-vacuity: unfunded day was not delivered (eviction clears the marker)");
     }
 
     function _runStageNewDay(uint256 vrfWord) internal {
@@ -286,9 +293,9 @@ contract ActivityScorePointFloorTest is DeployProtocol {
 
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) break;
+            if (_daySealed()) break;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) break;
+            if (_daySealed()) break;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }
@@ -296,12 +303,18 @@ contract ActivityScorePointFloorTest is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (_daySealed()) return;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (_daySealed()) return;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }
+    }
+
+    /// @dev A false advance hint can mean the read cohort must drain first.
+    function _daySealed() internal view returns (bool) {
+        uint24 sealedDay = uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24);
+        return game.currentDayView() == sealedDay && !game.advanceDue() && !game.rngLocked();
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

@@ -61,7 +61,7 @@ contract RouterWorstCaseGas is DeployProtocol {
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;             // mapping(uint24 => uint256) — the afking box's DAY-keyed word
     uint256 private constant LOOTBOX_ETH_SLOT = 15;                 // folded box word; amount[0:128] = box-owed signal
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;          // [0:47] lootboxRngIndex
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34;   // mapping(uint48 => uint256) (human box)
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 3;   // mapping(uint48 => uint256) (human box)
     uint256 private constant SUBOF_SLOT = 52;                       // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant SUBSCRIBERS_SLOT = 54;                 // address[] _subscribers (slot holds the length)
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 55;            // mapping(address => uint256) _subscriberIndex

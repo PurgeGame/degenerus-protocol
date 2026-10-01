@@ -29,7 +29,7 @@ contract TicketDrainWorstCaseBound is Test {
     uint256 internal constant FRESH_SSTORE = 20_000 + 2_100; // zero -> nonzero, cold slot
     uint256 internal constant DIRTY_SSTORE = 2_900 + 2_100; // nonzero -> nonzero, cold slot
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
-    uint256 internal constant CEILING = 11_000_000;
+    uint256 internal constant CEILING = 10_000_000;
     /// @dev Everything outside charged steps: entry reads, cursor/marker writes, a queue
     ///      release, the nested delegatecall, the foil deferral writes, the return path
     ///      (~120k) and the crank's own pre-drain logic in the same transaction, with headroom.
@@ -48,17 +48,17 @@ contract TicketDrainWorstCaseBound is Test {
     }
 
     function _singleAppend() internal pure returns (uint256) {
-        return 2 * COLD_SLOAD + 2 * FRESH_SSTORE; // read+write length, read+write tail
+        return 2 * COLD_SLOAD + 2 * FRESH_SSTORE; // singleton cannot both initialize a bucket and flush its tail
     }
 
     function _wordAppend() internal pure returns (uint256) {
-        return 2 * COLD_SLOAD + 3 * FRESH_SSTORE; // ... plus the next word
+        return 2 * COLD_SLOAD + 3 * FRESH_SSTORE; // bitmap, header and completed word, with addressing allowance
     }
 
     // ---- per-write prices (what a step charges once done) --------------------------------
 
-    function test_FreshWritePrice_ThreeUnits() public view {
-        assertGe(3 * p.unit(), FRESH_SSTORE + COLD_SLOAD, "a fresh write plus its read exceeds three units");
+    function test_EmptyBucketWritePrice_ThreeUnits() public view {
+        assertGe(3 * p.unit(), FRESH_SSTORE + COLD_SLOAD, "zero slot write plus read exceeds three units");
     }
 
     function test_DirtyWritePrice_OneUnit() public view {
@@ -116,7 +116,7 @@ contract TicketDrainWorstCaseBound is Test {
     function test_Budget_UnderCeilingAtUnitBound() public {
         uint256 bound = p.budget() * p.unit() + FIXED_OVERHEAD;
         emit log_named_uint("drain_call_gas_bound", bound);
-        assertLe(bound, CEILING, "budget x unit plus fixed overhead exceeds the 11M ceiling");
-        assertLt(bound, EIP7825_TX_GAS_CAP - 2_000_000, "and must leave 2M under the cap");
+        assertLe(bound, CEILING, "budget x unit plus fixed overhead exceeds the 10M drain ceiling");
+        assertLt(bound, EIP7825_TX_GAS_CAP, "hard envelope must stay below the transaction cap");
     }
 }

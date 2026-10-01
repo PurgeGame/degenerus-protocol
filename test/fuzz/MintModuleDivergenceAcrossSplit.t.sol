@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // =============================================================================
 // MintModuleDivergenceAcrossSplit.t.sol -- Phase 336 Plan 336-05
@@ -99,7 +100,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 33;
 
     /// @dev lootboxRngWordByIndex (mapping(uint48 => uint256)) — slot 35 (post V62 lootbox repack: was 36).
-    ///      Mint module reads `lootboxRngWordByIndex[uint48(lrIndex) - 1]`,
+    ///      Mint module reads `_lootboxWord(uint48(lrIndex) - 1)`,
     ///      with lrIndex default-initialized to 1, so the consumed slot is index 0.
     uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;
 
@@ -150,8 +151,8 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     uint24 private constant ANCHOR_LVL = 1;
 
     /// @dev Per-player deterministic entropy seed for the cross-path oracle.
-    ///      vm.store-injected into lootboxRngWordByIndex[0] so processTicketBatch's
-    ///      :696 read (`lootboxRngWordByIndex[uint48(lrIndex) - 1]` with the
+    ///      vm.store-injected into _lootboxWord(0) so processTicketBatch's
+    ///      :696 read (`_lootboxWord(uint48(lrIndex) - 1)` with the
     ///      default lrIndex=1) returns this exact word.
     uint256 private constant DETERMINISTIC_ENTROPY =
         uint256(keccak256("336-05-tst-03-deterministic-anchor-entropy"));
@@ -187,7 +188,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ///      256-element fixed array base; traitId offsets into it. The address[] inner array's
     ///      length lives at that offset slot; data at keccak256(elem).
     function _slotTraitBurnLen(uint24 lvl, uint8 traitId) private pure returns (bytes32) {
-        bytes32 base = keccak256(abi.encode(uint256(lvl), SLOT_TRAIT_BURN_TICKET));
+        bytes32 base = keccak256(abi.encode(uint256(lvl & 1), SLOT_TRAIT_BURN_TICKET));
         return bytes32(uint256(base) + uint256(traitId));
     }
 
@@ -249,10 +250,10 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         vm.store(host, keccak256(abi.encode(uint256(lvl), SLOT_LVL_ENTRY_OWNER)), bytes32(0));
     }
 
-    /// @dev Pre-seed `lootboxRngWordByIndex[0]` with `entropy` and pin `lootboxRngPacked` so its
+    /// @dev Pre-seed `_lootboxWord(0)` with `entropy` and pin `lootboxRngPacked` so its
     ///      lower-48 lrIndex == 1. processTicketBatch reads
-    ///      `lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1]` at :696,
-    ///      so the consumed slot is `lootboxRngWordByIndex[0]`.
+    ///      `_lootboxWord(_rngWriteBuffer() - 1)` at :696,
+    ///      so the consumed slot is `_lootboxWord(0)`.
     function _seedEntropy(address host, uint256 entropy) private {
         // lootboxRngPacked low 48 bits = 1 (lrIndex). Leave the higher-bit packed fields at their
         // module-default values (the function only reads the low-48 lrIndex via _lrRead).
@@ -261,9 +262,9 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         packed = (packed & ~mask48) | uint256(1);
         vm.store(host, bytes32(SLOT_LOOTBOX_RNG_PACKED), bytes32(packed));
 
-        // lootboxRngWordByIndex[0] = entropy
+        // Seed the live delivered RNG word.
         bytes32 wordSlot = keccak256(abi.encode(uint256(0), SLOT_LOOTBOX_RNG_WORD_BY_INDEX));
-        vm.store(host, wordSlot, bytes32(entropy));
+        RecyclingState.seedWord(host, uint48(0), bytes32(entropy));
     }
 
     /// @dev Drive `processTicketBatch(lvl)` on `address(mintModule)` until it reports finished.
@@ -297,7 +298,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         uint32[256] memory counts;
         for (uint16 traitId = 0; traitId < 256; ++traitId) {
             bytes32 lenSlot = _slotTraitBurnLen(lvl, uint8(traitId));
-            uint256 len = uint256(vm.load(host, lenSlot));
+            uint256 len = uint24(uint256(vm.load(host, lenSlot)));
             if (len == 0) continue;
             uint32 c;
             for (uint256 i = 0; i < len; ++i) {
@@ -320,7 +321,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ) private view returns (uint256 total) {
         for (uint16 traitId = 0; traitId < 256; ++traitId) {
             bytes32 lenSlot = _slotTraitBurnLen(lvl, uint8(traitId));
-            uint256 len = uint256(vm.load(host, lenSlot));
+            uint256 len = uint24(uint256(vm.load(host, lenSlot)));
             if (len == 0) continue;
             for (uint256 i = 0; i < len; ++i) {
                 if (_laneOwner(host, lvl, uint8(traitId), i) == player) {
@@ -411,7 +412,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ) private returns (bytes32 digest, uint256 totalTraits) {
         // Pitfall 5: clear lvlTraitEntry + queue + owed + cursor first (NOT vm.revertTo,
         // which would also clobber test-local bookkeeping). The LCG inputs (baseKey from
-        // owed + queueIdx + player + lvl; entropy from lootboxRngWordByIndex[0]) are
+        // owed + queueIdx + player + lvl; entropy from _lootboxWord(0)) are
         // re-seeded byte-identically below.
         _clearHostScenarioState(host, lvl, player);
         _seedEntropy(host, entropy);

@@ -165,7 +165,7 @@ describe("LootboxAutoResolveSilentColdBust — Phase 275 Wave 2 TST-LBX-AR-03", 
       // allowEthSpin(11) differs by caller (false on the resolveLootboxDirect recirc, true on
       // the redemption chunk). The redemption auto-resolve path holds its
       // `_resolveLootboxCommon` call in the private `_resolveRedemptionChunk` helper (per 5-ETH chunk).
-      for (const fnName of ["function resolveLootboxDirect(", "function _resolveRedemptionChunk("]) {
+      for (const fnName of ["function _resolveLootboxDirectCore(", "function _resolveRedemptionChunk("]) {
         const fnIdx = source.indexOf(fnName);
         expect(fnIdx, `${fnName} not found`).to.be.greaterThan(-1);
         const body = source.slice(fnIdx, fnIdx + 3000);

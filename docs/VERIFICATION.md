@@ -130,3 +130,12 @@ slither . --compile-force-framework hardhat --ignore-compile
 
 Analyzer output requires independent triage. Reports and test logs are generated
 on demand and are not part of the source handoff.
+
+Ticket header-tail pricing (latest user direction, 2026-10-01): require at least
+99% of normal keeper calls at 10M or less. The uniform-650 trial is superseded.
+Use 900 units at 10k gas, charging physical zero-valued slot writes three units
+and nonzero writes one; remove the first-chunk derate. With 1M fixed overhead,
+the drain envelope is 10M even during startup and record-volume backing growth.
+Existing stricter measured fixture limits remain in place. See
+`test/gas/TicketDrainWorstCaseBound.t.sol`, `RoundDrainChunkGas.t.sol` and
+`KeeperGasProfile.t.sol`.

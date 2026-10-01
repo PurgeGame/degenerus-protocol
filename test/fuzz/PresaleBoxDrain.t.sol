@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -64,11 +65,10 @@ contract PresaleBoxDrain is DeployProtocol {
 
     /// @dev Current LR_INDEX (the index every same-day box queues at).
     function _lrIndex() internal view returns (uint48) {
-        uint256 packed = uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED)));
-        return uint48(packed & 0xFFFFFFFFFFFF);
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev Slot for presaleBoxEth[index][player] (nested mapping at slot 18).
+    /// @dev Slot for presaleBoxEth[index & 1][player] (nested mapping at slot 18).
     function _boxRecord(uint48 index, address player) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_PRESALE_BOX_ETH)));
         bytes32 slot = keccak256(abi.encode(player, inner));
@@ -84,7 +84,7 @@ contract PresaleBoxDrain is DeployProtocol {
     /// @dev Set the committed VRF word for an index so opens resolve (RNG-word seeding).
     function _setRngWord(uint48 index, uint256 word) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD)));
-        vm.store(address(game), slot, bytes32(word));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(word));
     }
 
     /// @dev Advance LR_INDEX (the packed slot's low 48 bits) past `index` so the permissionless
@@ -92,13 +92,7 @@ contract PresaleBoxDrain is DeployProtocol {
     ///      VRF fulfillment does to LR_INDEX, without running an actual VRF round; only bits
     ///      [0:47] are touched, every other packed field (pendingEth, threshold, ...) survives.
     function _finalizeIndex(uint48 index) internal {
-        uint256 packed = uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED)));
-        uint256 mask = 0xFFFFFFFFFFFF;
-        vm.store(
-            address(game),
-            bytes32(SLOT_LOOTBOX_RNG_PACKED),
-            bytes32((packed & ~mask) | uint256(index + 1))
-        );
+        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
     }
 
     /// @dev Open exactly the NEXT pending queue entry at the (already-finalized) frontier index
@@ -133,7 +127,7 @@ contract PresaleBoxDrain is DeployProtocol {
 
     /// @dev Brute-force a rngWord (>0) so (player, index) lands the DGNRS branch [50,90).
     function _wordForDgnrs(address player, uint48 index) internal pure returns (uint256 w) {
-        for (w = 1; w < 5000; ++w) {
+        for (w = 2; w < 5000; ++w) {
             uint256 o = _outcome(w, player, index);
             if (o >= 50 && o < 90) return w;
         }
@@ -333,7 +327,7 @@ contract PresaleBoxDrain is DeployProtocol {
     /// @dev Brute-force a rngWord (>0) so (player, index) lands a chosen outcome BAND.
     ///      band: 0 = FLIP [0,50), 1 = DGNRS [50,90), 2 = WWXRP [90,100).
     function _wordForBand(address player, uint48 index, uint8 band) internal pure returns (uint256 w) {
-        for (w = 1; w < 20000; ++w) {
+        for (w = 2; w < 20000; ++w) {
             uint256 o = _outcome(w, player, index);
             if (band == 0 && o < 50) return w;
             if (band == 1 && o >= 50 && o < 90) return w;

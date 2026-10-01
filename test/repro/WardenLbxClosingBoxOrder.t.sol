@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -9,7 +10,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 /// @notice Box-order migration: the removed permissionless per-(player,index) `openBox` let the
 ///         closing buyer open before the same-index cohort, which is what the original version of
 ///         this test set out to prove was harmless (order-independent DGNRS). That capability no
-///         longer exists: `openBoxes` is a strict in-order, oldest-first walk of `boxPlayers[index]`,
+///         longer exists: `openBoxes` is a strict in-order, oldest-first walk of `boxPlayers[index & 1]`,
 ///         so the closer (bought last, the crossing buy) can never be opened ahead of its cohort
 ///         (bought first) -- the title's claim now holds STRUCTURALLY rather than merely by
 ///         observed invariant. This test instead proves: (1) the cohort drains before the closer is
@@ -37,7 +38,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
     }
 
     function _lrIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED))) & 0xFFFFFFFFFFFF);
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _boxRecord(uint48 index, address player) internal view returns (uint256) {
@@ -46,7 +47,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
     }
 
     function _setRngWord(uint48 index, uint256 word) internal {
-        vm.store(address(game), keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD))), bytes32(word));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(word));
     }
 
     function _setPoolBalanceTo(uint256 target) internal {
@@ -123,7 +124,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         }
         _setRngWord(index, word);
 
-        // Finalize `index` and park the sweep frontier on it: boxPlayers[index] queues v[0],
+        // Finalize `index` and park the sweep frontier on it: boxPlayers[index & 1] queues v[0],
         // v[1], v[2] (bought first), then closer (bought last, the crossing buy) -- the ONLY
         // order the in-order sweep can ever produce now.
         _finalizeAndParkSweep(index);

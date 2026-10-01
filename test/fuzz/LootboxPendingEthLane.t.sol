@@ -10,7 +10,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 contract LaneViewer is DegenerusGame {
     function lanes() external view returns (uint48 index, uint64 pendingMilliEth, uint64 thresholdMilliEth, uint40 pendingFlip) {
         uint256 w = lootboxRngPacked;
-        index = uint48((w >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
+        index = _rngWriteBuffer();
         pendingMilliEth = uint64((w >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK);
         thresholdMilliEth = uint64((w >> LR_THRESHOLD_SHIFT) & LR_THRESHOLD_MASK);
         pendingFlip = uint40((w >> LR_PENDING_FLIP_SHIFT) & LR_PENDING_FLIP_MASK);

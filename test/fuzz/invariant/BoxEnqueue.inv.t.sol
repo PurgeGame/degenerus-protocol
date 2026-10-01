@@ -14,13 +14,13 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 ///      the real code is restored after the read.
 contract BoxQueueViewer is DegenerusGame {
     function lrIndexView() external view returns (uint48) {
-        return uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        return _rngWriteBuffer();
     }
 
-    /// @notice Walk boxPlayers[index] for `who`. TRUE iff the box is enqueued for the permissionless
+    /// @notice Walk boxPlayers[index & 1] for `who`. TRUE iff the box is enqueued for the permissionless
     ///         openBoxes() auto-opener (the WHALE-01 property: a persisted box must be present here).
     function boxPlayersContains(uint48 index, address who) external view returns (bool) {
-        address[] storage q = boxPlayers[index];
+        address[] storage q = boxPlayers[index & 1];
         for (uint256 i; i < q.length; ++i) {
             if (q[i] == who) return true;
         }
@@ -30,13 +30,13 @@ contract BoxQueueViewer is DegenerusGame {
     /// @notice The raw persisted lootboxOrder word. word != 0 => a persisted, not-yet-opened box;
     ///         word == 0 => already resolved (drained on open, the whole word cleared in one
     ///         SSTORE) and correctly absent from the queue.
-    /// @notice The most times any one buyer appears in boxPlayers[index]. Each store enqueues a
+    /// @notice The most times any one buyer appears in boxPlayers[index & 1]. Each store enqueues a
     ///         buyer once per index however many boxes they buy: the box order (mint and cover
     ///         lootboxes share `lootboxOrder`) and the presale box (`presaleBoxEth`) each push
     ///         on their own first deposit, so a buyer holding both sits in the queue twice, and
     ///         the sweep's first visit opens both legs and its second is a zero/zero skip.
     function boxPlayersMaxMultiplicity(uint48 index) external view returns (uint256 most) {
-        address[] storage q = boxPlayers[index];
+        address[] storage q = boxPlayers[index & 1];
         for (uint256 i; i < q.length; i++) {
             uint256 n;
             for (uint256 j; j < q.length; j++) {
@@ -47,13 +47,13 @@ contract BoxQueueViewer is DegenerusGame {
     }
 
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxOrder[index][who];
+        return _boxOrder(index, who);
     }
 
     /// @notice The persisted presale-box applied-ETH base (the low 96-bit field; the closing flag at bit 255
     ///         and soldBefore at bits 96:191 are masked off). base != 0 => a persisted presale box.
     function presaleBoxBaseFor(uint48 index, address who) external view returns (uint256) {
-        return presaleBoxEth[index][who] & PRESALE_BOX_AMOUNT_MASK;
+        return presaleBoxEth[index & 1][who] & PRESALE_BOX_AMOUNT_MASK;
     }
 }
 
@@ -67,7 +67,7 @@ contract BoxQueueViewer is DegenerusGame {
 ///
 ///         THE PROPERTY (invariant_everyPersistedBoxIsEnqueued). Across any fuzzed sequence of box-creating
 ///         actions, every persisted box — a lootboxEth or presaleBoxEth record with base != 0 for an active
-///         index — is present in boxPlayers[index] until it is opened, never held un-enqueued. A box owner is
+///         index — is present in boxPlayers[index & 1] until it is opened, never held un-enqueued. A box owner is
 ///         the ONLY party who can open a box (manual openLootBox is operator-gated); a persisted-but-unenqueued
 ///         box lets the owner hold it closed and time the open to a favorable live level/boon, defeating the
 ///         lootbox-resolution-timing by-design ruling for that box class (the WHALE-01 finding). The invariant
@@ -82,7 +82,7 @@ contract BoxQueueViewer is DegenerusGame {
 ///         skipped its enqueue could not hide behind a vacuous green.
 ///
 ///         FALSIFIABILITY. A focused test seeds the exact WHALE-01 bug shape — a persisted lootboxEth record
-///         (base != 0) NOT pushed into boxPlayers[index] — via the handler's debugSeedUnenqueuedBox seam, then
+///         (base != 0) NOT pushed into boxPlayers[index & 1] — via the handler's debugSeedUnenqueuedBox seam, then
 ///         asserts the invariant's underlying check (base != 0 AND boxPlayersContains == false) registers the
 ///         break. Restoring the slot returns the check to green. A passing assertion here proves the wired
 ///         invariant is genuinely falsifiable, not vacuously true.
@@ -121,7 +121,7 @@ contract BoxEnqueue is DeployProtocol {
 
     /// @notice THE PROPERTY. For each (index, owner) the campaign created, read its persisted base (the
     ///         lootbox amount OR the presale-box applied-ETH base) via the etched viewer; if base != 0
-    ///         (persisted, not yet opened) assert it is present in boxPlayers[index]. Opened boxes (base == 0)
+    ///         (persisted, not yet opened) assert it is present in boxPlayers[index & 1]. Opened boxes (base == 0)
     ///         are skipped — they are correctly resolved and no longer owed in the queue. The viewer is etched
     ///         once, all reads are batched under it, and the real code is restored at the end so the campaign's
     ///         next call sees the unmodified game.
@@ -148,7 +148,7 @@ contract BoxEnqueue is DeployProtocol {
                 vm.etch(address(game), realCode);
                 assertTrue(
                     enqueued,
-                    "WHALE-01: every persisted box (base != 0) must be enqueued in boxPlayers[index] for the permissionless auto-open"
+                    "WHALE-01: every persisted box (base != 0) must be enqueued in boxPlayers[index & 1] for the permissionless auto-open"
                 );
             }
         }
@@ -233,7 +233,7 @@ contract BoxEnqueue is DeployProtocol {
     // =========================================================================
 
     /// @notice The WHALE-01 bug shape the net catches: a box-creating path persists a lootboxEth record
-    ///         (base != 0) but DROPS the boxPlayers[index] enqueue. We simulate that bug via the handler's
+    ///         (base != 0) but DROPS the boxPlayers[index & 1] enqueue. We simulate that bug via the handler's
     ///         debugSeedUnenqueuedBox seam (a field-isolated vm.store of a lootboxEth amount with NO enqueue),
     ///         then assert the invariant's underlying condition — base != 0 AND boxPlayersContains == false —
     ///         now holds (the break is registered). Clearing the seeded slot returns the check to green. If the
@@ -252,7 +252,7 @@ contract BoxEnqueue is DeployProtocol {
         assertFalse(viewer.boxPlayersContains(idx, victim), "pre: victim not in the queue");
         vm.etch(address(game), realCode);
 
-        // Seed the bug: a persisted lootboxEth amount (base != 0) WITHOUT pushing to boxPlayers[index].
+        // Seed the bug: a persisted lootboxEth amount (base != 0) WITHOUT pushing to boxPlayers[index & 1].
         uint256 injected = 3 ether;
         handler.debugSeedUnenqueuedBox(idx, victim, injected);
 

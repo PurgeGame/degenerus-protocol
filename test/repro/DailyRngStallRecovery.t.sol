@@ -89,6 +89,7 @@ contract DailyRngStallRecovery is DeployProtocol {
     /// @dev Open a new protocol day and fire ONLY the daily request — no fulfillment —
     ///      leaving the bought cohort staged in the read slot behind the stalled word.
     function _stallDailyRequest() internal returns (uint256 stalledReqId) {
+        _finishReadConsumers();
         _buyTickets();
         simTime += 1 days + 1;
         vm.warp(simTime);

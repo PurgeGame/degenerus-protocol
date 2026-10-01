@@ -73,7 +73,7 @@ contract DayOneSeeder is DegenerusGame, BucketSeed {
         phaseTransitionActive = false;
         subsFullyProcessed = true;
         _afkingResetDay = day;
-        rngWordCurrent = word;
+        rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         rngWordByDay[day] = word;
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = false;

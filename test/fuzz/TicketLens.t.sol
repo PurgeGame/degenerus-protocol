@@ -11,7 +11,8 @@ contract TicketLensHarness is DegenerusGameStorage {
     function append(uint24 lvl, uint8 trait, uint32 ownerIdx, uint32 count) external {
         uint256 base;
         assembly { base := lvlTraitEntry.slot }
-        _bucketAppendRun(uint256(keccak256(abi.encode(lvl, base))), trait, ownerIdx, count);
+        _setTicketBufferLevel(lvl);
+        _bucketAppendRun(_traitBufferBase(lvl), trait, ownerIdx, count, lvl);
     }
     function appendQueue(uint24 key, uint32 pos) external { _tqAppend(key, pos); }
 }

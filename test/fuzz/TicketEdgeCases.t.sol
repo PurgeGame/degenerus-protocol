@@ -42,7 +42,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
     }
 
     function setRngWordCurrent(uint256 v) external {
-        rngWordCurrent = v;
+        rngWordCurrent = v == 0 ? RNG_WORD_WAITING : (v == 1 ? 0 : v);
     }
 
     // -- State getters --

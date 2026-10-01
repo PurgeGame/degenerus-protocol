@@ -25,7 +25,7 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _afkingResetDay = day;
-        decWindowOpen = true;
+        _setDecWindowOpen(true);
         currentPrizePool = 0;
         _setPrizePools(nextPool, futurePool);
         levelPrizePool[98] = (uint256(nextPool) * 8) / 10;
@@ -72,27 +72,26 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         // mod 32) lands in word 1, round 2's in word 3 (computed offline from WORD's fixed
         // entropy chain) -- disjoint 8-lane storage words -- so their four-candidate reads
         // can never share an address, without touching the word's own round-by-round seeding.
-        _seedBucketDistinct(100, 96, 32, uint160(0xC3700000 + 9999 * 16));
+        _seedBucketDistinct(100, 96, 2048, uint160(0xC3700000 + 9999 * 4096));
 
         // The selected word has distinct (level, trait) buckets for the lvl / lvl+1 /
         // past-level bands. All candidates are different wallets; their winning BAF
         // scores are seeded later. This mirrors runBafJackpot's post-D/D2-removal
         // sequence exactly: slice B consumes salt=1, then 48 scatter rounds (salt
-        // 2..49) in 8-round century bands (lvl, lvl+1, lvl+2..lvl+5, lvl+6..lvl+99,
-        // then 16 rounds of random past levels).
+        // 2..49) in four 12-round forward bands (lvl, lvl+1, lvl+2..lvl+5, lvl+6..lvl+99).
         uint256 entropy = EntropyLib.hash2(word, uint256(keccak256("degenerus.baf.winners")));
         entropy = EntropyLib.hash2(entropy, uint256(1)); // Slice B's ++salt; this fixture doesn't need its pick.
         for (uint256 salt = 2; salt <= 49; ++salt) {
             entropy = EntropyLib.hash2(entropy, salt);
             uint256 round = salt - 2;
-            uint8 band = uint8(round / 8);
+            uint8 band = uint8(round / 12);
             if (band == 0 || band == 1) {
                 uint24 target = band == 0 ? 100 : 101;
                 uint8 trait = uint8(entropy >> 24);
                 // (100, 96) is pre-seeded to 32 above (the one known collision for WORD);
                 // every other (level, trait) bucket is still fresh here, so seed it as usual.
-                if (_seedBucketLen(target, trait) < 4) {
-                    _seedBucketDistinct(target, trait, 4, uint160(0xC3700000 + round * 16));
+                if (_seedBucketLen(target, trait) < 2048) {
+                    _seedBucketDistinct(target, trait, 2048, uint160(0xC3700000 + round * 4096));
                 }
                 continue;
             }
@@ -102,14 +101,7 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
                 // above, so no per-round bucket seeding is needed here.
                 continue;
             }
-            // Bands 4-5 (round 32..47): both century sub-bands share the same
-            // random-past-level formula (lvl - 1 - entropy % 99). WORD has no repeat
-            // here, but guard the same way as bands 0-1 for robustness.
-            uint24 target = 99 - uint24(entropy % 99);
-            uint8 trait = uint8(entropy >> 24);
-            if (_seedBucketLen(target, trait) < 4) {
-                _seedBucketDistinct(target, trait, 4, uint160(0xC3700000 + round * 16));
-            }
+
         }
         // Sealing is constant work regardless of the entrant population.
         decBattleRounds[100].count = 1_000_000;
@@ -174,21 +166,20 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertFalse(game.decWindow(), "real century request closes the burn window");
 
         // Replays runBafJackpot's exact post-D/D2-removal sampling sequence: slice B
-        // consumes salt=1, then 48 scatter rounds (salt 2..49) in 8-round century
-        // bands (lvl, lvl+1, lvl+2..lvl+5 far-future, lvl+6..lvl+99 far-future, then
-        // 16 rounds of random past levels).
+        // consumes salt=1, then 48 scatter rounds (salt 2..49) in four 12-round century
+        // bands (lvl, lvl+1, lvl+2..lvl+5 far-future, lvl+6..lvl+99 far-future).
         uint256 entropy = EntropyLib.hash2(word, uint256(keccak256("degenerus.baf.winners")));
         entropy = EntropyLib.hash2(entropy, uint256(1)); // Slice B's ++salt; this fixture doesn't need its pick.
         address[] memory futurePair;
         for (uint256 salt = 2; salt <= 49; ++salt) {
             entropy = EntropyLib.hash2(entropy, salt);
             uint256 round = salt - 2;
-            uint8 band = uint8(round / 8);
+            uint8 band = uint8(round / 12);
             address[] memory candidates;
             if (band == 0) {
-                (, candidates) = game.sampleTraitEntriesAtLevel(100, entropy);
+                (, candidates) = game.sampleTraitEntries(false, entropy);
             } else if (band == 1) {
-                (, candidates) = game.sampleTraitEntriesAtLevel(101, entropy);
+                (, candidates) = game.sampleTraitEntries(true, entropy);
             } else if (band < 4) {
                 // Bands 2-3 run in round pairs: the even round of the pair samples
                 // eight slots (four packs' a/b lanes) and caches them; both the even
@@ -202,9 +193,6 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
                 candidates = new address[](4);
                 uint256 off = (round & 1) << 2;
                 for (uint256 i; i < 4; ++i) candidates[i] = futurePair[off + i];
-            } else {
-                uint24 target = 99 - uint24(entropy % 99);
-                (, candidates) = game.sampleTraitEntriesAtLevel(target, entropy);
             }
             require(candidates.length == 4, "all four candidates must be present");
             for (uint256 i; i < candidates.length; ++i) {
@@ -241,7 +229,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         vm.store(address(sdgnrs), bytes32(0), bytes32(supply | (uint256(17.5 ether) << 128) | (uint256(399) << 224)));
         vm.store(
             address(sdgnrs),
-            keccak256(abi.encode(uint256(399), uint256(7))),
+            bytes32(uint256(7)),
             bytes32(uint256(10 ether / 1 gwei) | (uint256(1_000_000) << 64) | (uint256(10) << 128))
         );
         vm.deal(address(sdgnrs), 17.5 ether);

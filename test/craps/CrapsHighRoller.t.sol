@@ -72,7 +72,7 @@ contract CrapsHighRollerTest is CrapsPins {
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);
@@ -324,7 +324,7 @@ contract CrapsHighRollerTest is CrapsPins {
         craps.enterBattle(slot, _boardA(), 1);
         vm.prank(bob);
         craps.enterBattle(slot, _boardA(), 1);
-        _settle(slot, 7);
+        _settle(slot, 1);
 
         (uint32 heads,,,, bool done) = craps.highFieldOf(craps.battleKeyOf((uint256(slot) << 64) | 1));
         assertEq(heads, 0, "an ordinary field grew a lane");
@@ -340,9 +340,10 @@ contract CrapsHighRollerTest is CrapsPins {
         uint256 p;
         uint256 r;
         for (uint256 i = 0; i < 40; ++i) {
-            (slot, hi, r) = _laneOfOne(uint48(100 + i));
+            (slot, hi, r) = _laneOfOne(uint48(i));
             (, p) = craps.baseRunOf(hi);
             if (p != 0) break;
+            craps.resolveSlot(slot, WHOLE_FIELD);
         }
         assertGt(p, 0, "no pass in this sweep came home with money");
 
@@ -375,9 +376,9 @@ contract CrapsHighRollerTest is CrapsPins {
     ///      way to take money off the table for free.
     function test_aSoleHighRollerOnABustGetsNothingBack() public {
         for (uint256 i = 0; i < 40; ++i) {
-            (uint64 slot, uint256 hi,) = _laneOfOne(uint48(200 + i));
+            (uint64 slot, uint256 hi,) = _laneOfOne(uint48(i));
             (, uint256 basePaid) = craps.baseRunOf(hi);
-            if (basePaid != 0) continue;
+            if (basePaid != 0) { craps.resolveSlot(slot, WHOLE_FIELD); continue; }
 
             // Read off the rider's own announcement rather than the balance: the same call also
             // pays the field's main pot, and an all-bust field still has a best bust to pay it to.
@@ -401,7 +402,7 @@ contract CrapsHighRollerTest is CrapsPins {
         craps.enterBattle(slot, _boardA(), 10);
         vm.prank(carol);
         craps.enterBattle(slot, _boardA(), 1);
-        _closeOn(craps, slot, 9, uint256(keccak256(abi.encode("settle", slot))));
+        _closeOn(craps, slot, 1, uint256(keccak256(abi.encode("settle", slot))));
 
         // The LANE PAYS ITSELF OUT during the settlement that finishes the field — the same call
         // that pays the main pot — so what a claim used to collect is now one entry in this
@@ -443,7 +444,7 @@ contract CrapsHighRollerTest is CrapsPins {
         uint256 a = craps.enterBattle(slot, _boardA(), 10);
         vm.prank(bob);
         craps.enterBattle(slot, _boardA(), 10);
-        _closeOn(craps, slot, 40, uint256(keccak256("final")));
+        _closeOn(craps, slot, 0, uint256(keccak256("final")));
 
         // One of the two seats settled: the lane is loaded but not decided.
         assertEq(_resolveForLane(craps, slot, 1, false).length, 0, "a half-settled field paid its lane");
@@ -477,7 +478,7 @@ contract CrapsHighRollerTest is CrapsPins {
         uint256 lanePrincipal = 2 * 9 * SUW;
         assertEq(mainPrincipal + lanePrincipal, burnedBounty, "the two pots are not every bounty burned");
 
-        _closeOn(craps, slot, 9, uint256(keccak256(abi.encode("settle", slot))));
+        _closeOn(craps, slot, 1, uint256(keccak256(abi.encode("settle", slot))));
 
         // ONE call finishes the field and pays both pots, so the two are told apart by which event
         // carried them rather than by which transaction did.
@@ -501,7 +502,7 @@ contract CrapsHighRollerTest is CrapsPins {
             uint256 plain = craps.enterBattle(slot, _boardA(), 1);
             vm.prank(alice);
             craps.enterBattle(slot, _boardA(), 10);
-            _closeOn(craps, slot, uint48(30_000 + i), uint256(keccak256(abi.encode("rank", i))));
+            _closeOn(craps, slot, uint48(i & 1), uint256(keccak256(abi.encode("rank", i))));
             (uint256 won,) = craps.previewSettlement(plain);
             craps.resolveSlot(slot, WHOLE_FIELD);
             if (won == 0) continue;
@@ -644,7 +645,7 @@ contract CrapsHighRollerTest is CrapsPins {
         craps.enterBattle(slot, _boardA(), 1);
         vm.prank(carol);
         craps.enterBattle(slot, _boardA(), 1);
-        _closeOn(craps, slot, index, uint256(keccak256(abi.encode("lane", index))));
+        _closeOn(craps, slot, index & 1, uint256(keccak256(abi.encode("lane", index))));
     }
 
     function _settle(uint64 slot, uint48 index) internal {
@@ -680,7 +681,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         for (uint256 i = 0; i < players.length; ++i) {
             players[i] = makeAddr(string(abi.encodePacked("p", vm.toString(i))));
@@ -781,7 +782,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
         uint64 slot = _battle(30, 10);
         _fill(slot, 3, 1);
         bytes32 key = craps.battleKeyOf((uint256(slot) << 64) | 1);
-        _closeOn(craps, slot, 120, uint256(keccak256("nohigh")));
+        _closeOn(craps, slot, 0, uint256(keccak256("nohigh")));
 
         vm.record();
         craps.resolveSlot(slot, WHOLE_FIELD);
@@ -807,7 +808,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
         uint64 slot = _battle(31, 10);
         _fill(slot, 3, 10);
         bytes32 key = craps.battleKeyOf((uint256(slot) << 64) | 1);
-        _closeOn(craps, slot, 121, uint256(keccak256("high")));
+        _closeOn(craps, slot, 1, uint256(keccak256("high")));
 
         vm.record();
         craps.resolveSlot(slot, WHOLE_FIELD);
@@ -844,7 +845,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
     function test_gas_theFinishingBatchPaysBothPots() public {
         uint64 slot = _battle(11, 10);
         _fill(slot, 3, 10);
-        _closeOn(craps, slot, 70, uint256(keccak256("claimgas")));
+        _closeOn(craps, slot, 0, uint256(keccak256("claimgas")));
 
         // Everything but the last seat, so the measured call is the one that finalizes and pays.
         craps.resolveSeats(slot, 2);

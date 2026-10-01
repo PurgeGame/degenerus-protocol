@@ -17,22 +17,16 @@ import {
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
 import { boCustomFloor, boNominal } from "../helpers/boxOrder.js";
+import { compiledStorageSlot } from "../helpers/storageLayout.js";
 
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
-// `game.lootboxStatus(player, index)` was removed from the facade (box-order
-// rework) — read the packed `lootboxOrder[index][player]` word straight out of
-// storage instead. Slot 15 confirmed via a fresh `npx hardhat compile` +
-// build-info `storageLayout` lookup for `DegenerusGame.lootboxOrder`
-// (`mapping(uint48 => mapping(address => uint256))`), mirroring the
-// `entriesOwedPacked` slot-derivation pattern in
-// test/integration/CrossSurfaceTicketMixing.test.js.
-const LOOTBOX_ORDER_BASE_SLOT = 15n;
-
-function lootboxOrderSlot(index, player) {
+// These purchases remain in the live write buffer. Derive its physical tag and
+// the order mapping's slot from the current packed state and compiled layout.
+async function lootboxOrderSlot(index, player) {
   const abi = hre.ethers.AbiCoder.defaultAbiCoder();
   const inner = hre.ethers.keccak256(
-    abi.encode(["uint256", "uint256"], [BigInt(index), LOOTBOX_ORDER_BASE_SLOT])
+    abi.encode(["uint256", "uint256"], [BigInt(index), await compiledStorageSlot("lootboxOrder")])
   );
   return hre.ethers.keccak256(abi.encode(["address", "bytes32"], [player, inner]));
 }
@@ -41,8 +35,10 @@ function lootboxOrderSlot(index, player) {
 // (a pure custom-size order, small/med/large always 0), so the level price
 // multiplied against those zero counts is irrelevant to `boNominal` — 0n is a
 // safe placeholder regardless of the active level's price.
-async function lootboxNominalOf(gameAddress, player, index) {
-  const raw = await hre.ethers.provider.getStorage(gameAddress, lootboxOrderSlot(index, player));
+async function lootboxNominalOf(gameAddress, player) {
+  const state = BigInt(await hre.ethers.provider.getStorage(gameAddress, 0));
+  const index = (state >> 252n) & 1n;
+  const raw = await hre.ethers.provider.getStorage(gameAddress, await lootboxOrderSlot(index, player));
   return boNominal(BigInt(raw), 0n);
 }
 
@@ -259,8 +255,8 @@ describe("Distress-Mode Lootboxes", function () {
       await purchaseLootbox(game, alice, eth("1"));
 
       // lootboxOrder's nominal wei should be > 0 (removed lootboxStatus's `amount` leg)
-      // lootboxRngIndex starts at 1 (lootboxRngIndexView removed in Phase 146)
-      const nominal = await lootboxNominalOf(await game.getAddress(), alice.address, 1n);
+      // Purchases accumulate in the current binary write buffer.
+      const nominal = await lootboxNominalOf(await game.getAddress(), alice.address);
       expect(nominal).to.be.gt(0n);
     });
 
@@ -288,9 +284,8 @@ describe("Distress-Mode Lootboxes", function () {
       expect(futureAfter2).to.equal(futureBefore2);
       expect(nextAfter2 - nextBefore2).to.equal(eth("1"));
 
-      // Both lootboxes recorded at their respective indices
-      const indexAlice = 1n; // first lootbox index
-      const nominalAlice = await lootboxNominalOf(await game.getAddress(), alice.address, indexAlice);
+      // Both purchases are recorded in the live write buffer.
+      const nominalAlice = await lootboxNominalOf(await game.getAddress(), alice.address);
       expect(nominalAlice).to.be.gt(0n);
     });
   });
@@ -308,9 +303,9 @@ describe("Distress-Mode Lootboxes", function () {
       // Buy a lootbox in distress mode
       await purchaseLootbox(game, alice, eth("2"));
 
-      // lootboxRngIndex starts at 1 (lootboxRngIndexView removed in Phase 146)
+      // Purchases accumulate in the current binary write buffer.
       // Verify the lootbox was recorded with a non-zero nominal wei
-      const nominal = await lootboxNominalOf(await game.getAddress(), alice.address, 1n);
+      const nominal = await lootboxNominalOf(await game.getAddress(), alice.address);
       expect(nominal).to.be.gt(0n);
 
       // Verify the purchase was routed to the next pool (distress split)
@@ -320,9 +315,9 @@ describe("Distress-Mode Lootboxes", function () {
     it("mixed normal+distress lootbox purchases are both recorded", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
 
-      // Alice buys in normal mode (lootboxRngIndex starts at 1)
+      // Alice buys in normal mode into the current write buffer.
       await purchaseLootbox(game, alice, eth("1"));
-      const nominalAlice = await lootboxNominalOf(await game.getAddress(), alice.address, 1n);
+      const nominalAlice = await lootboxNominalOf(await game.getAddress(), alice.address);
       expect(nominalAlice).to.be.gt(0n);
 
       // Warp to distress
@@ -336,8 +331,8 @@ describe("Distress-Mode Lootboxes", function () {
       // Distress: all ETH to next pool
       expect(nextAfter - nextBefore).to.equal(eth("1"));
 
-      // lootboxRngIndex is still 1 during presale
-      const nominalBob = await lootboxNominalOf(await game.getAddress(), bob.address, 1n);
+      // No request has swapped the write buffer during these purchases.
+      const nominalBob = await lootboxNominalOf(await game.getAddress(), bob.address);
       expect(nominalBob).to.be.gt(0n);
     });
   });

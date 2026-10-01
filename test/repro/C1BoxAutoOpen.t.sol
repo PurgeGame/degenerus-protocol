@@ -8,15 +8,15 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state. A
 ///      DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access to
-///      the live internal boxPlayers / lootboxEth / lootboxRngWordByIndex maps and the packed LR_INDEX
+///      the live internal boxPlayers / retained orders / current word and the packed LR_INDEX
 ///      cursor without any storage change; the real code is restored after each read.
 contract C1Viewer is DegenerusGame {
     function lrIndexView() external view returns (uint48) {
-        return uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        return _rngWriteBuffer();
     }
 
     function boxPlayersContains(uint48 index, address who) external view returns (bool) {
-        address[] storage q = boxPlayers[index];
+        address[] storage q = boxPlayers[index & 1];
         for (uint256 i; i < q.length; ++i) {
             if (q[i] == who) return true;
         }
@@ -25,24 +25,24 @@ contract C1Viewer is DegenerusGame {
 
     /// @notice The raw packed lootboxOrder word for [index][who] — the live "box still owed" signal
     ///         that the auto-open sweep gates on (openHumanBoxes skips an entry whose box order AND
-    ///         presale leg are both zero) and that openLootBox zeroes (the whole word, one SSTORE)
+    ///         presale leg are both zero) and that openLootBox marks processed
     ///         on a successful open. The decisive "opened vs not" signal: != 0 => the box is still
     ///         closed; 0 => it was opened/drained.
     function lootboxBaseFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxOrder[index][who];
+        return _boxOrder(index, who);
     }
 
-    /// @notice lootboxRngWordByIndex[index] — the per-index VRF word the open path gates on.
+    /// @notice _lootboxWord(index) — the per-index VRF word the open path gates on.
     function rngWordFor(uint48 index) external view returns (uint256) {
-        return lootboxRngWordByIndex[index];
+        return _lootboxWord(index);
     }
 }
 
 /// @title C1BoxAutoOpen — REGRESSION TEST for finding V62-01 (lootbox auto-open off-by-one).
 ///
-/// @notice THE DEFECT (V62-01): a human lootbox is enqueued in boxPlayers[N] at LR_INDEX==N.
+/// @notice THE DEFECT (V62-01): a human lootbox is enqueued in boxPlayers[N & 1] at LR_INDEX==N.
 ///         requestLootboxRng / the daily finalize advance LR_INDEX to N+1 BEFORE the word lands, and the
-///         word is written to lootboxRngWordByIndex[LR_INDEX-1] == [N]. The permissionless
+///         word is written to _lootboxWord(LR_INDEX-1) == [N]. The permissionless
 ///         openBoxes()/_openHumanBoxes() previously read the ACTIVE LR_INDEX (= N+1) and so never opened
 ///         the just-finalized box at N — it degraded to manual-only openLootBox, returning open-timing
 ///         control to the owner. The fix points the open/boxesPending reads at LR_INDEX-1.
@@ -101,15 +101,6 @@ contract C1BoxAutoOpen is DeployProtocol {
     ///      at `index` with a zero in-index cursor, so the O(1) boxesPending hint + the multi-index
     ///      sweep begin exactly at this finalized index (the realistic state where the empty lower
     ///      indices are already drained). No contract mutation — a field-isolated slot poke.
-    function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(56));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 m = (uint256(1) << 48) - 1;
-        packed &= ~(m << (7 * 8));   // boxCursor = 0
-        packed &= ~(m << (13 * 8));  // clear boxCursorIndex field
-        packed |= (uint256(index) & m) << (13 * 8);
-        vm.store(address(game), slot, bytes32(packed));
-    }
 
     // =========================================================================
     // Drive a genesis daily cycle so rngWordByDay[currentDay] != 0 and the lock clears
@@ -157,7 +148,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         );
         base = _base(N, actor);
         assertGt(base, 0, "fixture: a human lootbox box persisted at index N (base != 0)");
-        assertTrue(_enqueued(N, actor), "fixture: the human box is enqueued in boxPlayers[N]");
+        assertTrue(_enqueued(N, actor), "fixture: the human box is enqueued in boxPlayers[N & 1]");
         assertEq(_idx(), N, "fixture: LR_INDEX is still N right after the box was enqueued");
     }
 
@@ -168,6 +159,7 @@ contract C1BoxAutoOpen is DeployProtocol {
 
     function test_V62_01_autoOpen_opens_finalized_box_midday() public {
         _driveDailyCycleOnce();
+        _finishReadConsumers();
         assertFalse(game.rngLocked(), "stage0: not locked (mid-day path reachable)");
 
         (uint48 N, uint256 baseAtCreate) = _enqueueHumanBoxAtCurrentIndex();
@@ -175,17 +167,18 @@ contract C1BoxAutoOpen is DeployProtocol {
         // requestLootboxRng fires the VRF AND advances LR_INDEX N -> N+1 before the word lands.
         vm.prank(actor);
         game.requestLootboxRng();
-        assertEq(_idx(), N + 1, "requestLootboxRng advanced LR_INDEX N -> N+1 before the word lands");
+        assertEq(_idx(), N ^ 1, "requestLootboxRng advanced LR_INDEX N -> N+1 before the word lands");
 
-        // Fulfill the mid-day VRF (not locked) => the word is written at lootboxRngWordByIndex[N].
+        // Fulfill the mid-day VRF (not locked) => the word is written at _lootboxWord(N).
         uint256 reqId = mockVRF.lastRequestId();
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         assertFalse(fulfilled, "the mid-day lootbox VRF request is pending");
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256("c1_midday_word")) | 1);
 
         assertFalse(game.rngLocked(), "post-fulfill: NOT locked (mid-day branch)");
-        assertGt(_word(N), 0, "the VRF word landed at lootboxRngWordByIndex[N] (box at N IS ready)");
-        assertEq(_idx(), N + 1, "LR_INDEX is N+1 while the ready word sits at N");
+        game.advanceGame(); // Required keeper publication after the minimal callback.
+        assertGt(_word(N), 0, "the VRF word landed at _lootboxWord(N) (box at N IS ready)");
+        assertEq(_idx(), N ^ 1, "LR_INDEX is N+1 while the ready word sits at N");
         assertEq(_base(N, actor), baseAtCreate, "pre-open: box at N still closed");
 
         // The relocated sweep is a MULTI-INDEX frontier walk: boxesPending() is an O(1) hint that
@@ -194,7 +187,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         // the frontier at N — the realistic post-drain state — before the O(1) check. (The sweep would
         // advance the frontier through the empty lower indices on its first call anyway; this just
         // positions the O(1) hint to report the box that IS waiting at N.)
-        _parkBoxFrontier(N);
+
 
         // boxesPending() must now SEE the finalized box (it reads LR_INDEX-1 == N at the frontier).
         assertTrue(game.boxesPending(), "boxesPending() reports the finalized box at N is openable");
@@ -209,7 +202,7 @@ contract C1BoxAutoOpen is DeployProtocol {
 
         assertGt(openedAuto, 0, "FIX: openBoxes() opened at least one box");
         assertEq(_base(N, actor), 0, "FIX: openBoxes() drained the finalized human box at N (auto valve works)");
-        assertFalse(game.boxesPending(), "post-open: no box pending at the finalized index");
+        assertTrue(game.boxesPending(), "committed tickets still keep the read cohort visible after its box opens");
     }
 
     // =========================================================================
@@ -229,8 +222,8 @@ contract C1BoxAutoOpen is DeployProtocol {
         assertFalse(game.rngLocked(), "post daily cycle: not locked");
 
         uint48 nowIdx = _idx();
-        assertGt(nowIdx, N, "daily finalize advanced LR_INDEX past N");
-        assertGt(_word(N), 0, "the daily-finalized word landed at lootboxRngWordByIndex[N]");
+        assertEq(nowIdx, N ^ 1, "daily seal switches to the other write buffer");
+        assertGt(_word(N), 0, "the daily-finalized word landed at _lootboxWord(N)");
         assertEq(_base(N, actor), baseAtCreate, "pre-open: box at N still closed");
 
         // Permissionless valve must open the just-finalized box (LR_INDEX-1).

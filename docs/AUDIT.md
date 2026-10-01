@@ -70,3 +70,11 @@ Genesis-only self-disruption is excluded.
 
 Outcomes requiring valid sDGNRS governance approval are the governance mechanism, not
 audit findings. Bypassing its authorization, voting or execution rules remains in scope.
+
+Ticket drain pricing targets at least 99% of normal keeper calls at 10M gas or less.
+The drain budget is 900 units of 10k gas: a write to a zero-valued slot costs three
+units and a nonzero write one, with no first-chunk derate. With 1M fixed overhead the
+drain envelope is 10M, including startup and record-volume backing growth. Charges
+depend only on storage state at the start of the call. See
+`test/gas/TicketDrainWorstCaseBound.t.sol`, `RoundDrainChunkGas.t.sol` and
+`KeeperGasProfile.t.sol`.

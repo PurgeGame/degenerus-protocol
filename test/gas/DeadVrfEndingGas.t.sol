@@ -17,7 +17,7 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
         for (uint256 i; i < count; ++i) {
             address owner = address(uint160(0xF0110000 + i));
             lvlEntryOwner[lvl].push(EntryOwner(owner, 0));
-            foilBuyers[day].push((lvlEntryOwner[lvl].length << 192) | (uint256(lvl) << 160) | uint160(owner));
+        foilBuyers[day].push((lvlEntryOwner[lvl].length << 192) | (uint256(lvl) << 160) | uint160(owner));
         }
         foilDrainDay = day;
         foilLastResolveDay = day;

@@ -5,7 +5,7 @@ import {Craps} from "./Craps.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 /// @dev The one thing this needs from the live game. `DegenerusGame` exposes a raw-slot reader
-///      (DegenerusGame.sol:509) because the lootbox RNG index and the per-index VRF words are
+///      (DegenerusGame.sol:509) because the RNG lifecycle and shared word payload are
 ///      `internal` storage with no typed getter — the same escape hatch `DegenerusGameLens` uses.
 interface IGameSlotReader {
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
@@ -13,60 +13,28 @@ interface IGameSlotReader {
 }
 
 /// @title LootboxCraps
-/// @notice `Craps` driven by the protocol's own lootbox RNG instead of a caller-supplied seed.
+/// @notice Craps driven by the protocol's sealed RNG session.
+/// @dev A battle binds to the accumulating write buffer (tag 0 or 1) when it closes.
+///      A fresh request seals that buffer and flips the selector only after every
+///      consumer of the preceding read session finishes. New commitments keep
+///      accumulating in write; they cannot see the sealed read word.
 ///
-///         A hand binds to a lootbox RNG index at bet time and settles from the VRF word that
-///         later lands on that index. This is exactly the commitment a lootbox buyer already
-///         accepts: you queue at the live index, and the word for it is not drawn until a future
-///         `requestLootboxRng()` cycle fulfils.
+///      Fulfillment stores the shared session word. Mandatory keeper publication
+///      makes it available to consumers and emits LootboxRngApplied(tag, word, requestId).
+///      Requests which never receive a usable word can be retried without swapping.
+///      Unfinished battles lose their entropy on terminal entry. Settled battles
+///      never consult a reused tag again; historical replay uses event positions.
 ///
-/// @dev WHY THE BINDING RULE IS THE WHOLE SECURITY ARGUMENT
+///      The word and physical tag determine the shared shooter, rather than the
+///      player or board. All players in one session see the same sequence of dice.
+///      A domain tag separates craps seeds from other consumers of that word.
+///      Shared shooters correlate payouts across players; their exposure remains
+///      limited to their stakes, while the house bears the table's correlated variance.
 ///
-///      A fulfilled lootbox word is public — it is written to storage and emitted as
-///      `LootboxRngApplied(index, word, requestId)`. Since a craps hand is a deterministic function
-///      of its seed, anyone who knows the word for an index knows every roll of every hand bound to
-///      it. So the only thing standing between this and a free money printer is that bets may bind
-///      ONLY to an index whose word does not exist yet. Nothing CHECKS that, because nothing can
-///      violate it: the cadence below makes it true by construction, and a runtime read would only
-///      re-ask the same contract to vouch for itself.
-///
-///      Reading the protocol's cadence off the packed slot:
-///
-///        * `lootboxRngIndex` lives in bits 0..47 of `lootboxRngPacked`. It is a monotonic uint48.
-///        * `requestLootboxRng()` fires the VRF request and advances the index in the same call, so
-///          the request in flight fulfils into `index - 1` and new commitments queue at `index`.
-///        * Therefore `_wordAt(_currentIndex())` is always zero, and a bet bound to `_currentIndex()`
-///          is bound to a word nobody can know yet. That is the property being bought.
-///
-/// @dev ONE INDEX IS ONE TABLE, AND EVERYONE AT IT SEES THE SAME SHOOTER
-///
-///      The seed is a function of the index alone — not of the player, not of what they bet, not of
-///      when they bought in. Every player bound to index N watches the identical dice, so friends
-///      who buy in at the same index are playing the same table: the same come-out, the same point,
-///      the same hot roll, the same seven-out. That is the whole design, and it is why `_seedFor`
-///      takes nothing but the index.
-///
-///      A session at an index reads that table's shooters in order, so hand `i` at index N is the
-///      same hand for everyone who is still betting by then. A player taking one hand and a player
-///      taking five agree on the first shooter and diverge only in how long they stay.
-///
-///      The domain tag survives, doing the one job that is still needed: keeping a craps seed from
-///      ever coinciding with a lootbox seed derived from the same word.
-///
-///      Consequence worth pricing: a shared shooter means the table's exposure is perfectly
-///      correlated. A hot roll pays every player at that index at once, rather than the independent
-///      draws a per-player seed would have given. The bounded-loss invariant is untouched — each
-///      player still cannot lose more than they staked — but the house's variance is now the
-///      table's variance, not the sum of independent ones.
-///
-/// @dev WHAT THIS DOES NOT DO
-///
-///      There is no escrow, no token, and no payout here — this is the randomness binding and the
-///      resolver, nothing more. Settlement timing is also not this contract's to give: the index
-///      only advances when someone calls the protocol's permissionless `requestLootboxRng()` and
-///      its basefee ceiling and daily-RNG lock allow it. The pending-value gates that lane applies
-///      to its own queue are waived for this contract's calls, so an arm never waits on lootbox
-///      volume — but a hand still settles on the protocol's cadence, which may be a while.
+///      This base supplies randomness binding and resolution, without escrow or
+///      payouts. The protocol's bounded keeper chain settles the preceding session
+///      before allowing a fresh request. Craps requests waive the lootbox volume
+///      threshold, while retaining the completion, daily-priority and funding gates.
 contract LootboxCraps is Craps {
     /// @notice No word has landed on this index yet, so nothing can be resolved from it.
     error RngNotReady();
@@ -74,18 +42,16 @@ contract LootboxCraps is Craps {
     /// @notice The live protocol game.
     address internal constant _GAME = ContractAddresses.GAME;
 
-    /// @dev Slot of `DegenerusGameStorage.lootboxRngPacked`, whose bits 0..47 hold the index.
+    /// @dev Slot of the Game session flags: write selector252, terminal253, publication255.
     ///      Hardcoded against the frozen contracts tree; `LootboxCraps.t.sol` re-derives both
     ///      slots from the audited storage layout and fails if the protocol ever moves them.
-    uint256 internal constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    /// @dev Base slot of `DegenerusGameStorage.lootboxRngWordByIndex`, a mapping(uint48 => uint256).
-    uint256 internal constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 internal constant RNG_STATE_SLOT = 0;
+    /// @dev Shared full-width session word; the slot-0 read selector and publication authenticate it.
+    uint256 internal constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev Base slot of `DegenerusGameStorage.rngWordByDay`, a mapping(uint24 => uint256) — the
-    ///      protocol's DAILY word, a different lane from the per-index lootbox words above. Pinned
+    ///      protocol's recorded DAILY word, retained separately from the shared live payload. Pinned
     ///      against the frozen tree exactly like those two, and covered by the same drift gate.
     uint256 internal constant RNG_WORD_BY_DAY_SLOT = 10;
-    /// @dev `LR_INDEX_MASK` — bits 0..47 of the packed slot.
-    uint256 internal constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
 
     /// @notice Domain tag mixed into every craps seed.
     bytes32 internal constant _CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
@@ -94,17 +60,21 @@ contract LootboxCraps is Craps {
     // Reading the protocol
     // ---------------------------------------------------------------------------------------
 
-    /// @notice The lootbox RNG index new bets must bind to.
-    /// @dev Its word is always still zero: the protocol advances the index at request time, so the
-    ///      request in flight fulfils into the index below this one.
-    function _currentIndex() internal view returns (uint48) {
-        return uint48(_sload(LOOTBOX_RNG_PACKED_SLOT) & LR_INDEX_MASK);
+    /// @notice The physical write buffer new battles bind to.
+    /// @dev A fresh request seals this buffer and flips the selector after all read consumers finish.
+    function _writeBuffer() internal view returns (uint48) {
+        return uint48((_sload(RNG_STATE_SLOT) >> 252) & 1);
     }
 
     /// @notice The VRF word committed to `index`, or zero if it has not been drawn.
     function _wordAt(uint48 index) internal view returns (uint256) {
-        // Solidity mapping slot: keccak256(h(key) . baseSlot), key left-padded to 32 bytes.
-        return uint256(_extsload(bytes32(_hash2(index, LOOTBOX_RNG_WORD_SLOT))));
+        uint256 state = _sload(RNG_STATE_SLOT);
+        // Bit253 is terminal, bit255 is keeper publication, bit252 selects write.
+        // Settled battles never consult this payload again; unfinished ones die at terminal.
+        if (state & (uint256(1) << 253) != 0 || state & (uint256(1) << 255) == 0
+            || index != (((state >> 252) & 1) ^ 1)) return 0;
+        uint256 stored = _sload(LOOTBOX_RNG_WORD_SLOT);
+        return stored == 1 ? 0 : stored;
     }
 
     /// @notice The protocol's daily VRF word for `day`, or zero if that day has not sealed one.

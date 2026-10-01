@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
@@ -31,7 +32,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
 ///         slot 34 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
-///         slot 35 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
+///         slot 35 = lootboxRngWordByIndex mapping (_lootboxWord(i) at
 ///         keccak256(abi.encode(uint256(i), uint256(34)))),
 ///         slot 3 = rngWordCurrent, slot 0 packed = rngRequestTime at bit offset 64.
 ///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
@@ -63,7 +64,7 @@ contract VrfRotationLiveness is DeployProtocol {
 
     /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 34).
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_PACKED))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Read the LR_MID_DAY flag (byte 28 of lootboxRngPacked).
@@ -72,15 +73,15 @@ contract VrfRotationLiveness is DeployProtocol {
         return (packed >> LR_MID_DAY_BIT) & 0xFF;
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from the slot-35 mapping.
+    /// @dev Read _lootboxWord(index) from the slot-35 mapping.
     function _readLootboxWord(uint48 index) internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_WORD_MAP));
-        return uint256(vm.load(address(game), slot));
+        return uint256(bytes32(RecyclingState.word(address(game), uint48(index))));
     }
 
     /// @dev Read rngWordCurrent directly from slot 3.
     function _readRngWordCurrent() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
+        return RecyclingState.currentWord(address(game));
     }
 
     /// @dev Read rngRequestTime from packed slot 0, bits [48:96] (uint48, bit offset 48).
@@ -131,6 +132,7 @@ contract VrfRotationLiveness is DeployProtocol {
     ///      request -> drain until unlocked, fulfilling any request the drain fires. Stops on
     ///      NotTimeYet() -- the keeper has done all the work available for this wall-clock day.
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         MockVRFCoordinator c = _coord();
         if (!_advanceTolerant()) return;
         uint256 reqId = c.lastRequestId();
@@ -147,6 +149,7 @@ contract VrfRotationLiveness is DeployProtocol {
                 _lastFulfilledReqId = r;
             }
         }
+            _finishReadConsumers();
     }
 
     /// @dev Drive the game into a mid-day RNG state where requestLootboxRng() succeeds AND
@@ -202,7 +205,7 @@ contract VrfRotationLiveness is DeployProtocol {
     // ══════════════════════════════════════════════════════════════════════
 
     /// @notice Mid-day branch (LR_MID_DAY==1): after a mid-flight rotation + fulfilment on the
-    ///         NEW coordinator, the re-issued word fills lootboxRngWordByIndex[reservedIndex]
+    ///         NEW coordinator, the re-issued word fills _lootboxWord(reservedIndex)
     ///         (the :269 drain-gate input) and the daily flow drains to rngLocked()==false --
     ///         no RngNotReady() permanent revert.
     function test_midDayRotation_liveness(uint256 vrfWord) public {
@@ -217,7 +220,7 @@ contract VrfRotationLiveness is DeployProtocol {
 
         // Fire the mid-day request; capture the reserved slot N = LR_INDEX-1.
         game.requestLootboxRng();
-        uint48 reservedIndex = _readLootboxRngIndex() - 1;
+        uint48 reservedIndex = (_readLootboxRngIndex() ^ 1);
 
         // The buffer swap set LR_MID_DAY=1, so the rotation's mid-day re-issue branch fires.
         assertEq(_readMidDayFlag(), 1, "requestLootboxRng must set LR_MID_DAY=1");
@@ -230,7 +233,7 @@ contract VrfRotationLiveness is DeployProtocol {
         // POSITIVE: the rotation re-issued the request on the NEW coordinator (re-issue, not zero).
         assertTrue(newVRF.lastRequestId() != 0, "rotation must re-issue on the new coordinator");
         // LR_INDEX preserved across the rotation: the same slot N is still reserved.
-        assertEq(_readLootboxRngIndex() - 1, reservedIndex, "rotation must preserve the reserved index");
+        assertEq((_readLootboxRngIndex() ^ 1), reservedIndex, "rotation must preserve the reserved index");
         // Still empty before the new coordinator fulfils -- proves no tautology.
         assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot still empty pre-fulfilment");
 
@@ -374,7 +377,7 @@ contract VrfRotationLiveness is DeployProtocol {
 
         // Fire the mid-day request; capture the reserved slot N = LR_INDEX-1.
         game.requestLootboxRng();
-        uint48 reservedIndex = _readLootboxRngIndex() - 1;
+        uint48 reservedIndex = (_readLootboxRngIndex() ^ 1);
         uint48 indexAfterRequest = _readLootboxRngIndex();
         assertEq(_readMidDayFlag(), 1, "requestLootboxRng must set LR_MID_DAY=1");
 
@@ -459,7 +462,7 @@ contract VrfRotationLiveness is DeployProtocol {
         // POSITIVE: requestLootboxRng succeeds on the new coordinator post-rotation.
         game.requestLootboxRng();
 
-        assertEq(_readLootboxRngIndex(), indexBefore + 1, "requestLootboxRng advances the index post-rotation");
+        assertEq(_readLootboxRngIndex(), (indexBefore ^ 1), "requestLootboxRng advances the index post-rotation");
         assertTrue(newVRF.lastRequestId() > reqIdBefore, "requestLootboxRng fired a request on the new coordinator");
     }
 }

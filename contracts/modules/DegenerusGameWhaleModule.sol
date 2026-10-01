@@ -394,8 +394,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      lootbox index: the entry already holds `MAX_BOXES_PER_ORDER` boxes and no custom box
     ///      exists to fold the bundled reward into. Mirrors the recorder's own count exactly.
     function _lootboxEntryRefusesPass(address player) private view returns (bool) {
-        uint48 idx = uint48((lootboxRngPacked >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-        uint256 word = lootboxOrder[idx][player];
+        uint48 idx = _rngWriteBuffer();
+        uint256 word = _boxOrder(idx, player);
         if (word == 0) return false;
         if (_lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK) != 0) return false;
         uint256 held = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK)
@@ -1295,7 +1295,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             for (uint8 q; q < 4; ++q) {
                 uint8 trait = uint8(traits >> (q * 8));
                 address deity = _deityOfTrait(trait);
-                if (lvlTraitEntry[lvl][trait].length == 0 && deity == address(0)) continue;
+                if (_bucketLength(lvl, trait) == 0 && deity == address(0)) continue;
                 if (q == soloQuadrant) {
                     soloActive = true;
                     continue;
@@ -1319,14 +1319,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 return address(0);
             }
         }
-        uint256 len = lvlTraitEntry[lvl][selectedTrait].length;
+        uint256 len = _bucketLength(lvl, selectedTrait);
         address deity = _deityOfTrait(selectedTrait);
         uint256 effectiveLen = len + _deityVirtualCount(selectedTrait, len, deity);
         if (effectiveLen == 0) return address(0);
         // A single recipient needs no packed-word group/cursor. Sample directly
         // over the same real-plus-virtual entries and resolve the packed owner.
         uint256 index = EntropyLib.hash2(entropy, 1) % effectiveLen;
-        return index < len ? _bucketOwnerAt(lvl, selectedTrait, index) : deity;
+        return index < len ? _bucketOwnerAtUnchecked(lvl, selectedTrait, index) : deity;
     }
 
     /// @notice Claim deferred whale pass rewards for a player.

@@ -1072,7 +1072,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint8 activeMask;
         for (uint8 i; i < 4; ) {
             uint8 trait = traitIds[i];
-            uint256 len = lvlTraitEntry[lvl][trait].length;
+            uint256 len = _bucketLength(lvl, trait);
             lens[i] = len;
             uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
             address deity;
@@ -1693,7 +1693,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         view
         returns (address[] memory winners, uint256[] memory ticketIndexes)
     {
-        uint256 len = lvlTraitEntry[lvl][trait].length;
+        uint256 len = _bucketLength(lvl, trait);
 
         // traitId layout: (quadrant << 6) | (color << 3) | symIdx
         // fullSymId = quadrant * 8 + symIdx
@@ -1731,6 +1731,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         view
         returns (address[] memory winners, uint256[] memory ticketIndexes)
     {
+        _assertReadableTicketLevel(lvl);
         uint256 virtualCount = _deityVirtualCount(trait, len, deity);
 
         uint256 effectiveLen = len + virtualCount;
@@ -1769,13 +1770,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             uint256 base = PackedTicketSampleLib.begin(
                 cursor, effectiveLen, EntropyLib.hash4(randomWord, trait, salt, pull)
             );
-            if (base < len) cursor.word = _bucketWordAt(lvl, trait, base);
+            if (base < len) cursor.word = _bucketWordAtUnchecked(lvl, trait, base);
         }
         bool redrawn;
         (index, redrawn) = PackedTicketSampleLib.next(cursor, effectiveLen);
         if (index >= len) return (deity, type(uint256).max);
-        uint256 word = redrawn ? _bucketWordAt(lvl, trait, index) : cursor.word;
-        winner = _bucketOwnerFromWord(lvl, word, index);
+        uint256 word = redrawn ? _bucketWordAtUnchecked(lvl, trait, index) : cursor.word;
+        winner = _bucketOwnerFromWordUnchecked(lvl, word, index);
     }
 
     /// @notice Level 1's trait-matched FLIP draw over level-1 ticket holders.
@@ -1897,7 +1898,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ) private view returns (address winner, uint24 lvl, uint256 index) {
         uint24 offset = uint24(uint256(keccak256(abi.encode(randomWord, FLIP_LEVEL_TAG, pull))) % range);
         lvl = minLevel + offset;
-        uint256 len = lvlTraitEntry[lvl][trait].length;
+        uint256 len = _bucketLength(lvl, trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         if (effectiveLen != 0) {
             (winner, index) = _drawBucketEntry(

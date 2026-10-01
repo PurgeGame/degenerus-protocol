@@ -11,9 +11,10 @@ contract TicketQueueCodecHarness is DegenerusGameStorage {
     function writeOwed(uint24 lvl, uint32 pos, uint80 packed) external { _setEntryOwed(lvl, pos, packed); }
     function record(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecord(lvl, pos); }
     function seedBucket(uint24 lvl, uint32 pos) external {
-        _bucketAppendRun(uint256(keccak256(abi.encode(lvl, uint256(8)))), 17, uint256(pos) - 1, 1);
+        _setTicketBufferLevel(lvl);
+        _bucketAppendRun(_traitBufferBase(lvl), 17, uint256(pos) - 1, 1, lvl);
     }
-    function bucketOwner(uint24 lvl) external view returns (address) { return _bucketOwnerAt(lvl, 17, 0); }
+    function bucketOwner(uint24 lvl) external view returns (address) { return _bucketOwnerAtUnchecked(lvl, 17, 0); }
     function append(uint24 key, uint32 pos) external { _tqAppend(key, pos); }
     function appendLanes(uint24 key, uint256 lanes, uint256 count) external { _tqAppendLanes(key, lanes, count); }
     function position(uint24 key, uint256 k) external view returns (uint32) {

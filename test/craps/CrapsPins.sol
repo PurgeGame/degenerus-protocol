@@ -33,6 +33,13 @@ contract MockGame {
         slots[slot] = value;
     }
 
+    function setCrapsRngPending(uint48 index, bool pending) external {
+        bytes32 root = bytes32(uint256(33));
+        uint256 packed = uint256(slots[root]);
+        uint256 mask = uint256(1) << (250 + (index & 1));
+        slots[root] = bytes32(pending ? packed | mask : packed & ~mask);
+    }
+
     function setScore(address player, uint256 s) external {
         score[player] = s;
     }
@@ -52,10 +59,14 @@ contract MockGame {
     uint256 public lootboxRngCalls;
 
     function requestLootboxRng() external {
+        uint256 state = uint256(slots[bytes32(0)]);
+        uint256 read = ((state >> 252) & 1) ^ 1;
+        if (uint256(slots[bytes32(uint256(33))]) & (uint256(1) << (250 + read)) != 0) return;
         ++lootboxRngCalls;
-        bytes32 packed = slots[bytes32(uint256(33))];
-        uint256 index = uint256(packed) & 0xFFFFFFFFFFFF;
-        slots[bytes32(uint256(33))] = bytes32((uint256(packed) & ~uint256(0xFFFFFFFFFFFF)) | ((index + 1) & 0xFFFFFFFFFFFF));
+        state ^= uint256(1) << 252;
+        state &= ~(uint256(1) << 255);
+        slots[bytes32(0)] = bytes32(state);
+        slots[bytes32(uint256(3))] = bytes32(uint256(1));
     }
 }
 
@@ -278,7 +289,7 @@ abstract contract CrapsPins is Test {
     address internal vaultOwner = makeAddr("vaultOwner");
 
     uint256 internal constant PACKED_SLOT = 33;
-    uint256 internal constant WORD_SLOT = 34;
+    uint256 internal constant WORD_SLOT = 3;
     uint256 internal constant DAY_WORD_SLOT = 10;
 
     function _installPins() internal {
@@ -301,16 +312,22 @@ abstract contract CrapsPins is Test {
 
     /// @dev Writes the packed slot the way the protocol lays it out: index in bits 0..47, with
     ///      unrelated fields above it that the decode must ignore.
-    function _setIndex(uint48 index) internal {
-        game.set(bytes32(PACKED_SLOT), bytes32(uint256(index)));
+    function _setIndex(uint48 buffer) internal {
+        require(buffer < 2, "physical buffer fixture");
+        uint256 state = uint256(game.slots(bytes32(0)));
+        game.set(bytes32(0), bytes32((state & ~(uint256(1) << 252)) | (uint256(buffer) << 252)));
     }
 
-    function _setIndexNoisy(uint48 index, uint256 noiseAbove) internal {
-        game.set(bytes32(PACKED_SLOT), bytes32(uint256(index) | (noiseAbove << 48)));
+    function _setIndexNoisy(uint48 buffer, uint256 noiseAbove) internal {
+        game.set(bytes32(0), bytes32(noiseAbove & ~((uint256(1) << 252) | (uint256(1) << 253) | (uint256(1) << 255))));
+        _setIndex(buffer);
     }
 
-    function _setWord(uint48 index, uint256 word) internal {
-        game.set(keccak256(abi.encode(uint256(index), WORD_SLOT)), bytes32(word));
+    function _setWord(uint48 buffer, uint256 word) internal {
+        _setIndex(buffer ^ 1);
+        game.set(bytes32(WORD_SLOT), bytes32(word > 1 ? word : 1));
+        uint256 state = uint256(game.slots(bytes32(0)));
+        game.set(bytes32(0), bytes32(word > 1 ? state | (uint256(1) << 255) : state & ~(uint256(1) << 255)));
     }
 
     /// @dev `CrapsBattle.MAX_GOAL_MULT`, restated so the shared base needs no live table. A target

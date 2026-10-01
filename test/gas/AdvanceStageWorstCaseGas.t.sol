@@ -9,6 +9,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @title AdvanceStageWorstCaseGas — Phase 367 (GASCEIL) measured per-stage advanceGame ceiling
@@ -58,13 +59,13 @@ contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
 ///      The seeder pushes N players into the read-slot ticketQueue with `owed` traits each and
 ///      sets the lootbox RNG entropy word the batch reads at index 1. A worst-case batch mints up
 ///      to WRITES_BUDGET_SAFE write-units of cold lvlTraitEntry SSTOREs in one call.
-contract TicketBatchStageHarness is DegenerusGameMintModule, BucketSeed {
+contract TicketBatchStageHarness is MintBucketSeed {
     /// @dev The mint module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
     function _pastDeadlineTriggered(uint24 today, uint24 idx)
         internal
         view
-        override(DegenerusGameMintModule, DegenerusGameStorage)
+        override
         returns (bool)
     {
         return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
@@ -72,15 +73,16 @@ contract TicketBatchStageHarness is DegenerusGameMintModule, BucketSeed {
 
     /// @dev Shared seeding: `n` distinct players each owing `owedEach` traits into the current
     ///      read-slot queue for `lvl`, plus a non-zero lootbox entropy word at index 0 (the word
-    ///      the batch reads via lootboxRngWordByIndex[ _lrRead(INDEX) - 1 ]).
+    ///      the batch reads via _lootboxWord( _lrRead(INDEX) - 1 )).
     function _seedQueue(uint24 lvl, uint256 n, uint32 owedEach, uint160 base) internal {
         // The sweep walks [anchor-1 .. _mintCeiling()] and the measured call passes anchor = lvl
         // (the purchase level), so pin level = lvl - 1: the window is [lvl-1 .. lvl] and the
         // seeded read queue at `lvl` is inside it. The harness default level 0 caps the window at
         // level 1, which would leave every measured batch walking nothing.
         level = lvl - 1;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = uint256(keccak256("367_ticketbatch_entropy")) | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = uint256(keccak256("367_ticketbatch_entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
 
         uint24 rk = _tqReadKey(lvl);
         uint256[] storage queue = ticketQueue[rk];

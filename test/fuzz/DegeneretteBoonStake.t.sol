@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -72,7 +73,7 @@ contract DegeneretteBoonStake is DeployProtocol {
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
         );
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
+        RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(
             address(game),
             bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),

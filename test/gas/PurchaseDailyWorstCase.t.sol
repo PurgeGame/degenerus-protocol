@@ -63,7 +63,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         phaseTransitionActive = false;
         subsFullyProcessed = true;
         _afkingResetDay = day;
-        rngWordCurrent = s.word;
+        rngWordCurrent = s.word < 2 ? RNG_WORD_WAITING : s.word;
         rngWordByDay[day] = s.word;
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = false;
@@ -109,7 +109,8 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
                 _seedBucketDistinct(pl, mainTraits[q], s.traitHolders, s.base + 0x4000000 + uint160(q) * 0x100000);
             }
             if (s.bonusHolders != 0) {
-                for (uint24 k; k < 4; ++k) {
+                // Only current/next minted buckets coexist; farther queues stay ungenerated.
+                for (uint24 k; k < 1; ++k) {
                     _seedBucketDistinct(
                         pl + 1 + k,
                         decoyTraits[q],
@@ -136,9 +137,14 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         uint24 day = _simulatedDayIndex();
         rngLockedFlag = false;
         rngRequestTime = 0;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         rngWordByDay[day] = 0;
-        vrfRequestId = 0;
+        vrfRequestId = 1;
+        rngRequestTime = 1;
+        _setRngRequestActive(false);
+        _setRngSessionPublished(false);
+        _setRngComplete(true);
+        humanReadComplete = true;
         prizePoolFrozen = false;
     }
 }
@@ -149,9 +155,14 @@ contract DayOneUnrecordedSeeder is DayOneSeeder {
         uint24 day = _simulatedDayIndex();
         rngLockedFlag = false;
         rngRequestTime = 0;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         rngWordByDay[day] = 0;
-        vrfRequestId = 0;
+        vrfRequestId = 1;
+        rngRequestTime = 1;
+        _setRngRequestActive(false);
+        _setRngSessionPublished(false);
+        _setRngComplete(true);
+        humanReadComplete = true;
         prizePoolFrozen = false;
     }
 }

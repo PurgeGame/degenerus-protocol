@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
@@ -14,7 +15,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 ///         recursion and reload the live Lootbox-pool balance afterward.
 contract LootboxNestedDgnrsOrdering is DeployProtocol {
     address private constant PLAYER = address(0xBEEF);
-    uint48 private constant GENESIS_INDEX = 1;
+    uint48 private constant PARENT_BUFFER = 1;
     uint256 private constant CUSTOM_SIZE = 10 ether;
     uint256 private constant BOX_ORDER = (uint256(3) << 24) | ((CUSTOM_SIZE / 1e12) << 32);
     // Verified against the single-symbol spin: parent DGNRS / score-6 ETH spin
@@ -31,6 +32,13 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        // Seal and finish the genesis read through the production lifecycle.
+        // The golden nested-spin word is bound to physical write buffer 1.
+        vm.warp(block.timestamp + 1 days);
+        _settleGame(0xB00757);
+        _settleClean(0xB00757);
+        _finishReadConsumers();
+        assertEq(RecyclingState.writeBuffer(address(game)), PARENT_BUFFER);
     }
 
     /// @notice Accepted century behavior: any keeper can settle the known winner before the
@@ -47,8 +55,8 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         uint256 balanceBefore = sdgnrs.balanceOf(PLAYER);
         // Box-order migration: the removed per-(player,index) `openBox` let a third party settle
         // PLAYER's box; its sweep replacement, `openBoxes`, is equally permissionless and equally
-        // credits the box owner regardless of caller. GENESIS_INDEX is PLAYER's only queued box
-        // (a real purchase through the production path, so boxPlayers[GENESIS_INDEX] already
+        // credits the box owner regardless of caller. PARENT_BUFFER is PLAYER's only queued box
+        // (a real purchase through the production path, so boxPlayers[PARENT_BUFFER] already
         // holds it) with nothing else pending, so this ports as a clean rename.
         vm.prank(address(0xCA11));
         game.openBoxes(type(uint256).max);
@@ -103,7 +111,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
                 ++batchCount;
             } else if (
                 entry.topics[0] == LOOTBOX_OPENED_SIG && entry.topics.length == 3
-                    && uint48(uint256(entry.topics[2])) == GENESIS_INDEX
+                    && uint48(uint256(entry.topics[2])) == PARENT_BUFFER
             ) {
                 (uint256 amount,,,,) = abi.decode(entry.data, (uint256, uint24, uint32, uint256, bool));
                 parentAmount = amount;

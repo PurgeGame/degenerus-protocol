@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -358,7 +360,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     }
 
     function _landTableWord(uint48 index, uint256 word) internal {
-        vm.store(address(game), keccak256(abi.encode(uint256(index), uint256(34))), bytes32(word));
+        RecyclingState.seedWord(address(game), index, bytes32(word));
     }
 
     /// @dev Open a day, seat `FIELD` distinct funded players into period 1 on `board`, shut the

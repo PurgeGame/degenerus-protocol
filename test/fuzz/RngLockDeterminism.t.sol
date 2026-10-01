@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
@@ -50,6 +51,7 @@ contract RngLockDeterminism is DeployProtocol {
     // ────────────────────────────────────────────────────────────────────
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -60,10 +62,11 @@ contract RngLockDeterminism is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+            _finishReadConsumers();
     }
 
     function _readRngWordCurrent() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
+        return RecyclingState.currentWord(address(game));
     }
 
     function _readVrfRequestId() internal view returns (uint256) {
@@ -71,12 +74,12 @@ contract RngLockDeterminism is DeployProtocol {
     }
 
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_INDEX)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD_BY_INDEX)));
-        return uint256(vm.load(address(game), slot));
+        return uint256(bytes32(RecyclingState.word(address(game), uint48(index))));
     }
 
     /// @dev Advances state to the next VRF-request boundary. Used by all
@@ -497,7 +500,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 burnAmountSeed
     ) public {
         // FLIPPED at v44.0: RNGLOCK-FIXREC.md sec103 -- V-184 sStonk cross-day re-roll CATASTROPHE -- D-43N-V44-HANDOFF-111 strict-assertion attestation; structural closure via per-day storage keying (304-SPEC §3 EDGE-07)
-        vm.assume(vrfWord != 0);
+        vm.assume(vrfWord > 1);
 
         // Burn on the day _completeDay just drew (the gate needs the current day's word recorded);
         // the single warp to the next wall-day is deferred to AFTER the burn so its pool resolves there.
@@ -615,14 +618,12 @@ contract RngLockDeterminism is DeployProtocol {
     function _readTotalFlipReversals() internal view returns (uint256) {
         // Slot 5 now packs totalFlipReversals (uint64, low) + lastVrfProcessedTimestamp
         // (uint48, bytes 8-13). Mask to the low 64 bits.
-        return uint64(uint256(vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)))));
+        return RecyclingState.nudgeCount(address(game));
     }
 
     /// @dev Zero the reversals lane of slot 5, preserving the co-resident timestamp.
     function _zeroTotalFlipReversals() internal {
-        bytes32 slot = bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS));
-        uint256 w = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(w & ~uint256(type(uint64).max)));
+        RecyclingState.seedNudges(address(game), 0);
     }
 
     /// @dev Mint FLIP to `who` via the GAME-gated mintForGame (the project idiom,
@@ -672,7 +673,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
         uint256 movedReversals = _readTotalFlipReversals();
         // NON-VACUITY (A): the perturbation actually moved totalFlipReversals before the consume.
-        assertGt(movedReversals, 0, "TST-01 non-vacuity: reverseFlip must move totalFlipReversals pre-lock");
+        assertGt(movedReversals, 0, "TST-01 non-vacuity: reverseFlip must move _nudgeCount() pre-lock");
 
         uint256 preLockSnap = _snapshotPreLock();
 
@@ -694,7 +695,7 @@ contract RngLockDeterminism is DeployProtocol {
         );
         assertEq(
             _readTotalFlipReversals(), movedReversals,
-            "TST-01: the keeper perturbation must NOT move totalFlipReversals (frozen request->consume)"
+            "TST-01: the keeper perturbation must NOT move _nudgeCount() (frozen request->consume)"
         );
 
         _deliverMockVrf(reqId, vrfWord);
@@ -731,7 +732,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 controlWord = _lootboxRngWord(purchaseIndex);
         assertTrue(
             controlWord != baselineWord,
-            "TST-01 non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads totalFlipReversals; otherwise the freeze proof is vacuous)"
+            "TST-01 non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads _nudgeCount(); otherwise the freeze proof is vacuous)"
         );
     }
 
@@ -828,7 +829,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
         uint256 movedReversals = _readTotalFlipReversals();
         // NON-VACUITY (A): the consume genuinely reads totalFlipReversals (non-zero pre-lock).
-        assertGt(movedReversals, 0, "TST-01 claim non-vacuity: reverseFlip must move totalFlipReversals pre-lock");
+        assertGt(movedReversals, 0, "TST-01 claim non-vacuity: reverseFlip must move _nudgeCount() pre-lock");
 
         uint256 preLockSnap = _snapshotPreLock();
 
@@ -867,7 +868,7 @@ contract RngLockDeterminism is DeployProtocol {
         );
         assertEq(
             _readTotalFlipReversals(), movedReversals,
-            "TST-01 claim: the claim perturbation must NOT move totalFlipReversals (frozen request->consume)"
+            "TST-01 claim: the claim perturbation must NOT move _nudgeCount() (frozen request->consume)"
         );
         // WHALE-04 §4 corollary: the pending-claim counter persists across the rngLock revert
         // (no grant marooned). Either the revert at Storage:661 / WhaleModule:1019 rolled the
@@ -918,7 +919,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 controlWord = _lootboxRngWord(purchaseIndex);
         assertTrue(
             controlWord != baselineWord,
-            "TST-01 claim non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads totalFlipReversals; otherwise the freeze proof is vacuous)"
+            "TST-01 claim non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads _nudgeCount(); otherwise the freeze proof is vacuous)"
         );
     }
 
@@ -1067,7 +1068,7 @@ contract RngLockDeterminism is DeployProtocol {
     ///      matching _lootboxRngWord). Mirrors CrankOpenBoxWorstCaseGas's _injectLootboxRngWord.
     function _injectActiveLootboxWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD_BY_INDEX)));
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
     /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 35) by one,
@@ -1075,12 +1076,8 @@ contract RngLockDeterminism is DeployProtocol {
     ///      it now sits at LR_INDEX-1, the index the relocated sweep opens) without touching any
     ///      other packed lootboxRng field.
     function _advanceLootboxRngIndexByOne() internal {
-        bytes32 slot = bytes32(uint256(SLOT_LOOTBOX_RNG_INDEX));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint48 idx = uint48(packed);
-        uint256 mask = (uint256(1) << 48) - 1;
-        packed = (packed & ~mask) | (uint256(idx + 1) & mask);
-        vm.store(address(game), slot, bytes32(packed));
+        // seedWord already selected the delivered read and opposite write tag.
+        assertGt(RecyclingState.currentWord(address(game)), 1);
     }
 
     /// @dev Park the auto-open frontier (boxCursorIndex byte 13, boxCursor byte 7 — both in slot
@@ -1089,13 +1086,11 @@ contract RngLockDeterminism is DeployProtocol {
     ///      drained). Without this the sweep would orphan-break at the first un-worded lower index.
     uint256 constant SLOT_BOX_CURSORS = 56;
     function _parkBoxFrontier(uint48 index) internal {
+        require(index == RecyclingState.readBuffer(address(game)), "fixture read tag");
         bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));
         uint256 packed = uint256(vm.load(address(game), slot));
-        // Clear boxCursor (byte 7, uint48) and boxCursorIndex (byte 13, uint48), then set the index.
-        uint256 cursorMask = (uint256(1) << 48) - 1;
-        packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
-        packed &= ~(cursorMask << (13 * 8));  // clear boxCursorIndex field
-        packed |= (uint256(index) & cursorMask) << (13 * 8);
+        packed &= ~(((uint256(1) << 48) - 1) << 56);
+        packed &= ~(uint256(0xff) << 104);
         vm.store(address(game), slot, bytes32(packed));
     }
 }

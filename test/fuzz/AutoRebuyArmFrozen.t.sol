@@ -40,8 +40,7 @@ contract AutoRebuyArmFrozen is DeployProtocol {
 
         _t += 1 days;
         vm.warp(_t);
-        game.advanceGame();
-        uint256 reqR = mockVRF.lastRequestId();
+        uint256 reqR = _requestFreshDaily();
         _t += 3 days;
         vm.warp(_t);
         uint24 W = game.currentDayView();
@@ -61,8 +60,8 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         coinflip.setCoinflipAutoRebuy(address(0), true, 0);
 
         _advanceUntilUnlocked();
-        game.advanceGame();
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
+        uint256 fresh = _requestFreshDaily();
+        mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
         game.advanceGame(); // backfill: every day through W resolved, lock still held
         // Nothing unresolved remains, so arming is open even under the lock: a known run can
         // only be claimed plainly, never compounded.
@@ -84,12 +83,18 @@ contract AutoRebuyArmFrozen is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (_daySealed()) return;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (_daySealed()) return;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }
+    }
+
+    /// @dev A false advance hint can mean the read cohort must drain first.
+    function _daySealed() internal view returns (bool) {
+        uint24 sealedDay = uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24);
+        return game.currentDayView() == sealedDay && !game.advanceDue() && !game.rngLocked();
     }
 
     function _fulfillPending(uint256 vrfWord) internal {
@@ -101,6 +106,20 @@ contract AutoRebuyArmFrozen is DeployProtocol {
                 _lastFulfilledReqId = reqId;
             }
         }
+    }
+
+    /// @dev Finish the previous cohort at a fixed clock before expecting a new request.
+    function _requestFreshDaily() internal returns (uint256 id) {
+        uint256 previous = mockVRF.lastRequestId();
+        for (uint256 i; i < 80; ++i) {
+            game.advanceGame();
+            id = mockVRF.lastRequestId();
+            if (id != previous) {
+                assertTrue(game.rngLocked(), "the new daily request holds the lock");
+                return id;
+            }
+        }
+        revert("harness: no fresh daily request");
     }
 
     function _advanceUntilUnlocked() internal {

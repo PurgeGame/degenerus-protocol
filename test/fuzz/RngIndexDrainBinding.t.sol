@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -13,7 +14,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 /// their persisted bucket counts and owners; no event entropy field is assumed.
 contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     /// @dev Base slot for `boxPlayers` mapping(uint48 => address[]). Authoritative
-    ///      at the working tree (confirmed at runtime: boxPlayers[idx][0] == buyer).
+    ///      at the working tree (confirmed at runtime: boxPlayers[idx & 1][0] == buyer).
     uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = 57;
     /// @dev Base slot for `presaleBoxEth` mapping(uint48 => mapping(address => uint256)).
     ///      Authoritative at the working tree (confirmed at runtime: low-96 cell == applied box ETH).
@@ -30,12 +31,12 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         mockVRF.fundSubscription(1, 100e18);
     }
 
-    /// @dev Read the player recorded at boxPlayers[index][0]. boxPlayers is the
+    /// @dev Read the player recorded at boxPlayers[index & 1][0]. boxPlayers is the
     ///      `mapping(uint48 => address[])` queued by a presale-box purchase
-    ///      (DegenerusGameMintModule:1965 `boxPlayers[index].push(buyer)`), so element
+    ///      (DegenerusGameMintModule:1965 `boxPlayers[index & 1].push(buyer)`), so element
     ///      [0] is the FIRST buyer keyed at `index`. Authoritative mapping base = slot 57.
     function _boxPlayerAt0(uint48 index) internal view returns (address) {
-        bytes32 arrSlot = keccak256(abi.encode(uint256(index), SLOT_BOX_PLAYERS_MAPPING));
+        bytes32 arrSlot = keccak256(abi.encode(uint256(index & 1), SLOT_BOX_PLAYERS_MAPPING));
         bytes32 elem0 = keccak256(abi.encode(arrSlot));
         return address(uint160(uint256(vm.load(address(game), elem0))));
     }
@@ -46,22 +47,21 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     ///      box bound to that exact index. (Despite the name — pre-dating the box-order migration
     ///      — this reads the lootboxOrder slot, not presaleBoxEth.)
     function _presaleBoxEth(uint48 index, address player) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), SLOT_PRESALE_BOX_ETH_MAPPING));
+        bytes32 inner = keccak256(abi.encode(uint256(index & 1), SLOT_PRESALE_BOX_ETH_MAPPING));
         bytes32 cell = keccak256(abi.encode(player, inner));
         uint256 word = uint256(vm.load(address(game), cell));
         if (word == 0) return 0;
         return BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(uint24(word & 0xFFFFFF)));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] directly from storage.
+    /// @dev Read _lootboxWord(index) directly from storage.
     function _lootboxWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_MAPPING));
-        return uint256(vm.load(address(game), slot));
+        return RecyclingState.word(address(game), index);
     }
 
     /// @dev Read LR_INDEX from `lootboxRngPacked` (slot 33, low 48 bits).
     function _lrIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(SLOT_LR_INDEX))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Purchase tickets for buyer at current level.
@@ -85,6 +85,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         internal
         returns (Vm.Log[] memory logs)
     {
+        _finishReadBoxes();
         vm.recordLogs();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
@@ -159,7 +160,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     ///         (DegenerusGameAdvanceModule._lrAdvanceIndexClearPending at :1140) and reserves
     ///         the in-flight word at the just-vacated index (LR_INDEX-1). A subsequent box buy
     ///         records itself at the NEW LR_INDEX (DegenerusGameMintModule:1949/1960 — and the
-    ///         :1951 `lootboxRngWordByIndex[index] != 0` guard rejects binding to a worded
+    ///         :1951 `_lootboxWord(index) != 0` guard rejects binding to a worded
     ///         index), so when the in-flight word lands at LR_INDEX-1 the post-request box at
     ///         LR_INDEX is still un-worded and CANNOT be resolved by that word. This is the
     ///         load-bearing RNG-freeze property: a buyer cannot be resolved by a word already
@@ -173,6 +174,8 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         _completeDayWithLogs(uint256(keccak256("midday-binding-setup-word")));
         vm.warp(block.timestamp + 1 days);
         _completeDayWithLogs(uint256(keccak256("midday-binding-setup-word-2")));
+
+        _finishReadBoxes();
 
         // ── Box A: a pre-request box buy creates pending lootbox ETH (clears the
         //    1-ether mid-day threshold) and keys itself at the LIVE index N.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -21,7 +22,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     ///      the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // post Stage-B game-storage repack: was 35
     /// @dev lootboxRngWordByIndex mapping root slot (uint48 index => word) (post Stage-B game-storage repack: was 36).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev prizePoolsPacked at slot 2 ([future:128 | next:128]).
     uint256 private constant PRIZE_POOLS_SLOT = 2;
 
@@ -89,7 +90,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // placeDegeneretteBet requires lootboxRngIndex != 0 and the word at that index == 0.
         // Seed index = 1 (word stays 0 until injected post-placement).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(INDEX);
+        RecyclingState.seedWriteBuffer(address(game), INDEX);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
 
         // The sweep (openBoxes) is permissionless (any caller may settle any queued bet;
@@ -419,6 +420,63 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // Internal helpers
     // =========================================================================
 
+    /// @dev One same-symbol cohort makes every owner's high-score spins correlate.
+    ///      Cold calls include sDGNRS awards, win boxes, the human sweep and bounty.
+    function test_ColdMineFlipCorrelatedMaxSpinEthBetsStayUnderOrdinaryTier() public {
+        (uint256 word, uint8 symbol) = _findHighAwardWord();
+        uint64[20] memory ids;
+        for (uint256 i; i < 20; ++i) {
+            address owner = address(uint160(0xA77000 + i));
+            vm.deal(owner, 100 ether);
+            ids[i] = _placeWorstCaseBetN(owner, MAX_SPINS_ETH, symbol);
+        }
+        _setFuturePool(SMALL_POOL_WEI);
+        _injectLootboxRngWord(INDEX, word);
+        _advanceActiveIndexPast(INDEX);
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        slot0 = (slot0 & ~(uint256(type(uint24).max) << 24))
+            | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
+        uint256 done;
+        uint256 calls;
+        uint256 awards;
+        bytes32 awardTopic = keccak256("PoolTransfer(uint8,address,uint256)");
+        while (done < ids.length && calls < 20) {
+            vm.recordLogs();
+            vm.prank(cranker);
+            game.mineFlip();
+            uint256 used = vm.snapshotGasLastCall("correlated-eth-bet-keeper");
+            assertLt(used + 21_000, 10_000_000, "correlated cold bet cohort respects the ordinary transaction tier");
+            emit log_named_uint("correlated keeper gross call gas", used);
+            Vm.Log[] memory rows = vm.getRecordedLogs();
+            for (uint256 i; i < rows.length; ++i) {
+                if (rows[i].emitter == address(sdgnrs) && rows[i].topics.length != 0 && rows[i].topics[0] == awardTopic) ++awards;
+            }
+            uint256 prior = done;
+            done = 0;
+            for (uint256 i; i < ids.length; ++i) if (game.degeneretteBetInfo(INDEX, ids[i]) == 0) ++done;
+            assertGt(done, prior, "each bounded paid call makes progress");
+            ++calls;
+        }
+        assertEq(done, ids.length);
+        assertGt(awards, 0, "nonvacuity: high-score sDGNRS tail actually executed");
+        assertGt(calls, 1, "saturated cohort is split into bounded calls");
+    }
+
+    function _findHighAwardWord() private pure returns (uint256 word, uint8 symbol) {
+        for (uint256 k; k < WORD_SEARCH_BUDGET; ++k) {
+            uint256 candidate = uint256(keccak256(abi.encode("correlated high-score gas", k)));
+            for (uint8 hero; hero < 8; ++hero) {
+                for (uint8 spin; spin < MAX_SPINS_ETH; ++spin) {
+                    (uint8 score,) = Ref.score(Ref.player(candidate, uint32(INDEX), hero, spin, false),
+                        Ref.house(candidate, uint32(INDEX), spin, false), 0);
+                    if (score >= 7) return (candidate, hero);
+                }
+            }
+        }
+        revert("no high-score stress word found");
+    }
+
     /// @dev Place a worst-case ETH bet of `spins` tickets with `ticket` so every spin wins
     ///      (matches >= 2). Placement adds totalBet to the pool; the caller resets the pool to
     ///      SMALL_POOL_WEI afterward so the 10% cap flips each spin into the lootbox.
@@ -487,7 +545,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev The current active lootbox RNG index (low 48 bits of lootboxRngPacked).
     function _currentActiveIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Search bounded candidate rounds for the most paying spins with a single
@@ -526,7 +584,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
     /// @dev Set the futurePrizePool (future half, bits 128-255 of slot 2), keeping next intact.
@@ -547,12 +605,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     /// @dev Advance the active lootbox index past `idx`, the sweep's own trigger condition once
     ///      `idx`'s word has landed (mirrors DegeneretteSweep.t.sol's `_landWord`/`_setActiveIndex`).
     function _advanceActiveIndexPast(uint48 idx) internal {
-        uint256 lr = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        vm.store(
-            address(game),
-            bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
-            bytes32((lr & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx + 1))
-        );
+        RecyclingState.seedWriteBuffer(address(game), idx ^ 1);
     }
 
     /// @dev Count the on-chain resolve effects from the recorded logs: DegeneretteResolved's packed

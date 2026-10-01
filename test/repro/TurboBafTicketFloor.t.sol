@@ -274,6 +274,7 @@ contract TurboBafTicketFloor is DeployProtocol {
     /// @dev Buy a lootbox and fire a mid-day lootbox request; report whether the
     ///      ticket buffer flipped (shared shape with MiddaySwapJackpotCohort).
     function _middayRequest() internal returns (bool swapped) {
+        _finishReadConsumers();
         vm.prank(buyer);
         game.purchase{value: 2 ether}(
             buyer,

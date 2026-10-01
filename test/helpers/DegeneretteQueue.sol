@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 
 /// @title DegeneretteQueue -- test-side readers for queued Degenerette bets.
-/// @notice A bet is one word in the Game's degeneretteQueue[index] (mapping root slot 21); its
+/// @notice A bet is one word in the Game's degeneretteQueue[index & 1] (mapping root slot 21); its
 ///         id is the queue position + 1, so the queue length is the newest bet's id. The word
 ///         packs owner [0..159] | symbol [160..164] | spins [165..169] | currency [170] |
 ///         record flag [171] | activity [172..187] | stake units [188..251] (ETH gwei, FLIP
@@ -18,7 +18,7 @@ library DegeneretteQueue {
 
     /// @dev The newest bet id at `index` (the queue length).
     function lastBetId(Vm vm, address game, uint48 index) internal view returns (uint64) {
-        return uint64(uint256(vm.load(game, keccak256(abi.encode(uint256(index), QUEUE_SLOT)))));
+        return uint64(uint256(vm.load(game, keccak256(abi.encode(uint256(index & 1), QUEUE_SLOT)))));
     }
 
     function owner(uint256 bet) internal pure returns (address) {

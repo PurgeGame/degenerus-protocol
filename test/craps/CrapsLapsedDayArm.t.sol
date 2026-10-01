@@ -45,7 +45,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         _installPins();
         craps = new LapseArmHarness();
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);

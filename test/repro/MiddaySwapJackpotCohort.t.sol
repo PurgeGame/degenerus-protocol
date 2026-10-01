@@ -549,8 +549,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         );
         simTime += 1 days + 1;
         vm.warp(simTime);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        ok;
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.advanceGame();
         require(game.rngLocked(), "harness: the daily request must be in flight");
         // Stall-window cohort: the daily lock does not block ticket buys (they land
         // on the fresh write buffer), so bypass the checked helper's lock-skip.
@@ -569,7 +568,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             simTime += 90 days;
             vm.warp(simTime);
             for (uint256 j = 0; j < 40; j++) {
-                (ok, ) = address(game).call(
+                (bool ok, ) = address(game).call(
                     abi.encodeWithSignature("advanceGame()")
                 );
                 if (!ok) break;
@@ -849,6 +848,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     ///      permissionless mid-day request from an unrelated account. True iff the
     ///      global ticket buffer toggled.
     function _middayRequest() internal returns (bool swapped) {
+        _finishReadConsumers();
         vm.prank(buyer);
         game.purchase{value: 2 ether}(
             buyer,

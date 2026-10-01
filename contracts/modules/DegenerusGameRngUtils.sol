@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity 0.8.34;
+
+import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
+import {ContractAddresses} from "../ContractAddresses.sol";
+
+/// @dev Daily and terminal entropy share identical recording, nudge and gap rules.
+///      This base declares no storage; both delegate modules inline the same helpers.
+abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
+    uint24 private constant GAP_BACKFILL_MAX_DAYS = _VRF_DEADMAN_DAYS + 1;
+
+    /// @notice Finalized daily word and the nudges applied to its raw input.
+    event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
+
+    /// @dev Resolve the sentinel-stamped gambling-burn pool off `word`. Three call sites in this
+    ///      module ran this identically; folded into one so the encoding is emitted once.
+    function _resolvePendingRedemption(uint256 word) internal {
+        IsDGNRS sdgnrs = IsDGNRS(ContractAddresses.SDGNRS);
+        uint24 toResolve = sdgnrs.pendingResolveDay();
+        if (toResolve != 0) {
+            sdgnrs.resolveRedemptionPeriod(uint16(((word >> 8) % 151) + 25), toResolve);
+        }
+    }
+
+    function _swapTicketSlot() internal {
+        ticketWriteSlot = !ticketWriteSlot;
+        ticketsFullyProcessed = false;
+        _setRngComplete(false);
+    }
+
+    function _finalizeLootboxRng(uint256 rngWord) internal {
+        uint48 index = _rngReadBuffer();
+        if (_rngSessionPublished()) return;
+        _setRngSessionPublished(true);
+        emit LootboxRngApplied(index, rngWord, vrfRequestId);
+    }
+
+    /// @dev Backfill rngWordByDay and process coinflip payouts for gap days
+    ///      caused by VRF stall. Derives deterministic words from the first
+    ///      post-gap VRF word via keccak256(vrfWord, gapDay).
+    ///      NOTE: Gap days get zero nudges (totalFlipReversals not consumed).
+    ///      NOTE: resolveRedemptionPeriod is NOT called for backfilled gap days —
+    ///      the redemption timer continued ticking in real time during the stall;
+    ///      it resolves only on the current day via the normal rngGate path.
+    /// @param vrfWord The first post-gap VRF random word.
+    /// @param startDay First gap day (dailyIdx + 1).
+    /// @param endDay Current day (exclusive — not backfilled, handled by normal path).
+    function _backfillGapDays(uint256 vrfWord, uint24 startDay, uint24 endDay) internal {
+        // Bounded for gas (~9M). A live gap never reaches the bound (the deadman ends the game
+        // first); on the normal ending the days past it hold no ticket or foil entry.
+        if (endDay - startDay > GAP_BACKFILL_MAX_DAYS) endDay = startDay + GAP_BACKFILL_MAX_DAYS;
+        for (uint24 gapDay = startDay; gapDay < endDay;) {
+            uint256 derivedWord = uint256(keccak256(abi.encodePacked(vrfWord, gapDay)));
+            if (derivedWord == 0) derivedWord = 1;
+            rngWordByDay[gapDay] = derivedWord;
+            // Gap days are calendar days that elapsed during the stall (no advance ran on
+            // them); every backfilled day is paid with bonus 0 regardless of phase or level.
+            coinflip.processCoinflipPayouts(0, derivedWord, gapDay);
+            emit DailyRngApplied(gapDay, derivedWord, 0, derivedWord);
+            unchecked {
+                ++gapDay;
+            }
+        }
+    }
+
+    /// @dev Record the callback-finalized word and clear its frozen nudge receipt. A recorded
+    ///      day word is never 0 ("no word") or 1 (rngGate's "request sent" return): a
+    ///      callback-finalized word of 0/1 is refused and recovered by the existing retry.
+    function _applyDailyRng(uint24 day, uint256 finalWord) internal returns (uint256) {
+        uint256 nudges = _nudgeCount();
+        uint256 rawWord = _rawDailyRngWord(finalWord);
+        _clearAppliedNudges();
+        rngWordByDay[day] = finalWord;
+        lastVrfProcessedTimestamp = uint48(block.timestamp);
+        emit DailyRngApplied(day, rawWord, nudges, finalWord);
+        return finalWord;
+    }
+}

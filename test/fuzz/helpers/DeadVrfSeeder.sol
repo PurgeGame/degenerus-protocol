@@ -18,8 +18,10 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         lastPurchaseDay = false;
         phaseTransitionActive = false;
         rngLockedFlag = true;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 777;
+        _setRngRequestActive(true);
+        _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp - 15 days) & ~uint48(1);
         ticketsFullyProcessed = true;
         prizePoolFrozen = false;
@@ -72,15 +74,17 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         lastPurchaseDay = false;
         phaseTransitionActive = false;
         rngLockedFlag = true;
-        rngWordCurrent = word;
+        rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         vrfRequestId = 777;
+        _setRngRequestActive(true);
+        _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp - 30 days) & ~uint48(1);
         rngWordByDay[s] = applied ? word : 0;
         ticketsFullyProcessed = true;
         prizePoolFrozen = false;
         // The stuck request's reserved lootbox index, not yet worded.
-        uint48 idx = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, idx + 1);
+        uint48 idx = _rngWriteBuffer();
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((idx + 1) & 1) << 12);
     }
 
     function vrfDeadView() external view returns (bool) {
@@ -98,12 +102,15 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         lastPurchaseDay = false;
         phaseTransitionActive = false;
         rngLockedFlag = false;
-        rngWordCurrent = 0;
-        vrfRequestId = 0;
-        rngRequestTime = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
+        vrfRequestId = 1;
+        rngRequestTime = 1;
+        _setRngRequestActive(false);
         ticketsFullyProcessed = true;
         prizePoolFrozen = false;
-        lootboxRngWordByIndex[uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK)) - 1] = boxWord;
+        // This fixture models an already requested, delivered cohort; index zero is unused.
+        if (uint48(lootboxRngPacked) <= 1) rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((2) & 1) << 12);
+        rngWordCurrent = boxWord; _setRngSessionPublished(true); _setRngComplete(false);
     }
 
     function terminalQueues(uint24 lvl) external view returns (uint256 readLen, uint256 writeLen, uint256 swapped) {

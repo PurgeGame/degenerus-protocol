@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
@@ -46,7 +48,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     // =========================================================================
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev lootboxRngPacked; lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
@@ -85,7 +87,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
         );
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
+        RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(
             address(game),
             bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
@@ -185,9 +187,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     /// @dev Move the active lootbox RNG index (low 48 bits of lootboxRngPacked) to `idx + 1`, the
     ///      state the human-box sweep needs before it will reach `idx`'s bet queue.
     function _advanceActiveIndexPast(uint48 idx) internal {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(idx) + 1);
-        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+        RecyclingState.seedWriteBuffer(address(game), idx ^ 1);
     }
 
     /// @dev Sweep index 1 with `budget` from the keeper and return the FLIP minted to `player`.
@@ -254,10 +254,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     }
 
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(
-            abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT))
-        );
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), index, bytes32(rngWord));
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {

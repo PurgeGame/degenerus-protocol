@@ -58,12 +58,6 @@ interface IVaultOwnership {
     function isVaultOwner(address account) external view returns (bool);
 }
 
-/// @dev Requests the lootbox word that will fill a newly selected table index.
-interface IGameLootboxRng {
-    /// @notice DegenerusGame's mid-day lootbox VRF request trigger.
-    function requestLootboxRng() external;
-}
-
 /// @dev Mint-history entry pricing and the daily RNG lock.
 interface IGameCraps {
     /// @notice Raw mint history: lifetime count, last mint level and deity ownership.
@@ -103,7 +97,7 @@ interface ICoinflipStake {
 ///         chips and leaves the rest of the ten to the draw.
 ///
 /// @dev Entry burns the bankroll plus any battle stake. Closing a slot binds it to
-///      `_currentIndex()`, the table whose word cannot exist yet, and asks for that word. `_resolveSlot`
+///      `_writeBuffer()`, the table whose word cannot exist yet, and asks for that word. `_resolveSlot`
 ///      walks the slot's dense, 1-based seats and credits each run's rounded return as coinflip
 ///      stake. A non-zero battle stake also records a single running leader, and the seat that
 ///      completes the field hands that leader the pot in the same call — there is no claim.
@@ -121,6 +115,13 @@ interface ICoinflipStake {
 ///
 ///      This contract depends on the pinned FLIP, Coinflip, Vault and Game addresses. FLIP and
 ///      Coinflip must in turn authorize `ContractAddresses.CRAPS` for burns and credits.
+interface IReadCohortLifecycle {
+    function admitCustom(uint64 slot) external;
+    function registerRngSlot(uint48 index, uint64 slot, bytes32 key) external;
+    function completeRngSlot(uint64 slot, uint48 index) external;
+    function resolveRngSlot(uint64 slot, uint64 budget) external;
+}
+
 contract CrapsBattle is CrapsBattleStorage {
     /// @dev Pinned cold lifecycle module; both contracts inherit the same append-only layout.
     fallback() external { _delegateJackpot(); }
@@ -134,6 +135,11 @@ contract CrapsBattle is CrapsBattleStorage {
             if iszero(ok) { revert(0, returndatasize()) }
             return(0, returndatasize())
         }
+    }
+
+    function resolveRngSlot(uint64 slot, uint64 budget) external {
+        if (msg.sender != address(this)) revert OnlyGame();
+        _resolveSlot(slot, budget);
     }
 
     function advanceJackpotBattle(uint64 budgetUnits) external returns (bool complete) {
@@ -151,16 +157,21 @@ contract CrapsBattle is CrapsBattleStorage {
     function _slotWord(uint256 slot) internal view returns (uint256) {
         if (_isJackpotSlot(slot)) return _jackpotRounds[slot].word;
         uint48 index = _slotIndex[slot];
-        return index == 0 ? 0 : _wordAt(index - 1);
+        // The subtraction is evaluated only for a nonzero stored index.
+        unchecked { return index == 0 ? 0 : _wordAt(index - 1); }
     }
 
     /// @dev Paid own seats, paid day tickets, then awarded own seats. The cursor uses this dense order.
     function _seatId(uint256 slot, uint64 seat, uint64 ownN, uint256 dayBase, uint64 dayN)
         private pure returns (uint256)
     {
-        if (seat <= ownN) return (slot << 64) | seat;
-        if (seat <= ownN + dayN) return dayBase | (seat - ownN);
-        return (slot << 64) | (seat - dayN);
+        // Both counts come from uint32 fields. The sum fits uint64, and each
+        // subtraction is guarded by the preceding ordinal comparisons.
+        unchecked {
+            if (seat <= ownN) return (slot << 64) | seat;
+            if (seat <= ownN + dayN) return dayBase | (seat - ownN);
+            return (slot << 64) | (seat - dayN);
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -227,6 +238,9 @@ contract CrapsBattle is CrapsBattleStorage {
         private
         returns (uint256 betId)
     {
+        if (w.bound >= _CUSTOM_SLOT_BASE && _battles[w.key] == 0) {
+            IReadCohortLifecycle(address(this)).admitCustom(w.bound);
+        }
         uint8 boonMask;
         bool high = _vetMultiple(w.highMult, multiple);
         // One seat per address unless the battle was opened saying otherwise. A bonus window
@@ -574,12 +588,13 @@ contract CrapsBattle is CrapsBattleStorage {
     function _resolveSlot(uint64 slot, uint64 budgetUnits) internal {
         if (budgetUnits == 0) return;
         // Unarmed reads as zero: the slot has not shut, so no table has been chosen yet.
+        Window memory w = _slotWindow(slot);
+        uint256 board = _battles[w.key];
+        if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board) && board != 0) return;
         uint256 word = _slotWord(slot);
         if (word == 0) revert RngNotReady();
         // The whole field plays these. Read once here rather than out of every header — which is
         // what lets a bet be a single word.
-        Window memory w = _slotWindow(slot);
-
         unchecked {
             // The field IS 1..entrants. There is no id space to scan and nothing to skip: every
             // read below is a member of this battle.
@@ -1867,7 +1882,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      preconditions on its own walk, and by `closeBattle` for custom battles.
     function _armSlot(uint64 slot, Window memory w) internal returns (uint48 index) {
         unchecked {
-            index = _currentIndex();
+            index = _writeBuffer();
             _slotIndex[slot] = index + 1;
             // The day field joins the window HERE rather than at the ticket sale, so selling a day
             // ticket never touches seven scoreboards. Both counts are already frozen — tickets
@@ -1884,14 +1899,9 @@ contract CrapsBattle is CrapsBattleStorage {
                 if (dayHigh != 0) _highField[w.key] += dayHigh;
             }
         }
-        // Shutting a window also asks the protocol for the word that settles it: the request
-        // fulfils into the cursor it was sent at, which is the index bound above, and advances the
-        // cursor past it. The lootbox queue's pending-value gates do not apply to this caller — the
-        // word settles a table, not a queue — but the temporary ones do. Fail-open: if the lootbox
-        // lane cannot request right now — LINK, gas ceiling, the daily lock, a request already in
-        // flight — the cursor stays put and the next request on that lane, whoever sends it, fills
-        // this same index. Closing on the clock must not be hostage to it.
-        try IGameLootboxRng(_GAME).requestLootboxRng() {} catch {}
+        // The shut window joins the write buffer's RNG round like any other consumer: the next
+        // request, daily or mid-day, settles it. Its pending bit counts as work for that request.
+        IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, w.key);
         emit CrapsBonusArmed(w.key, uint48(slot), index);
     }
 
@@ -2356,6 +2366,9 @@ contract CrapsBattle is CrapsBattleStorage {
                 // the table's word — so a separate claim would only re-derive all of it and cost
                 // the player a second transaction to collect what is already decided.
                 _payout(w, g, word);
+                if (!_isJackpotSlot(w.bound)) {
+                    IReadCohortLifecycle(address(this)).completeRngSlot(w.bound, _slotIndex[w.bound] - 1);
+                }
                 finalized = true;
             }
         }

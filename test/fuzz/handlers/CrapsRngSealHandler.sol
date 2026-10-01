@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -11,13 +12,14 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {Craps} from "../../../contracts/Craps.sol";
 import {CrapsBattle} from "../../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
+import {JackpotBattle} from "../../../contracts/JackpotBattle.sol";
 import {CrapsViews} from "../../craps/CrapsViews.sol";
 
 /// @title CrapsRngSealHandler — the craps lane of the RNG-freeze net, driven against the REAL
 ///        protocol (real game, real FLIP burn gate, real Coinflip credit lane, real VRF lifecycle).
 ///
 /// @notice The craps table binds every field to a lootbox-RNG index at the moment the field shuts
-///         (`_armSlot` takes `_currentIndex()`, the table whose word cannot exist yet) and reads
+///         (`_armSlot` takes `_writeBuffer()`, the table whose word cannot exist yet) and reads
 ///         that index's word at settlement through `LootboxCraps._wordAt`. The static RNG-window
 ///         gate classifies those reads CONSUMER-SEALED; the craps conservation campaign drives the
 ///         table against mocks with words seeded by hand. Nothing exercised the seal against the
@@ -41,7 +43,8 @@ import {CrapsViews} from "../../craps/CrapsViews.sol";
 ///        (6) ghost_inWindowGameSetMutations — a craps action taken while a protocol VRF window was
 ///                                             open (daily lock OR mid-day request in flight) moved
 ///                                             any slot of the game's enumerated consumed set. The
-///                                             craps arm's own `requestLootboxRng` is refused inside
+///                                             craps arm makes no request of its own; the ordinary
+///                                             request that seals a shut window is refused inside
 ///                                             either window, so no craps door may touch the set.
 ///
 ///      ISOLATION. Every craps action snapshots the game's enumerated set immediately before and
@@ -67,7 +70,7 @@ contract CrapsRngSealHandler is Test {
     // -------------------------------------------------------------------------
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant LR_MID_DAY_SHIFT = 224;
     uint256 private constant LR_MID_DAY_MASK = 0xFF;
@@ -128,7 +131,7 @@ contract CrapsRngSealHandler is Test {
     uint256 public ghost_arms;
     uint256 public ghost_armsWhileDailyLocked;
     uint256 public ghost_armsWhileMidDayInFlight;
-    uint256 public ghost_armsWithLiveRequest; // the arm's own request opened a mid-day window
+    uint256 public ghost_sealRequests; // an ordinary request sealed a pending craps window's buffer
     uint256 public ghost_postArmAmendAttempts;
     uint256 public ghost_postArmAmendsAccepted;
     uint256 public ghost_settlesWithWord;
@@ -220,6 +223,7 @@ contract CrapsRngSealHandler is Test {
 
     function _driveDay(uint256 seed) internal returns (bool opened) {
         if (game.gameOver()) return false;
+        _finishHumanRead();
         // A daily window left open by openDailyWindow is completed first (exempt machinery).
         for (uint256 i; i < 4 && game.rngLocked(); i++) {
             _fulfilPending(seed + 100 + i);
@@ -242,6 +246,7 @@ contract CrapsRngSealHandler is Test {
             try game.advanceGame() {} catch {}
             if (!game.rngLocked() && _crapsDayOpen()) break;
         }
+        _finishHumanRead();
         opened = _crapsDayOpen();
         if (opened) {
             uint24 today = craps.currentDayIndex();
@@ -305,6 +310,9 @@ contract CrapsRngSealHandler is Test {
         } catch {
             return;
         }
+        if (!game.rngLocked() && game.isRngFulfilled()) {
+            try game.advanceGame() {} catch {}
+        }
         // Property (3): the request that just landed must not have been the one in flight when
         // any armed field bound its index.
         uint256 n = armedSlots.length;
@@ -326,6 +334,7 @@ contract CrapsRngSealHandler is Test {
     function _openDailyWindow() internal returns (bool open) {
         if (game.gameOver()) return false;
         if (game.rngLocked()) return true;
+        _finishHumanRead();
         vm.warp(_dayStart() + 1 days + 5 minutes);
         _buyTicket();
         for (uint256 i; i < 4 && !game.rngLocked(); i++) {
@@ -392,7 +401,7 @@ contract CrapsRngSealHandler is Test {
 
     function _primeInFlightArms(uint256 actorSeed, uint256 boardSeed) internal {
         if (game.gameOver()) return;
-        if (game.rngLocked() || _rngRequestTime() != 0) {
+        if (game.rngLocked() || _requestActive()) {
             // Some window is already open: a single arm now is the measurement.
             uint64 s0 = _armTarget(actorSeed);
             if (s0 == 0) return;
@@ -455,7 +464,8 @@ contract CrapsRngSealHandler is Test {
         ghost_flipBurnedIn += flipB - coin.balanceOf(b);
         vm.warp(_dayStart() + _closeOf(pb));
         _armAndMeasure(_windowSlot(d, pa));
-        if (_rngRequestTime() == 0) return; // the first arm's request was refused; nothing in flight
+        _sealRequest(); // the shut makes no request; an ordinary one seals its buffer
+        if (!_requestActive()) return; // the request was refused; nothing in flight
         _armAndMeasure(_windowSlot(d, pb));
     }
 
@@ -578,6 +588,48 @@ contract CrapsRngSealHandler is Test {
             if (block.timestamp < closeTime) vm.warp(closeTime);
         }
         _armAndMeasure(slot);
+        // Most shuts are followed by an ordinary request that seals the window; the rest are left
+        // for the fuzzer's own sealRequest / keeper / daily-advance sequencing.
+        if (pickSeed % 4 != 0) _sealRequest();
+    }
+
+    /// @notice An ordinary mid-day request from a non-craps caller: with a craps window pending on
+    ///         the write buffer it seals that buffer and its word settles the window.
+    function sealRequest(uint256 seed) external {
+        _sealRequest();
+    }
+
+    function _sealRequest() internal returns (bool ok) {
+        if (game.gameOver()) return false;
+        _finishHumanRead();
+        ok = _tryRequest();
+        if (ok) return true;
+        // The read cohort may still owe the craps lane: drain it, then ask again.
+        if (_drainReadCrapsCohort()) ok = _tryRequest();
+    }
+
+    function _tryRequest() internal returns (bool ok) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT)));
+        bool pending = packed & (uint256(1) << (250 + _cursor())) != 0;
+        vm.prank(address(uint160(0x5ea1)));
+        try game.requestLootboxRng() {
+            ok = true;
+            if (pending) ghost_sealRequests++;
+        } catch {}
+    }
+
+    function _drainReadCrapsCohort() internal returns (bool drained) {
+        uint48 read = RecyclingState.readBuffer(address(game));
+        if (RecyclingState.word(address(game), read) == 0) return false;
+        uint256 flag = uint256(1) << (250 + read);
+        for (uint256 i; i < 64; i++) {
+            if (uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) & flag == 0) return drained;
+            try JackpotBattle(address(craps)).keepRngCohort(read, 1_888) {
+                drained = true;
+            } catch {
+                return drained;
+            }
+        }
     }
 
     function _armAndMeasure(uint64 slot) internal {
@@ -606,21 +658,37 @@ contract CrapsRngSealHandler is Test {
     function _recordArm(uint64 slot, uint48 index, uint256 cursorBefore, uint256 reqBefore, bool open, bool midDay)
         internal
     {
+        _recordArm(slot, index, cursorBefore, reqBefore, open, midDay, true);
+    }
+
+    /// @dev `measured` is false for a window found already shut by a path the handler did not
+    ///      bracket (the advance chain's own keeper hop): its arm-time cursor and word state are
+    ///      unknown, and a seal request may have moved both since, so only the freeze is recorded.
+    function _recordArm(
+        uint64 slot,
+        uint48 index,
+        uint256 cursorBefore,
+        uint256 reqBefore,
+        bool open,
+        bool midDay,
+        bool measured
+    ) internal {
         ghost_arms++;
         if (open) ghost_armsWhileDailyLocked++;
         if (midDay) ghost_armsWhileMidDayInFlight++;
-        // Property (1): the bound leaf holds no word.
-        if (_lootboxRngWord(index) != 0) ghost_armsOnWordedIndex++;
-        // Property (2): the bound leaf is at or above the cursor — never a leaf a request has
-        // already claimed (the in-flight leaf is cursor - 1; every leaf below it is worded).
-        if (uint256(index) < cursorBefore) ghost_armsBelowCursor++;
+        if (measured) {
+            // Property (1): the bound leaf holds no word.
+            if (_lootboxRngWord(index) != 0) ghost_armsOnWordedIndex++;
+            // Property (2): the bound leaf is the write buffer at the arm — never a leaf a request
+            // has already claimed (the in-flight leaf is the other buffer).
+            if (uint256(index) != cursorBefore) ghost_armsBelowCursor++;
+        }
         if (!armedSeen[slot]) {
             armedSeen[slot] = true;
             armedSlots.push(slot);
         }
         armedIndexOf[slot] = index;
         inFlightReqAtArm[slot] = reqBefore;
-        if (!open && !midDay && _rngRequestTime() != 0) ghost_armsWithLiveRequest++;
         // Freeze the slips that just bound.
         uint256[] storage ids = slotBets[slot];
         for (uint256 i; i < ids.length; i++) {
@@ -669,11 +737,31 @@ contract CrapsRngSealHandler is Test {
         uint64 slot = _wordedSettleTarget(pickSeed);
         if (slot == 0) {
             _fulfilPending(pickSeed);
+            // Let an open daily window finish: its word seals whatever window waits on the buffer.
+            for (uint256 i; i < 8 && game.rngLocked(); i++) {
+                try game.advanceGame() {} catch {}
+                _fulfilPending(pickSeed + 4 + i);
+            }
             slot = _wordedSettleTarget(pickSeed);
             if (slot == 0 && _settleTargetAny(pickSeed) == 0) {
                 // Nothing shut yet: build a field, shut it, and let the next request land its word.
                 _primeInFlightArms(pickSeed, pickSeed >> 8);
                 _fulfilPending(pickSeed + 1);
+            }
+            if (slot == 0 && _settleTargetAny(pickSeed) != 0) {
+                // A shut window waits for the next request to seal it: land what is in flight,
+                // send an ordinary one, and land that.
+                _fulfilPending(pickSeed + 2);
+                for (uint256 i; i < 8 && game.rngLocked(); i++) {
+                    try game.advanceGame() {} catch {}
+                    _fulfilPending(pickSeed + 4 + i);
+                }
+                slot = _wordedSettleTarget(pickSeed);
+                if (slot == 0) {
+                    _sealRequest();
+                    _fulfilPending(pickSeed + 3);
+                    slot = _wordedSettleTarget(pickSeed);
+                }
             }
             if (slot == 0 && _settleTargetAny(pickSeed) != 0) {
                 _driveDay(pickSeed);
@@ -744,6 +832,12 @@ contract CrapsRngSealHandler is Test {
         uint256 stake0 = _stakeLedger();
         uint256 bound = _keeperBound();
         (bool open, bool midDay, bytes32 h0) = _before();
+        for (uint256 i; i < trackedSlots.length; i++) {
+            uint64 shut = trackedSlots[i];
+            uint48 rawShut = craps.slotIndexOf(shut);
+            if (armedSeen[shut] || rawShut == 0) continue;
+            _recordArm(shut, rawShut - 1, 0, 0, false, false, false);
+        }
         vm.prank(currentActor);
         try craps.keepScheduled(budget % 64) {
             ghost_keeps++;
@@ -940,22 +1034,16 @@ contract CrapsRngSealHandler is Test {
     // Falsifiability seam (test-only; excluded from the campaign)
     // =========================================================================
 
-    /// @notice Seed a word onto the leaf the next arm will bind, arm, and report whether property
-    ///         (1) registered it. Counter-neutral: restores the leaf and does not touch the ghosts.
+    /// @notice Inject a deliberately invalid arm observation into the real ghost oracle.
+    ///         The snapshot makes the fault injection counter-neutral and never changes a battle.
     function debugSeedWordedArmAndCheck(uint64 slot) external returns (bool detected) {
-        uint48 target = craps.currentIndex();
-        bytes32 leaf = keccak256(abi.encode(uint256(target), LOOTBOX_RNG_WORD_SLOT));
-        bytes32 prior = vm.load(address(game), leaf);
-        vm.store(address(game), leaf, bytes32(uint256(keccak256("craps-seal-falsify")) | 1));
-        uint48 index;
-        try craps.armWindow(slot) returns (uint48 idx) {
-            index = idx;
-        } catch {
-            vm.store(address(game), leaf, prior);
-            return false;
-        }
-        detected = (index == target) && (_lootboxRngWord(index) != 0);
-        vm.store(address(game), leaf, prior);
+        uint256 snapshot = vm.snapshotState();
+        uint48 target = uint48(_cursor() ^ 1);
+        RecyclingState.seedWord(address(game), target, bytes32(uint256(keccak256("craps-seal-falsify")) | 1));
+        uint256 beforeCount = ghost_armsOnWordedIndex;
+        _recordArm(slot, target, _cursor(), 0, false, false);
+        detected = ghost_armsOnWordedIndex == beforeCount + 1;
+        vm.revertToStateAndDelete(snapshot);
     }
 
     // =========================================================================
@@ -1079,7 +1167,7 @@ contract CrapsRngSealHandler is Test {
 
     function _before() internal view returns (bool open, bool midDay, bytes32 h) {
         open = game.rngLocked();
-        midDay = !open && _rngRequestTime() != 0;
+        midDay = !open && _requestActive();
         if (open || midDay) h = _setHash();
     }
 
@@ -1096,7 +1184,7 @@ contract CrapsRngSealHandler is Test {
     function _setHash() internal view returns (bytes32) {
         uint24 day = game.currentDayView();
         uint256 cursor = _cursor();
-        uint256 reserved = cursor == 0 ? 0 : _lootboxRngWord(uint48(cursor - 1));
+        uint256 reserved = _lootboxRngWord(uint48(cursor ^ 1));
         uint256 raw0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         return keccak256(
             abi.encode(
@@ -1104,7 +1192,7 @@ contract CrapsRngSealHandler is Test {
                 cursor,
                 reserved,
                 _lootboxRngWord(uint48(cursor)),
-                _lootboxRngWord(uint48(cursor + 1)),
+                _lootboxRngWord(uint48(cursor ^ 1)),
                 (raw0 >> (DAILY_IDX_BYTE_OFF * 8)) & 0xFFFFFF,
                 (raw0 >> (RNG_REQUEST_TIME_BYTE_OFF * 8)) & RNG_REQUEST_TIME_MASK,
                 (raw0 >> (RNG_LOCKED_FLAG_BYTE_OFF * 8)) & 0xFF,
@@ -1122,11 +1210,24 @@ contract CrapsRngSealHandler is Test {
     }
 
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT))));
+        return uint256(bytes32(RecyclingState.word(address(game), uint48(index))));
     }
 
     function _cursor() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) & LR_INDEX_MASK;
+        return RecyclingState.writeBuffer(address(game));
+    }
+
+    function _finishHumanRead() internal {
+        if (game.rngLocked() || _requestActive()) return;
+        uint48 read = RecyclingState.readBuffer(address(game));
+        if (RecyclingState.word(address(game), read) == 0) return;
+        for (uint256 i; i < 100 && !game.boxIndexComplete(read); i++) {
+            try game.openBoxes(512) {} catch { return; }
+        }
+    }
+
+    function _requestActive() internal view returns (bool) {
+        return uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 254) != 0;
     }
 
     function _rngRequestTime() internal view returns (uint256) {

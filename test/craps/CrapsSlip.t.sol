@@ -188,7 +188,7 @@ contract CrapsSlipTest is CrapsPins {
         craps = new CrapsSlipHarness();
         // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         // Clear of the sybil floor. This suite prices a SEAT — what a placement burns and what a
         // settlement pays back — so the low-score surcharge must not ride silently inside every
         // burn assertion; it has a test of its own.
@@ -315,14 +315,18 @@ contract CrapsSlipTest is CrapsPins {
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
         craps.previewSettlement(betId);
 
-        // Shutting picks the live index — the one its own request fills — and the word for it
-        // cannot exist until after that.
-        _setIndex(9);
+        // Shutting binds the live index — the one the next ordinary request seals and fills — and
+        // the word for it cannot exist until after that request.
+        _setIndex(1);
         vm.warp(block.timestamp + 2 hours);
         uint48 index = craps.closeBattle(slot);
-        assertEq(index, 9, "the close took a table other than the live one");
-        assertEq(craps.currentIndex(), 10, "the close's request did not move the cursor past its table");
+        assertEq(index, 1, "the close took a buffer other than the write buffer");
+        assertEq(craps.currentIndex(), 1, "the close moved the cursor: it makes no request of its own");
         assertEq(craps.wordAt(index), 0, "the table it took already carried a word");
+
+        game.requestLootboxRng(); // the next ordinary request seals the bound table
+        assertEq(craps.currentIndex(), 0, "the sealing request did not move the cursor past the bound table");
+        assertEq(craps.wordAt(index), 0, "the sealed table carried a word before its fulfilment");
     }
 
     /// @dev The table's entry floor is the BANKROLL, not the board: a bankroll under
@@ -422,7 +426,7 @@ contract CrapsSlipTest is CrapsPins {
         craps.resolveSlot(slot, WHOLE_FIELD);
 
         // Shut, but the word has not landed.
-        _setIndex(4);
+        _setIndex(0);
         vm.warp(block.timestamp + 2 hours);
         craps.closeBattle(slot);
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
@@ -433,7 +437,7 @@ contract CrapsSlipTest is CrapsPins {
     }
 
     function test_settlesOnceAndOnlyOnce() public {
-        (uint256 betId, uint64 slot) = _run(alice, _bets(), 3, uint16(GOAL_FAR_MULT), 4, uint256(keccak256("vrf")));
+        (uint256 betId, uint64 slot) = _run(alice, _bets(), 3, uint16(GOAL_FAR_MULT), 0, uint256(keccak256("vrf")));
 
         craps.resolveSlot(slot, WHOLE_FIELD);
         assertTrue(craps.betOf(betId).settled, "settled");
@@ -451,11 +455,12 @@ contract CrapsSlipTest is CrapsPins {
         // Search for a table that actually pays, so the assertion is about who gets the money
         // rather than about a run that happened to bust.
         for (uint256 i = 0; i < 40; ++i) {
+            uint256 trialSnapshot = vm.snapshotState();
             (uint256 betId, uint64 slot) =
-                _run(alice, _bets(), 4, 5, uint48(4000 + i), uint256(keccak256(abi.encode("pay", i))));
+                _run(alice, _bets(), 4, 5, uint48(i & 1), uint256(keccak256(abi.encode("pay", i))));
 
             (, uint256 expected) = craps.previewSettlement(betId);
-            if (expected == 0) continue;
+            if (expected == 0) { vm.revertToStateAndDelete(trialSnapshot); continue; }
 
             uint256 before = coinflip.staked(alice);
             vm.prank(settler);
@@ -464,6 +469,7 @@ contract CrapsSlipTest is CrapsPins {
             assertEq(coinflip.staked(alice) - before, expected, "owner paid");
             assertEq(coinflip.staked(settler), 0, "settler paid nothing");
             return;
+            vm.revertToStateAndDelete(trialSnapshot);
         }
         revert("no paying table found");
     }
@@ -479,7 +485,7 @@ contract CrapsSlipTest is CrapsPins {
     function test_previewIsExactlyWhatSettlementPays() public {
         uint256 bankroll = uint256(PLAYED) * 3 * 1 ether;
         for (uint256 i = 0; i < 12; ++i) {
-            uint48 idx = uint48(100 + i);
+            uint48 idx = uint48(i & 1);
             (uint256 betId, uint64 slot) =
                 _run(alice, _bets(), 3, uint16(GOAL_FAR_MULT), idx, uint256(keccak256(abi.encode("w", i))));
 
@@ -505,7 +511,8 @@ contract CrapsSlipTest is CrapsPins {
         uint256 bankroll = uint256(PLAYED) * 5 * 1 ether;
 
         for (uint256 i = 0; i < 12; ++i) {
-            uint48 idx = uint48(500 + i);
+            uint256 trialSnapshot = vm.snapshotState();
+            uint48 idx = uint48(i & 1);
             (uint256 betId, uint64 slot) =
                 _run(alice, b, 5, uint16(GOAL_FAR_MULT), idx, uint256(keccak256(abi.encode("side", i))));
 
@@ -515,6 +522,7 @@ contract CrapsSlipTest is CrapsPins {
                 craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll, uint256(bankroll) * GOAL_FAR_MULT, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player).bankrollOut,
                 "side-only lean settlement != full resolver"
             );
+            vm.revertToStateAndDelete(trialSnapshot);
         }
     }
 
@@ -542,7 +550,7 @@ contract CrapsSlipTest is CrapsPins {
         if (rest > 3) b.place8 = uint24(rest - 3);
 
         uint256 bankroll = uint256(PLAYED) * 4 * 1 ether;
-        (uint256 betId, uint64 slot) = _run(alice, b, 4, uint16(GOAL_FAR_MULT), 900, word);
+        (uint256 betId, uint64 slot) = _run(alice, b, 4, uint16(GOAL_FAR_MULT), 0, word);
 
         (uint256 won,) = craps.previewSettlement(betId);
         assertEq(
@@ -569,7 +577,8 @@ contract CrapsSlipTest is CrapsPins {
         uint256 bankroll = uint256(PLAYED) * 5 * 1 ether;
 
         for (uint256 i = 0; i < 12; ++i) {
-            uint48 idx = uint48(1500 + i);
+            uint256 trialSnapshot = vm.snapshotState();
+            uint48 idx = uint48(i & 1);
             (uint256 betId, uint64 slot) =
                 _run(alice, b, 5, uint16(GOAL_FAR_MULT), idx, uint256(keccak256(abi.encode("dark", i))));
 
@@ -581,6 +590,7 @@ contract CrapsSlipTest is CrapsPins {
                 ).bankrollOut,
                 "the dark-only lean settlement != full resolver"
             );
+            vm.revertToStateAndDelete(trialSnapshot);
         }
     }
 
@@ -630,7 +640,7 @@ contract CrapsSlipTest is CrapsPins {
         bool sawBust;
         bool sawGoal;
         for (uint256 i = 0; i < 30; ++i) {
-            uint48 idx = uint48(6000 + i);
+            uint48 idx = uint48(i & 1);
             _setIndex(idx);
             _setWord(idx, uint256(keccak256(abi.encode("slip", i))));
 
@@ -667,7 +677,7 @@ contract CrapsSlipTest is CrapsPins {
         uint256 survives;
         uint256 busts;
         for (uint256 i = 0; i < 400; ++i) {
-            uint48 idx = uint48(40_000 + i);
+            uint48 idx = uint48(i & 1);
             _setIndex(idx);
             _setWord(idx, uint256(keccak256(abi.encode("2ndchance", i))));
 
@@ -715,13 +725,13 @@ contract CrapsSlipTest is CrapsPins {
         Craps.Bets memory b;
         b.passLine = U;
 
-        _setWord(4, uint256(keccak256("capslip")));
+        _setWord(0, uint256(keccak256("capslip")));
 
-        CrapsOracle.SlipResult memory r = craps.resolveSlipAt(b, 4, uint256(UW) * 1000, 0, 10);
+        CrapsOracle.SlipResult memory r = craps.resolveSlipAt(b, 0, uint256(UW) * 1000, 0, 10);
         assertTrue(r.stop == CrapsOracle.SlipStop.Bust, "hard bound should bust");
         assertEq(r.handsPlayed, 10, "hands at cap");
 
-        CrapsOracle.Session memory sess = craps.resolveHandsAt(b, 4, 10);
+        CrapsOracle.Session memory sess = craps.resolveHandsAt(b, 0, 10);
         assertEq(r.totalRolls, sess.totalRolls, "different dice");
         for (uint256 h = 0; h < 10; ++h) {
             assertEq(r.ledger[h].net, sess.ledger[h].net, "slip hand diverged from the table");
@@ -737,7 +747,7 @@ contract CrapsSlipTest is CrapsPins {
         b.place8 = 2;
         uint256 bankroll = uint256(PLAYED) * 10 * 1 ether;
 
-        (uint256 betId, uint64 slot) = _run(alice, b, 10, 50, 4, uint256(keccak256("slipvrf")));
+        (uint256 betId, uint64 slot) = _run(alice, b, 10, 50, 0, uint256(keccak256("slipvrf")));
 
         (uint256 won, uint256 expected) = craps.previewSettlement(betId);
         assertEq(
@@ -778,9 +788,9 @@ contract CrapsSlipTest is CrapsPins {
     function test_slipRollBudgetStopsBetweenShooters() public {
         Craps.Bets memory b;
         b.passLine = U;
-        _setWord(4, uint256(keccak256("budget")));
+        _setWord(0, uint256(keccak256("budget")));
 
-        Craps.SlipResult memory r = craps.slipWithBudget(b, 4, uint256(UW) * 1000, 20, address(0));
+        Craps.SlipResult memory r = craps.slipWithBudget(b, 0, uint256(UW) * 1000, 20, address(0));
         assertTrue(r.stop == Craps.SlipStop.Bust, "budget stop should bust");
         assertGe(r.totalRolls, 20, "stopped before the budget was consumed");
         assertLt(r.totalRolls, 20 + craps.MAX_ROLLS(), "a hand was cut mid-roll");
@@ -801,7 +811,7 @@ contract CrapsSlipTest is CrapsPins {
 
         bool sawDoubling;
         for (uint256 i = 0; i < 20; ++i) {
-            uint48 idx = uint48(9000 + i);
+            uint48 idx = uint48(i & 1);
             _setIndex(idx);
             _setWord(idx, uint256(keccak256(abi.encode("esc", i))));
 
@@ -827,7 +837,7 @@ contract CrapsSlipTest is CrapsPins {
         // The receipt ships no dice, so this is the property that has to hold instead: everything
         // about a run is derivable from its table's word, its slot and its owner — which is what
         // makes the lean event sufficient for an indexer.
-        (uint256 betId, uint64 slot) = _run(alice, _bets(), 3, uint16(GOAL_FAR_MULT), 4, uint256(keccak256("logvrf")));
+        (uint256 betId, uint64 slot) = _run(alice, _bets(), 3, uint16(GOAL_FAR_MULT), 0, uint256(keccak256("logvrf")));
         uint256 bankroll = uint256(PLAYED) * 3 * 1 ether;
 
         (uint256 won,) = craps.previewSettlement(betId);
@@ -859,7 +869,7 @@ contract CrapsSlipTest is CrapsPins {
             vm.prank(alice);
             ids[i] = craps.enterBattle(slot, _bets(), 1);
         }
-        _closeOn(craps, slot, 4, uint256(keccak256("vrf")));
+        _closeOn(craps, slot, 0, uint256(keccak256("vrf")));
 
         uint256 total;
         for (uint256 i = 0; i < 6; ++i) {
@@ -889,8 +899,9 @@ contract CrapsSlipTest is CrapsPins {
         uint256 sawBust;
 
         for (uint256 i = 0; i < 200; ++i) {
+            uint256 trialSnapshot = vm.snapshotState();
             (uint256 betId,) =
-                _run(alice, _bets(), 4, 5, uint48(1000 + i), uint256(keccak256(abi.encode("seed", i))));
+                _run(alice, _bets(), 4, 5, uint48(i & 1), uint256(keccak256(abi.encode("seed", i))));
 
             (uint256 won, uint256 paid) = craps.previewSettlement(betId);
             if (won >= goal) {
@@ -904,6 +915,7 @@ contract CrapsSlipTest is CrapsPins {
                 ++sawBust;
             }
             paidTotal += paid;
+            vm.revertToStateAndDelete(trialSnapshot);
         }
 
         // Both ends of the run distribution have to turn up, or the band above proves nothing.
@@ -924,11 +936,12 @@ contract CrapsSlipTest is CrapsPins {
     function test_awardsLandOnRoundFigures() public {
         uint256 checked;
         for (uint256 i = 0; i < 30; ++i) {
+            uint256 trialSnapshot = vm.snapshotState();
             (uint256 betId,) =
-                _run(alice, _bets(), 4, 5, uint48(3000 + i), uint256(keccak256(abi.encode("r", i))));
+                _run(alice, _bets(), 4, 5, uint48(i & 1), uint256(keccak256(abi.encode("r", i))));
 
             (, uint256 paid) = craps.previewSettlement(betId);
-            if (paid == 0) continue;
+            if (paid == 0) { vm.revertToStateAndDelete(trialSnapshot); continue; }
             ++checked;
 
             if (paid > FlipRoundLib.FLIP_ROUND_THRESHOLD) {
@@ -936,6 +949,7 @@ contract CrapsSlipTest is CrapsPins {
             } else {
                 assertEq(paid % 1 ether, 0, "not a whole FLIP");
             }
+            vm.revertToStateAndDelete(trialSnapshot);
         }
         assertGt(checked, 0, "no paying tables to check");
     }
@@ -962,7 +976,7 @@ contract CrapsSlipTest is CrapsPins {
         vm.prank(bob);
         uint256 c = craps.enterBattle(slot, _bets(), 1);
 
-        _closeOn(craps, slot, 4, uint256(keccak256("vrf")));
+        _closeOn(craps, slot, 0, uint256(keccak256("vrf")));
 
         (uint256 wonA, uint256 paidA) = craps.previewSettlement(a);
         (uint256 wonTwin, uint256 paidTwin) = craps.previewSettlement(twin);
@@ -988,7 +1002,7 @@ contract CrapsSlipTest is CrapsPins {
         uint256 trials = 120;
 
         for (uint256 i = 0; i < trials; ++i) {
-            uint48 idx = uint48(6000 + i);
+            uint48 idx = uint48(i & 1);
             _setWord(idx, uint256(keccak256(abi.encode("owner-salt", i))));
             // Same table, same round — the owner is the ONLY thing that moves.
             if (craps.survivedAt(idx, 7, alice) == craps.survivedAt(idx, 7, bob)) ++agreed;
@@ -1008,7 +1022,7 @@ contract CrapsSlipTest is CrapsPins {
     function test_theOwnerSaltLeavesTheSharedShooterAlone() public {
         Craps.Bets memory b;
         b.passLine = L;
-        uint48 idx = 6500;
+        uint48 idx = 0;
         _setIndex(idx);
         _setWord(idx, uint256(keccak256("shared-shooter")));
 
@@ -1043,7 +1057,7 @@ contract CrapsSlipTest is CrapsPins {
         uint256 coinsAgreed;
 
         for (uint256 i = 0; i < 60; ++i) {
-            uint48 idx = uint48(5000 + i);
+            uint48 idx = uint48(i & 1);
             _setIndex(idx);
             _setWord(idx, uint256(keccak256(abi.encode("salt", i))));
 
@@ -1073,7 +1087,7 @@ contract CrapsSlipTest is CrapsPins {
         uint8 rounds = uint8(bound(uint256(rawRounds), 1, craps.MAX_BANKROLL_MULT()));
         uint256 bankroll = uint256(played) * rounds * 1 ether;
 
-        uint48 idx = uint48(bound(seed, 1, type(uint32).max));
+        uint48 idx = uint48(seed & 1);
         uint64 slot = _openBattle(craps, played, rounds, uint16(GOAL_FAR_MULT), 0);
         vm.prank(alice);
         craps.enterBattle(slot, _bets(), 1);

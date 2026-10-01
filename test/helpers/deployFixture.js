@@ -66,7 +66,9 @@ export async function deployFullProtocol() {
 
   if (needsPatch) {
     patchContractAddresses(predicted, external, deployDayBoundary, vrfKeyHash);
-    await hre.run("compile", { force: true, quiet: true });
+    // Hardhat checks the patched source content against its compiler input cache.
+    // Changed pins still recompile; identical pins can reuse that exact build.
+    await hre.run("compile", { quiet: true });
     _patched = true;
     _patchedAddresses = predicted;
     _patchedExternal = external;

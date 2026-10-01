@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -11,7 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract PostSwapSeeder is DeadVrfSeeder {
     /// @dev Occurrences across all 256 trait buckets of `lvl`.
     function bucketTotal(uint24 lvl) external view returns (uint256 total) {
-        for (uint256 t; t < 256; ++t) total += lvlTraitEntry[lvl][t].length;
+        for (uint256 t; t < 256; ++t) total += _bucketLength(lvl, t);
     }
 
     function jackpotPaid() external view returns (uint256) {
@@ -25,10 +26,10 @@ contract PostSwapSeeder is DeadVrfSeeder {
     }
 }
 
-/// @dev Stands in for the game-over module (delegatecalled): reverts with the gas its frame
-///      received, i.e. exactly what the Advance frame hands the payout at that point.
-contract PayoutGasProbe {
-    fallback() external payable {
+/// @dev Keep the real terminal orchestration and replace only its payout body.
+///      Replacing the whole module fallback would probe its entry, before any drain.
+contract PayoutGasProbe is DegenerusGameGameOverModule {
+    function handleGameOverDrain(uint24) public override {
         assembly {
             mstore(0, gas())
             revert(0, 32)
@@ -200,8 +201,8 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         uint256 top = r.batchGas + r.batchGas / 10;
         uint256 bottom = r.batchGas / 8;
 
-        // Probe pass: the game-over module replaced by a probe that reports the gas it received.
-        // A starved batch that is swallowed reaches it; its reading is the payout's budget.
+        // Probe pass: the inherited production terminal worker replaces only the payout
+        // body, so a swallowed starved batch reports the actual payout budget.
         vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, type(PayoutGasProbe).runtimeCode);
         uint256 probed = vm.snapshotState();
         r.minBatchOkGas = type(uint256).max;

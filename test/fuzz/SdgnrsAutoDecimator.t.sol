@@ -25,10 +25,13 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         level = lvl;
         rngRequestTime = uint48(block.timestamp);
         rngLockedFlag = true;
-        rngWordCurrent = word;
-        decWindowOpen = true;
+        _setRngRequestActive(true);
+        _setRngSessionPublished(false);
+        _setRngComplete(false);
+        rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
+        _setDecWindowOpen(true);
         if (opening) decBattleRounds[lvl + 1].openedDay = _simulatedDayIndex();
-        decDayOneActive = opening;
+        _setDecDayOneActive(opening);
         lastPurchaseDay = opening;
         if (opening) _setPrizePools(10 ether, 20 ether);
     }
@@ -42,11 +45,13 @@ contract AutoDecimatorGameHarness is DegenerusGame {
 
     function prepareNextRequest(uint24 day) external {
         dailyIdx = day - 1;
-        rngRequestTime = 0;
-        vrfRequestId = 0;
-        rngWordCurrent = 0;
+        rngRequestTime = 1;
+        vrfRequestId = 1;
+        _setRngRequestActive(false);
+        rngWordCurrent = RNG_WORD_WAITING;
         rngLockedFlag = false;
         lastPurchaseDay = false;
+        _tryCompleteRng();
     }
 
     /// @dev The wallet's entry for `lvl` (zero if its latest entry is another event); stack in wei.

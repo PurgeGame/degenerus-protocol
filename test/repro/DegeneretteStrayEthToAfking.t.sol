@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 
@@ -23,7 +24,7 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
         vm.deal(address(game), 1_000_000 ether);
         // LR index = 1 so placement passes NotStarted; the word stays 0 (placement needs it unfulfilled).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
+        RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
         _seedFuturePrizePool(10_000_000 ether);
     }

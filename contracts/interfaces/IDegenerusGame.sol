@@ -259,6 +259,9 @@ interface IDegenerusGame {
     /// @return True if RNG is locked, false otherwise.
     function rngLocked() external view returns (bool);
 
+    /// @notice Whether every consumer of the previous RNG cycle has completed.
+    function rngComplete() external view returns (bool);
+
     /// @notice Current day index.
     function currentDayView() external view returns (uint24);
 
@@ -341,11 +344,11 @@ interface IDegenerusGame {
 
     /// @notice Sample up to 4 trait burn tickets from a specific level.
     /// @dev View function for BAF scatter selection targeting a specific level.
-    /// @param targetLvl The level to sample from.
+    /// @param nextLevel Select the next level instead of the current level.
     /// @param entropy Random entropy for sampling (typically from VRF).
     /// @return trait The sampled trait ID.
     /// @return entries Array of player addresses holding sampled entries.
-    function sampleTraitEntriesAtLevel(uint24 targetLvl, uint256 entropy) external view returns (uint8 trait, address[] memory entries);
+    function sampleTraitEntries(bool nextLevel, uint256 entropy) external view returns (uint8 trait, address[] memory entries);
 
     /// @notice Sample two BAF rounds' worth of unminted future-level candidates.
     /// @dev Four packs (independent level in [fromLevel, toLevel] + one random eight-lane queue

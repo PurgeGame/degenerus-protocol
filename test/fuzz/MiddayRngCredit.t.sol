@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title MiddayRngCredit — coverage for the LINK-donor mid-day RNG credit path.
 /// @notice A LINK donation banks per-donor credit that waives ONLY the pending-value gates
@@ -101,6 +103,120 @@ contract MiddayRngCreditTest is DeployProtocol {
     function _grantCredit(address to, uint256 amount) internal {
         vm.prank(address(admin));
         game.creditMiddayRng(to, amount);
+    }
+
+    /// @dev The direct-request fixture already primes today's word. Mark that same day
+    /// sealed for router discovery; no read consumers exist at genesis. Quiet the
+    /// unrelated scheduled keeper so this probe reaches only the request category.
+    function _idleRequestRouter() private {
+        uint256 state = uint256(vm.load(address(game), bytes32(0)));
+        state = (state & ~(uint256(0xffffff) << 24)) | (uint256(game.currentDayView()) << 24);
+        vm.store(address(game), bytes32(0), bytes32(state));
+        vm.mockCall(address(crapsBattle), abi.encodeWithSignature("keepScheduled(uint64)"), abi.encode(false, uint64(0)));
+        vm.mockCall(address(crapsBattle), abi.encodeWithSignature("keepRngCohort(uint48,uint64)"), abi.encode(false, false));
+        assertTrue(game.rngComplete(), "fixture has no outstanding read consumers");
+        assertFalse(game.advanceDue(), "fixture reaches the optional request category");
+    }
+
+    function test_MineFlipRequestChargesOriginalDonorCredit() public {
+        _idleRequestRouter();
+        uint256 charge = _expectedCharge();
+        _grantCredit(donor, charge * 3);
+        _grantCredit(address(game), charge * 5);
+        _grantCredit(outsider, charge * 7);
+        uint256 request = mockVRF.lastRequestId();
+        vm.prank(donor);
+        game.mineFlip();
+        assertGt(mockVRF.lastRequestId(), request, "router actually requested a fresh word");
+        assertEq(game.middayRngCredits(donor), charge * 2);
+        assertEq(game.middayRngCredits(address(game)), charge * 5, "Game identity was never charged");
+        assertEq(game.middayRngCredits(outsider), charge * 7, "another player's credit was never charged");
+    }
+
+    function test_MiddayCallbackStoresSharedWordWithoutApplyingDailyNudges() public {
+        RecyclingState.seedNudges(address(game), 5);
+        _grantCredit(donor, _expectedCharge() * 3);
+        vm.prank(donor);
+        game.requestLootboxRng();
+        assertFalse(game.rngLocked());
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 42);
+        assertEq(RecyclingState.currentWord(address(game)), 42, "midday word is unchanged");
+        assertEq(RecyclingState.nudgeCount(address(game)), 5, "daily nudge remains pending");
+        assertEq(uint256(game.extsload(bytes32(uint256(3)))), 42, "shared unchanged payload");
+    }
+
+    function test_EmptyBoxMiddaySessionRequiresKeeperPublicationAndRetainsMetadata() public {
+        // Finish the fixture's primed day through production stages, including the
+        // empty ticket frontier; marking only dailyIdx would leave genesis tickets pending.
+        uint24 day = game.currentDayView();
+        for (uint256 i; i < 100 && (uint24(uint256(game.extsload(bytes32(0))) >> 24) != day || game.rngLocked()); ++i) {
+            game.advanceGame();
+        }
+        assertEq(uint24(uint256(game.extsload(bytes32(0))) >> 24), day, "real daily stage completed");
+        _idleRequestRouter();
+        _grantCredit(donor, _expectedCharge() * 5);
+        vm.prank(donor);
+        game.requestLootboxRng();
+        uint256 id = mockVRF.lastRequestId();
+        bytes32 requestSlot = game.extsload(bytes32(uint256(4)));
+        uint256 requestTime = (uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max;
+        bytes32 packed = game.extsload(bytes32(uint256(33)));
+        vm.recordLogs();
+        mockVRF.fulfillRandomWords(id, 42);
+        Vm.Log[] memory delivered = vm.getRecordedLogs();
+        bytes32 applied = keccak256("LootboxRngApplied(uint48,uint256,uint256)");
+        for (uint256 i; i < delivered.length; ++i) {
+            assertFalse(delivered[i].emitter == address(game) && delivered[i].topics[0] == applied,
+                "callback must not pay for publication");
+        }
+        assertEq(game.extsload(bytes32(uint256(33))), packed, "callback must not write queue metadata");
+        assertEq(game.extsload(bytes32(uint256(4))), requestSlot, "callback retains request ID");
+        assertFalse(game.rngComplete(), "delivery alone cannot complete the session");
+        assertTrue(game.advanceDue(), "empty cohort still owes a keeper publication");
+        assertTrue(game.isRngFulfilled());
+        vm.recordLogs();
+        game.mineFlip();
+        Vm.Log[] memory published = vm.getRecordedLogs();
+        uint256 count;
+        for (uint256 i; i < published.length; ++i) {
+            if (published[i].emitter == address(game) && published[i].topics[0] == applied) {
+                ++count;
+                (uint48 index, uint256 word, uint256 requestId) = abi.decode(published[i].data, (uint48, uint256, uint256));
+                assertEq(word, 42); assertEq(requestId, id); assertEq(index, RecyclingState.readBuffer(address(game)));
+            }
+        }
+        assertEq(count, 1, "keeper publishes exactly once");
+        assertFalse(game.isRngFulfilled(), "keeper retires callback authority");
+        assertEq(game.extsload(bytes32(uint256(4))), requestSlot, "keeper retains nonzero request ID");
+        assertEq((uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max, requestTime, "keeper retains timestamp");
+        mockVRF.fulfillRandomWordsRaw(id, address(game), 99);
+        assertEq(RecyclingState.currentWord(address(game)), 42, "retained ID cannot authorize a duplicate");
+        // The real daily stage also awards tickets. Drain those through the required
+        // production advance category before completing the empty box frontier.
+        for (uint256 i; i < 100 && game.advanceDue(); ++i) game.mineFlip();
+        assertEq(mockVRF.lastRequestId(), id, "drain does not create another request");
+        _finishReadConsumers();
+        assertTrue(game.rngComplete(), "empty queue still traverses the production completion frontier");
+        vm.prank(donor);
+        game.requestLootboxRng();
+        assertGt(mockVRF.lastRequestId(), id, "next request remains possible");
+        mockVRF.fulfillRandomWordsRaw(id, address(game), 77);
+        assertEq(RecyclingState.currentWord(address(game)), 0, "old ID cannot fill the new session");
+    }
+
+    function test_MineFlipIneligibleRequestRollsBackWithoutChargingCredit() public {
+        _idleRequestRouter();
+        uint256 charge = _expectedCharge();
+        _grantCredit(donor, charge * 3);
+        _mockSubscriptionLink(LOOTBOX_LINK_FLOOR - 1);
+        uint256 request = mockVRF.lastRequestId();
+        bytes32 packed = vm.load(address(game), bytes32(uint256(33)));
+        vm.prank(donor);
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
+        game.mineFlip();
+        assertEq(game.middayRngCredits(donor), charge * 3);
+        assertEq(mockVRF.lastRequestId(), request);
+        assertEq(vm.load(address(game), bytes32(uint256(33))), packed, "failed request changed the cohort");
     }
 
     /// @dev Create pending lootbox ETH strictly below the 1-ether default threshold. Pure
@@ -299,59 +415,79 @@ contract MiddayRngCreditTest is DeployProtocol {
     // The craps exemption
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice The craps table clears an entirely empty queue with no credit at all: it is
-    ///         buying the word that settles a window already bound to the next index, and the
-    ///         lootbox queue's value has nothing to say about that.
-    function test_crapsClearsAnEmptyQueueWithoutCredit() public {
-        uint48 before_ = crapsBattle.currentIndex();
-        assertEq(game.middayRngCredits(address(crapsBattle)), 0, "harness: craps starts with credit");
-
+    /// @dev Mark a craps window pending on the current WRITE buffer, as a shut window does.
+    function _pendCrapsWindow() internal {
         vm.prank(address(crapsBattle));
+        game.setCrapsRngPending(RecyclingState.writeBuffer(address(game)), true);
+    }
+
+    /// @notice A shut craps window waiting on the write buffer clears an entirely empty queue for
+    ///         an ordinary caller holding no credit: the word settles a window already bound to
+    ///         the buffer, and the lootbox queue's value has nothing to say about that.
+    function test_pendingCrapsWindowClearsAnEmptyQueueWithoutCredit() public {
+        _pendCrapsWindow();
+        assertEq(game.middayRngCredits(outsider), 0, "harness: caller starts with credit");
+        uint256 request = mockVRF.lastRequestId();
+
+        vm.prank(outsider);
         game.requestLootboxRng();
 
-        assertEq(crapsBattle.currentIndex(), before_ + 1, "craps was refused an empty-queue request");
-        assertEq(game.middayRngCredits(address(crapsBattle)), 0, "the exemption charged credit");
+        assertGt(mockVRF.lastRequestId(), request, "a pending craps window was refused an empty-queue request");
+        assertEq(game.middayRngCredits(outsider), 0, "the waiver charged credit");
+    }
+
+    /// @notice Negative: with no window pending the same caller is refused the same request.
+    function test_noPendingCrapsWindowRefusesTheSameCaller() public {
+        uint256 request = mockVRF.lastRequestId();
+        vm.prank(outsider);
+        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
+        game.requestLootboxRng();
+        assertEq(mockVRF.lastRequestId(), request, "refused request still asked for a word");
     }
 
     /// @notice The same for a queue that exists but sits under the threshold.
-    function test_crapsClearsABelowThresholdQueue() public {
+    function test_pendingCrapsWindowClearsABelowThresholdQueue() public {
         _purchaseBelowThreshold();
-        uint48 before_ = crapsBattle.currentIndex();
+        _pendCrapsWindow();
+        uint256 request = mockVRF.lastRequestId();
 
-        vm.prank(address(crapsBattle));
+        vm.prank(outsider);
         game.requestLootboxRng();
 
-        assertEq(crapsBattle.currentIndex(), before_ + 1, "craps was refused a below-threshold request");
+        assertGt(mockVRF.lastRequestId(), request, "a pending craps window was refused a below-threshold request");
     }
 
-    /// @notice Craps answers to its own, lower LINK floor: a balance between the two floors
-    ///         refuses every other caller and passes craps.
-    function test_crapsClearsTheLowerLinkFloorWhereOthersAreRefused() public {
-        _purchaseAboveThreshold(); // so only the LINK floor can refuse either caller
+    /// @notice A pending window carries the lower LINK floor for whoever requests: a balance
+    ///         between the two floors refuses the same caller without it and passes with it.
+    function test_pendingCrapsWindowClearsTheLowerLinkFloorWhereOthersAreRefused() public {
+        _purchaseAboveThreshold(); // so only the LINK floor can refuse either request
         _mockSubscriptionLink(CRAPS_LINK_FLOOR + 1 ether);
 
+        vm.prank(outsider);
         vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
         game.requestLootboxRng();
 
-        uint48 before_ = crapsBattle.currentIndex();
-        vm.prank(address(crapsBattle));
+        _pendCrapsWindow();
+        uint256 request = mockVRF.lastRequestId();
+        vm.prank(outsider);
         game.requestLootboxRng();
-        assertEq(crapsBattle.currentIndex(), before_ + 1, "craps was refused above its own floor");
+        assertGt(mockVRF.lastRequestId(), request, "a pending window was refused above its own floor");
     }
 
-    /// @notice The floor is lowered, not removed — craps is still refused below it, so the
-    ///         never-gated daily word always keeps a reserve.
-    function test_crapsIsStillRefusedBelowItsOwnLinkFloor() public {
+    /// @notice The floor is lowered, not removed: a pending window is still refused below it, so
+    ///         the never-gated daily word always keeps a reserve.
+    function test_pendingCrapsWindowIsStillRefusedBelowItsOwnLinkFloor() public {
         _purchaseAboveThreshold();
+        _pendCrapsWindow();
         _mockSubscriptionLink(CRAPS_LINK_FLOOR - 1);
 
-        vm.prank(address(crapsBattle));
+        vm.prank(outsider);
         vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
         game.requestLootboxRng();
     }
 
-    /// @notice Credit buys no relief from the floor craps gets — the lower reserve is bound to
-    ///         the caller, not to the request.
+    /// @notice A pending window rides the write buffer only: pranking as the craps table grants
+    ///         nothing, and a credit holder gets no lower floor without a pending window.
     function test_creditHolderDoesNotInheritTheCrapsLinkFloor() public {
         _grantCredit(donor, 500 ether);
         _mockSubscriptionLink(CRAPS_LINK_FLOOR + 1 ether);
@@ -361,14 +497,19 @@ contract MiddayRngCreditTest is DeployProtocol {
         game.requestLootboxRng();
 
         assertEq(game.middayRngCredits(donor), 500 ether, "credit charged below the LINK floor");
-    }
-
-    /// @notice Nor the basefee ceiling: an expensive block holds the craps request back exactly
-    ///         as it holds anyone else's, which is what the arm's fail-open catch expects.
-    function test_crapsDoesNotWaiveTheBasefeeCeiling() public {
-        vm.fee(6 gwei); // default ceiling is 5 gwei
 
         vm.prank(address(crapsBattle));
+        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
+        game.requestLootboxRng(); // the craps address itself is an ordinary caller now: no lower floor
+    }
+
+    /// @notice Nor the basefee ceiling: an expensive block holds a pending window's request back
+    ///         exactly as it holds anyone else's.
+    function test_pendingCrapsWindowDoesNotWaiveTheBasefeeCeiling() public {
+        _pendCrapsWindow();
+        vm.fee(6 gwei); // default ceiling is 5 gwei
+
+        vm.prank(outsider);
         vm.expectRevert(bytes4(keccak256("GasTooHigh()")));
         game.requestLootboxRng();
     }

@@ -65,6 +65,7 @@ contracts/modules/DegenerusGameLootboxModule.sol
 contracts/modules/DegenerusGameMintModule.sol
 contracts/modules/DegenerusGameMintStreakUtils.sol
 contracts/modules/DegenerusGamePayoutUtils.sol
+contracts/modules/DegenerusGameRngUtils.sol
 contracts/modules/DegenerusGameWhaleModule.sol
 contracts/modules/GameAfkingModule.sol
 contracts/storage/CrapsBattleStorage.sol

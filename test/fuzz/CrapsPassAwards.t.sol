@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
@@ -191,6 +192,8 @@ contract CrapsPassAwards is DeployProtocol {
     uint256 private constant PASS_SIDE_TAG = 0x5061737353696465; // "PassSide"
     uint256 private constant WWXRP_DUD = 1 ether;
 
+    uint48 private presaleBuffer;
+
     /// @dev Buy one fully-ETH-funded presale box at the current index (credit seeded first).
     function _buyPresaleBox(address who, uint256 amount) private returns (uint48 index) {
         vm.store(
@@ -199,39 +202,23 @@ contract CrapsPassAwards is DeployProtocol {
             bytes32(amount)
         );
         vm.deal(who, amount);
-        index = uint48(
-            uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED))) & 0xFFFFFFFFFFFF
-        );
+        index = RecyclingState.writeBuffer(address(game));
+        presaleBuffer = index;
         vm.prank(who);
         game.buyPresaleBox{value: amount}(who, amount);
     }
 
     function _setWord(uint48 index, uint256 word) private {
-        vm.store(
-            address(game),
-            keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_RNG_WORD)),
-            bytes32(word)
-        );
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(word));
     }
 
-    /// @dev `_buyPresaleBox` queues at the CURRENT LR_INDEX, which only advances via
-    ///      advanceGame's daily tick -- never touched by the buy itself. The permissionless
-    ///      openBoxes() sweep only walks FINALIZED indices (idx <= LR_INDEX-1), so without this
-    ///      poke `index` stays the live/un-finalized head forever and the sweep no-ops. Force
-    ///      LR_INDEX to `index + 1` so `index` becomes reachable, mirroring a landed VRF word.
+    /// @dev Publish the purchased physical buffer; seedWord has already installed its word.
     function _finalizeIndex(uint48 index) private {
-        uint256 packed = uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED)));
-        uint256 mask = 0xFFFFFFFFFFFF;
-        vm.store(
-            address(game),
-            bytes32(SLOT_LOOTBOX_RNG_PACKED),
-            bytes32((packed & ~mask) | uint256(index + 1))
-        );
+        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
     }
 
     function _seedOf(uint256 word, address who) private view returns (uint256) {
-        uint48 index = uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED))));
-        return uint256(keccak256(abi.encodePacked(word, keccak256("PRESALE_BOX"), who, index)));
+        return uint256(keccak256(abi.encodePacked(word, keccak256("PRESALE_BOX"), who, presaleBuffer)));
     }
 
     /// @dev A word landing the FLIP branch (outcome < 50) on the requested variance band and
@@ -241,7 +228,7 @@ contract CrapsPassAwards is DeployProtocol {
         view
         returns (uint256 w)
     {
-        for (w = 1; w < 200_000; ++w) {
+        for (w = 2; w < 200_000; ++w) {
             uint256 seed = _seedOf(w, who);
             if (uint16(seed) % 100 >= 50) continue;
             if ((uint16(seed >> 80) % 20 >= 16) != highVariance) continue;
@@ -381,7 +368,7 @@ contract CrapsPassAwards is DeployProtocol {
     /// @dev A word putting a sub-pass roll on the pass side with the fraction's Bernoulli
     ///      landing as requested.
     function _subPassWord(address who, uint256 amount, bool win) private view returns (uint256 w) {
-        for (w = 1; w < 500_000; ++w) {
+        for (w = 2; w < 500_000; ++w) {
             uint256 seed = _seedOf(w, who);
             if (uint16(seed) % 100 >= 50) continue;
             if (uint16(seed >> 80) % 20 >= 16) continue; // low band keeps the roll sub-pass

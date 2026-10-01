@@ -57,11 +57,11 @@
   },
   {
     "bytes": "32",
-    "encoding": "mapping",
-    "label": "pendingByDay",
+    "encoding": "inplace",
+    "label": "pendingAggregate",
     "offset": 0,
     "slot": 7,
-    "typeLabel": "mapping(uint24 => struct sDGNRS.DayPending)"
+    "typeLabel": "struct sDGNRS.DayPending"
   },
   {
     "bytes": "16",

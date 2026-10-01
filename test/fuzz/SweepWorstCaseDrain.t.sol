@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -13,19 +14,19 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///      without any storage change; the real code is restored after each read.
 contract SweepViewer is DegenerusGame {
     function lrIndexView() external view returns (uint48) {
-        return uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
+        return _rngWriteBuffer();
     }
 
     function queueLen(uint48 index) external view returns (uint256) {
-        return boxPlayers[index].length;
+        return boxPlayers[index & 1].length;
     }
 
     function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return lootboxOrder[index][who];
+        return _boxOrder(index, who);
     }
 
     function presaleAmountFor(uint48 index, address who) external view returns (uint256) {
-        return presaleBoxEth[index][who] & PRESALE_BOX_AMOUNT_MASK;
+        return presaleBoxEth[index & 1][who] & PRESALE_BOX_AMOUNT_MASK;
     }
 
     function boxCursorView() external view returns (uint48) {
@@ -33,7 +34,7 @@ contract SweepViewer is DegenerusGame {
     }
 
     function boxCursorIndexView() external view returns (uint48) {
-        return boxCursorIndex;
+        return _rngReadBuffer();
     }
 }
 
@@ -129,17 +130,14 @@ contract SweepWorstCaseDrain is DeployProtocol {
     ///      requestLootboxRng's pre-increment, so boxes queued at the prior indices become finalized
     ///      (LR_INDEX-1 and below — the indices the sweep opens).
     function _advanceLrIndexBy(uint48 n) internal {
-        bytes32 slot = bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint48 idx = uint48(packed & LR_INDEX_MASK);
-        packed = (packed & ~LR_INDEX_MASK) | (uint256(idx + n) & LR_INDEX_MASK);
-        vm.store(address(game), slot, bytes32(packed));
+        require(n == 1, "fixture seals one binary cohort");
+        RecyclingState.seedWriteBuffer(address(game), RecyclingState.writeBuffer(address(game)) ^ 1);
     }
 
     /// @dev Land the committed VRF word for `index` (the per-index freeze anchor the open reads).
     function _landWord(uint48 index, uint256 word) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD)));
-        vm.store(address(game), slot, bytes32(word));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(word));
     }
 
     /// @dev Park the open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 56) at
@@ -150,13 +148,13 @@ contract SweepWorstCaseDrain is DeployProtocol {
         uint256 m = (uint256(1) << 48) - 1;
         packed &= ~(m << (7 * 8));   // boxCursor = 0
         packed &= ~(m << (13 * 8));  // boxCursorIndex field cleared
-        packed |= (uint256(index) & m) << (13 * 8);
+
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Append `count` no-box addresses to boxPlayers[index] — a pure skip-prefix. Each entry has
+    /// @dev Append `count` no-box addresses to boxPlayers[index & 1] — a pure skip-prefix. Each entry has
     ///      a zero lootbox amount AND zero presale leg, so the sweep skips it (one step, no
-    ///      resolution, never reverts). boxPlayers[index] is mapping(uint48 => address[]) at slot 57:
+    ///      resolution, never reverts). boxPlayers[index & 1] is mapping(uint48 => address[]) at slot 57:
     ///      length at keccak(index, 59); element i at keccak(keccak(index,59)) + i.
     function _appendSkipPrefix(uint48 index, uint256 count, uint256 saltSeed) internal {
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));

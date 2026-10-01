@@ -5,25 +5,16 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 
 contract BucketRunHarness is DegenerusGameStorage {
     function append(uint32 owner, uint256 n) external returns (uint256 f, uint256 d) {
-        uint256 slot;
-        assembly ("memory-safe") {
-            mstore(0, 11)
-            mstore(32, lvlTraitEntry.slot)
-            slot := keccak256(0, 64)
-        }
-        return _bucketAppendRun(slot, 7, owner, n);
+        _setTicketBufferLevel(11);
+        return _bucketAppendRun(_traitBufferBase(11), 7, owner, n, 11);
     }
 
     function length() external view returns (uint256) {
-        return lvlTraitEntry[11][7].length;
+        return _bucketLength(11, 7);
     }
 
     function word(uint256 i) external view returns (uint256 value) {
-        uint256[] storage bucket = lvlTraitEntry[11][7];
-        assembly ("memory-safe") {
-            mstore(0, bucket.slot)
-            value := sload(add(keccak256(0, 32), i))
-        }
+        return _bucketWordAtUnchecked(11, 7, i * 8);
     }
 }
 
@@ -37,10 +28,9 @@ contract BucketAppendRunTest is Test {
         uint256 len;
         for (uint256 i; i < 3; ++i) {
             (uint256 fresh, uint256 dirty) = h.append(owners[i], sizes[i]);
-            uint256 tail = len % 8;
-            uint256 tailTake = tail == 0 ? 0 : (sizes[i] < 8 - tail ? sizes[i] : 8 - tail);
-            assertEq(fresh, (len == 0 ? 1 : 0) + (sizes[i] - tailTake + 7) / 8, "fresh units");
-            assertEq(dirty, (len == 0 ? 0 : 1) + (tail == 0 ? 0 : 1), "dirty units");
+            uint256 completed = ((len & 7) + sizes[i]) / 8;
+            assertEq(fresh, (len == 0 ? 1 : 0) + (i == 0 ? 1 : 0) + completed, "zero backing writes");
+            assertEq(dirty, len == 0 ? 0 : 1, "nonzero header writes");
             len += sizes[i];
             assertEq(h.length(), len);
         }

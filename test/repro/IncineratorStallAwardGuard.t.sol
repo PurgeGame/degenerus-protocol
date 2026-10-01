@@ -85,6 +85,20 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         s0 &= ~(uint256(0xFFFFFF) << LEVEL_SHIFT);
         s0 |= uint256(lvl) << LEVEL_SHIFT;
         vm.store(address(game), bytes32(SLOT_0), bytes32(s0));
+        // A synthetic jump across 96 levels also jumps the retained inventory epochs.
+        // Old bootstrap queues are outside this century fixture, not live L-2 work.
+        uint256 s5 = uint256(vm.load(address(game), bytes32(uint256(5))));
+        uint48 stamps = uint48(uint256(lvl) << ((lvl & 1) * 24)
+            | uint256(lvl + 1) << (((lvl + 1) & 1) * 24));
+        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 112)) | (uint256(stamps) << 112)));
+        // The jump also skips the earlier activation/materialization of the
+        // two inventory levels it declares prepared. Remove only those bootstrap
+        // future headers; x00/x01 queues remain real and must drain in this test.
+        for (uint24 skipped = lvl; skipped <= lvl + 1; ++skipped) {
+            bytes32 skippedFuture = keccak256(abi.encode(uint24(skipped | (1 << 22)), uint256(12)));
+            assertGt(uint256(vm.load(address(game), skippedFuture)), 0, "jump has skipped bootstrap obligations");
+            vm.store(address(game), skippedFuture, bytes32(0));
+        }
     }
 
     /// @dev Mint WWXRP to `player` and enter the daily draw (which piggybacks
@@ -195,7 +209,11 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         // The armed day opens and fires its daily request; VRF then stalls.
         simTime += 1 days + 1;
         vm.warp(simTime);
-        _advance();
+        // Complete the prior delivered read work at this clock before the fresh
+        // daily seal; deliberately do not fulfil the new armed-day request.
+        for (uint256 i; i < 80 && !game.rngLocked(); ++i) {
+            if (!_advance()) break;
+        }
         assertTrue(game.rngLocked(), "the armed day's request is outstanding");
 
         // Wall clock runs past the armed day; the vault owner's 12h retry re-sends the same

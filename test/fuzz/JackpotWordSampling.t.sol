@@ -24,6 +24,7 @@ contract WordJackpotHarness is DegenerusGameJackpotModule, BucketSeed {
 
 contract WordScatterHarness is DegenerusGame, BucketSeed {
     function seed(uint256 len) external {
+        level = 42;
         _seedBucketDistinct(42, 7, len, 0x10000);
     }
 }
@@ -130,7 +131,7 @@ contract JackpotWordSamplingTest is Test {
         uint256 len = uint256(length) % 65;
         scatter.seed(len);
         entropy = (entropy & ~uint256(0xffffffffff)) | (uint256(7) << 24);
-        (uint8 trait, address[] memory players) = scatter.sampleTraitEntriesAtLevel(42, entropy);
+        (uint8 trait, address[] memory players) = scatter.sampleTraitEntries(false, entropy);
         assertEq(trait, 7);
         uint256 take = len < 4 ? len : 4;
         assertEq(players.length, take);

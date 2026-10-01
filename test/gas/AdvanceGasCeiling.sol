@@ -85,9 +85,10 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         levelPrizePool[lvl] = 100_000 ether;
         rngWordByDay[day] = rngWord; // the last sealed day's word; the ending requests its own
 
-        // lootbox entropy word the ticket batch reads at lootboxRngWordByIndex[LR_INDEX-1].
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = rngWord | 1;
+        // lootbox entropy word the ticket batch reads at _lootboxWord(LR_INDEX-1).
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = rngWord | 1; _setRngSessionPublished(true); _setRngComplete(false);
 
         uint24 pl = lvl + 1; // purchaseLevel the drain processes (drain calls processTicketBatch(lvl+1))
 

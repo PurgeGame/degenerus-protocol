@@ -121,7 +121,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         _checkBoard(chips);
         DecBattleRound storage round = decBattleRounds[lvl];
         if (
-            gameOver || !decWindowOpen || lvl != level + 1 || round.phase != 0 || player == address(0)
+            gameOver || !_decWindowOpen() || lvl != level + 1 || round.phase != 0 || player == address(0)
                 || baseAmount == 0 || multBps < 10_000 || multBps > 20_000
         ) revert E();
         uint24 day = _simulatedDayIndex();
@@ -183,7 +183,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         DecBattleRound storage round = decBattleRounds[lvl];
         // An empty or already sealed event hands the pool back untouched.
         if (round.phase != 0 || round.count == 0) return poolWei;
-        if (decWindowOpen || poolWei > type(uint128).max) revert E();
+        if (_decWindowOpen() || poolWei > type(uint128).max) revert E();
         round.rngWord = rngWord;
         round.poolWei = uint128(poolWei);
         uint256 places = (uint256(round.count) + 9) / 10;

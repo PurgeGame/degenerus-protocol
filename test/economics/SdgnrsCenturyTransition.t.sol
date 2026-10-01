@@ -33,10 +33,14 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage {
         jackpotFlags = compression;
         jackpotCounter = 0;
         rngLockedFlag = false;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         rngWordByDay[day] = 0;
-        rngRequestTime = 0;
-        vrfRequestId = 0;
+        rngRequestTime = 1;
+        vrfRequestId = 1;
+        _setRngRequestActive(false);
+        _setRngSessionPublished(false);
+        _setRngComplete(true);
+        humanReadComplete = true;
         dailyIdx = day - 1;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
@@ -122,6 +126,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         for (uint256 i; i < 1000 && sdgnrs.lastRecycledCentury() == 0; ++i) {
             _fulfillPending();
             if (game.advanceDue() || game.rngLocked()) game.advanceGame();
+            else if (game.boxesPending()) _finishReadConsumers();
             else vm.warp(block.timestamp + 1 days + 1);
         }
         assertFalse(game.gameOver());

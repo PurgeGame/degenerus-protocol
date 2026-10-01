@@ -14,8 +14,7 @@ OWNER	balancesPacked	modules/DegenerusGameLootboxModule.sol	pullRedemptionReserv
 HELPER	balancesPacked	storage/DegenerusGameStorage.sol	_creditClaimable/_debitClaimable/_debitAfking/_debitClaimableAndAfking/_settleShortfallNoPool/_creditAfkingValue: the per-player packed-balance mutators every module calls
 OWNER	boonPacked	DegenerusGame.sol	NOT A STORAGE WRITE: deityBoonData declares a local uint32 boonPacked = deityBoonPacked[deity] in a view; label collision with the storage identifier
 OWNER	boonPacked	modules/DegenerusGameBoonModule.sol	NOT A STORAGE WRITE: issueDeityBoon's local uint32 boonPacked caches deityBoonPacked[deity]; the real store is deityBoonPacked (separate row)
-OWNER	boxCursorIndex	modules/DegenerusGameLootboxModule.sol	openHumanBoxes persists the open frontier index; sole writer of the human-box sweep cursor pair
-OWNER	boxCursor	modules/DegenerusGameLootboxModule.sol	openHumanBoxes persists the intra-index resume position; sole writer, paired with boxCursorIndex
+OWNER	boxCursor	modules/DegenerusGameLootboxModule.sol	openHumanBoxes persists the intra-index resume position; paired with read-completion flag; fresh seal resets both in shared storage
 HELPER	centuryBonusUsed	storage/DegenerusGameStorage.sol	_setCenturyUsedFor stamps (level<<224|used); the x00 bonus cap mutator
 OWNER	claimablePool	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding release liability: pool -= payout in tandem with the per-player debit
 OWNER	claimablePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots adds the level-transition claimableDelta after crediting winners; one of the paired liability writers
@@ -37,8 +36,6 @@ OWNER	dailyIdx	modules/DegenerusGameAdvanceModule.sol	_unlockRng seals the compl
 OWNER	dailyJackpotCoinTicketsPending	modules/DegenerusGameJackpotModule.sol	payDailyJackpot sets the phase-2 latch, payDailyJackpotCoinAndTickets clears it; both in the jackpot module
 OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameJackpotModule.sol	payDailyJackpot packs the day's ticket budgets; payEarlyBirdTickets consumes and clears the day-1 early-bird field; payPurchaseJackpotBattle clears the battle latch; payDailyJackpotCoinAndTickets consumes the daily field and zeroes the word; in the purchase phase payDailyJackpot(false) prices the ticket leg into the top field and payPurchaseDailyTickets consumes and clears it
 OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameAdvanceModule.sol	daily jackpot battle latch only: _finalizeRngRequest sets _JACKPOT_BATTLE_PENDING (bit 72) on each fresh (non-retry) daily request that carries a battle day, in either phase, right after locking that day's jackpot battle on the table; the jackpot module's battle stage clears it once the field completes. OR-only on bit 72, under the RNG lock the same call takes
-OWNER	decDayOneActive	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest clears on a fresh daily request and arms at the x4/x99 window open; sole writer
-OWNER	decWindowOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest opens at x4/x99 and closes at x5/x00 on the level-promoting request; sole writer
 OWNER	deadClaimed	modules/DegenerusGameGameOverModule.sol	claimDeadVrf marks a claimed ticket bit; sole writer, one-way per ticket, dead-VRF ending (LR_GO_DEAD latched, terminal)
 OWNER	deadCreated	modules/DegenerusGameGameOverModule.sol	tallyDeadVrf accumulates the created-ticket count in its stage 2; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
 OWNER	deadPot	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain fixes the dead ending's pot once; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
@@ -67,7 +64,7 @@ OWNER	jackpotCounter	modules/DegenerusGameAdvanceModule.sol	_endPhase zeroes the
 OWNER	jackpotCounter	modules/DegenerusGameJackpotModule.sol	payDailyJackpotCoinAndTickets advances it by one in the tx that seals the day or ends the level; the advance module's _endPhase is the only reset
 OWNER	jackpotPhaseFlag	modules/DegenerusGameAdvanceModule.sol	advanceGame sets at the purchase->jackpot transition and clears at transition close; sole writer
 OWNER	lastPurchaseDay	modules/DegenerusGameAdvanceModule.sol	advanceGame arms (turbo/target-met) and clears at jackpot entry; sole writer
-OWNER	lastVrfProcessedTimestamp	modules/DegenerusGameAdvanceModule.sol	_applyDailyRng stamps the time the daily word was applied; runtime sole writer
+OWNER	lastVrfProcessedTimestamp	modules/DegenerusGameRngUtils.sol	_applyDailyRng stamps the time the daily word was applied; runtime sole writer
 INIT	lastVrfProcessedTimestamp	modules/DegenerusGameGameOverModule.sol	wireVrf (deploy-only, called from the ADMIN constructor) seeds the timestamp; the deadman itself keys off dailyIdx
 HELPER	levelDgnrsPacked	storage/DegenerusGameStorage.sol	_setLevelDgnrsAllocation/_addLevelDgnrsClaimed field mutators for the per-level DGNRS (allocation, claimed) pair
 OWNER	level	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest promotes level = lvl on the fresh last-purchase request; the sole writer (advance-chain coupling with GNRUS.pickCharity)
@@ -77,8 +74,6 @@ HELPER	lootboxEvCapPacked	storage/DegenerusGameStorage.sol	_setLootboxEvUsedFor 
 OWNER	lootboxRngPacked	modules/DegenerusGameAdvanceModule.sol	_lrAdvanceIndexClearPending bumps the index and zeroes the pending ETH/FLIP accumulators at each fresh VRF request; closes the index the lootbox module fed
 OWNER	lootboxRngPacked	modules/DegenerusGameLootboxModule.sol	beginBoxOrder/recordCoverBox add to the pending-ETH field of the current index (masked RMW from the cached word); the advance module zeroes it at the next request
 HELPER	lootboxRngPacked	storage/DegenerusGameStorage.sol	_lrWrite/_lrAdd field mutators (index, pending, mid-day latch, game-over latches)
-OWNER	lootboxRngWordByIndex	DegenerusGame.sol	rawFulfillRandomWords mid-day branch stores the word at LR_INDEX-1 (slot reserved empty by requestLootboxRng) and clears the request
-OWNER	lootboxRngWordByIndex	modules/DegenerusGameAdvanceModule.sol	advanceGame stores the daily word at the known-empty preIdx, _finalizeLootboxRng guards on ==0; write-once per index
 OWNER	middayRngCredit	DegenerusGame.sol	creditMiddayRng (ADMIN) banks donated LINK credit; the advance module debits
 OWNER	middayRngCredit	modules/DegenerusGameAdvanceModule.sol	_tryChargeMiddayCredit debits the caller's credit for a mid-day request; the facade credits
 OWNER	mintPacked_	modules/DegenerusGameBoonModule.sol	_creditActivity bumps LEVEL_COUNT via setPacked on a fresh read; field-isolated
@@ -95,9 +90,9 @@ OWNER	presaleBoxCredit	modules/DegenerusGameWhaleModule.sol	pass purchases accru
 OWNER	presaleBoxCredit	modules/GameAfkingModule.sol	_settlePendingFlip accrues credit from afking FLIP while presale open; accrual-only
 OWNER	presaleBoxDgnrsPoolStart	modules/DegenerusGameLootboxModule.sol	_presaleBoxDgnrsReward snapshots the DGNRS pool on first resolution; one-shot latch
 OWNER	presaleBoxEthSold	modules/DegenerusGameMintModule.sol	_buyPresaleBoxFor advances the cumulative box-ETH sold; sole writer
-OWNER	presaleCloseIndex	modules/DegenerusGameMintModule.sol	_buyPresaleBoxFor records the crossing box's index; the lootbox sweep reads it to flip presaleDrained
+OWNER	presaleCloseBuffer	modules/DegenerusGameMintModule.sol	_buyPresaleBoxFor records the crossing box's index; the lootbox sweep reads it to flip presaleDrained
 OWNER	presaleCloser	modules/DegenerusGameMintModule.sol	_buyPresaleBoxFor stamps the crossing box's buyer; the lootbox sweep pays that buyer the Pool.PresaleBox remainder when it flips presaleDrained
-OWNER	presaleDrained	modules/DegenerusGameLootboxModule.sol	openHumanBoxes flips the one-way latch once the sweep passes presaleCloseIndex (gated on presaleOver); sole writer
+OWNER	presaleDrained	modules/DegenerusGameLootboxModule.sol	openHumanBoxes flips the one-way latch once the sweep passes presaleCloseBuffer (gated on presaleOver); sole writer
 OWNER	presaleOver	modules/DegenerusGameMintModule.sol	_buyPresaleBoxFor latches the terminal on the crossing buy; sole writer, one-way
 OWNER	prizePoolFrozen	modules/DegenerusGameAdvanceModule.sol	_freezePool/_unfreezePool own the freeze; unfreeze folds pending into live
 OWNER	prizePoolFrozen	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain clears the freeze after zeroing the live pools so _unlockRng's _unfreezePool cannot resurrect pending ETH; terminal
@@ -109,12 +104,10 @@ HELPER	prizePoolsPacked	storage/DegenerusGameStorage.sol	_setPrizePools/_addPriz
 INIT	purchaseStartDay	DegenerusGame.sol	constructor seeds the deploy day
 OWNER	purchaseStartDay	modules/DegenerusGameAdvanceModule.sol	advanceGame stamps the new level's start at transition close; rngGate extends by stall gap days; sole runtime writer
 OWNER	rngLockedFlag	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest/_gameOverEntropy take the lock, _unlockRng releases; sole writer
-OWNER	rngRequestTime	DegenerusGame.sol	rawFulfillRandomWords mid-day branch clears the timer with vrfRequestId on fulfilment
-OWNER	rngRequestTime	modules/DegenerusGameAdvanceModule.sol	requestLootboxRng/_finalizeRngRequest arm (LSB = daily retry-spent), _gameOverEntropy arms the fallback timer, _unlockRng clears
+OWNER	rngRequestTime	modules/DegenerusGameAdvanceModule.sol	requestLootboxRng/_finalizeRngRequest stamp fresh requests (LSB = daily retry-spent); unlock retains timestamp
 OWNER	rngRequestTime	modules/DegenerusGameGameOverModule.sol	updateVrfCoordinatorAndSub re-arms the timer when it re-issues an in-flight request on the new coordinator (governance rotation); clears the retry LSB deliberately
-OWNER	rngWordByDay	modules/DegenerusGameAdvanceModule.sol	_applyDailyRng records the sealed day's word; _backfillGapDays derives words for stall days; sole writer
-OWNER	rngWordCurrent	DegenerusGame.sol	rawFulfillRandomWords daily branch stores the delivered word (guarded requestId match and ==0)
-OWNER	rngWordCurrent	modules/DegenerusGameAdvanceModule.sol	request paths zero it, _applyDailyRng stores the nudged word, _gameOverEntropy stores the fallback, _unlockRng clears
+OWNER	rngWordByDay	modules/DegenerusGameRngUtils.sol	_applyDailyRng records the sealed day's word; _backfillGapDays derives words for stall days; sole writer
+OWNER	rngWordCurrent	modules/DegenerusGameAdvanceModule.sol	Normal fresh request/retry sets the nonzero waiting sentinel; daily unlock retains the read payload.
 OWNER	_sdgnrsBonusLevel	modules/GameAfkingModule.sol	processSubscriberStage latches the level at which SDGNRS's bonus box fired; sole writer
 OWNER	snapLevel	DegenerusGame.sol	setThanosLevel declares the pending (level, shift) pair; the advance module consumes it at promotion
 OWNER	snapLevel	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest zeroes the declaration when lvl >= snapLevel after folding it into snapShift
@@ -130,16 +123,11 @@ OWNER	ticketCursor	modules/DegenerusGameMintModule.sol	processTicketBatch and it
 INIT	ticketGenerationStartBlock	DegenerusGame.sol	constructor stamps the deployment block for level 1, the first ticket level; outside all drain steps
 OWNER	ticketGenerationStartBlock	modules/DegenerusGameAdvanceModule.sol	early target-met request or last-purchase latch stamps the next level's generation window; later latches preserve its first opening block
 OWNER	ticketLevel	modules/DegenerusGameMintModule.sol	ticket batch workers stamp the level being walked (the far-future continuation stamps lvl|FF bit) and clear to 0 at release; sole owner
-OWNER	ticketRedemptionOpen	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest closes the FLIP window at the final jackpot request
-OWNER	ticketRedemptionOpen	modules/DegenerusGameMintModule.sol	_redeemFlipFor opens lazily on the first redeem once target met and unlocked; the crank closes
-OWNER	ticketsFullyProcessed	modules/DegenerusGameAdvanceModule.sol	advanceGame/_handleGameOverPath set when the sweep finishes and clear when work is discovered; _swapTicketSlot clears on swap; sole writer
-OWNER	ticketWriteSlot	modules/DegenerusGameAdvanceModule.sol	_swapTicketSlot toggles the double-buffer parity; sole writer
-OWNER	totalFlipReversals	DegenerusGame.sol	reverseFlip increments the nudge count (FLIP burn); the crank consumes
-OWNER	totalFlipReversals	modules/DegenerusGameAdvanceModule.sol	_applyDailyRng applies queued nudges to the word and zeroes the count
+OWNER	ticketsFullyProcessed	modules/DegenerusGameAdvanceModule.sol	Advance updates read-ticket completion at generation/drain transitions.
+OWNER	ticketWriteSlot	modules/DegenerusGameRngUtils.sol	_swapTicketSlot toggles the double-buffer parity; sole writer
 INIT	vrfCoordinator	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation; config, not game state
 INIT	vrfKeyHash	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
-OWNER	vrfRequestId	DegenerusGame.sol	rawFulfillRandomWords mid-day branch clears the id on fulfilment
-OWNER	vrfRequestId	modules/DegenerusGameAdvanceModule.sol	request paths set the outstanding id; _unlockRng clears
+OWNER	vrfRequestId	modules/DegenerusGameAdvanceModule.sol	request paths replace retained nonzero IDs; unlock revokes the packed active bit
 OWNER	vrfRequestId	modules/DegenerusGameGameOverModule.sol	updateVrfCoordinatorAndSub re-issues an in-flight request on the new coordinator and stores the new id (the old fulfilment is rejected by mismatch)
 INIT	vrfSubscriptionId	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
 OWNER	whalePassClaims	modules/DegenerusGameBoonModule.sol	_activateWhalePass adds two half-passes with a checked add (an overflow reverts rather than drops, unreachable at the 100-box cap); the whale module drains
@@ -155,10 +143,24 @@ OWNER	ticketRound	modules/DegenerusGameFoilPackModule.sol	drainRounds advances t
 OWNER	ticketSeats	modules/DegenerusGameFoilPackModule.sol	drainRounds records the seats still holding entries when a chunk ends (queue indices plus one, queue order) so the next chunk re-seats them without rescanning holes
 OWNER	ticketSeats	modules/DegenerusGameMintModule.sol	_drainSeatedSurvivors pops seats it drains by index below the seat floor; processFutureTicketBatch clears it on an empty queue
 OWNER	ticketSeats	storage/DegenerusGameStorage.sol	_releaseTicketQueue clears the seats with the drained queue
-OWNER	terminalAffiliate	modules/DegenerusGameAdvanceModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; handleGameOverDrain reads it
+OWNER	terminalAffiliate	modules/DegenerusGameGameOverModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; handleGameOverDrain reads it
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameJackpotModule.sol	pricing latches even half-pass units from exact early-bird surplus; settlement consumes once with no pool movement
 OWNER	earlyBirdWhalePasses	modules/DegenerusGameGameOverModule.sol	terminal drain cancels any pending early-bird pass prize
 OWNER	earlyTicketLevel	modules/DegenerusGameAdvanceModule.sol	first fresh daily or mid-day request after the goal freezes this absolute next-level pool and permanently closes its far-future queue to later entries
 OWNER	decBattleEntries	modules/DegenerusGameDecimatorModule.sol	recordDecBurn writes an entry's owner, board and stack; only its own wallet's burns rewrite it, and settlement only reads it
 OWNER	decBattlePlayers	modules/DegenerusGameDecimatorModule.sol	recordDecBurn points a wallet at its latest entry; a new event's first burn repoints it, and settlement never reads it
 OWNER	decBattleQueue	modules/DegenerusGameDecimatorModule.sol	Sealing appends FIFO rounds; completion advances head (clears the queue when it was the last)
+OWNER	lootboxRngPacked	modules/DegenerusGameGameOverModule.sol	Terminal-only cold request transition advances once after coordinator success; preserves ending flags, clears normal readiness and pending activity.
+OWNER	rngLockedFlag	modules/DegenerusGameGameOverModule.sol	Successful terminal coordinator request locks daily consumption; no normal completion predicate is called.
+OWNER	rngWordCurrent	modules/DegenerusGameGameOverModule.sol	Successful terminal request invalidates buffered daily payload, as the previous Advance _tryRequestRng did.
+HELPER	ticketCursor	storage/DegenerusGameStorage.sol	_prepareTicketLevel clears old empty resume state on legal retirement; pending seats prohibit normal takeover.
+HELPER	ticketLevel	storage/DegenerusGameStorage.sol	_prepareTicketLevel clears the old empty resume identity on legal retirement; no paid normal queue is discarded.
+HELPER	ticketBufferLevels	storage/DegenerusGameStorage.sol	_setTicketBufferLevel updates one parity epoch in verified spare bytes of slot 5; retirement derived from its higher occupant.
+OWNER	decimatorFlags	storage/DegenerusGameStorage.sol	Shared masked setters preserve independent burn-window and opening-day bits at slot-0 byte 18; used by Advance and terminal workers.
+OWNER	ticketsFullyProcessed	modules/DegenerusGameRngUtils.sol	Shared normal/terminal _swapTicketSlot clears read-ticket completion.
+OWNER	rngFlagsAndNudges	storage/DegenerusGameStorage.sol	Masked helpers preserve window/complete bits, nine-bit exact256 nudge counter and callback reserved-word receipt.
+OWNER	rngWordCurrent	DegenerusGame.sol	Authenticated active request callback stores final word; no event, cleanup or completion here.
+HELPER	boxCursor	storage/DegenerusGameStorage.sol	Fresh seal resets the cursor after read completion; retries preserve it.
+HELPER	humanReadComplete	storage/DegenerusGameStorage.sol	Initial idle true, fresh seals false; only box/bet worker completes the read.
+OWNER	humanReadComplete	modules/DegenerusGameLootboxModule.sol	True only after every box, presale leg and bet in the current read completes.
+HELPER	traitBucketLive	storage/DegenerusGameStorage.sol	Parity takeover clears validity; append helpers set a trait bit when initializing its header tail.

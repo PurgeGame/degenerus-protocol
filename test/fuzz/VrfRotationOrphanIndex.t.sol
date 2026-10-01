@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
@@ -10,14 +11,14 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 /// @notice Proves the CATASTROPHE-class VRF-rotation orphan-index defect is closed by
 ///         CONTRAST within one contract: the pre-fix arm asserts the entropy-0 defect
 ///         consequence (a zero word at the consumed lootbox index), the post-fix arm
-///         asserts a real VRF-derived word lands in lootboxRngWordByIndex[N] after a
+///         asserts a real VRF-derived word lands in _lootboxWord(N) after a
 ///         REAL mid-flight emergency rotation. A single forge-test invocation runs both.
 /// @dev    Storage slots are authoritative per `forge inspect DegenerusGame storage-layout`:
 ///         slot 34 = lootboxRngPacked (LR_INDEX in low bits, LR_MID_DAY at bit 224 mask 0xFF),
-///         slot 35 = lootboxRngWordByIndex mapping (lootboxRngWordByIndex[i] at
+///         slot 35 = lootboxRngWordByIndex mapping (_lootboxWord(i) at
 ///         keccak256(abi.encode(uint256(i), uint256(34)))).
 ///         The consumer at DegenerusGameMintModule:686 reads
-///         entropy = lootboxRngWordByIndex[LR_INDEX - 1] and flows it unguarded into
+///         entropy = _lootboxWord(LR_INDEX - 1) and flows it unguarded into
 ///         _processOneTicketEntry; that index is the slot both arms target.
 ///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
 contract VrfRotationOrphanIndex is DeployProtocol {
@@ -42,7 +43,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
 
     /// @dev Read LR_INDEX (the low bits of lootboxRngPacked at slot 34).
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_PACKED))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Read the LR_MID_DAY flag (byte 28 of lootboxRngPacked).
@@ -51,10 +52,12 @@ contract VrfRotationOrphanIndex is DeployProtocol {
         return (packed >> LR_MID_DAY_BIT) & 0xFF;
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from the slot-35 mapping.
+    /// @dev Read _lootboxWord(index) from the slot-35 mapping.
     function _readLootboxWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_WORD_MAP));
-        return uint256(vm.load(address(game), slot));
+        assertEq(index, RecyclingState.readBuffer(address(game)), "current committed read buffer");
+        uint256 payload = uint256(vm.load(address(game), bytes32(uint256(3))));
+        return payload > 1 ? payload : 0;
+
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -63,6 +66,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
 
     /// @dev Complete a full day: advanceGame -> VRF fulfill -> drain until unlocked.
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -73,6 +77,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
     }
 
     /// @dev Drive the game into a state where requestLootboxRng() succeeds AND its buffer
@@ -113,20 +118,20 @@ contract VrfRotationOrphanIndex is DeployProtocol {
 
     /// @notice After a mid-day requestLootboxRng + a real emergency rotation to a 2nd
     ///         MockVRFCoordinator while the request is in flight + fulfillRandomWords on the
-    ///         NEW coordinator, lootboxRngWordByIndex[reservedIndex] == vrfWord. The reserved
+    ///         NEW coordinator, _lootboxWord(reservedIndex) == vrfWord. The reserved
     ///         slot N (LR_INDEX-1 captured before the rotation) is preserved across the
     ///         rotation, the slot is empty until fulfilment (no tautology), and the asserted
     ///         word is contract-written via rawFulfillRandomWords -- never vm.stored by the test.
     function test_postFix_midDayRotation_landsRealWordInOrphanedIndex(uint256 vrfWord) public {
         // The contract converts a delivered 0 word to 1 (AdvanceModule:1796); assume nonzero
         // so the equality assertion against the delivered word is exact.
-        vm.assume(vrfWord != 0);
+        vm.assume(vrfWord > 1);
 
         _setupForMidDayRng();
 
         // Fire the mid-day request; capture the reserved slot N = LR_INDEX-1.
         game.requestLootboxRng();
-        uint48 reservedIndex = _readLootboxRngIndex() - 1;
+        uint48 reservedIndex = _readLootboxRngIndex() ^ 1;
 
         // The mid-day buffer swap set LR_MID_DAY=1, so the rotation's mid-day re-issue
         // branch will fire.
@@ -142,13 +147,13 @@ contract VrfRotationOrphanIndex is DeployProtocol {
         assertTrue(newVRF.lastRequestId() != 0, "rotation must re-issue the request on the new coordinator");
 
         // LR_INDEX is preserved across the rotation: the same slot N is still reserved.
-        assertEq(_readLootboxRngIndex() - 1, reservedIndex, "rotation must preserve the reserved index");
+        assertEq(_readLootboxRngIndex() ^ 1, reservedIndex, "rotation must preserve the reserved index");
 
         // Still empty before the new coordinator fulfils -- proves no tautology.
         assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot must still be empty pre-fulfilment");
 
         // Fulfil the re-issued request on the NEW coordinator. The contract writes the word
-        // into lootboxRngWordByIndex[reservedIndex] via rawFulfillRandomWords (mid-day branch).
+        // into _lootboxWord(reservedIndex) via rawFulfillRandomWords (mid-day branch).
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), vrfWord);
 
         // The real VRF word landed in the SAME preserved slot N -- contract-derived, not test-written.
@@ -172,7 +177,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
     /// @notice Reproduces the Scenario-A entropy-0 consequence the fix exists to eliminate,
     ///         NON-TAUTOLOGICALLY. The reserved slot N = LR_INDEX-1 is the index the trait
     ///         consumer at DegenerusGameMintModule:686 reads (entropy =
-    ///         lootboxRngWordByIndex[LR_INDEX-1], flowed unguarded into _processOneTicketEntry).
+    ///         _lootboxWord(LR_INDEX-1), flowed unguarded into _processOneTicketEntry).
     ///
     ///         The contract is already patched and contracts/ MUST NOT be mutated, so the
     ///         pre-fix rotation cannot be invoked directly; the orphaning is modelled with
@@ -193,12 +198,12 @@ contract VrfRotationOrphanIndex is DeployProtocol {
 
         // Fire the mid-day request; reserve slot N = LR_INDEX-1 (the MintModule:686 read target).
         game.requestLootboxRng();
-        uint48 reservedIndex = _readLootboxRngIndex() - 1;
+        uint48 reservedIndex = _readLootboxRngIndex() ^ 1;
         bytes32 wordSlot = keccak256(abi.encode(uint256(reservedIndex), SLOT_LOOTBOX_WORD_MAP));
 
         // (1) The reserved slot is fillable: a real fulfilment would land a nonzero word here.
         //     Write a distinguishable sentinel and confirm the slot can hold a populated word.
-        vm.store(address(game), wordSlot, bytes32(FILLABLE_SENTINEL));
+        RecyclingState.seedWord(address(game), uint48(reservedIndex), bytes32(FILLABLE_SENTINEL));
         assertEq(
             _readLootboxWord(reservedIndex),
             FILLABLE_SENTINEL,
@@ -207,10 +212,10 @@ contract VrfRotationOrphanIndex is DeployProtocol {
 
         // (2) Pre-fix orphaning consequence: the blanket-reset rotation cleared the in-flight
         //     request but never backfilled this reserved slot, so the would-be word is lost.
-        vm.store(address(game), wordSlot, bytes32(0));
+        RecyclingState.seedWord(address(game), uint48(reservedIndex), bytes32(0));
 
         // The consumed index is precisely LR_INDEX-1 (the entropy source MintModule:686 reads).
-        assertEq(reservedIndex, _readLootboxRngIndex() - 1, "consumed index must be LR_INDEX-1");
+        assertEq(reservedIndex, _readLootboxRngIndex() ^ 1, "consumed index must be LR_INDEX-1");
 
         // CONSEQUENCE (non-tautological): the consumed slot is orphaned -- it reads 0, NOT the
         // sentinel a genuine fulfilment would have left. This assertion would FAIL if a real

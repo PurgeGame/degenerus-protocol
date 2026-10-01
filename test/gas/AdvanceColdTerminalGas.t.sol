@@ -18,7 +18,7 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
         dailyIdx = day - sealedAge;
         levelPrizePool[9] = 1000 ether;
         ticketsFullyProcessed = true;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         for (uint8 q; q < 4; ++q) {
             _seedBucketDistinct(10, traits[q], 5000, uint160(0x7E000000 + uint256(q) * 0x100000));

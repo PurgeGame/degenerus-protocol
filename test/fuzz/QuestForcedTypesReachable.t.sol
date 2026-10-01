@@ -160,12 +160,12 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         QuestInfo[2] memory active = quests.getActiveQuests();
         bool windowOpen = game.decWindow();
         bool inJackpot = game.jackpotPhase();
-        // decDayOneActive is slot 0 byte [31:32] -- raised by the request that
+        // The opening-day bit is slot 0 byte 18 bit 1 -- raised by the request that
         // arms a burn window, cleared by the next day's fresh request, so it
         // still reads true after the arming day's advances finish.
         bool armingDayThisDay = ((uint256(
             vm.load(address(game), bytes32(uint256(0)))
-        ) >> 248) & 1) == 1;
+        ) >> 145) & 1) == 1;
         if (armingDayThisDay) sawArmingDay = true;
 
         for (uint256 s = 0; s < 2; s++) {

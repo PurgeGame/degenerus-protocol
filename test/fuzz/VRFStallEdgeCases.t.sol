@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
@@ -31,6 +32,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     uint256 private _lastFulfilledReqId;
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -41,6 +43,7 @@ contract VRFStallEdgeCases is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+            _finishReadConsumers();
     }
 
     /// @dev Deploy a new MockVRFCoordinator, wire it up via admin prank.
@@ -97,18 +100,17 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Read lootboxRngIndex directly from storage slot 35 (lower 48 bits of lootboxRngPacked)
     ///      (Stage B packing: lootboxRngPacked = slot 34).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 34, Stage B Game pack).
+    /// @dev Read _lootboxWord(index) from storage (mapping at slot 34, Stage B Game pack).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(34)));
-        return uint256(vm.load(address(game), slot));
+        return RecyclingState.word(address(game), index);
     }
 
     /// @dev Read rngWordCurrent directly from storage slot 3.
     function _readRngWordCurrent() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
+        return RecyclingState.currentWord(address(game));
     }
 
     /// @dev Read vrfRequestId directly from storage slot 4.
@@ -136,16 +138,17 @@ contract VRFStallEdgeCases is DeployProtocol {
     ///      wall day still completes.
     function test_gapBackfillEntropyUnique_sentinelWords() public {
         uint256 snap = vm.snapshotState();
-        test_gapBackfillEntropyUnique_fuzz(0);
+        test_gapBackfillEntropyUnique_fuzz(2);
         vm.revertToState(snap);
-        test_gapBackfillEntropyUnique_fuzz(1);
+        test_gapBackfillEntropyUnique_fuzz(type(uint256).max);
     }
 
     /// @notice Fuzz: gap backfill entropy produces unique per-day words derived from
     ///         keccak256(vrfWord, gapDay). Verifies all gap day words are distinct.
     function test_gapBackfillEntropyUnique_fuzz(uint256 vrfWord) public {
         // The callback delivers a zero word as 1; the backfill derives from the delivered word.
-        uint256 delivered = vrfWord == 0 ? 1 : vrfWord;
+        vm.assume(vrfWord > 1);
+        uint256 delivered = vrfWord;
 
         // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
@@ -446,7 +449,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Record totalFlipReversals before swap
         uint256 preSwapReversals = uint256(
-            uint64(uint256(vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)))))
+            RecyclingState.nudgeCount(address(game))
         );
 
         // Warp to the next day (day 3 absolute), trigger VRF request, then swap
@@ -456,12 +459,12 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // totalFlipReversals must be preserved
         uint256 postSwapReversals = uint256(
-            uint64(uint256(vm.load(address(game), bytes32(uint256(SLOT_TOTAL_FLIP_REVERSALS)))))
+            RecyclingState.nudgeCount(address(game))
         );
         assertEq(
             postSwapReversals,
             preSwapReversals,
-            "totalFlipReversals preserved across swap"
+            "_nudgeCount() preserved across swap"
         );
     }
 
@@ -489,7 +492,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         game.requestLootboxRng();
 
         // The reserved index this mid-day request is bound to (LR_INDEX - 1)
-        uint48 reservedIndex = _lootboxRngIndex() - 1;
+        uint48 reservedIndex = (_lootboxRngIndex() ^ 1);
 
         // Verify midDayTicketRngPending is set (bits 224-231 of lootboxRngPacked slot 36)
         uint256 lrPacked = uint256(
@@ -509,7 +512,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         assertEq(midDayVal, 1, "midDayTicketRngPending preserved after swap (re-issued)");
 
         // LR_INDEX preserved -> the re-issue targets the same reserved index
-        assertEq(_lootboxRngIndex() - 1, reservedIndex, "reserved lootbox index preserved across swap");
+        assertEq((_lootboxRngIndex() ^ 1), reservedIndex, "reserved lootbox index preserved across swap");
 
         // A re-issued request exists on the new coordinator
         uint256 reissued = newVRF.lastRequestId();
@@ -561,10 +564,10 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         uint256 stalledReqId = mockVRF.lastRequestId();
         uint48 postRequestIndex = _lootboxRngIndex();
-        uint48 reservedBucket = postRequestIndex - 1;
+        uint48 reservedBucket = (postRequestIndex ^ 1);
 
         assertTrue(stalledReqId != 0, "Mid-day VRF request fired");
-        assertEq(postRequestIndex, preIndex + 1, "Mid-day request advanced lootboxRngIndex");
+        assertEq(postRequestIndex, (preIndex ^ 1), "Mid-day request advanced lootboxRngIndex");
         assertFalse(game.rngLocked(), "Mid-day request leaves the daily lock clear");
 
         // Confirm LR_MID_DAY = 1 (swap committed)
@@ -613,7 +616,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         _completeDay(0xDEAD0001);
 
         // Verify lootboxRngWord at current index is nonzero after completing the first day
-        uint48 preSwapIndex = _lootboxRngIndex() - 1;
+        uint48 preSwapIndex = (_lootboxRngIndex() ^ 1);
         uint256 preSwapWord = _lootboxRngWord(preSwapIndex);
         assertTrue(preSwapWord != 0, "lootboxRngWord at current index nonzero after first day");
 
@@ -630,7 +633,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         _resumeAfterSwap(newVRF, 0xCAFE0002);
 
         // After resume: lootboxRngWord at new index updated via _finalizeLootboxRng
-        uint48 postResumeIndex = _lootboxRngIndex() - 1;
+        uint48 postResumeIndex = (_lootboxRngIndex() ^ 1);
         uint256 postResumeWord = _lootboxRngWord(postResumeIndex);
         assertTrue(postResumeWord != 0, "lootboxRngWord at current index nonzero after resume");
     }
@@ -647,9 +650,9 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Coordinator swap at game start (edge case): the daily request is re-sent for the
         // same reserved index
-        uint48 reservedIndex = _lootboxRngIndex() - 1;
+        uint48 reservedIndex = (_lootboxRngIndex() ^ 1);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
-        assertEq(_lootboxRngIndex() - 1, reservedIndex, "swap re-sends for the reserved index");
+        assertEq((_lootboxRngIndex() ^ 1), reservedIndex, "swap re-sends for the reserved index");
         assertEq(_lootboxRngWord(reservedIndex), 0, "reserved index unfinalized before the word");
 
         // Resume: the re-sent request's word finalizes that index

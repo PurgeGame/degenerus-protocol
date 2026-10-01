@@ -90,12 +90,19 @@ contract FSMAdvanceHarness is DegenerusGameAdvanceModule {
         purchaseStartDay = purchaseDay;
         lastPurchaseDay = lastPurchase;
         ticketsFullyProcessed = true;
-        lootboxRngPacked = 1;
+        lootboxRngPacked = 0;
+        // vm.etch does not run Storage's inline initializers. Install the same idle
+        // genesis authority and nonzero waiting metadata before invoking production transitions.
+        rngFlagsAndNudges = (uint16(1) << 8) | (uint16(1) << 15);
+        rngWordCurrent = RNG_WORD_WAITING;
+        rngRequestTime = 1;
+        vrfRequestId = 1;
+        humanReadComplete = true;
         vrfCoordinator = IVRFCoordinator(ContractAddresses.VRF_COORDINATOR);
     }
 
     function recordDeliveredWord(uint256 word) external {
-        rngWordCurrent = word;
+        rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
     }
 
     function drainEmptyDeadGame(uint24 day) external {
@@ -112,6 +119,8 @@ contract FSMAdvanceHarness is DegenerusGameAdvanceModule {
     function requestState() external view returns (bool, uint48, uint256) {
         return (rngLockedFlag, rngRequestTime, vrfRequestId);
     }
+
+    function requestActive() external view returns (bool) { return _rngRequestActive(); }
 
     function wordAt(uint24 day) external view returns (uint256) {
         return rngWordByDay[day];
@@ -250,7 +259,7 @@ contract GameFSMSymbolicTest is Test {
         _mustCall(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
         assert(machine.sealedDay() == day);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
-        assert(!locked && requestTime == 0 && requestId == 0);
+        assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);
         assert(machine.level() == 1);
         assert(FSMEmptyDependencies(ContractAddresses.COINFLIP).settlements() == uint256(gap) + 1);
         (bool repeated,) = address(machine).call(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));

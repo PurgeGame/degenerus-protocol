@@ -350,6 +350,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Lootbox Opening Functions
     // =========================================================================
 
+    /// @dev A purchased Degenerette win may cross the normal allowance once, up to this ceiling.
+    uint256 private constant DEGENERETTE_WIN_EV_CAP = 50 ether;
+
     /// @dev Apply EV multiplier with per-account per-level cap of 10 ETH.
     ///      Tracks how much benefit has been used and only applies EV adjustment
     ///      to the uncapped portion. Remainder gets 100% EV (neutral).
@@ -362,6 +365,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         private
         returns (uint256 scaledAmount)
     {
+        return _applyEvMultiplierWithCap(player, lvl, amount, evMultiplierBps, LOOTBOX_EV_BENEFIT_CAP);
+    }
+
+    /// @dev `ceiling` bounds this box's adjustment, while recorded usage always stays within
+    ///      the shared 10 ETH allowance (and its 64-bit storage lane). Eligibility is read once
+    ///      at settlement: an exhausted allowance cannot receive the exceptional extension.
+    function _applyEvMultiplierWithCap(
+        address player, uint24 lvl, uint256 amount, uint256 evMultiplierBps, uint256 ceiling
+    ) private returns (uint256 scaledAmount)
+    {
         // Bonus-only cap: penalty (< NEUTRAL) and neutral (== NEUTRAL) boxes apply the
         // multiplier on the full amount and draw nothing from the cap. Only a bonus box
         // (> NEUTRAL) falls through to the cap-draw branch below.
@@ -371,19 +384,20 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         // Check how much EV benefit capacity remains for this level
         uint256 usedBenefit = _lootboxEvUsedFor(player, lvl);
-        uint256 remainingCap = usedBenefit >= LOOTBOX_EV_BENEFIT_CAP ? 0 : LOOTBOX_EV_BENEFIT_CAP - usedBenefit;
-
-        if (remainingCap == 0) {
+        if (usedBenefit >= LOOTBOX_EV_BENEFIT_CAP) {
             // Cap exhausted: apply 100% EV (neutral)
             return amount;
         }
 
         // Determine how much of this lootbox gets the EV adjustment
+        uint256 remainingCap = ceiling - usedBenefit;
         uint256 adjustedPortion = amount > remainingCap ? remainingCap : amount;
         uint256 neutralPortion = amount - adjustedPortion;
 
         // Update tracking
-        _setLootboxEvUsedFor(player, lvl, usedBenefit + adjustedPortion);
+        uint256 usedAfter = usedBenefit + adjustedPortion;
+        if (usedAfter > LOOTBOX_EV_BENEFIT_CAP) usedAfter = LOOTBOX_EV_BENEFIT_CAP;
+        _setLootboxEvUsedFor(player, lvl, usedAfter);
 
         // Calculate scaled amount:
         // - adjustedPortion gets the full EV multiplier
@@ -585,8 +599,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     function quoteBoxOrder(address buyer, uint256 boxOrder) external payable returns (uint256 costWei) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (boxOrder == 0) return 0;
-        uint48 idx = uint48((lootboxRngPacked >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-        (, costWei,) = _mergeBoxOrder(lootboxOrder[idx][buyer], boxOrder, _activeTicketLevel());
+        uint48 idx = _rngWriteBuffer();
+        (, costWei,) = _mergeBoxOrder(_boxOrder(idx, buyer), boxOrder, _activeTicketLevel());
     }
 
     /// @notice Record a purchase's box order: merge the counts, freeze level and custom size,
@@ -614,19 +628,19 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (boxOrder == 0) return (0, 0, 0, 0);
 
         uint256 lrWord = lootboxRngPacked;
-        uint48 idx = uint48((lrWord >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-        uint256 existing = lootboxOrder[idx][buyer];
+        uint48 idx = _rngWriteBuffer();
+        uint256 existing = _boxOrder(idx, buyer);
 
         uint256 word;
         (word, costWei, priorNominal) = _mergeBoxOrder(existing, boxOrder, _activeTicketLevel());
 
         if (existing == 0) {
             // First box for this (index, buyer): enqueue for the permissionless open cursor.
-            // The consumer walk gates each index on lootboxRngWordByIndex != 0 (VRF
+            // The consumer walk gates each index on the live cohort's delivered word (VRF
             // orphan-index protection), so enqueue is producer-only here — and it happens ONCE
             // per player per index however many boxes they buy, which is what keeps the sweep
             // queue bounded by buyers rather than by boxes.
-            boxPlayers[idx].push(buyer);
+            boxPlayers[idx & 1].push(buyer);
         }
 
         // The boon uplift is capped per purchase and applies only to the purchases that consume a
@@ -660,7 +674,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             );
         }
 
-        lootboxOrder[idx][buyer] = word;
+        lootboxOrder[idx & 1][buyer] = word;
 
         // Biggest-box bounty: a CUSTOM only, and its per-box size, never the order's total.
         // Presets are excluded outright — the bounty marks deliberately going big, and a large
@@ -725,11 +739,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (amountWei < LB_CUSTOM_SCALE) return;
 
         uint256 lrWord = lootboxRngPacked;
-        uint48 idx = uint48((lrWord >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-        uint256 word = lootboxOrder[idx][player];
+        uint48 idx = _rngWriteBuffer();
+        uint256 word = _boxOrder(idx, player);
 
         if (word == 0) {
-            boxPlayers[idx].push(player);
+            boxPlayers[idx & 1].push(player);
             word = _lbSet(0, LB_LEVEL_SHIFT, LB_LEVEL_MASK, _activeTicketLevel())
                 | _lbSet(
                     0,
@@ -813,7 +827,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) + amountWei / LB_CUSTOM_SCALE
             );
         }
-        lootboxOrder[idx][player] = word;
+        lootboxOrder[idx & 1][player] = word;
 
         uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK) + _packEthToMilliEth(amountWei);
         lootboxRngPacked = (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT))
@@ -856,8 +870,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 priorNominal
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        uint48 idx = uint48((lootboxRngPacked >> LR_INDEX_SHIFT) & LR_INDEX_MASK);
-        uint256 word = lootboxOrder[idx][buyer];
+        uint48 idx = _rngWriteBuffer();
+        uint256 word = _boxOrder(idx, buyer);
         if (word == 0) return;
 
         // Score freezes on the period's FIRST box. Clamped to the curve's effective cap so it
@@ -890,7 +904,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             _blendBps(uint16(_lbGet(word, LB_ADJ_SHIFT, LB_BPS_MASK)), priorNominal, evExtra, costWei)
         );
 
-        lootboxOrder[idx][buyer] = word;
+        lootboxOrder[idx & 1][buyer] = word;
     }
 
     /// @dev Per-entry reward accumulator. Every lane an entry's boxes can pay into is summed
@@ -956,9 +970,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (_boxOrderCount(word) == 0) return false;
         if (rngWord == 0) revert RngNotReady();
 
-        // Cleared before any resolution: the roll path makes external calls, and a zeroed slot
-        // means a re-entrant open finds nothing left to open.
-        lootboxOrder[index][player] = 0;
+        // Marked processed before resolution: external roll calls see an empty logical order,
+        // while its nonzero backing payload remains available for the next buffer occupant.
+        lootboxOrder[index & 1][player] = word | BOX_PROCESSED;
 
         // `c`'s declaration allocates its nested BoxAcc; use it directly rather than
         // allocating a second one and repointing.
@@ -1232,24 +1246,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (!okBoon) revert EmptyRevert();
     }
 
-    /// @notice Human-box leg of openBoxes(): a permissionless, gas-bounded MULTI-INDEX sweep.
-    /// @dev Delegatecall entrypoint from DegenerusGame.openBoxes — runs in the Game's storage
-    ///      context, mirroring the afking leg's drainAfkingBoxes delegatecall. Walks the open
-    ///      frontier from boxCursorIndex up to LR_INDEX-1 (the finalized indices — words land at
-    ///      LR_INDEX-1, one behind the pre-incremented active index), opening every ready box at
-    ///      each index and then resolving the Degenerette bets placed there, then advancing to
-    ///      the next. `budget` bounds the WORK this call does, in
-    ///      the shared walk unit: an open charges its entry weight plus a per-box weight, a skip
-    ///      or index header charges one, so a long skip-prefix (already-opened or presale-only
-    ///      entries) can never gas-wall the tx. The first entry of a call always runs whatever
-    ///      it costs (so no wide entry can wedge the cursor); progress is monotonic and persists
-    ///      across calls via (boxCursorIndex, boxCursor). Each entry resolves BOTH legs
-    ///      (lootbox + presale, robust to either empty) from values loaded once per entry —
-    ///      the skip-check reads are threaded into the opens. Orphan-index
-    ///      coupling: the sweep STOPS at any index whose VRF word has not landed
-    ///      (orphaned mid-day by a coordinator rotation) instead of advancing past it, so its boxes
-    ///      are never marooned — it resumes once the re-issued word lands. Every leg is O(1)
-    ///      (whale-pass materialization is deferred to claimWhalePass).
+    /// @notice Permissionless, bounded settlement of the current read buffer's boxes and bets.
+    /// @dev Delegatecall runs in Game storage. The queue is frozen at request time; producers
+    ///      continue in the other buffer. Retry preserves both the selector and the cursor.
+    ///      A wide first entry always runs, and skips are charged, so bounded calls eventually
+    ///      finish every entry. Completion is committed only after boxes and bets are exhausted.
     /// @param budget Walk budget in the shared open-weight unit (~4.7k gas each) — the same
     ///        unit the afking leg spends. An entry costs OPEN_HUMAN_ENTRY_WEIGHT plus
     ///        OPEN_HUMAN_BOX_WEIGHT for each box; a bet its per-bet weight; a skip or
@@ -1272,16 +1273,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // failing reverts the whole call and leaves the cursor where it was).
         if (rngLockedFlag || _livenessTriggered()) return (0, 0);
 
-        uint48 active = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        if (active <= 1) return (0, 0); // no finalized index yet (LR_INDEX is genesis-1, monotonic)
-        uint48 finalized = active - 1; // highest openable index — where the word lands
-
-        uint48 idx = boxCursorIndex;
-        if (idx == 0) idx = 1; // index 0 is unused; the genesis box index is 1
+        if (humanReadComplete || budget == 0) return (0, 0);
+        uint48 idx = _rngReadBuffer();
         uint256 cur = boxCursor;
         // Free slot-0 read (the entry-gate above already SLOAD'd slot 0 for rngLockedFlag): probe
         // the presale leg until presale is fully drained. The flag is flipped (below) once this
-        // sweep advances past presaleCloseIndex, after which every entry skips the cold
+        // sweep completes presaleCloseBuffer, after which every entry skips the cold
         // presaleBoxEth SLOAD. Cached once per call.
         bool checkPresale = !presaleDrained;
         // `level`'s sole writer (advanceGame) is unreachable from this sweep, so the open level
@@ -1290,16 +1287,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         uint256 steps; // entries + index-headers scanned this call — bounds the tx gas
         uint256 uncredited; // bet budget headroom above the work the bets actually ran
-        while (idx <= finalized && steps < budget) {
+        while (steps < budget) {
             unchecked {
                 ++steps; // each index visit costs a step (bounds an empty-index crawl)
             }
             // Orphan-index coupling: never advance past an un-worded index, or its boxes maroon.
             // The word is loaded once per index and threaded into every open below.
-            uint256 indexWord = lootboxRngWordByIndex[idx];
+            uint256 indexWord = _lootboxWord(idx);
             if (indexWord == 0) break;
 
-            address[] storage queue = boxPlayers[idx];
+            address[] storage queue = boxPlayers[idx & 1];
             uint256 qlen = queue.length;
             while (cur < qlen && steps < budget) {
                 address player = queue[cur];
@@ -1308,8 +1305,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // open, so a zero/zero entry is already-drained (or never carried a box of this
                 // type) and is skipped. Each leg's word is loaded ONCE here and threaded into
                 // its open — the skip-check values double as the open's inputs.
-                uint256 word = lootboxOrder[idx][player];
-                uint256 stored = checkPresale ? presaleBoxEth[idx][player] : 0;
+                uint256 word = _boxOrder(idx, player);
+                uint256 stored = checkPresale ? presaleBoxEth[idx & 1][player] : 0;
                 uint256 boxes = _boxOrderCount(word);
                 if (boxes == 0 && stored == 0) {
                     unchecked {
@@ -1345,7 +1342,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // is unreachable from the buy path.
                 _openLootBoxLegWith(player, idx, word, indexWord, currentLevel);
                 if (stored != 0) {
-                    presaleBoxEth[idx][player] = 0; // dequeue before resolution
+                    presaleBoxEth[idx & 1][player] = 0; // dequeue before resolution
                     _resolvePresaleBox(player, idx, stored, indexWord, currentLevel);
                 }
                 unchecked {
@@ -1361,7 +1358,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // (cur = qlen + bet position). Both lists are frozen once the word lands, since
             // placement and box deposits require an unset word, so the combined position is
             // stable. The degenerette module prices each bet and resolves within the budget.
-            uint256 blen = degeneretteQueue[idx].length;
+            uint256 blen = degeneretteQueue[idx & 1].length;
             if (cur - qlen < blen) {
                 if (steps >= budget) break;
                 (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
@@ -1388,25 +1385,23 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 cur = qlen + betPos;
                 if (betPos < blen) break; // budget hit mid-queue — resume here next call
             }
-            unchecked {
-                ++idx; // index fully swept — advance the open frontier (this index is now complete)
-            }
+            humanReadComplete = true;
             cur = 0;
+            break;
         }
 
         // Credited work only matters when something opened (the bounty). A walk that opened
         // nothing reports what it consumed, so the router's craps leg sizes from the real spend.
         unitsSpent = opened == 0 ? steps : steps - uncredited;
-        boxCursorIndex = idx;
         boxCursor = uint48(cur);
         // Presale is fully drained once the cursor has advanced PAST the close index (every box at
-        // indices <= presaleCloseIndex is now opened). One-way, sweep-only; gated on presaleOver so
+        // indices <= presaleCloseBuffer is now opened). One-way, sweep-only; gated on presaleOver so
         // it never fires before the close index is meaningful (zero while presale is open / never
         // closed). Thereafter every open path skips the cold presaleBoxEth SLOAD. The drain is
         // the one moment every presale roll has drawn, so the pool remainder paid here to the
         // closing buyer is the curve's variance dust: no box opened out of order can move
         // another box's DGNRS into it.
-        if (presaleOver && checkPresale && idx > presaleCloseIndex) {
+        if (presaleOver && checkPresale && humanReadComplete && idx == presaleCloseBuffer) {
             presaleDrained = true;
             uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
             if (remaining != 0) {
@@ -1416,6 +1411,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 );
             }
         }
+        _tryCompleteRng();
     }
 
     /// @dev Resolve a presale box off the salted committed word: 50% a FLIP-valued budget
@@ -1564,7 +1560,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @notice Resolve a lootbox directly for degenerette wins (no RNG wait needed)
+    /// @notice Resolve an internal ETH reward spin's recirculated lootbox (normal 10 ETH cap).
     /// @dev Rolls full boons + passes via the common resolver over the STATIC table — this
     ///      path's open timing is claimant-controlled, so no live eligibility may reach the
     ///      draw; ineligible drawn types are discarded at delivery (`_deliverBoon`). Emits
@@ -1582,6 +1578,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         external
         payable
     {
+        _resolveLootboxDirectCore(player, amount, rngWord, activityScore, LOOTBOX_EV_BENEFIT_CAP);
+    }
+
+    /// @notice Resolve one purchased Degenerette bet's combined win box.
+    /// @dev Remaining allowance is checked at settlement. A qualifying box gets a 50 ETH
+    ///      ceiling less prior usage, then exhausts the normal allowance if it crosses 10 ETH.
+    ///      The activity score and RNG seed remain frozen; no purchase bookkeeping is added.
+    function resolveDegeneretteLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore)
+        external
+        payable
+    {
+        _resolveLootboxDirectCore(player, amount, rngWord, activityScore, DEGENERETTE_WIN_EV_CAP);
+    }
+
+    function _resolveLootboxDirectCore(
+        address player, uint256 amount, uint256 rngWord, uint16 activityScore, uint256 ceiling
+    ) private
+    {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (the amount==0 early-return path).
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
@@ -1597,7 +1611,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
-        uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
+        uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps, ceiling);
 
         // allowEthSpin=false: this is the recirc entry, called inside sweepDegeneretteBets' deferred
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll

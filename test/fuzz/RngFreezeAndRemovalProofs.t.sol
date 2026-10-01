@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -74,7 +75,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
     ///      box-owed signal (set on first deposit, zeroed on open in one SSTORE) — it replaced
     ///      the removed lootboxEthBase mapping the old pin read.
@@ -132,7 +133,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
         );
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(INDEX);
+        RecyclingState.seedWriteBuffer(address(game), INDEX);
         vm.store(
             address(game),
             bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
@@ -151,7 +152,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
 
     /// @notice SAFE-04 (boxes): a crank-driven box open BEFORE the word lands is skipped at the
-    ///         autoOpen cursor orphan gate (`lootboxRngWordByIndex[idx] == 0 -> break`,
+    ///         autoOpen cursor orphan gate (`_lootboxWord(idx) == 0 -> break`,
     ///         DegenerusGameLootboxModule.openHumanBoxes) AND the LootboxModule openLootBox
     ///         RngNotReady guard — no pre-word open. After the word lands the SAME crank opens the
     ///         box (signal cleared). The box is queued at the round's index, then the index is
@@ -200,7 +201,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
     /// @notice SAFE-04 (placement guard untouched): a degenerette placement for the active
     ///         index AFTER that index already has a word reverts RngNotReady
-    ///         (DegeneretteModule:452 `if (lootboxRngWordByIndex[index] != 0) revert RngNotReady`).
+    ///         (DegeneretteModule:452 `if (_lootboxWord(index) != 0) revert RngNotReady`).
     ///         The crank relaxed RESOLVE, not PLACEMENT — placement stays frozen as before.
     function testPlacementGuardUntouchedWhenIndexHasWord() public {
         // Land a word at the active INDEX, so the placement guard at :452 must trip.
@@ -274,7 +275,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
         uint256 creditB = _resolveWinningBetForPlayerAtIndex(
             makeAddr("freeze_proof_player_2"),
-            INDEX + 1
+            INDEX ^ 1
         );
 
         assertGt(creditA, 0, "first credit is nonzero (winning bet)");
@@ -863,7 +864,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint256 packed = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
         );
-        return uint48(packed & 0xFFFFFFFFFFFF);
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _placeLosingBet(address better) internal returns (uint64 betId) {
@@ -887,26 +888,14 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     }
 
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(
-            abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT))
-        );
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), index, bytes32(rngWord));
     }
 
     /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34) by one,
     ///      mirroring requestLootboxRng's pre-increment, so a box queued at the prior index now sits
     ///      at LR_INDEX-1 — the just-finalized index the relocated multi-index sweep opens.
     function _advanceLootboxRngIndexByOne() internal {
-        uint256 packed = uint256(
-            vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
-        );
-        uint48 idx = uint48(packed & 0xFFFFFFFFFFFF);
-        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx + 1);
-        vm.store(
-            address(game),
-            bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
-            bytes32(packed)
-        );
+        assertGt(RecyclingState.currentWord(address(game)), 1, "fixture delivered word");
     }
 
     /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 56)
@@ -919,15 +908,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
         packed &= ~(cursorMask << (13 * 8));  // clear boxCursorIndex field
-        packed |= (uint256(index) & cursorMask) << (13 * 8);
+        require(index < 2, "binary buffer fixture");
         vm.store(address(game), slot, bytes32(packed));
     }
 
     function _injectedWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(
-            abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT))
-        );
-        return uint256(vm.load(address(game), slot));
+        return RecyclingState.word(address(game), index);
     }
 
     function _lootboxEthBase(
@@ -979,15 +965,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
     /// @dev Set the live daily lootboxRngIndex (low 48 bits of lootboxRngPacked slot 34).
     function _setLootboxRngIndex(uint48 idx) internal {
-        uint256 packed = uint256(
-            vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
-        );
-        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx);
-        vm.store(
-            address(game),
-            bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
-            bytes32(packed)
-        );
+        RecyclingState.seedWriteBuffer(address(game), idx);
     }
 
     function _resultTicketFor(

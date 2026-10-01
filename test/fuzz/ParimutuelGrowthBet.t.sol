@@ -1198,8 +1198,12 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         // day's RNG and latches the lock, and nothing settles until the mock fulfills.
         simTime += 1 days + 1;
         vm.warp(simTime);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        require(ok, "harness: advance must request the day's RNG");
+        _finishReadConsumers();
+        bool ok;
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) {
+            (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            require(ok, "harness: prerequisites and daily request must progress");
+        }
         require(game.rngLocked(), "harness: the day's word must be in flight");
         require(game.jackpotPhase(), "harness: the phase must still be live");
 

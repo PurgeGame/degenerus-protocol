@@ -6,18 +6,18 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @dev Extends the production mint module so the live `processTicketBatch` runs the seated
 ///      round drain in THIS contract's storage; adds queue seeders and bucket decoders only.
-contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
+contract RoundDrainHarness is MintBucketSeed {
     /// @dev The mint module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
     function _pastDeadlineTriggered(uint24 today, uint24 idx)
         internal
         view
-        override(DegenerusGameMintModule, DegenerusGameStorage)
+        override
         returns (bool)
     {
         return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
@@ -30,8 +30,9 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
         // so the caller's `processTicketBatch(lvl + 1)` window [lvl .. lvl+1] actually covers
         // the seeded read key, matching the old anchor-relative [anchor-1..anchor+4] window.
         level = lvl;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = entropy | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = entropy | 1; _setRngSessionPublished(true); _setRngComplete(false);
         uint24 rk = _tqReadKey(lvl);
         for (uint256 i; i < players.length; ++i) {
             _seedQueued(rk, lvl, players[i], (uint80(owed[i]) << 8) | uint80(rem[i]));
@@ -48,8 +49,9 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
         // Pin `level` so `lvl` sits at/under _mintCeiling() (level + 1) and routes through the
         // double buffer, not the far-future key space.
         level = lvl;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = entropy | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = entropy | 1; _setRngSessionPublished(true); _setRngComplete(false);
         for (uint256 i; i < players.length; ++i) {
             _queueEntriesScaled(players[i], lvl, entriesScaled[i], false);
         }
@@ -63,11 +65,11 @@ contract RoundDrainHarness is DegenerusGameMintModule, BucketSeed {
     }
 
     function ownerAt(uint24 lvl, uint8 trait, uint256 k) external view returns (address) {
-        return _bucketOwnerAt(lvl, trait, k);
+        return _bucketOwnerAtUnchecked(lvl, trait, k);
     }
 
     function bucketLen(uint24 lvl, uint8 trait) external view returns (uint256) {
-        return lvlTraitEntry[lvl][trait].length;
+        return _bucketLength(lvl, trait);
     }
 
     function ownerCount(uint24 lvl) external view returns (uint256) {

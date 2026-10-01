@@ -6,12 +6,12 @@ import {DegenerusGameDecimatorModule} from "../../../contracts/modules/Degenerus
 contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
     function open(uint24 lvl) external {
         level = lvl - 1;
-        decWindowOpen = true;
+        _setDecWindowOpen(true);
         decBattleRounds[lvl].openedDay = _simulatedDayIndex();
     }
 
     function seal(uint24 lvl, uint128 pool, uint256 word) external returns (uint256 returned) {
-        decWindowOpen = false;
+        _setDecWindowOpen(false);
         returned = this.runDecimatorJackpot(pool, lvl, word);
         claimablePool += pool - uint128(returned);
     }

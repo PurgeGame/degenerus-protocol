@@ -104,7 +104,7 @@ interface IsDGNRS {
 
     /// @notice Check if day `day` has an unresolved gambling-burn pool.
     /// @param day Wall-clock day to query.
-    /// @return True if `pendingByDay[day]` has a non-zero ETH base.
+    /// @return True if day matches the active pending stamp and its ETH base is nonzero.
     function hasPendingRedemptions(uint24 day) external view returns (bool);
 
     /// @notice Sentinel for the single-pool invariant.
@@ -121,7 +121,7 @@ interface IsDGNRS {
 
     /// @notice Resolve day `dayToResolve`'s gambling-burn pool with RNG results.
     /// @dev Only callable by game contract during advanceGame. Writes redemptionPeriods[dayToResolve],
-    ///      emits RedemptionResolved, then deletes pendingByDay[dayToResolve] at resolve.
+    ///      emits RedemptionResolved, then invalidates the reusable aggregate via its day stamp.
     /// @param roll The random roll (25-175).
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
     function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external;

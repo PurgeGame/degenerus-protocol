@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
@@ -8,6 +9,8 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 /// @dev Etch-only storage overlay used to construct and inspect exact terminal states while every
 ///      measured advance still executes the production DegenerusGame runtime.
 contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
+    function exposedVrfDead() external view returns (bool) { return _vrfDead(); }
+
     function seedPhase(bool inJackpot, bool isLastPurchase, bool locked) external {
         jackpotPhaseFlag = inJackpot;
         lastPurchaseDay = isLastPurchase;
@@ -46,18 +49,19 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         ticketWriteSlot = false;
         prizePoolFrozen = false;
 
-        // processTicketBatch reads lootboxRngWordByIndex[LR_INDEX-1]; index 0 is an older worded
-        // index. Unlocked, no request is in flight: the terminal request reserves index 1 and
-        // fills it. A held lock is the pre-freeze daily request, sent the day after the last seal:
-        // it reserved index 1 and committed the read cohort, and its word was delivered but never
-        // applied. The ending waits for such a request, lets its word finalize only index 1, then
-        // drops it; the terminal word is always the ending's own later request.
-        rngWordCurrent = locked ? preFreezeWord : 0;
-        vrfRequestId = locked ? 777 : 0;
-        rngRequestTime = locked ? uint48(block.timestamp - 120 days) & ~uint48(1) : 0;
-        lootboxRngPacked = locked ? 2 : 1;
-        lootboxRngWordByIndex[0] = uint256(keccak256("terminal-ticket-traits")) | 1;
-        lootboxRngWordByIndex[1] = 0;
+        // Only one word exists. A held daily request may have delivered its final
+        // word; an unanswered request has the nonzero waiting payload and no ready bit.
+        lootboxRngPacked = 2;
+        if (locked && preFreezeWord > 1) {
+            uint256 finalWord = preFreezeWord;
+            rngWordCurrent = finalWord; _setRngSessionPublished(true); _setRngComplete(false);
+        } else {
+            rngWordCurrent = RNG_WORD_WAITING;
+        }
+        _setRngRequestActive(locked);
+        _setRngSessionPublished(!locked);
+        vrfRequestId = locked ? 777 : 1;
+        rngRequestTime = locked ? uint48(block.timestamp - 120 days) & ~uint48(1) : 1;
 
         ticketCursor = 0;
         ticketLevel = 0;
@@ -95,13 +99,17 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         ticketWriteSlot = false;
         prizePoolFrozen = true;
 
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         rngWordByDay[day] = 0;
         vrfRequestId = 777;
+        _setRngRequestActive(true);
+        _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp - 14 days);
 
         lootboxRngPacked = 1;
-        lootboxRngWordByIndex[0] = uint256(keccak256("grace-terminal-ticket-traits")) | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        // The outstanding request has no delivered payload; its paid cohort remains queued.
+        _setRngSessionPublished(false);
         ticketCursor = 0;
         ticketLevel = 0;
         _seedQueue(_tqReadKey(lvl + 1), readPlayer, entries);
@@ -119,9 +127,9 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
 
     function holderEntryCount(uint24 lvl, address player) external view returns (uint256 count) {
         for (uint16 trait; trait < 256; ++trait) {
-            uint256 len = lvlTraitEntry[lvl][uint8(trait)].length;
+            uint256 len = _bucketLength(lvl, uint8(trait));
             for (uint256 i; i < len; ++i) {
-                if (_bucketOwnerAt(lvl, uint8(trait), i) == player) ++count;
+                if (_bucketOwnerAtUnchecked(lvl, uint8(trait), i) == player) ++count;
             }
         }
     }
@@ -337,6 +345,35 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertTrue(game.gameOver(), "locked-transition terminal settlement completes");
         assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "later level+1 write cohort never drawn");
         assertEq(_totalQueuedOwed(LEVEL + 1, lateBuyer), ENTRIES, "later write cohort remains queued at latch");
+    }
+
+    function testRefusedTerminalRequestsKeepOneTimerAndNoCallbackAuthority() public {
+        TerminalCohortSeeder seeder = _installSeeder();
+        seeder.seedTerminalState(LEVEL, false, false, false, true, 0, LEVEL + 1, address(0), address(0), 0);
+        _restoreGame();
+        vm.deal(address(game), 100 ether);
+        vm.mockCallRevert(address(mockVRF), bytes4(keccak256("requestRandomWords((bytes32,uint256,uint16,uint32,uint32,bytes))")), abi.encodeWithSignature("Error(string)", "refused"));
+        game.advanceGame();
+        uint256 state = uint256(game.extsload(bytes32(0)));
+        uint256 stamp = (state >> 48) & type(uint48).max;
+        assertGt(stamp, 1, "first attempt arms a real refusal timer");
+        assertEq((state >> 254) & 1, 0, "failed request has no callback authority");
+        assertEq((state >> 255) & 1, 0, "terminal session remains unpublished");
+        assertEq(uint256(game.extsload(bytes32(uint256(4)))), 1, "nonzero idle ID is retained");
+        mockVRF.fulfillRandomWordsRaw(1, address(game), 42);
+        assertEq(RecyclingState.currentWord(address(game)), 0, "idle ID cannot authorize a terminal callback");
+        for (uint256 i; i < 3; ++i) {
+            vm.warp(vm.getBlockTimestamp() + 1 hours);
+            game.advanceGame();
+            assertEq((uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max, stamp, "refusal cannot reset the timeout");
+        }
+        vm.warp(stamp + 14 days);
+        seeder = _installSeeder();
+        assertTrue(seeder.exposedVrfDead(), "unanswered terminal attempt expires without a live ID");
+        _restoreGame();
+        vm.clearMockedCalls();
+        for (uint256 i; i < 5 && !game.gameOver(); ++i) game.advanceGame();
+        assertTrue(game.gameOver(), "refused terminal RNG cannot strand the ending");
     }
 
     function testExpiredStallEndsDeterministicallyWithoutDrawing() public {

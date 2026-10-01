@@ -1030,6 +1030,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     event JackpotHighCompsAccrued(
         uint64 indexed slot, uint256 fees, uint256 atRisk, uint256 lossBudget, uint256 comps
     );
+    uint64[4] internal _fundedCustomSlots;
+    mapping(uint48 => uint64[]) internal _rngSlots;
+    uint48[2] private __rngCohortLayoutGap; // Generation stamps removed; preserve later fields.
+    uint64[2] internal _rngSlotCursor;
+    uint64[2] internal _rngPending;
+
     function _highMultOf(uint256 word) internal pure returns (uint256) {
         if (word == 0) return 0;
         return CrapsPriceLib.highMultiple(_hash2(word, HIGH_TAG));

@@ -38,7 +38,7 @@ contract CrapsFlowHandler {
     MockGame internal immutable game;
 
     /// @dev The game-side storage slots the words live in — the same numbers `CrapsPins` pins.
-    uint256 internal constant WORD_SLOT = 34;
+    uint256 internal constant WORD_SLOT = 3;
     uint256 internal constant DAY_WORD_SLOT = 10;
 
     uint256 internal constant PERIODS = 7;
@@ -132,7 +132,19 @@ contract CrapsFlowHandler {
     }
 
     function _setWord(uint48 index, uint256 word) internal {
-        game.set(keccak256(abi.encode(uint256(index), WORD_SLOT)), bytes32(word));
+        require(index < 2, "physical RNG buffer");
+        uint256 flags = uint256(game.slots(bytes32(0)));
+        uint48 read = uint48((flags >> 252) & 1) ^ 1;
+        if (index != read) {
+            // A pending read field owns the shared word until its actual settlement finishes.
+            if (uint256(game.slots(bytes32(uint256(33)))) & (uint256(1) << (250 + read)) != 0) return;
+            game.requestLootboxRng();
+            flags = uint256(game.slots(bytes32(0)));
+            require(index == (uint48((flags >> 252) & 1) ^ 1), "mock seal did not swap");
+        }
+        if (flags & (uint256(1) << 255) != 0) return;
+        game.set(bytes32(WORD_SLOT), bytes32(word));
+        game.set(bytes32(0), bytes32(flags | (uint256(1) << 255)));
     }
 
     function _setDailyWord(uint24 day, uint256 word) internal {

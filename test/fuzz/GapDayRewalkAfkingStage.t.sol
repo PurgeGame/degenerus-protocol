@@ -90,6 +90,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
 
         // ---- #2: the ONE wall-day STAGE(W), on a word not yet committed; fresh request. ----
         assertEq(game.rngWordForDay(W), 0, "#2 enters with W's word uncommitted");
+        _finishReadConsumers();
         game.advanceGame();
         assertTrue(game.rngLocked(), "#2 fired the fresh request");
         assertEq(_afkingResetDay(), W, "#2 ran STAGE(W)");
@@ -185,9 +186,9 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (!game.advanceDue() && !game.rngLocked() && !game.boxesPending()) return;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (!game.advanceDue() && !game.rngLocked() && !game.boxesPending()) return;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }

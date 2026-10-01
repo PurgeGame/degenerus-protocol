@@ -85,7 +85,7 @@ abstract contract NestedSettlementFixture is PurchaseDailyFixture, FreshWordLeg 
             );
             vm.store(
                 ContractAddresses.SDGNRS,
-                keccak256(abi.encode(uint256(399), uint256(7))),
+                bytes32(uint256(7)),
                 bytes32(uint256(100 ether / 1 gwei) | (uint256(1e12) << 64) | (uint256(100) << 128))
             );
             vm.deal(ContractAddresses.SDGNRS, 175 ether);

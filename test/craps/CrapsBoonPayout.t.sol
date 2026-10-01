@@ -50,7 +50,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
         _installPins();
         craps = new BoonPayoutHarness();
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);
         game.setScore(bob, floor_);
@@ -154,10 +154,11 @@ contract CrapsBoonPayoutTest is CrapsPins {
         bool sawBust;
 
         for (uint256 i; i < 400 && !(sawPaying && sawBust); ++i) {
+            uint256 trialSnapshot = vm.snapshotState();
             uint64 slot = _openBattle(craps, PLAYED, 4, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0);
             vm.prank(alice);
             uint256 betId = craps.enterBattle(slot, _seven(), 1);
-            _closeOn(craps, slot, uint48(9_000 + i), uint256(keccak256(abi.encode("seam", i))));
+            _closeOn(craps, slot, uint48(i & 1), uint256(keccak256(abi.encode("seam", i))));
 
             (uint256 wonPlain, uint256 paidPlain) = craps.previewSettlement(betId);
             uint256 word = craps.betWordOf(betId);
@@ -178,6 +179,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
                 assertGt(paidBooned, paidPlain, "a paying run drew no bonus");
                 sawPaying = true;
             }
+            vm.revertToStateAndDelete(trialSnapshot);
         }
         assertTrue(sawPaying, "the sweep never found a paying run");
         assertTrue(sawBust, "the sweep never found a busted run");
@@ -190,7 +192,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
         uint64 slot = _openBattle(craps, PLAYED, 4, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0);
         vm.prank(alice);
         uint256 betId = craps.enterBattle(slot, _seven(), 1);
-        _closeOn(craps, slot, 9_500, uint256(keccak256("invalid-mask")));
+        _closeOn(craps, slot, 0, uint256(keccak256("invalid-mask")));
 
         (, uint256 paidPlain) = craps.previewSettlement(betId);
         uint256 word = craps.betWordOf(betId);
@@ -222,15 +224,16 @@ contract CrapsBoonPayoutTest is CrapsPins {
         bool sawCapped;
 
         for (uint256 i; i < 400 && !sawCapped; ++i) {
+            uint256 trialSnapshot = vm.snapshotState();
             uint64 slot = _openHigh(craps, PLAYED, 4, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0, h);
             vm.prank(alice);
             uint256 betId = craps.enterBattle(slot, _seven(), h);
             vm.prank(bob);
             craps.enterBattle(slot, _seven(), h); // contest the lane, so neither seat rides
-            _closeOn(craps, slot, uint48(11_000 + i), uint256(keccak256(abi.encode("high", i))));
+            _closeOn(craps, slot, uint48(i & 1), uint256(keccak256(abi.encode("high", i))));
 
             (, uint256 paidPlain) = craps.previewSettlement(betId);
-            if (paidPlain == 0) continue;
+            if (paidPlain == 0) { vm.revertToStateAndDelete(trialSnapshot); continue; }
 
             uint256 word = craps.betWordOf(betId);
             craps.setBetWord(betId, word | (MASK_15 << shift));
@@ -245,6 +248,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
                 assertEq(paidBooned - paidPlain, 9_000 ether, "the ceiling did not bite on the scaled base");
                 sawCapped = true;
             }
+            vm.revertToStateAndDelete(trialSnapshot);
         }
         assertTrue(sawCapped, "no high run large enough to test the ceiling");
     }
@@ -273,7 +277,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
             vm.prank(third);
             craps.enterBattle(slot, _seven(), h);
 
-            _closeOn(craps, slot, uint48(13_000 + i), uint256(keccak256(abi.encode("parity", i))));
+            _closeOn(craps, slot, uint48(i & 1), uint256(keccak256(abi.encode("parity", i))));
 
             (, uint256 quotedOrdinary) = craps.previewSettlement(ordinary);
             (, uint256 quotedHigh) = craps.previewSettlement(high);

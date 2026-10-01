@@ -40,7 +40,7 @@ contract CrapsMutationPins is CrapsPins {
         _installPins();
         craps = new PinHarness();
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         game.setScore(alice, craps.SYBIL_SCORE_FLOOR());
     }

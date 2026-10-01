@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -18,7 +19,7 @@ contract PreJackpotMintSeeder is DegenerusGame {
         dailyIdx = day;
         lastVrfProcessedTimestamp = uint48(block.timestamp);
         rngWordByDay[day] = 0xDA11;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         rngRequestTime = 0;
         vrfRequestId = 0;
         rngLockedFlag = false;
@@ -35,11 +36,14 @@ contract PreJackpotMintSeeder is DegenerusGame {
         levelPrizePool[129] = 50 ether;
         _setPrizePools(51 ether, 20 ether);
         currentPrizePool = 0;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 42);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((42) & 1) << 12);
         _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, 0);
         _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 0);
         _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
-        lootboxRngWordByIndex[41] = 0x01D;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(41) + 1) & 1) << 12);
+        rngWordCurrent = 0x01D; _setRngSessionPublished(true); _setRngComplete(true);
+        // Synthetic empty prior cohort: delivered word, no boxes/bets/fields.
+        humanReadComplete = true;
         if (currentBuyer != address(0)) _queueEntries(currentBuyer, 130, 4, false);
         if (nextEntries != 0) _queueEntries(nextBuyer, 131, nextEntries, false);
         // The turbo latch freezes the same FF cohort; set it after queueing that cohort.
@@ -76,7 +80,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     uint24 private constant NEXT = 131;
     uint24 private constant SLOT_BIT = uint24(1) << 23;
     uint24 private constant FF_BIT = uint24(1) << 22;
-    uint48 private constant INDEX = 42;
+    uint48 private constant INDEX = 0;
     bytes32 private constant PAYOUT_FIXED = keccak256("DeadVrfPayoutFixed(uint24,uint256,uint256,uint256,uint256)");
 
     address private alice = address(0xA11CE);
@@ -151,6 +155,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         assertEq(_ceiling(), NEXT, "the generation ceiling remains raised after the latch clears");
 
         // Early generation does not grant another request without ordinary request funding.
+        _finishReadConsumers();
         vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
         game.requestLootboxRng();
         assertEq(mockVRF.lastRequestId(), reqId, "ticket work grants no extra request");
@@ -219,7 +224,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
 
         _overlay().setTargetMet(true);
         _restore();
-        vm.expectRevert(bytes4(keccak256("RngInFlight()")));
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         game.requestLootboxRng();
         assertEq(_ceiling(), CURRENT, "an already requested word cannot open the generation window");
         assertEq(_midday(), 0, "no isolated cohort was bound retroactively");
@@ -320,6 +325,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         uint24 currentKey = _writeKey(CURRENT);
         _requestPaidMidday();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xABCD);
+        game.advanceGame(); // Mandatory publication precedes the bounded ticket worker.
         game.advanceGame{gas: 16_777_216}();
         assertEq(_midday(), 2, "a partial batch retains its word binding");
         assertFalse(_fullyProcessed(), "partial FF batch cannot report completion");
@@ -536,6 +542,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     }
 
     function _requestPaidMidday() private {
+        _finishReadConsumers();
         _buyBox(2 ether);
         vm.prank(keeper);
         game.requestLootboxRng();
@@ -574,7 +581,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     }
 
     function _boxWord(uint48 index) private view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(index), uint256(34)))));
+        return RecyclingState.word(address(game), index);
     }
 
     function _owed(uint24 key, address player) private view returns (uint256) {

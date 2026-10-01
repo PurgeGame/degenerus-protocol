@@ -20,8 +20,8 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 ///
 ///         THE ENUMERATED IN-WINDOW SLOAD SET (the RngWindowFreezeHandler backward trace):
 ///           (1) rngWordByDay[currentDay]     — slot 10 : the VRF-DERIVED day word.
-///           (2) lootboxRngWordByIndex[index] — slot 35 : the VRF-DERIVED lootbox word.
-///           (3) lootboxRngPacked cursor      — slot 34 low 48 bits : the NON-VRF index read alongside
+///           (2) _lootboxWord(index) — slot 34 : reusable VRF-DERIVED lootbox payload.
+///           (3) lootboxRngPacked cursor      — slot 33 low 48 bits : the NON-VRF index read alongside
 ///                                                       the word.
 ///           (4) dailyIdx                     — slot 0, byte 3 : the NON-VRF day cursor the consumption
 ///                                                       keys against (included precisely because it is
@@ -33,10 +33,10 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 ///         rngRequestTime != 0 with rngLocked() == false. Its pending consumption (the mid-day
 ///         rawFulfillRandomWords branch + the next advance's frozen ticket batch) reads its own
 ///         enumerated set, checked by the tryMidDay* actions under the same isolation discipline:
-///           (5)  LR_INDEX cursor            — slot 34 low 48   : the landing index (-1) of the pending word.
-///           (6)  lootboxRngWordByIndex[N-1] — slot 35 leaf     : the reserved landing leaf.
-///           (7)  LR_MID_DAY flag            — slot 34 bits 224 : routes the frozen ticket batch.
-///           (8)  ticketWriteSlot            — slot 0 byte 26   : the buffer selector frozen at request.
+///           (5)  LR_INDEX cursor            — slot 33 low 48   : the landing index (-1) of the pending word.
+///           (6)  _lootboxWord(N-1) — slot 34 payload     : the reserved landing leaf.
+///           (7)  LR_MID_DAY flag            — slot 33 bits 224 : routes the frozen ticket batch.
+///           (8)  ticketWriteSlot            — slot 0 byte 25   : the buffer selector frozen at request.
 ///           (9)  vrfRequestId               — slot 4           : the fulfillment request-match gate.
 ///           (10) rngRequestTime             — slot 0 bytes 6-11: the in-flight marker (reroll guard).
 ///           (11) rngLockedFlag              — slot 0 byte 19   : the fulfillment branch selector.
@@ -46,7 +46,7 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 ///         ghost_windowsOpened / ghost_inWindowActions AND their mid-day counterparts all > 0 (a "passes
 ///         because nothing happened" green is impossible for either window shape).
 ///
-/// @dev Test-only: ZERO contracts/*.sol mutation. The only vm.store is the standard slot-34 lootbox-index
+/// @dev Test-only: ZERO contracts/*.sol mutation. The only vm.store is the standard slot-33 lootbox-index
 ///      seed inside the handler (mirroring RngFreezeAndRemovalProofs.setUp) so an active index exists to
 ///      snapshot, plus the seeded-violation vm.store in the falsifiability test (reverted in-test).
 contract RngWindowFreeze is DeployProtocol {

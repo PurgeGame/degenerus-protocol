@@ -43,7 +43,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         phaseTransitionActive = false;
         subsFullyProcessed = true;
         _afkingResetDay = day;
-        rngWordCurrent = word;
+        rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         rngWordByDay[day] = word;
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
@@ -80,7 +80,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         phaseTransitionActive = true;
         subsFullyProcessed = true;
         _afkingResetDay = day;
-        rngWordCurrent = word;
+        rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         rngWordByDay[day] = word;
         vrfRequestId = 1;
         ticketLevel = 0; // not resuming FF -> _processPhaseTransition runs this tx

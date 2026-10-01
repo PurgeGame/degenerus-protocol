@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -67,16 +68,19 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     }
 
     function _index() private view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _word(uint48 index) private view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(index), uint256(34)))));
+        return RecyclingState.word(address(game), index);
     }
 
     function _order(uint48 index, address owner) private view returns (uint256) {
-        bytes32 outer = keccak256(abi.encode(uint256(index), uint256(15)));
-        return uint256(vm.load(address(game), keccak256(abi.encode(owner, outer))));
+        uint48 active = _index();
+        if (index > 1) return 0;
+        bytes32 outer = keccak256(abi.encode(uint256(index & 1), uint256(15)));
+        uint256 order = uint256(vm.load(address(game), keccak256(abi.encode(owner, outer))));
+        return order & (uint256(1) << 255) != 0 ? 0 : order;
     }
 
     function _pool() private view returns (uint256) {
@@ -127,13 +131,13 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     function _assertOrders(uint48 index, uint256[2] memory orders, bool aliceSpent) private view {
         assertEq(_order(index, ALICE), aliceSpent ? 0 : orders[0], "old Alice order cannot be rewritten or replayed");
         assertEq(_order(index, BOB), orders[1], "old Bob order cannot be rewritten");
-        assertEq(_index(), index + 1, "new actions remain on the subsequent index");
+        assertEq(_index(), (index ^ 1), "new actions remain on the subsequent index");
     }
 
     function _perturb(uint48 index, uint256[2] memory orders, bool aliceSpent) private {
-        assertEq(_index(), index + 1);
-        uint256 nextAlice = _order(index + 1, ALICE);
-        uint256 nextBob = _order(index + 1, BOB);
+        assertEq(_index(), (index ^ 1));
+        uint256 nextAlice = _order((index ^ 1), ALICE);
+        uint256 nextBob = _order((index ^ 1), BOB);
         uint256 ethBefore = address(game).balance + mockStETH.balanceOf(address(game));
         // Different custom denomination, plus new paid tickets and a competing bet.
         // These are successful public writes, not a set of swallowed reverts.
@@ -144,8 +148,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         if (game.rngLocked()) vm.expectRevert(bytes4(keccak256("BetLocked()")));
         vm.prank(BOB);
         crapsBattle.setPreferredBoard(uint32(1 << 9));
-        assertGt(_order(index + 1, ALICE), nextAlice, "next-index Alice order really grew");
-        assertGt(_order(index + 1, BOB), nextBob, "next-index Bob order really grew");
+        assertGt(_order((index ^ 1), ALICE), nextAlice, "next-index Alice order really grew");
+        assertGt(_order((index ^ 1), BOB), nextBob, "next-index Bob order really grew");
         assertGt(
             address(game).balance + mockStETH.balanceOf(address(game)), ethBefore, "public mutation moved real backing"
         );
@@ -281,16 +285,16 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     }
 
     function _open(uint256 budget, address caller, uint256 expectedCount, uint48 index) private {
-        uint256 nextAlice = _order(index + 1, ALICE);
-        uint256 nextBob = _order(index + 1, BOB);
+        uint256 nextAlice = _order((index ^ 1), ALICE);
+        uint256 nextBob = _order((index ^ 1), BOB);
         uint256 next = game.nextPrizePoolView();
         uint256 future = game.futurePrizePoolView();
         uint256 current = game.currentPrizePoolView();
         uint256 liability = game.claimablePoolView();
         vm.prank(caller);
         assertEq(game.openBoxes(budget), expectedCount, "exact number of consumed boxes");
-        assertEq(_order(index + 1, ALICE), nextAlice, "unrevealed Alice order survives old-index opening");
-        assertEq(_order(index + 1, BOB), nextBob, "unrevealed Bob order survives old-index opening");
+        assertEq(_order((index ^ 1), ALICE), nextAlice, "unrevealed Alice order survives old-index opening");
+        assertEq(_order((index ^ 1), BOB), nextBob, "unrevealed Bob order survives old-index opening");
         assertEq(game.nextPrizePoolView(), next, "ordinary reward does not spend ticket backing");
         assertEq(game.futurePrizePoolView(), future, "ordinary reward does not spend live ETH inventory");
         assertEq(game.currentPrizePoolView(), current);
@@ -325,9 +329,10 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         assertTrue(fulfilled, "callback really fulfilled");
         if (perturb) _perturb(index, orders, false);
         if (daily) _finishDaily();
+        else game.advanceGame(); // publish delivered midday word before opening
         assertEq(game.level(), 0, "opening denomination intentionally held fixed");
         assertEq(_word(index), word, "exact delivered word reaches its committed index");
-        assertEq(_word(index + 1), 0, "later purchases remain unrevealed");
+        assertEq(_word((index ^ 1)), 0, "later purchases remain unrevealed");
         _assertOrders(index, orders, false);
 
         uint256 inventory = _pool();
@@ -374,7 +379,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             _pool(), inventory - alice.dgnrs - bob.dgnrs, "actual pool debit equals both independently priced awards"
         );
         assertEq(_word(index), word, "consumption cannot alter the commitment");
-        assertEq(_word(index + 1), 0);
+        assertEq(_word((index ^ 1)), 0);
         beforeAlice = _balance(ALICE);
         beforeBob = _balance(BOB);
         _open(1000, KEEPER_ONE, 0, index);

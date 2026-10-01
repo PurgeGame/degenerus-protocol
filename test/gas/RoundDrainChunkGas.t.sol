@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
@@ -11,13 +11,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Extends the production mint module so one live `processTicketBatch` call runs a full
 ///      write-budget chunk in THIS contract's storage; adds queue seeders only.
-contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
+contract ChunkHarness is MintBucketSeed {
     /// @dev The mint module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
     function _pastDeadlineTriggered(uint24 today, uint24 idx)
         internal
         view
-        override(DegenerusGameMintModule, DegenerusGameStorage)
+        override(DegenerusGameMintModule)
         returns (bool)
     {
         return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
@@ -39,8 +39,9 @@ contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
     ///      the write key.
     function seedViaPurchase(uint24 lvl, uint256 n, uint32 entriesScaled, uint160 base, bool warm) external {
         _pinWindow(lvl);
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
@@ -56,8 +57,9 @@ contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
     ///      to a skip or a single entry and the drain does nothing but walk them.
     function seedDust(uint24 lvl, uint256 n, uint160 base, bool warm) external {
         _pinWindow(lvl);
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         uint24 rk = _tqReadKey(lvl);
         if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
@@ -78,10 +80,11 @@ contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
     ///      purchase level while the last-purchase lock is held); the read window
     ///      [lvl - 2 .. lvl] is empty, so the call reaches processTicketBatch's frozen-pool
     ///      continuation. `warm` pins the FF marker and cursor 1 (index 0 drained) so the chunk
-    ///      runs the full, non-derated write budget. Requires lvl >= 2.
+    ///      exercises continuation from a nonzero cursor. Requires lvl >= 2.
     function seedFrozenPool(uint24 lvl, uint256 n, uint32 entriesScaled, uint160 base, bool warm) external {
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         // Before the seal: level = lvl - 2, ceiling lvl - 1, so `lvl` routes far-future.
         level = lvl - 2;
         if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
@@ -99,6 +102,42 @@ contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
         ticketLevel = warm ? ffk : 0;
         ticketCursor = warm ? 1 : 0;
         if (warm) _seedOwedAt(ffk, address(base + 1), 0);
+    }
+
+    /// @dev Recycled backing: every bucket of `lvl`'s parity holds an older level's stamp and
+    ///      `words` nonzero words, so the drain rewrites nonzero slots (no fresh stores).
+    function recycleBacking(uint24 lvl, uint256 words) external {
+        require(lvl >= 2, "older level of the same parity");
+        uint256 base = _traitBufferBase(lvl);
+        for (uint256 trait; trait < 256; ++trait) {
+            uint256 elem = base + trait;
+            uint256 stale = (words * 8);
+            assembly ("memory-safe") {
+                sstore(elem, stale)
+                mstore(0, elem)
+                let w := keccak256(0, 32)
+                for { let i := 0 } lt(i, words) { i := add(i, 1) } { sstore(add(w, i), 0x0101) }
+            }
+        }
+    }
+
+    /// @dev A later level whose existing headers each have seven lanes but whose next
+    ///      completed words are still zero: every hit can cross the backing high-water mark.
+    function seedHeaderTails(uint24 lvl) external {
+        _setTicketBufferLevel(lvl);
+        traitBucketLive[lvl & 1] = type(uint256).max;
+        uint256 base = _traitBufferBase(lvl);
+        uint256 tail = 0x00000001000000010000000100000001000000010000000100000001;
+        for (uint256 trait; trait < 256; ++trait) {
+            uint256 elem = base + trait;
+            uint256 head = 7 | (tail << 32);
+            assembly ("memory-safe") { sstore(elem, head) }
+        }
+    }
+
+    function grownTraits(uint24 lvl, uint256 oldWords) external view returns (uint256 n) {
+        for (uint256 trait; trait < 256; ++trait)
+            if (_bucketLengthUnchecked(lvl, trait) > oldWords * 8) ++n;
     }
 
     function cursor() external view returns (uint256) {
@@ -119,8 +158,9 @@ contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
 
     function seed(uint24 lvl, uint256 n, uint32 owedEach, uint160 base, bool warm) external {
         _pinWindow(lvl);
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = uint256(keccak256("chunk-gas-entropy")) | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         uint24 rk = _tqReadKey(lvl);
         // Position zero stays out of the seeded set (a zero lane makes word stores no-ops).
         if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
@@ -130,7 +170,7 @@ contract ChunkHarness is DegenerusGameMintModule, BucketSeed {
             _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
             _seedOwedAt(rk, p, ownerBits | (uint80(owedEach) << 8));
         }
-        // warm: pin level == lvl and a nonzero cursor so the chunk runs at the full budget.
+        // warm: pin level == lvl and a nonzero cursor to exercise continuation.
         ticketLevel = warm ? lvl : 0;
         ticketCursor = warm ? 1 : 0;
         if (warm) {
@@ -170,6 +210,49 @@ contract RoundDrainChunkGas is Test {
         assertTrue(worked, string.concat(tag, ": chunk did no work (seeded level outside the window)"));
         assertLt(g, GAS_TARGET, string.concat(tag, ": chunk over the 10M soft target"));
         assertLt(g, EIP7825_TX_GAS_CAP, string.concat(tag, ": chunk over the EIP-7825 cap"));
+    }
+
+    function test_Chunk_HeaderTailFlushes_ZeroBacking() public {
+        h.seed(LVL, 8, 20000, uint160(0xD0000), true);
+        h.seedHeaderTails(LVL);
+        _measure("chunk_header_tail_flushes_zero_backing_gas");
+    }
+
+    function test_Chunk_PerEntry_GrowsBeyondRecycledBacking() public {
+        h.recycleBacking(LVL, 1);
+        h.seed(LVL, 3, 5000, uint160(0xE0000), true);
+        _measure("chunk_per_entry_backing_growth_gas");
+    }
+
+    function test_Chunk_Rounds_GrowsBeyondRecycledBacking() public {
+        h.recycleBacking(LVL, 1);
+        h.seed(LVL, 8, 20000, uint160(0xF0000), true);
+        h.seedHeaderTails(LVL);
+        _measure("chunk_rounds_backing_growth_gas");
+    }
+
+    /// @dev Measure late record-level chunks after real earlier chunks have exhausted
+    ///      the previous same-parity backing, rather than measuring only its first chunk.
+    function test_Chunk_LateRecord_PerEntry() public {
+        h.recycleBacking(LVL, 1);
+        h.seed(LVL, 3, 50000, uint160(0x110000), true);
+        for (uint256 i; i < 32; ++i) {
+            (, bool worked) = h.processTicketBatch(LVL + 1);
+            assertTrue(worked, "record prefix must still drain paid entries");
+        }
+        assertGt(h.grownTraits(LVL, 1), 96, "prefix must grow beyond old words across common traits");
+        _measure("chunk_late_record_per_entry_gas");
+    }
+
+    function test_Chunk_LateRecord_Rounds() public {
+        h.recycleBacking(LVL, 1);
+        h.seed(LVL, 8, 20000, uint160(0x120000), true);
+        for (uint256 i; i < 32; ++i) {
+            (, bool worked) = h.processTicketBatch(LVL + 1);
+            assertTrue(worked, "record prefix must still drain paid entries");
+        }
+        assertGt(h.grownTraits(LVL, 1), 96, "prefix must grow beyond old words across common traits");
+        _measure("chunk_late_record_rounds_gas");
     }
 
     /// @dev All rounds: many buyers each owing a few whole tickets, cold level.
@@ -235,6 +318,25 @@ contract RoundDrainChunkGas is Test {
     }
 
     /// @dev Per-entry path: three whales (below the seat floor), coalesced runs.
+    /// @dev Whale and round chunks over recycled backing: every write rewrites a nonzero slot.
+    function test_Chunk_PerEntry_Whales_Recycled() public {
+        h.recycleBacking(LVL, 64);
+        h.seed(LVL, 3, 5000, uint160(0x40000), true);
+        _measure("chunk_per_entry_whales_recycled_gas");
+    }
+
+    function test_Chunk_PerEntry_MidWhales_600_Recycled() public {
+        h.recycleBacking(LVL, 64);
+        h.seed(LVL, 3, 600, uint160(0x41000), true);
+        _measure("chunk_per_entry_mid_whales_600_recycled_gas");
+    }
+
+    function test_Chunk_AllRounds_Recycled() public {
+        h.recycleBacking(LVL, 64);
+        h.seed(LVL, 600, 8, uint160(0x42000), true);
+        _measure("chunk_all_rounds_recycled_gas");
+    }
+
     function test_Chunk_PerEntry_Whales_Warm() public {
         h.seed(LVL, 3, 5000, uint160(0x40000), true);
         _measure("chunk_per_entry_whales_warm_gas");

@@ -47,7 +47,7 @@ contract LootboxBudgetResume is DeployProtocol {
         uint256 m = (uint256(1) << 48) - 1;
         packed &= ~(m << (7 * 8));
         packed &= ~(m << (13 * 8));
-        packed |= (uint256(index) & m) << (13 * 8);
+        require(index < 2, "binary read fixture"); // byte 13 is humanReadComplete, not an index
         vm.store(address(game), slot, bytes32(packed));
     }
 

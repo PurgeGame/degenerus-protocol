@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
@@ -20,7 +22,7 @@ contract HumanSweepProbe is DegenerusGameStorage {
 }
 
 /// @title DegeneretteSweep -- queued Degenerette bets resolve inside the box-open sweep.
-/// @notice A bet is one word appended to degeneretteQueue[index]; its id is the queue
+/// @notice A bet is one word appended to degeneretteQueue[index & 1]; its id is the queue
 ///         position + 1. The human-box sweep (openHumanBoxes, reached by mineFlip and
 ///         openBoxes) resolves every bet queued at an index after that index's box entries,
 ///         priced per bet in walk units and resumable mid-queue. This suite owns:
@@ -39,7 +41,7 @@ contract HumanSweepProbe is DegenerusGameStorage {
 ///         BigRecordArming.
 contract DegeneretteSweep is DeployProtocol {
     uint256 private constant LR_PACKED_SLOT = 33;
-    uint256 private constant LR_WORD_SLOT = 34;
+    uint256 private constant LR_WORD_SLOT = 3;
     uint256 private constant PRIZE_POOLS_SLOT = 2;
     uint256 private constant QUEUE_SLOT = 21; // degeneretteQueue mapping root
     uint256 private constant FROZEN_BIT = uint256(1) << 208; // slot 0, byte 26
@@ -77,13 +79,11 @@ contract DegeneretteSweep is DeployProtocol {
     // =========================================================================
 
     function _setActiveIndex(uint48 idx) private {
-        uint256 lr = uint256(vm.load(address(game), bytes32(LR_PACKED_SLOT)));
-        vm.store(address(game), bytes32(LR_PACKED_SLOT), bytes32((lr & ~uint256(0xFFFFFFFFFFFF)) | idx));
+        RecyclingState.seedWriteBuffer(address(game), idx);
     }
 
     function _landWord(uint48 idx, uint256 word) private {
-        vm.store(address(game), keccak256(abi.encode(uint256(idx), LR_WORD_SLOT)), bytes32(word));
-        _setActiveIndex(idx + 1);
+        RecyclingState.seedWord(address(game), idx, bytes32(word));
     }
 
     function _setFuturePool(uint256 future) private {
@@ -223,7 +223,7 @@ contract DegeneretteSweep is DeployProtocol {
     ///         independent path left to cross-check payouts against; this asserts the sweep's
     ///         own resolution shape directly instead.)
     function testFuzz_SweepResolvesFullMixedQueueInOrder(uint256 word) public {
-        vm.assume(word != 0);
+        vm.assume(word > 1);
         _placeMixedQueue();
         _landWord(IDX, word);
 
@@ -270,7 +270,7 @@ contract DegeneretteSweep is DeployProtocol {
     // =========================================================================
 
     function testFuzz_ResolvedEventCarriesEverySpin(uint256 word) public {
-        vm.assume(word != 0);
+        vm.assume(word > 1);
         _place(alice, ETH, 0.01 ether, 25);
         _landWord(IDX, word);
         vm.recordLogs();

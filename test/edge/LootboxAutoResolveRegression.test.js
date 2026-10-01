@@ -217,7 +217,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
   describe("TST-REG-03 — auto-resolve cold-bust silent + sentinel retired + emitLootboxEvent removed (Phase 277)", function () {
     it("[03a] resolveLootboxDirect passes `index = 0` to _resolveLootboxCommon and carries no emitLootboxEvent flag (every box emits)", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const fnIdx = source.indexOf("function resolveLootboxDirect(");
+      const fnIdx = source.indexOf("function _resolveLootboxDirectCore(");
       expect(fnIdx).to.be.greaterThan(-1);
       // Scan within 2500 chars (full function body) for the call to
       // _resolveLootboxCommon.
@@ -297,7 +297,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
-        "function resolveLootboxDirect(",
+        "function _resolveLootboxDirectCore(",
         "function _resolveRedemptionChunk(",
       ]) {
         const fnIdx = source.indexOf(fnSig);
@@ -457,7 +457,7 @@ describe("LootboxAutoResolveRegression — Phase 274 Wave 2 TST-REG-01..04", fun
       // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
       // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
       for (const fnSig of [
-        "function resolveLootboxDirect(",
+        "function _resolveLootboxDirectCore(",
         "function _resolveRedemptionChunk(",
       ]) {
         const fnIdx = source.indexOf(fnSig);

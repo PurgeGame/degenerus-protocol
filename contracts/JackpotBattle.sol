@@ -6,7 +6,12 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {CrapsPriceLib} from "./libraries/CrapsPriceLib.sol";
 import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
+import {IReadCohortLifecycle} from "./CrapsBattle.sol";
 import {JackpotBattleFieldLib} from "./libraries/JackpotBattleFieldLib.sol";
+
+interface IGameCrapsPending {
+    function setCrapsRngPending(uint48 index, bool pending) external;
+}
 
 interface IFlipCrapsComps {
     function creditCrapsComps(uint256 amount) external;
@@ -31,6 +36,81 @@ contract JackpotBattle is CrapsBattleStorage {
     uint256 private constant _HIGH_LOSS_BPS = 1200;
     uint256 private constant _HIGH_COMP_SHARE_BPS = 8000;
     event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, address indexed player, uint256 units, uint32 chips);
+
+    /// @dev Scheduled fields use the slot itself; custom fields commit to their exact terms.
+    function _rngBattleKey(uint64 slot) private view returns (bytes32) {
+        if (slot < _CUSTOM_SLOT_BASE) return bytes32(uint256(slot));
+        uint256 c = _customBattle[slot];
+        uint256 played = (c & _CB_PLAYED_MASK) * 1 ether;
+        uint256 bank = uint128(played * ((c >> _CB_BANK_SHIFT) & _CB_BANK_MASK));
+        uint256 goal = uint128(bank * ((c >> _CB_GOAL_SHIFT) & _CB_GOAL_MASK));
+        uint256 terms = ((c >> _CB_STAKE_SHIFT) & _BSTAKE_MAX)
+            | (((c >> _CB_HIGH_SHIFT) & _CB_HIGH_MASK) << _TERM_HIGH_SHIFT);
+        return keccak256(abi.encode(BATTLE_TAG, uint48(slot), bank, goal, played, terms));
+    }
+
+    /// @notice Bounded keeper settlement of every armed field committed to a word.
+    function keepRngCohort(uint48 index, uint64 budget) external returns (bool moved, bool settled) {
+        if (index > 1) revert BadJackpotField();
+        uint48 physical = index;
+        if (_rngPending[physical] == 0 || budget == 0) return (false, false);
+        uint64[] storage slots = _rngSlots[physical];
+        uint64 pos = _rngSlotCursor[physical];
+        // One field per call; direct settlements may leave a bounded skip-only frontier.
+        uint256 steps;
+        while (pos < slots.length && steps++ < 16) {
+            uint64 slot = slots[pos];
+            uint256 board = _battles[_rngBattleKey(slot)];
+            if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board)) { ++pos; moved = true; continue; }
+            if (_wordAt(index) == 0) break;
+            uint64 beforeCursor = _bonusCursor[slot];
+            IReadCohortLifecycle(address(this)).resolveRngSlot(slot, budget);
+            uint256 afterBoard = _battles[_rngBattleKey(slot)];
+            settled = _bonusCursor[slot] != beforeCursor || afterBoard != board;
+            moved = moved || settled;
+            board = afterBoard;
+            if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board)) ++pos;
+            break;
+        }
+        _rngSlotCursor[physical] = pos;
+    }
+
+    function admitCustom(uint64 slot) external {
+        if (msg.sender != address(this)) revert OnlyTableSelf();
+        for (uint256 i; i < 4; ++i) {
+            if (_fundedCustomSlots[i] == 0) { _fundedCustomSlots[i] = slot; return; }
+        }
+        revert BadJackpotField();
+    }
+
+    function registerRngSlot(uint48 index, uint64 slot, bytes32 key) external {
+        if (msg.sender != address(this)) revert OnlyTableSelf();
+        if (uint32(_battles[key]) == 0) return;
+        if (index > 1) revert BadJackpotField();
+        uint48 physical = index;
+        if (_rngPending[physical] == 0) {
+            uint64[] storage slots = _rngSlots[physical];
+            assembly ("memory-safe") { sstore(slots.slot, 0) }
+            _rngSlotCursor[physical] = 0;
+        }
+        _rngSlots[physical].push(slot);
+        if (_rngPending[physical]++ == 0) {
+            IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, true);
+        }
+    }
+
+    function completeRngSlot(uint64 slot, uint48 index) external {
+        if (msg.sender != address(this)) revert OnlyTableSelf();
+        if (index > 1) revert BadJackpotField();
+        if (--_rngPending[index] == 0) {
+            IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, false);
+        }
+        if (slot >= _CUSTOM_SLOT_BASE) {
+            for (uint256 i; i < 4; ++i) {
+                if (_fundedCustomSlots[i] == slot) { _fundedCustomSlots[i] = 0; return; }
+            }
+        }
+    }
 
     /// @param pool The recorded prize pool the Added allocation is drawn from, in wei.
     /// @param level The Game's level at the request: it prices the pool in FLIP and picks the floor.
@@ -265,13 +345,13 @@ contract JackpotBattle is CrapsBattleStorage {
         JackpotRound storage r = _jackpotRounds[slot];
         added = r.added;
         started = r.word != 0;
-        uint256 g = _battles[bytes32(uint256(slot))];
+        uint256 g = _battles[_rngBattleKey(slot)];
         complete = started && uint32(g >> _BG_RESOLVED_SHIFT) == uint32(g);
     }
 
     /// @notice UI/replay view. Added is the whole protocol allocation, including awarded bankrolls.
     function jackpotBattleOf(uint64 slot) external view returns (JackpotRound memory round, uint256 board, uint64 cursor) {
-        return (_jackpotRounds[slot], _battles[bytes32(uint256(slot))], _bonusCursor[slot]);
+        return (_jackpotRounds[slot], _battles[_rngBattleKey(slot)], _bonusCursor[slot]);
     }
 
     /// @notice The fee is fixed; bankroll and pot are sized from the locked field after its pool roll.

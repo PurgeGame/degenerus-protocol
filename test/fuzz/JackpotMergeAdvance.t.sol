@@ -24,7 +24,7 @@ contract JackpotMergeSeeder is DegenerusGame {
         _afkingResetDay = day;
         rngLockedFlag = false;
         rngRequestTime = 0;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 0;
         dailyTicketBudgetsPacked = 0;
         dailyJackpotCoinTicketsPending = false;

@@ -23,8 +23,9 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
                 foilBuyers[day].push((uint256(i % 2 == 0 ? 5 : 6) << 160) | uint160(i + 1));
             }
         }
-        lvlTraitEntry[5][0].push(1);
-        lvlTraitEntry[5][255].push(1);
+        _setTicketBufferLevel(5);
+        _bucketAppendRun(_traitBufferBase(5), 0, 1, 1, 5);
+        _bucketAppendRun(_traitBufferBase(5), 255, 1, 1, 5);
         deadTallyStage = stage;
         if (stage != 0) {
             deadTallyPos = uint32(count);
@@ -112,7 +113,7 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
         uint256 created;
         uint256 traits;
         for (uint256 t; t < 256; ) {
-            uint256 n = lvlTraitEntry[lvl][t].length;
+            uint256 n = _bucketLength(lvl, t);
             if (n != 0) {
                 created += n;
                 unchecked {

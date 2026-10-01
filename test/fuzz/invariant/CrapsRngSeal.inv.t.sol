@@ -12,7 +12,7 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 /// @title CrapsRngSeal — the craps lane of the RNG-freeze net, against the real VRF lifecycle.
 ///
 /// @notice The craps table is a satellite consumer of the protocol's lootbox-RNG words: a field
-///         binds to `_currentIndex()` when it shuts and reads that leaf at settlement. The
+///         binds to `_writeBuffer()` when it shuts and reads that leaf at settlement. The
 ///         freeze standard for every VRF consumer is that nothing an actor controls can change WHICH
 ///         word settles an outcome or HOW after the request is made. For craps that decomposes into
 ///         the six properties the handler counts (see CrapsRngSealHandler): the bound leaf is
@@ -129,21 +129,30 @@ contract CrapsRngSeal is DeployProtocol {
         slot = uint64(betId >> 64);
     }
 
-    /// @notice The arm binds the cursor's own leaf, the leaf is unworded, and the arm's own
-    ///         request is the one that fulfils into it — the cursor moves past it in the same call.
-    function test_armBindsTheCursorAndItsOwnRequestLandsThere() public {
+    /// @notice The arm binds the cursor's own leaf and makes no request: the cursor stays put, the
+    ///         leaf is unworded, and an ordinary request afterwards seals that leaf so the word it
+    ///         fetches lands there.
+    function test_armBindsTheCursorAndTheNextOrdinaryRequestSealsIt() public {
         (uint64 slot,,) = _openDayWithOneEntrant();
         uint48 cursorBefore = crapsBattle.currentIndex();
         vm.warp(block.timestamp + crapsBattle.BONUS_EVENT_CLOSE() + crapsBattle.BONUS_CLOCK_ALIGN());
+        uint256 reqBefore = mockVRF.lastRequestId();
         uint48 index = crapsBattle.armWindow(slot);
         assertEq(index, cursorBefore, "the field must bind the cursor's leaf");
         assertEq(crapsBattle.wordAt(index), 0, "the bound leaf must be unworded");
-        assertEq(crapsBattle.currentIndex(), cursorBefore + 1, "the arm's request must have advanced the cursor");
+        assertEq(crapsBattle.currentIndex(), cursorBefore, "the arm must not move the cursor");
+        assertEq(mockVRF.lastRequestId(), reqBefore, "the arm must make no request of its own");
+
+        vm.prank(address(0x5ea1));
+        game.requestLootboxRng();
+        assertEq(crapsBattle.currentIndex(), cursorBefore ^ 1, "the ordinary request must seal the armed buffer");
 
         uint256 reqId = mockVRF.lastRequestId();
+        assertGt(reqId, reqBefore, "the ordinary request asked for the word");
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256("seal-pin")) | 1);
-        assertGt(crapsBattle.wordAt(index), 0, "the arm's own request lands on the armed leaf");
-        assertEq(crapsBattle.wordAt(index + 1), 0, "the leaf above stays unworded for the next arm");
+        game.advanceGame();
+        assertGt(crapsBattle.wordAt(index), 0, "the sealing request lands on the armed leaf");
+        assertEq(crapsBattle.wordAt(index ^ 1), 0, "the leaf above stays unworded for the next arm");
     }
 
     /// @notice After the field shuts, the slip is frozen: amendSlip is refused and the stored
@@ -181,8 +190,8 @@ contract CrapsRngSeal is DeployProtocol {
         assertTrue(handler.debugSeedWordedArmAndCheck(slot), "the seal detector must register a pre-worded leaf");
     }
 
-    /// @notice A second field shut while the first arm's request is in flight is an in-window
-    ///         arm, and it moves nothing in the game's consumed set.
+    /// @notice A second field shut while the request that sealed the first is in flight is an
+    ///         in-window arm, and it moves nothing in the game's consumed set.
     function test_secondArmDuringTheFirstArmsRequestIsInWindow() public {
         handler.advanceDay(1);
         handler.enterWindow(0, 5, 0, false);
@@ -190,7 +199,8 @@ contract CrapsRngSeal is DeployProtocol {
         handler.enterWindow(2, 7, 2, false);
         assertEq(handler.ghost_entries(), 3, "three seats on three windows");
         handler.arm(0);
-        assertEq(handler.ghost_armsWithLiveRequest(), 1, "the first arm's request opened a mid-day window");
+        handler.sealRequest(0);
+        assertEq(handler.ghost_sealRequests(), 1, "an ordinary request sealed the first window and opened a mid-day window");
         handler.arm(1);
         handler.arm(2);
         assertEq(handler.ghost_arms(), 3);
@@ -199,8 +209,8 @@ contract CrapsRngSeal is DeployProtocol {
         assertEq(handler.ghost_armsOnWordedIndex() + handler.ghost_armsBelowCursor(), 0);
     }
 
-    /// @notice A past day's field shut under the DAILY lock is an in-window arm; its own request is
-    ///         refused, so the lock's consumed set is untouched.
+    /// @notice A past day's field shut under the DAILY lock is an in-window arm; the arm makes no
+    ///         request, so the lock's consumed set is untouched.
     function test_armUnderTheDailyLockIsInWindowAndInert() public {
         handler.primeLockedArm(3, 9);
         assertEq(handler.ghost_armsWhileDailyLocked(), 1, "the arm ran under the daily lock");
@@ -209,10 +219,10 @@ contract CrapsRngSeal is DeployProtocol {
         assertTrue(game.rngLocked(), "the daily window is still held after the arm");
     }
 
-    /// @notice Each arm's own request lands its armed leaf — a request issued AFTER the field shut,
-    ///         and the one that fills exactly the table the field bound — so a field settles as
-    ///         soon as its own request fulfils, and a later arm binds the leaf above it.
-    function test_eachArmsOwnRequestLandsItsLeafAndItSettles() public {
+    /// @notice Each shut window is sealed by the next ordinary request, which lands its armed leaf,
+    ///         so a field settles as soon as that request fulfils, and a later arm binds the leaf
+    ///         above it.
+    function test_eachShutWindowIsSealedByTheNextRequestAndSettles() public {
         handler.advanceDay(1);
         handler.enterWindow(0, 5, 0, false);
         handler.enterWindow(1, 6, 1, false);
@@ -220,18 +230,28 @@ contract CrapsRngSeal is DeployProtocol {
         uint64 s0 = handler.armedSlots(0);
         uint48 i0 = handler.armedIndexOf(s0);
         assertEq(crapsBattle.wordAt(i0), 0, "the first leaf was worded when it bound");
+        handler.sealRequest(0);
+        assertEq(handler.ghost_sealRequests(), 1, "the ordinary request must seal the shut window");
         handler.fulfil(11);
-        assertGt(crapsBattle.wordAt(i0), 0, "the arm's own request must land on its leaf");
+        assertGt(crapsBattle.wordAt(i0), 0, "the sealing request must land on the window's leaf");
         handler.settle(0);
         assertEq(handler.ghost_settlesWithWord(), 1, "the first field settled on its word");
         assertEq(handler.ghost_settlesWithoutWord(), 0);
+        game.openBoxes(2000);
+        assertTrue(game.boxIndexComplete(i0), "the human read must also finish before a fresh request");
+        for (uint256 i; i < 128 && uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 248) == 0; ++i) {
+            game.mineFlip();
+        }
+        assertTrue(uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 248) != 0,
+            "all prior consumers must finish before the second request");
         handler.arm(1);
+        handler.sealRequest(0);
         uint64 s1 = handler.armedSlots(1);
         uint48 i1 = handler.armedIndexOf(s1);
-        assertEq(i1, i0 + 1, "the second arm did not bind the leaf above the first");
+        assertEq(i1, i0 ^ 1, "the second arm did not bind the leaf above the first");
         assertEq(crapsBattle.wordAt(i1), 0, "the second leaf was worded when it bound");
         handler.fulfil(12);
-        assertGt(crapsBattle.wordAt(i1), 0, "the second arm's own request must land on its leaf");
+        assertGt(crapsBattle.wordAt(i1), 0, "the second sealing request must land on its leaf");
         handler.settle(1);
         assertEq(handler.ghost_settlesWithWord(), 2, "the second field settled on its word");
         handler.advanceDay(2);

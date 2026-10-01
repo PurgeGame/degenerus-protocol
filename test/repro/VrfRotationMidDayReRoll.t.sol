@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
@@ -8,20 +9,13 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title VrfRotationMidDayReRoll -- regression for finding C1 (VRF-rotation lootbox entropy re-roll).
 ///
-/// @notice A mid-day lootbox VRF word lands in `lootboxRngWordByIndex[N]` (write-once), but the
-///         `LR_MID_DAY` flag stays set until the swapped ticket batch drains. PRE-FIX,
-///         `updateVrfCoordinatorAndSub` treated `LR_MID_DAY != 0` as "mid-day request in flight"
-///         and re-issued a spurious VRF request on the new coordinator; fulfilling it OVERWROTE the
-///         already-delivered write-once word `lootboxRngWordByIndex[N]` (an entropy re-roll) and
-///         emitted a duplicate LootboxRngApplied. The fix keys the mid-day re-issue on
-///         `vrfRequestId != 0` (cleared to 0 on fulfilment) instead of the sticky flag, so a
-///         rotation after the word lands does NOT re-issue and the delivered word is preserved.
-///
-/// @dev TEST-ONLY. No contracts/*.sol touched. Storage-read helpers mirror VrfRotationOrphanIndex.
-///      Run: forge test --match-path test/repro/VrfRotationMidDayReRoll.t.sol -vv
+/// @notice A delivered session word is immutable even while the ticket latch remains set.
+///         Rotation may reissue an active unanswered request, preserving its physical buffer;
+///         it must never reissue one whose usable word has already arrived. Request metadata
+///         remains nonzero, so the active flag and waiting payload decide authority.
+/// @dev TEST-ONLY. Callback landing is observed before mandatory keeper publication.
 contract VrfRotationMidDayReRoll is DeployProtocol {
     uint256 private constant SLOT_LOOTBOX_PACKED = 33;
-    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 34;
     uint256 private constant LR_MID_DAY_BIT = 224;
     uint256 private _lastFulfilledReqId;
 
@@ -31,7 +25,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
     }
 
     function _readLootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_PACKED))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _readMidDayFlag() internal view returns (uint256) {
@@ -40,12 +34,16 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
     }
 
     function _readLootboxWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_WORD_MAP));
-        return uint256(vm.load(address(game), slot));
+        assertEq(index, RecyclingState.readBuffer(address(game)), "current committed read buffer");
+        uint256 payload = uint256(vm.load(address(game), bytes32(uint256(3))));
+        return payload > 1 ? payload : 0; // Callback landing before keeper publication.
+
     }
 
     function _completeDay(uint256 vrfWord) internal {
-        game.advanceGame();
+        _finishReadConsumers();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.advanceGame();
+        assertTrue(game.rngLocked(), "daily request starts after prior consumers finish");
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -63,6 +61,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         _completeDay(0xDEAD0001);
         vm.warp(block.timestamp + 1 days);
         _completeDay(0xDEAD0002);
+        _finishReadConsumers();
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
@@ -70,22 +69,21 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         mockVRF.fundSubscription(1, 100e18);
     }
 
-    /// @notice After a mid-day word has ALREADY LANDED (vrfRequestId cleared, LR_MID_DAY still 1),
+    /// @notice After a mid-day word has ALREADY LANDED (metadata retained, LR_MID_DAY still 1),
     ///         a governance coordinator rotation must NOT re-issue a request and must NOT overwrite
     ///         the delivered write-once lootbox word.
     function test_C1_rotationAfterMidDayWordLands_doesNotReRoll(uint256 midDayWord) public {
-        vm.assume(midDayWord != 0);
+        vm.assume(midDayWord > 1);
 
         _setupForMidDayRng();
 
-        // Fire the mid-day request; capture the reserved slot N = LR_INDEX - 1.
+        // Fire the mid-day request; capture the sealed physical read buffer.
         game.requestLootboxRng();
-        uint48 reservedIndex = _readLootboxRngIndex() - 1;
+        uint48 reservedIndex = _readLootboxRngIndex() ^ 1;
         assertEq(_readMidDayFlag(), 1, "precondition: requestLootboxRng set LR_MID_DAY=1");
 
-        // Land the mid-day word on the CURRENT coordinator. rawFulfillRandomWords' mid-day branch
-        // writes lootboxRngWordByIndex[N] and clears vrfRequestId + rngRequestTime, but LEAVES
-        // LR_MID_DAY=1 (it clears only when the swapped ticket batch drains on a later advance).
+        // The callback stores only the finalized payload. Metadata and the ticket
+        // latch are retained until their required keeper stages run.
         uint256 midReqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(midReqId, midDayWord);
 
@@ -93,7 +91,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         assertEq(_readMidDayFlag(), 1, "LR_MID_DAY stays set after the word lands (batch not yet drained)");
 
         // Governance rotates the coordinator while LR_MID_DAY is still latched but no request is
-        // genuinely in flight (vrfRequestId == 0). The FIX must not re-issue here.
+        // genuinely unanswered (a usable payload has arrived). The FIX must not re-issue here.
         MockVRFCoordinator newVRF = new MockVRFCoordinator();
         uint256 newSubId = newVRF.createSubscription();
         newVRF.addConsumer(newSubId, address(game));
@@ -122,18 +120,18 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         }
     }
 
-    /// @notice Control: a GENUINELY in-flight mid-day request (word not yet landed, vrfRequestId != 0)
+    /// @notice Control: a GENUINELY in-flight mid-day request (active request with waiting payload)
     ///         MUST still be re-issued on rotation so the reserved slot eventually fills — proving the
     ///         C1 fix does not over-suppress the legitimate re-issue path.
     function test_C1_rotationDuringGenuineMidDayFlight_stillReIssues(uint256 vrfWord) public {
-        vm.assume(vrfWord != 0);
+        vm.assume(vrfWord > 1);
 
         _setupForMidDayRng();
         game.requestLootboxRng();
-        uint48 reservedIndex = _readLootboxRngIndex() - 1;
+        uint48 reservedIndex = _readLootboxRngIndex() ^ 1;
         assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot empty before fulfilment");
 
-        // Rotate WHILE the request is genuinely in flight (not yet fulfilled): vrfRequestId != 0.
+        // Rotate WHILE the request is genuinely in flight (not yet fulfilled): its active flag and waiting payload remain.
         MockVRFCoordinator newVRF = new MockVRFCoordinator();
         uint256 newSubId = newVRF.createSubscription();
         newVRF.addConsumer(newSubId, address(game));

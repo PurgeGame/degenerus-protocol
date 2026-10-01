@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
@@ -34,7 +35,7 @@ import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarne
 ///      inject freeze state and seed pending pools to a known value, then places
 ///      a real degenerette bet via the public API, injects a lootbox RNG word
 ///      pre-computed to produce a winning result, and resolves the bet.
-/// @dev DOORS-REMOVAL PORT NOTE: bets are one word in `degeneretteQueue[index]` (id = queue
+/// @dev DOORS-REMOVAL PORT NOTE: bets are one word in `degeneretteQueue[index & 1]` (id = queue
 ///      position + 1), resolved ONLY through the permissionless in-order sweep
 ///      `game.openBoxes(maxCount)` (delegates to `sweepDegeneretteBets`) — the manual
 ///      `resolveDegeneretteBets(index, betIds)` door is gone, with it the per-call
@@ -72,7 +73,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant PENDING_PACKED_SLOT = 11;
 
     /// @dev lootboxRngWordByIndex mapping root slot (post Stage-B game-storage repack: was 36).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
 
     /// @dev lootboxRngPacked at slot 34 (post Stage-B game-storage repack: was 35); lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
@@ -130,7 +131,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // as 0 (no pending RNG), which is the required state for bet placement.
         // lootboxRngIndex is the low 48 bits of lootboxRngPacked (slot 34).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
+        RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(
             address(game),
             bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
@@ -190,7 +191,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         // Inject RNG word, finalize the index, and sweep it through openBoxes.
         _injectLootboxRngWord(index, winningRngWord);
-        _advanceLootboxRngIndexByOne();
+
         game.openBoxes(type(uint256).max);
 
         // Live future should have decreased (debited by ETH payout)
@@ -256,7 +257,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _placeBet(CURRENCY_FLIP, 100 ether, 1, pick); // decoy bet shifts the queue position
         uint64 second = _placeBet(CURRENCY_FLIP, 200 ether, 3, pick);
         _injectLootboxRngWord(1, word);
-        _advanceLootboxRngIndexByOne();
+
 
         vm.recordLogs();
         game.openBoxes(type(uint256).max);
@@ -319,7 +320,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint256 preWwxrp = wwxrp.balanceOf(player);
 
         // Resolve both in ONE call (the cross-bet flush under test).
-        _advanceLootboxRngIndexByOne();
+
         vm.recordLogs();
         game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -426,7 +427,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         uint256 preFlip = coin.balanceOf(player);
 
-        _advanceLootboxRngIndexByOne();
+
         vm.recordLogs();
         game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -483,7 +484,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint16 activity = DQ.activity(game.degeneretteBetInfo(index, betId));
         uint256 preClaimable = game.claimableWinningsOf(player);
 
-        _advanceLootboxRngIndexByOne();
+
         vm.recordLogs();
         game.openBoxes(type(uint256).max);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -577,7 +578,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint64 bet2 = _placeBet(CURRENCY_ETH, perTicket, 1, ticket);
         _seedFuturePrizePool(smallPool);
         _injectLootboxRngWord(index, word);
-        _advanceLootboxRngIndexByOne();
+
 
         // Snapshot so the SAME placed bets can be resolved two different ways.
         uint256 snap = vm.snapshotState();
@@ -645,7 +646,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         assertEq(DQ.stake(_betPacked(betId)), 1 ether, "unboosted stake reaches the DGNRS cap exactly");
         _seedFuturePrizePool(1_000_000 ether);
         _injectLootboxRngWord(index, word);
-        _advanceLootboxRngIndexByOne();
+
 
         uint256[5] memory poolsBefore;
         for (uint8 i; i < 5; ++i) poolsBefore[i] = sdgnrs.poolBalance(sDGNRS.Pool(i));
@@ -760,7 +761,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint128 perTicket = 0.05 ether; // >= MIN_BET_ETH
         uint64 betId = _placeBet(CURRENCY_ETH, perTicket, 1, ticket);
         _injectLootboxRngWord(index, word); // RNG committed -> bet is resolvable
-        _advanceLootboxRngIndexByOne(); // finalize the index so the sweep can reach it
+ // finalize the index so the sweep can reach it
 
         // --- Phase 2: prove the bet IS otherwise resolvable pre-game-over ---
         // (the §1 path: pre-fix, this same call after game-over would have credited
@@ -846,7 +847,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @dev The active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 33).
     function _activeIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Find the spin-0 winning custom ticket for (index, word): the spin-0
@@ -1076,21 +1077,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @notice Inject a lootbox RNG word for a given index.
-    /// @dev Writes to the lootboxRngWordByIndex mapping at slot 35.
+    /// @dev Seals the cohort and marks the reusable word ready.
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
-    }
-
-    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 33) by
-    ///      one, so a bet placed at the prior index now sits at LR_INDEX-1 — the finalized
-    ///      index the sweep (`openHumanBoxes`/`sweepDegeneretteBets`, reached via
-    ///      `game.openBoxes`) resolves. Mirrors RngFreezeAndRemovalProofs._advanceLootboxRngIndexByOne.
-    function _advanceLootboxRngIndexByOne() internal {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        uint48 idx = uint48(packed & 0xFFFFFFFFFFFF);
-        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | uint256(idx + 1);
-        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
     /// @notice Find a (customTraits, rngWord) pair that guarantees >= 2 matches.

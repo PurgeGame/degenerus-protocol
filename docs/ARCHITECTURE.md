@@ -33,6 +33,15 @@ Ticket and ordinary lootbox ETH funds protocol prize pools. Presale-box ETH is c
 also receives the sDGNRS `PresaleBox` pool remainder once presale is drained. Jackpot and redemption paths create claimable
 obligations or game-specific credits; moving ETH/stETH to a player follows the relevant
 claim/recipient checks. Permissionless processing is not authority to redirect payment.
+
+A purchased ETH Degenerette bet resolves its combined win lootbox once per bet ID.
+If the shared score allowance for `level + 1` has usage below 10 ETH at settlement,
+the box applies its frozen activity-score bonus to at most `50 ETH - used`; overflow
+receives neutral EV. Recorded usage stays capped at 10 ETH, so crossing that boundary
+exhausts the allowance for later boxes. Eligibility is read at settlement, with no
+purchase reservation. Ordinary boxes, AFKing, redemption, and internal ETH reward-spin
+recirculation retain the normal 10 ETH allowance.
+
 Game-over processing reserves existing claims and applicable deity refunds, credits 2% of
 the remaining pool to the terminal level's top affiliate, and sends the rest to the main
 terminal ticket jackpot. If no affiliate is ranked, the jackpot receives the entire pool.
@@ -113,6 +122,41 @@ operator and charge; the table's `CrapsBonusDonated` records the vault as donor.
 
 ## Ticket materialization
 
+`advanceGame` and `mineFlip` enter the same work dispatcher in `GameAfkingModule`.
+The dispatcher calls the advance worker or drains existing read consumers before the
+next daily request can reuse their randomness storage. Neither public entry calls the
+other. Workers run by delegatecall, preserving the original caller. Only `mineFlip`
+enables the keeper bounty; standalone advancement and its prerequisite drains are
+unrewarded.
+
+`Advance(18, lvl)` reports a fresh daily word applied with its jackpot field still
+pending. `Advance(19, lvl)` reports committed ticket progress waiting for the previous
+read consumers to finish before the next RNG request. These are distinct work stages;
+neither changes the game phase by itself.
+
+`rngComplete` is cached in slot 0 bit 248. A fresh normal request clears it;
+consumer completion and the daily seal set it only after committed tickets, the
+midday latch, the combined box/bet cursor and read-bound Craps all finish. Requests
+read this flag; unanswered retries preserve the same session and buffer tags.
+
+There is one reusable `rngWordCurrent` and two physical queue tags, 0 and 1.
+Slot 0 bit 252 selects write; read is its opposite. A normal fresh request swaps
+only after read completion and resets the released queue headers in constant work.
+The uint48 lootbox fields in events and APIs carry these physical tags, without a
+monotonic counter. History must pair commitments and results with their publication
+interval using block number and log index. Ordinary stamped AFKING boxes and foil
+packs continue using retained daily words.
+
+The VRF callback authenticates the active request, adds the frozen daily nudge
+count (0..256, stored in slot 0), and writes only the final word. Midday requests
+apply no daily nudge. Final values 0 and 1 are refused and remain retryable;
+1 is the nonzero waiting sentinel. Mandatory keeper publication emits the applied
+word and performs nudge/request cleanup outside the LINK-funded callback. Request
+ID and timestamp retain nonzero idle values; the active flag controls authority.
+Terminal advancement bypasses normal read completion and kills unfinished boxes,
+bets and Craps rather than retaining earlier session words. Paid ending tickets
+and already-earned claims follow the existing terminal distribution.
+
 Purchases queue owed entries; the drain assigns traits from committed entropy. The round
 worker groups up to four entries per seat; cards are client presentation. Resume cursors
 and seated round state persist across chunks.
@@ -126,7 +170,8 @@ in the far-future key space.
 Level L+1 starts to exist when L's last purchase day latches at its seal. The seal moves
 L+1 under the ceiling: its far-future pool freezes, and later L+1 entries take its write
 buffer. The read side is fully drained at the seal, so the first buffer swap after it is the
-first RNG request after it: typically a craps battle's mid-day request, otherwise the
+first RNG request after it: typically a mid-day request (a closed craps window counts as
+request work), otherwise the
 last-purchase daily request (or, after a same-day turbo latch, that same request). The
 frozen pool mints inside the unified sweep with that first cohort, on its word, before the
 sweep counts as finished; keepers see it through `advanceDue`. Either way it is fully
@@ -196,12 +241,27 @@ remainder-seven slot, which the lapse sweep never walks. The worst settle call i
 `JackpotBattleStageGas`, `JackpotBattleDrawGas` and `JackpotBattleAwardsGas` tests.
 The BAF scatter is 80% of the BAF pool (50% to each round's best BAF score, 30% to the
 second) over 48 rounds of four samples: 12 each at the BAF level, level + 1, level + 2..5
-and level + 6..99 (centuries: 8, 8, 8, 8, and 16 on the previous 99 levels). The two
+and level + 6..99, including century levels. The two
 unminted ranges sample one queue lane per wallet.
 
+Century scatter no longer samples completed levels. Each forward band receives 25%
+of scatter rounds (previously 1/6 at centuries); the retired 99-level band receives
+none. This changes century candidate exposure, not the scatter pool or its 50/30
+first/second split. Empty rounds still refund their allocation, so realized payouts
+depend on populated candidates and their BAF scores.
+
 The level owner registry is append-only. Trait buckets pack eight uint32 owner indices
-per storage word. The individual drain aggregates trait occurrences before writing runs;
-the round drain batches seats. Queue release clears the length in constant time.
+per completed storage word in two parity buffers. The unfinished zero to seven
+lanes live in the header above its uint32 count. Each buffer retains its full
+level stamp; a per-buffer bitmap validates buckets at that actual level; takeover invalidates old counts without clearing payload words. The
+individual drain aggregates trait occurrences before writing runs; the round drain
+batches seats. Queue release clears the length in constant time. Bingo stays open
+on completed inventory until that buffer is actually reassigned to L+2, so its
+deadline depends on game progress. Unfinished normal paid ticket work and revealed
+foil drainage defer takeover. A foil pack whose next-day entropy lands after its
+level retired is consumed without writing traits into the newer buffer; its record
+and daily entropy still support match/gold claims. Its old-level Bingo eligibility
+has expired at the same retirement boundary.
 
 `EntryOwnerRegistered` maps level/index to owner; both `lvl` and `owner` are indexed, so a
 wallet's registry positions at a level are one log filter. Storage bucket owner indices
@@ -265,6 +325,9 @@ bounded stages. The packed queue holds eight owner indices per word and must use
 its codec helpers; Solidity array operations do not express its logical length.
 `PackedTicketSampleLib` samples eight lanes from one selected word, with explicit
 handling of a padded final word. These groups intentionally share a word draw.
+The BAF trait sampler consumes up to four of these lanes and caches the bucket's
+packed-word root and owner-registry root once per call. A padding redraw loads
+its source word through that cached root or from the header tail; entry weights and sampled order are unchanged.
 
 Each jackpot-phase ETH quadrant can convert up to 25% of its original allocation
 to full whale passes at 4.5 ETH each. The usual shares and ETH winner counts are

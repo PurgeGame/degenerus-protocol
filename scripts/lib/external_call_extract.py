@@ -40,13 +40,16 @@ import sys
 CONTRACTS_DIR = os.environ.get("CONTRACTS_DIR", "contracts")
 
 DEFAULT_SCOPE = [
+    "CrapsBattle.sol",
     "JackpotBattle.sol",
     "libraries/JackpotBattleFieldLib.sol",
     "DegenerusGame.sol",
     "storage/DegenerusGameStorage.sol",
     "modules/DegenerusGameAdvanceModule.sol",
+    "modules/DegenerusGameRngUtils.sol",
     "modules/DegenerusGameJackpotModule.sol",
     "modules/DegenerusGameMintModule.sol",
+    "modules/DegenerusGameMintStreakUtils.sol",
     "modules/DegenerusGameGameOverModule.sol",
     "modules/GameAfkingModule.sol",
     "modules/DegenerusGameLootboxModule.sol",

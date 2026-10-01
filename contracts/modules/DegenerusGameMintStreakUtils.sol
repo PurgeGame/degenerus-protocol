@@ -61,6 +61,35 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///        0 means cured).
     event CurseChanged(address indexed player, uint8 newCurseCount);
 
+    /// @dev Resolve the salvage-swap counterparty for a budget, fail-closed. sDGNRS first when its OWN
+    ///      claimable covers totalBudget above a >=1 ETH floor; else the vault when its owner has enabled
+    ///      the salvage-buy fallback AND its game-side ETH (claimable + prepaid afking, both backed by
+    ///      claimablePool) covers totalBudget above the owner-set reserve floor; else address(0) (no buyer
+    ///      can fund). The vault owner stages reserve ETH into the afking half via depositAfkingFunding.
+    ///      Shared by the executing path and the preview so the displayed counterparty matches the one
+    ///      charged. The vault config is a freeze-safe owner storage read (never a VRF-window value); the
+    ///      executing swap reverts under rngLockedFlag at its entrypoint, and the view preview may run in
+    ///      the lock because it writes nothing.
+    /// @param totalBudget The -EV ETH budget the buyer must fund above its floor.
+    /// @return buyer The counterparty (sDGNRS, the vault, or address(0) if none can fund).
+    function _resolveSalvageBuyer(uint256 totalBudget) internal view returns (address buyer) {
+        if (_claimableOf(ContractAddresses.SDGNRS) >= totalBudget + 1 ether) {
+            return ContractAddresses.SDGNRS;
+        }
+        (bool enabled, uint256 vaultFloorWei) = IDegenerusVaultOwner(
+            ContractAddresses.VAULT
+        ).salvageBuyConfig();
+        if (
+            enabled &&
+            _claimableOf(ContractAddresses.VAULT) +
+                _afkingOf(ContractAddresses.VAULT) >=
+            totalBudget + vaultFloorWei
+        ) {
+            return ContractAddresses.VAULT;
+        }
+        return address(0);
+    }
+
     /// @dev Mask for clearing last-completed + streak fields in one pass.
     uint256 private constant MINT_STREAK_FIELDS_MASK =
         (BitPackingLib.MASK_24 << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) |

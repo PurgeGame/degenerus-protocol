@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
@@ -12,7 +13,7 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 ///         flat per-bet credit far below every shape's cost.
 contract DegeneretteSweepGas is DeployProtocol {
     uint256 private constant LR_PACKED_SLOT = 33;
-    uint256 private constant LR_WORD_SLOT = 34;
+    uint256 private constant LR_WORD_SLOT = 3;
     uint256 private constant PRIZE_POOLS_SLOT = 2;
     uint48 private constant IDX = 1;
     uint8 private constant SYMBOL = 9;
@@ -27,7 +28,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(bettor, 100_000_000 ether);
         uint256 lr = uint256(vm.load(address(game), bytes32(LR_PACKED_SLOT)));
-        vm.store(address(game), bytes32(LR_PACKED_SLOT), bytes32((lr & ~uint256(0xFFFFFFFFFFFF)) | IDX));
+        RecyclingState.seedWriteBuffer(address(game), IDX);
         uint256 pools = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_SLOT)));
         vm.store(
             address(game),
@@ -57,9 +58,7 @@ contract DegeneretteSweepGas is DeployProtocol {
                 address(0), currency, perSpin, spins, SYMBOL
             );
         }
-        vm.store(address(game), keccak256(abi.encode(uint256(IDX), LR_WORD_SLOT)), bytes32(word));
-        uint256 lr = uint256(vm.load(address(game), bytes32(LR_PACKED_SLOT)));
-        vm.store(address(game), bytes32(LR_PACKED_SLOT), bytes32((lr & ~uint256(0xFFFFFFFFFFFF)) | (IDX + 1)));
+        RecyclingState.seedWord(address(game), IDX, bytes32(word));
         vm.recordLogs();
         uint256 g = gasleft();
         uint256 opened = game.openBoxes(type(uint256).max);

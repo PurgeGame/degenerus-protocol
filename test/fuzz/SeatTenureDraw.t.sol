@@ -44,6 +44,7 @@ contract SeatTenureDraw is DeployProtocol {
 
     /// @dev Complete a full day: advance -> VRF fulfill -> drain to unlock.
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
@@ -55,6 +56,7 @@ contract SeatTenureDraw is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
     }
 
     /// @dev The draw's selection formula, mirrored: 1 + H("SEATDRAW", word) % (len-1).

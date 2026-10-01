@@ -55,11 +55,7 @@ import { advanceToNextDay } from "../helpers/testUtils.js";
 // MIN_BET_ETH at DegenerusGameDegeneretteModule:217 (5 ether / 1000).
 const MIN_BET_ETH_VALUE = hre.ethers.parseEther("0.005");
 
-// Storage slot for lootboxRngPacked in DegenerusGame. Resolved via the
-// hardhat storage-layout artifact (`getBuildInfo()` → contracts →
-// storageLayout) — slot index 35 at offset 0, type uint256. The low 48 bits
-// are `lootboxRngIndex` (LR_INDEX_SHIFT=0, LR_INDEX_MASK=0xFFFFFFFFFFFF).
-const LOOTBOX_RNG_PACKED_SLOT = "0x" + (35).toString(16).padStart(64, "0");
+
 
 // Storage slot 0 holds the packed timing/FSM struct. Authoritative layout
 // (forge inspect storageLayout): purchaseStartDay uint24 @offset 0,
@@ -73,23 +69,13 @@ const UINT32_MASK = 0xffffffn;
 // Currency tag for ETH bets per DegenerusGameDegeneretteModule constants.
 const CURRENCY_ETH = 0;
 
-/// Seed `lootboxRngPacked` low 48 bits to `index` so the bet gate at
-/// DegenerusGameDegeneretteModule:451 (`if (index == 0) revert E()`) opens.
-/// The companion check at L452 (`if (lootboxRngWordByIndex[index] != 0)
-/// revert RngNotReady()`) passes by default — slot for index=1 is unset so
-/// the word reads as zero.
+// Set the physical write tag in slot 0, preserving every neighboring field.
 async function seedLootboxRngIndex(gameAddr, index = 1) {
-  const provider = hre.ethers.provider;
-  const current = BigInt(
-    await provider.getStorage(gameAddr, LOOTBOX_RNG_PACKED_SLOT)
-  );
-  const INDEX_MASK = (1n << 48n) - 1n;
-  const cleared = current & ~INDEX_MASK;
-  const updated = cleared | (BigInt(index) & INDEX_MASK);
+  const slot0 = hre.ethers.toBeHex(0, 32);
+  const current = BigInt(await hre.ethers.provider.getStorage(gameAddr, slot0));
+  const updated = (current & ~(1n << 252n)) | ((BigInt(index) & 1n) << 252n);
   await hre.network.provider.send("hardhat_setStorageAt", [
-    gameAddr,
-    LOOTBOX_RNG_PACKED_SLOT,
-    "0x" + updated.toString(16).padStart(64, "0"),
+    gameAddr, slot0, hre.ethers.toBeHex(updated, 32),
   ]);
 }
 

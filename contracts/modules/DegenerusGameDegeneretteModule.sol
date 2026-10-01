@@ -290,7 +290,7 @@ contract DegenerusGameDegeneretteModule is
     // Queued Bet Layout
     // -------------------------------------------------------------------------
     //
-    // A bet is one word in degeneretteQueue[index] (full layout on the storage declaration):
+    // A bet is one word in degeneretteQueue[index & 1] (full layout on the storage declaration):
     // owner [0..159] | symbol [160..164] | spinCount [165..169] | currency [170] |
     // record flag [171] | activity score [172..187] | boosted stake units [188..251] |
     // consumed stake-boon tier [252..253]. The tier lets settlement recover paid stake.
@@ -328,7 +328,9 @@ contract DegenerusGameDegeneretteModule is
     ///      hits together; the ETH floor prices that case, never an average.
     uint256 private constant BET_ENTRY_WEIGHT_ETH = 36;
     uint256 private constant BET_ENTRY_WEIGHT_FLIP = 4;
-    uint256 private constant BET_SPIN_WEIGHT_ETH = 2;
+    // Every ETH spin may also transfer sDGNRS. Charge the cold award tail per
+    // spin, since many same-symbol bets can share the same high-score outcomes.
+    uint256 private constant BET_SPIN_WEIGHT_ETH = 8;
     uint256 private constant BET_SPIN_WEIGHT_FLIP = 1;
     uint256 private constant BET_RECORD_WEIGHT = 6;
 
@@ -453,12 +455,12 @@ contract DegenerusGameDegeneretteModule is
         // revert here would stall the whole box frontier behind this queue. The freeze only
         // runs inside the RNG lock the sweep already waits out; hold the queue while it is up.
         if (prizePoolFrozen) return (0, pos, 0, 0);
-        uint256[] storage queue = degeneretteQueue[index];
+        uint256[] storage queue = degeneretteQueue[index & 1];
         uint256 qlen = queue.length;
         ResolveAcc memory acc;
         while (pos < qlen && unitsSpent < budget) {
             uint256 bet = queue[pos];
-            if (bet == 0) {
+            if (bet == 0 || bet & BET_PROCESSED != 0) {
                 unchecked {
                     ++pos;
                     ++unitsSpent;
@@ -469,7 +471,7 @@ contract DegenerusGameDegeneretteModule is
             // BREAK, never skip: the cursor is monotonic, so a bet that does not fit stays
             // at the cursor for the next call's fresh budget.
             if ((resolved != 0 || !mustRunFirst) && unitsSpent + cost > budget) break;
-            queue[pos] = 0;
+            queue[pos] = bet | BET_PROCESSED;
             unchecked {
                 ++pos;
                 unitsSpent += cost;
@@ -586,9 +588,8 @@ contract DegenerusGameDegeneretteModule is
         if (symbol >= 32) revert InvalidBet();
         uint8 heroQuadrant = symbol >> 3;
 
-        uint48 index = uint48(_lrRead(LR_INDEX_SHIFT, LR_INDEX_MASK));
-        if (index == 0) revert NotStarted();
-        if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();
+        uint48 index = _rngWriteBuffer();
+        if (_lootboxWord(index) != 0) revert RngNotReady();
 
         totalBet = uint256(amountPerSpin) * uint256(spinCount);
         // Decay-aware effective quest streak: a streak
@@ -690,7 +691,7 @@ contract DegenerusGameDegeneretteModule is
 
         // The bet itself is the sweep's queue entry: one word, appended at this index. Its
         // id is the queue position + 1, fixed here while the index word is still unset.
-        uint256[] storage queue = degeneretteQueue[index];
+        uint256[] storage queue = degeneretteQueue[index & 1];
         uint64 betId = uint64(queue.length + 1);
         uint256 bet =
             uint256(uint160(player)) |
@@ -880,12 +881,11 @@ contract DegenerusGameDegeneretteModule is
             // accumulator so the single flush mints exactly this bet's payout — the
             // subtraction cannot underflow because the accumulator already holds at least it.
             //
-            // The roll is per-bet on a betId-keyed word, and that is load-bearing: settling
-            // is permissionless and `betIds[]` is caller-composed, so rounding the summed
-            // `acc.flipMint` at the flush instead would let a caller enumerate batch
-            // partitions against the already-committed word and take the split with the
-            // most round-ups. Keyed per bet, the outcome is fixed at fulfillment however the
-            // bets are batched.
+            // The roll is per-bet on a betId-keyed word, and that is load-bearing: the sweep
+            // resolves the queue in order but each call stops where its budget runs out, so
+            // rounding the summed `acc.flipMint` at the flush instead would make the payout
+            // depend on where the crank's call boundaries fall. Keyed per bet, the outcome is
+            // fixed at fulfillment however the queue is chunked.
             uint256 rounded = totals.totalPayout > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(
                     totals.totalPayout,
@@ -906,7 +906,7 @@ contract DegenerusGameDegeneretteModule is
         if (totals.betLootboxShare > 0) {
             // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
             // so the per-box FLIP datum is recoverable.
-            _resolveLootboxDirect(
+            _resolveDegeneretteLootboxDirect(
                 player,
                 totals.betLootboxShare,
                 EntropyLib.hash2(rngWord, betId),
@@ -1121,7 +1121,7 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly.
-    ///      Applies activity-score EV multiplier (90-145%) to match regular lootbox opens.
+    ///      Internal ETH reward-spin recirculation keeps the normal 10 ETH ceiling.
     ///      The resolved box itemizes its contents via `LootBoxOpened` like every box path.
     function _resolveLootboxDirect(
         address player,
@@ -1140,6 +1140,25 @@ contract DegenerusGameDegeneretteModule is
                     activityScore
                 )
             );
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev One purchased bet's combined box, with a 50 ETH ceiling if allowance remains.
+    function _resolveDegeneretteLootboxDirect(
+        address player,
+        uint256 amount,
+        uint256 rngWord,
+        uint16 activityScore
+    ) private {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameLootboxModule.resolveDegeneretteLootboxDirect.selector,
+                player,
+                amount,
+                rngWord,
+                activityScore
+            )
+        );
         if (!ok) _revertDelegate(data);
     }
 

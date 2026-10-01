@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
@@ -60,7 +61,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
 
 
     // -------------------------------------------------------------------------
@@ -142,7 +143,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
         );
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(INDEX);
+        RecyclingState.seedWriteBuffer(address(game), INDEX);
         vm.store(
             address(game),
             bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
@@ -186,7 +187,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     ///         word is zero returns early without rewarding (the orphan-index re-issue coupling).
     function testAutoOpenBoxesBeforeRngWordEmitsNoReward() public {
         // INDEX word is zero (we never inject it here). autoOpen must early-return at the
-        // lootboxRngWordByIndex[index] == 0 guard, emitting no creditFlip.
+        // _lootboxWord(index) == 0 guard, emitting no creditFlip.
         uint256 preStake = coinflip.coinflipAmount(sybil);
         vm.recordLogs();
         vm.prank(sybil);
@@ -411,7 +412,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
     /// @dev The REAL spin-0 result ticket for (index, word), matching _resolveBet:

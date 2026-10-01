@@ -89,25 +89,27 @@ async function jumpToNextGameDayBoundary(offsetSeconds = 5) {
 
 /**
  * Advance the game through one full day cycle.
- * advanceGame (requests VRF) -> fulfill VRF -> loop advanceGame until RNG unlocked.
- * Caller must bypass the mint gate (via DGVE majority or gateIdx condition).
- *
- * Multiple post-fulfillment advances are required because future ticket processing
- * (STAGE_FUTURE_TICKETS_WORKING) now takes several advance calls before daily
- * processing completes and RNG is unlocked.
+ * Run the real keeper chain until the target day seals and its read work finishes.
+ * Prior read consumers may run before a new daily request; the retained request ID
+ * alone does not mean there is a new request to fulfill.
  */
 async function advanceGameOneDay(game, caller, mockVRF) {
-  await game.connect(caller).advanceGame();
-  const reqId = await getLastVRFRequestId(mockVRF);
-  if (reqId > 0n) {
-    await fulfillVRF(mockVRF, reqId, BigInt(hre.ethers.keccak256(hre.ethers.toBeHex(reqId, 32))));
+  const targetDay = BigInt(await game.currentDayView());
+  const address = await game.getAddress();
+  for (let i = 0; i < 128; ++i) {
+    const state = BigInt(await hre.ethers.provider.getStorage(address, 0));
+    const sealedDay = (state >> 24n) & 0xffffffn;
+    if (sealedDay >= targetDay && !await game.rngLocked() && (state & (1n << 248n)) !== 0n) return;
+    const reqId = await getLastVRFRequestId(mockVRF);
+    if (reqId > 0n) {
+      const request = await mockVRF.pendingRequests(reqId);
+      if (!request.fulfilled) {
+        await fulfillVRF(mockVRF, reqId, BigInt(hre.ethers.keccak256(hre.ethers.toBeHex(reqId, 32))));
+      }
+    }
+    await game.connect(caller).mineFlip();
   }
-  // Loop until RNG is unlocked (daily processing fully complete).
-  for (let i = 0; i < 30; i++) {
-    const locked = await game.rngLocked();
-    if (!locked) break;
-    await game.connect(caller).advanceGame();
-  }
+  throw new Error("keeper chain did not seal the target day and finish its read consumers");
 }
 
 describe("Governance & Gating (Phase 43)", function () {

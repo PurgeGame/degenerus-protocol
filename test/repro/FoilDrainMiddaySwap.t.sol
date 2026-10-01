@@ -425,6 +425,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     }
 
     function _middayRequest() internal returns (bool swapped) {
+        _finishReadConsumers();
         vm.prank(ticketBuyer);
         game.purchase{value: 2 ether}(
             ticketBuyer,
@@ -539,10 +540,14 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         address who
     ) internal view returns (uint256 n) {
         bytes32 levelSlot = keccak256(
-            abi.encode(uint256(lvl), SLOT_LVL_TRAIT_ENTRY)
+            abi.encode(uint256(lvl & 1), SLOT_LVL_TRAIT_ENTRY)
         );
         bytes32 elem = bytes32(uint256(levelSlot) + uint256(traitId));
-        uint256 len = uint256(vm.load(address(game), elem));
+        uint256 header = uint256(vm.load(address(game), elem));
+        uint48 stamps = uint48(uint256(vm.load(address(game), bytes32(uint256(5)))) >> 112);
+        uint256 bits = uint256(vm.load(address(game), bytes32(uint256(76) + (lvl & 1))));
+        if (uint24(stamps >> ((lvl & 1) * 24)) != lvl || ((bits >> traitId) & 1) == 0) return 0;
+        uint256 len = uint32(header);
         if (len == 0) return 0;
         uint256 base = uint256(keccak256(abi.encode(elem)));
         // Lanes are uint32 registry positions, eight per word; resolve through
@@ -551,7 +556,8 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             keccak256(abi.encode(keccak256(abi.encode(uint256(lvl), uint256(67)))))
         );
         for (uint256 i = 0; i < len; i++) {
-            uint256 word = uint256(vm.load(address(game), bytes32(base + (i >> 3))));
+            uint256 word = (i >> 3) == (len >> 3) ? header >> 32
+                : uint256(vm.load(address(game), bytes32(base + (i >> 3))));
             uint256 lane = (word >> (32 * (i & 7))) & 0xffffffff;
             address a = address(
                 uint160(

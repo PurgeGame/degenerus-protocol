@@ -30,13 +30,8 @@ abstract contract BucketSeed is DegenerusGameStorage {
 
     /// @dev Append `n` occurrences of `player` to lvlTraitEntry[lvl][trait].
     function _seedBucket(uint24 lvl, uint8 trait, address player, uint256 n) internal {
-        uint256 levelSlot;
-        assembly ("memory-safe") {
-            mstore(0x00, lvl)
-            mstore(0x20, lvlTraitEntry.slot)
-            levelSlot := keccak256(0x00, 0x40)
-        }
-        _bucketAppendRun(levelSlot, trait, _ownerIdxFor(lvl, player), n);
+        _setTicketBufferLevel(lvl);
+        _bucketAppendRun(_traitBufferBase(lvl), trait, _ownerIdxFor(lvl, player), n, lvl);
     }
 
     /// @dev Queue `player` on key `rk` for level `lvl` owing `packedOwedRem` (owed << 8 | rem),
@@ -59,14 +54,14 @@ abstract contract BucketSeed is DegenerusGameStorage {
 
     /// @dev Occurrence count of the bucket.
     function _seedBucketLen(uint24 lvl, uint8 trait) internal view returns (uint256) {
-        return lvlTraitEntry[lvl][trait].length;
+        return _bucketLength(lvl, trait);
     }
 
     /// @dev Reset the bucket to empty (the length word alone gates every read).
     function _seedBucketClear(uint24 lvl, uint8 trait) internal {
-        uint256[] storage lanes = lvlTraitEntry[lvl][trait];
+        uint256 lanesSlot = _traitBufferBase(lvl) + trait;
         assembly ("memory-safe") {
-            sstore(lanes.slot, 0)
+            sstore(lanesSlot, 0)
         }
     }
 }

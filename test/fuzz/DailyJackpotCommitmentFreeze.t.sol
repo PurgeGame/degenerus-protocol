@@ -27,7 +27,7 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
         _afkingResetDay = day;
         rngLockedFlag = false;
         rngRequestTime = 0;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 0;
         dailyTicketBudgetsPacked = 0;
         dailyJackpotCoinTicketsPending = false;
@@ -41,7 +41,7 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
         // window belongs to `day`, never to this sealed ledger.
         dailyHeroWagers[day - 1][1] = uint256(1000) << (5 * 32);
         whalePassClaims[attacker] = 2;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
 
         // Word 2's raw board is [12,98,134,215]; the committed hero changes 98 to 101.
         // Distinct source-level owners make an early-bird/main source swap observable.

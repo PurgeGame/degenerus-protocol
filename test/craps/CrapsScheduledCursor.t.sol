@@ -36,7 +36,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }
 
@@ -96,7 +96,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         // Period 0's window armed first (oldest); drive until the window under test is armed.
         for (uint256 i = 0; i < 8 && craps.slotIndexOf(winSlot) == 0; ++i) {
             uint48 pending = craps.slotIndexOf(craps.keeperSlot());
-            if (pending != 0 && craps.wordAt(pending - 1) == 0) {
+            if (pending != 0 && pending <= 2 && craps.wordAt(pending - 1) == 0) {
                 _setWord(pending - 1, uint256(keccak256(abi.encode("life", i))));
             }
             craps.keepScheduled(type(uint64).max);
@@ -344,7 +344,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
             uint64 at = craps.keeperSlot();
             if (at == target && craps.slotIndexOf(target) != 0) return;
             uint48 pending = craps.slotIndexOf(at);
-            if (pending != 0 && craps.wordAt(pending - 1) == 0 && at != target) {
+            if (pending != 0 && pending <= 2 && craps.wordAt(pending - 1) == 0 && at != target) {
                 _setWord(pending - 1, uint256(keccak256(abi.encode("drive", i))));
             }
             craps.keepScheduled(type(uint64).max);
@@ -361,7 +361,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
             if (craps.keeperSlot() >= pastAll) return;
             uint64 at = craps.keeperSlot();
             uint48 pending = craps.slotIndexOf(at);
-            if (pending != 0 && craps.wordAt(pending - 1) == 0) {
+            if (pending != 0 && pending <= 2 && craps.wordAt(pending - 1) == 0) {
                 _setWord(pending - 1, uint256(keccak256(abi.encode("whole", day, i))));
             }
             craps.keepScheduled(type(uint64).max);

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 
 /// @title DegeneretteResolveRepeg -- sweep-budget invariance of queued-bet resolution.
-/// @notice Bets are queued per RNG index (`degeneretteQueue[index]`, id = queue position + 1) and
+/// @notice Bets are queued per RNG index (`degeneretteQueue[index & 1]`, id = queue position + 1) and
 ///         resolve ONLY through the permissionless human-box sweep (`game.openBoxes`, unrewarded,
 ///         or `game.mineFlip`, rewarded to the CALLER based on the walk-unit work actually done --
 ///         see KeeperFaucetResistance.t.sol and DegeneretteSweep.t.sol for that reward's own
@@ -32,7 +33,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     // =========================================================================
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev lootboxRngPacked; lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
@@ -64,7 +65,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         // placeDegeneretteBet reverts with E() when lootboxRngIndex == 0; seed it to 1
         // (the word at index 1 starts at 0 = no pending RNG, the state bet placement needs).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
+        RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
     }
 
@@ -187,15 +188,13 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     /// @dev Inject a lootbox RNG word for a given index (lootboxRngWordByIndex mapping).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
     /// @dev Move the active lootbox RNG index (low 48 bits of lootboxRngPacked) to `idx + 1`, the
     ///      state the human-box sweep needs before it will reach `idx`'s bet queue.
     function _advanceActiveIndexPast(uint48 idx) internal {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(idx) + 1);
-        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(packed));
+        RecyclingState.seedWriteBuffer(address(game), idx ^ 1);
     }
 
     /// @dev Seed futurePrizePool (future half, bits 128-255 of prizePoolsPacked, slot 2). Preserves nextPrizePool.

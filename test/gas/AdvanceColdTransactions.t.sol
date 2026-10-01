@@ -4,9 +4,29 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract ColdSubscriberSeeder is DegenerusGame {
+    /// @dev The all-skip gas fixture also places the two permanent protocol
+    /// subscribers on their already-bought guard for the measured next day.
+    function prepareProtocolSkips() external {
+        uint24 nextDay = _simulatedDayIndex() + 1;
+        _subOf[ContractAddresses.VAULT].lastAutoBoughtDay = nextDay;
+        _subOf[ContractAddresses.SDGNRS].lastAutoBoughtDay = nextDay;
+    }
+    /// @dev Run the actual indexed worker without consuming independent stamped AFKING boxes.
+    function finishIndexedRead() external {
+        require(!rngLockedFlag, "setup daily still locked");
+        for (uint256 i; i < 100 && !humanReadComplete; ++i) {
+            (bool ok, bytes memory ret) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector, 10_000)
+            );
+            if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
+        require(humanReadComplete, "indexed read did not complete");
+    }
+
     function useMatureLevel() external {
         level = 110;
         levelPrizePool[110] = 1000 ether;
@@ -46,8 +66,17 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
         vm.deal(address(game), 1_000_000 ether);
         vm.deal(address(this), 100_000 ether);
         _settle();
+        _finishReadConsumers();
 
         uint8 mode = _mode();
+        // At mature levels subscriptions create stamped daily boxes, separate from
+        // read-cohort indexed covers; their pending-box skip can span a daily request.
+        if (mode == 3) {
+            bytes memory original = address(game).code;
+            vm.etch(address(game), type(ColdSubscriberSeeder).runtimeCode);
+            ColdSubscriberSeeder(payable(address(game))).useMatureLevel();
+            vm.etch(address(game), original);
+        }
         uint256 n = mode == 0 ? 320 : mode == 1 ? 125 : mode == 2 ? 260 : 1300;
         // The per-level sDGNRS whale purchase takes 700 of the 2,500-unit budget on this day.
         if (_complete()) n = mode == 1 ? 85 : 180;
@@ -87,6 +116,10 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
         bytes memory original = address(game).code;
         vm.etch(address(game), type(ColdSubscriberSeeder).runtimeCode);
         ColdSubscriberSeeder(payable(address(game))).useMatureLevel();
+        if (mode == 3) {
+            ColdSubscriberSeeder(payable(address(game))).finishIndexedRead();
+            ColdSubscriberSeeder(payable(address(game))).prepareProtocolSkips();
+        }
         if (_split()) ColdSubscriberSeeder(payable(address(game))).seedSplitBalances(players);
         vm.etch(address(game), original);
         vm.warp(vm.getBlockTimestamp() + 1 days);

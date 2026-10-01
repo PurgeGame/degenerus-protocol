@@ -19,7 +19,7 @@ contract TerminalAffiliateSeeder is DegenerusGame, BucketSeed {
         rngWordByDay[day] = word;
         ticketsFullyProcessed = true;
         levelPrizePool[lvl] = 1000 ether;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
         _creditClaimable(creditor, reserved);
         claimablePool = reserved;
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
@@ -36,7 +36,7 @@ contract TerminalAffiliateSeeder is DegenerusGame, BucketSeed {
         rngWordByDay[_simulatedDayIndex()] = 0;
         rngRequestTime = uint48(block.timestamp) & ~uint48(1);
         vrfRequestId = 777;
-        rngWordCurrent = word;
+        rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
     }
 
     function paidPass(address owner, uint96 paid) external {

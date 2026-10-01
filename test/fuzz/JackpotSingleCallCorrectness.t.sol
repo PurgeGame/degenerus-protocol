@@ -47,7 +47,7 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
     }
 
     function bucketLen(uint24 lvl, uint8 traitId) external view returns (uint256) {
-        return lvlTraitEntry[lvl][traitId].length;
+        return _bucketLength(lvl, traitId);
     }
 }
 

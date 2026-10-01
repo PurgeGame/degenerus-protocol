@@ -48,7 +48,7 @@ contract V56FreezeSolvency is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint32 => uint256) — the afking box DAY-keyed word
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // [0:47] lootboxRngIndex (was 35)
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 34; // mapping(uint48 => uint256) (was 36)
+    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 3; // mapping(uint48 => uint256) (was 36)
     uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot) (was 58)
     uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
 
@@ -485,6 +485,7 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     function _settleGame(uint256 vrfWord) internal {
+        _finishReadConsumers();
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
@@ -497,6 +498,7 @@ contract V56FreezeSolvency is DeployProtocol {
     /// @dev A robust settle DEMANDING a clean (`!advanceDue && !rngLocked`) state before returning — used
     ///      before an afking open so mineFlip reliably takes the OPEN leg (Don't-Hand-Roll).
     function _settleClean(uint256 vrfWord) internal {
+        _finishReadConsumers();
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);

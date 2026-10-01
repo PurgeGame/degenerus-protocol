@@ -23,9 +23,9 @@
 #
 # TRACKED VARIABLES (the VRF-word storage set). Keep in lockstep with VRF_WORD_IDENTIFIERS
 # in rng_window_extract.py and with the enumerated slots in RngWindowFreezeHandler:
-#   rngWordCurrent          the fulfilled-but-not-yet-sealed daily buffer (own slot)
+#   rngWordCurrent          single retained daily/midday session payload (slot 3)
 #   rngWordByDay[day]       the sealed, write-once per-day word            (slot 10)
-#   lootboxRngWordByIndex[] the sealed, write-once per-index lootbox word  (slot 34)
+#   _nudgeCount             frozen daily nudge input in slot-0 bytes30..31
 #   lootboxRngPacked        the packed lootbox cursor; low 48 bits = index (slot 33)
 #
 # CROSS-CONTRACT READERS (_wordAt, _dailyWordAt). A satellite outside the game — CRAPS — reads
@@ -40,7 +40,7 @@
 # that RngWindowFreezeHandler references each. (dailyIdx — the non-VRF day cursor, slot 0
 # byte 3 — is a 4th enumerated slot in the handler but is read in hundreds of unrelated
 # places, so it is NOT tracked as a word variable here; the handler covers it directly.)
-# FROZEN_SET: rngWordByDay lootboxRngWordByIndex lootboxRngPacked
+# FROZEN_SET: rngWordCurrent rngWordByDay lootboxRngPacked _nudgeCount
 #
 # WINDOW ASYMMETRY (a reviewer note the CLASS judgements rest on): a DAILY request sets both
 # rngLockedFlag and prizePoolFrozen; a MID-DAY requestLootboxRng sets NEITHER — it relies on
@@ -71,91 +71,127 @@
 #   python3 scripts/lib/rng_window_extract.py | python3 scripts/lib/rng_window_classify.py
 # then hand-review every row before committing.
 #
+# RECYCLING REVIEW: packed bit 249 is fulfillment readiness; normal swaps clear it.
+# Word helpers are tracked as well as payloads so transitive consumers remain visible.
+# Terminal-only slot 80 preserves the immediately previous read word for Craps across
+# the ungated ending request. No normal player action changes either word payload.
 CLASS	IDENTIFIER	FUNCTION	FILE	MODE
-DECL	lootboxRngPacked	<file-scope>	storage/DegenerusGameStorage.sol	DECL
-DECL	lootboxRngWordByIndex	<file-scope>	storage/DegenerusGameStorage.sol	DECL
-DECL	rngWordByDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL
-DECL	rngWordCurrent	<file-scope>	storage/DegenerusGameStorage.sol	DECL
-PRODUCER	lootboxRngPacked	_lrAdvanceIndexClearPending	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	WRITE
-PRODUCER	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	WRITE
-PRODUCER	lootboxRngWordByIndex	_finalizeLootboxRng	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	lootboxRngWordByIndex	advanceGame	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	lootboxRngWordByIndex	rawFulfillRandomWords	DegenerusGame.sol	WRITE
-PRODUCER	rngWordByDay	_applyDailyRng	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	rngWordByDay	_backfillGapDays	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	rngWordCurrent	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	WRITE	clears the buffer when the deterministic ending latches, and when the normal ending drops a pre-freeze daily request (its delivered word only finalized that request's own lootbox index); the terminal word is always the ending's own later request
-PRODUCER	rngWordCurrent	_applyDailyRng	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	rngWordCurrent	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	rngWordCurrent	_unlockRng	modules/DegenerusGameAdvanceModule.sol	WRITE
-PRODUCER	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	WRITE
-PRODUCER	rngWordCurrent	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol	WRITE
-EXEMPT-ADVANCE	lootboxRngPacked	_lrAdvanceIndexClearPending	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	lootboxRngPacked	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	lootboxRngWordByIndex	_finalizeLootboxRng	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	lootboxRngWordByIndex	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordByDay	_afKingSubDraw	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	lootboxRngWordByIndex	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	READ	existence check in the normal game-over ending, only before the ending's own swap: a cohort an earlier request committed (mid-day swap or dropped pre-freeze daily) drains on its own landed word; the ending's swapped cohort drains only on the terminal word
-EXEMPT-ADVANCE	rngWordByDay	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordByDay	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordByDay	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordByDay	rngGate	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordByDay	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ
-EXEMPT-ADVANCE	rngWordCurrent	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordCurrent	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordByDay	_gameOverEntropy	modules/DegenerusGameAdvanceModule.sol	READ	existence check at the terminal word's application: a dropped pre-freeze day that already applied its own word keeps it and the derivation starts after it (its flips settled on it); no value decision
-EXEMPT-ADVANCE	rngWordCurrent	_handleGameOverPath	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordCurrent	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	READ
-EXEMPT-ADVANCE	rngWordCurrent	rngGate	modules/DegenerusGameAdvanceModule.sol	READ
-EXEMPT-ADVANCE	rngWordCurrent	updateVrfCoordinatorAndSub	modules/DegenerusGameGameOverModule.sol	READ
-CONSUMER-SEALED	lootboxRngWordByIndex	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	READ
-CONSUMER-SEALED	lootboxRngWordByIndex	processTicketBatch	modules/DegenerusGameMintModule.sol	READ
-CONSUMER-SEALED	lootboxRngWordByIndex	_drainFrozenPool	modules/DegenerusGameMintModule.sol	READ
-CONSUMER-SEALED	rngWordByDay	deityBoonData	DegenerusGame.sol	READ
-CONSUMER-SEALED	rngWordByDay	_payFoilTier	modules/DegenerusGameFoilPackModule.sol	READ
-CONSUMER-SEALED	rngWordByDay	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ
-CONSUMER-SEALED	rngWordByDay	_tryClaimFoilMatch	modules/DegenerusGameFoilPackModule.sol	READ
-CONSUMER-SEALED	rngWordByDay	claimGoldenTicket	modules/DegenerusGameFoilPackModule.sol	READ
-CONSUMER-SEALED	rngWordByDay	issueDeityBoon	modules/DegenerusGameBoonModule.sol	READ
-CONSUMER-SEALED	rngWordByDay	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ
-CONSUMER-SEALED	rngWordByDay	_autoOpen	modules/GameAfkingModule.sol	READ
-GATE	lootboxRngWordByIndex	boxesPending	DegenerusGame.sol	READ
-GATE	lootboxRngWordByIndex	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ
-GATE	lootboxRngWordByIndex	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	READ
-GATE	rngWordByDay	_afkingStreak	storage/DegenerusGameStorage.sol	READ
-GATE	rngWordByDay	_rngWordByDayOf	DegenerusGameLens.sol	READ	read-only periphery mirror of _afkingStreak's decay gate (existence test on the sealed word via extsload); the lens is never called by game logic and can move no value
-GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
-GATE	rngWordByDay	_vrfDead	storage/DegenerusGameStorage.sol	READ	existence check only, read once a request is a whole VRF-dead window old with nothing delivered: a word applied for the request's day means VRF works (a ticket backlog), so the deterministic ending does not fire; no value decision
-GATE	rngWordCurrent	_vrfDead	storage/DegenerusGameStorage.sol	READ	existence check only, read once a request is a whole VRF-dead window old: a delivered daily word means VRF works even if the day processing it never completes (a stuck stage or a backlog), so that game ends by the deadman on a fresh terminal word instead; no value decision
-GATE	rngWordByDay	_pastDeadlineTriggered	storage/DegenerusGameStorage.sol	READ	existence check only, read only past the purchase deadline: a day that holds its word is finished on it, so the ending starts only before any word exists and the terminal word is always requested after the freeze; no value decision
-EXEMPT-ADVANCE	rngWordByDay	purchaseWhalePassForSdgnrs	modules/DegenerusGameWhaleModule.sol	READ	existence gate only (word != 0 -> return 0, no purchase) on the afking STAGE path, re-checking the STAGE's own "unlocked AND word uncommitted" gate live before any award; delegatecall-only, no player entry; slot 10 is enumerated by RngWindowFreezeHandler
-CURSOR	lootboxRngPacked	applyBoxOrderScore	modules/DegenerusGameLootboxModule.sol	READ
-CURSOR	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	READ
-CURSOR	lootboxRngPacked	quoteBoxOrder	modules/DegenerusGameLootboxModule.sol	READ
-CURSOR	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	READ
-CURSOR	lootboxRngPacked	_lootboxEntryRefusesPass	modules/DegenerusGameWhaleModule.sol	READ	same cursor read as recordCoverBox: the sDGNRS automatic purchase preflights the live index's order-entry fullness (a capacity check, no word consumed); slot 33 is enumerated by RngWindowFreezeHandler
+ACCESSOR	_dailyWordAt	_bonusBoostBand	CrapsBattle.sol	READ
+ACCESSOR	_dailyWordAt	_bonusDayOf	CrapsBattle.sol	READ
+ACCESSOR	_dailyWordAt	_bonusTermsFor	CrapsBattle.sol	READ
+ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
+ACCESSOR	_lootboxWord	_lootboxWord	storage/DegenerusGameStorage.sol	READ	packed ready bit plus activeIndex-1 authenticates current read payload
+ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
 ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	READ
 ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	WRITE
 ACCESSOR	lootboxRngPacked	_lrRead	storage/DegenerusGameStorage.sol	READ
 ACCESSOR	lootboxRngPacked	_lrWrite	storage/DegenerusGameStorage.sol	WRITE
 ACCESSOR	rngWordByDay	rngWordForDay	DegenerusGame.sol	READ
 ACCESSOR	rngWordCurrent	isRngFulfilled	DegenerusGame.sol	READ
-ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
-ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
+CONSUMER-SEALED	_dailyWordAt	_enterToday	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	_shareOf	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	_windowTerms	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	keepScheduled	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	lockJackpotBattle	JackpotBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	openBonusDay	CrapsBattle.sol	READ
+CONSUMER-SEALED	_dailyWordAt	vaultComp	CrapsBattle.sol	READ
+CONSUMER-SEALED	_lootboxWord	_drainFrozenPool	modules/DegenerusGameMintModule.sol	READ
+CONSUMER-SEALED	_lootboxWord	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	READ
+CONSUMER-SEALED	_lootboxWord	processTicketBatch	modules/DegenerusGameMintModule.sol	READ
 CONSUMER-SEALED	_wordAt	_seedFor	LootboxCraps.sol	READ
 CONSUMER-SEALED	_wordAt	_slotWord	CrapsBattle.sol	READ
-CONSUMER-SEALED	_dailyWordAt	_windowTerms	CrapsBattle.sol	READ
-CONSUMER-SEALED	_dailyWordAt	_shareOf	CrapsBattle.sol	READ
-CONSUMER-SEALED	_dailyWordAt	openBonusDay	CrapsBattle.sol	READ
-CONSUMER-SEALED	_dailyWordAt	_enterToday	CrapsBattle.sol	READ
-CONSUMER-SEALED	_dailyWordAt	vaultComp	CrapsBattle.sol	READ
-CONSUMER-SEALED	_dailyWordAt	keepScheduled	CrapsBattle.sol	READ
+CONSUMER-SEALED	_wordAt	keepRngCohort	JackpotBattle.sol	READ	registered slot index is closed before the word exists; exact field key and bounded cursor; pending count discharges only after payout
+CONSUMER-SEALED	rngWordByDay	_autoOpen	modules/GameAfkingModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ
+CONSUMER-SEALED	rngWordByDay	_payFoilTier	modules/DegenerusGameFoilPackModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	_tryClaimFoilMatch	modules/DegenerusGameFoilPackModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	claimGoldenTicket	modules/DegenerusGameFoilPackModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	deityBoonData	DegenerusGame.sol	READ
+CONSUMER-SEALED	rngWordByDay	issueDeityBoon	modules/DegenerusGameBoonModule.sol	READ
+CONSUMER-SEALED	rngWordByDay	resolveProtocolBoonDraws	modules/DegenerusGameBoonModule.sol	READ	Menu word D (fallback D+1 when D is absent) and winner word D+1; ETH hero bet placement writes only current-day pools, so D intervals/paid-ETH/score snapshots are closed before D+1 requests. Menu and winners use separate hash domains. The two-day ring reuses a day's slots only from D+2 (after its only possible draw day) and the day tag keeps a stale slot from drawing. ProtocolBoonDraw verifies launch-day awards, pool immutability through the draw day, the stale-slot guard, and exact award-day gating.
+CURSOR	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	READ
+CURSOR	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	READ
+DECL	lootboxRngPacked	<file-scope>	storage/DegenerusGameStorage.sol	DECL
+DECL	rngWordByDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL
+DECL	rngWordCurrent	<file-scope>	storage/DegenerusGameStorage.sol	DECL
+EXEMPT-ADVANCE	_lootboxWord	handleGameOverAdvance	modules/DegenerusGameGameOverModule.sol	READ	existence check in the normal game-over ending, only before the ending's own swap: a cohort an earlier request committed (mid-day swap or dropped pre-freeze daily) drains on its own landed word; the ending's swapped cohort drains only on the terminal word
+EXEMPT-ADVANCE	_lootboxWord	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	lootboxRngPacked	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	_afKingSubDraw	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	applyTerminalRng	modules/DegenerusGameGameOverModule.sol	READ	existence check at the terminal word's application: a dropped pre-freeze day that already applied its own word keeps it and the derivation starts after it (its flips settled on it); no value decision
+EXEMPT-ADVANCE	rngWordByDay	handleGameOverAdvance	modules/DegenerusGameGameOverModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ
+EXEMPT-ADVANCE	rngWordByDay	purchaseWhalePassForSdgnrs	modules/DegenerusGameWhaleModule.sol	READ	existence gate only (word != 0 -> return 0, no purchase) on the afking STAGE path, re-checking the STAGE's own "unlocked AND word uncommitted" gate live before any award; delegatecall-only, no player entry; slot 10 is enumerated by RngWindowFreezeHandler
+EXEMPT-ADVANCE	rngWordByDay	rngGate	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	handleGameOverAdvance	modules/DegenerusGameGameOverModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	READ
+EXEMPT-ADVANCE	rngWordCurrent	updateVrfCoordinatorAndSub	modules/DegenerusGameGameOverModule.sol	READ
 GATE	_dailyWordAt	_reserveDay	CrapsBattle.sol	READ
 GATE	_dailyWordAt	_reserveWindow	CrapsBattle.sol	READ
 GATE	_dailyWordAt	upgradeReservedDay	JackpotBattle.sol	READ
-ACCESSOR	_dailyWordAt	_bonusDayOf	CrapsBattle.sol	READ
-ACCESSOR	_dailyWordAt	_bonusBoostBand	CrapsBattle.sol	READ
-ACCESSOR	_dailyWordAt	_bonusTermsFor	CrapsBattle.sol	READ
-CONSUMER-SEALED	rngWordByDay	resolveProtocolBoonDraws	modules/DegenerusGameBoonModule.sol	READ	Menu word D (fallback D+1 when D is absent) and winner word D+1; ETH hero bet placement writes only current-day pools, so D intervals/paid-ETH/score snapshots are closed before D+1 requests. Menu and winners use separate hash domains. The two-day ring reuses a day's slots only from D+2 (after its only possible draw day) and the day tag keeps a stale slot from drawing. ProtocolBoonDraw verifies launch-day awards, pool immutability through the draw day, the stale-slot guard, and exact award-day gating.
-CONSUMER-SEALED	_dailyWordAt	lockJackpotBattle	JackpotBattle.sol	READ
+GATE	_lootboxWord	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	READ
+GATE	_lootboxWord	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ
+GATE	lootboxRngPacked	_rngConsumersComplete	storage/DegenerusGameStorage.sol	READ	ready, all committed ticket processing, mid-day latch, box/bet frontier and exact Craps pending count
+GATE	lootboxRngPacked	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol	READ	write-buffer Craps pending bit marks a closed window as request work; selects LINK floor and pending-value waiver, never a word
+GATE	rngWordByDay	_afkingStreak	storage/DegenerusGameStorage.sol	READ
+GATE	rngWordByDay	_foilDrainPending	storage/DegenerusGameStorage.sol	READ
+GATE	rngWordByDay	_pastDeadlineTriggered	storage/DegenerusGameStorage.sol	READ	existence check only, read only past the purchase deadline: a day that holds its word is finished on it, so the ending starts only before any word exists and the terminal word is always requested after the freeze; no value decision
+GATE	rngWordByDay	_rngWordByDayOf	DegenerusGameLens.sol	READ	read-only periphery mirror of _afkingStreak's decay gate (existence test on the sealed word via extsload); the lens is never called by game logic and can move no value
+GATE	rngWordByDay	_vrfDead	storage/DegenerusGameStorage.sol	READ	existence check only, read once a request is a whole VRF-dead window old with nothing delivered: a word applied for the request's day means VRF works (a ticket backlog), so the deterministic ending does not fire; no value decision
+GATE	rngWordCurrent	_vrfDead	storage/DegenerusGameStorage.sol	READ	existence check only, read once a request is a whole VRF-dead window old: a delivered daily word means VRF works even if the day processing it never completes (a stuck stage or a backlog), so that game ends by the deadman on a fresh terminal word instead; no value decision
+PRODUCER	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	WRITE
+PRODUCER	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	WRITE
+PRODUCER	lootboxRngPacked	requestTerminalRng	modules/DegenerusGameGameOverModule.sol	WRITE	ungated terminal worker; atomically preserves delivered preceding read before reserving the sole ending word
+PRODUCER	rngWordByDay	_applyDailyRng	modules/DegenerusGameRngUtils.sol	WRITE
+PRODUCER	rngWordByDay	_backfillGapDays	modules/DegenerusGameRngUtils.sol	WRITE
+PRODUCER	rngWordCurrent	_finalizeRngRequest	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordCurrent	handleGameOverAdvance	modules/DegenerusGameGameOverModule.sol	WRITE	clears the buffer when the deterministic ending latches, and when the normal ending drops a pre-freeze daily request (its delivered word only finalized that request's own lootbox index); the terminal word is always the ending's own later request
+PRODUCER	rngWordCurrent	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol	WRITE
+PRODUCER	rngWordCurrent	requestTerminalRng	modules/DegenerusGameGameOverModule.sol	WRITE	ungated terminal worker; atomically preserves delivered preceding read before reserving the sole ending word
+CURSOR	lootboxRngPacked	setCrapsRngPending	DegenerusGame.sol	READ	CRAPS-only assembly RMW of parity pending bits 250/251, never entropy/index/readiness slices.
+EXEMPT-ADVANCE	_currentRngWord	advanceGame	modules/DegenerusGameAdvanceModule.sol	READ	Decoded delivered entropy; waiting1 returns logical0, stored0 preserves delivered logical1. Same locked daily/terminal consumption as before.
+EXEMPT-ADVANCE	_currentRngWord	handleGameOverAdvance	modules/DegenerusGameGameOverModule.sol	READ	Decoded delivered entropy; waiting1 returns logical0, stored0 preserves delivered logical1. Same locked daily/terminal consumption as before.
+EXEMPT-ADVANCE	_currentRngWord	rngGate	modules/DegenerusGameAdvanceModule.sol	READ	Decoded delivered entropy; waiting1 returns logical0, stored0 preserves delivered logical1. Same locked daily/terminal consumption as before.
+EXEMPT-ADVANCE	_currentRngWord	applyTerminalRng	modules/DegenerusGameGameOverModule.sol	READ	Decoded delivered entropy; waiting1 returns logical0, stored0 preserves delivered logical1. Same locked daily/terminal consumption as before.
+ACCESSOR	_currentRngWord	_currentRngWord	storage/DegenerusGameStorage.sol	READ	Shared encoding accessor for current slot3; no extra state, all entropy readers use this decoder.
+ACCESSOR	rngWordCurrent	_currentRngWord	storage/DegenerusGameStorage.sol	READ	Shared encoding accessor for current slot3; no extra state, all entropy readers use this decoder.
+
+
+CONSUMER-SEALED	_currentRngWord	_lootboxWord	storage/DegenerusGameStorage.sol	READ	Current read identity and ready bit gate the shared payload decoder.
+ACCESSOR	_nudgeCount	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Nine-bit slot-0 accessor; neighboring flags are masked.
+PURE-DERIVE	_rawDailyRngWord	_rawDailyRngWord	storage/DegenerusGameStorage.sol	READ	Undo callback nudge/normalization only for raw replay and gap derivation.
+PURE-DERIVE	_nudgeCount	_rawDailyRngWord	storage/DegenerusGameStorage.sol	READ	Daily-lock-frozen receipt lets gap derivation retain exact original entropy.
+CURSOR	_nudgeCount	reverseFlip	DegenerusGame.sol	READ	Quote-gated counter update before daily lock; exact256 admission cap.
+ACCESSOR	_nudgeCount	rngNudgeQuote	DegenerusGame.sol	READ	View of pending/frozen nudge receipt; no RNG consumer.
+EXEMPT-ADVANCE	_nudgeCount	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder logs/clears the frozen receipt and never adds it again.
+EXEMPT-ADVANCE	_rawDailyRngWord	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder emits original raw word without changing finalized payload.
+EXEMPT-ADVANCE	_rawDailyRngWord	applyTerminalRng	modules/DegenerusGameGameOverModule.sol	READ	Terminal daily-lock receipt restores pre-nudge gap input; no prior words retained.
+EXEMPT-ADVANCE	_rawDailyRngWord	rngGate	modules/DegenerusGameAdvanceModule.sol	READ	Gap days use the exact original raw word before daily nudge.
+GATE	rngWordCurrent	_advanceDue	storage/DegenerusGameStorage.sol	READ	An active delivered midpoint word owes publication even with empty consumer queues.
+GATE	rngWordCurrent	_rngRetryDue	modules/DegenerusGameAdvanceModule.sol	READ	Retry only an active unanswered request; retained delivered payload cannot be discarded.
+PRODUCER	rngWordCurrent	applyTerminalRng	modules/DegenerusGameGameOverModule.sol	WRITE	Invalidate prior consumed entropy once before arming the terminal failure timer.
+PRODUCER	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	WRITE	Coordinator, active-bit, request-ID and waiting checks authenticate the final encoded payload.
+
+# Slot0 flags contain the daily-frozen nine-bit nudge input. Runtime freezes that
+# count, not the mutable neighboring lifecycle bits; packing fuzz proves isolation.
+DECL	rngFlagsAndNudges	<file-scope>	storage/DegenerusGameStorage.sol	DECL	Packed nudge and lifecycle bits; initial idle is complete+published.
+ACCESSOR	rngFlagsAndNudges	<file-scope>	storage/DegenerusGameStorage.sol	READ	Simple lifecycle-bit getters; no entropy consumed or nudge input changed.
+ACCESSOR	rngFlagsAndNudges	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Extract frozen nine-bit count, capped256 by the only production buyer.
+ACCESSOR	rngFlagsAndNudges	_setNudgeCount	storage/DegenerusGameStorage.sol	WRITE	Nudge purchase before daily lock; masked setter preserves every lifecycle bit.
+ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	READ	Daily recorder clears the frozen receipt once after using the finalized word.
+ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	WRITE	Keeper recorder clears only nudge bits, never in the billed callback.
+ACCESSOR	rngFlagsAndNudges	_setTicketRedemptionOpen	storage/DegenerusGameStorage.sol	WRITE	Masked lifecycle setter preserves nudge bits.
+ACCESSOR	rngFlagsAndNudges	_setRngComplete	storage/DegenerusGameStorage.sol	WRITE	Masked completion setter preserves nudge bits.
+ACCESSOR	rngFlagsAndNudges	_setRngRequestActive	storage/DegenerusGameStorage.sol	WRITE	Masked callback-authority setter preserves nudge bits; retained IDs cannot grant authority.
+ACCESSOR	rngFlagsAndNudges	_setRngSessionPublished	storage/DegenerusGameStorage.sol	WRITE	Masked mandatory-publication setter preserves nudge bits.
+PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	DegenerusGame.sol	READ	One slot0 SLOAD authenticates activity, identifies daily lock and supplies frozen nudge; callback never writes it.
+GATE	_currentRngWord	_rngConsumersComplete	storage/DegenerusGameStorage.sol	READ	Completion requires a published non-waiting word plus every frozen consumer.
+GATE	_currentRngWord	boxesPending	DegenerusGame.sol	READ	Keeper discovery only; a waiting payload cannot open queues.
+EXEMPT-ADVANCE	lootboxRngPacked	_sealRngWriteBuffer	modules/DegenerusGameAdvanceModule.sol	WRITE	Successful normal request clears pending purchase values once before the binary seal; retry preserves both buffers.
+ACCESSOR	rngFlagsAndNudges	<file-scope>	storage/DegenerusGameStorage.sol	WRITE	Deployment defaults and masked lifecycle helpers preserve all nine nudge bits; terminal marks unfinished lootbox consumers dead.
+EXEMPT-ADVANCE	rngFlagsAndNudges	_swapRngBuffers	storage/DegenerusGameStorage.sol	WRITE	Normal completion gate precedes seal; terminal bypass kills unfinished box/bet/Craps work. Retry never swaps.

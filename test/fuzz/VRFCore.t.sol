@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {VRFHandler} from "./helpers/VRFHandler.sol";
@@ -38,6 +39,7 @@ contract VRFCore is DeployProtocol {
     uint256 private _lastFulfilledReqId;
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -48,12 +50,14 @@ contract VRFCore is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
+            _finishReadConsumers();
     }
 
     /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 34, low 48 bits = LR_INDEX)
     ///      (post V62 lootbox repack: was 35).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Read vrfRequestId directly from storage slot 4.
@@ -68,7 +72,7 @@ contract VRFCore is DeployProtocol {
 
     /// @dev Read rngWordCurrent directly from storage slot 3.
     function _readRngWordCurrent() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SLOT_RNG_WORD_CURRENT))));
+        return RecyclingState.currentWord(address(game));
     }
 
     /// @dev Read rngRequestTime from packed slot 0, bytes [6:12] (uint48, bit offset 48).
@@ -132,8 +136,8 @@ contract VRFCore is DeployProtocol {
 
         // Verify word stored (zero-guarded to 1)
         uint256 stored = _readRngWordCurrent();
-        if (randomWord == 0) {
-            assertEq(stored, 1, "Zero word should be stored as 1");
+        if (randomWord < 2) {
+            assertEq(stored, 0, "Reserved word remains waiting for retry");
         } else {
             assertEq(stored, randomWord, "Word should be stored as-is");
         }
@@ -160,7 +164,7 @@ contract VRFCore is DeployProtocol {
 
     /// @notice Callback silently returns on duplicate fulfillment (rngWordCurrent already set).
     function test_callbackNeverReverts_duplicateFulfillment(uint256 randomWord) public {
-        vm.assume(randomWord != 0); // Ensure first fulfillment sets a nonzero word
+        vm.assume(randomWord > 1); // Ensure first fulfillment sets a nonzero word
 
         // Trigger daily VRF request
         game.advanceGame();
@@ -239,7 +243,7 @@ contract VRFCore is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, randomWord);
 
         // rngWordCurrent must be 1, not 0
-        assertEq(_readRngWordCurrent(), 1, "Zero word must be guarded to 1");
+        assertEq(_readRngWordCurrent(), 0, "Zero word must remain waiting for retry");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -249,7 +253,7 @@ contract VRFCore is DeployProtocol {
     /// @notice Daily request: vrfRequestId set on request, cleared after full processing.
     function test_vrfRequestIdLifecycle_dailyFreshRequest() public {
         // Before any request
-        assertEq(_readVrfRequestId(), 0, "vrfRequestId should start at 0");
+        assertEq(_readVrfRequestId(), 1, "request ID initializes to a nonzero idle sentinel");
 
         // Trigger daily VRF request
         game.advanceGame();
@@ -270,7 +274,8 @@ contract VRFCore is DeployProtocol {
         assertFalse(game.rngLocked(), "Should be unlocked after full processing");
 
         // After _unlockRng: vrfRequestId should be 0
-        assertEq(_readVrfRequestId(), 0, "vrfRequestId should be cleared after unlock");
+        assertEq(_readVrfRequestId(), reqId, "idle request ID is retained after unlock");
+        assertFalse(game.isRngFulfilled(), "idle callback authority is disarmed");
     }
 
     /// @notice Mid-day request: vrfRequestId set, cleared after mid-day fulfillment.
@@ -278,7 +283,7 @@ contract VRFCore is DeployProtocol {
         _setupForMidDayRng();
 
         // Before mid-day request, vrfRequestId should be 0 (cleared by _unlockRng from day 2)
-        assertEq(_readVrfRequestId(), 0, "vrfRequestId should be 0 before mid-day request");
+        assertEq(_readVrfRequestId(), mockVRF.lastRequestId(), "idle request ID is retained before midpoint");
 
         // Fire mid-day request
         game.requestLootboxRng();
@@ -291,9 +296,12 @@ contract VRFCore is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, 0xCAFE);
 
         // After mid-day branch: vrfRequestId cleared to 0
-        assertEq(_readVrfRequestId(), 0, "vrfRequestId should be cleared after mid-day fulfillment");
+        assertTrue(game.isRngFulfilled(), "callback leaves publication pending");
+        game.advanceGame();
+        assertEq(_readVrfRequestId(), reqId, "publication retains the idle ID");
+        assertFalse(game.isRngFulfilled(), "publication disarms callback authority");
         // rngRequestTime also cleared
-        assertEq(_readRngRequestTime(), 0, "rngRequestTime should be cleared after mid-day fulfillment");
+        assertGt(_readRngRequestTime(), 1, "idle timestamp is retained");
     }
 
     /// @notice Fresh daily request: isRetry=false, lootboxRngIndex increments by 1.
@@ -306,7 +314,7 @@ contract VRFCore is DeployProtocol {
 
         // lootboxRngIndex should have incremented (fresh request)
         uint48 indexAfter = _lootboxRngIndex();
-        assertEq(indexAfter, indexBefore + 1, "Fresh request should increment lootboxRngIndex by 1");
+        assertEq(indexAfter, (indexBefore ^ 1), "Fresh request should increment lootboxRngIndex by 1");
     }
 
     /// @notice Timeout retry: lootboxRngIndex does NOT increment again.
@@ -340,7 +348,7 @@ contract VRFCore is DeployProtocol {
     /// @notice Fuzz retry scenario: request -> timeout -> retry -> fulfill.
     ///         lootboxRngIndex must remain unchanged between first request and post-retry.
     function test_retryDetection_fuzz(uint256 word1, uint256 word2) public {
-        vm.assume(word1 != 0 && word2 != 0);
+        vm.assume(word1 > 1 && word2 != 0);
 
         // Day 1: complete normally
         _completeDay(word1);
@@ -471,8 +479,11 @@ contract VRFCore is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, 0xCAFE);
 
         // Both should be cleared
-        assertEq(_readVrfRequestId(), 0, "vrfRequestId cleared after mid-day fulfillment");
-        assertEq(_readRngRequestTime(), 0, "rngRequestTime cleared after mid-day fulfillment");
+        assertTrue(game.isRngFulfilled());
+        game.advanceGame();
+        assertEq(_readVrfRequestId(), reqId, "publication retains idle request ID");
+        assertFalse(game.isRngFulfilled());
+        assertGt(_readRngRequestTime(), 1, "idle request timestamp retained");
     }
 
     /// @notice A mid-day ticket batch whose drain completes on the NEW-day path must still
@@ -666,6 +677,7 @@ contract VRFCore is DeployProtocol {
         assertFalse(game.rngLocked(), "Day completes on the retried request's word");
 
         // Next day starts with a fresh retry allowance
+        _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         game.advanceGame();
         assertEq(_readRngRequestTime() & 1, 0, "Fresh daily request re-arms the retry");
@@ -705,7 +717,7 @@ contract VRFCore is DeployProtocol {
     /// @notice After retry overwrites vrfRequestId, old fulfillment is silently discarded.
     ///         New fulfillment (with new requestId) succeeds.
     function test_timeoutRetry_staleWordDiscarded(uint256 word1, uint256 word2) public {
-        vm.assume(word1 != 0 && word2 != 0);
+        vm.assume(word1 > 1 && word2 != 0);
 
         // Day 1: complete normally
         _completeDay(0xBEEF0001);
@@ -737,7 +749,7 @@ contract VRFCore is DeployProtocol {
 
     /// @notice Fuzz: timeout retry never double-increments lootboxRngIndex.
     function test_timeoutRetry_lootboxIndexPreserved_fuzz(uint256 word) public {
-        vm.assume(word != 0);
+        vm.assume(word > 1);
 
         // Day 1: complete normally
         _completeDay(0xFEED0001);

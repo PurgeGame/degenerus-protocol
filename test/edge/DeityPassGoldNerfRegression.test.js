@@ -115,7 +115,7 @@ import { expect } from "chai";
 import hre from "hardhat";
 import * as bucketSeed from "../helpers/bucketSeed.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
-import { execSync } from "node:child_process";
+import { compiledStorageSlot as deriveStorageSlot } from "../helpers/storageLayout.js";
 import {
   deployFullProtocol,
   restoreAddresses,
@@ -190,40 +190,7 @@ const FALLBACK_DEITY_BY_SYMBOL_SLOT = 28n; // Stage B Game-storage packing shift
 // Runs `forge inspect` at test runtime to extract the storage-layout slot
 // index for a named state variable. Re-validates the Phase 294 §2 EMPTY-diff
 // attestation. Returns a BigInt or null on parse failure.
-function deriveStorageSlot(varName) {
-  let forgeOut;
-  try {
-    forgeOut = execSync(
-      "FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge inspect " +
-        "contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage " +
-        "storageLayout 2>/dev/null"
-    ).toString();
-  } catch (err) {
-    throw new Error(
-      `deriveStorageSlot(${varName}): forge inspect failed — ${err.message}. ` +
-        "Ensure foundry is installed and on PATH."
-    );
-  }
-  for (const line of forgeOut.split("\n")) {
-    if (!line.includes(varName)) continue;
-    const cells = line.split("|").map((c) => c.trim());
-    for (let k = 0; k < cells.length; k++) {
-      if (cells[k] === varName) {
-        if (k + 2 < cells.length) {
-          const candidate = cells[k + 2];
-          if (/^[0-9]+$/.test(candidate)) {
-            return BigInt(candidate);
-          }
-        }
-        break;
-      }
-    }
-  }
-  throw new Error(
-    `deriveStorageSlot(${varName}): failed to parse slot index from forge ` +
-      `output. First 400 chars:\n${forgeOut.slice(0, 400)}`
-  );
-}
+
 
 // Compute the storage slot for `deityBySymbol[fullSymId]`. Solidity
 // `mapping(uint8 => address)` at base slot `baseSlot`:
@@ -251,7 +218,7 @@ function computeTraitBucketLengthSlot(lvl, trait, baseSlot) {
     hre.ethers.keccak256(
       hre.ethers.AbiCoder.defaultAbiCoder().encode(
         ["uint256", "uint256"],
-        [BigInt(lvl), baseSlot]
+        [BigInt(lvl) & 1n, baseSlot]
       )
     )
   );
@@ -396,8 +363,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
   describe(
     "TST-DPNERF setup-and-sanity — JS-replay oracle wiring + forge-inspect storage-layout baseSlot derivation",
     function () {
-      it("derives deityBySymbol base slot from forge inspect storageLayout and matches the close pin (slot 29)", function () {
-        const slot = deriveStorageSlot("deityBySymbol");
+      it("derives deityBySymbol base slot from the compiled Hardhat storageLayout and matches the close pin (slot 29)", async function () {
+        const slot = await deriveStorageSlot("deityBySymbol");
         expect(typeof slot).to.equal("bigint");
         expect(slot >= 0n).to.equal(true);
         expect(slot).to.equal(FALLBACK_DEITY_BY_SYMBOL_SLOT);
@@ -406,8 +373,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
         );
       });
 
-      it("derives lvlTraitEntry base slot from forge inspect storageLayout and matches the v41 close pin (slot 8)", function () {
-        const slot = deriveStorageSlot("lvlTraitEntry");
+      it("derives lvlTraitEntry base slot from the compiled Hardhat storageLayout and matches the v41 close pin (slot 8)", async function () {
+        const slot = await deriveStorageSlot("lvlTraitEntry");
         expect(typeof slot).to.equal("bigint");
         expect(slot >= 0n).to.equal(true);
         expect(slot).to.equal(FALLBACK_TRAIT_BURN_TICKET_SLOT);
@@ -524,8 +491,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const { game } = fixture;
           const gameAddr = await game.getAddress();
 
-          const deityBaseSlot = deriveStorageSlot("deityBySymbol");
-          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
+          const deityBaseSlot = await deriveStorageSlot("deityBySymbol");
+          const bucketBaseSlot = await deriveStorageSlot("lvlTraitEntry");
 
           // Seed deity for fullSymId 0 (the symbol-id of GOLD_TRAIT).
           const deity = hre.ethers.getAddress(
@@ -638,8 +605,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const { game } = fixture;
           const gameAddr = await game.getAddress();
 
-          const deityBaseSlot = deriveStorageSlot("deityBySymbol");
-          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
+          const deityBaseSlot = await deriveStorageSlot("deityBySymbol");
+          const bucketBaseSlot = await deriveStorageSlot("lvlTraitEntry");
 
           // Seed deity for fullSymId 0 (the symbol-id of COMMON_TRAIT, which
           // has color 0, symIdx 0 → fullSymId 0).
@@ -762,8 +729,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const { game } = fixture;
           const gameAddr = await game.getAddress();
 
-          const deityBaseSlot = deriveStorageSlot("deityBySymbol");
-          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
+          const deityBaseSlot = await deriveStorageSlot("deityBySymbol");
+          const bucketBaseSlot = await deriveStorageSlot("lvlTraitEntry");
 
           const deity = hre.ethers.getAddress(
             "0x00000000000000000000000000000000000B0E11" // FLIP deity
@@ -1081,8 +1048,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const { game } = fixture;
           const gameAddr = await game.getAddress();
 
-          const deityBaseSlot = deriveStorageSlot("deityBySymbol");
-          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
+          const deityBaseSlot = await deriveStorageSlot("deityBySymbol");
+          const bucketBaseSlot = await deriveStorageSlot("lvlTraitEntry");
 
           const deity = hre.ethers.getAddress(
             "0x0000000000000000000000000000000000C7055D"
@@ -1217,8 +1184,8 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           const { game } = fixture;
           const gameAddr = await game.getAddress();
 
-          const bucketBaseSlot = deriveStorageSlot("lvlTraitEntry");
-          const deityBaseSlot = deriveStorageSlot("deityBySymbol");
+          const bucketBaseSlot = await deriveStorageSlot("lvlTraitEntry");
+          const deityBaseSlot = await deriveStorageSlot("deityBySymbol");
 
           // Explicit no-deity fixture: symbol 0 belongs to the vault at genesis.
           await seedDeityBySymbol(gameAddr, 0, ZERO_ADDRESS, deityBaseSlot);

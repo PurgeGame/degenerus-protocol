@@ -401,7 +401,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
             address[BAF_SCATTER_ROUNDS] memory secondWinners;
             uint256 firstCount;
             uint256 secondCount;
-            bool isCentury = (lvl % 100 == 0);
             address[] memory futurePair;
 
             // Fixed rounds of 4-ticket sampling to keep gas bounded per call.
@@ -415,10 +414,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 // level's last-purchase word, before this draw) and sample trait buckets; the
                 // unminted ranges sample one queue lane per wallet.
                 // Non-x00: 12 lvl, 12 lvl+1, 12 lvl+2..lvl+5, 12 lvl+6..lvl+99
-                // x00:     8 lvl, 8 lvl+1, 8 lvl+2..lvl+5, 8 lvl+6..lvl+99, 16 random from past 99
+                // x00 uses the same four 12-round bands; no historical inventory.
                 address[] memory tickets;
                 uint24 targetLvl;
-                uint8 band = isCentury ? round / 8 : round / 12;
+                uint8 band = round / 12;
                 if (band == 0) targetLvl = lvl;
                 else if (band == 1) targetLvl = lvl + 1;
                 else if (band < 4) {
@@ -433,8 +432,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
                     uint256 off = uint256(round & 1) << 2;
                     for (uint256 i; i < 4; ++i) tickets[i] = futurePair[off + i];
                 }
-                else targetLvl = lvl - 1 - uint24(entropy % 99);
-                if (targetLvl != 0) (, tickets) = degenerusGame.sampleTraitEntriesAtLevel(targetLvl, entropy);
+                if (targetLvl != 0) (, tickets) = degenerusGame.sampleTraitEntries(band == 1, entropy);
                 // Pick up to 4 tickets from the sampled set.
                 uint256 limit = tickets.length;
                 if (limit > 4) limit = 4;

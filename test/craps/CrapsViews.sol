@@ -137,9 +137,13 @@ contract CrapsViews is CrapsBattle {
         buyFutureCrapsDays(startDay, count, high, 0);
     }
 
+    function rngCohortComplete(uint48 index) external view returns (bool) {
+        return index < 2 && _rngPending[index] == 0;
+    }
+
     // ── Table / RNG ─────────────────────────────────────────────────────────
     function currentIndex() external view returns (uint48) {
-        return _currentIndex();
+        return _writeBuffer();
     }
 
     function currentDayIndex() external view returns (uint24) {

@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
+import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 
+interface IFreezeCohortKeeper {
+    function keepRngCohort(uint48 index, uint64 budget) external returns (bool, bool);
+}
+
+/// @dev _currentRngWord() decodes rngWordCurrent in slot3; no extra readiness slot.
 /// @title RngWindowFreezeHandler — the FUZZ-02 RNG-FREEZE durable-invariant action handler.
 ///
 /// @notice Promotes the scattered scenario freeze proofs (RngFreezeAndRemovalProofs placement/
@@ -31,8 +38,8 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///      10/34/35; NOT the stale VRFPathHandler 37/38 literals):
 ///        (1) rngWordByDay[currentDay]         — slot 10  : the VRF-DERIVED day word the daily
 ///                                                          consumption resolves against.
-///        (2) lootboxRngWordByIndex[index]     — slot 35  : the VRF-DERIVED lootbox word.
-///        (3) lootboxRngPacked                 — slot 34  : the packed lootbox cursor — its low 48
+///        (2) _lootboxWord(index)     — slot 34  : reusable VRF-DERIVED lootbox payload.
+///        (3) lootboxRngPacked                 — slot 33  : the packed lootbox cursor — its low 48
 ///                                                          bits (lootboxRngIndex) are the NON-VRF
 ///                                                          index the consumption reads ALONGSIDE
 ///                                                          the word ([[feedback_rng_window_storage_read_freshness]]).
@@ -53,7 +60,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///      the freeze assertion is vacuous (the window never opened or no in-window action fired). The
 ///      invariant test gates acceptance on both being positive.
 ///
-///      Test-only: NO contracts/*.sol is mutated. The only vm.store is the standard slot-34
+///      Test-only: NO contracts/*.sol is mutated. The only vm.store is the standard slot-33
 ///      lootbox-index seed (mirroring RngFreezeAndRemovalProofs.setUp) so an active lootbox index
 ///      exists to snapshot. Slot reads are vm.load against the authoritative layout.
 contract RngWindowFreezeHandler is Test {
@@ -66,8 +73,8 @@ contract RngWindowFreezeHandler is Test {
     // -------------------------------------------------------------------------
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) day word
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // lootboxRngPacked (post Stage B pack: was 35); low 48 bits = index cursor
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34; // mapping(uint48 => uint256) lootbox word (post Stage B pack: was 36)
-    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 34
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3; // reusable uint256 lootbox payload; ready bit 249 in packed slot 33
+    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 33
     uint256 private constant DAILY_IDX_BYTE_OFF = 3; // dailyIdx uint24 @ slot 0 byte 3
     uint256 private constant DAILY_IDX_MASK = 0xFFFFFF; // uint24
 
@@ -77,10 +84,10 @@ contract RngWindowFreezeHandler is Test {
     uint256 private constant RNG_REQUEST_TIME_BYTE_OFF = 6; // rngRequestTime uint48 @ slot 0 bytes 6-11
     uint256 private constant RNG_REQUEST_TIME_MASK = 0xFFFFFFFFFFFF; // uint48
     uint256 private constant RNG_LOCKED_FLAG_BYTE_OFF = 19; // bool rngLockedFlag @ slot 0 byte 19
-    uint256 private constant TICKET_WRITE_SLOT_BYTE_OFF = 26; // bool ticketWriteSlot @ slot 0 byte 26
-    uint256 private constant LR_MID_DAY_SHIFT = 224; // LR_MID_DAY flag bits of slot 34
+    uint256 private constant TICKET_WRITE_SLOT_BYTE_OFF = 25; // bool ticketWriteSlot @ slot 0 byte 25
+    uint256 private constant LR_MID_DAY_SHIFT = 224; // LR_MID_DAY flag bits of slot 33
     uint256 private constant LR_MID_DAY_MASK = 0xFF;
-    uint256 private constant LR_THRESHOLD_SHIFT = 112; // lootboxRngThreshold (milli-ETH) bits of slot 34
+    uint256 private constant LR_THRESHOLD_SHIFT = 112; // lootboxRngThreshold (milli-ETH) bits of slot 33
     uint256 private constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;
     uint256 private constant LR_ETH_SCALE = 1e15; // milli-ETH packing scale
 
@@ -157,13 +164,8 @@ contract RngWindowFreezeHandler is Test {
             game.setOperatorApproval(address(game), true);
         }
 
-        // Seed lootboxRngIndex = 1 (word stays 0) so an ACTIVE lootbox index exists to snapshot
-        // and so placeDegeneretteBet's index!=0 / word==0 placement precondition can hold. This is
-        // the identical slot-34 index seed RngFreezeAndRemovalProofs.setUp uses — a field-isolated
-        // cursor write, NOT a balance or word write.
-        uint256 lrPacked = uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT)));
-        lrPacked = (lrPacked & ~LR_INDEX_MASK) | uint256(1);
-        vm.store(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT), bytes32(lrPacked));
+        // Buffer0 is a valid write buffer at deployment; no synthetic counter is needed.
+
     }
 
     function actorCount() external view returns (uint256) {
@@ -198,6 +200,8 @@ contract RngWindowFreezeHandler is Test {
             return true;
         }
 
+        _drainReadConsumers();
+
         // Small daily-gate buy so advanceGame has a reason to request the daily word.
         (, , , , uint256 priceWei) = game.purchaseInfo();
         uint256 oneTicket = priceWei; // 400 entries == 1 price (project_ticket_entry_price_units)
@@ -214,6 +218,7 @@ contract RngWindowFreezeHandler is Test {
         // when rngLocked() is observed true after the advance). Time passing between days is the heartbeat's
         // natural rhythm (the v45-exempt progression), not a player-attributable mutation.
         for (uint256 i; i < 8 && !game.rngLocked(); i++) {
+            _drainReadConsumers();
             vm.warp(block.timestamp + 1 days);
             vm.prank(currentActor);
             try game.advanceGame() {} catch {}
@@ -343,6 +348,31 @@ contract RngWindowFreezeHandler is Test {
         }
     }
 
+    /// @dev Real permissionless work, outside the measured freeze window. A fresh request
+    ///      now requires the preceding cohort's boxes, bets, tickets and Craps to finish.
+    ///      Never seed a completion cursor: failed progress must remain visible to the test.
+    function _drainReadConsumers() internal {
+        if (game.rngLocked()) return;
+        if (_requestActive()) {
+            if (game.isRngFulfilled()) { try game.advanceGame() {} catch {} }
+            else return;
+        }
+        uint48 read = RecyclingState.readBuffer(address(game));
+        if (RecyclingState.word(address(game), read) == 0) return;
+        IFreezeCohortKeeper craps = IFreezeCohortKeeper(ContractAddresses.CRAPS);
+        for (uint256 i; i < 32; ++i) {
+            uint256 packed = uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT)));
+            bool ticketsDone = (uint256(vm.load(address(game), bytes32(0))) >> (24 * 8)) & 0xff != 0;
+            bool midDayDone = (packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK == 0;
+            if (ticketsDone && midDayDone && game.boxIndexComplete(read) && packed & (uint256(1) << (250 + (read & 1))) == 0) return;
+            try game.openBoxes(512) {} catch {}
+            if (!ticketsDone || !midDayDone) {
+                try game.advanceGame() {} catch {}
+            }
+            try craps.keepRngCohort(read, 64) {} catch {}
+        }
+    }
+
     // =========================================================================
     // MID-DAY LOOTBOX WINDOW — the second freeze window shape.
     //
@@ -350,14 +380,14 @@ contract RngWindowFreezeHandler is Test {
     // rngLockedFlag NOR prizePoolFrozen: the in-flight marker is rngRequestTime != 0 with
     // rngLocked() == false. The pending consumption is the mid-day rawFulfillRandomWords branch —
     // it reads the LR_INDEX cursor (landing index = LR_INDEX - 1), writes the reserved
-    // lootboxRngWordByIndex leaf, and the NEXT advance processes the ticket batch frozen (buffer
+    // reusable lootboxRngWord payload, and the NEXT advance processes the ticket batch frozen (buffer
     // swap + LR_MID_DAY=1) at request time. The backward trace of that consumption gives the
     // enumerated mid-day SLOAD set:
-    //   (5)  LR_INDEX cursor            — slot 34 low 48 : where the pending word will land (-1).
-    //   (6)  lootboxRngWordByIndex[N-1] — slot 35 leaf   : the reserved landing leaf (0 until the
+    //   (5)  LR_INDEX cursor            — slot 33 low 48 : where the pending word will land (-1).
+    //   (6)  _lootboxWord(N-1) — slot 34 payload   : the reserved landing leaf (0 until the
     //                                                      exempt fulfillment writes it).
-    //   (7)  LR_MID_DAY flag            — slot 34 bits 224.. : routes the frozen ticket batch.
-    //   (8)  ticketWriteSlot            — slot 0 byte 26 : the read/write buffer selector frozen
+    //   (7)  LR_MID_DAY flag            — slot 33 bits 224.. : routes the frozen ticket batch.
+    //   (8)  ticketWriteSlot            — slot 0 byte 25 : the read/write buffer selector frozen
     //                                                      by the request-time swap.
     //   (9)  vrfRequestId               — slot 4         : the fulfillment's request-match gate.
     //   (10) rngRequestTime             — slot 0 bytes 6-11 : the in-flight marker (a player
@@ -371,8 +401,11 @@ contract RngWindowFreezeHandler is Test {
 
     /// @dev The mid-day window predicate: a VRF request is in flight (rngRequestTime stamped) but
     ///      the daily lock is NOT held — exactly the requestLootboxRng in-flight state.
+    function _requestActive() private view returns (bool) {
+        return uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 254) != 0;
+    }
     function _midDayWindowOpen() internal view returns (bool) {
-        return _rngRequestTime() != 0 && !game.rngLocked();
+        return _requestActive() && !game.rngLocked();
     }
 
     /// @notice Drive a mid-day lootbox VRF window open so the fuzzer can act inside it.
@@ -408,6 +441,8 @@ contract RngWindowFreezeHandler is Test {
                 _closeDailyWindow(actorSeed + i);
                 if (game.rngLocked() || game.gameOver()) return false;
             }
+
+            _drainReadConsumers();
 
             // Pending lootbox ETH must clear the packed milli-ETH threshold (default 1 ether).
             uint256 thresholdWei =
@@ -508,7 +543,9 @@ contract RngWindowFreezeHandler is Test {
     // Snapshot storage of the enumerated consumed set, captured at request time / before each
     // isolated in-window action.
     uint256 private _snapDayWord; // rngWordByDay[currentDay]
-    uint256 private _snapLootboxWord; // lootboxRngWordByIndex[activeIndex]
+    uint256 private _snapLootboxReadiness;
+    uint256 private _snapNudges; // _nudgeCount frozen by the daily lock; midday nudges remain writable.
+    uint256 private _snapLootboxWord; // _lootboxWord(activeIndex)
     uint256 private _snapLootboxCursor; // lootboxRngPacked low 48 bits (the index cursor)
     uint256 private _snapDailyIdx; // dailyIdx (the non-VRF day cursor)
     uint24 private _snapDay; // the day key the word snapshot was taken at
@@ -519,9 +556,11 @@ contract RngWindowFreezeHandler is Test {
     ///      positive — the consumption reads the leaf live at request time).
     function _snapshotEnumeratedSet() internal {
         _snapDay = game.currentDayView();
-        _snapIndex = _activeLootboxIndex();
+        _snapNudges = _nudgeCount();
+        _snapIndex = _activeLootboxIndex() - 1;
         _snapDayWord = _rngWordByDay(_snapDay);
         _snapLootboxWord = _lootboxRngWord(_snapIndex);
+        _snapLootboxReadiness = uint256(vm.load(address(game), bytes32(0))) & (uint256(7) << 253);
         _snapLootboxCursor = _lootboxRngIndexCursor();
         _snapDailyIdx = _dailyIdx();
     }
@@ -531,11 +570,13 @@ contract RngWindowFreezeHandler is Test {
     ///      set — was NOT called between the snapshot and here, any delta is attributable to the
     ///      player action alone. Compares the SAME day/index leaf the snapshot used.
     function _checkFrozenAfterIsolatedAction() internal {
+        if (_nudgeCount() != _snapNudges) { ghost_frozenSlotMutations++; ghost_lastMutatedSlotTag = 12; }
         if (_rngWordByDay(_snapDay) != _snapDayWord) {
             ghost_frozenSlotMutations++;
             ghost_lastMutatedSlotTag = 1;
         }
-        if (_lootboxRngWord(_snapIndex) != _snapLootboxWord) {
+        if (_lootboxRngWord(_snapIndex) != _snapLootboxWord
+            || (uint256(vm.load(address(game), bytes32(0))) & (uint256(7) << 253)) != _snapLootboxReadiness) {
             ghost_frozenSlotMutations++;
             ghost_lastMutatedSlotTag = 2;
         }
@@ -553,8 +594,9 @@ contract RngWindowFreezeHandler is Test {
     // The enumerated MID-DAY snapshot + isolation freeze check
     // =========================================================================
 
-    uint256 private _snapMidCursor; // LR_INDEX (slot 34 low 48)
-    uint256 private _snapMidLeafWord; // lootboxRngWordByIndex[LR_INDEX - 1]
+    uint256 private _snapMidCursor; // LR_INDEX (slot 33 low 48)
+    uint256 private _snapMidReadiness;
+    uint256 private _snapMidLeafWord; // _lootboxWord(LR_INDEX - 1)
     uint256 private _snapMidMidDayFlag; // LR_MID_DAY bits
     uint256 private _snapMidTicketWriteSlot; // ticketWriteSlot byte
     uint256 private _snapMidVrfRequestId; // vrfRequestId
@@ -567,8 +609,9 @@ contract RngWindowFreezeHandler is Test {
     ///      the pending fulfillment will write.
     function _snapshotMidDaySet() internal {
         _snapMidCursor = _lootboxRngIndexCursor();
-        _snapMidLeafIndex = _snapMidCursor == 0 ? 0 : uint48(_snapMidCursor - 1);
+        _snapMidLeafIndex = uint48(_snapMidCursor) ^ 1;
         _snapMidLeafWord = _lootboxRngWord(_snapMidLeafIndex);
+        _snapMidReadiness = uint256(vm.load(address(game), bytes32(0))) & (uint256(7) << 253);
         _snapMidMidDayFlag = _lrMidDayFlag();
         _snapMidTicketWriteSlot = _ticketWriteSlotRaw();
         _snapMidVrfRequestId = _vrfRequestId();
@@ -584,7 +627,8 @@ contract RngWindowFreezeHandler is Test {
             ghost_frozenSlotMutations++;
             ghost_lastMutatedSlotTag = 5;
         }
-        if (_lootboxRngWord(_snapMidLeafIndex) != _snapMidLeafWord) {
+        if (_lootboxRngWord(_snapMidLeafIndex) != _snapMidLeafWord
+            || (uint256(vm.load(address(game), bytes32(0))) & (uint256(7) << 253)) != _snapMidReadiness) {
             ghost_frozenSlotMutations++;
             ghost_lastMutatedSlotTag = 6;
         }
@@ -618,12 +662,18 @@ contract RngWindowFreezeHandler is Test {
         return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT))));
     }
 
-    function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT))));
+    /// @dev Check the retained rngWordCurrent payload even while readiness makes it unusable.
+    function _lootboxRngWord(uint48) internal view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_WORD_SLOT)));
+    }
+
+    function _nudgeCount() private view returns (uint256) {
+        uint256 state = uint256(vm.load(address(game), bytes32(0))) >> 240;
+        return ((state >> 1) & 127) | (((state >> 9) & 3) << 7);
     }
 
     function _lootboxRngIndexCursor() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) & LR_INDEX_MASK;
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _activeLootboxIndex() internal view returns (uint48) {
@@ -700,13 +750,10 @@ contract RngWindowFreezeHandler is Test {
     ///         campaign's live property counter is never moved by a deliberately-seeded break, and
     ///         the selector is excluded from the fuzz campaign in the invariant setUp.
     function debugSeedMidDayMutationAndCheck() external returns (bool detected) {
-        bytes32 leafSlot = keccak256(abi.encode(uint256(_snapMidLeafIndex), LOOTBOX_RNG_WORD_SLOT));
-        uint256 original = uint256(vm.load(address(game), leafSlot));
-
-        vm.store(address(game), leafSlot, bytes32(original ^ uint256(keccak256("midday_falsify"))));
-
+        bytes32 payloadSlot = bytes32(LOOTBOX_RNG_WORD_SLOT);
+        bytes32 original = vm.load(address(game), payloadSlot);
+        vm.store(address(game), payloadSlot, original ^ keccak256("midday_falsify"));
         detected = (_lootboxRngWord(_snapMidLeafIndex) != _snapMidLeafWord);
-
-        vm.store(address(game), leafSlot, bytes32(original));
+        vm.store(address(game), payloadSlot, original);
     }
 }

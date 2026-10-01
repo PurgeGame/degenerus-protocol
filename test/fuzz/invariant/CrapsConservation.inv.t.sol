@@ -58,7 +58,7 @@ contract CrapsConservationInv is CrapsPins {
         craps = new InvHarness();
         // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         handler = new CrapsFlowHandler(craps);
         // The handler's creator holds the custom-battle roll, granted by the vault's majority.
         address battleCreator = handler.creator();

@@ -57,7 +57,7 @@ import { readEntriesOwed, entryOwnerRecordSlot } from "../helpers/bucketSeed.js"
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
-import { execSync } from "node:child_process";
+import { compiledStorageLayout } from "../helpers/storageLayout.js";
 import {
   deployFullProtocol,
   restoreAddresses,
@@ -290,20 +290,11 @@ async function pinDailyEntropy(game, deployer, mockVRF, word) {
 // Storage slots for entropy source lookup (post-MINTCLN; v42 contract).
 // Source: `forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout`.
 const RNG_WORD_BY_DAY_BASE_SLOT = 10n;
-const LOOTBOX_RNG_PACKED_SLOT = 33n; // Stage B Game-storage packing shifted 35 -> 34
-const LOOTBOX_RNG_WORD_BY_INDEX_BASE_SLOT = 34n; // Stage B Game-storage packing shifted 36 -> 35
-
 async function readLootboxEntropy(gameAddr) {
-  const packed = BigInt(
-    await hre.ethers.provider.getStorage(gameAddr, LOOTBOX_RNG_PACKED_SLOT)
-  );
-  const lrIndex = packed & 0xFFFFFFFFFFFFn;
-  if (lrIndex === 0n) return 0n;
-  const abi = hre.ethers.AbiCoder.defaultAbiCoder();
-  const slot = hre.ethers.keccak256(
-    abi.encode(["uint256", "uint256"], [lrIndex - 1n, LOOTBOX_RNG_WORD_BY_INDEX_BASE_SLOT])
-  );
-  return BigInt(await hre.ethers.provider.getStorage(gameAddr, slot));
+  const flags = BigInt(await hre.ethers.provider.getStorage(gameAddr, 0));
+  if ((flags & (1n << 255n)) === 0n) return 0n;
+  const word = BigInt(await hre.ethers.provider.getStorage(gameAddr, 3));
+  return word === 1n ? 0n : word;
 }
 
 async function readDailyEntropy(gameAddr, day) {
@@ -330,7 +321,7 @@ async function drainViaAdvanceGame(game, caller, storage, deployDayBoundary, max
   }
   const gameAddr = await game.getAddress();
   // Path B (lvl=1, current-level via processTicketBatch L686) sources entropy
-  // from lootboxRngWordByIndex[lrIndex-1]; the index does not change while
+  // from the published shared session payload; the index does not change while
   // alice's ticket queue at lvl=1 is being drained, so the post-drain read
   // returns the same word the emissions consumed.
   // Path A (lvl>=2, the whale pass's far-future span) sources entropy from the
@@ -568,10 +559,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
     }
 
     it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8) | owner<<48) 80-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
-      const layout = JSON.parse(execSync(
-        "forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout --json",
-        { env: { ...process.env, FOUNDRY_SKIP: '["test/**","script/**"]' } }
-      ).toString());
+      const layout = await compiledStorageLayout();
       const locator = layout.storage.find((entry) => entry.label === "entryOwnerPosition");
       const owners = layout.storage.find((entry) => entry.label === "lvlEntryOwner");
       expect(locator.slot).to.equal("13");

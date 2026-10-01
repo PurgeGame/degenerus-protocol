@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -66,6 +67,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -76,6 +78,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
     }
 
     /// @dev Compute the storage slot for boonPacked[player].slot0
@@ -131,7 +134,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
     ///      `index` (box-order migration: the removed per-(player,index) `openBox` read
     ///      lootboxOrder[index][player] straight from the mapping and had no notion of
     ///      "finalized" or a discovery queue; its sweep replacement, `openBoxes`, only ever
-    ///      finds a box by walking `boxPlayers[index]`, and only for indices at or below
+    ///      finds a box by walking `boxPlayers[index & 1]`, and only for indices at or below
     ///      LR_INDEX-1 — neither of which this vm.store-only setup produced before).
     function _setupLootbox(
         address player,
@@ -154,10 +157,10 @@ contract LootboxBoonCoexistence is DeployProtocol {
             | (customUnits << LB_CUSTOM_SIZE_SHIFT);
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
 
-        // lootboxRngWordByIndex[index] = vrfWord
-        vm.store(address(game), _simpleMappingSlot(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
+        // Seed the live delivered RNG word.
+        RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
 
-        // Enqueue `player` into boxPlayers[index] (the sweep's discovery queue — every real
+        // Enqueue `player` into boxPlayers[index & 1] (the sweep's discovery queue — every real
         // purchase path pushes here on first deposit; this forged setup bypasses all of them) and
         // finalize+park the sweep frontier exactly on `index` so a full-budget openBoxes() call
         // can only ever reach this one entry.
@@ -165,35 +168,25 @@ contract LootboxBoonCoexistence is DeployProtocol {
         _finalizeAndParkSweep(index);
     }
 
-    /// @dev Push `player` onto boxPlayers[index] (mapping(uint48 => address[]) at slot 57): the
+    /// @dev Push `player` onto boxPlayers[index & 1] (mapping(uint48 => address[]) at slot 57): the
     ///      length lives at keccak(index, 57), element i at keccak(that slot) + i.
     function _enqueueForSweep(uint48 index, address player) internal {
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
+        uint256 len = 0; // one fixture entry; previous case was fully consumed
         bytes32 dataBase = keccak256(abi.encode(lenSlot));
         vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
         vm.store(address(game), lenSlot, bytes32(len + 1));
     }
 
-    /// @dev Advance LR_INDEX (lootboxRngPacked low 48 bits, slot 33) to `index + 1` so the sweep
-    ///      treats `index` as finalized (idx <= LR_INDEX-1), then park the open frontier
-    ///      (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 56) exactly on `index` with
-    ///      cursor 0. With LR_INDEX == index+1, `index` is the ONLY finalized index reachable, so
-    ///      a full-budget sweep can never wander into the thousands of unrelated indices between
-    ///      the game's real low indices and this file's deliberately sparse/high test indices
-    ///      ("Use high indices to avoid collisions").
+    /// @dev Select the delivered physical read and reset only its fixture cursor.
     function _finalizeAndParkSweep(uint48 index) internal {
         uint256 mask48 = (uint256(1) << 48) - 1;
-
-        bytes32 lrSlot = bytes32(uint256(SLOT_LOOTBOX_RNG_IDX));
-        uint256 lrPacked = uint256(vm.load(address(game), lrSlot));
-        vm.store(address(game), lrSlot, bytes32((lrPacked & ~mask48) | (uint256(index) + 1)));
+        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
 
         bytes32 cursorSlot = bytes32(uint256(SLOT_BOX_CURSORS));
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
         cur &= ~(mask48 << (7 * 8));
         cur &= ~(mask48 << (13 * 8));
-        cur |= (uint256(index) & mask48) << (13 * 8);
         vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
@@ -206,7 +199,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         vm.prank(player);
         uint256 opened = game.openBoxes(type(uint256).max);
         assertEq(opened, 1, "preservation proof must actually open its one box");
-        assertEq(uint256(vm.load(address(game), orderSlot)), 0, "seeded order must be consumed");
+        assertTrue(uint256(vm.load(address(game), orderSlot)) >> 255 != 0, "seeded order must carry its consumed marker");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -240,7 +233,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
 
         for (uint256 seed = 1; seed <= 50; seed++) {
             uint256 vrfWord = uint256(keccak256(abi.encode("boonTest", seed)));
-            uint48 index = uint48(1000 + seed); // Use high indices to avoid collisions
+            uint48 index = uint48(seed & 1); // Use high indices to avoid collisions
 
             _setupLootbox(player, index, 10 ether, 1, currentDay, vrfWord);
 
@@ -266,7 +259,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
     /// @notice Fuzz test: with a pre-injected coinflip boon, any lootbox open that
     ///         produces a LootBoxReward event preserves the existing coinflip tier.
     function testFuzz_coinflipBoonSurvivesLootboxBoonRoll(uint256 vrfWord) public {
-        vm.assume(vrfWord != 0);
+        vm.assume(vrfWord > 1);
 
         _completeDay(0xBEEF0001);
         vm.warp(block.timestamp + 1 days);
@@ -281,9 +274,9 @@ contract LootboxBoonCoexistence is DeployProtocol {
         _injectCoinflipBoon(player, currentDay);
 
         // Setup lootbox with fuzzed VRF word
-        _setupLootbox(player, 999, 10 ether, 1, currentDay, vrfWord);
+        _setupLootbox(player, 1, 10 ether, 1, currentDay, vrfWord);
 
-        _openSeededBox(player, 999);
+        _openSeededBox(player, 1);
 
         // After open, coinflip tier must still be >= 1
         // (it can increase if lootbox rolled a higher-tier coinflip boon, but never decrease)
@@ -318,9 +311,9 @@ contract LootboxBoonCoexistence is DeployProtocol {
 
         // Open lootbox
         uint256 vrfWord = uint256(keccak256("deterministic_boon_test"));
-        _setupLootbox(player, 888, 10 ether, 1, currentDay, vrfWord);
+        _setupLootbox(player, 0, 10 ether, 1, currentDay, vrfWord);
 
-        _openSeededBox(player, 888);
+        _openSeededBox(player, 0);
 
         // Both tiers must be >= 1 (can only increase, never wiped by cross-category application)
         assertTrue(_readCoinflipTier(player) >= 1, "Coinflip tier preserved after lootbox open");
@@ -348,7 +341,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
             _injectCoinflipBoon(player, currentDay);
 
             uint256 vrfWord = uint256(keccak256(abi.encode("autoBuy", i)));
-            uint48 index = uint48(2000 + i);
+            uint48 index = uint48(i & 1);
 
             _setupLootbox(player, index, 10 ether, 1, currentDay, vrfWord);
 

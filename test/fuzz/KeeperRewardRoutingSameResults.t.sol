@@ -133,6 +133,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
                 }
             }
         }
+        _finishReadConsumers();
     }
 
     // =========================================================================

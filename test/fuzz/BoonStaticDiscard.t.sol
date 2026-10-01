@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -50,6 +51,7 @@ contract BoonStaticDiscard is DeployProtocol {
     }
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -60,6 +62,7 @@ contract BoonStaticDiscard is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+        _finishReadConsumers();
     }
 
     function _nestedMappingSlot(uint256 baseSlot, uint48 index, address player) internal pure returns (bytes32) {
@@ -79,27 +82,24 @@ contract BoonStaticDiscard is DeployProtocol {
             | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
             | ((ethAmount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
-        vm.store(address(game), _simpleMappingSlot(SLOT_LOOTBOX_WORD, index), bytes32(vrfWord));
+        RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
 
         // Box-order migration: enqueue + finalize + park (same pattern as
         // LootboxBoonCoexistence._setupLootbox) so the sweep replacement for the removed
         // per-(player,index) `openBox` can discover and reach this forged, sparse-index entry.
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
+        uint256 len = 0; // one fixture entry; previous case was fully consumed
         bytes32 dataBase = keccak256(abi.encode(lenSlot));
         vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
         vm.store(address(game), lenSlot, bytes32(len + 1));
 
         uint256 mask48 = (uint256(1) << 48) - 1;
-        bytes32 lrSlot = bytes32(SLOT_LOOTBOX_RNG_IDX);
-        uint256 lrPacked = uint256(vm.load(address(game), lrSlot));
-        vm.store(address(game), lrSlot, bytes32((lrPacked & ~mask48) | (uint256(index) + 1)));
+        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
 
         bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
         cur &= ~(mask48 << (7 * 8));
         cur &= ~(mask48 << (13 * 8));
-        cur |= (uint256(index) & mask48) << (13 * 8);
         vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
@@ -128,7 +128,7 @@ contract BoonStaticDiscard is DeployProtocol {
         // old share silently becomes a coin-flip rather than a guard.
         for (uint256 i = 1; i <= 400; i++) {
             uint256 vrfWord = uint256(keccak256(abi.encode("staticDiscard", i)));
-            uint48 index = uint48(5000 + i);
+            uint48 index = uint48(i & 1);
             _setupLootbox(player, index, 10 ether, vrfWord);
 
             vm.recordLogs();

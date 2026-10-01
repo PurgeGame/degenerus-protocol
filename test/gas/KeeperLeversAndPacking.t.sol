@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
@@ -51,7 +52,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
     ///      after the Stage B Game-storage packing); lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
 
     // -------------------------------------------------------------------------
     // Constants
@@ -98,7 +99,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
         // Seed lootboxRngIndex = 1 (word stays 0 until injected post-placement).
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(INDEX);
+        RecyclingState.seedWriteBuffer(address(game), INDEX);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
 
         // The crank resolve delegatecall has msg.sender == address(game); approve it as operator.
@@ -152,7 +153,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // _advanceDue, the storage-level discovery shared with the Game's external advanceDue view
         // (same reads in-context, no self-call round-trip).
         assertGt(
-            _countOccurrences(afking, "if (_advanceDue()) {"),
+            _countOccurrences(afking, "if (rewarded ? _advanceDue() : !_advanceNeedsReadDrain()) {"),
             0,
             "GAS-02 (v55): mineFlip's one-category early-return (advance branch) byte-present"
         );
@@ -218,14 +219,14 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // boxCursor / boxCursorIndex are uint48 (the packed cursor pair). Declared in the storage
         // base (DegenerusGameStorage.sol), so the byte-presence grep targets STORAGE_SRC.
         assertGt(_countOccurrences(storage_, "uint48 internal boxCursor;"), 0, "GAS-04: boxCursor is uint48");
-        assertGt(_countOccurrences(storage_, "uint48 internal boxCursorIndex;"), 0, "GAS-04: boxCursorIndex is uint48");
+        assertGt(_countOccurrences(storage_, "bool internal humanReadComplete = true;"), 0, "GAS-04: binary read completion replaces the old index frontier");
 
         // No new hot-path storage: the first-deposit enqueue is the ONLY crank-added storage
         // write, inlined at the module first-deposit sites as a direct `boxPlayers[...].push`
         // (the Game-side enqueueBoxForAutoOpen self-call stub was removed with its round trip).
         assertEq(_countOccurrences(game_, "function enqueueBoxForAutoOpen("), 0, "GAS-04: no Game-side enqueue stub (enqueue inlined in modules)");
-        string memory mintModule_ = vm.readFile("contracts/modules/DegenerusGameMintModule.sol");
-        assertGt(_countOccurrences(mintModule_, "boxPlayers[index].push(buyer);"), 0, "GAS-04: first-deposit enqueue push present in MintModule");
+        string memory lootboxModule_ = vm.readFile("contracts/modules/DegenerusGameLootboxModule.sol");
+        assertGt(_countOccurrences(lootboxModule_, "boxPlayers[idx & 1].push(buyer);"), 0, "GAS-04: first-deposit enqueue push present in LootboxModule");
     }
 
     // =========================================================================
@@ -244,7 +245,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
         // G1 — RngNotReady freeze guard: placement (reject a bet at an already-worded index) + resolve.
         assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady guard byte-present");
-        assertGt(_countOccurrences(degenerette, "if (lootboxRngWordByIndex[index] != 0) revert RngNotReady();"), 0, "G1: placement freeze guard (reject bet at an already-worded index)");
+        assertGt(_countOccurrences(degenerette, "if (_lootboxWord(index) != 0) revert RngNotReady();"), 0, "G1: placement freeze guard (reject bet at an already-worded index)");
         // Doors removal: resolveDegeneretteBets (which held its own `if (rngWord == 0) revert
         // RngNotReady();`) is gone. Bets resolve only through sweepDegeneretteBets, which takes
         // the index's word as an already-validated parameter -- the readiness gate relocated to
@@ -255,18 +256,18 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // G2 — RngNotReady open-box guard / orphan-index skip. The relocated multi-index sweep
         // (DegenerusGameLootboxModule.openHumanBoxes) never advances past an un-worded index: it
         // BREAKs the walk (resuming once the re-issued word lands), so its boxes are never marooned.
-        assertGt(_countOccurrences(lootbox, "uint256 indexWord = lootboxRngWordByIndex[idx];"), 0, "G2: sweep per-index word load (threaded into every open at this index)");
+        assertGt(_countOccurrences(lootbox, "uint256 indexWord = _lootboxWord(idx);"), 0, "G2: sweep per-index word load (threaded into every open at this index)");
         assertGt(_countOccurrences(lootbox, "if (indexWord == 0) break;"), 0, "G2: sweep orphan-index skip (break, never advance past an un-worded index)");
         assertGt(_countOccurrences(lootbox, "revert RngNotReady()"), 0, "G2: LootboxModule open RngNotReady guard byte-present");
 
         // G3 — one-reward-per-item: the queue word is zeroed before the bet resolves.
-        assertGt(_countOccurrences(degenerette, "queue[pos] = 0;"), 0, "G3: sweep zeroes the bet word first");
+        assertGt(_countOccurrences(degenerette, "queue[pos] = bet | BET_PROCESSED;"), 0, "G3: sweep marks the bet processed before resolution");
 
         // G4 — one-reward-per-item: box zeroing + autoOpen already-emptied skip. Post-repack the box
         // lives in the single packed lootboxOrder word; open clears it in one SSTORE, and the sweep
         // skips an entry whose box order AND presale leg are both already zero (already drained).
-        assertGt(_countOccurrences(lootbox, "lootboxOrder[index][player] = 0;"), 0, "G4: box zeroing one-reward guard (single packed word)");
-        assertGt(_countOccurrences(lootbox, "uint256 word = lootboxOrder[idx][player];"), 0, "G4: sweep per-entry box-word load (the skip-check read doubles as the open's input)");
+        assertGt(_countOccurrences(lootbox, "lootboxOrder[index & 1][player] = word | BOX_PROCESSED;"), 0, "G4: box zeroing one-reward guard (single packed word)");
+        assertGt(_countOccurrences(lootbox, "uint256 word = _boxOrder(idx, player);"), 0, "G4: sweep per-entry box-word load (the skip-check read doubles as the open's input)");
         assertGt(_countOccurrences(lootbox, "if (boxes == 0 && stored == 0) {"), 0, "G4: sweep already-opened skip (both legs zero -> continue)");
 
         // G6 — (v49 batchPurchase per-player slice try/catch) DROPPED, D-351-02 (removed surface). The

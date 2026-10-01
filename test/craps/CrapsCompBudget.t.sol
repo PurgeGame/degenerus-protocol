@@ -57,7 +57,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         _installPins();
         craps = new CompHarness();
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);
@@ -213,7 +213,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         (uint256 bank, uint256 highMult,) = craps.windowOf(slot);
         assertEq(highMult, 0, "the fixture opened a high lane");
         uint256 before = flip.compLane();
-        _closeOn(craps, slot, 9, 0xBEEF);
+        _closeOn(craps, slot, 1, 0xBEEF);
         craps.resolveSlot(slot, WHOLE_FIELD);
         assertEq(flip.compLane() - before, _expected(bank, 2, 0, 0), "a custom field earned other than 2% of its bankrolls");
     }
@@ -327,13 +327,13 @@ contract CrapsCompBudgetTest is CrapsPins {
         craps.enterBattle(slot, _blank(), 1);
         bytes32 key = craps.battleKeyOf(betId);
         uint256 snap = vm.snapshotState();
-        _closeOn(craps, slot, 9, 0xBEEF);
+        _closeOn(craps, slot, 1, 0xBEEF);
         PaidOut memory baseline = _onlyPot(craps, slot, WHOLE_FIELD);
         assertTrue(vm.revertToState(snap));
 
         vm.prank(ContractAddresses.VAULT);
         craps.donate(true, index, 45);
-        _closeOn(craps, slot, 9, 0xBEEF);
+        _closeOn(craps, slot, 1, 0xBEEF);
         PaidOut memory donated = _onlyPot(craps, slot, WHOLE_FIELD);
         assertEq(donated.betId, baseline.betId, "donation changed winner selection");
         assertEq(donated.amount, baseline.amount + 45 * GRANULE, "donation was rationed or rounded");

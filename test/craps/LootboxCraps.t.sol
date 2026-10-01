@@ -13,11 +13,19 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 ///     so the drift gate needs no build artifact and no external process.
 contract SlotProbe is DegenerusGameStorage {
     function lootboxRngPackedSlot() external pure returns (uint256 s) {
-        assembly { s := lootboxRngPacked.slot }
+        assembly { s := rngFlagsAndNudges.slot }
     }
 
-    function lootboxRngWordByIndexSlot() external pure returns (uint256 s) {
-        assembly { s := lootboxRngWordByIndex.slot }
+    function lootboxRngWordSlot() external pure returns (uint256 s) {
+        assembly { s := rngWordCurrent.slot }
+    }
+
+    function recyclingSlots() external pure returns (uint256 tickets, uint256 offset, uint256 pendingBits) {
+        assembly { tickets := ticketBufferLevels.slot offset := ticketBufferLevels.offset }
+        pendingBits = uint256(3) << LR_CRAPS_PENDING_SHIFT;
+    }
+    function packedLifecycleBits() external pure returns (uint256, uint256) {
+        return (uint256(1) << 255, uint256(1) << 253);
     }
 
     function rngWordByDaySlot() external pure returns (uint256 s) {
@@ -46,7 +54,7 @@ contract LootboxCrapsHarness is LootboxCraps {
     bytes32 public constant CRAPS_SEED_DOMAIN = _CRAPS_SEED_DOMAIN;
 
     function currentIndex() external view returns (uint48) {
-        return _currentIndex();
+        return _writeBuffer();
     }
 
     function wordAt(uint48 index) external view returns (uint256) {
@@ -62,7 +70,7 @@ contract LootboxCrapsHarness is LootboxCraps {
         view
         returns (CrapsOracle.Outcome memory)
     {
-        return oracle.resolveHand(b, _seedFor(index));
+        return oracle.resolveHand(b, handSeed(_seedFor(index), 0));
     }
 
     function resolveHandsAt(Craps.Bets calldata b, uint48 index, uint256 hands)
@@ -89,7 +97,7 @@ contract LootboxCrapsHarness is LootboxCraps {
 ///      function externally observable.
 contract ShippedProbe is LootboxCraps {
     function currentIndex() external view returns (uint48) {
-        return _currentIndex();
+        return _writeBuffer();
     }
 
     function wordAt(uint48 index) external view returns (uint256) {
@@ -129,28 +137,40 @@ contract LootboxCrapsTest is CrapsPins {
     /// @dev The index shares its slot with pending ETH, the threshold, a basefee ceiling and
     ///      several latches. Masking to 48 bits is the whole decode, and getting it wrong would
     ///      read a plausible-looking but wrong index rather than failing loudly.
+    function test_AllRawRecyclingFixtureRootsAndPackedBitsMatchProduction() public {
+        SlotProbe p = new SlotProbe();
+        assertEq(p.lootboxRngPackedSlot(), 0);
+        assertEq(p.lootboxRngWordSlot(), 3);
+        (uint256 tickets, uint256 offset, uint256 pending) = p.recyclingSlots();
+        assertEq(tickets, 5); assertEq(offset, 14); assertEq(pending, uint256(3) << 250);
+        (uint256 ready, uint256 terminalSwap) = p.packedLifecycleBits();
+        assertEq(ready, uint256(1) << 255);
+        assertEq(terminalSwap, uint256(1) << 253);
+        assertEq(ready & terminalSwap, 0);
+    }
+
     function test_indexDecodeIgnoresTheRestOfThePackedSlot() public {
         // Every bit above 47 set: pending value, threshold, basefee cap, latches, all noise here.
-        _setIndexNoisy(1234, type(uint256).max >> 48);
-        assertEq(craps.currentIndex(), 1234, "index must ignore the co-packed fields");
+        _setIndexNoisy(0, type(uint256).max);
+        assertEq(craps.currentIndex(), 0, "index must ignore the co-packed fields");
 
-        _setIndexNoisy(type(uint48).max, 0);
-        assertEq(craps.currentIndex(), type(uint48).max, "full-width index");
+        _setIndexNoisy(1, 0);
+        assertEq(craps.currentIndex(), 1, "full-width index");
     }
 
     function test_wordLookupMatchesSolidityMappingSlot() public {
-        _setWord(7, 0xABCDEF);
-        assertEq(craps.wordAt(7), 0xABCDEF, "word at 7");
-        assertEq(craps.wordAt(8), 0, "unset index reads zero");
-        assertEq(craps.wordAt(8), 0, "unset index reads unresolved");
-        assertTrue(craps.wordAt(7) != 0, "set index reads resolved");
+        _setWord(1, 0xABCDEF);
+        assertEq(craps.wordAt(1), 0xABCDEF, "word at 7");
+        assertEq(craps.wordAt(0), 0, "unset index reads zero");
+        assertEq(craps.wordAt(0), 0, "unset index reads unresolved");
+        assertTrue(craps.wordAt(1) != 0, "set index reads resolved");
     }
 
 
 
 
     function test_cannotResolveBeforeTheWordLands() public {
-        _setIndexNoisy(5, 0);
+        _setIndexNoisy(1, 0);
 
         Craps.Bets memory b;
         b.passLine = U;
@@ -167,22 +187,22 @@ contract LootboxCrapsTest is CrapsPins {
     ///      The dice belong to the index, so every player bound to it settles against the identical
     ///      shooter — same come-out, same point, same seven-out.
     function test_everyPlayerAtAnIndexGetsTheSameShooter() public {
-        _setIndexNoisy(4, 0);
-        _setWord(4, uint256(keccak256("vrf")));
+        _setIndexNoisy(0, 0);
+        _setWord(0, uint256(keccak256("vrf")));
 
         Craps.Bets memory b;
         b.passLine = U;
         b.place6 = U;
 
-        uint8[] memory shooter = craps.shooterDice(4, 0);
+        uint8[] memory shooter = craps.shooterDice(0, 0);
         assertGt(shooter.length, 0, "no dice");
 
         // Whoever asks, whenever they ask, the table is the table.
-        CrapsOracle.Outcome memory first = craps.resolveHandAt(b, 4);
+        CrapsOracle.Outcome memory first = craps.resolveHandAt(b, 0);
         vm.prank(makeAddr("alice"));
-        CrapsOracle.Outcome memory alice = craps.resolveHandAt(b, 4);
+        CrapsOracle.Outcome memory alice = craps.resolveHandAt(b, 0);
         vm.prank(makeAddr("bob"));
-        CrapsOracle.Outcome memory bob = craps.resolveHandAt(b, 4);
+        CrapsOracle.Outcome memory bob = craps.resolveHandAt(b, 0);
 
         assertEq(alice.rolls, first.rolls, "alice saw a different shooter");
         assertEq(bob.rolls, first.rolls, "bob saw a different shooter");
@@ -194,8 +214,8 @@ contract LootboxCrapsTest is CrapsPins {
     /// @dev Load-bearing once the table is shared: the dice must not depend on what anyone bet, or
     ///      two friends at one table would disagree about what the shooter rolled.
     function test_theShooterDoesNotDependOnWhatWasBet() public {
-        _setIndexNoisy(4, 0);
-        _setWord(4, uint256(keccak256("vrf")));
+        _setIndexNoisy(0, 0);
+        _setWord(0, uint256(keccak256("vrf")));
 
         Craps.Bets memory lineOnly;
         lineOnly.passLine = U;
@@ -204,8 +224,8 @@ contract LootboxCrapsTest is CrapsPins {
         loadedUp.place5 = U;
         loadedUp.hard8 = U;
 
-        CrapsOracle.Outcome memory thin = craps.resolveHandAt(lineOnly, 4);
-        CrapsOracle.Outcome memory fat = craps.resolveHandAt(loadedUp, 4);
+        CrapsOracle.Outcome memory thin = craps.resolveHandAt(lineOnly, 0);
+        CrapsOracle.Outcome memory fat = craps.resolveHandAt(loadedUp, 0);
 
         assertEq(thin.rolls, fat.rolls, "the bets moved the dice");
         assertEq(thin.pointsMade, fat.pointsMade, "the bets moved the points");
@@ -214,14 +234,14 @@ contract LootboxCrapsTest is CrapsPins {
     /// @dev A group betting different session lengths still shares one run of shooters: they agree
     ///      hand for hand and differ only in where they stop.
     function test_sessionsAtOneIndexShareTheirShooters() public {
-        _setIndexNoisy(4, 0);
-        _setWord(4, uint256(keccak256("vrf")));
+        _setIndexNoisy(0, 0);
+        _setWord(0, uint256(keccak256("vrf")));
 
         Craps.Bets memory b;
         b.passLine = U;
 
-        CrapsOracle.Session memory shortRun = craps.resolveHandsAt(b, 4, 3);
-        CrapsOracle.Session memory longRun = craps.resolveHandsAt(b, 4, 10);
+        CrapsOracle.Session memory shortRun = craps.resolveHandsAt(b, 0, 3);
+        CrapsOracle.Session memory longRun = craps.resolveHandsAt(b, 0, 10);
 
         assertEq(shortRun.hands, 3, "short run");
         assertEq(longRun.hands, 10, "long run");
@@ -235,20 +255,20 @@ contract LootboxCrapsTest is CrapsPins {
 
     function test_seedIsTheIndexAloneAndDomainSeparatedFromTheWord() public {
         uint256 word = uint256(keccak256("vrf"));
-        _setIndexNoisy(4, 0);
-        _setWord(4, word);
+        _setIndexNoisy(0, 0);
+        _setWord(0, word);
 
-        bytes32 seed = craps.seedFor(4);
+        bytes32 seed = craps.seedFor(0);
         assertTrue(seed != bytes32(word), "seed is the raw word");
         assertEq(
             seed,
-            keccak256(abi.encode(craps.CRAPS_SEED_DOMAIN(), word, uint48(4))),
+            keccak256(abi.encode(craps.CRAPS_SEED_DOMAIN(), word, uint48(0))),
             "seed derivation"
         );
 
         // A different index is a different table, even under the same word.
-        _setWord(5, word);
-        assertTrue(craps.seedFor(5) != seed, "two indices collapsed to one table");
+        _setWord(1, word);
+        assertTrue(craps.seedFor(1) != seed, "two indices collapsed to one table");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -269,11 +289,11 @@ contract LootboxCrapsTest is CrapsPins {
         SlotProbe probe = new SlotProbe();
         assertEq(
             probe.lootboxRngPackedSlot(),
-            PACKED_SLOT,
+            0,
             "lootboxRngPacked moved - update LOOTBOX_RNG_PACKED_SLOT"
         );
         assertEq(
-            probe.lootboxRngWordByIndexSlot(),
+            probe.lootboxRngWordSlot(),
             WORD_SLOT,
             "lootboxRngWordByIndex moved - update LOOTBOX_RNG_WORD_SLOT"
         );
@@ -289,12 +309,12 @@ contract LootboxCrapsTest is CrapsPins {
     function test_shippedPathReadsThroughThePinnedGame() public {
         assertTrue(ContractAddresses.GAME != address(0), "GAME is unpinned in this tree");
 
-        _setIndex(77);
-        _setWord(77, 0xBEEF);
+        _setIndex(1);
+        _setWord(1, 0xBEEF);
 
         ShippedProbe shipped = new ShippedProbe();
         assertEq(shipped.GAME(), ContractAddresses.GAME, "GAME pin");
-        assertEq(shipped.currentIndex(), 77, "shipped currentIndex did not read the pinned game");
-        assertEq(shipped.wordAt(77), 0xBEEF, "shipped wordAt did not read the pinned game");
+        assertEq(shipped.currentIndex(), 0, "shipped currentIndex did not read the pinned game");
+        assertEq(shipped.wordAt(1), 0xBEEF, "shipped wordAt did not read the pinned game");
     }
 }

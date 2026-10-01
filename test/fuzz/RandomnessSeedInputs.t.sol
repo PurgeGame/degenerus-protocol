@@ -10,15 +10,16 @@ import {Vm} from "forge-std/Vm.sol";
 contract SeedInputSeeder is DegenerusGame {
     function seed(address player, uint256 word, uint256 amount, bool presale) external {
         level = 10;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 2);
-        lootboxRngWordByIndex[1] = word;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((2) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(1) + 1) & 1) << 12);
+        rngWordCurrent = word; _setRngSessionPublished(true); _setRngComplete(false);
         if (presale) presaleBoxEth[1][player] = amount;
         else lootboxOrder[1][player] = (uint256(10) << LB_LEVEL_SHIFT) |
             (uint256(1) << LB_CUSTOM_COUNT_SHIFT) |
             ((amount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
         // Box-order migration: the removed per-(player,index) `openBox` read the leg mappings
         // above directly; its sweep replacement only ever finds a box by walking
-        // boxPlayers[index], which a real purchase pushes to on first deposit. This seeder
+        // boxPlayers[index & 1], which a real purchase pushes to on first deposit. This seeder
         // forges the leg mappings straight, so enqueue here too (index 1 is already finalized
         // above via LR_INDEX = 2, and index/cursor default to 1/0 on a fresh deploy).
         boxPlayers[1].push(player);

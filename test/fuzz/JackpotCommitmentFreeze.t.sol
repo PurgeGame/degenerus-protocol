@@ -25,7 +25,7 @@ contract JackpotCommitmentSeeder is DegenerusGame {
         _afkingResetDay = day;
         rngLockedFlag = false;
         rngRequestTime = 0;
-        rngWordCurrent = 0;
+        rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 0;
         dailyTicketBudgetsPacked = 0;
         levelPrizePool[6] = 30_000 ether; // 500 awards, requiring four real draw calls.

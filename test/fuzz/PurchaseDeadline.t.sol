@@ -15,6 +15,7 @@ contract PurchaseDeadlineHarness is DegenerusGameStorage {
         purchaseStartDay = day - age;
         dailyIdx = day - sealedAge;
         rngRequestTime = requestTime;
+        _setRngRequestActive(requestTime > 1);
         lastPurchaseDay = phase == 1;
         jackpotPhaseFlag = phase == 2;
     }

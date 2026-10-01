@@ -61,6 +61,7 @@ contract StaleBufferedDailyWordClamp is DeployProtocol {
         // across vm.warp calls in the same test frame.
         // Seal the first post-deploy day normally.
         _completeDay(0xDEAD0001);
+        _finishReadConsumers();
         uint24 idxSealed = _dailyIdx();
 
         // Day D: fire the daily request, then the word arrives the SAME day — but no advance
@@ -91,6 +92,7 @@ contract StaleBufferedDailyWordClamp is DeployProtocol {
         assertEq(rpE, 0, "day D+1 coinflip untouched by the stale word");
 
         // Day D+1 gets its OWN request — entropy unknown to any deposit that targeted it.
+        _finishReadConsumers();
         game.advanceGame();
         assertTrue(game.rngLocked(), "fresh daily VRF request in flight for day D+1");
         uint256 freshReqId = mockVRF.lastRequestId();

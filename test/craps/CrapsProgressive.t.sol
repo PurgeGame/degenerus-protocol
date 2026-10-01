@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {CrapsViews} from "./CrapsViews.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
-import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {CrapsBattle, IReadCohortLifecycle} from "../../contracts/CrapsBattle.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
@@ -34,6 +34,12 @@ contract ProgHarness is CrapsViews {
         w.bankroll = 3000 ether;
         w.goal = 15_000 ether;
         w.played = 600 ether;
+        // This fold-only fixture bypasses armWindow. Enroll its real field before
+        // its first score so finalization has the same obligation as an armed field.
+        if (uint32(_battles[key] >> _BG_RESOLVED_SHIFT) == 0 && uint32(_battles[key]) != 0) {
+            _slotIndex[w.bound] = 1;
+            IReadCohortLifecycle(address(this)).registerRngSlot(0, w.bound, key);
+        }
         _scoreBattle(w, score, seat, 0);
     }
 
@@ -208,7 +214,7 @@ contract CrapsProgressiveTest is CrapsPins {
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
         vm.warp(block.timestamp + 1 days);
-        _setIndex(4);
+        _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }
 
@@ -481,7 +487,7 @@ contract CrapsProgressiveTest is CrapsPins {
         craps.enterBattle(slot, 3 | (uint32(3) << 9) | (uint32(1) << 12), 1);
         vm.prank(bob);
         craps.enterBattle(slot, 3 | (uint32(3) << 12) | (uint32(1) << 15), 1);
-        _closeOn(craps, slot, 7, uint256(keccak256("custom-word")));
+        _closeOn(craps, slot, 1, uint256(keccak256("custom-word")));
         craps.resolveSlot(slot, WHOLE_FIELD);
         assertEq(craps.progressivePool(), pool, "settling a custom battle moved the pool");
     }
@@ -1809,7 +1815,7 @@ contract CrapsProgressiveTest is CrapsPins {
         craps.enterBattle(slot, 3 | (uint32(3) << 9) | (uint32(1) << 12), 1);
         vm.prank(bob);
         craps.enterBattle(slot, 3 | (uint32(3) << 12) | (uint32(1) << 15), 1);
-        _closeOn(craps, slot, 7, uint256(keccak256("custom-split-word")));
+        _closeOn(craps, slot, 1, uint256(keccak256("custom-split-word")));
         vm.recordLogs();
         craps.resolveSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();

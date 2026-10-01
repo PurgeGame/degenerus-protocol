@@ -481,6 +481,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address[] memory subs = _setupFundedSubs(N_HI, "gr_", 5 ether, false);
 
         _settleClean(uint256(keccak256("gr_clean")) | 1);
+        _finishReadConsumers();
         // Level stays at genesis: the 30-day stall is within the lvl-0 365-day idle clock and the deadman,
         // and the resume settles without a level transition (no charity-pick dependency).
 
@@ -1227,6 +1228,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      a Foundry caching quirk where block.timestamp freezes after the first warp (the day index would
     ///      stall and never reach the boundary). Tracking `t` and warping to it advances reliably.
     function _warpToBoundary(bool onSettle) internal {
+        _finishIndexedReadConsumers();
         uint256 t = block.timestamp;
         for (uint256 guardN; guardN < 2 * SETTLE_PERIOD; ++guardN) {
             t += 1 days;
@@ -1320,6 +1322,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     /// @dev Drive a fresh new-day STAGE then land the day's word (the per-sub stamp becomes a ready box).
     function _runStageNewDay(uint256 vrfWord) internal {
         _settleGame(vrfWord ^ 0xF00D);
+        _finishIndexedReadConsumers();
         vm.warp(block.timestamp + 1 days);
         _settleGame(vrfWord);
     }
@@ -1447,7 +1450,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Read the human-box cursor `boxCursor` (slot 56, byte 7, uint48) — the human open walk
-    ///      (openHumanBoxes over boxPlayers[index]). Distinct from _subOpenCursor (byte 2).
+    ///      (openHumanBoxes over boxPlayers[index & 1]). Distinct from _subOpenCursor (byte 2).
     function _boxCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 56) & 0xFFFFFFFFFFFF;
     }

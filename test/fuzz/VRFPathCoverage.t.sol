@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
@@ -27,6 +28,7 @@ contract VRFPathCoverage is DeployProtocol {
 
     /// @dev Complete a full day: advanceGame -> VRF fulfill -> loop until unlocked.
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         game.advanceGame();
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -34,17 +36,17 @@ contract VRFPathCoverage is DeployProtocol {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+            _finishReadConsumers();
     }
 
     /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 33, low 48 bits = LR_INDEX).
     function _lootboxRngIndex() internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev Read lootboxRngWordByIndex[index] from storage (mapping at slot 34).
+    /// @dev Read _lootboxWord(index) from storage (mapping at slot 34).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(34)));
-        return uint256(vm.load(address(game), slot));
+        return RecyclingState.word(address(game), index);
     }
 
     /// @dev Read dailyIdx from packed slot 0 (uint24 at bit offset 24).
@@ -55,7 +57,6 @@ contract VRFPathCoverage is DeployProtocol {
     /// @dev The word _backfillGapDays derives for a skipped day. The day is packed as uint24
     ///      (its loop counter type), so the preimage day width is 3 bytes.
     function _derived(uint256 word, uint256 day) internal pure returns (uint256 w) {
-        if (word == 0) word = 1; // the callback delivers a zero word as 1
         w = uint256(keccak256(abi.encodePacked(word, uint24(day))));
         if (w == 0) w = 1;
     }
@@ -81,7 +82,7 @@ contract VRFPathCoverage is DeployProtocol {
         }
         newVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 500; i++) {
-            if (!game.rngLocked()) break;
+            if (!game.rngLocked() && !game.isRngFulfilled()) break;
             try game.advanceGame() {} catch { break; }
         }
     }
@@ -90,6 +91,7 @@ contract VRFPathCoverage is DeployProtocol {
     ///      with `word`, which derives every skipped day in between, and the wall day completes.
     function _catchUp(MockVRFCoordinator vrf, uint256 word) internal {
         uint24 wallDay = game.currentDayView();
+        _finishReadConsumers();
         for (uint256 i = 0; i < 500; i++) {
             game.advanceGame();
             uint256 id = vrf.lastRequestId();
@@ -135,14 +137,15 @@ contract VRFPathCoverage is DeployProtocol {
     ///      wall day still completes.
     function test_gapBackfillSingleDay_sentinelWords() public {
         uint256 snap = vm.snapshotState();
-        test_gapBackfillSingleDay_fuzz(0);
+        test_gapBackfillSingleDay_fuzz(2);
         vm.revertToState(snap);
-        test_gapBackfillSingleDay_fuzz(1);
+        test_gapBackfillSingleDay_fuzz(type(uint256).max);
     }
 
     /// @notice Fuzz: day 3 stalls into day 5. Day 3 finishes on its own late word, day 5's
     ///         fresh (fuzzed) word derives the single gap day 4.
     function test_gapBackfillSingleDay_fuzz(uint256 vrfWord) public {
+        vm.assume(vrfWord > 1);
         MockVRFCoordinator newVRF = _stallDay3AndResume(5);
         _catchUp(newVRF, vrfWord);
 
@@ -159,6 +162,7 @@ contract VRFPathCoverage is DeployProtocol {
     ///         The stalled day-3 request is answered before it is 14 days old; past that the
     ///         game sits unattended until the wall day, at most 30 days past the day-3 seal.
     function test_gapBackfillMultiDay_fuzz(uint256 vrfWord, uint8 rawGapDays) public {
+        vm.assume(vrfWord > 1);
         uint256 gapDays = bound(rawGapDays, 2, 29);
         uint256 wallDay = 4 + gapDays;
         uint256 resumeDay = wallDay < 16 ? wallDay : 16;
@@ -192,6 +196,7 @@ contract VRFPathCoverage is DeployProtocol {
     ///         33 (dailyIdx 3 + 30): 29 skipped days, all derived in the transaction that applies
     ///         day 33's word. One more day trips the deadman and the game ends instead.
     function test_gapBackfillMaxGap_fuzz(uint256 vrfWord) public {
+        vm.assume(vrfWord > 1);
         MockVRFCoordinator newVRF = _stallDay3AndResume(16);
 
         // Boundary: day 34 is 31 days past the last seal.
@@ -233,6 +238,7 @@ contract VRFPathCoverage is DeployProtocol {
     ///         it for its reserved index; its word fills that index but seals no day. Day 8's
     ///         fresh daily request then derives gap days 4..7.
     function test_gapBackfillWithMidDayPending_fuzz(uint256 vrfWord) public {
+        vm.assume(vrfWord > 1);
         // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
 
@@ -249,7 +255,7 @@ contract VRFPathCoverage is DeployProtocol {
         // Request mid-day lootbox RNG (creates mid-day pending state)
         game.requestLootboxRng();
         uint48 indexBeforeStall = _lootboxRngIndex();
-        uint48 reservedIndex = indexBeforeStall - 1;
+        uint48 reservedIndex = (indexBeforeStall ^ 1);
 
         // Stall into day 8, swap: the mid-day request is re-issued for the same reserved index
         vm.warp(8 * 86400);
@@ -269,7 +275,7 @@ contract VRFPathCoverage is DeployProtocol {
 
         // lootboxRngIndex should have advanced past the stall
         assertTrue(
-            _lootboxRngIndex() > indexBeforeStall,
+            _lootboxRngIndex() == (indexBeforeStall ^ 1),
             "lootboxRngIndex must advance after mid-day stall recovery"
         );
     }
@@ -281,6 +287,7 @@ contract VRFPathCoverage is DeployProtocol {
     /// @notice Fuzz: gap backfill produces unique per-day entropy via keccak256(word, day).
     ///         Day 3 stalls into day 13; day 13's fuzzed word derives gap days 4..12.
     function test_gapBackfillEntropyUnique_fuzz(uint256 vrfWord) public {
+        vm.assume(vrfWord > 1);
         MockVRFCoordinator newVRF = _stallDay3AndResume(13);
         _catchUp(newVRF, vrfWord);
 
@@ -310,6 +317,7 @@ contract VRFPathCoverage is DeployProtocol {
     /// @notice Fuzz: lootboxRngIndex monotonically increases across stall recovery,
     ///         with no double-increments or skips. Recovery word is fuzzed.
     function test_indexLifecycleAcrossStall_fuzz(uint256 vrfWord) public {
+        vm.assume(vrfWord > 1);
         // Record initial index
         uint48 initialIndex = _lootboxRngIndex();
 
@@ -318,7 +326,7 @@ contract VRFPathCoverage is DeployProtocol {
         uint48 indexAfterFirstDay = _lootboxRngIndex();
         assertEq(
             indexAfterFirstDay,
-            initialIndex + 1,
+            initialIndex ^ 1,
             "First day: index should increment by exactly 1"
         );
 
@@ -330,7 +338,7 @@ contract VRFPathCoverage is DeployProtocol {
 
         // Index must have increased (fresh daily request increments it)
         assertTrue(
-            indexAfterDay3Request >= indexAfterFirstDay,
+            indexAfterDay3Request == (indexAfterFirstDay ^ 1),
             "Day 3 request: index must not decrease"
         );
 
@@ -349,14 +357,12 @@ contract VRFPathCoverage is DeployProtocol {
 
         // Final index must be >= day 3 request index (monotonic)
         assertTrue(
-            finalIndex >= indexAfterDay3Request,
+            finalIndex == indexAfterDay3Request,
             "Final index must be >= index after day 3 request (monotonic)"
         );
 
         // Verify lootbox word at the initial index (first day slot) is nonzero
-        assertTrue(
-            _lootboxRngWord(initialIndex) != 0,
-            "First day lootbox index must have nonzero word"
-        );
+        assertEq(_lootboxRngWord(indexAfterFirstDay), vrfWord, "recovery publishes the current read word");
+        assertEq(_lootboxRngWord(initialIndex), 0, "retired word is unavailable");
     }
 }

@@ -666,7 +666,7 @@ describe("DegenerusJackpots", function () {
      */
     function lvlTraitEntrySlot(level, trait) {
       const baseSlot = hre.ethers.keccak256(
-        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [level, 8])
+        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint24", "uint256"], [BigInt(level) & 1n, 8])
       );
       return hre.ethers.toBeHex(BigInt(baseSlot) + BigInt(trait), 32);
     }
@@ -719,7 +719,7 @@ describe("DegenerusJackpots", function () {
 
       // Populate lvlTraitEntry for levels 10-16 (scatter targets)
       // Fill ALL 256 traits per level so random trait selection always hits
-      for (let lvl = 10; lvl <= 16; lvl++) {
+      for (let lvl = 10; lvl <= 11; lvl++) {
         for (let trait = 0; trait < 256; trait++) {
           const startIdx = ((lvl - 10) * 7 + trait) % players.length;
           const holders = [

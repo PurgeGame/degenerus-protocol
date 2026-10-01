@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -10,7 +11,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title BoxCreationHandler — drives every box-creating entrypoint for the FUZZ-04 ENQUEUE invariant
 /// @notice The box-creating family the ASYM-02 sweep enumerates has FOUR enqueue sites, each guarded by a
-///         first-deposit check that pushes the (index, owner) into boxPlayers[index] for the permissionless
+///         first-deposit check that pushes the (index, owner) into boxPlayers[index & 1] for the permissionless
 ///         openBoxes() auto-opener:
 ///           - mint-with-lootbox purchase           (MintModule first-deposit -> boxPlayers push)
 ///           - whale / lazy / deity pass bundle      (WhaleModule._recordLootboxEntry -> boxPlayers push)
@@ -26,7 +27,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///         transitions the invariant distinguishes.
 ///
 /// @dev WHALE-01 is the bug this net catches: a sibling box-creation path that persists a record
-///      (lootboxEth/presaleBoxEth with base != 0) but skips the boxPlayers[index] push, letting the sole
+///      (lootboxEth/presaleBoxEth with base != 0) but skips the boxPlayers[index & 1] push, letting the sole
 ///      opener (manual openLootBox is operator-gated) hold the box and time the open to a favorable
 ///      level/boon. The actor base is 0x70000 (disjoint from WhaleHandler's 0xB0000 and the afking
 ///      handler's 0xAF000 / 0xDE17A); each actor is field-isolated-seeded with the HAS_DEITY_PASS score
@@ -115,7 +116,7 @@ contract BoxCreationHandler is Test {
 
     /// @notice Every (index, owner) box record this campaign created via a real entrypoint. The invariant
     ///         iterates these and, for each with base != 0 (persisted, not yet opened), asserts it is present
-    ///         in boxPlayers[index].
+    ///         in boxPlayers[index & 1].
     function trackedBoxes() external view returns (BoxRef[] memory refs) {
         refs = new BoxRef[](created.length);
         for (uint256 i; i < created.length; i++) refs[i] = created[i];
@@ -325,8 +326,7 @@ contract BoxCreationHandler is Test {
 
     /// @dev Active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34).
     function _lrIndex() internal view returns (uint48) {
-        uint256 packed = uint256(vm.load(address(game), bytes32(LR_PACKED_SLOT)));
-        return uint48(packed & LR_INDEX_MASK);
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Field-isolated HAS_DEITY_PASS score-bit seed in mintPacked_ (slot 9, shift 184). No balance touched.
@@ -350,7 +350,7 @@ contract BoxCreationHandler is Test {
     // =========================================================================
 
     /// @dev FALSIFIABILITY seam: simulate the WHALE-01 bug shape — a persisted lootboxEth record (amount != 0)
-    ///      that was NOT pushed into boxPlayers[index]. Writes the lootbox amount sub-field of
+    ///      that was NOT pushed into boxPlayers[index & 1]. Writes the lootbox amount sub-field of
     ///      lootboxEth[index][who] (slot 15 nested mapping) via a field-isolated vm.store WITHOUT calling any
     ///      enqueue site, so boxPlayersContains(index, who) stays false. This is exactly the persisted-but-
     ///      unenqueued state the invariant must catch; it is NOT used by any fuzzed action (the campaign creates

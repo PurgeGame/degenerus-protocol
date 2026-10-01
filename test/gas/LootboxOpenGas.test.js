@@ -18,7 +18,6 @@ import { eth, getLastVRFRequestId, ZERO_BYTES32 } from "../helpers/testUtils.js"
 const NORMAL_GAS_TARGET = 10_000_000n;
 const AUDIT_GAS_CEILING = 11_500_000n;
 const WORD = 266266n;
-const MASK48 = (1n << 48n) - 1n;
 const layout = JSON.parse(readFileSync(new URL("../../scripts/layout/golden/DegenerusGame.json", import.meta.url), "utf8"));
 const root = (name) => {
   const entry = layout.find((item) => item.label === name);
@@ -31,11 +30,18 @@ const slot = (key, base) => hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiC
 async function read(game, position) {
   return BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), position));
 }
-async function indexOf(game) { return (await read(game, root("lootboxRngPacked"))) & MASK48; }
+async function indexOf(game) { return ((await read(game, 0)) >> 252n) & 1n; }
 async function orderOf(game, index, player) {
-  return read(game, slot(BigInt(player), BigInt(slot(index, root("lootboxOrder")))));
+  const word = await read(game, slot(BigInt(player), BigInt(slot(index & 1n, root("lootboxOrder")))));
+  return word & (1n << 255n) ? 0n : word;
 }
-async function wordOf(game, index) { return read(game, slot(index, root("lootboxRngWordByIndex"))); }
+async function wordOf(game, index) {
+  const flags = await read(game, 0);
+  const readBuffer = ((flags >> 252n) & 1n) ^ 1n;
+  if (readBuffer !== BigInt(index) || (flags & (1n << 255n)) === 0n) return 0n;
+  const stored = await read(game, 3);
+  return stored === 1n ? 0n : stored;
+}
 
 
 async function purchase(f, player, packed, nominal) {
@@ -56,12 +62,13 @@ async function prepare(f, buyers, count, singleCustom) {
   await f.game.connect(f.deployer).requestLootboxRng();
   const request = await getLastVRFRequestId(f.mockVRF);
   await f.mockVRF.fulfillRandomWords(request, WORD);
+  await f.game.advanceGame(); // Required publication runs outside the measured open.
   expect(await wordOf(f.game, index), "delivered word is bound to the original index").to.equal(WORD);
-  expect(await indexOf(f.game)).to.equal(index + 1n);
+  expect(await indexOf(f.game)).to.equal(index ^ 1n);
   expect(await f.game.boxesPending(), "measured entry is ready").to.equal(true);
   // A later unworded order must survive every measured opening and the final replay probe.
   await purchase(f, f.alice, boSmalls(1), eth(0.01));
-  const nextOrder = await orderOf(f.game, index + 1n, f.alice.address);
+  const nextOrder = await orderOf(f.game, index ^ 1n, f.alice.address);
   expect(boCount(nextOrder)).to.equal(1n);
   return { index, nextOrder };
 }
@@ -74,7 +81,7 @@ async function measureOpen(f, state, player, count) {
   expect(receipt.gasUsed, "owner's hard transaction ceiling").to.be.lte(AUDIT_GAS_CEILING);
   expect(receipt.gasUsed, "normal public-opening witness").to.be.lte(NORMAL_GAS_TARGET);
   expect(await orderOf(f.game, state.index, player.address), "measured order fully consumed").to.equal(0n);
-  expect(await orderOf(f.game, state.index + 1n, f.alice.address), "unrevealed next-index order survives").to.equal(state.nextOrder);
+  expect(await orderOf(f.game, state.index ^ 1n, f.alice.address), "unrevealed next-index order survives").to.equal(state.nextOrder);
   const summaries = [];
   for (const log of receipt.logs) {
     if (log.address.toLowerCase() !== (await f.game.getAddress()).toLowerCase()) continue;
@@ -100,7 +107,7 @@ describe("LootboxOpenGas — current public opening and maximum-size order", fun
     await measureOpen(f, state, f.alice, 1n);
     expect(await f.game.boxIndexComplete(state.index)).to.equal(true);
     expect(await f.game.openBoxes.staticCall(1000), "no replay and no opening of the later unworded order").to.equal(0n);
-    expect(await orderOf(f.game, state.index + 1n, f.alice.address)).to.equal(state.nextOrder);
+    expect(await orderOf(f.game, state.index ^ 1n, f.alice.address)).to.equal(state.nextOrder);
   });
 
   it("opens two maximum 100-box orders in separate bounded cold transactions without skipping the second owner", async function () {

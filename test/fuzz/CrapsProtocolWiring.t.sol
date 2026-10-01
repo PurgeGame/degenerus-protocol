@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
+
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -149,8 +151,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint256 paid;
         for (uint256 nonce = 1; nonce <= 64; ++nonce) {
             uint256 word = uint256(keccak256(abi.encode("real craps flow", nonce)));
-            bytes32 wordSlot = keccak256(abi.encode(uint256(index), uint256(34)));
-            vm.store(address(game), wordSlot, bytes32(word));
+            RecyclingState.seedWord(address(game), index, bytes32(word));
             assertEq(crapsBattle.wordAt(index), word, "the real game word slot did not resolve");
             (, paid) = crapsBattle.previewSettlement(betId);
             if (paid != 0) break;
@@ -255,8 +256,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         // The word cannot exist in the block that took the index, which is exactly why the walk
         // is a LATER crank's job. Stand it in the way the flow test above does.
-        bytes32 wordSlot = keccak256(abi.encode(uint256(index - 1), uint256(34)));
-        vm.store(address(game), wordSlot, bytes32(uint256(keccak256("mineflip craps table"))));
+        RecyclingState.seedWord(address(game), index - 1, bytes32(uint256(keccak256("mineflip craps table"))));
 
         // ── The WALK. The cursor moves, and the same flat FLIP pays for it.
         uint256 before = coinflip.coinflipAmount(KEEPER);
@@ -323,7 +323,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 5 hours + 10 minutes); // period 1 shuts 6h03m in
         // OLDEST-FIRST: the cursor settles period 0's window before this one arms.
         (uint48 index,) = _crankUntilArmed(slot);
-        vm.store(address(game), keccak256(abi.encode(uint256(index - 1), uint256(34))), bytes32(uint256(1)));
+        RecyclingState.seedWord(address(game), index - 1, bytes32(uint256(2)));
 
         uint256 g = gasleft();
         vm.prank(KEEPER);
@@ -448,7 +448,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     }
 
     function _landTableWordW(uint48 index, uint256 word) internal {
-        vm.store(address(game), keccak256(abi.encode(uint256(index), uint256(34))), bytes32(word));
+        RecyclingState.seedWord(address(game), index, bytes32(word));
     }
 
     /// @dev Land a day's committed word in the Game slot the table reads it out of.

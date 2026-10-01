@@ -5,21 +5,56 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @dev Extends the production mint module so the live `processTicketBatch` drains into THIS
 ///      contract's packed buckets; adds lane-level seeders and decoders only.
-contract BucketLaneHarness is DegenerusGameMintModule, BucketSeed {
+contract BucketLaneHarness is DegenerusGameMintModule {
     /// @dev The mint module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
     function _pastDeadlineTriggered(uint24 today, uint24 idx)
         internal
         view
-        override(DegenerusGameMintModule, DegenerusGameStorage)
+        override
         returns (bool)
     {
         return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
+    }
+
+    /// @dev Seed a queue owner's locator and positional owed field without weakening owner identity.
+    function _seedOwedAt(uint24 key, address player, uint80 packed) internal {
+        uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
+        if (pos != 0) entryOwnerPosition[key][player] = pos;
+        else pos = entryOwnerPosition[key][player];
+        require(pos != 0, "queue owner must be registered");
+        _setEntryOwed(key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), pos, packed);
+    }
+
+    /// @dev Registry position for `player` at `lvl`: the last position when it is already
+    ///      this player, otherwise a fresh push (test-side lookup-or-push).
+    function _ownerIdxFor(uint24 lvl, address player) internal returns (uint256) {
+        EntryOwner[] storage owners = lvlEntryOwner[lvl];
+        uint256 len = owners.length;
+        if (len != 0 && owners[len - 1].owner == player) return len - 1;
+        owners.push(EntryOwner(player, 0));
+        return len;
+    }
+
+    /// @dev Append `n` occurrences of `player` to lvlTraitEntry[lvl][trait].
+    function _seedBucket(uint24 lvl, uint8 trait, address player, uint256 n) internal {
+        _setTicketBufferLevel(lvl);
+        _bucketAppendRun(_traitBufferBase(lvl), trait, _ownerIdxFor(lvl, player), n, lvl);
+    }
+
+    /// @dev Queue `player` on key `rk` for level `lvl` owing `packedOwedRem` (owed << 8 | rem),
+    ///      registered the way every production sink registers.
+    function _seedQueued(uint24 rk, uint24 lvl, address player, uint80 packedOwedRem) internal {
+        // Keep position zero out of the seeded set: a zero lane index makes every word store a
+        // no-op and understates gas.
+        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        uint80 ownerBits = _registerEntryOwner(player, lvl);
+        _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
+        _seedOwedAt(rk, player, ownerBits | packedOwedRem);
     }
 
     function append(uint24 lvl, uint8 trait, address player, uint256 n) external {
@@ -27,11 +62,11 @@ contract BucketLaneHarness is DegenerusGameMintModule, BucketSeed {
     }
 
     function ownerAt(uint24 lvl, uint8 trait, uint256 k) external view returns (address) {
-        return _bucketOwnerAt(lvl, trait, k);
+        return _bucketOwnerAtUnchecked(lvl, trait, k);
     }
 
     function bucketLen(uint24 lvl, uint8 trait) external view returns (uint256) {
-        return lvlTraitEntry[lvl][trait].length;
+        return _bucketLength(lvl, trait);
     }
 
     function ownerCount(uint24 lvl) external view returns (uint256) {
@@ -39,11 +74,7 @@ contract BucketLaneHarness is DegenerusGameMintModule, BucketSeed {
     }
 
     function laneWord(uint24 lvl, uint8 trait, uint256 w) external view returns (uint256 word) {
-        uint256[] storage lanes = lvlTraitEntry[lvl][trait];
-        assembly ("memory-safe") {
-            mstore(0x00, lanes.slot)
-            word := sload(add(keccak256(0x00, 0x20), w))
-        }
+        return _bucketWordAtUnchecked(lvl, trait, w * 8);
     }
 
     /// @dev One player owing `owed` entries in the read-slot queue for `lvl`, cursor reset.
@@ -51,8 +82,9 @@ contract BucketLaneHarness is DegenerusGameMintModule, BucketSeed {
         // The live mint window ends at game level + 1. Put this queue at its
         // edge so processTicketBatch(lvl + 1) exercises the real sweep.
         level = lvl - 1;
-        _lrWrite(LR_INDEX_SHIFT, LR_INDEX_MASK, 1);
-        lootboxRngWordByIndex[0] = uint256(keccak256("lane-packing-entropy")) | 1;
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
+        rngWordCurrent = uint256(keccak256("lane-packing-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         uint24 rk = _tqReadKey(lvl);
         _seedQueued(rk, lvl, p, uint80(owed) << 8);
         ticketCursor = 0;

@@ -109,10 +109,10 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         require(writeLen >= 349, "need >= 349 queued buyers to exercise the multi-tx resume");
         uint256 N = writeLen;
 
-        // 3) Cross the wall-day. The first advance requests the daily word and swaps write->read
-        //    (_swapAndFreeze), so the buyers become the read cohort the drain consumes.
+        // 3) Cross the wall-day. Advances first finish the previous word's consumers,
+        //    then request the daily word and swap write->read (_swapAndFreeze).
         vm.warp(block.timestamp + 1 days + 1);
-        game.advanceGame();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.advanceGame();
         require(game.rngLocked(), "daily VRF request is in flight (word swapped in)");
 
         uint24 rk = _readKey(lvl);

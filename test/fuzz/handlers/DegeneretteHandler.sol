@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -18,11 +19,11 @@ contract DegeneretteHandler is Test {
     /// @dev Re-attested via game-layout-POST.txt (forge inspect DegenerusGame storageLayout):
     ///      `lootboxRngPacked` slot 34 (LR_INDEX lives in its low 48 bits) and
     ///      `lootboxRngWordByIndex` slot 35 (mapping(uint48 => uint256)). placeDegeneretteBet
-    ///      gates on (LR_INDEX != 0) AND (lootboxRngWordByIndex[LR_INDEX] == 0); resolution
-    ///      gates on lootboxRngWordByIndex[betIndex] != 0. The handler seeds both so the fuzzer
+    ///      gates on (LR_INDEX != 0) AND (_lootboxWord(LR_INDEX) == 0); resolution
+    ///      gates on _lootboxWord(betIndex) != 0. The handler seeds both so the fuzzer
     ///      reaches a non-vacuous place->resolve sequence regardless of call ordering.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // post Stage-B game-storage repack: was 35
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;   // post Stage-B game-storage repack: was 36
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;   // post Stage-B game-storage repack: was 36
     uint48 private constant SEED_LR_INDEX = 1;
 
     // --- Ghost variables ---
@@ -204,57 +205,35 @@ contract DegeneretteHandler is Test {
     // --- Internal helpers ---
 
     /// @dev Make a Degenerette bet placeable: placeDegeneretteBet reverts unless the lootbox
-    ///      RNG index is non-zero AND lootboxRngWordByIndex[index] is still zero (the open,
+    ///      RNG index is non-zero AND _lootboxWord(index) is still zero (the open,
     ///      not-yet-rolled window). The unguided fuzzer drives the game to game-over long before
     ///      a real purchase opens that window, so without this seed every placeEthBet early-returns
     ///      and the solvency invariant passes vacuously (betsPlaced stays 0). We force LR_INDEX to a
     ///      fixed open index (word still zero) so the live placeDegeneretteBet path actually executes
     ///      against real ETH. This is the same mechanism the DegeneretteHeroScore unit harness uses.
-    function _ensureLootboxIndexOpen() private returns (uint48 index) {
-        uint256 lrPacked = uint256(
-            vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))
-        );
-        index = uint48(lrPacked);
-        if (index == 0) {
-            lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(SEED_LR_INDEX);
-            vm.store(
-                address(game),
-                bytes32(LOOTBOX_RNG_PACKED_SLOT),
-                bytes32(lrPacked)
-            );
-            index = SEED_LR_INDEX;
-        }
-        // Keep the word at the active index zero so the place-gate (word == 0) holds.
-        bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
-        if (uint256(vm.load(address(game), wordSlot)) != 0) {
-            vm.store(address(game), wordSlot, bytes32(uint256(0)));
-        }
+    function _ensureLootboxIndexOpen() private view returns (uint48 index) {
+        // Placement always joins the write buffer; its previous session is never rewritten.
+        return RecyclingState.writeBuffer(address(game));
     }
 
     /// @dev Make a placed bet resolvable: the sweep reverts (RngNotReady on placement, or simply
-    ///      never reaching the index) unless lootboxRngWordByIndex[index] is non-zero. Fill the
+    ///      never reaching the index) unless _lootboxWord(index) is non-zero. Fill the
     ///      bet's index word with a deterministic non-zero entropy so the sweep executes its
     ///      live payout + claimable-credit path (exercising the post-resolve solvency leg too).
     function _fillLootboxWordForResolve(uint48 index) private {
-        if (index == 0) return;
+        if (index > 1) return;
         bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
-        if (uint256(vm.load(address(game), wordSlot)) == 0) {
-            vm.store(
-                address(game),
-                wordSlot,
-                bytes32(uint256(keccak256(abi.encodePacked("degenerette_resolve_word", index))) | 1)
-            );
+        if (uint256(bytes32(RecyclingState.word(address(game), uint48(index)))) == 0) {
+            RecyclingState.seedWord(address(game), uint48(index), bytes32(uint256(keccak256(abi.encodePacked("degenerette_resolve_word", index))) | 1));
         }
     }
 
     /// @dev Force the active lootbox index past `index` so the sweep's finalized-index frontier
     ///      (which only opens indices strictly below the active one) can reach a bet queued at
     ///      `index`. A no-op if the active index has already moved past it.
-    function _advanceLootboxIndexPast(uint48 index) private {
-        uint256 packed = uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT)));
-        if (uint48(packed) > index) return;
-        packed = (packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(index) + 1);
-        vm.store(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT), bytes32(packed));
+    function _advanceLootboxIndexPast(uint48 index) private view {
+        // The isolated resolution fixture seed has already selected this read.
+        require(index == RecyclingState.readBuffer(address(game)), "fixture read tag");
     }
 
 }

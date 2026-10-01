@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -36,11 +37,11 @@ abstract contract RngIndexDrainOracle is Test {
     }
 
     function _lrIndexOf(DegenerusGame subject) internal view returns (uint48) {
-        return uint48(uint256(vm.load(address(subject), bytes32(SLOT_LR_INDEX))));
+        return RecyclingState.writeBuffer(address(subject));
     }
 
     function _wordAt(DegenerusGame subject, uint48 index) internal view returns (uint256) {
-        return uint256(vm.load(address(subject), keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_MAPPING))));
+        return RecyclingState.word(address(subject), index);
     }
 
     function _roundOf(DegenerusGame subject) private view returns (uint32) {
@@ -48,7 +49,14 @@ abstract contract RngIndexDrainOracle is Test {
     }
 
     function _bucketSlot(uint24 lvl, uint256 trait) private pure returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(uint256(lvl), SLOT_BUCKETS))) + trait);
+        return bytes32(uint256(keccak256(abi.encode(uint256(lvl & 1), SLOT_BUCKETS))) + trait);
+    }
+
+    function _bucketLengthOf(DegenerusGame subject, uint24 lvl, uint256 trait) private view returns (uint256) {
+        uint256 header = uint256(vm.load(address(subject), _bucketSlot(lvl, trait)));
+        uint24 stamp = uint24(uint256(vm.load(address(subject), bytes32(uint256(5)))) >> (112 + (lvl & 1) * 24));
+        uint256 bits = uint256(vm.load(address(subject), bytes32(uint256(76) + (lvl & 1))));
+        return stamp == lvl && ((bits >> trait) & 1) != 0 ? uint32(header) : 0;
     }
 
     function _snapshotDrain(DegenerusGame subject) internal view returns (DrainSnapshot memory snap) {
@@ -59,7 +67,7 @@ abstract contract RngIndexDrainOracle is Test {
         // One advance cannot move the active window beyond level+2. Include its trailing
         // level as well, so the same oracle sees current and frozen future-pool batches.
         for (uint256 n; n < 1024; ++n) {
-            snap.lengths[n] = uint256(vm.load(address(subject), _bucketSlot(snap.firstLevel + uint24(n / 256), n % 256)));
+            snap.lengths[n] = _bucketLengthOf(subject, snap.firstLevel + uint24(n / 256), n % 256);
         }
     }
 
@@ -67,7 +75,7 @@ abstract contract RngIndexDrainOracle is Test {
         private view returns (address)
     {
         bytes32 slot = _bucketSlot(lvl, trait);
-        uint256 len = uint256(vm.load(address(subject), slot));
+        uint256 len = _bucketLengthOf(subject, lvl, trait);
         if (occurrence >= len) return address(0);
         uint256 lanes = uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(slot))) + occurrence / 8)));
         uint32 ownerIndex = uint32(lanes >> (32 * (occurrence % 8)));
@@ -138,7 +146,7 @@ abstract contract RngIndexDrainOracle is Test {
         // Compare every bucket, including zero-expected buckets: a wrong word cannot
         // escape merely by placing entries outside the traits predicted above.
         for (uint256 n; n < 1024; ++n) {
-            uint256 afterLength = uint256(vm.load(address(subject), _bucketSlot(snap.firstLevel + uint24(n / 256), n % 256)));
+            uint256 afterLength = _bucketLengthOf(subject, snap.firstLevel + uint24(n / 256), n % 256);
             if (afterLength != snap.lengths[n] + added[n]) ++result.mismatches;
         }
     }
@@ -197,7 +205,7 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
             return;
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 committedWord = snap.index == 0 ? 0 : _wordAt(game, snap.index - 1);
+        uint256 committedWord = _wordAt(game, snap.index ^ 1);
         DrainResult memory result = _checkDrain(game, snap, logs, committedWord, actor);
         ghost_bindingMismatches += result.mismatches;
         ghost_unsupportedConsumers += result.unsupported;

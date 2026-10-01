@@ -51,13 +51,20 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
 
     /// @dev Complete a full day: advanceGame -> fulfill the pending daily word -> drain until unlocked.
     function _completeDay(uint256 vrfWord) internal {
-        game.advanceGame();
+        _requestDailyAfterDraining();
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
             game.advanceGame();
         }
+    }
+
+    /// @dev A new daily request first drains the previous word's boxes/bets/fields.
+    ///      Keep the clock fixed and let production routing do that bounded work.
+    function _requestDailyAfterDraining() private {
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.advanceGame();
+        assertTrue(game.rngLocked(), "prior cohort drained and daily request started");
     }
 
     function _purchaseStartDay() internal view returns (uint24) {
@@ -124,7 +131,7 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
 
         // Now stall: fire the daily request, then let many days pass with NO fulfillment.
         vm.warp(block.timestamp + 1 days);
-        game.advanceGame();
+        _requestDailyAfterDraining();
         assertTrue(game.rngLocked(), "daily VRF request is in flight (window open)");
         uint256 stalledReqId = mockVRF.lastRequestId();
 

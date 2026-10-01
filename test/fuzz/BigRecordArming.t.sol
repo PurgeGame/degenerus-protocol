@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {RecyclingState} from "../helpers/RecyclingState.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
@@ -24,7 +26,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 contract BigRecordArmingTest is DeployProtocol {
     uint256 private constant LOOTBOX_ETH_SLOT = 15;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 34;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
     /// @dev degeneretteRecordBounty mapping root slot, keyed (index << 64) | betId.
     uint256 private constant RECORD_BOUNTY_SLOT = 37;
     uint48 private constant BET_INDEX = 1;
@@ -66,12 +68,11 @@ contract BigRecordArmingTest is DeployProtocol {
         vm.deal(rival, 100_000 ether);
         vm.deal(address(game), 100_000 ether);
 
-        // placeDegeneretteBet reverts when lootboxRngIndex == 0; seed it to 1. The
-        // word at index 1 stays 0 (unfulfilled), which is the state placement requires.
+        // Place this fixture's orders in physical buffer 1; buffer 0 starts empty.
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
         );
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | uint256(1);
+        RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(
             address(game),
             bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
@@ -171,7 +172,7 @@ contract BigRecordArmingTest is DeployProtocol {
         _injectLootboxRngWord(1, uint256(keccak256("record-spin-word")));
         // The sweep only reaches a finalized index (active - 1); bump the active index past
         // BET_INDEX so the walk's frontier actually opens it, mirroring the word injection above.
-        _advanceLootboxIndex();
+        assertEq(_lootboxIndex(), BET_INDEX ^ 1, "the fulfilled cohort is sealed");
         vm.recordLogs();
         vm.prank(rival);
         game.openBoxes(type(uint256).max);
@@ -320,16 +321,12 @@ contract BigRecordArmingTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + numDays * 1 days);
     }
 
-    /// @dev Bump the active lootbox RNG index by one (test-only slot poke, mirrors the established
-    ///      idiom elsewhere in this suite). A box order's custom-box size freezes for the period at
-    ///      one index (DegenerusGameLootboxModule._mergeBoxOrder) — a fixture that buys DIFFERENT
-    ///      custom sizes for the SAME player must move to a fresh index between buys, or the second,
-    ///      differently-sized buy reverts E() against the frozen size.
+    /// @dev Deliver and drain the current purchase buffer before moving to another custom size.
     function _advanceLootboxIndex() internal {
-        uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        uint256 idx = lrPacked & 0xFFFFFFFFFFFF;
-        lrPacked = (lrPacked & ~uint256(0xFFFFFFFFFFFF)) | (idx + 1);
-        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
+        uint48 buffer = RecyclingState.writeBuffer(address(game));
+        RecyclingState.seedWord(address(game), buffer, bytes32(uint256(0xB16B00)));
+        for (uint256 i; i < 50 && !game.boxIndexComplete(buffer); ++i) game.openBoxes(512);
+        assertTrue(game.boxIndexComplete(buffer), "the earlier custom order must settle before reuse");
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {
@@ -382,10 +379,7 @@ contract BigRecordArmingTest is DeployProtocol {
     }
 
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(
-            abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT))
-        );
-        vm.store(address(game), slot, bytes32(rngWord));
+        RecyclingState.seedWord(address(game), index, bytes32(rngWord));
     }
 
     function _placeEth(address who, uint128 perSpin, uint8 spins) internal {
@@ -425,7 +419,7 @@ contract BigRecordArmingTest is DeployProtocol {
         uint256 lrPacked = uint256(
             vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))
         );
-        return uint48(lrPacked & 0xFFFFFFFFFFFF);
+        return RecyclingState.writeBuffer(address(game));
     }
 
     function _boxSlot(address who) internal view returns (bytes32) {

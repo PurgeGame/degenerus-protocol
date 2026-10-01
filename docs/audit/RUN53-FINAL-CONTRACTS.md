@@ -32,25 +32,47 @@ less the 2,149 gas of a 128-byte LOG2 the emitter does not perform, plus the emi
 allowance). `_runRound` charges 4 compute/event units, giving `ROUND_UNITS = 38`; a fully
 split round reserves 166 units.
 
-## Charges against re-derived worst cases
+## Header-tail drain pricing (2026-10-01)
 
-| Step | Charge gas | Re-derived worst gas | Headroom |
-|---|---:|---:|---:|
-| Seated round, no split | 380,000 | 282,000 + 56,800 + 32,851 = **371,651** | **8,349** |
-| Split quadrant, extra | 320,000 | 8 × 48,400 − 70,500 = **316,700** | **3,300** |
-| Seat join | 20,000 | 14,200 | 5,800 |
-| Dust skip | 10,000 | 9,200 | 800 |
-| Seats word write | 30,000 | 22,100 | 7,900 |
-| Per-entry occurrence, first 256 | 60,000 | 51,600 | 8,400 |
-| Per-entry occurrence, beyond 256 | 10,000 | 3,200 | 6,800 |
-| Foil pack | 830,000 | 814,400 | 15,600 |
-| Fully split round | 1,660,000 | **1,638,451** | **21,549** |
+The user authorized removing the first-call 35% derate and requires at least 99%
+of normal calls at 10M gas or less. After measuring uniform pricing, the final
+choice prices every physical slot from its prior value: three units if zero and
+one if nonzero. Header tails eliminate separate partial-data writes. Completed
+words and bitmap initialization use the same classification; stale headers are
+classified before their payload is logically reset.
 
-With `UNIT_GAS_BOUND = 10,000` and `WRITES_BUDGET_SAFE = 1000`, the analytical ceiling for a
-drain call is **11,000,000 gas**, 5,777,216 below 16,777,216. Block metadata is written in the
-constructor/request transaction, not in this drain envelope. Transition housekeeping is
-separate from charged steps and runs only before the cold first future chunk; the 35%
-first-chunk derate leaves 3.5M of unused budget for that leg.
+`UNIT_GAS_BOUND = 10,000`, `WRITES_BUDGET_SAFE = 900`. A cold SLOAD followed by
+a warm zero-to-nonzero SSTORE costs 22,100 gas, covered by three units. A cold
+nonzero read plus rewrite costs 5,000, covered by one. Classification adds small
+opcode costs but no additional cold-access charge. Slot contents alone decide
+pricing: no transient tracking, caller-supplied gas or warmth enters work sizing.
+
+| Item | Worst / reserve |
+| --- | ---: |
+| Zero-valued slot write | 3 units / 30,000 gas |
+| Nonzero-valued slot write | 1 unit / 10,000 gas |
+| Singleton append (at most two writes), including reads allowance | 48,400 gas |
+| Eight-lane append (bitmap, header, completed word), including reads allowance | 70,500 gas |
+| Fully split round | 1,638,451 gas / 166 units |
+| First 256 per-entry occurrences | 6 units each |
+| Additional per-entry occurrences | 1 unit each |
+| Foil pack | 83 units |
+| Drain budget | 900 units |
+| Fixed entry/exit/keeper overhead allowance | 1,000,000 gas |
+| Analytical drain envelope | **10,000,000 gas** |
+
+A singleton can initialize a bucket (header plus bitmap), or complete an already
+live tail (header plus word); it cannot do all three. Admission reserves bound
+actual step gas even if conservatively charged units exceed a reserve on the
+last step. The outer drain does not begin another step without sufficient room.
+The fixed allowance covers keeper/entry/exit work; it is an explicit assumption
+of this analytical envelope, checked separately in complete transaction fixtures.
+
+Normal chunk fixtures include startup, full recycling, tail flushes, growth
+beyond the previous parity backing and later record-volume chunks after 32 real
+earlier drain calls. The named 16-day lifecycle enforces at most 1% of keeper
+transactions above 10M and none above 16.7M. This fixture gate is evidence for
+exercised workloads, not a statistical claim about the entire future game.
 
 `test/gas/TicketDrainWorstCaseBound.t.sol` checks this model's arithmetic; it is not an
 independent measurement of the model.
