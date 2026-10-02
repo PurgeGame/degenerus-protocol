@@ -95,6 +95,10 @@ contract ReviewDeadlineSeeder is DegenerusGame {
     function clock() external view returns (uint24 psd, uint24 idx) {
         return (purchaseStartDay, dailyIdx);
     }
+
+    function recordedWord(uint24 day) external view returns (uint256) {
+        return _recordedDailyWord(day);
+    }
 }
 
 contract RecoveredStallIntegrationTest is DeployProtocol {
@@ -111,6 +115,12 @@ contract RecoveredStallIntegrationTest is DeployProtocol {
     function _clock() private returns (uint24 psd, uint24 idx) {
         vm.etch(address(game), type(ReviewDeadlineSeeder).runtimeCode);
         (psd, idx) = ReviewDeadlineSeeder(payable(address(game))).clock();
+        vm.etch(address(game), realCode);
+    }
+
+    function _recordedWord(uint24 day) private returns (uint256 word) {
+        vm.etch(address(game), type(ReviewDeadlineSeeder).runtimeCode);
+        word = ReviewDeadlineSeeder(payable(address(game))).recordedWord(day);
         vm.etch(address(game), realCode);
     }
 
@@ -148,7 +158,8 @@ contract RecoveredStallIntegrationTest is DeployProtocol {
             _answer();
         }
         assertFalse(game.rngLocked(), "the stalled day finished");
-        assertTrue(game.rngWordForDay(d) != 0, "on its own late word");
+        assertTrue(_recordedWord(d) != 0, "on its own late word");
+        assertEq(game.rngWordForDay(d), 0, "the public view expires words older than yesterday");
         (, uint24 idx1) = _clock();
         assertEq(idx1, d, "harness: only the stalled day sealed; the gap is not yet credited");
         assertFalse(game.gameOver(), "not over");
@@ -158,6 +169,7 @@ contract RecoveredStallIntegrationTest is DeployProtocol {
         assertFalse(game.livenessTriggered(), "recovered stall: liveness must not fire before the backfill");
 
         // The next advance requests today's word, backfills the gap and credits it.
+        _finishReadConsumers();
         for (uint256 i; i < 200; ++i) {
             assertFalse(game.gameOver(), "the level must not end");
             _answer();
@@ -399,15 +411,16 @@ contract RedemptionEndingPendingTest is DeployProtocol {
 /// @dev Foil module etched at GAME: the drain runs in this storage.
 contract ReviewFoilHarness is DegenerusGameFoilPackModule {
     function setFoilPack(uint24 day, uint24 lvl, address buyer, uint16 multBps) external {
-        foilRecord[lvl][buyer] = uint256(day) | (uint256(multBps) << _FOIL_MULT_SHIFT);
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        uint256 ownerIdx = owners.length;
-        owners.push(EntryOwner(buyer, 0));
-        foilQueue[day].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer)));
+        foilRecord[lvl & 3][buyer] = uint256(day) | (uint256(multBps) << _FOIL_MULT_SHIFT)
+            | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
+        uint256 ownerIdx = uint256(_registerEntryOwner(buyer, lvl) >> OWNER_IDX_SHIFT) - 1;
+        foilQueue[_foilReadKey()].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer)));
     }
 
     function setWordAndWindow(uint24 day, uint256 word) external {
         _recordDailyRng(day, word);
+        rngWordCurrent = word;
+        _setRngSessionPublished(true);
         foilGenerationDay = day;
         foilFirstDrawDay = day;
         foilCursor = 0;

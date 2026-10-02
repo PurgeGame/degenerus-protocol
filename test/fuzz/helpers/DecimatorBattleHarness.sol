@@ -12,6 +12,15 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
 
     function seal(uint24 lvl, uint128 pool, uint256 word) external returns (uint256 returned) {
         _setDecWindowOpen(false);
+        if (decBattleRounds[lvl].phase == 0) {
+            require(decBattleQueue == 0 && word > RNG_WORD_WAITING, "session not ready");
+            rngWordCurrent = word;
+            _setRngSessionPublished(true);
+            _setRngRequestActive(false);
+            ticketsFullyProcessed = true;
+            humanReadComplete = true;
+            dailyIdx = _simulatedDayIndex();
+        }
         returned = this.runDecimatorJackpot(pool, lvl, word);
         claimablePool += pool - uint128(returned);
     }
@@ -36,9 +45,11 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
         uint256 stored = decBattleHeap[i];
         uint64 id = uint64(stored);
         n.score = stored >> 64;
-        n.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), decBattleRounds[lvl].rngWord, lvl, id)))
+        n.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), _currentRngWord(), lvl, id)))
             & ~uint256(type(uint64).max)) | id;
     }
+
+    function activeWord() external view returns (uint256) { return _lootboxWord(_rngReadBuffer()); }
 
     /// @dev The stack in wei of virtual chips, as the Lens reports it.
     function entryOf(uint24 lvl, uint64 id) external view returns (Entry memory e) {

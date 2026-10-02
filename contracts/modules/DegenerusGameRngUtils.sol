@@ -43,8 +43,8 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     }
 
     /// @dev Fill packed coinflip results and settle funding for gap days
-    ///      caused by VRF stall. Derives deterministic words from the first
-    ///      post-gap VRF word via keccak256(vrfWord, gapDay).
+    ///      caused by VRF stall. Coinflip consumes raw bits 1..31, anchored at startDay;
+    ///      other daily consumers retain the final gap day's keccak256(vrfWord, gapDay).
     ///      NOTE: Gap days get zero nudges (totalFlipReversals not consumed).
     ///      NOTE: resolveRedemptionPeriod is NOT called for backfilled gap days —
     ///      the redemption timer continued ticking in real time during the stall;

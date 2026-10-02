@@ -119,7 +119,7 @@ interface IReadCohortLifecycle {
     function admitCustom(uint64 slot) external;
     function registerRngSlot(uint48 index, uint64 slot, bytes32 key) external;
     function completeRngSlot(uint64 slot, uint48 index) external;
-    function resolveRngSlot(uint64 slot, uint64 budget) external;
+    function resolveRngSlot(uint64 slot, uint64 budget) external returns (uint64 charged);
 }
 
 contract CrapsBattle is CrapsBattleStorage {
@@ -137,9 +137,10 @@ contract CrapsBattle is CrapsBattleStorage {
         }
     }
 
-    function resolveRngSlot(uint64 slot, uint64 budget) external {
+    function resolveRngSlot(uint64 slot, uint64 budget) external returns (uint64 charged) {
         if (msg.sender != address(this)) revert OnlyGame();
-        _resolveSlot(slot, budget);
+        if (!_readCrapsFrontier(slot)) return 0;
+        return _resolveSlotWork(slot, _readWorkAllowance(budget), true);
     }
 
     function advanceJackpotBattle(uint64 budgetUnits) external returns (bool complete) {
@@ -552,7 +553,10 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts RngNotReady If the battle has not closed, or its table has no word yet.
     function resolveSlot(uint64 slot, uint64 budgetUnits) external {
         if (slot < _CUSTOM_SLOT_BASE) revert NoSuchBattle();
-        _resolveSlot(slot, budgetUnits);
+        uint256 board = _battles[_slotWindow(slot).key];
+        if (board != 0 && uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board)) return;
+        if (!_readCrapsFrontier(slot)) revert RngNotReady();
+        _resolveSlotWork(slot, _readWorkAllowance(budgetUnits), true);
     }
 
     /// @notice Settle a slot's entrants — bonus window, daily jackpot or custom battle — in id
@@ -586,11 +590,17 @@ contract CrapsBattle is CrapsBattleStorage {
     ///        nothing; any nonzero budget completes at least one seat.
     /// @custom:reverts RngNotReady If the slot has not shut, or its table has no word yet.
     function _resolveSlot(uint64 slot, uint64 budgetUnits) internal {
-        if (budgetUnits == 0) return;
+        _resolveSlotWork(slot, budgetUnits, false);
+    }
+
+    /// @dev Normal read cohorts reserve each whole seat before running it. The
+    /// independent game-only jackpot transaction keeps its established meter.
+    function _resolveSlotWork(uint64 slot, uint64 budgetUnits, bool strict) internal returns (uint64 charged) {
+        if (budgetUnits == 0 || (strict && budgetUnits < _READ_BATCH_UNITS + _READ_SEAT_RESERVE)) return 0;
         // Unarmed reads as zero: the slot has not shut, so no table has been chosen yet.
         Window memory w = _slotWindow(slot);
         uint256 board = _battles[w.key];
-        if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board) && board != 0) return;
+        if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board) && board != 0) return 0;
         uint256 word = _slotWord(slot);
         if (word == 0) revert RngNotReady();
         // The whole field plays these. Read once here rather than out of every header — which is
@@ -605,14 +615,15 @@ contract CrapsBattle is CrapsBattleStorage {
             // arrays and the loop counter whatever the caller asked for, so one call can never be
             // made to allocate unboundedly; the BUDGET is what stops a production crank.
             if (from + _RESOLVE_MAX_SEATS < end) end = from + _RESOLVE_MAX_SEATS;
-            if (end <= from) return;
+            if (end <= from) return 0;
             // The field is the window's OWN seats followed by the day's, as one dense 1..entrants
             // range — so a single cursor still covers both and nothing here has to skip or scan.
             // Only where a seat's word LIVES differs. A jackpot field's awarded seats follow its
             // paid ones in the same range; its word exists only once the whole field is sealed, so
             // one walk may cross from paid into awarded seats and still finalize exactly once.
             (uint256 dayBase, uint64 dayN) = _dayField(slot);
-            (uint256 put, uint256 hi) = _settleBatch(slot, from, end, (end0 - 1) - dayN - w.drawn, dayBase, w, word, budgetUnits);
+            (uint256 put, uint256 hi, uint256 used) = _settleBatch(slot, from, end, (end0 - 1) - dayN - w.drawn, dayBase, w, word, budgetUnits, strict);
+            charged = uint64(used);
             // Booked to the day the field PLAYED, not the day someone got round to settling it.
             // Settlement is permissionless and unbounded in time, so keying the books to `now`
             // would let a holder of unsettled slots choose which day's boost budget their action
@@ -668,9 +679,14 @@ contract CrapsBattle is CrapsBattleStorage {
         uint256 dayBase,
         Window memory w,
         uint256 word,
-        uint256 budgetUnits
-    ) private returns (uint256 staked, uint256 high) {
+        uint256 budgetUnits,
+        bool strict
+    ) private returns (uint256 staked, uint256 high, uint256 charged) {
         unchecked {
+            if (strict) {
+                budgetUnits -= _READ_BATCH_UNITS;
+                charged = _READ_BATCH_UNITS;
+            }
             // One batched credit for the whole walk. `creditFlipBatch` skips nothing we have to
             // pre-filter, but a busted run pays zero and a zero word still costs calldata, so the
             // arrays are packed and then trimmed to what actually pays.
@@ -682,6 +698,9 @@ contract CrapsBattle is CrapsBattleStorage {
                 freePtr := mload(0x40)
             }
             for (uint64 n = from; n < end; ++n) {
+                uint256 finalCharge = n == w.entrants ? _READ_FINAL_UNITS : 0;
+                uint256 reserve = _READ_SEAT_RESERVE + (finalCharge == 0 ? 0 : _FINAL_UNITS + finalCharge);
+                if (strict && budgetUnits < reserve) break;
                 // Every allocation made while resolving the previous seat is dead now. Reuse that
                 // memory instead of expanding it once per entrant; the credit arrays and `w` were
                 // allocated below this saved pointer and remain intact.
@@ -706,8 +725,11 @@ contract CrapsBattle is CrapsBattleStorage {
                 // CHECKED AFTER THE SEAT, because a run cannot be half-settled without storing a
                 // resumable engine state, and that state costs more than the overshoot. So one
                 // complete seat may cross the budget; the hard bound is what covers it.
-                if (result.cost >= budgetUnits) break;
-                budgetUnits -= result.cost;
+                uint256 cost = result.cost + (strict ? finalCharge : 0);
+                charged += cost;
+                if (strict) assert(cost <= reserve);
+                if (cost >= budgetUnits) break;
+                budgetUnits -= cost;
             }
 
             if (k != 0) {
@@ -734,19 +756,39 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      earning no bounty — on a window still taking bets, an armed field whose word has not
     ///      landed, a day the advance has not opened yet, and a settle it lacks budget for. All
     ///      four resolve themselves; polling them pays nobody.
-    /// @param budgetUnits The work allowance in walk units, exactly as `_resolveSlot` takes it.
-    ///        Zero still does the cheap lifecycle work — crossing spent slots and shutting a
-    ///        closed window — since the arm is the time-critical piece and costs no settlement.
+    /// @param budgetUnits Shared work allowance. Zero performs no lifecycle or settlement work.
     /// @return progressed Whether ANY state moved: the cursor, a sweep, an arm, or settled seats.
     ///         The keeper's bounty gate, so a poll can never be farmed.
     /// @return slot Where the cursor stands after the call.
     function keepScheduled(uint64 budgetUnits) external returns (bool progressed, uint64 slot) {
+        (progressed, slot,) = _keepScheduled(budgetUnits);
+    }
+
+    function keepScheduledBudgeted(uint64 budgetUnits)
+        external returns (bool progressed, uint64 slot, uint64 charged)
+    {
+        return _keepScheduled(budgetUnits);
+    }
+
+    function _keepScheduled(uint64 budgetUnits)
+        private returns (bool progressed, uint64 slot, uint64 charged)
+    {
         // Never zero: the constructor births the cursor at genesis + 1's separator.
         uint64 cur = _keeperSlot;
+        budgetUnits = _readWorkAllowance(budgetUnits);
+        if (budgetUnits < _KEEP_HOP_UNITS) return (false, cur, 0);
+        uint8 stage = _readCrapsStage();
+        uint48 read = _writeBuffer() ^ 1;
+        // Maintenance can create the first commitment without a published session.
+        // It cannot jump ahead of another live read consumer category.
+        if (stage != 5 && stage != 6
+            && !(stage == 0 && _rngPending[read] == 0 && _wordAt(read) == 0)) return (false, cur, 0);
         uint24 today = _currentDayIndex();
         (,, uint256 open) = _currentBonusSlot();
         unchecked {
             for (uint256 hops = 0; hops < _KEEP_MAX_HOPS; ++hops) {
+                if (budgetUnits - charged < _KEEP_HOP_UNITS) break;
+                charged += uint64(_KEEP_HOP_UNITS);
                 uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
                 if (cur % _BONUS_SLOTS_PER_DAY == 0) {
                     // THE SEPARATOR. An opened day is crossed into its windows; today and the
@@ -763,7 +805,10 @@ contract CrapsBattle is CrapsBattleStorage {
                     // a no-progress call as NoWork, and a revert would undo the very credits the
                     // sweep just committed. The day's own sweep cursor moving is that report;
                     // crossing the finished day moves the keeper cursor and reports itself.
-                    (bool doneAll, bool moved) = _sweepLapsedDay(cur, day, budgetUnits);
+                    if (budgetUnits - charged < _SWEEP_BASE_UNITS) break;
+                    charged += uint64(_SWEEP_BASE_UNITS);
+                    (bool doneAll, bool moved, uint64 used) = _sweepLapsedDay(cur, day, budgetUnits - charged);
+                    charged += used;
                     if (doneAll) cur += uint64(_BONUS_SLOTS_PER_DAY);
                     else if (moved) progressed = true;
                     break;
@@ -781,6 +826,8 @@ contract CrapsBattle is CrapsBattleStorage {
                     // The battle exists by construction: the cursor only enters a day's windows
                     // through a separator that proved the day opened, and an opened day writes
                     // all seven.
+                    if (budgetUnits - charged < _ARM_UNITS) break;
+                    charged += uint64(_ARM_UNITS);
                     _armSlot(cur, w);
                     progressed = true;
                     break;
@@ -793,10 +840,12 @@ contract CrapsBattle is CrapsBattleStorage {
                     ++cur;
                     continue;
                 }
-                if (_slotWord(cur) == 0) break;
-                if (budgetUnits == 0) break;
-                _resolveSlot(cur, budgetUnits);
-                progressed = true;
+                // Daily jackpot work retains its independent Game transaction.
+                // All other fields obey the same read-cohort FIFO as manual custom calls.
+                if (_isJackpotSlot(cur) || !_readCrapsFrontier(cur) || _slotWord(cur) == 0) break;
+                uint64 beforeCursor = _bonusCursor[cur];
+                charged += _resolveSlotWork(cur, budgetUnits - charged, true);
+                progressed = _bonusCursor[cur] != beforeCursor;
                 g = _battles[w.key];
                 if (((g >> _BG_RESOLVED_SHIFT) & _MASK32) == (g & _MASK32)) ++cur;
                 break;
@@ -826,7 +875,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///         day is not yet done.
     function _sweepLapsedDay(uint64 daySlot_, uint24 day, uint64 budgetUnits)
         private
-        returns (bool doneAll, bool moved)
+        returns (bool doneAll, bool moved, uint64 charged)
     {
         unchecked {
             // One walk over the separator and the day's six windows: the separator holds the day
@@ -846,6 +895,7 @@ contract CrapsBattle is CrapsBattleStorage {
                         break;
                     }
                     budgetUnits -= uint64(_SWEEP_SEAT_UNITS);
+                    charged += uint64(_SWEEP_SEAT_UNITS);
                     ++done;
                     moved = true;
                     uint256 header = _bets[(s << 64) | done];
@@ -861,7 +911,7 @@ contract CrapsBattle is CrapsBattleStorage {
                 if (left) break;
             }
             if (comps != 0) _creditComps(comps);
-            if (left) return (false, moved);
+            if (left) return (false, moved, charged);
             emit CrapsDayLapsed(day, uint32(_dayTickets[daySlot_]));
             doneAll = true;
         }

@@ -9,8 +9,7 @@ contract TicketRecyclingHarness is DegenerusGameStorage {
     function prepare(uint24 lvl) external returns (bool) { return _prepareTicketLevel(lvl); }
     function append(uint24 lvl, uint8 trait, address owner, uint256 n) external {
         require(_ticketBufferLevel(lvl) == lvl, "unprepared");
-        uint256 idx = lvlEntryOwner[lvl].length;
-        lvlEntryOwner[lvl].push(EntryOwner(owner, 0));
+        uint256 idx = uint256(_registerEntryOwner(owner, lvl) >> OWNER_IDX_SHIFT) - 1;
         _bucketAppendRun(_traitBufferBase(lvl), trait, idx, n, lvl);
     }
     function count(uint24 lvl, uint8 trait) external view returns (uint256) { return _bucketLength(lvl, trait); }

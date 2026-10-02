@@ -82,10 +82,10 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
             return;
         } else if (batch) {
             address[] memory players = new address[](1);
-            players[0] = BOB;
+            players[0] = ALICE;
             sdgnrs.claimRedemptionMany(players, burnDay);
         } else {
-            sdgnrs.claimRedemption(BOB, burnDay);
+            sdgnrs.claimRedemption(ALICE, burnDay);
         }
         _complete();
         assertFalse(sdgnrs.redemptionSettlementPending(), "no retained obligation");

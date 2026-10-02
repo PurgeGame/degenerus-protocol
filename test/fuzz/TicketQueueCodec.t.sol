@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 contract TicketQueueCodecHarness is DegenerusGameStorage {
-    function roots() external pure returns (uint256 q, uint256 locator, uint256 owners) {
-        assembly { q := ticketQueue.slot locator := entryOwnerPosition.slot owners := lvlEntryOwner.slot }
+    function roots() external pure returns (uint256 q, uint256 locator, uint256 owners, uint256 pending) {
+        assembly { q := ticketQueue.slot locator := ticketOwnerId.slot owners := ticketOwners.slot pending := ticketPending.slot }
     }
     function writeOwed(uint24 lvl, uint32 pos, uint80 packed) external { _setEntryOwed(lvl, pos, packed); }
     function record(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecord(lvl, pos); }
@@ -48,8 +48,10 @@ contract TicketQueueCodecHarness is DegenerusGameStorage {
     }
     function seedOwner(uint24 lvl, uint32 pos, address player) external {
         require(pos != 0);
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
+        ticketOwnerId[player] = pos;
+        address[] storage owners = ticketOwners;
         assembly ("memory-safe") {
+            if gt(pos, sload(owners.slot)) { sstore(owners.slot, pos) }
             mstore(0, owners.slot)
             sstore(add(keccak256(0, 32), sub(pos, 1)), player)
         }
@@ -78,8 +80,8 @@ contract TicketQueueCodecTest is Test {
     }
 
     function test_ReferenceModelRootsMatchCompilerLayout() public view {
-        (uint256 q, uint256 locator, uint256 owners) = h.roots();
-        assertEq(q, 12); assertEq(locator, 13); assertEq(owners, 67);
+        (uint256 q, uint256 locator, uint256 owners, uint256 pending) = h.roots();
+        assertEq(q, 12); assertEq(locator, 13); assertEq(owners, 67); assertEq(pending, 79);
     }
 
     function testFuzz_OwedRewritePreservesOwnerAndNeighbour(address player, uint80 owed, uint32 position) public {
@@ -89,7 +91,8 @@ contract TicketQueueCodecTest is Test {
         h.seedBucket(7, position);
         h.writeOwed(7, position, owed);
         assertEq(h.bucketOwner(7), player, "trait decoder must mask the mutable owed field");
-        assertEq(h.record(7, position), uint256(uint160(player)) | (uint256(owed) << 160));
+        uint80 expected = owed == 0 ? 0 : (uint80(position) << 48) | (owed & ((uint80(1) << 41) - 1));
+        assertEq(h.record(7, position), uint256(uint160(player)) | (uint256(expected) << 160));
         assertEq(h.record(7, position + 1), uint160(address(0xBEEF)));
         h.append(7, position);
         assertEq(h.owner(7, 7, 0), player);

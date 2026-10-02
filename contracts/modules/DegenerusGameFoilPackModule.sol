@@ -48,7 +48,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @dev All storage reads/writes operate on the inherited DegenerusGameStorage.
  *      The buy keys on the active ticket level (the cycle the pack bets into), so
  *      a pack and the draws it bets against share one cycle key. The claim never
- *      re-derives the winning set — it reads dailyFoilDraw[day], which the
+ *      re-derives the winning set — it reads the tagged dailyFoilDraw slot, which the
  *      jackpot sealed, so the foil numbers equal the jackpot's.
  */
 interface IFoilWwxrp {
@@ -76,50 +76,26 @@ contract DegenerusGameFoilPackModule is
         uint24 key = _tqFarFutureKey(targetLevel);
         uint256 lanes;
         uint256 count;
-        EntryOwner[] storage owners = lvlEntryOwner[targetLevel];
-        uint256 ownerCount = owners.length;
-        uint256 originalCount = ownerCount;
-        uint256 records;
-        assembly ("memory-safe") {
-            mstore(0, owners.slot)
-            records := keccak256(0, 32)
-        }
         uint256 total = deityPassOwners.length;
         for (uint256 i; i < total; ++i) {
             address owner = deityPassOwners[i];
             uint80 packed = _entriesOwed(key, owner);
             if (packed == 0) {
-                // Same full-registry policy as other advance-chain ticket awards.
-                if (ownerCount >= type(uint32).max - 1) continue;
-                uint32 pos;
-                // The capacity guard keeps the plus-one position within uint32.
-                unchecked { pos = uint32(ownerCount + 1); }
-                uint256 record = uint256(uint160(owner)) | (
-                    ((uint256(pos) << OWNER_IDX_SHIFT) | (uint256(DEITY_PERPETUAL_ENTRIES) << 8)) << 160
-                );
-                assembly ("memory-safe") { sstore(add(records, ownerCount), record) }
-                emit EntryOwnerRegistered(targetLevel, uint32(ownerCount), owner);
-                unchecked { ++ownerCount; }
-                entryOwnerPosition[key][owner] = pos;
-                lanes |= uint256(pos) << (count * 32);
-                // A group contains at most eight lanes; the previous count is below eight.
-                unchecked { ++count; }
-                if (count == 8) {
+                packed = _registerEntryOwner(owner, targetLevel);
+                if (packed == 0) continue;
+                lanes |= uint256(uint32(packed >> OWNER_IDX_SHIFT)) << (count * 32);
+                if (++count == 8) {
                     _tqAppendLanes(key, lanes, count);
                     lanes = 0;
                     count = 0;
                 }
-            } else {
-                uint256 owed = uint256(uint32(packed >> 8)) + DEITY_PERPETUAL_ENTRIES;
-                if (owed > type(uint32).max) owed = type(uint32).max;
-                _setEntryOwed(targetLevel, uint32(packed >> OWNER_IDX_SHIFT),
-                    (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
             }
+            uint256 owed = uint256(uint32(packed >> 8)) + DEITY_PERPETUAL_ENTRIES;
+            if (owed > type(uint32).max) owed = type(uint32).max;
+            _setEntryOwed(key, uint32(packed >> OWNER_IDX_SHIFT),
+                (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
         }
         if (count != 0) _tqAppendLanes(key, lanes, count);
-        if (ownerCount != originalCount) {
-            assembly ("memory-safe") { sstore(owners.slot, ownerCount) }
-        }
         if (total != 0) emit DeityPerpetualQueued(targetLevel, DEITY_PERPETUAL_ENTRIES);
     }
 
@@ -130,6 +106,8 @@ contract DegenerusGameFoilPackModule is
     // error E() — inherited from DegenerusGameStorage
     /// @notice Thrown when the buyer already holds a foil pack for this cycle level.
     error FoilAlreadyBought();
+    /// @notice The reusable slot still holds a pending pack or unexpired claim rights.
+    error FoilRecordBusy();
     /// @notice Thrown when the given (player, day, ticketIndex) tuple does not resolve to
     ///         a claimable foil match.
     error NoClaimableMatch();
@@ -207,13 +185,6 @@ contract DegenerusGameFoilPackModule is
     ///      it, never folded into the fixed per-pack charge, so the ~7.1 billion packs
     ///      that do not reach it pay nothing toward it.
     uint32 private constant GRAND_DRAIN_UNITS = 14;
-
-    /// @dev Domain tag for the golden-ticket claim's double-claim marker, which shares
-    ///      the foilMatchClaimed map with the per-draw match markers. Those fold four
-    ///      fields (player, level, day, ticketIndex) against this key's three, so the
-    ///      preimages differ in length as well as in this tag — the two claim families
-    ///      can never mint the same marker.
-    bytes32 private constant GOLDEN_TICKET_TAG = keccak256("foil-golden-ticket");
 
     /// @dev Per-settled-claim keeper bounty target (ETH-equivalent wei) for the
     ///      permissionless batch claimer, converted to FLIP at the reference price.
@@ -307,6 +278,7 @@ contract DegenerusGameFoilPackModule is
         // Purchases after a request enter the next cohort and require fresh entropy.
         uint24 lvl = _activeTicketLevel();
         if (_foilBoughtThisLevel(buyer, lvl)) revert FoilAlreadyBought();
+        if (!_foilRecordReusable(foilRecord[lvl & 3][buyer])) revert FoilRecordBusy();
 
 
         // Price: ten ticket prices for the level. The fresh ETH the purchase path carved
@@ -449,16 +421,15 @@ contract DegenerusGameFoilPackModule is
 
         // The normal ticket swap freezes this pack before the cohort's request.
         // Lines and eligibility are stamped later, when that cohort materializes.
-        foilRecord[lvl][buyer] =
+        foilRecord[lvl & 3][buyer] =
+            (uint256(lvl) << _FOIL_LEVEL_SHIFT) |
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
             (uint256(uint16(score)) << _FOIL_SCORE_SHIFT);
 
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        uint256 ownerIdx = owners.length;
-        owners.push(EntryOwner(buyer, 0));
-        emit EntryOwnerRegistered(lvl, uint32(ownerIdx), buyer);
+        uint80 ownerBits = _registerEntryOwner(buyer, lvl);
+        if (ownerBits == 0) revert E();
         foilQueue[_foilWriteKey()].push(
-            ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
+            (uint256(ownerBits >> OWNER_IDX_SHIFT) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
         );
 
         emit FoilPackBought(buyer, lvl, multBps, cost);
@@ -474,7 +445,8 @@ contract DegenerusGameFoilPackModule is
     ///      and the double-claim marker is set before any payout, so a tuple pays at
     ///      most once regardless of who triggers it. The eligible cycle level is read
     ///      from the day's sealed draw, not passed in. Reverts if the tuple is not a
-    ///      claimable win (the batch variant skips instead).
+    ///      claimable win (the batch variant skips instead). Matches expire after the
+    ///      draw day and following day; terminal settlement also closes this entrance.
     /// @param player Pack owner the win credits to.
     /// @param day The draw day to claim against.
     /// @param ticketIndex Which of the pack's four tickets to claim (0-3).
@@ -529,15 +501,14 @@ contract DegenerusGameFoilPackModule is
         );
         if (!present) revert NoGoldenTicket();
 
-        uint256 record = foilRecord[lvl][player];
-        if (record & _FOIL_READY == 0 || !_foilClaimOpen(uint24(record >> _FOIL_GENERATED_DAY_SHIFT))) {
+        uint256 record = _foilRecordWord(player, lvl);
+        if (record & _FOIL_READY == 0 || !_foilGoldClaimOpen(uint24(record >> _FOIL_GENERATED_DAY_SHIFT))) {
             revert NoGoldenTicket();
         }
 
         // Already settled — including by the drain, which burns this exact marker when
         // it pushes a pack's grand.
-        bytes32 mk = _goldenTicketKey(player, lvl);
-        if (foilMatchClaimed[mk]) revert NoGoldenTicket();
+        if (record & _FOIL_GOLD_CLAIMED != 0) revert NoGoldenTicket();
 
         (uint8 golds, uint8 allGold) = _packGold(
             _foilStoredLines(player, lvl)
@@ -553,14 +524,14 @@ contract DegenerusGameFoilPackModule is
         if (allGold >= 2) revert NoGoldenTicket();
 
         // Mark before any payout (CEI).
-        foilMatchClaimed[mk] = true;
+        foilRecord[lvl & 3][player] = record | _FOIL_GOLD_CLAIMED;
         _settleGoldenTicket(player, lvl, golds, allGold);
     }
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
     /// @dev Each claim runs as an external self-call wrapped in try/catch, so ANY single
     ///      claim revert — a non-claimable tuple (out of range, no draw, no record,
-    ///      look-back, already claimed, no match) OR a payout spin that reverts (e.g. an
+    ///      ineligible day, already claimed, no match) OR a payout spin that reverts (e.g. an
     ///      ETH tier too large for the frozen pool's pending buffer) — rolls back ONLY
     ///      that claim (its marker, whale pass, and spin together) and the sweep moves
     ///      on. One stale or unpayable tuple past the opener can never poison the batch.
@@ -641,30 +612,29 @@ contract DegenerusGameFoilPackModule is
         uint256 ticketIndex
     ) private returns (bool) {
         if (ticketIndex >= 4) return false;
-        // Bind `day` to the uint24 domain every lookup truncates to (dailyFoilDraw,
-        // rngWordByDay). Without this the double-claim marker — which folds the full
-        // uint256 `day` — would alias: day, day + 2^24, ... resolve to the SAME
-        // draw/level/line/tier but mint DISTINCT markers, re-paying the win.
-        if (day > type(uint24).max || !_foilClaimOpen(day)) return false;
+        // Expire before reading reusable slots or replacing any claim bitmap lane.
+        uint256 today = _simulatedDayIndex();
+        if (day == 0 || day > today || today - day > 1) return false;
 
-        // The day's sealed winning set and the cycle level active that day.
-        (bool drawPresent, uint32 winSet, uint24 L) = _foilDrawFor(day);
-        if (!drawPresent) return false;
+        // One retained record supplies the exact board, level and payout entropy.
+        // The full day tag rejects stale parity aliases.
+        uint256 draw = _foilDrawWord(day);
+        if (draw & _FOIL_DRAW_SEEDED == 0) return false;
+        uint32 winSet = uint32(draw);
+        uint24 L = uint24(draw >> 64);
 
         // The pack's first eligible draw and buy-time activity score (spin RTP).
         // Pending packs have no generated lines and cannot claim.
         (bool present, , uint24 resolveDay, uint16 activityScore) =
             _foilRecordFor(player, L);
-        if (!present || foilRecord[L][player] & _FOIL_READY == 0) return false;
+        if (!present || _foilRecordWord(player, L) & _FOIL_READY == 0) return false;
 
         // The first eligible draw is pinned when the cohort materializes.
         // A draw already sealed that day cannot be claimed retroactively.
         if (day < resolveDay) return false;
 
-        // Double-claim marker. The level binding keeps a player's wins at different
-        // cycles separable.
-        bytes32 mk = keccak256(abi.encode(player, uint256(L), day, ticketIndex));
-        if (foilMatchClaimed[mk]) return false;
+        // A sealed day has one level. Exact-day bitmap lanes separate all four tickets.
+        if (_foilMatchAlreadyClaimed(player, uint24(day), ticketIndex)) return false;
 
         uint32 sel = _foilStoredLines(player, L)[ticketIndex];
 
@@ -686,7 +656,7 @@ contract DegenerusGameFoilPackModule is
         if (score < 4) return false;
 
         // Mark before any payout (CEI).
-        foilMatchClaimed[mk] = true;
+        _markFoilMatchClaimed(player, uint24(day), ticketIndex);
 
         uint8 tier = uint8(score); // 4..8
         uint256 faces;
@@ -704,7 +674,7 @@ contract DegenerusGameFoilPackModule is
 
         emit FoilMatchClaimed(player, uint24(day), ticketIndex, tier, faces);
 
-        _payFoilTier(player, day, ticketIndex, L, sel, tier, faces, activityScore);
+        _payFoilTier(player, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT));
         return true;
     }
 
@@ -740,24 +710,17 @@ contract DegenerusGameFoilPackModule is
 
     /// @dev Pay one matched tier as a single Degenerette box-spin. The tier's
     ///      magnitude (faces) is the stake; the currency is rolled 40/40/20
-    ///      (ETH/FLIP/WWXRP) and the spin is seeded — both off the retained daily
-    ///      word. Spins use the buyer's activity score frozen at buy, and regenerate
+    ///      (ETH/FLIP/WWXRP) and the spin is seeded — both off the historical draw's
+    ///      packed payout seed. Spins use the buyer's activity score frozen at buy, and regenerate
     ///      all colors, so the foil's boosted gold mix does not tilt spin EV. FLIP stakes split into
     ///      thirds across three spins under one survival flip; ETH and WWXRP are single
     ///      spins. The T=8 tier (all four full doubles) also grants a half whale pass. All
     ///      effects run after the double-claim marker is set (CEI). The matched signature `sel` is the
     ///      source of one seed-selected hero symbol; the remaining ticket is generated.
     ///
-    ///      Snap valve: NO foil payout carries the exponent. The buy still pays 2^s
-    ///      (the price tracks the ticket path), so on a thanos level the pack is simply
-    ///      bad value — a deliberate ruling, not an oversight. Scaling the payout
-    ///      instead would mean reading an exponent at claim time, and the claim can
-    ///      land arbitrarily later than the buy: a declaration always targets
-    ///      `level + 6` or beyond, so once one commits a live `_snapShiftFor` hands
-    ///      every PAST level the new exponent, and a claim parked across the commit
-    ///      would pay 2^(new - old) times its face. Freezing the exponent into the
-    ///      record would close that, but the valve is an emergency lever nobody should
-    ///      be farming around, so the foil legs just do not scale.
+    ///      Snap valve: foil payouts never carry the exponent. The buy pays 2^s
+    ///      with the normal ticket price, but every award uses the unshifted face.
+    ///      Claims can follow purchases by many draws; no live snap read changes them.
     function _payFoilTier(
         address player,
         uint256 day,
@@ -766,27 +729,26 @@ contract DegenerusGameFoilPackModule is
         uint32 sel,
         uint8 tier,
         uint256 faces,
-        uint16 activityScore
+        uint16 activityScore,
+        uint256 entropy
     ) private {
         if (tier == 8) {
             whalePassClaims[player] += 1;
         }
 
-        // Two disjoint keccak lanes off the retained daily word: the currency split
-        // and the spin entropy. A sealed draw always retained a non-zero word; the
-        // guard fails closed if that invariant is ever violated.
-        uint256 rw = _recordedDailyWord(uint24(day));
-        if (rw == 0) revert Invariant();
+        // Currency and spin use disjoint lanes of the seed saved with this draw.
+        // Zero is a valid seed; the caller authenticated the record's presence flag.
         uint256 c = uint256(
-            keccak256(abi.encode(rw, day, ticketIndex, FOIL_CCY_TAG))
+            keccak256(abi.encode(entropy, day, ticketIndex, FOIL_CCY_TAG))
         ) % 100;
         uint256 seed = uint256(
-            keccak256(abi.encode(rw, day, ticketIndex, FOIL_SPIN_TAG))
+            keccak256(abi.encode(entropy, day, ticketIndex, FOIL_SPIN_TAG))
         );
 
         // activityScore is the buyer's score frozen at buy (passed in), not a live read:
-        // the spin RTP is fixed at buy, so neither the claim timing nor who triggers it
-        // can move the payout. Only a symbol carries into the award spin; all colors are rerolled,
+        // the spin RNG and activity-based RTP are fixed. Realized ETH/recirculation
+        // still depends on the live pool; an unclaimed match is not reserved ETH.
+        // Only a symbol carries into the award spin; all colors are rerolled,
         // so the foil's boosted color mix cannot change the spin EV.
 
         uint8 quadrant = uint8(seed) & 3;
@@ -887,6 +849,7 @@ contract DegenerusGameFoilPackModule is
         uint256 seated;
         uint256 cur;
         uint24 lvl;
+        uint24 rk;
         // Queue lanes are read-only during the call; adjacent seats share this cached word.
         uint256 queueBase;
         uint256 queueWordIndex;
@@ -1000,6 +963,7 @@ contract DegenerusGameFoilPackModule is
 
         RoundSeats memory st;
         st.lvl = lvl;
+        st.rk = rk;
         st.cur = idx;
         uint256 queueBase;
         assembly ("memory-safe") {
@@ -1038,7 +1002,7 @@ contract DegenerusGameFoilPackModule is
         // persists is the frontier.
         uint256 seated = st.seated;
         for (uint256 j; j < seated; ) {
-            _setEntryOwed(lvl, uint32(st.ownerIdx[j] + 1),
+            _setEntryOwed(st.rk, uint32(st.ownerIdx[j] + 1),
                 uint80((st.ownerIdx[j] + 1) << OWNER_IDX_SHIFT) |
                 (uint80(st.owed[j]) << 8) | uint80(st.rem[j]) | snapDone);
             word |= (uint256(st.queueIdx[j]) + 1) << (32 * j);
@@ -1097,7 +1061,7 @@ contract DegenerusGameFoilPackModule is
             st.queueWordIndex = wordIndex;
         }
         uint32 ownerPos = uint32(st.queueWord >> ((qi & 7) << 5));
-        uint256 record = _entryRecord(lvl, ownerPos);
+        uint256 record = _entryRecord(st.rk, ownerPos);
         address p = address(uint160(record));
         uint80 packed = uint80(record >> 160);
         if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
@@ -1109,7 +1073,7 @@ contract DegenerusGameFoilPackModule is
             bool skip;
             (packed, skip) = _resolveZeroOwedRemainder(
                 packed,
-                lvl,
+                st.rk,
                 ownerPos,
                 entropy,
                 (uint256(lvl) << 224) | (qi << 192) | (uint256(uint160(p)) << 32),
@@ -1126,7 +1090,8 @@ contract DegenerusGameFoilPackModule is
         st.queueIdx[j] = uint32(qi);
         st.owed[j] = owed;
         st.rem[j] = rem;
-        st.ownerIdx[j] = uint256(packed >> OWNER_IDX_SHIFT) - 1;
+        // _entryRecord authenticated ownerPos as a nonzero, in-range global ID.
+        unchecked { st.ownerIdx[j] = uint256(ownerPos) - 1; }
         used += SEAT_JOIN_UNITS;
         st.seated = j + 1;
         return used;
@@ -1229,7 +1194,7 @@ contract DegenerusGameFoilPackModule is
                     rem = 0;
                 }
                 if (owed == 0) {
-                    _setEntryOwed(lvl, uint32(st.ownerIdx[j] + 1), 0);
+                    _setEntryOwed(st.rk, uint32(st.ownerIdx[j] + 1), 0);
                     unchecked {
                         ++used;
                         ++j;
@@ -1267,59 +1232,6 @@ contract DegenerusGameFoilPackModule is
         uint256 p2 = offset + 2 < st.seated ? prefix | uint160(st.player[offset + 2]) : 0;
         uint256 p3 = offset + 3 < st.seated ? prefix | uint160(st.player[offset + 3]) : 0;
         emit EntryTraitsRevealed(p0, p1, p2, p3, uint144(uint128(traits)) | (uint144(uint16(mask)) << 128));
-    }
-
-    /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
-    /// @dev Read-only twin of sellFarFutureEntries: shares the exact valuation (curve + daily
-    ///      per-player jitter + ETH/FLIP split) the executing path uses, so the displayed offer
-    ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
-    ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
-    ///      counterparty's FLIP inventory. Reverts on an ineligible distance or a zero /
-    ///      non-whole-ticket quantity (entry counts in multiples of 4); does
-    ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no FLIP
-    ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
-    ///      value(flipTokens).
-    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
-    /// @return totalBudget Total ETH the buyer would pay (the -EV offer).
-    /// @return ticketWei Portion delivered as current-level tickets.
-    /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
-    /// @return flipTokens Cash portion delivered as FLIP (burned from the buyer, paid as flip credit).
-    function previewSellFarFutureEntries(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities
-    )
-        external
-        view
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 ethCashWei,
-            uint256 flipTokens
-        )
-    {
-        uint24 cl = _activeTicketLevel();
-        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
-        uint256 seed = _farFutureSeed(player);
-        uint256 cashWei;
-        (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
-            levels,
-            quantities,
-            cl,
-            oneTicketWei,
-            seed
-        );
-        // Display the split for the buyer the executing path would resolve; fall back to sDGNRS as the
-        // nominal counterparty when neither can fund (the preview still shows the -EV offer).
-        address buyer = _resolveSalvageBuyer(totalBudget);
-        if (buyer == address(0)) buyer = ContractAddresses.SDGNRS;
-        (ethCashWei, flipTokens) = _quoteFarFutureFlipSplit(
-            cashWei,
-            oneTicketWei,
-            seed,
-            buyer
-        );
     }
 
     /// @dev Payable delegate worker: records the presale leg in the reusable cohort.
@@ -1432,10 +1344,10 @@ contract DegenerusGameFoilPackModule is
             _foilMultFor(buyer, lvl)
         );
 
-        uint256 record = foilRecord[lvl][buyer];
+        uint256 record = _foilRecordWord(buyer, lvl);
         record |= uint256(foilFirstDrawDay) | (uint256(_simulatedDayIndex()) << _FOIL_GENERATED_DAY_SHIFT) | _FOIL_READY;
         for (uint256 i; i < 4; ++i) record |= uint256(lines[i]) << (_FOIL_LINES_SHIFT + i * 32);
-        foilRecord[lvl][buyer] = record;
+        foilRecord[lvl & 3][buyer] = record;
         units = 4; // record, cursor and stored lines
         // Tomorrow's word can land after a turbo transition retired this pack's
         // inventory. Claims still use its retained record and daily word; never
@@ -1459,7 +1371,9 @@ contract DegenerusGameFoilPackModule is
             // trait. Mirrors the mint module's batch writer; re-zeroes the shared scratch so
             // the next buyer starts clean.
             uint256 levelSlot = _traitBufferBase(lvl);
-            uint256 ownerIdx = (packedLvlBuyer >> 192) - 1;
+            // Every queue writer registers a checked nonzero stable ID.
+            uint256 ownerIdx;
+            unchecked { ownerIdx = (packedLvlBuyer >> 192) - 1; }
             for (uint16 u; u < touchedLen; ) {
                 uint8 traitId = touchedTraits[u];
                 uint32 occurrences = counts[traitId];
@@ -1604,7 +1518,7 @@ contract DegenerusGameFoilPackModule is
         // is exactly what two all-gold tickets are, so an unmarked pack would qualify
         // for 7.5M FLIP on top of a pool-sized grand. The marker closes that outright
         // rather than leaving it to the pull's re-derivation.
-        foilMatchClaimed[_goldenTicketKey(player, lvl)] = true;
+        foilRecord[lvl & 3][player] |= _FOIL_GOLD_CLAIMED;
         (bool ok, ) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameJackpotModule.payGoldenTicketGrand.selector,
@@ -1618,14 +1532,4 @@ contract DegenerusGameFoilPackModule is
         emit GoldenTicketFoil(player, lvl, golds, allGold, 0);
     }
 
-    /// @dev The pack's golden-ticket claim marker key. Shares the foilMatchClaimed map
-    ///      with the per-draw match markers: those fold four fields (player, level, day,
-    ///      ticketIndex) against this key's three, so the preimages differ in length as
-    ///      well as in the tag — the two claim families can never mint the same marker.
-    function _goldenTicketKey(
-        address player,
-        uint24 lvl
-    ) private pure returns (bytes32) {
-        return keccak256(abi.encode(player, uint256(lvl), GOLDEN_TICKET_TAG));
-    }
 }

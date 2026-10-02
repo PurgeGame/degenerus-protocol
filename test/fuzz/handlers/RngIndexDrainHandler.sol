@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
-import {TicketQueueStorage as RingStorage} from "../helpers/TicketQueueStorage.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -78,9 +77,14 @@ abstract contract RngIndexDrainOracle is Test {
         bytes32 slot = _bucketSlot(lvl, trait);
         uint256 len = _bucketLengthOf(subject, lvl, trait);
         if (occurrence >= len) return address(0);
-        uint256 lanes = uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(slot))) + occurrence / 8)));
+        // The final partial word lives in header bits32..255. Completed words
+        // remain in the payload, including the last word of an exact multiple of8.
+        uint256 lanes = occurrence / 8 == len / 8
+            ? uint256(vm.load(address(subject), slot)) >> 32
+            : uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(slot))) + occurrence / 8)));
         uint32 ownerIndex = uint32(lanes >> (32 * (occurrence % 8)));
-        bytes32 owners = keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), SLOT_OWNERS));
+        // Bucket lanes hold zero-based indices into the append-only global array.
+        bytes32 owners = bytes32(SLOT_OWNERS);
         if (ownerIndex >= uint256(vm.load(address(subject), owners))) return address(0);
         return address(uint160(uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(owners))) + ownerIndex)))));
     }

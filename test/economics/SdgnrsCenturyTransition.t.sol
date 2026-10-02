@@ -19,9 +19,8 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage {
             address who = address(0xF0200000 + i);
             uint80 packed = _registerEntryOwner(who, target);
             uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
-            entryOwnerPosition[key][who] = pos;
             _tqAppend(key, pos);
-            _setEntryOwed(target, pos, packed | (uint80(4) << 8));
+            _setEntryOwed(key, pos, packed | (uint80(4) << 8));
         }
     }
 

@@ -40,7 +40,7 @@
 # that RngWindowFreezeHandler references each. (dailyIdx — the non-VRF day cursor, slot 0
 # byte 3 — is a 4th enumerated slot in the handler but is read in hundreds of unrelated
 # places, so it is NOT tracked as a word variable here; the handler covers it directly.)
-# FROZEN_SET: rngWordCurrent rngWordByDay rngDayTags lootboxRngPacked _nudgeCount
+# FROZEN_SET: dailyFoilDraw rngWordCurrent rngWordByDay rngDayTags lootboxRngPacked _nudgeCount
 #
 # WINDOW ASYMMETRY (a reviewer note the CLASS judgements rest on): a DAILY request sets both
 # rngLockedFlag and prizePoolFrozen; a MID-DAY requestLootboxRng sets NEITHER — it relies on
@@ -121,9 +121,8 @@ CONSUMER-SEALED	_lootboxWord	_drainFrozenPool	modules/DegenerusGameMintModule.so
 CONSUMER-SEALED	_lootboxWord	_processFoilDrain	modules/DegenerusGameFoilPackModule.sol	READ	normal frozen read cohort generates and stores all foil lines once
 CONSUMER-SEALED	_lootboxWord	openHumanBoxes	modules/DegenerusGameLootboxModule.sol	READ
 CONSUMER-SEALED	_lootboxWord	processTicketBatch	modules/DegenerusGameMintModule.sol	READ
-CONSUMER-SEALED	_recordedDailyWord	_autoOpen	modules/GameAfkingModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
+CONSUMER-SEALED	_lootboxWord	_autoOpen	modules/GameAfkingModule.sol	READ	Active published word; stampDay <= dailyIdx excludes pre-seal stamps; pending AFKing count prevents reuse until final open.
 CONSUMER-SEALED	_recordedDailyWord	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
-CONSUMER-SEALED	_recordedDailyWord	_payFoilTier	modules/DegenerusGameFoilPackModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_recordedDailyWord	deityBoonData	DegenerusGame.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_recordedDailyWord	issueDeityBoon	modules/DegenerusGameBoonModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_recordedDailyWord	resolveProtocolBoonDraws	modules/DegenerusGameBoonModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
@@ -194,3 +193,7 @@ PRODUCER	rngWordCurrent	requestLootboxRng	modules/DegenerusGameAdvanceModule.sol
 PRODUCER	rngWordCurrent	requestTerminalRng	modules/DegenerusGameGameOverModule.sol	WRITE	ungated terminal worker; atomically preserves delivered preceding read before reserving the sole ending word
 PURE-DERIVE	_nudgeCount	_rawDailyRngWord	storage/DegenerusGameStorage.sol	READ	Daily-lock-frozen receipt lets gap derivation retain exact original entropy.
 PURE-DERIVE	_rawDailyRngWord	_rawDailyRngWord	storage/DegenerusGameStorage.sol	READ	Undo callback nudge/normalization only for raw replay and gap derivation.
+DECL	dailyFoilDraw	<file-scope>	storage/DegenerusGameStorage.sol	DECL	Two reusable parity slots store board/level/payout seed and exact day tag.
+ACCESSOR	dailyFoilDraw	_foilDrawWord	storage/DegenerusGameStorage.sol	READ	Authenticates the exact logical day in the parity slot; no wall-age gate so stalled advance consumers retain their board.
+EXEMPT-ADVANCE	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	READ	Same-day retries and stale writes against a newer stored day are idempotent no-ops.
+PRODUCER	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	WRITE	Seal the committed logical-day board/level/seed with its exact day tag; recycle only an older parity slot.

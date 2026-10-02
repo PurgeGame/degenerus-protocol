@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
-import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -419,20 +418,16 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     // =====================================================================
 
     function _packedFoilRecord(uint24 lvl, address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, keccak256(abi.encode(uint256(lvl), SLOT_FOIL_RECORD))))));
+        uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(who, keccak256(abi.encode(uint256(lvl & 3), SLOT_FOIL_RECORD))))));
+        return uint24(packed >> 208) == lvl ? packed : 0;
     }
 
-    /// foilRecord[lvl][buyer] — slot 58; [0-23] resolveDay, [24-39] multBps.
+    /// foilRecord[lvl & 3][buyer] — slot 58; [208-231] authenticates the level.
     function _foilRecord(
         uint24 lvl,
         address who
     ) internal view returns (uint24 resolveDay, uint16 multBps) {
-        bytes32 outer = keccak256(
-            abi.encode(uint256(lvl), SLOT_FOIL_RECORD)
-        );
-        uint256 packed = uint256(
-            vm.load(address(game), keccak256(abi.encode(who, outer)))
-        );
+        uint256 packed = _packedFoilRecord(lvl, who);
         resolveDay = uint24(packed);
         multBps = uint16(packed >> 24);
     }
@@ -494,9 +489,9 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         if (len == 0) return 0;
         uint256 base = uint256(keccak256(abi.encode(elem)));
         // Lanes are uint32 registry positions, eight per word; resolve through
-        // lvlEntryOwner[lvl] (slot 67).
+        // the permanent address registry (slot 67).
         uint256 owners = uint256(
-            keccak256(abi.encode(keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), uint256(67)))))
+            keccak256(abi.encode(uint256(67)))
         );
         for (uint256 i = 0; i < len; i++) {
             uint256 word = (i >> 3) == (len >> 3) ? header >> 32

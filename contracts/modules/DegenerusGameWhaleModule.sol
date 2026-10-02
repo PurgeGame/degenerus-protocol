@@ -1031,61 +1031,28 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(buyer, symbolId);
     }
 
-    /// @dev Batch both genesis owners for one level. Registry length and packed
-    ///      queue lanes commit once; each fresh owner/owed record is one word write.
+    /// @dev Credit both genesis wallets for one level, registering their permanent IDs
+    ///      only once. Packed queue lanes commit once; balances use independent lanes.
     ///      Existing purchases and partial queue tails are preserved.
     function _queueGenesisDeities(uint24 lvl, uint24 key) private {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        uint256 ownerCount = owners.length;
-        uint256 records;
-        assembly ("memory-safe") {
-            mstore(0, owners.slot)
-            records := keccak256(0, 32)
-        }
         uint256 lanes;
         uint256 count;
-        for (uint256 i; i < 2; ) {
+        for (uint256 i; i < 2; ++i) {
             address buyer = i == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
-            // The loop condition bounds i below two; the body uses only buyer afterward.
-            unchecked { ++i; }
             uint80 packed = _entriesOwed(key, buyer);
-            if (packed != 0) {
-                uint32 owed = uint32(packed >> 8) + DEITY_PERPETUAL_ENTRIES;
-                _setEntryOwed(lvl, uint32(packed >> OWNER_IDX_SHIFT),
-                    (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
-                continue;
+            if (packed == 0) {
+                packed = _registerEntryOwner(buyer, lvl);
+                if (packed == 0) revert E();
+                lanes |= uint256(uint32(packed >> OWNER_IDX_SHIFT)) << (count * 32);
+                ++count;
             }
-            if (ownerCount >= type(uint32).max - 1) revert E();
-            uint32 pos;
-            // The capacity guard bounds the owner counter below uint32.max - 1.
-            unchecked { pos = uint32(ownerCount + 1); }
-            // Canonical fixed buyer and capacity-bounded pos fit their existing fields.
-            assembly ("memory-safe") {
-                let owed := or(shl(OWNER_IDX_SHIFT, pos), shl(8, DEITY_PERPETUAL_ENTRIES))
-                sstore(add(records, ownerCount), or(buyer, shl(160, owed)))
-            }
-            emit EntryOwnerRegistered(lvl, uint32(ownerCount), buyer);
-            unchecked { ++ownerCount; }
-            // Each mapping value has its own word. Both fixed buyer addresses and
-            // the capacity-bounded uint32 position are canonical; no packed neighbour exists.
-            assembly ("memory-safe") {
-                mstore(0, key)
-                mstore(32, entryOwnerPosition.slot)
-                mstore(32, keccak256(0, 64))
-                mstore(0, buyer)
-                sstore(keccak256(0, 64), pos)
-            }
-            // count is at most one here, so the lane shift is zero or 32.
-            assembly ("memory-safe") { lanes := or(lanes, shl(shl(5, count), pos)) }
-            // At most the two genesis wallets contribute lanes.
-            unchecked { ++count; }
+            uint32 owed = uint32(packed >> 8) + DEITY_PERPETUAL_ENTRIES;
+            _setEntryOwed(key, uint32(packed >> OWNER_IDX_SHIFT),
+                (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
         }
         if (count != 0) {
-            assembly ("memory-safe") { sstore(owners.slot, ownerCount) }
-            // Initialization is restricted to level zero. All reachable targets
-            // are in 1..100, so these first-century roots cannot have been reused.
+            // Genesis is restricted to level zero; keys1..100 cannot have been reused.
             uint256[] storage q;
-            // key is canonical: the genesis loop supplies 1..100 plus queue flags.
             assembly ("memory-safe") {
                 mstore(0, key)
                 mstore(32, ticketQueue.slot)

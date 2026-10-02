@@ -69,6 +69,7 @@ contract DecimatorBattleTest is Test {
 
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         h = new DecimatorBattleHarness();
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
         h.open(LVL);
@@ -160,7 +161,7 @@ contract DecimatorBattleTest is Test {
         vm.expectRevert();
         h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, 0);
         assertEq(h.seal(LVL, 1 ether, 456), 1 ether);
-        assertEq(h.roundOf(LVL).rngWord, 123);
+        assertEq(h.activeWord(), 123);
         assertEq(h.reserved(), 1 ether);
     }
 
@@ -172,11 +173,11 @@ contract DecimatorBattleTest is Test {
 
     function test_SingleHeadsGetsEverythingAndNoDoublePay() public {
         _burn(h, address(1), LVL, 1000 ether, 10_000);
-        uint256 word;
+        uint256 word = 2;
         while (!_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 13 ether + 17, word);
         h.freeze(true);
-        _drain(h, 21);
+        _drain(h, 122);
         // The champion: half in whole half passes (6.5 ETH buys two), the rest ETH.
         assertEq(h.passesOf(address(1)), 2);
         assertEq(h.balanceOf(address(1)), 13 ether + 17 - 2 * 2.25 ether);
@@ -187,30 +188,34 @@ contract DecimatorBattleTest is Test {
         assertFalse(moved);
     }
 
-    function test_AllTailsReturnsReserveToFrozenFuture() public {
+    function test_DailyLockDefersAllTailsReserveRelease() public {
         _burn(h, address(1), LVL, 1000 ether, 10_000);
-        uint256 word;
+        uint256 word = 2;
         while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 7 ether, word);
         h.freeze(true);
+        (uint256 work, uint256 charged, bool moved) = h.settleDecimatorWinners(1500);
+        assertEq(work, 0); assertEq(charged, 0); assertFalse(moved);
+        assertEq(h.reserved(), 7 ether, "locked stage retains the reservation");
+        h.freeze(false);
         _drain(h, 1500);
         assertEq(h.balanceOf(address(1)), 0);
         assertEq(h.roundOf(LVL).winners, 0);
         assertEq(h.reserved(), 0);
-        assertEq(h.pendingFuture(), 7 ether);
-        assertEq(h.future(), 0);
+        assertEq(h.pendingFuture(), 0);
+        assertEq(h.future(), 7 ether);
     }
 
     /// @dev A tails run never reaches the engine: an engine that always reverts cannot stop it.
     function test_TailsSkipsTheEngine() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, hex"fe");
         _burn(h, address(1), LVL, 1000 ether, 10_000);
-        uint256 word;
+        uint256 word = 2;
         while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 5 ether, word);
         (uint256 worked, uint256 units,) = h.settleDecimatorWinners(1500);
         assertEq(worked, 1);
-        assertEq(units, 10, "call base plus the flat tails charge");
+        assertEq(units, 15, "call base plus the flat tails charge");
         _drain(h, 1500);
         assertEq(h.roundOf(LVL).winners, 0);
         assertEq(h.future(), 5 ether, "all-tails pool returns to future");
@@ -220,7 +225,7 @@ contract DecimatorBattleTest is Test {
     function test_SettlementIdlesAfterGameOver() public {
         _probe();
         _populate(h, LVL, 4);
-        h.seal(LVL, 3 ether, 1);
+        h.seal(LVL, 3 ether, 11);
         h.terminal();
         (uint256 worked, uint256 units, bool moved) = h.settleDecimatorWinners(1500);
         assertEq(worked, 0);
@@ -231,18 +236,22 @@ contract DecimatorBattleTest is Test {
         assertEq(h.reserved(), 3 ether);
     }
 
-    function test_MultipleRoundsQueuedAndHistoricalEntriesRemain() public {
+    function test_RoundsCannotOverlapAndHistoricalEntriesRemain() public {
         _probe();
         _populate(h, LVL, 4);
-        h.seal(LVL, 3 ether, 1);
+        h.seal(LVL, 3 ether, 11);
         h.open(15);
         _populate(h, 15, 3);
-        h.seal(15, 4 ether, 2);
+        vm.expectRevert();
+        h.seal(15, 4 ether, 22);
         assertEq(uint24(h.queue()), LVL);
-        assertEq(uint24(h.queue() >> 24), 15);
-        assertEq(h.roundOf(LVL).next, 15);
-        _drain(h, 21);
+        assertEq(uint24(h.queue() >> 24), LVL);
+        assertEq(h.roundOf(LVL).next, 0);
+        assertEq(h.activeWord(), 11);
+        _drain(h, 122);
         assertEq(h.roundOf(LVL).phase, 3);
+        h.seal(15, 4 ether, 22);
+        _drain(h, 122);
         assertEq(h.roundOf(15).phase, 3);
         assertEq(h.entryOf(LVL, 1).stack, 2000 ether);
         assertEq(h.entryOf(15, 1).stack, 2000 ether);
@@ -256,7 +265,7 @@ contract DecimatorBattleTest is Test {
         uint256 word = type(uint256).max - 77;
         h.seal(LVL, 13 ether + 77, word);
         other.seal(LVL, 13 ether + 77, word);
-        _drain(h, 21);
+        _drain(h, 122);
         _drain(other, type(uint256).max);
         assertEq(abi.encode(h.roundOf(LVL)), abi.encode(other.roundOf(LVL)));
         for (uint8 i; i < h.roundOf(LVL).winners; ++i) {
@@ -337,7 +346,7 @@ contract DecimatorBattleTest is Test {
 
     function test_TailsChampionNeverOccupiesPlace() public {
         _probe();
-        uint256 word;
+        uint256 word = 2;
         while (_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
         _burn(h, address(1), LVL, type(uint160).max, 10_000);
         _burn(h, address(2), LVL, 1000 ether, 10_000);
@@ -375,7 +384,7 @@ contract DecimatorBattleTest is Test {
     /// @dev A chosen board reaches the engine with the scatter count and boost row for its size.
     function test_ChosenBoardDrivesTheRun() public {
         _probe();
-        uint256 word;
+        uint256 word = 2;
         while (!_heads(word, LVL, 1)) ++word;
         vm.prank(ContractAddresses.COIN);
         h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, 2 | 3 << 12 | 1 << 21);
@@ -395,7 +404,7 @@ contract DecimatorBattleTest is Test {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorFlatProbe).runtimeCode);
         DecimatorBattleHarness other = new DecimatorBattleHarness();
         other.open(LVL);
-        uint256 word;
+        uint256 word = 2;
         while (!_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
         for (uint160 i = 1; i <= 35; ++i) {
             uint256 amount = i <= 2 ? 2000 ether : 1000 ether;
@@ -404,7 +413,7 @@ contract DecimatorBattleTest is Test {
         }
         h.seal(LVL, 4 ether, word);
         other.seal(LVL, 4 ether, word);
-        _drain(h, 21);
+        _drain(h, 122);
         _drain(other, type(uint256).max);
         assertEq(h.roundOf(LVL).capacity, 4);
         assertEq(h.roundOf(LVL).winners, 4);
@@ -589,7 +598,7 @@ contract DecimatorBattleTest is Test {
     ///      tiebreak, and settlement completes.
     function test_ScoreSaturatesInsteadOfWrapping() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorHugePeakProbe).runtimeCode);
-        uint256 word;
+        uint256 word = 2;
         while (!_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
         _burn(h, address(1), LVL, type(uint160).max, 10_000);
         _burn(h, address(2), LVL, 1000 ether, 10_000);
@@ -604,6 +613,7 @@ contract DecimatorBattleTest is Test {
 
     function testFuzz_WinnerQuotaAndConservation(uint8 population, uint256 word, uint96 pool) public {
         _probe();
+        word = bound(word, 2, type(uint256).max);
         uint64 n = uint64(bound(population, 1, 35));
         _populate(h, LVL, n);
         h.seal(LVL, pool, word);

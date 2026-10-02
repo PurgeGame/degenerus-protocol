@@ -3,13 +3,13 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {LegacyTicketOwnerReference} from "../helpers/LegacyTicketOwnerReference.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-contract QueueWordCacheHarness is DegenerusGameStorage {
+contract QueueWordCacheHarness is LegacyTicketOwnerReference {
     function seed(uint24 key, uint24 lvl, uint256 n, uint32 ownerStart, uint256 entropy, uint8 shape) external {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
+        address[] storage owners = ticketOwners;
         assembly ("memory-safe") { sstore(owners.slot, ownerStart) }
         for (uint256 i; i < n; ++i) {
             uint80 bits = _registerEntryOwner(address(uint160(0x123400 + i)), lvl);
@@ -20,7 +20,7 @@ contract QueueWordCacheHarness is DegenerusGameStorage {
             uint8 rem = shape == 1 ? 0 : uint8((random >> 32) % 100);
             uint80 packed = bits | (uint80(owed) << 8) | uint80(rem);
             if (shape == 0 && i % 7 == 0) packed = 0;
-            _setEntryOwed(lvl, pos, packed);
+            _setEntryOwed(key, pos, packed);
         }
     }
 
@@ -44,6 +44,8 @@ contract QueueWordCacheTest is Test {
 
     struct Observation {
         bytes32 writes;
+        bytes32 logical;
+        bytes32 buckets;
         bytes32 logs;
         uint256 nextIdx;
         uint32 used;
@@ -54,7 +56,7 @@ contract QueueWordCacheTest is Test {
     function setUp() public {
         h = new QueueWordCacheHarness();
         referenceCode = vm.parseBytes(vm.readFile("contracts/mocks/QueueWordCacheReference.hex"));
-        assertEq(keccak256(referenceCode), 0x5a6a7e70f0c61accb0ac17b9d3698408b2a40be2dc2d09f7c7e197c25c6fd76f, "pinned uncached reference runtime");
+        assertEq(keccak256(referenceCode), 0xae005d10018c1f8f35445f87a0e686eb8724c226224ff6ecc0122392526863bd, "pinned uncached reference runtime");
         candidateCode = address(new DegenerusGameFoilPackModule()).code;
     }
 
@@ -89,13 +91,19 @@ contract QueueWordCacheTest is Test {
         uint256 snapshot = vm.snapshotState();
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, referenceCode);
         beforeObs = _observe(key, lvl, room, idx, n, entropy, shift);
+        beforeObs.logical = h.logicalDrainState(key, lvl, false);
+        beforeObs.buckets = h.logicalBuckets(lvl, false);
         assertTrue(vm.revertToStateAndDelete(snapshot));
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, candidateCode);
         afterObs = _observe(key, lvl, room, idx, n, entropy, shift);
+        afterObs.logical = h.logicalDrainState(key, lvl, false);
+        afterObs.buckets = h.logicalBuckets(lvl, false);
         assertEq(afterObs.nextIdx, beforeObs.nextIdx, "same frontier");
         assertEq(afterObs.used, beforeObs.used, "same deterministic work charge");
         assertEq(afterObs.logs, beforeObs.logs, "identical event bytes and order");
         assertEq(afterObs.writes, beforeObs.writes, "identical storage writes and order");
+        assertEq(afterObs.logical, beforeObs.logical, "identical pending quantities, seats and round");
+        assertEq(afterObs.buckets, beforeObs.buckets, "identical ordered trait inventories");
         assertEq(afterObs.distinctWords, beforeObs.distinctWords, "same queue words visited");
         assertEq(afterObs.queueReads, afterObs.distinctWords, "each queue word loaded exactly once per call");
     }

@@ -340,11 +340,11 @@ contract GoldenTicketArmResolve is Test {
     // -- resolve gating -------------------------------------------------------
 
     function testNoResolveOnSameIdx() public {
-        (address winner, , , ) = armDay([1, 2, 3, 4]);
+        (address winner, , , uint256 word) = armDay([1, 2, 3, 4]);
         uint256 gBefore = h.goldenTicketRaw();
         // Same frozen idx (a re-run of the arm draw's index) must not resolve.
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, allGoldWord([1, 2, 3, 4], 0xBEEF));
+        h.payDailyJackpot(true, LVL, word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
             "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
@@ -358,6 +358,17 @@ contract GoldenTicketArmResolve is Test {
         assertEq((gAfter >> 189) & 1, 1, "still armed");
         assertEq((gAfter >> 165) & 0xFFFFFF, (gBefore >> 165) & 0xFFFFFF, "armedIdx unchanged");
         assertTrue(winner != address(0));
+    }
+
+    function testSealedFoilDrawIgnoresDifferentRngWordWithoutRevert() public {
+        armDay([1, 2, 3, 4]);
+        bytes32 slot = keccak256(abi.encode(uint256((ARM_IDX + 1) & 1), uint256(60)));
+        bytes32 sealedDraw = vm.load(address(h), slot);
+        vm.recordLogs();
+        h.payDailyJackpot(true, LVL, allGoldWord([1, 2, 3, 4], 0xBEEF));
+        assertEq(vm.load(address(h), slot), sealedDraw, "first sealed board/level/seed stays intact");
+        (, bool replacementEmitted) = officialDay(vm.getRecordedLogs());
+        assertFalse(replacementEmitted, "no replacement board event");
     }
 
     function testResolveAfterIdxGap() public {
@@ -640,6 +651,7 @@ contract GoldenTicketArmResolve is Test {
     function testDailyWinningTraitsCarriesOneBoardMatchingTheFoilRecord() public {
         uint256 word = wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D);
         seedBoardBuckets(word, 0x1000);
+        vm.warp(vm.getBlockTimestamp() + 40 days); // wall day diverges from the committed logical draw
         vm.recordLogs();
         h.payDailyJackpot(true, LVL, word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -660,5 +672,10 @@ contract GoldenTicketArmResolve is Test {
         (bool present, uint32 recordedMain, ) = h.foilDrawFor(day);
         assertTrue(present, "the day's foil record was written");
         assertEq(mainPacked, recordedMain, "the event's board equals the one recorded for foil claims");
+        uint256 draw = uint256(vm.load(address(h), keccak256(abi.encode(uint256(day & 1), uint256(60)))));
+        assertEq(uint128(draw >> 88), uint128(uint256(keccak256(abi.encode(word, day, keccak256("foil-payout-seed"))))), "seed binds logical day");
+        assertTrue(draw & (uint256(1) << 216) != 0);
+        assertEq(uint24(draw >> 217), day, "draw ring authenticates the logical day");
+
     }
 }

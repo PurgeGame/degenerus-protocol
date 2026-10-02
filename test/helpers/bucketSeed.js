@@ -1,19 +1,15 @@
 // Test-side seeding and decoding of the packed trait buckets via hardhat_setStorageAt.
 //
 // Trait headers hold a uint32 count and seven uint32 tail lanes. Full data words have eight lanes.
-// The full buffer level and per-parity bitmap gate validity; registries remain per actual level.
+// The full buffer level and per-parity bitmap gate validity; owners resolve through one permanent global registry.
 import hre from "hardhat";
 
 const TRAIT_SLOT = 8n;
 const OWNER_SLOT = 67n;
+const queueStorageKey = (key) => { const lvl = BigInt(key) & 0x3fffffn; return (BigInt(key) & 0xc00000n) | (lvl === 0n ? 0n : (lvl - 1n) % 100n + 1n); };
+const ownerStorageKey = (lvl) => BigInt(lvl);
 const LANE_MASK = 0xffffffffn;
 const TRAIT_BITMAP_SLOT = 76n;
-const QUEUE_LEVEL_SLOT = 78n;
-const queueStorageKey = (key) => {
-  const lvl = BigInt(key) & 0x3fffffn;
-  return (BigInt(key) & 0xc00000n) | (lvl === 0n ? 0n : (lvl - 1n) % 100n + 1n);
-};
-const ownerStorageKey = (lvl) => BigInt(lvl);
 
 const pad32 = (v) => hre.ethers.toBeHex(BigInt(v), 32);
 
@@ -30,7 +26,7 @@ function bucketLengthSlot(lvl, trait, traitSlot = TRAIT_SLOT) {
 }
 
 function ownerLengthSlot(lvl, ownerSlot = OWNER_SLOT) {
-  return mapSlot(ownerStorageKey(lvl), ownerSlot);
+  return BigInt(ownerSlot);
 }
 
 function dataBase(lengthSlot) {
@@ -47,22 +43,15 @@ async function getStorage(addr, slot) {
 
 /**
  * Replace lvlTraitEntry[lvl][trait] with one occurrence per holder, in order. Holders are
- * appended to lvlEntryOwner[lvl]; the bucket's lanes name those positions.
+ * registered globally; the bucket's lanes name their immutable zero-based positions.
  */
 async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
   const traitSlot = opts.traitSlot ?? TRAIT_SLOT;
   const ownerSlot = opts.ownerSlot ?? OWNER_SLOT;
 
   const ownersLen = ownerLengthSlot(lvl, ownerSlot);
-  let ownerCount = await getStorage(addr, ownersLen);
-  const ownersData = dataBase(ownersLen);
   const lanes = [];
-  for (const h of holders) {
-    await setStorage(addr, ownersData + ownerCount, BigInt(h) & ((1n << 160n) - 1n));
-    lanes.push(ownerCount);
-    ownerCount += 1n;
-  }
-  await setStorage(addr, ownersLen, ownerCount);
+  for (const h of holders) lanes.push((await registerOwner(addr, h, ownerSlot)) - 1n);
 
   const stampShift = 112n + (BigInt(lvl) & 1n) * 24n;
   const stamps = await getStorage(addr, 5n);
@@ -86,21 +75,28 @@ async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
   }
 }
 
-/** Replace a queue with ownerIdx+1 lanes; key flags are removed only for registry lookup. */
-async function seedTicketQueue(addr, key, holders) {
-  const lvl = BigInt(key) & ((1n << 22n) - 1n);
-  const ownersLen = ownerLengthSlot(lvl);
-  let ownerCount = await getStorage(addr, ownersLen);
-  const ownersData = dataBase(ownersLen);
-  const lanes = [];
-  for (const holder of holders) {
-    await setStorage(addr, ownersData + ownerCount, BigInt(holder));
-    ownerCount += 1n;
-    lanes.push(ownerCount);
+async function registerOwner(addr, holder, ownerSlot = OWNER_SLOT) {
+  const locator = mapSlot(BigInt(holder), 13n);
+  let id = (await getStorage(addr, locator)) & LANE_MASK;
+  if (id === 0n) {
+    const count = await getStorage(addr, ownerSlot);
+    id = count + 1n;
+    if (id > LANE_MASK) throw new Error('stable owner namespace exhausted');
+    await setStorage(addr, dataBase(ownerSlot) + count, BigInt(holder));
+    await setStorage(addr, ownerSlot, id);
+    await setStorage(addr, locator, id);
   }
-  await setStorage(addr, ownersLen, ownerCount);
-  const lengthSlot = mapSlot(queueStorageKey(key), 12n);
-  await setStorage(addr, mapSlot(queueStorageKey(key), QUEUE_LEVEL_SLOT), lvl);
+  return id;
+}
+
+/** Replace a queue with stable nonzero uint32 wallet IDs. */
+async function seedTicketQueue(addr, key, holders) {
+  const lanes = [];
+  for (const holder of holders) lanes.push(await registerOwner(addr, holder));
+  const level = BigInt(key) & ((1n << 22n) - 1n);
+  const physical = queueStorageKey(key);
+  const lengthSlot = mapSlot(physical, 12n);
+  await setStorage(addr, mapSlot(physical, 78n), level);
   await setStorage(addr, lengthSlot, BigInt(holders.length));
   const base = dataBase(lengthSlot);
   for (let w = 0; w * 8 < lanes.length; ++w) {
@@ -112,23 +108,25 @@ async function seedTicketQueue(addr, key, holders) {
   }
 }
 
-/** Resolve a player's queue-key locator, then read the owed field at registry bit 160. */
+/** Resolve the persistent pending word for a wallet's stable ID and logical level. */
 async function entryOwnerRecordSlot(addr, key, player) {
-  const outer = mapSlot(key, 13n);
-  const locator = BigInt(hre.ethers.keccak256(
-    hre.ethers.AbiCoder.defaultAbiCoder().encode(["address", "uint256"], [player, outer])
-  ));
-  const position = (await getStorage(addr, locator)) & LANE_MASK;
-  if (position === 0n) return null;
+  const id = (await getStorage(addr, mapSlot(BigInt(player), 13n))) & LANE_MASK;
+  if (id === 0n) return null;
   const lvl = BigInt(key) & ((1n << 22n) - 1n);
-  return pad32(dataBase(ownerLengthSlot(lvl)) + position - 1n);
+  return pad32(mapSlot(id, mapSlot(lvl ? ((lvl - 1n) % 128n) + 1n : 0n, 79n)));
 }
 
 async function readEntriesOwed(addr, key, player) {
   const slot = await entryOwnerRecordSlot(addr, key, player);
   if (slot === null) return 0n;
-  const record = await getStorage(addr, slot);
-  return (record >> 160n) & ((1n << 80n) - 1n);
+  const shift = BigInt(key) & (1n << 22n) ? 84n : BigInt(key) & (1n << 23n) ? 42n : 0n;
+  const word = await getStorage(addr, slot);
+  const level = BigInt(key) & ((1n << 22n) - 1n);
+  if (((word >> (126n + (shift / 42n) * 24n)) & 0xffffffn) !== level) return 0n;
+  const lane = (word >> shift) & ((1n << 42n) - 1n);
+  if (!(lane & (1n << 41n))) return 0n;
+  const id = (await getStorage(addr, mapSlot(BigInt(player), 13n))) & LANE_MASK;
+  return (id << 48n) | (lane & ((1n << 41n) - 1n));
 }
 
 /** Decode the bucket back to holder addresses through the registry. */

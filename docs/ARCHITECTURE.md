@@ -136,7 +136,8 @@ neither changes the game phase by itself.
 
 `rngComplete` is cached in slot 0 bit 248. A fresh normal request clears it;
 consumer completion and the daily seal set it only after committed tickets, the
-midday latch, the combined box/bet cursor and read-bound Craps all finish. Requests
+midday latch, sDGNRS redemption settlement, AFKing boxes, the combined human box/bet
+cursor, Decimator rounds and read-bound Craps all finish. Requests
 read this flag; unanswered retries preserve the same session and buffer tags.
 
 There is one reusable `rngWordCurrent` and two physical queue tags, 0 and 1.
@@ -144,8 +145,10 @@ Slot 0 bit 252 selects write; read is its opposite. A normal fresh request swaps
 only after read completion and resets the released queue headers in constant work.
 The uint48 lootbox fields in events and APIs carry these physical tags, without a
 monotonic counter. History must pair commitments and results with their publication
-interval using block number and log index. Ordinary stamped AFKING boxes and foil
-packs continue using retained daily words.
+interval using block number and log index. AFKing boxes, ticket/foil generation
+and Decimator settlement use the active session word. Pre-request AFKing stamps
+cannot open until their daily seal; every pending stamp blocks subsequent requests.
+Timed player claims retain their own required results independently.
 
 The VRF callback authenticates the active request, adds the frozen daily nudge
 count (0..256, stored in slot 0), and writes only the final word. Midday requests
@@ -250,8 +253,9 @@ none. This changes century candidate exposure, not the scatter pool or its 50/30
 first/second split. Empty rounds still refund their allocation, so realized payouts
 depend on populated candidates and their BAF scores.
 
-The level owner registry is append-only. Trait buckets pack eight uint32 owner indices
-per completed storage word in two parity buffers. The unfinished zero to seven
+The global wallet registry is append-only: each wallet gets one permanent, one-based
+uint32 ID. IDs are never reassigned. Queue words pack eight IDs; trait buckets pack
+eight zero-based global owner indices per completed storage word in two parity buffers. The unfinished zero to seven
 lanes live in the header above its uint32 count. Each buffer retains its full
 level stamp; a per-buffer bitmap validates buckets at that actual level; takeover invalidates old counts without clearing payload words. The
 individual drain aggregates trait occurrences before writing runs; the round drain
@@ -260,12 +264,23 @@ on completed inventory until that buffer is actually reassigned to L+2, so its
 deadline depends on game progress. Unfinished normal paid ticket work and revealed
 foil drainage defer takeover. A foil pack whose next-day entropy lands after its
 level retired is consumed without writing traits into the newer buffer; its record
-and daily entropy still support match/gold claims. Its old-level Bingo eligibility
+and tagged draw still support unexpired match/gold claims. Its old-level Bingo eligibility
 has expired at the same retirement boundary.
 
-`EntryOwnerRegistered` maps level/index to owner; both `lvl` and `owner` are indexed, so a
-wallet's registry positions at a level are one log filter. Storage bucket owner indices
-are zero-based; generated inventory is separate from the queue's remaining owed balance.
+`EntryOwnerRegistered` still identifies the level and zero-based owner index when a wallet
+joins a queue; a wallet uses the same global index across levels. The Lens exposes
+`walletIdOf` and `walletOfId` for direct identity lookup. Pending balances are separate:
+one reusable word per wallet ID and physical level slot packs three queue-domain lanes,
+with independent absolute-level tags and a nonzero sentinel after consumption. The queue
+uses 100 physical roots per domain; pending balances use 128 so L and L+100 cannot alias.
+
+IDs through 3,000,000,000 retain lazy registration at the ordinary ticket minimum.
+An ordinary ticket purchase allocating a higher ID must contain at least 0.01 ETH
+of nominal ticket value before bonus entries. Existing IDs keep the ordinary minimum;
+passes and ticket-producing prizes can allocate freely. The rule applies equally to
+ETH-equivalent ticket value funded by ETH, claimable balance, prepaid AFKING or FLIP.
+There is no separate registration fee, and box spend or overpayment does not qualify a
+smaller ticket leg.
 
 `EntryTraitsRevealed` replaces `RoundTraitsGenerated`. Each anonymous log has four indexed
 player keys, `(uint256(level) << 160) | uint160(player)`, and one `uint144` data word:
@@ -355,8 +370,18 @@ the conversion conditions, the ordinary ticket payout remains intact.
 
 Protocol deity grants occur after the deployment sequence. Their perpetual entries
 and protocol boon cohorts have their own pre-request scheduling and closure rules.
-Foil packs resolve tomorrow's committed draw, then compare their four lines against each
-day's board once a day, purchase and jackpot days alike, at the same face table. A VRF stall skips missed days on
+Foil packs generate from their next committed cohort, then compare their four lines
+against each eligible day's board, purchase and jackpot days alike, at the same face
+table. Two tagged draw slots retain each board, level and payout seed. Match claims
+expire after the logical draw day and following day, even if a stalled draw first
+arrives later. Golden-ticket claims expire after the generation day and following day.
+Each player has four tagged reusable pack records, including the four lines and
+gold-paid flag, plus one word of reusable daily match bitmaps. A purchase may reuse
+a slot only after the old pack has generated and its level, gold window and both
+live match days no longer need it; a collision rejects the new purchase without
+blocking advancement. Historical records are reconstructed from events.
+Match randomness is fixed, but ETH caps, sDGNRS rewards, and recirculation use live
+payout state; old wins are not reserved ETH obligations. A VRF stall skips missed days on
 recovery and freezes auto-rebuy arming; a request unanswered for 14 days ends the game
 deterministically. The NatSpec of `_livenessTriggered`,
 `_vrfDead` and `_handleGameOverPath` states the implemented behavior.

@@ -91,8 +91,6 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     /// @dev ticketQueue (mapping(uint24 => uint256[])) — slot 12.
     uint256 private constant SLOT_TICKET_QUEUE = 12;
 
-    /// @dev entriesOwedPacked (mapping(uint24 => mapping(address => uint40))) — slot 13.
-    uint256 private constant SLOT_TICKETS_OWED_PACKED = 13;
 
     /// @dev packed slot 14: ticketCursor (uint32) offset 0; ticketLevel (uint24) offset 4.
     uint256 private constant SLOT_TICKET_CURSOR_LEVEL = 14;
@@ -105,9 +103,8 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ///      with lrIndex default-initialized to 1, so the consumed slot is index 0.
     uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;
 
-    /// @dev lvlEntryOwner (mapping(uint24 => address[])) — slot 67, the owner registry the
-    ///      packed lvlTraitEntry lanes index into.
-    uint256 private constant SLOT_LVL_ENTRY_OWNER = 67;
+    /// @dev Permanent ticketOwners array — slot 67; bucket lanes hold zero-based global IDs.
+    uint256 private constant SLOT_TICKET_OWNERS = 67;
 
     /// @dev TICKET_SLOT_BIT mirror from DegenerusGameStorage.sol:182. With
     ///      ticketWriteSlot=false (default), _tqReadKey(lvl) returns lvl | TICKET_SLOT_BIT.
@@ -178,12 +175,6 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         return keccak256(abi.encode(_slotTicketQueueLen(rk)));
     }
 
-    /// @dev Compute the storage slot of `_entriesOwed(rk, player)` (the uint40 packed slot).
-    function _slotOwed(uint24 rk, address player) private pure returns (bytes32) {
-        bytes32 inner = keccak256(abi.encode(uint256(rk), SLOT_TICKETS_OWED_PACKED));
-        return keccak256(abi.encode(player, inner));
-    }
-
     /// @dev Compute the storage slot of `lvlTraitEntry[lvl][traitId]` (the array length slot).
     ///      Layout: mapping(uint24 => address[][256]). The keccak256(lvl . slot) yields the
     ///      256-element fixed array base; traitId offsets into it. The address[] inner array's
@@ -198,14 +189,14 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         return keccak256(abi.encode(_slotTraitBurnLen(lvl, traitId)));
     }
 
-    /// @dev Owner of occurrence `i` of `lvlTraitEntry[lvl][traitId]` on `host`: decode the
-    ///      uint32 lane, then resolve it through `lvlEntryOwner[lvl]`.
+    /// @dev Decode a header-tail bucket lane and resolve its permanent wallet identity.
     function _laneOwner(address host, uint24 lvl, uint8 traitId, uint256 i) private view returns (address) {
-        bytes32 dataRoot = _slotTraitBurnData(lvl, traitId);
-        uint256 word = uint256(vm.load(host, bytes32(uint256(dataRoot) + (i >> 3))));
+        uint256 header = uint256(vm.load(host, _slotTraitBurnLen(lvl, traitId)));
+        uint256 len = uint24(header);
+        uint256 word = i / 8 == len / 8 ? header >> 32
+            : uint256(vm.load(host, bytes32(uint256(_slotTraitBurnData(lvl, traitId)) + i / 8)));
         uint256 lane = (word >> (32 * (i & 7))) & 0xffffffff;
-        bytes32 ownersLen = keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), SLOT_LVL_ENTRY_OWNER));
-        bytes32 ownersData = keccak256(abi.encode(ownersLen));
+        bytes32 ownersData = keccak256(abi.encode(SLOT_TICKET_OWNERS));
         return address(uint160(uint256(vm.load(host, bytes32(uint256(ownersData) + lane)))));
     }
 
@@ -222,15 +213,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ) private {
         uint24 rk = lvl | TICKET_SLOT_BIT; // _tqReadKey with ticketWriteSlot=false (default)
 
-        // Queue length is one lane naming registry position zero as ownerIdx+1 = 1.
-        vm.store(host, _slotTicketQueueLen(rk), bytes32(uint256(1)));
-        vm.store(host, _slotTicketQueueData(rk), bytes32(uint256(1)));
-
-        // One combined owner/owed record; the queue-key locator stores position plus one.
-        bytes32 ownersLen = keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), SLOT_LVL_ENTRY_OWNER));
-        vm.store(host, ownersLen, bytes32(uint256(1)));
-        vm.store(host, bytes32(uint256(keccak256(abi.encode(ownersLen)))), bytes32(uint256(uint160(player)) | (((uint256(1) << 48) | (uint256(owed) << 8)) << 160)));
-        vm.store(host, _slotOwed(rk, player), bytes32(uint256(1)));
+        TicketQueueStorage.seed(host, rk, lvl, player, uint80(owed) << 8);
 
         // ticketLevel = lvl (offset 4 within slot 14); ticketCursor = 0 (offset 0). Default 0.
         vm.store(
@@ -247,8 +230,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         for (uint16 traitId = 0; traitId < 256; ++traitId) {
             vm.store(host, _slotTraitBurnLen(lvl, uint8(traitId)), bytes32(0));
         }
-        // The owner registry behind the lanes resets with them.
-        vm.store(host, keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), SLOT_LVL_ENTRY_OWNER)), bytes32(0));
+        // Permanent wallet IDs survive clearing the generated bucket state.
     }
 
     /// @dev Pre-seed `_lootboxWord(0)` with `entropy` and pin `lootboxRngPacked` so its

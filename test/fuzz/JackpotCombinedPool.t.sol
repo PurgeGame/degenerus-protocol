@@ -13,7 +13,7 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
 
     // -- State setters --
 
-    /// @dev Push `count` addresses into ticketQueue[key] as address(uint160(i+1))
+    /// @dev Push `count` addresses into ticketQueue[_ticketQueueStorageKey(key)] as address(uint160(i+1))
     function setTicketQueue(uint24 key, uint256 count) external {
         for (uint256 i = 0; i < count; i++) {
             _tqAppend(key, uint32(_registerEntryOwner(address(uint160(i + 1)), key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));

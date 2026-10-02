@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
-import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -297,9 +296,9 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(0))));
     }
 
-    /// @dev ticketQueue[key].length — the mapping sits at slot 12.
+    /// @dev _ticketQueueLength(key) — the mapping sits at slot 12.
     function _queueLen(uint24 key) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)))));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(key), uint256(12)))));
     }
 
     /// @dev ticketWriteSlot — slot 0, byte 25.

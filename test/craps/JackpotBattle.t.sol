@@ -222,12 +222,7 @@ contract JackpotBattleTest is CrapsPins {
     }
 
     function test_NewHighDrawAgreesWithJackpotPaidUnits() public {
-        uint256 tail;
-        for (uint256 word = 1; word < 1_000; ++word) {
-            if (table.highMultOfWord(word) == 100) { tail = word; break; }
-        }
-        assertGt(tail, 0);
-        _setDailyWord(day, tail);
+        _highDay(true);
         vm.prank(alice);
         table.enterBonusBattle(5, 0, 100);
         assertEq(flip.burned(alice), 800_000 ether);
@@ -502,10 +497,23 @@ contract JackpotBattleTest is CrapsPins {
     }
 
     function _highDay(bool tail) private returns (uint16 multiple) {
+        if (!tail) {
+            assertEq(table.jackpotTerms(slot).highMult, 10, "default day already accepted 10x terms");
+            return 10;
+        }
+        // Window terms freeze at openBonusDay. Choose the word before opening a
+        // fresh day; replacing the already-open day's mock word cannot reprice it.
+        dayStart += 1 days;
+        vm.warp(dayStart);
+        day = table.currentDayIndex();
+        slot = uint64(uint256(day) * 8 + 6);
         multiple = tail ? 100 : 10;
         for (uint256 word = 1; ; ++word) {
             if (table.highMultOfWord(word) == multiple) {
                 _setDailyWord(day, word);
+                vm.prank(ContractAddresses.GAME);
+                table.openBonusDay();
+                table.clearDayBodies(day);
                 return multiple;
             }
         }

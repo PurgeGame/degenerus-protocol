@@ -12,7 +12,9 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
         snapShift = shift;
         for (uint256 i; i < count; ++i) {
             uint80 packed = uint80(uint256(keccak256(abi.encode(salt, i))));
-            lvlEntryOwner[5].push(EntryOwner(address(uint160(i + 1)), packed));
+            uint80 bits = _registerEntryOwner(address(uint160(i + 1)), 5);
+            _tqAppend(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT));
+            _setEntryOwed(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT), bits | (packed & ((uint80(1) << 41) - 1)));
         }
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
@@ -35,19 +37,21 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
 
     function seedOne(uint80 packed, uint8 shift) external {
         snapShift = shift;
-        lvlEntryOwner[5].push(EntryOwner(address(1), packed));
+        uint80 bits = _registerEntryOwner(address(1), 5);
+        _tqAppend(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT));
+        _setEntryOwed(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT), bits | (packed & ((uint80(1) << 41) - 1)));
     }
 
     function legacyTally(uint24 lvl) external returns (bool finished) {
         uint256 stage = deadTallyStage;
         if (stage == 3) return true;
-        uint256 units = 3000; // Pinned reference batch budget.
+        uint256 units = 2800; // Pinned reference batch budget.
         uint256 uncreated = deadUncreated;
         uint24 dd = deadTallyFoilDay;
         uint256 idx = deadTallyFoilIdx;
 
         if (stage == 0) {
-            uint256 len = lvlEntryOwner[lvl].length;
+            uint256 len = _ticketQueueLength(_tqReadKey(lvl));
             uint256 pos = deadTallyPos;
             uint8 shift = _snapShiftFor(lvl);
             while (pos < len) {
@@ -61,9 +65,9 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
                     ++pos;
                 }
                 // pos is now the registry position plus one, the form _entryRecord takes.
-                uncreated += _legacyWeight(uint80(_entryRecord(lvl, uint32(pos)) >> 160), shift);
+                uncreated += _legacyWeight(uint80(_entryRecord(_tqReadKey(lvl), uint32(pos)) >> 160), shift);
             }
-            deadTallyPos = uint32(pos);
+            deadTallyPos = 0;
             stage = 1;
             // The foil walk starts at the drain's own low-water mark.
             dd = 1;
@@ -193,7 +197,7 @@ contract DeadVrfTallyParityTest is Test {
     }
 
     function test_ExactRegistryBudgetThenFoilContinuation() public {
-        h.seed(3000, 888, 1, 0);
+        h.seed(2800, 888, 1, 0);
         _compare();
         _compare();
     }

@@ -133,9 +133,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
     // error E() — inherited from DegenerusGameStorage
 
-    /// @dev Tally units per call: one registry position, one foil pack, or one foil day
-    ///      stepped. Every unit is a single cold read at most, so a call stays near 7.5M gas.
-    uint256 private constant DEAD_TALLY_UNITS = 3000;
+    /// @dev Fixed tally budget: one queued record, foil pack, or boundary per unit.
+    ///      Includes headroom for a finishing 256-trait scan and thirty cold refunds
+    ///      through the complete delegatecall chain under the 11.5M transaction cap.
+    uint256 private constant DEAD_TALLY_UNITS = 2800;
 
     /// @dev claimDeadVrf reference kinds, in the top byte of each reference.
     uint256 private constant DEAD_REF_CREATED = 0;
@@ -618,8 +619,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      add a ticket is closed by the liveness trigger, so what is counted here stays
     ///      put. Resumable, DEAD_TALLY_UNITS per call — a pure function of state, never of
     ///      the gas supplied. Three stages:
-    ///        0 — uncreated queued entries: the owed balance on every registry position of
-    ///            `lvl`, snap-adjusted as the ticket drain would have applied it, in QTY_SCALE
+    ///        0 — uncreated queued entries: the terminal read, write and future queues, snap-adjusted as the ticket drain would have applied it, in QTY_SCALE
     ///            units (a fractional remainder counts as its fraction of an entry);
     ///        1 — undrained foil packs of `lvl`, FOIL_PACK_ENTRIES entries each;
     ///        2 — created tickets: every trait bucket's occurrence count, and how many of the
@@ -635,34 +635,27 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         uint256 idx = deadTallyFoilIdx;
 
         if (stage == 0) {
-            EntryOwner[] storage owners = lvlEntryOwner[lvl];
-            uint256 len = owners.length;
-            // The registry is immutable during this tally. Reuse its data base for
-            // the bounded walk instead of hashing the same array slot per owner.
-            uint256 records;
-            assembly ("memory-safe") {
-                mstore(0, owners.slot)
-                records := keccak256(0, 32)
-            }
             uint256 pos = deadTallyPos;
             uint8 shift = _snapShiftFor(lvl);
-            while (pos < len) {
-                if (units == 0) {
-                    deadTallyPos = uint32(pos);
-                    deadUncreated = uint64(uncreated);
-                    return false;
+            while (dd < 3) {
+                uint24 key = dd == 0 ? _tqReadKey(lvl) : (dd == 1 ? _tqWriteKey(lvl) : _tqFarFutureKey(lvl));
+                uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(key)];
+                uint256 len = _ticketQueueLength(key);
+                while (pos < len) {
+                    if (units == 0) {
+                        deadTallyPos = uint32(pos);
+                        deadTallyFoilDay = dd;
+                        deadUncreated = uint64(uncreated);
+                        return false;
+                    }
+                    uint32 id = _tqPositionAt(queue, pos);
+                    uncreated += _deadWeight(_entryPacked(key, id), shift);
+                    unchecked { --units; ++pos; }
                 }
-                unchecked {
-                    --units;
-                    ++pos;
-                }
-                // pos was below len before the increment; this reads that owner's
-                // single-slot record, whose owed field starts at bit 160.
-                uint80 packed;
-                assembly ("memory-safe") { packed := shr(160, sload(add(records, sub(pos, 1)))) }
-                uncreated += _deadWeight(packed, shift);
+                pos = 0;
+                unchecked { ++dd; }
             }
-            deadTallyPos = uint32(pos);
+            deadTallyPos = 0;
             stage = 1;
             // Both frozen read and accumulating write cohorts remain paid inventory.
             // dd uses 1/2 as progress markers for physical queue keys 0/1.
@@ -764,8 +757,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///          at bits 0..63 of the reference, selecting a holding in the level's trait bucket.
     ///          Pays the trait's equal share of
     ///          the created pot, divided equally among that trait's tickets.
-    ///        DEAD_REF_QUEUED (1) — uncreated queued entries: registry position plus one at
-    ///          bits 0..31. Pays pot * weight / total for the position's whole owed balance.
+    ///        DEAD_REF_QUEUED (1) — uncreated queued entries: permanent wallet ID at
+    ///          bits 0..31 and absolute queue key (including its domain flags) at bits
+    ///          32..55. Pays pot * weight / total for that ID's balance in that queue.
     ///        any other kind — an undrained foil pack: physical cohort (0/1) at bits 64..87, index into
     ///          foilQueue[cohort] at bits 0..63. Pays pot * FOIL_PACK_ENTRIES * QTY_SCALE / total.
     ///      Each holding pays once: a created ticket sets its claimed bit, a queued position
@@ -802,11 +796,14 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 amount += perTrait / n;
             } else if (kind == DEAD_REF_QUEUED) {
                 uint32 pos = uint32(ref);
-                uint256 record = _entryRecord(lvl, pos);
+                // Queue-domain key is carried above the stable ID in bits 32..55.
+                uint24 key = uint24(ref >> 32);
+                if (key != _tqReadKey(lvl) && key != _tqWriteKey(lvl) && key != _tqFarFutureKey(lvl)) revert E();
+                uint256 record = _entryRecord(key, pos);
                 if (address(uint160(record)) != player) revert E();
                 uint256 w = _deadWeight(uint80(record >> 160), shift);
                 if (w == 0) revert E();
-                _setEntryOwed(lvl, pos, 0);
+                _setEntryOwed(key, pos, 0);
                 weight += w;
                 amount += (pot * w) / total;
             } else {

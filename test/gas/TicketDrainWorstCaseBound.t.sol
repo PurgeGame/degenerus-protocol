@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.33;
-import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -66,28 +65,39 @@ contract TicketDrainWorstCaseBound is Test {
         assertGe(1 * p.unit(), DIRTY_SSTORE + COLD_SLOAD, "a dirty write plus its read exceeds one unit");
     }
 
-    function test_PositionLookupReadsOnlyLaneAndCombinedRecord() public {
+    function test_PositionLookupUsesGlobalIdentityAndPendingWithoutWalletMap() public {
         uint24 lvl = 7;
-        uint256 queueBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(lvl))), uint256(12))))));
-        uint256 ownerBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), uint256(67))))));
-        uint32 pos = 0x01000002;
+        uint256 queueBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(lvl), uint256(12))))));
+        uint256 ownerBase = uint256(keccak256(abi.encode(uint256(67))));
+        uint32 id = 0x01000002;
         bytes32 queueSlot = bytes32(queueBase + 1);
-        bytes32 recordSlot = bytes32(ownerBase + pos - 1);
-        vm.store(address(p), queueSlot, bytes32(uint256(pos) << 32));
-        uint256 record = uint160(address(0xBEEF)) | (uint256((uint80(pos) << 48) | (uint80(4) << 8)) << 160);
-        vm.store(address(p), recordSlot, bytes32(record));
+        bytes32 ownerSlot = bytes32(ownerBase + id - 1);
+        bytes32 pendingSlot = keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(lvl), uint256(79)))));
+        vm.store(address(p), bytes32(uint256(67)), bytes32(uint256(id)));
+        vm.store(address(p), queueSlot, bytes32(uint256(id) << 32));
+        vm.store(address(p), ownerSlot, bytes32(uint256(uint160(address(0xBEEF)))));
+        vm.store(address(p), pendingSlot, bytes32((uint256(1) << 255) | (uint256(lvl) << 126)
+            | (uint256(1) << 41) | (uint256(4) << 8)));
+        uint256 record = uint160(address(0xBEEF)) | (uint256((uint80(id) << 48) | (uint80(4) << 8)) << 160);
         vm.record();
         assertEq(p.recordAtQueueIndex(lvl, 9), record);
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(p));
-        assertEq(reads.length, 2, "drain lookup must not touch an address locator");
-        assertEq(reads[0], queueSlot); assertEq(reads[1], recordSlot);
+        assertEq(reads.length, 4, "queue lane, shared count, identity and owed; no wallet-map lookup");
+        for (uint256 i; i < reads.length; ++i) {
+            assertTrue(reads[i] == queueSlot || reads[i] == bytes32(uint256(67))
+                || reads[i] == ownerSlot || reads[i] == pendingSlot);
+        }
         assertEq(writes.length, 0);
     }
 
     function test_FixedCharges() public view {
         assertGe(1 * p.unit(), COLD_SLOAD + DIRTY_SSTORE, "a seat exit exceeds one unit");
-        assertGe(1 * p.unit(), 2 * COLD_SLOAD + DIRTY_SSTORE, "queue plus combined owner/owed read and dust clear exceeds one unit");
-        assertGe(p.joinUnits() * p.unit(), 2 * COLD_SLOAD + 2 * DIRTY_SSTORE, "a seat join with combined owner/owed record exceeds its units");
+        // The shared registry count's first cold read belongs to fixed overhead; later reads
+        // cost 100. An already-read pending slot's dirty SSTORE adds no second cold surcharge.
+        assertGe(1 * p.unit(), 3 * COLD_SLOAD + 100 + DIRTY_SSTORE - COLD_SLOAD,
+            "queue, identity, pending and dust clear exceeds one unit");
+        assertGe(p.joinUnits() * p.unit(), 3 * COLD_SLOAD + 100 + 2 * DIRTY_SSTORE,
+            "a seat join with permanent identity and packed owed exceeds its units");
         assertGe(4 * p.unit(), ROUND_COMPUTE_BOUND, "a round's reveals and loops exceed four units");
         assertGe(1 * p.unit(), 16 * 400, "sixteen occurrences of LCG and scratch work exceed one unit");
         assertGe(3 * p.unit(), 30_000, "a foil pack's record and cursor bookkeeping exceeds three units");

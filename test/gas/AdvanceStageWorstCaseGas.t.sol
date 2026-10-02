@@ -87,7 +87,7 @@ contract TicketBatchStageHarness is MintBucketSeed {
         uint24 rk = _tqReadKey(lvl);
         uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
 
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             uint80 ownerBits = _registerEntryOwner(p, lvl);

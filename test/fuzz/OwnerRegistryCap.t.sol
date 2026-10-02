@@ -8,7 +8,7 @@ import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMint
 ///      registry can be filled to its 32-bit lane ceiling by a raw length write.
 contract RegistryCapHarness is DegenerusGameMintModule {
     function fill(uint24 lvl, uint256 len) external {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
+        address[] storage owners = ticketOwners;
         assembly ("memory-safe") {
             sstore(owners.slot, len)
         }
@@ -18,7 +18,7 @@ contract RegistryCapHarness is DegenerusGameMintModule {
     // LVL and its neighbors LVL-1/LVL+1 stay inside the minted window and route through
     // the double buffer these tests read via _tqWriteKey, not the far-future key space.
     function setLevel(uint24 lvl) external { level = lvl; }
-    function ownerCount(uint24 lvl) external view returns (uint256) { return lvlEntryOwner[lvl].length; }
+    function ownerCount(uint24 lvl) external view returns (uint256) { return ticketOwners.length; }
     function queueLen(uint24 lvl) external view returns (uint256) { return _ticketQueueLength(_tqWriteKey(lvl)); }
     function owedOf(uint24 lvl, address p) external view returns (uint80) { return _entriesOwed(_tqWriteKey(lvl), p); }
     function entries(address p, uint24 lvl, uint32 n, bool crank) external { _queueEntries(p, lvl, n, crank); }
@@ -33,7 +33,7 @@ contract RegistryCapHarness is DegenerusGameMintModule {
 ///         ever written without a position, so the drain's position decode cannot underflow.
 contract OwnerRegistryCap is Test {
     RegistryCapHarness internal h;
-    uint256 internal constant FULL = uint256(type(uint32).max) - 1;
+    uint256 internal constant FULL = uint256(type(uint32).max);
     uint24 internal constant LVL = 3;
 
     function setUp() public {
@@ -60,19 +60,19 @@ contract OwnerRegistryCap is Test {
         assertEq(h.queueLen(LVL), 0, "nothing queued");
     }
 
-    function test_CrankSinksDropTheLevelAndContinue() public {
+    function test_CrankSinksCannotAllocateNewIdAtTheCeiling() public {
         h.entries(address(0xA1), LVL, 4, true);
         h.scaled(address(0xA1), LVL, 400, true);
         assertEq(h.ownerCount(LVL), FULL, "award dropped: no position taken");
         assertEq(h.queueLen(LVL), 0, "award dropped: nothing queued");
         assertEq(h.owedOf(LVL, address(0xA1)), 0, "award dropped: no owed word");
-        // A range spanning the full level skips it and still queues the others.
+        // A full global namespace prevents new IDs at every target level.
         h.range(address(0xA1), LVL - 1, 3, 4, true);
-        assertEq(h.queueLen(LVL - 1), 1);
+        assertEq(h.queueLen(LVL - 1), 0);
         assertEq(h.queueLen(LVL), 0);
-        assertEq(h.queueLen(LVL + 1), 1);
-        assertEq(h.ownerCount(LVL - 1), 1);
-        assertEq(h.ownerCount(LVL + 1), 1);
+        assertEq(h.queueLen(LVL + 1), 0);
+        assertEq(h.ownerCount(LVL - 1), FULL);
+        assertEq(h.ownerCount(LVL + 1), FULL);
     }
 
     function test_ExistingOwnerStillAccumulatesAtTheCeiling() public {

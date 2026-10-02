@@ -542,6 +542,24 @@ contract RngWindowFreezeHandler is Test {
 
     // Snapshot storage of the enumerated consumed set, captured at request time / before each
     // isolated in-window action.
+    // dailyFoilDraw (slot 60): both reusable physical slots, including their day tags.
+    uint256[2] private _snapFoilDraws;
+
+    function _snapshotFoilDraws() private {
+        for (uint256 i; i < 2; ++i) {
+            _snapFoilDraws[i] = uint256(vm.load(address(game), keccak256(abi.encode(i, uint256(60)))));
+        }
+    }
+
+    function _checkFoilDraws() private {
+        for (uint256 i; i < 2; ++i) {
+            if (uint256(vm.load(address(game), keccak256(abi.encode(i, uint256(60))))) != _snapFoilDraws[i]) {
+                ghost_frozenSlotMutations++;
+                ghost_lastMutatedSlotTag = 13;
+            }
+        }
+    }
+
     uint256 private _snapDayWord;
     uint256 private _snapDayPayload0;
     uint256 private _snapDayPayload1;
@@ -558,6 +576,7 @@ contract RngWindowFreezeHandler is Test {
     ///      the post-action re-read compares the SAME mapping leaf (a fresh leaf would be a false
     ///      positive — the consumption reads the leaf live at request time).
     function _snapshotEnumeratedSet() internal {
+        _snapshotFoilDraws();
         _snapDay = game.currentDayView();
         _snapNudges = _nudgeCount();
         _snapIndex = _activeLootboxIndex() - 1;
@@ -576,6 +595,7 @@ contract RngWindowFreezeHandler is Test {
     ///      set — was NOT called between the snapshot and here, any delta is attributable to the
     ///      player action alone. Compares the SAME day/index leaf the snapshot used.
     function _checkFrozenAfterIsolatedAction() internal {
+        _checkFoilDraws();
         if (_nudgeCount() != _snapNudges) { ghost_frozenSlotMutations++; ghost_lastMutatedSlotTag = 12; }
         if (_dailyRingChanged()) {
             ghost_frozenSlotMutations++;
@@ -614,6 +634,7 @@ contract RngWindowFreezeHandler is Test {
     ///      landing index (LR_INDEX - 1) so the post-action re-read compares the SAME mapping leaf
     ///      the pending fulfillment will write.
     function _snapshotMidDaySet() internal {
+        _snapshotFoilDraws();
         _snapMidCursor = _lootboxRngIndexCursor();
         _snapMidLeafIndex = uint48(_snapMidCursor) ^ 1;
         _snapMidLeafWord = _lootboxRngWord(_snapMidLeafIndex);
@@ -629,6 +650,7 @@ contract RngWindowFreezeHandler is Test {
     ///      advance / request / fulfillment ran in between) and flag any change — identical
     ///      discipline to _checkFrozenAfterIsolatedAction, over the mid-day consumption's set.
     function _checkMidDayFrozenAfterIsolatedAction() internal {
+        _checkFoilDraws();
         if (_lootboxRngIndexCursor() != _snapMidCursor) {
             ghost_frozenSlotMutations++;
             ghost_lastMutatedSlotTag = 5;

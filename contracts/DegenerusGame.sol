@@ -907,9 +907,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      eligible cycle level is read inside the module from the day's sealed draw. The win
     ///      credits to `player`, never the caller, and a tuple pays at most once (CEI marker),
     ///      so anyone may trigger it. The day's one board x four tickets give 4 independent
-    ///      claimables per day. The signature matches the module function exactly (identical
-    ///      selector), so the calldata forwards as-is — re-encoding would cost size headroom for
-    ///      no change.
+    ///      claimables per day. Claims are valid on the draw day and the following day,
+    ///      and close when terminal settlement triggers. The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is —
+    ///      re-encoding would cost size headroom for no change.
     function claimFoilMatch(
         address,
         uint256,
@@ -927,8 +928,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      credits its own player and the caller earns a per-settled-claim FLIP bounty
     ///      during a live game. A non-claimable tuple AT index 0 reverts the whole call
     ///      (StaleBatch), so a second sender handed an already-swept list sees the failure
-    ///      in simulation instead of paying to walk it. The signature matches the module
-    ///      function exactly, so the calldata forwards as-is.
+    ///      in simulation instead of paying to walk it. Claims are valid on the draw day
+    ///      and the following day, and close when terminal settlement triggers. The
+    ///      signature matches the module function exactly, so the calldata forwards as-is.
     function claimFoilMatchMany(
         address[] calldata,
         uint24[] calldata,
@@ -1270,7 +1272,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint64));
     }
 
-    /// @notice Progress sealed Decimator battles, including during RNG locks; idles after game over.
+    /// @notice Progress sealed Decimator battles in the shared consumer order.
     function settleDecimatorWinners(uint256) external returns (uint256, uint256, bool) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
@@ -1604,49 +1606,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///        weight — MAX_BOXES_PER_ORDER of them can ride one entry.
     /// @return opened Total boxes opened (afking + human) plus Degenerette bets the sweep resolved.
     function openBoxes(uint256 maxCount) external returns (uint256 opened) {
-        if (maxCount == 0) return 0;
-        // AfKing boxes first — delegatecall the afking module so the open runs in this Game's
-        // storage; drainAfkingBoxes is the afking-side cursor walk (the human-box leg follows).
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IGameAfkingModule.drainAfkingBoxes.selector,
-                    maxCount
-                )
-            );
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        (uint256 openedAfking, uint256 afkingSteps) = abi.decode(
-            data,
-            (uint256, uint256)
-        );
-        // Then human boxes with the remaining budget — the read-buffer sweep lives in the
-        // lootbox module (delegatecall runs it in this Game's storage), mirroring the afking
-        // leg above. The afking leg's FULL step consumption (opens AND ring-scan skips, in
-        // open-step currency) is charged against maxCount, so a long drained-ring scan can
-        // never hand the human sweep an uncharged full budget — the same shared-budget rule
-        // the rewarded mineFlip crank enforces.
-        if (afkingSteps < maxCount) {
-            // The human sweep budgets in WALK UNITS (~4.7k gas each) while the afking leg
-            // above counts box opens, so the remainder is converted at the per-entry weight:
-            // one leftover unit of maxCount buys about one human entry-open's worth of work.
-            // Clamped before the multiply — openBoxes(type(uint256).max) is the natural
-            // "drain everything" call for this permissionless valve, and a checked overflow
-            // here would revert it instead of handing the loop-bounded sweep a big budget.
-            uint256 rem = maxCount - afkingSteps;
-            if (rem > 1 << 40) rem = 1 << 40;
-            (ok, data) = ContractAddresses
-                .GAME_LOOTBOX_MODULE
-                .delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameLootboxModule.openHumanBoxes.selector,
-                        rem * OPEN_HUMAN_ENTRY_WEIGHT
-                    )
-                );
-            if (!ok) _revertDelegate(data);
-            (opened, ) = abi.decode(data, (uint256, uint256));
-        }
-        opened += openedAfking;
+        return abi.decode(data, (uint256));
     }
 
     /*+======================================================================+
@@ -1787,14 +1749,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         )
     {
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_FOILPACK_MODULE
+            .GAME_MINT_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        return
-            abi.decode(
-                data,
-                (uint256, uint256, uint256, uint256, uint256)
-            );
+        // The trusted Mint worker returns the identical five-word ABI result.
+        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
     }
 
     /*+===============================================================================================+
@@ -2181,7 +2140,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24 lvl,
         address player
     ) external view returns (uint32) {
-        return _totalEntriesOwed(lvl, player);
+        unchecked {
+            return
+                _entriesOwedTotal(lvl, player);
+        }
     }
 
 
@@ -2199,6 +2161,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         } else {
             _tryCompleteRng();
         }
+    }
+
+    /// @notice Current allowed automatic read-consumer category; shared by manual calls.
+    function rngConsumerStage() external view returns (uint8) {
+        return _rngConsumerStage();
     }
 
     /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
@@ -2663,7 +2630,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // once, including for a padding redraw that selects a different packed word.
         uint256 wordsBase;
         uint256 ownersBase;
-        EntryOwner[] storage owners = lvlEntryOwner[targetLvl];
+        address[] storage owners = ticketOwners;
         assembly ("memory-safe") {
             mstore(0, headerSlot)
             wordsBase := keccak256(0, 32)
@@ -2799,15 +2766,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // it sit under what is now the read key. The far-future space is included for the case
         // where a level's far-future buys have not yet been drained across the transition.
         uint24 lvl = level;
-        return _totalEntriesOwed(lvl, player);
-    }
-
-    function _totalEntriesOwed(uint24 lvl, address player) private view returns (uint32 total) {
-        uint32 a = uint32(_entriesOwed(lvl, player) >> 8);
-        uint32 b = uint32(_entriesOwed(lvl | TICKET_SLOT_BIT, player) >> 8);
-        uint32 c = uint32(_entriesOwed(lvl | TICKET_FAR_FUTURE_BIT, player) >> 8);
-        // Preserve the original uint32 wrapping sum, evaluated wide before truncation.
-        assembly ("memory-safe") { total := and(add(add(a, b), c), 0xffffffff) }
+        unchecked {
+            tickets =
+                _entriesOwedTotal(lvl, player);
+        }
     }
 
     /*+======================================================================+

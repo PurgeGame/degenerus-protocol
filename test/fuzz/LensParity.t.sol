@@ -121,8 +121,13 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         decBattleQueue = uint256(head) | uint256(tail) << 24;
     }
 
+    function setDecActiveWord(uint256 word, bool published) external {
+        rngWordCurrent = word;
+        _setRngSessionPublished(published);
+    }
+
     function setFoilRecord(uint24 lvl, address p, uint256 w) external {
-        foilRecord[lvl][p] = w;
+        foilRecord[lvl & 3][p] = w == 0 ? 0 : w | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
     }
 }
 
@@ -349,10 +354,12 @@ contract LensParityTest is Test {
 
     function testFuzz_decWinner(uint24 lvl, uint8 index, uint256 word, uint192 score, uint64 id) public {
         vm.assume(lvl != 0);
+        word = bound(word, 2, type(uint256).max);
         index = uint8(bound(index, 0, 99));
         DegenerusGameLens.DecBattleRound memory r;
         r.winners = index + 1;
-        r.rngWord = word;
+        r.phase = 1;
+        harness.setDecActiveWord(word, true);
         harness.setDecRound(lvl, r);
         harness.setDecNode(index, (uint256(score) << 64) | id);
         // The shared leaderboard answers only for the round at the head of the queue.
@@ -364,6 +371,14 @@ contract LensParityTest is Test {
         uint256 tie = uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), word, lvl, id)));
         assertEq(w.key, (tie & ~uint256(type(uint64).max)) | id);
         vm.expectRevert(); lens.decWinnerAt(game, lvl, index + 1);
+        harness.setDecActiveWord(word, false);
+        vm.expectRevert(); lens.decWinnerAt(game, lvl, index);
+        harness.setDecActiveWord(1, true);
+        vm.expectRevert(); lens.decWinnerAt(game, lvl, index);
+        harness.setDecActiveWord(word, true);
+        r.phase = 3;
+        harness.setDecRound(lvl, r);
+        vm.expectRevert(); lens.decWinnerAt(game, lvl, index);
     }
 
     function testFuzz_decSettleCursorOf(uint24 head, uint24 tail) public {

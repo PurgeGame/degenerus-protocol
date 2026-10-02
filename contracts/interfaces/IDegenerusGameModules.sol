@@ -29,6 +29,8 @@ import {MintPaymentKind} from "./IDegenerusGame.sol";
 /// @title IDegenerusGameAdvanceModule
 /// @notice Interface for the game advancement module handling VRF and game progression
 interface IDegenerusGameAdvanceModule {
+    function advanceGameBudgeted(uint256 allowance) external returns (uint8 mult, uint256 charged);
+
     /// @notice Advances the game state by processing pending operations.
     /// @return mult Day-epoch stall multiplier (new-day stall ladder 1/2/4/6; 1 mid-day;
     ///         0 on the gameover path = no bounty). The router pays 2x * mult when mult > 0.
@@ -275,6 +277,25 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
+    function processTicketBatchBudgeted(uint24 anchor, uint256 allowance) external returns (bool finished, bool worked, uint256 charged);
+
+    /// @notice Quote a far-future salvage swap WITHOUT executing (read-only -EV offer).
+    function previewSellFarFutureEntries(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        external
+        view
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 ethCashWei,
+            uint256 flipTokens
+        );
+
+
 
 
     /// @notice Processes a ticket and lootbox purchase
@@ -685,6 +706,8 @@ interface IDegenerusGameBingoModule {
 ///      (delegatecall), so msg.sender is preserved end-to-end (the consent gates and
 ///      the bounty payee read the original caller).
 interface IGameAfkingModule {
+    function processSubscriberStageBudgeted(uint24 processDay, uint256 allowance) external returns (uint256 processed, uint256 charged);
+
     /// @notice Dispatch advancement or its prerequisite read drain without a keeper bounty.
     function advanceGame() external returns (uint8 mult);
 
@@ -765,22 +788,6 @@ interface IGameAfkingModule {
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
-    /// @notice Quote a far-future salvage swap WITHOUT executing (read-only -EV offer).
-    function previewSellFarFutureEntries(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities
-    )
-        external
-        view
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 ethCashWei,
-            uint256 flipTokens
-        );
-
     function recordPresaleBox(address buyer, uint48 index, uint256 word) external payable;
     /// @notice Prepare a ticket level, returning false while takeover is unsafe.
     function prepareTicketLevel(uint24 lvl) external payable returns (bool);
@@ -838,7 +845,8 @@ interface IDegenerusGameFoilPackModule {
     /// @notice Claim a foil ticket's match against a day's draw (permissionless).
     /// @dev The win credits to `player`, never the caller, and a tuple pays at most
     ///      once, so anyone may resolve any player's claim. Reverts if the tuple is not
-    ///      a claimable win.
+    ///      a claimable win. Claims are valid on the draw day and the following day,
+    ///      and close when terminal settlement triggers.
     /// @param player Pack owner the win credits to.
     /// @param day The draw day to claim against.
     /// @param ticketIndex Which of the pack's four tickets to claim (0-3).
@@ -864,7 +872,8 @@ interface IDegenerusGameFoilPackModule {
     ///      win credits its own player and the caller earns a small per-settled-claim
     ///      FLIP bounty during a live game. A non-claimable tuple AT index 0 reverts the
     ///      whole call (StaleBatch), marking an already-swept list. The three arrays are
-    ///      parallel.
+    ///      parallel. Claims are valid on the draw day and the following day, and close
+    ///      when terminal settlement triggers.
     /// @param players Pack owners the wins credit to.
     /// @param drawDays Draw days to claim against.
     /// @param ticketIndexes Which pack ticket (0-3) per claim.

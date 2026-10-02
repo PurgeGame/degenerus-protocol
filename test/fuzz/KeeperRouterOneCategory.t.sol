@@ -22,7 +22,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         There are exactly TWO router categories — advance (the buy folded into advanceGame's required-path
 ///         STAGE, so it rides the advance bounty) and the box open (afking boxes first, then human boxes with
 ///         the leftover budget — one combined open bounty). The else-if XOR is the mitigation
-///         for bounty-stacking; the single CEI-last `creditFlip(msg.sender, bountyEarned)`
+///         for bounty-stacking; the single CEI-last `creditFlip(msg.sender, total)`
 ///         (GameAfkingModule.sol:1014-1016) is the mitigation for a composed reentrant double-pay. Security
 ///         is the HARD FLOOR.
 ///
@@ -42,7 +42,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///   `ContractAddresses.GAME_LOOTBOX_MODULE` delegatecall (the afking + human box-open legs — both
 ///   pull-only: no callee on those paths hands control to player code). There is no untrusted call to
 ///   re-enter through, so a synthetic reentrant attacker has no hook. The disposition is satisfied by a
-///   comment-stripped source grep-attestation: (a) the single `creditFlip(msg.sender, bountyEarned)`
+///   comment-stripped source grep-attestation: (a) the single `creditFlip(msg.sender, total)`
 ///   occurrence (==1, CEI-last), and (b) ZERO low-level ETH-push primitives in the mineFlip legs (the
 ///   module pushes no ETH at all — funding withdraw moved to DegenerusGame). NO attacker/reentrant mock
 ///   exists in this file (User verbatim: "reentrancy is not an issue, nothing here pays eth and this only
@@ -262,51 +262,33 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // Task 2 — D-01 structural reentrancy attest + D-03 one-category early-return + the human escape
     // =========================================================================
 
-    /// @notice STRUCTURAL reentrancy attestation (D-01), grep over the COMMENT-STRIPPED GameAfkingModule
-    ///         source — NO attacker harness. Proves (a) the single `creditFlip(msg.sender, bountyEarned)`
-    ///         occurrence (CEI-last, one money edge per tx) and (b) ZERO low-level ETH-push primitives in
-    ///         the mineFlip legs (the module pushes no ETH at all). The source-grep finds the relocated
-    ///         mineFlip body at the new GameAfkingModule.sol location (no runtime throw on the deleted
-    ///         AfKing.sol).
+    /// @notice Pin the shared dispatch, single combined keeper-credit site, and absence
+    ///         of ETH-push hooks across both work branches and their payout helper.
     function testMintFlipReentrancyStructurallySafeSourceAttest() public view {
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
-        // Both public entries use this dispatcher; mineFlip enables its reward gate.
-        string memory body = _extractFunctionBody(afking, "function _runWork(bool rewarded) private returns (uint8 mult) {");
-        assertGt(bytes(body).length, 0, "D-01: shared work dispatcher body extracted");
+        string memory dispatch = _extractFunctionBody(afking, "function _runWork(bool rewarded) private returns (uint8 mult) {");
+        string memory advance = _extractFunctionBody(afking, "function _runAdvance(bool rewarded) private returns (uint8 mult) {");
+        string memory consumers = _extractFunctionBody(afking, "function _runRngConsumers(bool rewarded) private {");
+        string memory credit = _extractFunctionBody(afking, "function _creditWorkBounty(uint8 kind, uint256 bounty, uint256 redemptionBounty) private {");
+        assertGt(bytes(dispatch).length, 0, "D-01: shared dispatcher extracted");
+        assertGt(bytes(advance).length, 0, "D-01: advance worker extracted");
+        assertGt(bytes(consumers).length, 0, "D-01: consumer worker extracted");
+        assertGt(bytes(credit).length, 0, "D-01: combined credit helper extracted");
+        assertEq(_countOccurrences(dispatch, "return _runAdvance(rewarded);"), 1, "advance branch returns before consumer work");
+        assertEq(_countOccurrences(dispatch, "_runRngConsumers(rewarded);"), 1, "one consumer pipeline");
+        assertEq(_countOccurrences(dispatch, "_creditWorkBounty("), 0, "dispatcher cannot add a second bounty");
+        assertEq(_countOccurrences(credit, "uint256 total = bounty + redemptionBounty;"), 1, "consumer rewards combine before credit");
+        assertEq(_countOccurrences(credit, "if (total == 0) return;"), 1, "zero credit is skipped");
+        assertEq(_countOccurrences(credit, "creditFlip(msg.sender, total)"), 1, "single helper credit");
+        assertEq(_countOccurrences(afking, "creditFlip(msg.sender,"), 1, "sole keeper-credit site across all legs");
 
-        // (a) The single unified bounty credit is byte-present EXACTLY ONCE in mineFlip (CEI-last after
-        // the one-category early-return). This is the ONLY money edge in the router per tx.
-        assertEq(
-            _countOccurrences(body, "creditFlip(msg.sender, bountyEarned)"),
-            1,
-            "D-01: exactly one CEI-last mineFlip creditFlip (the only money edge per tx)"
-        );
-        // The same gate over the whole file proves the unified bounty is the SOLE `creditFlip(msg.sender,...)`
-        // site — there is no second router self-credit (the other creditFlip in the file is the 349.2 per-buy
-        // `creditFlip(player, flipCredit)` affiliate/quest side-effect inside the STAGE, a different recipient
-        // and a different argument shape, NOT a router bounty).
-        assertEq(
-            _countOccurrences(afking, "creditFlip(msg.sender, bountyEarned)"),
-            1,
-            "D-01: the unified bounty is the ONLY creditFlip(msg.sender, bountyEarned) site (no per-leg self-credit)"
-        );
-
-        // (b) NO untrusted external-call primitive inside the mineFlip legs that could hand control to an
-        // arbitrary address. The bounty is a minted flip-credit ledger move (NO ETH push), so a low-level
-        // `.call{value:` / `.transfer(` / `.send(` ETH-push has NO place in any router leg. Asserting ZERO
-        // over the comment-stripped mineFlip body pins the no-ETH-push / no-untrusted-call shape.
-        assertEq(_countOccurrences(body, ".call{value:"), 0, "D-01: no low-level ETH-push call in the mineFlip legs");
-        assertEq(_countOccurrences(body, ".transfer("), 0, "D-01: no .transfer ETH-push in the mineFlip legs");
-        assertEq(_countOccurrences(body, ".send("), 0, "D-01: no .send ETH-push in the mineFlip legs");
-
-        // (c) File-wide, the GameAfkingModule pushes NO ETH at all (the funding self-send was re-homed to
-        // DegenerusGame.withdrawAfkingFunding, NOT this module). Pin the module's low-level ETH-push count at
-        // exactly 0 so a future ETH-push surface (a potential reentrancy vector) flips RED.
-        assertEq(
-            _countOccurrences(afking, ".call{value:"),
-            0,
-            "D-01: the GameAfkingModule pushes no ETH file-wide (funding withdraw lives on DegenerusGame)"
-        );
+        string memory bodies = string.concat(dispatch, advance, consumers, credit);
+        assertEq(_countOccurrences(bodies, ".call{value:"), 0, "no low-level ETH push in work or credit helpers");
+        assertEq(_countOccurrences(bodies, ".transfer("), 0, "no transfer hook in work or credit helpers");
+        assertEq(_countOccurrences(bodies, ".send("), 0, "no send hook in work or credit helpers");
+        assertEq(_countOccurrences(afking, ".call{value:"), 0, "module cannot push ETH");
+        assertEq(_countOccurrences(afking, ".transfer("), 0, "module cannot transfer ETH");
+        assertEq(_countOccurrences(afking, ".send("), 0, "module cannot send ETH");
     }
 
 
@@ -664,7 +646,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     /// @dev Seed `whole` current-level tickets for `who` at the read key (packed: owed=whole*4 << 8 | rem)
-    ///      and append `who` to ticketQueue[readKey], so advanceDue() sees a non-empty read slot.
+    ///      and append `who` to ticketQueue[_ticketQueueStorageKey(readKey)], so advanceDue() sees a non-empty read slot.
     function _seedReadSlotTickets(uint24 readKey, address who, uint32 whole) internal {
         TicketQueueStorage.seed(address(game), readKey, readKey & ~TICKET_SLOT_BIT, who, uint80(whole) * 4 << 8);
     }

@@ -62,7 +62,7 @@ contract QueueHarness is DegenerusGameAdvanceModule {
     function recordAt(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecord(lvl, pos); }
     function retire(uint24 key) external {
         uint24 lvl = key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
-        for (uint256 i; i < _ticketQueueLength(key); ++i) _setEntryOwed(lvl, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], i), 0);
+        for (uint256 i; i < _ticketQueueLength(key); ++i) _setEntryOwed(key, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], i), 0);
         _releaseTicketQueue(key);
     }
     // --- State helpers ---
@@ -117,7 +117,7 @@ contract QueueDoubleBufferTest is Test {
         uint24 frozenKey = harness.exposed_tqWriteKey(LEVEL);
         for (uint160 i; i < 19; ++i) harness.exposed_queueEntries(address(0xCA00 + i), LEVEL, 10);
         uint256[19] memory frozen;
-        for (uint256 i; i < 19; ++i) frozen[i] = harness.recordAt(LEVEL, harness.positionAt(frozenKey, i));
+        for (uint256 i; i < 19; ++i) frozen[i] = harness.recordAt(frozenKey, harness.positionAt(frozenKey, i));
         harness.setTicketsFullyProcessed(true);
         harness.exposed_swapTicketSlot(LEVEL);
         harness.setLock(true);
@@ -125,8 +125,8 @@ contract QueueDoubleBufferTest is Test {
         for (uint160 i; i < 19; ++i) harness.exposed_queueEntriesScaled(address(0xCA00 + i), LEVEL, 725);
         for (uint256 i; i < 19; ++i) {
             address player = address(uint160(0xCA00 + i));
-            assertEq(harness.recordAt(LEVEL, harness.positionAt(frozenKey, i)), frozen[i]);
-            assertTrue(harness.positionAt(frozenKey, i) != harness.positionAt(liveKey, i));
+            assertEq(harness.recordAt(frozenKey, harness.positionAt(frozenKey, i)), frozen[i]);
+            assertEq(harness.positionAt(frozenKey, i), harness.positionAt(liveKey, i), "owner ID stays stable across queue domains");
             assertEq(harness.getTicketsOwed(frozenKey, player), 10);
             assertEq(harness.getTicketsOwed(liveKey, player), 7);
             assertEq(harness.getQueueEntry(liveKey, i), player);
@@ -139,7 +139,7 @@ contract QueueDoubleBufferTest is Test {
         assertEq(harness.getQueueLength(frozenKey), 1);
         assertEq(harness.getTicketsOwed(frozenKey, address(0xCA00)), 13);
         assertEq(harness.getTicketsOwed(liveKey, address(0xCA00)), 7);
-        assertGt(harness.positionAt(frozenKey, 0), 38, "re-enrolment needs its own immutable registry position");
+        assertEq(harness.positionAt(frozenKey, 0), 1, "re-enrolment reuses the stable owner ID");
     }
 
     // =========================================================================

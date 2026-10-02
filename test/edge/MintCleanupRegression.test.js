@@ -560,17 +560,15 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
 
     it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8) | owner<<48) 80-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
       const layout = await compiledStorageLayout();
-      const locator = layout.storage.find((entry) => entry.label === "entryOwnerPosition");
-      const owners = layout.storage.find((entry) => entry.label === "lvlEntryOwner");
+      const locator = layout.storage.find((entry) => entry.label === "ticketOwnerId");
+      const owners = layout.storage.find((entry) => entry.label === "ticketOwners");
+      const pending = layout.storage.find((entry) => entry.label === "ticketPending");
       expect(locator.slot).to.equal("13");
       expect(owners.slot).to.equal("67");
-      expect(layout.types[locator.type].label).to.equal("mapping(uint24 => mapping(address => uint32))");
-      const ownerArray = layout.types[layout.types[owners.type].value];
-      const record = layout.types[ownerArray.base];
-      expect(record.numberOfBytes).to.equal("32");
-      expect(record.members.map(({ label, slot, offset }) => ({ label, slot, offset }))).to.deep.equal([
-        { label: "owner", slot: "0", offset: 0 }, { label: "owed", slot: "0", offset: 20 }
-      ]);
+      expect(pending.slot).to.equal("79");
+      expect(layout.types[locator.type].label).to.equal("mapping(address => uint32)");
+      expect(layout.types[owners.type].label).to.equal("address[]");
+      expect(layout.types[pending.type].label).to.equal("mapping(uint24 => mapping(uint32 => uint256))");
 
       const { fixture, gameAddr, ticketWriteSlot } = await setupQueuedState();
       const { game, alice } = fixture;

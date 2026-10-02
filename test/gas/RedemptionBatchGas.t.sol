@@ -111,16 +111,15 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    function test_ColdLongClaimedPrefixIsBoundedAndCommits() public {
+    function test_ColdLongManuallyClaimedCohortClearsInConstantTime() public {
         uint24 day = game.currentDayView();
         address[] memory players = _queueBurners(2000, 1 ether);
         _resolve(day, 100, 99);
         for (uint256 i; i < players.length; ++i) sdgnrs.claimRedemption(players[i], day);
-        emit log_named_uint("cold_922_skip_router_gas", _coldRouterGas());
-        assertTrue(sdgnrs.redemptionSettlementPending(), "bounded prefix leaves remainder");
-        emit log_named_uint("cold_second_922_skip_router_gas", _coldRouterGas());
-        assertTrue(sdgnrs.redemptionSettlementPending());
-        emit log_named_uint("cold_156_skip_completion_router_gas", _coldRouterGas());
+        assertTrue(sdgnrs.redemptionSettlementPending(), "metadata cleanup remains owed");
+        uint256 used = _coldRouterGas();
+        emit log_named_uint("cold_2000_manual_claim_cleanup_router_gas", used);
+        assertLe(used, 500_000, "cleanup must not rescan already-consumed beneficiaries");
         assertFalse(sdgnrs.redemptionSettlementPending());
     }
 

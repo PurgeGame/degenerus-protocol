@@ -41,7 +41,7 @@ contract TLKeyComputer is DegenerusGameStorage {
 ///                [28:29]subsFullyProcessed [29:30]presaleDrained [30:31]ticketRedemptionOpen
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
 ///      - ticketQueue: slot 12 (mapping(uint24 => uint256[]))
-///      - entryOwnerPosition: slot 13 (mapping(uint24 => mapping(address => uint32)))
+///      - ticketOwnerId: slot 13 (mapping(address => uint32))
 ///      - prizePoolsPacked: slot 2 ([future:128][next:128])
 ///
 /// @dev Requirement coverage:
@@ -1716,7 +1716,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
 
     /// @notice Verify that the mid-day swap is conditional: only happens when
-    ///         ticketQueue[writeKey].length > 0 AND ticketsFullyProcessed == true.
+    ///         _ticketQueueLength(writeKey) > 0 AND ticketsFullyProcessed == true.
     ///         When conditions aren't met, no swap occurs and tickets wait for daily path.
     function testMidDaySwapConditional_NoTickets() public {
         // Drive to a state where daily processing has occurred (ticketsFullyProcessed = true)

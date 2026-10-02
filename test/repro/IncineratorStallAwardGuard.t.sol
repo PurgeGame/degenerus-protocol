@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
@@ -91,14 +92,22 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         uint48 stamps = uint48(uint256(lvl) << ((lvl & 1) * 24)
             | uint256(lvl + 1) << (((lvl + 1) & 1) * 24));
         vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 112)) | (uint256(stamps) << 112)));
-        // The jump also skips the earlier activation/materialization of the
-        // two inventory levels it declares prepared. Remove only those bootstrap
-        // future headers; x00/x01 queues remain real and must drain in this test.
-        for (uint24 skipped = lvl; skipped <= lvl + 1; ++skipped) {
-            bytes32 skippedFuture = keccak256(abi.encode(uint24(skipped | (1 << 22)), uint256(12)));
-            assertGt(uint256(vm.load(address(game), skippedFuture)), 0, "jump has skipped bootstrap obligations");
+        // This teleport skips activation of every earlier bootstrap future cohort,
+        // not just the two prepared inventory levels. A fresh 100-level whale pass
+        // must be able to reuse those expired roots. Authenticate each logical level
+        // before clearing its header: physical root1 may already hold live level101.
+        uint24 ff = 1 << 22;
+        assertGt(TicketQueueStorage.length(address(game), lvl | ff), 0, "jump skips bootstrap obligations");
+        uint256 kept100 = TicketQueueStorage.length(address(game), (lvl + 2) | ff);
+        uint256 kept101 = TicketQueueStorage.length(address(game), (lvl + 3) | ff);
+        for (uint24 skipped = 1; skipped <= lvl + 1; ++skipped) {
+            uint24 key = skipped | ff;
+            if (TicketQueueStorage.length(address(game), key) == 0) continue;
+            bytes32 skippedFuture = keccak256(abi.encode(uint256(TicketQueueStorage.queueKey(key)), uint256(12)));
             vm.store(address(game), skippedFuture, bytes32(0));
         }
+        assertEq(TicketQueueStorage.length(address(game), (lvl + 2) | ff), kept100, "preserve century cohort");
+        assertEq(TicketQueueStorage.length(address(game), (lvl + 3) | ff), kept101, "preserve next-century cohort");
     }
 
     /// @dev Mint WWXRP to `player` and enter the daily draw (which piggybacks

@@ -42,7 +42,7 @@ contract ChunkHarness is MintBucketSeed {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
         rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             _queueEntriesScaled(p, lvl, entriesScaled, false);
@@ -61,7 +61,7 @@ contract ChunkHarness is MintBucketSeed {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
         rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         uint24 rk = _tqReadKey(lvl);
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             uint80 ownerBits = _registerEntryOwner(p, lvl);
@@ -87,7 +87,7 @@ contract ChunkHarness is MintBucketSeed {
         rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         // Before the seal: level = lvl - 2, ceiling lvl - 1, so `lvl` routes far-future.
         level = lvl - 2;
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             _queueEntriesScaled(p, lvl, entriesScaled, false);
@@ -163,7 +163,7 @@ contract ChunkHarness is MintBucketSeed {
         rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         uint24 rk = _tqReadKey(lvl);
         // Position zero stays out of the seeded set (a zero lane makes word stores no-ops).
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
             uint80 ownerBits = _registerEntryOwner(p, lvl);

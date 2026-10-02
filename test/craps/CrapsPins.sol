@@ -27,6 +27,13 @@ contract MockGame {
     }
     bool public rngLocked;
 
+    uint8 private consumerStageOverride;
+    function setRngConsumerStage(uint8 stage) external { consumerStageOverride = stage + 1; }
+    function rngConsumerStage() external view returns (uint8) {
+        if (rngLocked) return 0;
+        return consumerStageOverride == 0 ? 5 : consumerStageOverride - 1;
+    }
+
     function setRngLocked(bool locked) external { rngLocked = locked; }
 
     function set(bytes32 slot, bytes32 value) external {

@@ -45,6 +45,7 @@ contract DecimatorPricingTest is Test {
 
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         h = new DecimatorBattleHarness();
         meter = new DecimatorPricingMeter();
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
@@ -88,6 +89,7 @@ contract DecimatorPricingTest is Test {
             vm.cool(address(h));
             vm.cool(ContractAddresses.CRAPS_ENGINE);
             (uint256 used, uint256 units) = meter.settle(h, budget);
+            assertLe(units, budget < 1824 ? budget : 1824, "strict shared work budget");
             assertLe(used * 10, units * UNIT_GAS * 9, "call exceeds 90% of its charge");
             uint256 ratio = used * 10_000 / (units * UNIT_GAS);
             if (ratio > maxRatioBps) maxRatioBps = ratio;
@@ -101,14 +103,14 @@ contract DecimatorPricingTest is Test {
         emit log_named_uint(string.concat(label, ": heaviest call gas"), maxCallGas);
     }
 
-    /// @dev Real dice on every board size: full-budget calls and one-item calls.
+    /// @dev Real dice on every board size: full-budget calls and small-allowance calls.
     function test_RealEngineCallsWithinCharge() public {
         for (uint256 salt = 1; salt <= 3; ++salt) {
             _field(700, salt, true, 0);
             _settleAll(2500);
         }
         _field(300, 9, true, 0);
-        _settleAll(10); // one item per call: the call frame plus a single run, rank or credit
+        _settleAll(122); // small allowance still reserves the largest indivisible run
         _report("real engine");
         assertLt(maxCallGas, 10_000_000, "a full keeper leg stays under 10M");
     }
@@ -126,8 +128,8 @@ contract DecimatorPricingTest is Test {
         }
         vm.stopPrank();
         h.seal(lvl, 50 ether, uint256(keccak256(abi.encode("round200k", uint256(259)))));
-        _settleAll(10);
-        _report("hot round, one item a call");
+        _settleAll(122);
+        _report("hot round, small allowance");
         uint24 again = nextLevel;
         nextLevel += 10;
         h.open(again);
@@ -142,12 +144,12 @@ contract DecimatorPricingTest is Test {
     }
 
     /// @dev A pool big enough that every share buys half passes: payouts alternate ETH credits and
-    ///      half-pass awards to fresh addresses, one item a call and in full calls.
+    ///      half-pass awards to fresh addresses, small allowance and in full calls.
     function test_WhalePassPayoutsWithinCharge() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorPricingFlatProbe).runtimeCode);
         fieldPool = 2000 ether;
         _field(1000, 300, false, 0);
-        _settleAll(10);
+        _settleAll(122);
         _field(1000, 301, false, 0);
         _settleAll(2500);
         _report("whale pass payouts");
@@ -159,7 +161,7 @@ contract DecimatorPricingTest is Test {
         for (uint8 pass; pass < 2; ++pass) {
             for (uint8 shape = 1; shape <= 3; ++shape) {
                 _field(1000, 100 + pass * 10 + shape, false, shape);
-                _settleAll(10);
+                _settleAll(122);
                 _field(1000, 200 + pass * 10 + shape, false, shape);
                 _settleAll(2500);
             }

@@ -143,7 +143,8 @@ Existing stricter measured fixture limits remain in place. See
 ## Daily RNG and foil implementation (2026-10-01)
 
 The two tagged daily RNG slots, normal foil generation cohorts with stored lines,
-D/D+1 foil and WWXRP claim windows, packed coinflip gap results, automatic live
+D/D+1 foil and WWXRP claim windows (the foil-match deadline is superseded by
+the persistent-seed change below), packed coinflip gap results, automatic live
 sDGNRS settlement, and 250-day startup deadline are implemented. Terminal sDGNRS
 redemptions have no expiry. Global level wrapping was superseded by ticket queue
 reuse with absolute gameplay levels, described below.
@@ -224,3 +225,110 @@ prior audit snapshot were those promoted files. Verification evidence remains in
 `foil-redemption-accepted/20261001T192221.151074Z-f7d2e221`. The audit snapshot was
 refreshed after checking that correspondence. Deployment-size and whitespace
 checks also pass on the combined checkout.
+
+
+## Persistent foil match seed (2026-10-02)
+
+The no-expiry policy and permanent record retention described in this historical
+entry are superseded by the foil expiry and record reuse change below. The saved
+payout seed and its domain separation are retained.
+
+Implemented the packed 128-bit payout seed and format flag in `dailyFoilDraw`,
+with no new storage field. Live-game match claims no longer expire by age or read
+the two-slot daily RNG ring. Golden-ticket deadlines and the liveness/terminal
+cutoff remain. Repeated sealing is a no-op: it preserves the first record without
+a replacement event or a new revert in the advance chain. No emergency entrance,
+ticket-round change, or dispatcher rewrite is included.
+
+The final isolated Foundry campaign passed **84/84 tests** across eight selected
+roots (ten suites including imported helpers). It covers all five match tiers and
+three currencies, 400-day delays after both RNG slots are reused, single/batch
+replay, century-crossing batch eligibility, zero versus unseeded records, invalid
+domains/packs, logical-day versus wall-day sealing, unchanged golden expiry,
+terminal rejection, and existing jackpot/foil/snap payout regressions. A separate
+focused run passed the six generation-cohort tests and the five RNG-freeze checks,
+including 256 invariant runs × 128 actions and seeded mutation detection. The
+freeze handler now samples recent/logical and historical foil records in both
+request windows. This is focused verification, not a full-suite audit.
+
+The pool-change test preserves the primary ETH gross payout with historical level
+pricing and saved activity, while an empty live pool converts the ETH share into
+recirculation. The first synthetic century-jump version collided with an old
+undrained recycled queue; the corrected pool-change fixture changes pricing within
+the century, while the separate batch test checks old-claim eligibility at level
+101. No production code was changed to bypass queue protection. Claim timing can
+change the live ETH share, sDGNRS Reward-pool award, and recirculation results;
+unclaimed matches are not funded reservations. No age limit expands this existing
+timing option. See `docs/audit/RNG-DOMAINS.md` for the payout-state review.
+
+A deterministic 40,000-sample seed smoke check produced currency counts
+16,148 / 15,861 / 7,991 (ETH/FLIP/WWXRP) and hero-quadrant counts
+9,760 / 10,146 / 10,088 / 10,006. This checks gross distribution drift, not a
+cryptographic proof. Pack generation, matching tiers, and spin resolvers are
+unchanged; the new domain-separated seed intentionally changes payout sequences.
+
+An isolated storage/packing microbenchmark measured +247 gas for a fresh draw
+record and −4,195 gas for the packed draw/entropy read versus the previous draw
+plus tagged daily-word read. These are localized call measurements, not full
+transaction gas deltas or worst-case payout bounds. The writer still performs one
+SSTORE for a new record and none for an existing record.
+
+A fresh production-pin build passed source-hash-validated size checks for every
+deployable contract: FoilPack 24,524 bytes (52 spare), Jackpot 23,219 (1,357 spare),
+and Game 24,560 (16 spare). All 28 emitted layouts match the checked-in normalized
+goldens; build sources match the workspace exactly. RNG-window, RNG-taint,
+shared-writer, advance-call, delegatecall, unchecked, and gasleft gates pass; the
+RNG-window gate's four mutation self-tests also pass.
+
+Evidence: `.audit-test-logs/foil-persistent-seed/`; final campaign
+`20261002T053806.025136Z-7a5211ec`, cohort/invariant run
+`20261002T052904.715785Z-953cdaa4`, and localized gas probe
+`20261002T053705.473273Z-dbda1d4d`. The probe source, production sizes, layout result,
+and distribution counts are saved there. Changes are uncommitted. Old unseeded
+records intentionally fail claim validation; this is a predeployment format
+change, not a deployed-state migration.
+
+## Foil claim expiry and record reuse (2026-10-02)
+
+Match claims now close at the start of D+2, where D is the logical draw day.
+Expiry applies even if the draw slot remains intact, and a draw first published
+after that deadline is already expired. Gold retains its actual-generation-day
+and following-day window; terminal settlement still closes both claim paths.
+
+The four ticket lines and pack metadata occupy four reusable level-tagged words
+per player (`level & 3`), with the gold-paid flag in the same word. Reuse requires
+completed materialization, an older level, a closed gold window, and no reference
+from today's or yesterday's draw. A collision rejects only the new purchase.
+The daily board and payout seed use two exact-day-tagged slots. Match replay
+protection uses one word per player with two tagged daily ticket bitmaps. Every
+lookup authenticates the full day or level; expiry is checked before claim bits
+can roll over. Internal draw readers retain logical-day access for stalled
+jackpot stages without granting expired player claims.
+
+Production compilation and source-hash-validated size checks pass for all 33
+deployment artifacts. FoilPack is 23,582 bytes, Jackpot 23,578, and Game 24,524.
+All 28 normalized storage layouts were compared: only `foilMatchClaimed` changes
+type to `mapping(address => uint256)` in the 13 shared layouts; no slot or offset
+moves. This is a predeployment storage-format change with no legacy migration.
+
+The final focused campaign covers 141 distinct passing test cases across its
+selected roots, taking the latest execution of each case after fixture repairs.
+The focused claim/reuse rerun passes 42/42 executions, including all 18 batch/claim
+tests and seven storage-reuse tests. Coverage includes all match tiers/currencies
+on D and D+1, D+2 rejection without overwrite, exact-tag rejection, bitmap rollover,
+single/batch replay, independent ticket bits, and actual purchases preserving live
+or pending records before replacing expired records and clearing old flags/lines.
+Gold/snap payouts, cohort isolation, lens parity and ticket recycling regressions
+pass. The RNG-freeze suite passes 256 invariant runs × 128 calls. Nine drain gas
+tests pass: the empty foil-tail advance uses 1,688,075 gas including intrinsic;
+the accompanying ticket stage uses 4,958,867, under the 10-million drain bound.
+
+Evidence is under `.audit-test-logs/foil-record-reuse/`. Early fixture failures
+(timestamp reads across `vm.warp`, obsolete cohort keys and historical public RNG
+lookups) were corrected in tests; no payout or advance rule was relaxed for them.
+Both stalled-request tests pass after restricting fixture box drains to unlocked
+boundaries; the final trace and rerun are in
+`.audit-test-logs/foil-record-reuse-stall-debug/20261002T061312.802123Z-e5dd0f9f/`.
+The production source manifest, sizes, normalized-layout comparison and isolated
+Foundry run manifests are retained there. These are focused checks, not a full
+audit or a full-suite pass.

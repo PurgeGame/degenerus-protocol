@@ -24,20 +24,16 @@ contract BucketLaneHarness is DegenerusGameMintModule {
     /// @dev Seed a queue owner's locator and positional owed field without weakening owner identity.
     function _seedOwedAt(uint24 key, address player, uint80 packed) internal {
         uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
-        if (pos != 0) entryOwnerPosition[key][player] = pos;
-        else pos = entryOwnerPosition[key][player];
+        if (pos != 0) ticketOwnerId[player] = pos;
+        else pos = ticketOwnerId[player];
         require(pos != 0, "queue owner must be registered");
-        _setEntryOwed(key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), pos, packed);
+        _setEntryOwed(key, pos, packed);
     }
 
     /// @dev Registry position for `player` at `lvl`: the last position when it is already
     ///      this player, otherwise a fresh push (test-side lookup-or-push).
-    function _ownerIdxFor(uint24 lvl, address player) internal returns (uint256) {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        uint256 len = owners.length;
-        if (len != 0 && owners[len - 1].owner == player) return len - 1;
-        owners.push(EntryOwner(player, 0));
-        return len;
+    function _ownerIdxFor(uint24 lvl, address player) internal returns(uint256) {
+        return uint256(_registerEntryOwner(player,lvl)>>OWNER_IDX_SHIFT)-1;
     }
 
     /// @dev Append `n` occurrences of `player` to lvlTraitEntry[lvl][trait].
@@ -51,7 +47,7 @@ contract BucketLaneHarness is DegenerusGameMintModule {
     function _seedQueued(uint24 rk, uint24 lvl, address player, uint80 packedOwedRem) internal {
         // Keep position zero out of the seeded set: a zero lane index makes every word store a
         // no-op and understates gas.
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         uint80 ownerBits = _registerEntryOwner(player, lvl);
         _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
         _seedOwedAt(rk, player, ownerBits | packedOwedRem);
@@ -70,7 +66,7 @@ contract BucketLaneHarness is DegenerusGameMintModule {
     }
 
     function ownerCount(uint24 lvl) external view returns (uint256) {
-        return lvlEntryOwner[lvl].length;
+        return ticketOwners.length;
     }
 
     function laneWord(uint24 lvl, uint8 trait, uint256 w) external view returns (uint256 word) {
@@ -152,15 +148,14 @@ contract BucketLanePacking is Test {
         }
     }
 
-    /// @dev The same owner appended twice in a row reuses one registry position; a different
-    ///      owner in between forces a new one.
+    /// @dev A wallet retains its global registry position even with another owner in between.
     function test_RegistryReuse() public {
         h.append(1, 9, address(0x1), 3);
         h.append(1, 9, address(0x1), 3);
         assertEq(h.ownerCount(1), 1);
         h.append(1, 9, address(0x2), 1);
         h.append(1, 9, address(0x1), 1);
-        assertEq(h.ownerCount(1), 3);
+        assertEq(h.ownerCount(1), 2);
         assertEq(h.ownerAt(1, 9, 6), address(0x2));
         assertEq(h.ownerAt(1, 9, 7), address(0x1));
     }

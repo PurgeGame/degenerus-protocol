@@ -30,7 +30,7 @@ HELPER	claimablePool	storage/DegenerusGameStorage.sol	_settleShortfall applies t
 OWNER	jackpotFlags	modules/DegenerusGameAdvanceModule.sol	advanceGame arms the turbo bit; _endPhase replaces it with the bonus-pending bit; rngGate consumes that bonus; sole writer
 OWNER	currentPrizePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots stores the settled current pool directly (single SSTORE batch); the jackpot/gameover modules go through _setCurrentPrizePool
 HELPER	currentPrizePool	storage/DegenerusGameStorage.sol	_setCurrentPrizePool narrows and stores; called by jackpot and gameover modules
-OWNER	dailyFoilDraw	modules/DegenerusGameJackpotModule.sol	payDailyJackpot/emitDailyWinningTraits persist the day's winning board, its double flag and level for foil claims; one write per sealed day
+OWNER	dailyFoilDraw	modules/DegenerusGameJackpotModule.sol	payDailyJackpot/emitDailyWinningTraits seal board, level and payout seed with an exact day tag in the two-slot ring; same-day retries and stale writes preserve the sealed word
 INIT	dailyIdx	DegenerusGame.sol	constructor seeds dailyIdx to the deploy day so gap detection starts there
 OWNER	dailyIdx	modules/DegenerusGameAdvanceModule.sol	_unlockRng seals the completed day (skipped at gameOver so the deadman's staleness survives); the crank is the sole runtime writer
 OWNER	dailyJackpotCoinTicketsPending	modules/DegenerusGameJackpotModule.sol	payDailyJackpot sets the phase-2 latch, payDailyJackpotCoinAndTickets clears it; both in the jackpot module
@@ -53,7 +53,7 @@ OWNER	deityBySymbol	modules/DegenerusGameWhaleModule.sol	_registerDeity records 
 OWNER	deityPassPricePaid	modules/DegenerusGameWhaleModule.sol	purchaseDeityPass records the price paid (caps the early-gameover refund); plain assignment, one pass per buyer
 OWNER	degeneretteRecordBounty	modules/DegenerusGameDegeneretteModule.sol	_placeDegeneretteBetCore writes the armed record bounty beside the queued bet; _resolveBet reads and deletes it once; sole writer
 OWNER	foilCursor	modules/DegenerusGameFoilPackModule.sol	_processFoilDrain persists the per-bucket resume position on budget deferral and zeroes when caught up; sole writer
-OWNER	foilMatchClaimed	modules/DegenerusGameFoilPackModule.sol	claim/_tryClaimFoilMatch/_pushFoilGrand set the one-shot per-pack marker before payout (CEI); sole writer
+OWNER	foilMatchClaimed	storage/DegenerusGameStorage.sol	_markFoilMatchClaimed sets the exact-day ticket bit before payout (CEI); expiry-gated claims recycle one of two per-player day lanes while preserving the other lane
 OWNER	_fundingSourceOf	modules/GameAfkingModule.sol	subscribe upserts/deletes the sparse external-funder map with FLAG_EXTERNAL_FUNDING; sole writer
 OWNER	gameOver	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain latches terminal state; sole writer, one-way
 HELPER	gameOverStatePacked	storage/DegenerusGameStorage.sol	_goWrite field mutator for the packed game-over state (time, jackpotPaid, swept)
@@ -168,3 +168,4 @@ OWNER	foilGenerationDay	modules/DegenerusGameRngUtils.sol	cohort generation stam
 OWNER	foilGenerationDay	modules/DegenerusGameFoilPackModule.sol	cohort generation stamps reset on swap and pinned on materialization
 OWNER	foilFirstDrawDay	modules/DegenerusGameRngUtils.sol	cohort generation stamps reset on swap and pinned on materialization
 OWNER	foilFirstDrawDay	modules/DegenerusGameFoilPackModule.sol	cohort generation stamps reset on swap and pinned on materialization
+HELPER	ticketOwnerId	storage/DegenerusGameStorage.sol	_registerEntryOwner assigns the wallet its permanent one-based ID only once, paired with appending the same wallet to ticketOwners; all ticket producers share this bounded allocation helper.

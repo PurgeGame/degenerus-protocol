@@ -26,6 +26,7 @@ pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
 import {Craps} from "../Craps.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -45,11 +46,11 @@ interface IDecimatorCrapsEngine {
 }
 
 /// @notice Shared-dice Decimator battle. All runs, ranking and ETH credits execute on chain.
-/// @dev Delegatecalled by Game. A FIFO of sealed rounds allows later windows to open while
-///      keepers process older fields. No transaction walks the unbounded entrant population.
+/// @dev Delegatecalled by Game. A sealed round finishes on the active session word before
+///      the next request can replace it. No transaction walks the unbounded entrant population.
 contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     uint256 private constant SCALE = 3000 ether;
-    uint256 private constant MAX_BUDGET = 2500;
+    uint256 private constant MAX_RUN_UNITS = 108;
     bytes32 private constant DICE_TAG = keccak256("decimator.battle.dice.v1");
     bytes32 private constant BOARD_TAG = keccak256("decimator.battle.board.v1");
     bytes32 private constant COIN_TAG = keccak256("decimator.battle.final-coin.v1");
@@ -63,7 +64,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     // (~30.5k), and a half-pass award with its share of the pool move (~23k fresh, plus ~10k once
     // a call). DecimatorPricing.t.sol pins every call, real dice and worst heap shapes alike, at
     // or under 90% of its charge with each call's storage cold, as a keeper transaction finds it.
-    uint256 private constant CALL_UNITS = 9;
+    uint256 private constant CALL_UNITS = 14;
     uint256 private constant TAILS_UNITS = 1;
     uint256 private constant RUN_UNITS = 4;
     uint256 private constant ROLLS_PER_UNIT = 6;
@@ -183,19 +184,14 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         DecBattleRound storage round = decBattleRounds[lvl];
         // An empty or already sealed event hands the pool back untouched.
         if (round.phase != 0 || round.count == 0) return poolWei;
-        if (_decWindowOpen() || poolWei > type(uint128).max) revert E();
-        round.rngWord = rngWord;
+        if (_decWindowOpen() || poolWei > type(uint128).max || decBattleQueue != 0
+            || rngWord <= RNG_WORD_WAITING || rngWord != _lootboxWord(_rngReadBuffer())) revert E();
+        _setRngComplete(false);
         round.poolWei = uint128(poolWei);
         uint256 places = (uint256(round.count) + 9) / 10;
         round.capacity = uint8(places > 100 ? 100 : places);
         round.phase = 1;
-        uint24 tail = uint24(decBattleQueue >> 24);
-        if (tail == 0) {
-            decBattleQueue = uint256(lvl) | (uint256(lvl) << 24);
-        } else {
-            decBattleRounds[tail].next = lvl;
-            decBattleQueue = uint24(decBattleQueue) | (uint256(lvl) << 24);
-        }
+        decBattleQueue = uint256(lvl) | (uint256(lvl) << 24);
         emit DecimatorResolved(lvl, rngWord, poolWei, round.count);
     }
 
@@ -203,24 +199,29 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     ///         Idles once the game is over: a round still queued then keeps its reservation in
     ///         claimablePool, which the final sweep releases.
     /// @return settled Work items (runs, finalization or ETH credits), including losing runs.
-    /// @return unitsUsed Conservative keeper work units; the final bounded run may overshoot.
+    /// @return unitsUsed Conservative keeper work units, never above the supplied allowance.
     /// @return moved Whether the FIFO or a round's cursor advanced.
     function settleDecimatorWinners(uint256 budgetUnits)
         external
         returns (uint256 settled, uint256 unitsUsed, bool moved)
     {
         uint24 lvl = uint24(decBattleQueue);
-        if (lvl == 0 || budgetUnits <= CALL_UNITS || gameOver) return (0, 0, false);
-        if (budgetUnits > MAX_BUDGET) budgetUnits = MAX_BUDGET;
+        budgetUnits = MineFlipBudget.clamp(budgetUnits);
+        if (lvl == 0 || budgetUnits <= CALL_UNITS || _rngConsumerStage() != 4) return (0, 0, false);
         DecBattleRound storage round = decBattleRounds[lvl];
+        uint256 word = _lootboxWord(_rngReadBuffer());
+        if (word == 0) return (0, 0, false);
         unitsUsed = CALL_UNITS;
         if (round.phase == 1) {
             uint64 cursor = round.cursor;
             uint64 count = round.count;
-            if (cursor == count) return (1, unitsUsed + _rank(lvl, round), true);
+            if (cursor == count) {
+                uint256 rankCost = RANK_UNITS + (uint256(round.winners) - round.winners / 2) * RANK_NODE_UNITS;
+                if (rankCost > budgetUnits - unitsUsed) return (0, unitsUsed, false);
+                return (1, unitsUsed + _rank(lvl, round, word), true);
+            }
             // The only external call is the pinned pure engine, which cannot touch Game storage, so
             // the batch keeps its progress on the stack and persists it once.
-            uint256 word = round.rngWord;
             uint256 capacity = round.capacity;
             uint256 winners = round.winners;
             uint256 winnersBefore = winners;
@@ -228,9 +229,14 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             uint256 free;
             assembly ("memory-safe") { free := mload(0x40) }
             while (cursor < count && unitsUsed < budgetUnits && settled < 256) {
-                ++cursor;
+                uint64 next = cursor + 1;
+                bool heads = uint256(keccak256(abi.encode(COIN_TAG, word, lvl, next))) & 1 != 0;
+                uint256 reserved = heads ? MAX_RUN_UNITS : TAILS_UNITS;
+                if (reserved > budgetUnits - unitsUsed) break;
                 uint256 units;
-                (units, winners) = _run(lvl, cursor, word, seed, capacity, winners);
+                (units, winners) = _run(lvl, next, word, seed, capacity, winners);
+                if (units > reserved) revert Invariant();
+                cursor = next;
                 unitsUsed += units;
                 ++settled;
                 // Every engine result is dead before the next iteration.
@@ -244,6 +250,9 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             (uint256 base, uint256 champ, uint256 champPasses, uint256 perEth,, bool passMode) = _payTerms(round);
             mapping(uint256 => uint256) storage heap = decBattleHeap;
             while (paid < winners && unitsUsed < budgetUnits) {
+                uint256 cost = CREDIT_UNITS
+                    + ((paid == 0 ? champPasses != 0 : passMode && paid & 1 == 0) ? PASS_UNITS : 0);
+                if (cost > budgetUnits - unitsUsed) break;
                 uint64 id = uint64(heap[paid]);
                 address owner = address(uint160(decBattleEntries[_entryKey(lvl, id)]));
                 // Position 0 is the champion (moved there at ranking): half passes, the rest ETH.
@@ -390,7 +399,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         return (uint256(keccak256(abi.encode(TIE_TAG, word, lvl, id))) & ~uint256(type(uint64).max)) | id;
     }
 
-    function _rank(uint24 lvl, DecBattleRound storage round) private returns (uint256 units) {
+    function _rank(uint24 lvl, DecBattleRound storage round, uint256 word) private returns (uint256 units) {
         uint256 winners = round.winners;
         units = RANK_UNITS;
         if (winners == 0) {
@@ -400,7 +409,6 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             return units;
         }
         mapping(uint256 => uint256) storage heap = decBattleHeap;
-        uint256 word = round.rngWord;
         // Every internal node of the min-heap is below a child, so the maximum is a leaf.
         uint256 i = winners / 2;
         uint256 best = i;
@@ -440,6 +448,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint24 next = round.next;
         round.phase = 3;
         decBattleQueue = next == 0 ? 0 : (decBattleQueue & (uint256(type(uint24).max) << 24)) | next;
+        _tryCompleteRng();
     }
 
     function _entryKey(uint24 lvl, uint64 id) private pure returns (uint256) {

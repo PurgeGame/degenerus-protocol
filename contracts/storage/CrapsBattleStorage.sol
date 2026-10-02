@@ -5,6 +5,11 @@ import {Craps} from "../Craps.sol";
 import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {LootboxCraps} from "../LootboxCraps.sol";
 import {CrapsCustomTerms} from "../CrapsCustomTerms.sol";
+import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
+
+interface IGameCrapsWorkStage {
+    function rngConsumerStage() external view returns (uint8);
+}
 
 /// @dev Shared layout for the table and its pinned jackpot lifecycle delegate. Append-only.
 abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
@@ -165,6 +170,38 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev What the seat that completes a field pays on top: the comp-lane credit's cold call
     ///      into FLIP, its lane write and its log, ~27k → 6 units.
     uint256 internal constant _FINAL_UNITS = 6;
+
+    // Normal read work shares MineFlip's budget. Reserve the engine's hard roll
+    // ceiling before a seat, then charge its deterministic outcome. The final
+    // seat also reserves the high/progressive/pass payout tail, beyond the old
+    // comp-only finalization weight. Jackpot transactions retain their own meter.
+    uint256 internal constant _READ_BATCH_UNITS = 12;
+    uint256 internal constant _READ_FINAL_UNITS = 64;
+    // Mirrors Craps._SLIP_ROLL_CEILING (600 - 1 + 512), pinned by budget tests.
+    uint256 internal constant _READ_SEAT_RESERVE =
+        _SEAT_UNITS + 1111 / _ROLLS_PER_UNIT + _CREDIT_UNITS;
+    uint256 internal constant _KEEP_HOP_UNITS = 4;
+    uint256 internal constant _ARM_UNITS = 40;
+    uint256 internal constant _SWEEP_BASE_UNITS = 12;
+
+    function _readCrapsStage() internal view returns (uint8) {
+        return IGameCrapsWorkStage(_GAME).rngConsumerStage();
+    }
+
+    /// @dev Both public custom settlement and scheduled settlement must take the
+    /// same oldest committed field. Already-paid historical slots are checked by
+    /// their callers before this live-cohort guard.
+    function _readCrapsFrontier(uint64 slot) internal view returns (bool) {
+        uint48 bound = _slotIndex[slot];
+        if (bound == 0 || bound > 2 || _readCrapsStage() != 5) return false;
+        uint48 index = bound - 1;
+        uint64 pos = _rngSlotCursor[index];
+        return _rngPending[index] != 0 && pos < _rngSlots[index].length && _rngSlots[index][pos] == slot;
+    }
+
+    function _readWorkAllowance(uint64 budget) internal pure returns (uint64) {
+        return uint64(MineFlipBudget.clamp(budget));
+    }
 
     /// @notice What one lapsed-day reservation refund charges: a pass-credit write, two logs and
     ///         the resumable sweep cursor — ~33k measured cold, rounded up.

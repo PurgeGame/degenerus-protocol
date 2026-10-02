@@ -38,6 +38,9 @@ enum MintPaymentKind {
 ///      payout phase (jackpotPhase()==true) once the prize target is met, then the level advances.
 ///      Ticket purchases stay open in both phases. gameOver() is terminal.
 interface IDegenerusGame {
+    /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
+    function rngConsumerStage() external view returns (uint8);
+
     /// @notice Get the current jackpot level.
     /// @return Current jackpot level (starts at 0).
     function level() external view returns (uint24);
@@ -429,8 +432,8 @@ interface IDegenerusGame {
     ///         game over caused by a dead VRF (open until the final sweep).
     /// @param player Owner of every referenced holding (credited, never the caller).
     /// @param refs Holdings to claim; the top byte of each is its kind: 0 a created ticket
-    ///        (trait at bits 64..71, occurrence index at bits 0..63), 1 queued entries (registry
-    ///        position plus one at bits 0..31), any other an undrained foil pack (resolve day at
+    ///        (trait at bits 64..71, occurrence index at bits 0..63), 1 queued entries (stable owner ID
+    ///        at bits 0..31, uint24 queue-domain key at bits 32..55), any other an undrained foil pack (resolve day at
     ///        bits 64..87, index into that day's bucket at bits 0..63).
     function claimDeadVrf(address player, uint256[] calldata refs) external;
 

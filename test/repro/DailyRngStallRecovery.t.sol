@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
-import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -413,22 +412,22 @@ contract DailyRngStallRecovery is DeployProtocol {
         return _ticketWriteSlot() ? lvl : lvl | TICKET_SLOT_BIT;
     }
 
-    /// @dev Zero ticketQueue[key].length (models an award-less previous draw).
+    /// @dev Zero _ticketQueueLength(key) (models an award-less previous draw).
     function _clearQueue(uint24 key) internal {
         vm.store(
             address(game),
-            keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12))),
+            keccak256(abi.encode(uint256(key), uint256(12))),
             bytes32(0)
         );
     }
 
-    /// @dev ticketQueue[key].length — the mapping sits at slot 12.
+    /// @dev _ticketQueueLength(key) — the mapping sits at slot 12.
     function _queueLen(uint24 key) internal view returns (uint256) {
         return
             uint256(
                 vm.load(
                     address(game),
-                    keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)))
+                    keccak256(abi.encode(uint256(key), uint256(12)))
                 )
             );
     }

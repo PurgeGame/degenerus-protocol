@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
-import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
@@ -736,7 +735,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         TicketQueueStorage.seed(address(game), _readKeyOf(lvl), lvl, who, uint80(entries) << 8);
     }
 
-    /// @dev Register `who` in lvlEntryOwner[lvl] (slot 67, append-only) the way every sink does at
+    /// @dev Register `who` in ticketOwners (slot 67, permanent) the way every sink does at
     ///      queue time, returning the owner bits the owed word must carry (position + 1 << 48).
     // ---------------------------------------------------------------------
     // Drive
@@ -995,13 +994,13 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         return _ticketWriteSlot() ? lvl | TICKET_SLOT_BIT : lvl;
     }
 
-    /// @dev ticketQueue[key].length — the mapping sits at slot 12.
+    /// @dev _ticketQueueLength(key) — the mapping sits at slot 12.
     function _queueLen(uint24 key) internal view returns (uint256) {
         return
             uint256(
                 vm.load(
                     address(game),
-                    keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)))
+                    keccak256(abi.encode(uint256(key), uint256(12)))
                 )
             );
     }

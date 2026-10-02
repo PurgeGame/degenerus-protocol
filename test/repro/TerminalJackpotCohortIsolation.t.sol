@@ -119,7 +119,8 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         uint80 ownerBits = _registerEntryOwner(player, lvl);
         uint256 id = uint32(ownerBits >> OWNER_IDX_SHIFT);
         foilQueue[_foilWriteKey()].push((id << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
-        foilRecord[lvl][player] = (uint256(20000) << _FOIL_MULT_SHIFT) | (uint256(100) << _FOIL_SCORE_SHIFT);
+        foilRecord[lvl & 3][player] = (uint256(20000) << _FOIL_MULT_SHIFT)
+            | (uint256(100) << _FOIL_SCORE_SHIFT) | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
     }
 
     function setFoilParity(bool writeSlot) external { ticketWriteSlot = writeSlot; }
@@ -134,13 +135,13 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
             record |= _FOIL_READY;
             foilCursor = 1;
         }
-        foilRecord[lvl][player] = record;
+        foilRecord[lvl & 3][player] = record | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
     }
 
     function foilCursorState() external view returns (uint256) { return foilCursor; }
 
     function foilState(uint24 lvl, address player) external view returns (uint256 writeLength, uint256 readLength, bool ready) {
-        return (foilQueue[_foilWriteKey()].length, foilQueue[_foilReadKey()].length, foilRecord[lvl][player] & _FOIL_READY != 0);
+        return (foilQueue[_foilWriteKey()].length, foilQueue[_foilReadKey()].length, _foilRecordWord(player, lvl) & _FOIL_READY != 0);
     }
 
     function seedEveryTrait(uint24 lvl, address player) external {

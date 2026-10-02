@@ -3,14 +3,14 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {LegacyTicketOwnerReference} from "../helpers/LegacyTicketOwnerReference.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-contract EntryRevealHarness is DegenerusGameStorage {
+contract EntryRevealHarness is LegacyTicketOwnerReference {
     function seed(uint32[] memory amounts, uint8 rem, uint256 ownerStart) external {
         _setTicketBufferLevel(7);
-        EntryOwner[] storage owners = lvlEntryOwner[7];
+        address[] storage owners = ticketOwners;
         assembly ("memory-safe") { sstore(owners.slot, ownerStart) }
         for (uint256 i; i < amounts.length; ++i) {
             uint80 bits = _registerEntryOwner(address(uint160(0x123400 + i)), 7);
@@ -20,7 +20,7 @@ contract EntryRevealHarness is DegenerusGameStorage {
         }
     }
 
-    function owner(uint32 idx) external view returns (address) { return lvlEntryOwner[7][idx].owner; }
+    function owner(uint32 idx) external view returns (address) { return ticketOwners[idx]; }
 
     function run(uint32 room, uint256 entropy) external returns (uint256 frontier, uint32 used) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
@@ -51,6 +51,7 @@ contract EntryRevealGas is Test {
     }
 
     function _observe(bool candidate, uint256 entropy, uint32 room) private returns (Observation memory o) {
+        if (!candidate) h.installLegacyOwners(7, 7);
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, candidate ? afterCode : beforeCode);
         vm.recordLogs();
         vm.startStateDiffRecording();
@@ -68,18 +69,7 @@ contract EntryRevealGas is Test {
         }
         // Physical bucket addresses and level stamps intentionally changed. Compare
         // every stored logical bucket (including lane order), not raw slot identity.
-        uint256 root = uint256(keccak256(abi.encode(uint256(candidate ? 1 : 7), uint256(8))));
-        for (uint256 trait; trait < 256; ++trait) {
-            uint256 header = uint256(vm.load(address(h), bytes32(root + trait)));
-            uint256 count = candidate ? uint32(header) : header;
-            o.buckets = keccak256(abi.encode(o.buckets, trait, count));
-            uint256 data = uint256(keccak256(abi.encode(root + trait)));
-            for (uint256 laneWord; laneWord < (count + 7) / 8; ++laneWord) {
-                bytes32 word = candidate && laneWord == count / 8 ? bytes32(header >> 32)
-                    : vm.load(address(h), bytes32(data + laneWord));
-                o.buckets = keccak256(abi.encode(o.buckets, word));
-            }
-        }
+        o.buckets = h.logicalBuckets(7, !candidate);
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
             assertEq(l.emitter, address(h));

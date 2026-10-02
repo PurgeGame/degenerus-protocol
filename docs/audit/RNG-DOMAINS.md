@@ -40,8 +40,12 @@ The game retains two full daily words under `day & 1`, authenticated by two
 absolute uint24 day tags in slot 34. `rngWordForDay` exposes only today and
 yesterday, returning zero for future, expired, or mismatched tags. Internal
 processing readers authenticate the same tags without a calendar cutoff: a
-committed AFKing/Craps cohort can finish after midnight before its word is reused.
-The ordinary read-completion gate also waits for live sDGNRS redemption settlement.
+committed daily advance consumer can finish after midnight. AFKing boxes and
+Decimator settlement use the active published session word instead of historical
+daily words or separate round words. The ordinary read-completion gate waits for
+AFKing boxes, live sDGNRS redemption settlement and Decimator rounds, along with
+committed tickets/foil, human boxes/bets and read-bound Craps. An AFKing stamp
+cannot open before its day is sealed, even while the preceding word is retained.
 Craps freezes its opened window tier, high multiplier, and existing stake echo in
 the scoreboard, so delayed scheduled cleanup reconstructs identical terms after
 the opening-day word retires without storing another word.
@@ -51,13 +55,45 @@ write cohort. The next request freezes that cohort; purchases made after the
 request require a later word. Materialization stores four uint32 lines in the
 existing foil record, together with readiness, first eligible draw, and the pack's
 actual generation day. Claims never reconstruct pack lines from a daily word.
-A match claim still uses the draw day's retained word for its currency and spin.
+Each `dailyFoilDraw[day & 1]` keeps board bits 0–31 and level bits 64–87, plus a
+128-bit payout seed in bits 88–215, a format flag at bit 216, and the exact day
+in bits 217–240. Every reader authenticates the day tag. The seed is
+`uint128(H(committedWord, logicalDay, keccak256("foil-payout-seed")))` and seals
+with the board in one write. A same-day or newer tagged record makes the writer
+return without changing state, emitting a replacement board, or reverting the advance. Match
+currency and spin hash this saved seed with day, ticket index, and their existing
+separate tags; they no longer depend on retained daily words. A zero seed is valid
+with the flag set; unseeded records are rejected. This is a predeployment format
+change, with no legacy-state migration.
 
-Foil matches and WWXRP payouts remain claimable on resolving day D and D+1 and
-expire on D+2, including when advancement stalls without overwriting a word.
-For WWXRP, D is participation day plus one. Golden foil claims use generation day
-and stored lines; the grand remains a push during materialization. The initial
-level-0 idle deadline is 250 days.
+Foil match claims are open on the draw day and following day, and expire on D+2
+even if the record has not yet been overwritten. Internal jackpot processing may
+still read an older, exactly tagged logical day while completing a stalled draw.
+Pack readiness, first-eligible draw, and exact level checks still apply. Each
+player's match markers occupy one reusable word: two day-tagged lanes, each with
+four ticket bits. The liveness/game-over cutoff still closes claims. Golden foil claims retain the
+generation-day and next-day window; WWXRP payouts retain resolving day D and D+1
+(where D is participation day plus one). Both expire on D+2. The foil grand remains
+a push during materialization. The initial level-0 idle deadline is 250 days.
+
+Pack metadata and all four lines share four reusable slots per player, keyed by
+`level & 3` and authenticated by the full level in bits 208–231. Gold-paid state
+lives in bit 232 of that same record. A new purchase can overwrite an occupied
+slot only after its previous pack has generated, its level is below the current
+game level, its generation-day gold window is closed, and neither today's nor
+yesterday's sealed board references its level. This protects late generation
+and fast or stalled transitions without assuming a maximum level rate. A live
+collision rejects only the new purchase; it does not block the advance. Events
+provide historical reconstruction after records are reused.
+
+The stored seed fixes the board, currency, and primary spin, not all proceeds.
+Stake pricing uses the draw's historical level and the pack's saved activity score.
+An ETH spin still caps its ETH share at 10% of the live unfrozen future pool;
+overflow is recirculated using the live lootbox state. High-score ETH spins award
+sDGNRS from the current Reward pool. Waiting for pool replenishment or a different
+level within the claim window can therefore change ETH, sDGNRS, and recirculation
+proceeds; unclaimed matches do not reserve funds.
+Claims during frozen pools retain the existing pending-pool solvency check.
 
 Recovery takes Coinflip wins directly from bits 1 through 31 of the committed
 raw recovery word, leaving bit 0 for the recovery day's normal flip. Each gap
@@ -137,7 +173,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Skim bps / variance | `H(word, SKIM_BPS_TAG)` / `H(word, SKIM_VARIANCE_TAG)` | Second variance draw hashes the first variance word |
 | sDGNRS century refill | `H(word, CENTURY_REFILL_TAG XOR completedLevel) % 51 + 25` | Tag = `H("sdgnrs.century.refill")`; fixed level and transition word; no caller, amount, timestamp or pool balance in seed |
 | Coinflip reward percent | packed `H(REWARD_PERCENT_TAG, word, uint24(epoch))` | Gap days use the raw recovery root as `word`; separate from win bits |
-| Foil packs | `FOIL_SEED_TAG` on frozen normal cohort word; `FOIL_CCY_TAG` / `FOIL_SPIN_TAG` on retained draw word | Stored lines bind buyer, level and ticket ordinal; payout binds draw day and ticket ordinal |
+| Foil packs | `FOIL_SEED_TAG` on frozen normal cohort word; `FOIL_CCY_TAG` / `FOIL_SPIN_TAG` on immutable packed payout seed | Stored lines bind buyer, level and ticket ordinal; payout binds draw day and ticket ordinal |
 | Protocol/deity boons | existing issuer/day/slot domains | Shared issuer menu intentional; winner cohort closed before request |
 | Incinerator / WWXRP draws | existing contract/day/draw domains | Weighted stake intervals choose probability, not hash input entropy |
 

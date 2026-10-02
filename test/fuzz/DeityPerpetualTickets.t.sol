@@ -23,7 +23,7 @@ contract PerpetualFixture is DegenerusGameStorage {
         uint256[] storage q = ticketQueue[_ticketQueueStorageKey(key)];
         uint256 n = _ticketQueueLength(key);
         for (uint256 i; i < n; ++i) {
-            _setEntryOwed(key & 0x3fffff, _tqPositionAt(q, i), 0);
+            _setEntryOwed(key, _tqPositionAt(q, i), 0);
         }
         _releaseTicketQueue(key);
     }

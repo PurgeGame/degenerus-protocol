@@ -74,7 +74,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         assertEq(game.level(), 0, "Initial level should be 0");
 
         // Verify constructor pre-queued FF entries at levels 6, 7, 8.
-        // ticketQueue[key] is an address[] of unique buyers. The constructor queues tickets
+        // ticketQueue[_ticketQueueStorageKey(key)] is an address[] of unique buyers. The constructor queues tickets
         // for 2 addresses (sDGNRS and VAULT) at each level, so the array length is 2.
         // Each address has 16 tickets tracked in entriesOwedPacked (not in the array length).
         uint256 ffLen6 = _ffQueueLength(6);

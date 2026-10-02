@@ -39,6 +39,7 @@ import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
+import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
 
 /**
  * @title DegenerusGameMintModule
@@ -332,7 +333,8 @@ contract DegenerusGameMintModule is
     /// @return writesUsed Write-budget units consumed (each storage write or skip costs one unit).
     function _processFutureTicketBatch(
         uint24 lvl,
-        uint256 entropy
+        uint256 entropy,
+        uint32 writesBudget
     ) private returns (bool worked, bool finished, uint32 writesUsed) {
         uint24 rk = _tqFarFutureKey(lvl);
 
@@ -346,8 +348,8 @@ contract DegenerusGameMintModule is
         }
 
         if (!_prepareTicketLevel(lvl)) {
-            (, bool drained) = _drainFoil((WRITES_BUDGET_SAFE * 65) / 100);
-            return (drained, false, WRITES_BUDGET_SAFE);
+            (, bool drained) = _drainFoil((writesBudget * 65) / 100);
+            return (drained, false, writesBudget);
         }
         uint256 idx = ticketCursor;
         if (idx >= total && ticketSeats == 0) {
@@ -356,9 +358,6 @@ contract DegenerusGameMintModule is
             ticketLevel = 0;
             return (false, true, 0);
         }
-
-        // Uniform budget for every chunk, including the first one.
-        uint32 writesBudget = WRITES_BUDGET_SAFE;
 
         uint32 used;
         uint32 processed; // Track within-player progress
@@ -375,7 +374,7 @@ contract DegenerusGameMintModule is
         // whole lane word. Survivors below the seat floor drain entry by entry.
         if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
             (idx, used) = _drainRounds(rk, lvl, writesBudget, idx, total, entropy, shift);
-            used = _drainSeatedSurvivors(queue, lvl, writesBudget, used, entropy, shift);
+            used = _drainSeatedSurvivors(queue, rk, lvl, writesBudget, used, entropy, shift);
         }
 
         while (idx < total && used < writesBudget) {
@@ -385,6 +384,7 @@ contract DegenerusGameMintModule is
                 bool advance
             ) = _processOneTicketEntry(
                     _tqPositionAt(queue, idx),
+                    rk,
                     lvl,
 
                     writesBudget - used,
@@ -445,14 +445,38 @@ contract DegenerusGameMintModule is
         external
         returns (bool finished, bool didWork)
     {
+        return _processTicketBatch(anchor, WRITES_BUDGET_SAFE);
+    }
+
+    /// @notice Same ordered sweep using the caller's remaining common work allowance.
+    /// @dev Reserve the existing 1M fixed-overhead bound (224 common units), plus
+    ///      32 local units for final-item accounting, seated-entry reloads and the
+    ///      rare foil grand. The remaining local writes cost at most 10k gas each.
+    ///      Charge the entire conservative allocation; no fresh allowance is granted
+    ///      when this sweep reaches the frozen future pool or the foil tail.
+    function processTicketBatchBudgeted(uint24 anchor, uint256 allowance)
+        external returns (bool finished, bool didWork, uint256 chargedUnits)
+    {
+        allowance = MineFlipBudget.clamp(allowance);
+        if (allowance <= 224) return (false, false, 0);
+        uint256 writes = (allowance - 224) * MineFlipBudget.GAS_PER_UNIT / UNIT_GAS_BOUND;
+        if (writes <= 32) return (false, false, 0);
+        writes -= 32;
+        if (writes > WRITES_BUDGET_SAFE) writes = WRITES_BUDGET_SAFE;
+        (finished, didWork) = _processTicketBatch(anchor, uint32(writes));
+        return (finished, didWork, allowance);
+    }
+
+    function _processTicketBatch(uint24 anchor, uint32 remaining)
+        private returns (bool finished, bool didWork)
+    {
         // A mid-day next-level snapshot leaves ordinary queues for the daily request.
         // The existing mid-day latch pins the reserved index until this drain completes.
         // Terminal callers explicitly select their current cohort and ignore future work.
         if ((anchor & TICKET_SLOT_BIT) == 0 && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == MID_DAY_FUTURE_POOL) {
-            (didWork, finished) = _drainFrozenPool(earlyTicketLevel);
+            (didWork, finished) = _drainFrozenPool(earlyTicketLevel, remaining);
             return (finished, didWork);
         }
-        uint32 remaining = WRITES_BUDGET_SAFE;
         // Lazily read on the first non-empty level: read-side content implies a
         // committed cohort implies a prior request, so the lootbox index is >= 1
         // whenever this loads. A stored word is never zero.
@@ -509,7 +533,7 @@ contract DegenerusGameMintModule is
 
             if (ticketSeats != 0 || total - idx >= ROUND_MIN_SEATS) {
                 (idx, used) = _drainRounds(rk, t, remaining, idx, total, entropy, shift);
-                used = _drainSeatedSurvivors(queue, t, remaining, used, entropy, shift);
+                used = _drainSeatedSurvivors(queue, rk, t, remaining, used, entropy, shift);
             }
 
             while (idx < total && used < remaining) {
@@ -519,6 +543,7 @@ contract DegenerusGameMintModule is
                     bool advance
                 ) = _processOneTicketEntry(
                         _tqPositionAt(queue, idx),
+                        rk,
                         t,
 
                         remaining - used,
@@ -571,7 +596,7 @@ contract DegenerusGameMintModule is
             uint24 nextLvl = _mintCeiling();
             if (_ticketQueueLength(_tqFarFutureKey(nextLvl)) != 0) {
                 if (didWork) return (false, true);
-                (bool ffWorked, bool ffFinished) = _drainFrozenPool(nextLvl);
+                (bool ffWorked, bool ffFinished) = _drainFrozenPool(nextLvl, remaining);
                 return (ffFinished && !_foilDrainPending(), ffWorked);
             }
         }
@@ -594,14 +619,14 @@ contract DegenerusGameMintModule is
     }
 
     /// @dev Both future-pool paths share the reserved, immutable lootbox word and batch cursor.
-    function _drainFrozenPool(uint24 lvl) private returns (bool worked, bool finished) {
+    function _drainFrozenPool(uint24 lvl, uint32 writesBudget) private returns (bool worked, bool finished) {
         uint24 marker = lvl | TICKET_FAR_FUTURE_BIT;
         if (ticketLevel != marker) {
             ticketLevel = marker;
             ticketCursor = 0;
         }
         uint256 entropy = _lootboxWord(_rngReadBuffer());
-        (worked, finished, ) = _processFutureTicketBatch(lvl, entropy);
+        (worked, finished, ) = _processFutureTicketBatch(lvl, entropy, writesBudget);
     }
 
     function _prepareTicketLevel(uint24 lvl) internal override returns (bool) {
@@ -654,6 +679,7 @@ contract DegenerusGameMintModule is
     ///      remain (a fuller set keeps rolling as rounds next chunk).
     function _drainSeatedSurvivors(
         uint256[] storage queue,
+        uint24 rk,
         uint24 lvl,
 
         uint32 budget,
@@ -675,6 +701,7 @@ contract DegenerusGameMintModule is
                 bool advance
             ) = _processOneTicketEntry(
                     _tqPositionAt(queue, qi),
+                    rk,
                     lvl,
 
                     budget - used,
@@ -736,6 +763,7 @@ contract DegenerusGameMintModule is
     ///      divides it twice.
     function _processOneTicketEntry(
         uint32 ownerPos,
+        uint24 rk,
         uint24 lvl,
 
         uint32 room,
@@ -745,7 +773,7 @@ contract DegenerusGameMintModule is
         uint8 shift
     ) private returns (uint32 writesUsed, uint32 take, bool advance) {
         uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
-        uint256 record = _entryRecord(lvl, ownerPos);
+        uint256 record = _entryRecord(rk, ownerPos);
         address player = address(uint160(record));
         uint80 packed = uint80(record >> 160);
         if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
@@ -761,7 +789,7 @@ contract DegenerusGameMintModule is
             bool skip;
             (packed, skip) = _resolveZeroOwedRemainder(
                 packed,
-                lvl,
+                rk,
                 ownerPos,
                 entropy,
                 baseKey,
@@ -775,7 +803,9 @@ contract DegenerusGameMintModule is
         if (room <= baseOv) return (0, 0, false);
         // Registry position, stamped when the entry was queued and carried on every write-back.
         uint80 ownerBits = packed & OWNER_IDX_MASK;
-        uint256 ownerIdx = uint256(ownerBits >> OWNER_IDX_SHIFT) - 1;
+        uint256 ownerIdx;
+        // _entryRecord authenticated ownerPos as a nonzero, in-range global ID.
+        unchecked { ownerIdx = uint256(ownerPos) - 1; }
         {
             uint32 availRoom = room - baseOv;
             // Reserve the worst: six units per occurrence for the first 256 (each may open a
@@ -821,7 +851,7 @@ contract DegenerusGameMintModule is
         uint80 newPacked = (uint80(remainingOwed) << 8) | uint80(rem);
         if (newPacked != 0) newPacked |= snapDone | ownerBits;
         if (newPacked != packed) {
-            _setEntryOwed(lvl, ownerPos, newPacked);
+            _setEntryOwed(rk, ownerPos, newPacked);
         }
         advance = remainingOwed == 0;
     }
@@ -980,6 +1010,59 @@ contract DegenerusGameMintModule is
         uint256 flipTokens
     );
 
+    /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
+    /// @dev Read-only twin of sellFarFutureEntries: shares the exact valuation (curve + daily
+    ///      per-player jitter + ETH/FLIP split) the executing path uses, so the displayed offer
+    ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
+    ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
+    ///      counterparty's FLIP inventory. Reverts on an ineligible distance or a zero /
+    ///      non-whole-ticket quantity (entry counts in multiples of 4); does
+    ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no FLIP
+    ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
+    ///      value(flipTokens).
+    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
+    /// @return totalBudget Total ETH the buyer would pay (the -EV offer).
+    /// @return ticketWei Portion delivered as current-level tickets.
+    /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
+    /// @return flipTokens Cash portion delivered as FLIP (burned from the buyer, paid as flip credit).
+    function previewSellFarFutureEntries(
+        address player,
+        uint32[] calldata levels,
+        uint256[] calldata quantities
+    )
+        external
+        view
+        returns (
+            uint256 totalFaceWei,
+            uint256 totalBudget,
+            uint256 ticketWei,
+            uint256 ethCashWei,
+            uint256 flipTokens
+        )
+    {
+        uint24 cl = _activeTicketLevel();
+        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
+        uint256 seed = _farFutureSeed(player);
+        uint256 cashWei;
+        (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
+            levels,
+            quantities,
+            cl,
+            oneTicketWei,
+            seed
+        );
+        // Display the split for the buyer the executing path would resolve; fall back to sDGNRS as the
+        // nominal counterparty when neither can fund (the preview still shows the -EV offer).
+        address buyer = _resolveSalvageBuyer(totalBudget);
+        if (buyer == address(0)) buyer = ContractAddresses.SDGNRS;
+        (ethCashWei, flipTokens) = _quoteFarFutureFlipSplit(
+            cashWei,
+            oneTicketWei,
+            seed,
+            buyer
+        );
+    }
+
     /// @notice Sell far-future ticket entries (current-level tickets + cash; -EV exit) to sDGNRS, or to
     ///         the vault on the owner-enabled fallback when sDGNRS cannot fund the swap.
     /// @dev Delegatecalled from DegenerusGame.sellFarFutureEntries with an already-resolved `player`
@@ -1108,7 +1191,7 @@ contract DegenerusGameMintModule is
 
     /// @dev Debit `entries` (owed is in entries, 4 per whole ticket) of the player's far-future tickets
     ///      at level L. On full sell-out (packed == 0) verify the caller-supplied queue index and O(1)
-    ///      swap-pop the seller out of ticketQueue[ffk], MAINTAINING `membership <=> packed != 0`
+    ///      swap-pop the seller out of ticketQueue[_ticketQueueStorageKey(ffk)], MAINTAINING `membership <=> packed != 0`
     ///      (so the far-future jackpot samplers need no change and gain no hot-path read). Partial sells
     ///      and sells that leave `rem` do not pop.
     function _removeFarFutureEntries(
@@ -1118,8 +1201,8 @@ contract DegenerusGameMintModule is
         uint256 idx
     ) internal {
         uint24 ffk = _tqFarFutureKey(L);
-        uint32 ownerPos = entryOwnerPosition[ffk][player];
-        uint80 packed = ownerPos == 0 ? 0 : uint80(_entryRecord(L, ownerPos) >> 160);
+        uint32 ownerPos = ticketOwnerId[player];
+        uint80 packed = ownerPos == 0 ? 0 : uint80(_entryRecord(ffk, ownerPos) >> 160);
         uint32 owed = uint32(packed >> 8);
         if (owed < entries) revert E(); // ownership / over-sell guard
         uint8 rem = uint8(packed);
@@ -1128,9 +1211,9 @@ contract DegenerusGameMintModule is
             uint256[] storage q = ticketQueue[_ticketQueueStorageKey(ffk)];
             if (idx >= _ticketQueueLength(ffk) || _tqOwnerAt(q, L, idx) != player) revert E();
             _tqSwapPop(q, idx);
-            _setEntryOwed(L, ownerPos, 0);
+            _setEntryOwed(ffk, ownerPos, 0);
         } else {
-            _setEntryOwed(L, ownerPos, (packed & OWNER_IDX_MASK) | (uint80(newOwed) << 8) | uint80(rem));
+            _setEntryOwed(ffk, ownerPos, (packed & OWNER_IDX_MASK) | (uint80(newOwed) << 8) | uint80(rem));
         }
     }
 
@@ -1781,6 +1864,16 @@ contract DegenerusGameMintModule is
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
+        // IDs through three billion keep lazy registration at the ordinary minimum.
+        // A later first ID from a ticket buy requires a 0.01 ETH-equivalent ticket
+        // leg, before bonuses. Claimable/afking/FLIP funding uses the same value;
+        // unrelated box spend or ETH overpayment does not satisfy this floor.
+        // Passes and ticket prizes register through their own unrestricted sinks.
+        if (
+            costWei < 0.01 ether &&
+            ticketOwnerId[buyer] == 0 &&
+            ticketOwners.length >= 3_000_000_000
+        ) revert E();
         // A dust ticket leg that cannot survive the routed level's snap divide fails closed instead
         // of charging full price for zero entries. The drain divides the accumulated
         // (player, level) balance by 2^s ONCE, so a buy under 2^s scaled units truncates to nothing

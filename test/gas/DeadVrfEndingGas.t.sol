@@ -16,13 +16,13 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
     function seedFoilBatch(uint24 lvl, uint24 day, uint256 count) external {
         for (uint256 i; i < count; ++i) {
             address owner = address(uint160(0xF0110000 + i));
-            lvlEntryOwner[lvl].push(EntryOwner(owner, 0));
-        foilQueue[day & 1].push((lvlEntryOwner[lvl].length << 192) | (uint256(lvl) << 160) | uint160(owner));
+            uint256 id = uint256(_registerEntryOwner(owner, lvl) >> OWNER_IDX_SHIFT);
+        foilQueue[day & 1].push((id << 192) | (uint256(lvl) << 160) | uint160(owner));
         }
         foilGenerationDay = day;
         foilFirstDrawDay = day;
         // Reachable continuation after the registry (all zero owed) has been tallied.
-        deadTallyPos = uint32(lvlEntryOwner[lvl].length);
+        deadTallyPos = uint32(ticketOwners.length);
         deadTallyStage = 1;
         deadTallyFoilDay = (day & 1) + 1;
     }
@@ -36,18 +36,22 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
 
     function seedFinalBatch(uint24 lvl) external returns (uint256 expectedUncreated) {
         snapShift = 1;
-        // Populate every trait, then leave exactly 2,742 registry entries. The same cold
-        // transaction must tally those, read all 256 trait lengths, and fix the payout.
+        // The finishing batch has 2,542 queued records across all three domains,
+        // two foil-queue boundary steps and 256 trait reads: exactly 2,800 units.
         for (uint256 t; t < 256; ++t) {
             _seedBucket(lvl, uint8(t), address(0xC4EA7ED), 1);
         }
-        while (lvlEntryOwner[lvl].length < 2742) {
-            _seedQueued(_tqReadKey(lvl), lvl, address(uint160(0xDEAD0000 + lvlEntryOwner[lvl].length)), uint80(4) << 8);
+        uint24[3] memory keys = [_tqReadKey(lvl), _tqWriteKey(lvl), _tqFarFutureKey(lvl)];
+        uint256 otherCount = _ticketQueueLength(keys[1]) + _ticketQueueLength(keys[2]);
+        while (_ticketQueueLength(keys[0]) + otherCount < 2542) {
+            _seedQueued(keys[0], lvl, address(uint160(0xDEAD0000 + _ticketQueueLength(keys[0]))), uint80(4) << 8);
         }
-        for (uint256 i; i < lvlEntryOwner[lvl].length; ++i) {
-            uint80 owed = uint80(_entryRecord(lvl, uint32(i + 1)) >> 160);
-            if (owed != 0 && owed & SNAP_DONE_BIT == 0) owed = _snapOwedPacked(owed, 1);
-            expectedUncreated += uint256(uint32(owed >> 8)) * QTY_SCALE + uint8(owed);
+        for (uint256 k; k < keys.length; ++k) {
+            for (uint256 i; i < _ticketQueueLength(keys[k]); ++i) {
+                uint80 owed = _entryPacked(keys[k], _tqPositionAt(ticketQueue[_ticketQueueStorageKey(keys[k])], i));
+                if (owed != 0 && owed & SNAP_DONE_BIT == 0) owed = _snapOwedPacked(owed, 1);
+                expectedUncreated += uint256(uint32(owed >> 8)) * QTY_SCALE + uint8(owed);
+            }
         }
         for (uint256 i; i < 30; ++i) {
             address owner = address(uint160(0xD3170000 + i));
@@ -84,7 +88,7 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
         s.seedDeadStall(mode == 3 ? 9 : LVL);
         if (mode == 0) s.seedRegistry(LVL + 1, 3001);
         if (mode == 1) s.seedFoilBatch(LVL + 1, FOIL_DAY, 3001);
-        if (mode == 2) s.seedEmptyDays(FOIL_DAY, FOIL_DAY + 3000);
+        if (mode == 2) s.seedEmptyDays(FOIL_DAY, FOIL_DAY + 2800);
         if (mode == 3) expectedUncreated = s.seedFinalBatch(10);
         vm.etch(address(game), code);
     }
@@ -127,17 +131,17 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
         vm.etch(address(game), type(DeadVrfGasSeeder).runtimeCode);
         (uint256 pos, uint256 day, uint256 idx, uint256 stage) = DeadVrfGasSeeder(payable(address(game))).progress();
         if (mode == 0) {
-            assertEq(pos, 3000, "full registry budget consumed");
+            assertEq(pos, 2800, "full registry budget consumed");
             assertEq(stage, 0);
         } else if (mode == 1) {
-            assertEq(idx, 3000, "full foil budget consumed");
+            assertEq(idx, 2800, "full foil budget consumed");
             assertEq(day, (FOIL_DAY & 1) + 1);
             assertEq(stage, 1);
         } else if (mode == 2) {
             assertEq(day, 3, "only two physical foil queues are scanned");
             assertEq(stage, 3);
         } else {
-            assertEq(pos, 2742);
+            assertEq(pos, 0, "completed queue-stage cursor cleared");
             assertEq(stage, 3);
         }
     }

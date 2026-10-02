@@ -92,16 +92,17 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertEq(quote, 24_000_000_000_000 * 1000 ether / game.mintPrice());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
-    function test_ClaimedPrefixConsumesAllowanceWithoutBounty() public {
+    function test_ManuallyClaimedCohortNeedsOnlyBoundedCleanupWithoutBounty() public {
         uint24 day = game.currentDayView();
         address[] memory players = _newBurners(3, 1 ether);
         _resolve(day, 100, 99);
         for (uint256 i; i < players.length; ++i) sdgnrs.claimRedemption(players[i], day);
-        for (uint256 i; i < players.length; ++i) {
-            (bool done, uint256 charged, uint256 quote) = _batch(14);
-            assertEq(done, i == players.length - 1);
-            assertEq(charged, 14); assertEq(quote, 0);
-        }
+        assertTrue(sdgnrs.redemptionSettlementPending(), "keeper cleanup is still owed");
+        (bool done, uint256 charged, uint256 quote) = _batch(11);
+        assertFalse(done); assertEq(charged, 0); assertEq(quote, 0);
+        assertTrue(sdgnrs.redemptionSettlementPending());
+        (done, charged, quote) = _batch(12);
+        assertTrue(done); assertEq(charged, 12); assertEq(quote, 0);
         assertFalse(sdgnrs.redemptionSettlementPending());
     }
     function test_EscrowOnlySuccessfulClaimReceivesTheExistingClaimBounty() public {
@@ -212,14 +213,15 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    function test_ExactBudgetCompletionNeverStartsBoxesWithZeroAllowance() public {
+    function test_NearBudgetCompletionDefersHumanBoxUntilFreshAllowance() public {
         address buyer = address(0xB0C3);
         _buyHuman(buyer, 1);
         uint24 day = game.currentDayView();
         address[] memory players = _newBurners(67, 1 ether);
         _resolve(day, 100, 99);
         for (uint256 j; j < 22; ++j) sdgnrs.claimRedemption(players[j], day);
-        // 22 skips * 2 + 45 claims * 40 + completion 12 = 1856, plus router tail 64.
+        // The manual prefix advances the cursor: 45 claims * 40 + completion 12
+        // leaves too little of the shared allowance for the next human box.
         _commitWord(99);
         vm.prank(keeper); game.mineFlip();
         assertFalse(sdgnrs.redemptionSettlementPending());

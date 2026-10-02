@@ -536,10 +536,10 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         return keccak256(abi.encode(uint256(key), TICKET_QUEUE_SLOT));
     }
 
-    /// @dev Register `who` in lvlEntryOwner[lvl] (slot 67, append-only) the way every sink does at
+    /// @dev Register `who` in ticketOwners (slot 67, permanent) the way every sink does at
     ///      queue time, returning the owner bits the owed word must carry (position + 1 << 48).
     /// @dev Seed `whole` far-future tickets for `who` at level L (packed: owed=whole*4 entries << 8 | rem).
-    ///      Appends `who` to ticketQueue[ffk(L)].
+    ///      Appends `who` to ticketQueue[_ticketQueueStorageKey(ffk(L))].
     function _seedFarTickets(address who, uint24 L, uint32 whole) internal {
         TicketQueueStorage.seed(address(game), ffk.ffKey(L), L, who, uint80(whole) * 4 << 8);
     }
@@ -569,7 +569,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     /// @dev Seed `whole` current-level tickets for `who` at the read key (packed: owed=whole*4 entries
-    ///      << 8 | rem) and append `who` to ticketQueue[readKey]. Mirrors the far-future seed shape.
+    ///      << 8 | rem) and append `who` to ticketQueue[_ticketQueueStorageKey(readKey)]. Mirrors the far-future seed shape.
     function _seedReadSlotTickets(uint24 readKey, address who, uint32 whole) internal {
         TicketQueueStorage.seed(address(game), readKey, readKey & ~TICKET_SLOT_BIT, who, uint80(whole) * 4 << 8);
     }

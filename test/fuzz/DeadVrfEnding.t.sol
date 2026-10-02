@@ -229,7 +229,7 @@ contract DeadVrfEndingTest is DeployProtocol {
     }
 
     function _ref(uint256 kind, uint256 hi, uint256 lo) private pure returns (uint256) {
-        return (kind << 248) | (hi << 64) | lo;
+        return (kind << 248) | (hi << (kind == 1 ? 32 : 64)) | lo;
     }
 
     function test_deadEndingSplitsThePotDeterministically() public {
@@ -268,13 +268,13 @@ contract DeadVrfEndingTest is DeployProtocol {
         game.claimDeadVrf(carol, two);
         assertEq(game.claimableWinningsOf(carol), 2 * (perTrait / 2), "carol: a whole trait's share");
 
-        one[0] = _ref(1, 0, davePos);
+        one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
         game.claimDeadVrf(dave, one);
         assertEq(game.claimableWinningsOf(dave), (pot * 450) / total, "dave: the average for 4.5 entries");
         vm.expectRevert();
         game.claimDeadVrf(dave, one); // owed zeroed
 
-        one[0] = _ref(1, 0, erinPos);
+        one[0] = _ref(1, TLVL, erinPos);
         game.claimDeadVrf(erin, one);
         assertEq(game.claimableWinningsOf(erin), (pot * 200) / total, "erin: the average for 2 entries");
 
@@ -291,6 +291,45 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertLt(pot - paid, 16, "only rounding dust left");
         (,,,,, uint256 left) = _state();
         assertEq(left, 0, "every uncreated unit claimed exactly once");
+    }
+
+    function test_SameStableOwnerClaimsThreeTerminalDomainsExactlyOnce() public {
+        DeadVrfSeeder s = _seeder();
+        s.seedDeadStall(LVL);
+        uint32 id = s.seedQueued(TLVL, false, dave, 3, 0);
+        assertEq(s.seedQueued(TLVL, true, dave, 5, 0), id);
+        assertEq(s.seedFuture(TLVL, dave, 7), id);
+        _restore();
+        _endGame();
+        (uint256 pot, uint256 total,, uint256 uncreated,,) = _state();
+        assertEq(uncreated, 1500);
+        assertEq(total, 1500);
+        uint256[] memory refs = new uint256[](1);
+        refs[0] = _ref(1, TLVL | (uint24(1) << 23), id);
+        vm.expectRevert(); game.claimDeadVrf(erin, refs);
+        refs[0] = _ref(1, TLVL + 1, id);
+        vm.expectRevert(); game.claimDeadVrf(dave, refs);
+        uint256[] memory duplicate = new uint256[](2);
+        duplicate[0] = _ref(1, TLVL, id);
+        duplicate[1] = duplicate[0];
+        vm.expectRevert(); game.claimDeadVrf(dave, duplicate);
+        assertEq(game.claimableWinningsOf(dave), 0, "duplicate batch rolls back atomically");
+        uint24[3] memory keys = [TLVL | (uint24(1) << 23), TLVL, TLVL | (uint24(1) << 22)];
+        uint256[3] memory weights = [uint256(300), 500, 700];
+        uint256 paid;
+        for (uint256 i; i < 3; ++i) {
+            refs[0] = _ref(1, keys[i], id);
+            game.claimDeadVrf(dave, refs);
+            paid += pot * weights[i] / total;
+            assertEq(game.claimableWinningsOf(dave), paid);
+            vm.expectRevert(); game.claimDeadVrf(dave, refs);
+        }
+        (,,,,,uint256 left) = _state();
+        assertEq(left, 0);
+        assertEq(_seeder().pendingWord(TLVL, dave), uint256(1) << 255);
+        _restore();
+        assertLe(paid, pot);
+        assertLt(pot - paid, 3);
     }
 
     /// @dev After game over the one path that must keep working is the sDGNRS deterministic
@@ -320,7 +359,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         vm.warp(block.timestamp + 31 days);
         game.advanceGame(); // final sweep
         uint256[] memory one = new uint256[](1);
-        one[0] = _ref(1, 0, davePos);
+        one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
         vm.expectRevert();
         game.claimDeadVrf(dave, one);
     }
@@ -385,16 +424,23 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertGt(mockVRF.lastRequestId(), before, "on a fresh terminal request");
         uint24 today = game.currentDayView();
         assertTrue(game.rngWordForDay(today) != 0, "applied to the ending's own day");
-        uint256 derived = uint256(keccak256(abi.encodePacked(uint256(0xF00D), s)));
         assertEq(game.rngWordForDay(s), 0, "old processing words are retired");
         assertEq(game.rngWordForDay(s + 1), 0, "gap words have no archive");
-        _assertCoinflipResult(s, applied ? 0x57AC : derived);
-        _assertCoinflipResult(s + 1, uint256(keccak256(abi.encodePacked(uint256(0xF00D), s + 1))));
+        // The terminal backfill starts after an already-applied day. Gap wins take raw-root
+        // bits 1..31 from that original start; reward percentages hash the root and actual day.
+        uint24 gapStart = applied ? s + 1 : s;
+        if (applied) _assertCoinflipResult(s, 0x57AC);
+        else _assertCoinflipResult(s, 0xF00D, (uint256(0xF00D) >> 1) & 1 != 0);
+        _assertCoinflipResult(s + 1, 0xF00D,
+            (uint256(0xF00D) >> (1 + uint256(s + 1) - gapStart)) & 1 != 0);
     }
 
     function _assertCoinflipResult(uint24 day, uint256 word) private view {
+        _assertCoinflipResult(day, word, word & 1 != 0);
+    }
+
+    function _assertCoinflipResult(uint24 day, uint256 word, bool expectedWin) private view {
         (uint16 actual, bool win) = coinflip.getCoinflipDayResult(day);
-        bool expectedWin = word & 1 != 0;
         uint256 hash = uint256(keccak256(abi.encodePacked(keccak256("degenerus.coinflip.reward-percent"), word, day)));
         uint16 expected = !expectedWin ? 1 : hash % 20 == 0 ? 50 : hash % 20 == 1 ? 150 : uint16(hash % 38 + 78);
         assertEq(actual, expected);

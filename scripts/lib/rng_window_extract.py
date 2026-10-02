@@ -41,6 +41,7 @@ VRF_WORD_IDENTIFIERS = [
     "rngWordCurrent",
     "_currentRngWord",
     "rngWordByDay",
+    "dailyFoilDraw",  # historical sealed board plus domain-separated payout seed
     "rngDayTags",
     "_recordedDailyWord",
     "_retainedDailyWord",

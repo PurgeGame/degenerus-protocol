@@ -73,7 +73,7 @@ contract RoundDrainHarness is MintBucketSeed {
     }
 
     function ownerCount(uint24 lvl) external view returns (uint256) {
-        return lvlEntryOwner[lvl].length;
+        return ticketOwners.length;
     }
 
     function owedOf(uint24 lvl, address p) external view returns (uint80) {

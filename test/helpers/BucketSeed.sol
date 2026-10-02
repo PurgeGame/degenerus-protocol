@@ -6,26 +6,19 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 /// @title BucketSeed — test-side seeding and decoding of the packed trait buckets
 /// @notice Harnesses that extend a production module mix this in to seed
 ///         `lvlTraitEntry[lvl][trait]` the way the drains do: register the owner in
-///         `lvlEntryOwner[lvl]`, then append packed lanes naming that position.
+///         the global owner registry, then append packed lanes naming that position.
 /// @dev Test-only. No contracts/*.sol is mutated.
 abstract contract BucketSeed is DegenerusGameStorage {
     /// @dev Seed a queue owner's locator and positional owed field without weakening owner identity.
     function _seedOwedAt(uint24 key, address player, uint80 packed) internal {
-        uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
-        if (pos != 0) entryOwnerPosition[key][player] = pos;
-        else pos = entryOwnerPosition[key][player];
-        require(pos != 0, "queue owner must be registered");
-        _setEntryOwed(key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), pos, packed);
+        uint32 pos = ticketOwnerId[player];
+        require(pos != 0 && (uint32(packed >> OWNER_IDX_SHIFT) == 0 || uint32(packed >> OWNER_IDX_SHIFT) == pos), "owner ID mismatch");
+        _setEntryOwed(key, pos, packed);
     }
 
-    /// @dev Registry position for `player` at `lvl`: the last position when it is already
-    ///      this player, otherwise a fresh push (test-side lookup-or-push).
+    /// @dev Resolve the stable owner index without creating another registry position.
     function _ownerIdxFor(uint24 lvl, address player) internal returns (uint256) {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        uint256 len = owners.length;
-        if (len != 0 && owners[len - 1].owner == player) return len - 1;
-        owners.push(EntryOwner(player, 0));
-        return len;
+        return uint256(_registerEntryOwner(player, lvl) >> OWNER_IDX_SHIFT) - 1;
     }
 
     /// @dev Append `n` occurrences of `player` to lvlTraitEntry[lvl][trait].
@@ -39,7 +32,7 @@ abstract contract BucketSeed is DegenerusGameStorage {
     function _seedQueued(uint24 rk, uint24 lvl, address player, uint80 packedOwedRem) internal {
         // Keep position zero out of the seeded set: a zero lane index makes every word store a
         // no-op and understates gas.
-        if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
+        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         uint80 ownerBits = _registerEntryOwner(player, lvl);
         _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
         _seedOwedAt(rk, player, ownerBits | packedOwedRem);

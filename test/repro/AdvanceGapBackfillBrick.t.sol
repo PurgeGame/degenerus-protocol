@@ -162,8 +162,27 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         assertEq(psdAfterBackfill, psdBeforeStall + expectedGap, "purchaseStartDay bumped by exact gap once");
         assertEq(_dailyIdx(), resumeDay - 1, "gap days skipped: index parked at the wall day minus one");
         assertTrue(game.rngLocked(), "the wall day's jackpot is still owed under the lock");
-        assertEq(game.rngWordForDay(idxBeforeStall + 1), 0xCAFEBABE, "request day kept its own raw word");
-        assertTrue(game.rngWordForDay(idxBeforeStall + 2) != 0, "first gap day received a backfill word");
+        // Full daily words expire from the two-day ring; compact Coinflip outcomes persist.
+        uint24 requestDay = idxBeforeStall + 1;
+        assertEq(game.rngWordForDay(requestDay), 0, "old request-day full word expired");
+        (uint16 requestReward, bool requestWon) = coinflip.getCoinflipDayResult(requestDay);
+        assertEq(requestReward, 1, "0xCAFEBABE request settled to the canonical loss sentinel");
+        assertFalse(requestWon, "request-day outcome retains the original even word's loss");
+
+        uint24 firstGapDay = requestDay + 1;
+        uint256 resumedRoot = game.rngWordForDay(resumeDay);
+        assertGt(resumedRoot, 1, "current resume-day root is retained");
+        assertEq(game.rngWordForDay(firstGapDay), 0, "old first gap-day full word expired");
+        uint256 rewardSeed = uint256(keccak256(abi.encodePacked(
+            keccak256("degenerus.coinflip.reward-percent"), resumedRoot, firstGapDay
+        )));
+        uint256 rewardRoll = rewardSeed % 20;
+        uint16 expectedReward = rewardRoll == 0 ? 50 : rewardRoll == 1 ? 150 : uint16(rewardSeed % 38 + 78);
+        bool expectedWin = resumedRoot & 2 != 0;
+        (uint16 gapReward, bool gapWon) = coinflip.getCoinflipDayResult(firstGapDay);
+        assertEq(gapReward, expectedWin ? expectedReward : 1, "first gap has its canonical stored result");
+        assertEq(gapWon, expectedWin, "first gap uses bit 1 of the resume root");
+        assertTrue(game.rngWordForDay(resumeDay - 1) != 0, "last gap day retains yesterday's full word");
         // Make the target met only AFTER the backfill. The wall day is the only day left to
         // seal, and it seals under the lock its own request holds.
         _setLevelTarget(0, 0);

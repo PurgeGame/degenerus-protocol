@@ -68,8 +68,14 @@ describe("BackfillIdempotency", function () {
     restoreAddresses();
   });
 
-  it("credits a delayed VRF gap exactly once and preserves packed outcomes across midnight", async function () {
-    const { game, advanceModule, mockVRF, coinflip, alice } = await loadFixture(deployFullProtocol);
+  for (const paidNudge of [false, true]) {
+  it(`credits a delayed VRF gap exactly once across midnight (${paidNudge ? "paid nudge" : "no nudge"})`, async function () {
+    const { game, advanceModule, mockVRF, coinflip, coin, alice } = await loadFixture(deployFullProtocol);
+    // An odd initial word funds the real nudge through Alice's resolved purchase credit.
+    const requestWord = paidNudge ? REQUEST_WORD | 1n : REQUEST_WORD;
+    // +1 carries across several gap bits, making accidental use of the nudged root visible.
+    const resumeWord = paidNudge ? 0xbadc0fffn : RESUME_WORD;
+    const appliedResumeWord = resumeWord + (paidNudge ? 1n : 0n);
     const initial = await readClocks(game);
     expect(initial).to.deep.equal({ purchaseStartDay: 1n, dailyIdx: 1n });
 
@@ -86,7 +92,7 @@ describe("BackfillIdempotency", function () {
     for (let i = 0; i < 4; ++i) await advanceToNextDay();
     const resumeDayW = await game.currentDayView();
     expect(resumeDayW).to.equal(requestDayR + 4n);
-    await mockVRF.fulfillRandomWords(stalledId, REQUEST_WORD);
+    await mockVRF.fulfillRandomWords(stalledId, requestWord);
     await drainDay(game, advanceModule, async () => {
       expect((await readClocks(game)).purchaseStartDay).to.equal(initial.purchaseStartDay);
       for (let day = requestDayR + 1n; day <= resumeDayW; ++day) {
@@ -99,9 +105,21 @@ describe("BackfillIdempotency", function () {
     expect(await game.rngWordForDay(requestDayR), "calendar-expired full word is hidden").to.equal(0n);
     expect((await coinflip.getCoinflipDayResult(requestDayR))[0], "sealed outcome survives expiry").to.be.gt(0n);
 
+    if (paidNudge) {
+      const [queued, cost] = await game.rngNudgeQuote();
+      expect(queued).to.equal(0n);
+      const available = await coin.balanceOfWithClaimable(alice.address);
+      expect(available, "resolved winnings fund the nudge").to.be.gte(cost);
+      await game.connect(alice).reverseFlip(cost);
+      expect(await coin.balanceOfWithClaimable(alice.address), "real FLIP cost was burned").to.equal(available - cost);
+      expect((await game.rngNudgeQuote())[0], "one paid nudge is queued").to.equal(1n);
+      expect((resumeWord >> 1n) & 7n, "raw gap fixture wins every skipped day").to.equal(7n);
+      expect((appliedResumeWord >> 1n) & 7n, "nudged gap bits would instead lose").to.equal(0n);
+    }
+
     const resumeId = await requestDay(game, advanceModule, mockVRF);
     expect(resumeId).to.be.gt(stalledId);
-    await mockVRF.fulfillRandomWords(resumeId, RESUME_WORD);
+    await mockVRF.fulfillRandomWords(resumeId, resumeWord);
     let reachedBackfill = false;
     for (let i = 0; i < 64; ++i) {
       if (await advanceStage(game, advanceModule) === STAGE_GAP_BACKFILLED) {
@@ -119,17 +137,18 @@ describe("BackfillIdempotency", function () {
     expect(await readClocks(game)).to.deep.equal({
       purchaseStartDay: creditedStart, dailyIdx: resumeDayW - 1n,
     });
-    const expectedWords = new Map([[requestDayR, REQUEST_WORD], [resumeDayW, RESUME_WORD]]);
+    const expectedWords = new Map([[requestDayR, requestWord], [resumeDayW, appliedResumeWord]]);
     for (let day = requestDayR + 1n; day < resumeDayW; ++day) {
-      const derived = BigInt(hre.ethers.solidityPackedKeccak256(["uint256", "uint24"], [RESUME_WORD, day]));
+      const derived = BigInt(hre.ethers.solidityPackedKeccak256(["uint256", "uint24"], [resumeWord, day]));
       expectedWords.set(day, derived === 0n ? 1n : derived);
     }
     const expectedResults = new Map();
     const rewardTag = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("degenerus.coinflip.reward-percent"));
     for (let day = requestDayR + 1n; day < resumeDayW; ++day) {
-      const word = expectedWords.get(day);
-      const seed = BigInt(hre.ethers.solidityPackedKeccak256(["bytes32", "uint256", "uint24"], [rewardTag, word, day]));
-      const win = (word & 1n) !== 0n;
+      // Gap wins use bits 1..31 of the RAW root; nudges affect only the real daily word.
+      // The retained yesterday word still serves the other daily RNG consumers.
+      const seed = BigInt(hre.ethers.solidityPackedKeccak256(["bytes32", "uint256", "uint24"], [rewardTag, resumeWord, day]));
+      const win = ((resumeWord >> (day - (requestDayR + 1n) + 1n)) & 1n) !== 0n;
       const roll = seed % 20n;
       const reward = roll === 0n ? 50n : roll === 1n ? 150n : seed % 38n + 78n;
       expectedResults.set(day, [win ? reward : 1n, win]);
@@ -159,6 +178,8 @@ describe("BackfillIdempotency", function () {
     expect(await game.currentDayView()).to.equal(resumeDayW + 1n);
     await drainDay(game, advanceModule, assertFrozenGap);
     expect((await readClocks(game)).dailyIdx).to.equal(resumeDayW);
+    expect((await coinflip.getCoinflipDayResult(resumeDayW))[1], "real daily flip uses the final nudged bit 0")
+      .to.equal((appliedResumeWord & 1n) !== 0n);
     expect(await game.gameOver()).to.equal(false);
 
     const laterId = await requestDay(game, advanceModule, mockVRF);
@@ -173,7 +194,8 @@ describe("BackfillIdempotency", function () {
       purchaseStartDay: creditedStart, dailyIdx: resumeDayW + 1n,
     });
     expect(await game.rngWordForDay(resumeDayW + 1n)).to.equal(LATER_WORD);
-    expect(LATER_WORD).not.to.equal(RESUME_WORD);
+    expect(LATER_WORD).not.to.equal(appliedResumeWord);
     expect(await game.gameOver()).to.equal(false);
   });
+  }
 });

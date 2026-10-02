@@ -28,6 +28,7 @@ import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
+import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {
@@ -47,8 +48,8 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 ///      and reports whether anything actually moved, which is the whole of what a
 ///      bounty-paying caller needs to know.
 interface ICrapsKeeper {
-    function keepScheduled(uint64 budgetUnits) external returns (bool progressed, uint64 slot);
-    function keepRngCohort(uint48 index, uint64 budgetUnits) external returns (bool moved, bool settled);
+    function keepScheduledBudgeted(uint64 budgetUnits) external returns (bool progressed, uint64 slot, uint64 charged);
+    function keepRngCohortBudgeted(uint48 index, uint64 budgetUnits) external returns (bool moved, bool settled, uint64 charged);
 }
 
 /// @title IQuestCompletionView
@@ -119,7 +120,8 @@ interface ISeatToken {
  */
 contract GameAfkingModule is DegenerusGameMintStreakUtils {
     // Shared execution units reserve entry/completion/reward overhead before box handoff.
-    uint256 private constant REDEMPTION_ROUTER_TAIL_UNITS = 64;
+    uint256 private constant AFK_CALL_UNITS = 12;
+    uint256 private constant RNG_REQUEST_UNITS = 512;
     // Same module-only encoding as the human worker: strict budget bit and packed result.
     uint256 private constant OPEN_STRICT_BUDGET_FLAG = uint256(1) << 255;
     uint8 private constant MINER_BOUNTY_REDEMPTION = 6;
@@ -380,16 +382,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      as ring-scan skips consume units. Bounds one call's open-leg gas at
     ///      ≈ 1920 × ~4.7k ≈ 9.1M structurally — skips cannot stack a full-ring
     ///      scan on top of a full-budget human sweep.
-    uint256 internal constant OPEN_WEIGHT_BUDGET = OPEN_BATCH * OPEN_ITEM_WEIGHT;
-
-    /// @dev The decimator leg's walk budget, in the same units, less what the box legs scanned.
-    ///      The module prices each run at the heaviest board's dice, so real fields use well under
-    ///      their charge: measured full calls run 7.3M on mixed boards and at most 8.2M on a field
-    ///      of the heaviest board. A scan that spent part of it leaves the leg only the rest. Only
-    ///      the last item can cross it, and a Decimator run is bounded at 48 shooters and exactly
-    ///      511 rolls: at most 108 units with a fresh insert and a full sift, so every item at its
-    ///      pinned 90% bounds a call at ~11.0M.
-    uint256 internal constant DEC_WALK_BUDGET = 2_500;
+    uint256 internal constant OPEN_WEIGHT_BUDGET = MineFlipBudget.BASIC_BUDGET;
 
     /// @dev THE CRAPS LEG'S FLAT REWARD — one FLIP for shutting a window or walking a field,
     ///      whichever the crank found to do. Flat rather than pro-rated because the two jobs are
@@ -397,22 +390,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      allowance of them, and pricing them apart would need a second unit to buy very
     ///      little.
     uint256 internal constant CRAPS_KEEP_FLAT_FLIP = 1 ether;
-
-    /// @dev THE CRAPS LEG SPENDS THE SAME WALK UNITS THE BOX LEGS DO — no gas conversion at all.
-    ///      The table charges each settled seat its own outcome in these units (`_SEAT_UNITS` and
-    ///      friends on `CrapsBattle`), so the three legs genuinely share ONE deterministic
-    ///      per-transaction envelope: whatever the afking walk and the human sweep left of
-    ///      `OPEN_WEIGHT_BUDGET` is handed down as-is, less a small reserve for the router's own
-    ///      tail — the cursor reads, the bounty credit, the `MinerBounty` log (~100k gas ≈ 22
-    ///      units, held at 32 for margin).
-    uint256 internal constant CRAPS_ROUTER_TAIL_UNITS = 32;
-
-    /// @dev Below this the leg passes ZERO rather than a token allowance. Any nonzero budget
-    ///      completes at least one seat — the table charges after a seat, not before — so handing
-    ///      it a sliver would buy a whole seat's work with a sliver's worth of budget and
-    ///      reintroduce exactly the stacking this shares an envelope to prevent. A DIRECT
-    ///      permissionless caller is deliberately not clamped.
-    uint256 internal constant CRAPS_MIN_START_UNITS = 64;
 
     /// @dev The craps table itself, pinned once. The address is a compile-time constant, so this
     ///      is the same bytecode as writing the cast at every call site — it just stops the keeper
@@ -1261,9 +1238,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         the debit (it also doubles as the lootbox seed `day`), and carry the
     ///         set-mutation semantics (no cursor advance after swap-pop).
     /// @dev The STAGE runs strictly pre-RNG (before `rngGate`), so the day-D
-    ///      word `_recordedDailyWord(processDay)` is uncommitted at stamp — the freeze property.
-    ///      The lootbox open sources its word from
-    ///      `_recordedDailyWord(lastAutoBoughtDay)` and rolls the level LIVE at open; there is no
+    ///      session word is uncommitted at stamp — the freeze property.
+    ///      The lootbox open uses the published active session word after the stamped day
+    ///      has sealed, and rolls the level LIVE at open; there is no
     ///      stored per-day epoch. The boundary-pinned `processDay` is computed once by the
     ///      STAGE and passed in (it is the stamped `lastAutoBoughtDay`, the frozen seed
     ///      `day`; never open-time `_simulatedDayIndex()`).
@@ -1288,10 +1265,25 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///        `SUB_STAGE_EVICT_WEIGHT` — and the chunk ends
     ///        when the accumulated weight reaches the budget, bounding even an all-evicts chunk.
     /// @return processed Number of set entries advanced/handled this chunk.
-    function processSubscriberStage(
-        uint24 processDay,
-        uint256 weightBudget
-    ) external returns (uint256 processed) {
+    function processSubscriberStage(uint24 processDay, uint256 weightBudget)
+        external returns (uint256 processed)
+    {
+        (processed,) = _processSubscriberStage(processDay, weightBudget);
+    }
+
+    /// @notice Subscriber staging in the common work currency, including entry and tail.
+    function processSubscriberStageBudgeted(uint24 processDay, uint256 allowance)
+        external returns (uint256 processed, uint256 charged)
+    {
+        return _processSubscriberStage(processDay, allowance);
+    }
+
+    function _processSubscriberStage(uint24 processDay, uint256 weightBudget)
+        private returns (uint256 processed, uint256 weight)
+    {
+        weightBudget = MineFlipBudget.clamp(weightBudget);
+        if (weightBudget < 20 + SUB_STAGE_TICKET_WEIGHT) return (0, 0);
+        weight = 20;
         uint256 mp = _mintPriceInContext();
         // Hoist the level read ONCE so the per-iter validity check is a pure
         // stored-field compare (no SLOAD on the non-crossing path).
@@ -1305,7 +1297,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             ? currentLevel
             : currentLevel + 1;
 
-        uint256 weight; // accumulated gas-weight; the chunk ends at weightBudget
 
         // sDGNRS level-start whale purchase, attempted ONCE per level here at the start of
         // afking processing (out of the per-sub loop, so it adds NO per-sub cost). On the first
@@ -1325,6 +1316,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // gas-weight is charged to this chunk, so the loop below starts with it consumed and
         // the chunk stays on the <10M target; a no-buy probe charges nothing.
         if (!swept && currentLevel > _sdgnrsBonusLevel) {
+            if (weight + SUB_STAGE_SDGNRS_WHALE_WEIGHT > weightBudget) return (0, 0);
             _sdgnrsBonusLevel = currentLevel;
             (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
                 abi.encodeWithSelector(
@@ -1333,7 +1325,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             );
             if (!ok) _revertDelegate(data);
             if (abi.decode(data, (uint256)) != 0) {
-                weight = SUB_STAGE_SDGNRS_WHALE_WEIGHT;
+                weight += SUB_STAGE_SDGNRS_WHALE_WEIGHT;
+            } else {
+                weight += 12;
             }
         }
 
@@ -1353,7 +1347,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // SLOAD-free per iteration.
         uint256 len = _subscribers.length;
 
-        while (weight < weightBudget && cursor < len) {
+        // Reserve the largest per-subscriber branch before reading or mutating it.
+        while (weight + SUB_STAGE_TICKET_WEIGHT <= weightBudget && cursor < len) {
             address player = _subscribers[cursor];
             Sub storage sub = _subOf[player];
 
@@ -1541,7 +1536,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
         // Credit the prize pools once for this chunk's batched box + ticket spend.
         _routeAfkingPoolEth(boxEthAccrued, ticketEthAccrued);
-        return processed;
+        return (processed, weight);
     }
 
     /// @dev Route a chunk's batched afking spend to the prize pools, mirroring the normal-buy
@@ -1598,8 +1593,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @dev Materialize ONE subscriber's stamped afking box (the freeze-critical open).
-    ///      The box's word comes from `_recordedDailyWord(sub.lastAutoBoughtDay)` (the frozen
-    ///      stamp day); the level and the EV-cap key read live inside `resolveAfkingBox`;
+    ///      The box uses the published active session word; the stamped day stays in its
+    ///      seed domain. The level and EV-cap key read live inside `resolveAfkingBox`;
     ///      the per-sub inputs (amount, score) come from the Sub record. Day-keyed
     ///      no-double-open: the leg runs only while `lastOpenedDay < lastAutoBoughtDay`
     ///      (the router pre-gates on the same condition), and advances the marker
@@ -1608,7 +1603,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      box is materialized by delegatecalling the LootboxModule's `resolveAfkingBox`
     ///      (the live-level twin of `resolveLootboxDirect`) with: the stamped spend (boons
     ///      OFF ⇒ amount == spend), the frozen process `day` = `lastAutoBoughtDay`, the
-    ///      frozen day's word `_recordedDailyWord(day)`, and the frozen
+    ///      active session's word, and the frozen
     ///      `activityScore = score`. The draw math and the single EV-cap RMW live in
     ///      `resolveAfkingBox`; this leg is the thin cursor/marker/dispatch shell.
     ///      `resolveAfkingBox` is the one freeze-correct seam (the public
@@ -1616,17 +1611,17 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      seed `day`). No stored baseLevel/index — the live roll needs no floor.
     /// @param player The subscriber whose box is materialized.
     /// @param sub The subscriber's stamped record (storage ref — the marker advances here).
-    /// @param word The frozen stamp day's `_recordedDailyWord(day)`, read once by the caller.
+    /// @param word The published active session word, read once by the caller.
     function _openAfkingBox(address player, Sub storage sub, uint256 word) private {
-        // lastAutoBoughtDay is the frozen stamp day used as the seed/word key.
+        // lastAutoBoughtDay is the frozen stamp day used in the seed domain.
         uint24 day = sub.lastAutoBoughtDay;
         // Advance the day-keyed no-double-open marker BEFORE the resolve (effects-first; a
         // re-entrant open re-checks `lastOpenedDay < lastAutoBoughtDay` → false → no-op).
         sub.lastOpenedDay = sub.lastAutoBoughtDay;
         // Pending box consumed — the sole decrement paired with the daily stamp's sole
-        // increment. Unchecked: a (never-expected) underflow wraps the counter HIGH, which
-        // only re-enables walks that find nothing (the safe direction); flooring at zero
-        // would instead bias toward under-count, the direction that skips real work.
+        // increment. The stamp/count invariant guarantees a positive count here. An
+        // erroneous underflow would fail closed by blocking session completion; flooring
+        // at zero would instead conceal outstanding work and permit word reuse.
         unchecked {
             --_pendingBoxCount;
         }
@@ -1638,8 +1633,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
 
         // boons OFF ⇒ the stamped spend IS the box amount (unpacked milli-ETH → wei). The
-        // word (the frozen stamp day's `_recordedDailyWord(day)`, passed in from the readiness check
-        // so it isn't re-read) keeps the open from being re-seeded; the level and EV-cap read
+        // active session word (passed in from the readiness check so it isn't re-read)
+        // remains retained until every pending box opens; the level and EV-cap read
         // live in the callee. No index, no baseLevel.
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
@@ -1677,9 +1672,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     function _autoOpen(
         uint256 budgetUnits
     ) internal returns (uint256 opened, uint256 unitsUsed, bool exhausted) {
-        if (budgetUnits == 0) budgetUnits = OPEN_WEIGHT_BUDGET;
-        // Entry-gate: the open path no-ops in the freeze / terminal control.
-        if (rngLockedFlag || _livenessTriggered()) return (0, 0, false);
+        budgetUnits = MineFlipBudget.clamp(budgetUnits);
+        if (budgetUnits < AFK_CALL_UNITS + OPEN_ITEM_WEIGHT || _rngConsumerStage() != 2) return (0, 0, false);
 
         uint256 len = _subscribers.length;
         if (len == 0) return (0, 0, false);
@@ -1688,14 +1682,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // on already-opened subs; a fresh-stamp sub past its marker opens).
         if (cursor >= len) cursor = 0;
 
-        // Day-cache: the boxes in one pass are almost always all stamped on the current day,
-        // so the frozen stamp-day word is read from `rngWordByDay` once per DISTINCT day, not
-        // once per box. Mixed days CAN occur (the open leg falls behind the budget or a keeper
-        // skips a day → the no-orphan rule keeps an old-day box), so each box still resolves
-        // ITS OWN stamp day — the cache only short-circuits the repeated same-day SLOAD, never
-        // crosses a box to another day's word (the seed-freeze invariant).
-        uint24 cachedDay;
-        uint256 cachedWord; // != 0 ⇒ cache holds _recordedDailyWord(cachedDay)
+        // Pending stamps hold this session open, just like indexed boxes. Load its word once;
+        // no historical daily word is needed, including after a delayed daily fulfillment.
+        uint256 word = _lootboxWord(_rngReadBuffer());
+        if (word == 0) return (0, 0, false);
+        // STAGE can span unlocked calls while the prior completed word is still published.
+        // Its new stamps are ahead of dailyIdx until their own daily session unlocks.
+        uint24 sealedDay = dailyIdx;
 
         // Budgeted ring walk: visit up to `len` subs from the cursor, wrapping mid-scan, at
         // most one full lap per call. A call that completes the lap with 0 opens has PROVEN
@@ -1704,7 +1697,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // (line below the loop entry) re-reaches it on a later lap. The caller treats cursor
         // movement as progress (no NoWork revert), so a skip run grinds down across calls.
         uint256 scanned;
-        while (scanned < len && unitsUsed < budgetUnits) {
+        unitsUsed = AFK_CALL_UNITS;
+        while (scanned < len && unitsUsed + 2 <= budgetUnits) {
             if (cursor >= len) cursor = 0;
             address player = _subscribers[cursor];
             Sub storage sub = _subOf[player];
@@ -1714,25 +1708,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 unchecked {
                     ++cursor;
                     ++scanned;
-                    ++unitsUsed;
+                    unitsUsed += 2;
                 }
                 continue;
             }
-            // Resolve this box's frozen stamp-day word — cache hit on the common same-day path.
-            uint256 word;
-            if (stampDay == cachedDay && cachedWord != 0) {
-                word = cachedWord;
-            } else {
-                word = _recordedDailyWord(stampDay);
-                cachedDay = stampDay;
-                cachedWord = word;
-            }
-            // word == 0 ⇒ the stamp day's word hasn't landed yet — skip until it does.
-            if (word == 0) {
+            // A pre-request STAGE stamp belongs to the next daily session, not this word.
+            if (stampDay > sealedDay) {
                 unchecked {
                     ++cursor;
                     ++scanned;
-                    ++unitsUsed;
+                    unitsUsed += 2;
                 }
                 continue;
             }
@@ -1751,10 +1736,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 ++scanned;
                 unitsUsed += OPEN_ITEM_WEIGHT;
             }
+            if (_pendingBoxCount == 0) break;
         }
 
         _subOpenCursor = uint16(cursor >= len ? 0 : cursor);
         exhausted = scanned < len;
+        // The human sweep may already be complete after an earlier partial-budget handoff.
+        // Recheck only after every opened box's reward effects have returned successfully.
+        if (opened != 0) _tryCompleteRng();
     }
 
     /// @notice Permissionless router, prioritizing advance, then redemption/box work,
@@ -1796,246 +1785,184 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return _runWork(false);
     }
 
-    /// @dev One dispatcher for both public entries. Workers never call back into either entry.
-    ///      Standalone calls preserve the advance worker's idle/error behavior unless a new day
-    ///      is blocked solely by read consumers; rewarded calls select any available keeper work.
+    /// @dev The normal RNG pipeline has two phases, both driven by mineFlip:
+    ///      1. Advance: pre-request staging, request/publication, committed ticket and foil
+    ///         generation, daily draws and jackpot stages, then daily unlock.
+    ///      2. Consumers: redemption boxes, AFKing boxes, human boxes/Degenerette,
+    ///         Decimator, and read-bound Craps. Only then may another request run.
+    ///      _rngConsumersComplete is the shared completion checklist; timed player claims
+    ///      use retained results independently. Standalone advance uses the same drain when
+    ///      a new day is waiting on phase 2, without paying a keeper bounty.
     function _runWork(bool rewarded) private returns (uint8 mult) {
-        uint256 bountyEarned;
-        uint256 redemptionBounty;
-        // Category for the unified credit below. The two legs are a strict if/else, so
-        // each sets it alongside the bounty it prices; it is read only when one paid.
-        uint8 bountyKind;
-
-        // (1) advance — highest priority, liveness-critical (TRUE regardless of rngLock).
-        // Delegate directly to the worker, preserving the original caller and storage context.
         if (rewarded ? _advanceDue() : !_advanceNeedsReadDrain()) {
-            // Post-gameover dailyIdx freezes, so _advanceDue stays true while the
-            // only remaining advance work is the one-time final sweep. Revert the idle
-            // no-op (checked BEFORE the advance, so a still-pending sweep runs and commits).
-            if (rewarded && gameOver && !_finalSweepPending()) revert NoWork();
-            // Read pay-eligibility BEFORE the advance — it sees the pre-advance day (the
-            // advance bumps dailyIdx). The advance work runs regardless; an ineligible
-            // keeper just earns no bounty (real participants get first shot, free cranks
-            // are welcome). The bounty unit is likewise priced strictly PRE-advance (the
-            // advance mutates level/jackpotPhaseFlag), and only when a bounty can pay.
-            bool eligible = rewarded && _bountyEligible(msg.sender);
-            uint256 unit;
-            if (eligible) {
-                unit =
-                    (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
-                    _mintPriceInContext();
-            }
-            (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameAdvanceModule.advanceGame.selector)
-            );
-            if (!ok) _revertDelegate(data);
-            mult = abi.decode(data, (uint8));
-            if (mult > 0 && eligible) {
-                bountyEarned = unit * ADVANCE_RATIO_NUM * mult;
-                bountyKind = MINER_BOUNTY_ADVANCE;
-            }
+            return _runAdvance(rewarded);
         }
-        // (2) box open — FALSE during rngLock; opens mid-day-resolved stamped boxes.
-        // Afking boxes FIRST via _subOpenCursor, then human boxes with the leftover
-        // budget. The two legs share ONE weighted budget (visits = 1 unit, opens =
-        // OPEN_ITEM_WEIGHT), so a long afking skip run can never stack a free full-ring
-        // scan on top of a full-budget human sweep; both legs are pull-only, so the tx
-        // stays gas-bounded and reentrancy-free. The combined open count is bountied 1x
-        // pro-rated below the knee, flat 1x at/above — kills the small-batch
-        // farm-by-splitting corner.
-        else {
-            // Redemption rewards may register far-future ticket owners. Finish the
-            // daily draws and release their lock first; the read-completion gate still
-            // forbids every fresh normal RNG request until this cohort is consumed.
-            uint256 openBudget = OPEN_WEIGHT_BUDGET;
-            bool redemptionProgress;
-            if (!rngLockedFlag && IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) {
-                // Reserve router/worker entry and reward tails before handing out shared work.
-                (bool done, uint256 charged, uint256 quote) =
-                    IsDGNRS(ContractAddresses.SDGNRS).processRedemptionSettlement(OPEN_WEIGHT_BUDGET - REDEMPTION_ROUTER_TAIL_UNITS);
-                redemptionBounty = quote;
-                redemptionProgress = charged != 0;
-                if (!done) {
-                    if (rewarded) _creditWorkBounty(0, 0, redemptionBounty);
-                    return 0;
-                }
-                _tryCompleteRng();
-                if (redemptionProgress) openBudget -= REDEMPTION_ROUTER_TAIL_UNITS + charged;
-            }
-            uint256 opened;
-            uint256 unitsUsed;
-            // What the two box legs actually burned, in walk units. The craps leg below is sized
-            // out of the same budget, so a crank cannot stack a full box sweep and a full settle
-            // batch into one transaction.
-            uint256 spentUnits;
-            // Afking opens creditable toward the bounty knee THIS call: net of the
-            // forced-split carry, so a backlog the weighted budget splits across calls
-            // pays the same aggregate bounty the unsplit call would have.
-            uint256 afkKneeCredit;
-            // Afking-leg progress = a box opened OR the cursor advanced over a skip run.
-            // Skip-only progress commits (later calls resume past it) but pays no bounty.
-            bool afkProgress;
-            // O(1) drained gate: zero pending afking boxes ⇒ skip the ring walk entirely
-            // (a walk would only prove "no work" at ~1 unit per subscriber). The unrewarded
-            // openBoxes valve never consults the counter, so a counter fault can only cost
-            // gas (a walk that finds nothing — the ungated behavior), never box liveness.
-            if (_pendingBoxCount != 0 && openBudget != 0) {
-                uint256 cursorBefore = _subOpenCursor;
-                // Read the carry BEFORE the walk: opening the batch's last pending box
-                // fires the open-side clear mid-walk, and the netting below must see the
-                // pre-walk batch state, not the cleared slot.
-                uint256 carry = _openBountyCarry;
-                bool afkExhausted;
-                (opened, unitsUsed, afkExhausted) = _autoOpen(openBudget);
-                spentUnits = unitsUsed;
-                afkProgress = opened != 0 || _subOpenCursor != cursorBefore;
-                // Netting runs only when the walk actually ran (a freeze/liveness early
-                // return leaves the batch state untouched — no spurious carry clear,
-                // independent of the NoWork revert below).
-                if (unitsUsed != 0 || opened != 0) {
-                    // Forced-split bounty batch: knee-credit only the opens beyond what
-                    // the carry already credited. A batch is one OPEN_BATCH's worth of
-                    // opens; opens past that boundary begin a FRESH batch with a fresh
-                    // knee. The carry persists while the walk is
-                    // budget-exhausted with boxes still pending, and clears at a completed
-                    // lap, at the boundary, or when the pending counter drains to zero
-                    // (the open-side clear). Aggregate bounty over the split chunks == the
-                    // unsplit calls' aggregate.
-                    uint256 batchOpens = carry + opened;
-                    uint256 carryKnee = carry < OPEN_KNEE ? carry : OPEN_KNEE;
-                    uint16 newCarry;
-                    if (batchOpens >= OPEN_BATCH) {
-                        // carry < 80 and opened <= 80 ⇒ at most one boundary crossing.
-                        uint256 beyond = batchOpens - OPEN_BATCH;
-                        uint256 beyondKnee = beyond < OPEN_KNEE ? beyond : OPEN_KNEE;
-                        afkKneeCredit = (OPEN_KNEE - carryKnee) + beyondKnee;
-                        newCarry = (afkExhausted && _pendingBoxCount != 0)
-                            ? uint16(beyond)
-                            : 0;
-                    } else {
-                        uint256 batchKnee = batchOpens < OPEN_KNEE
-                            ? batchOpens
-                            : OPEN_KNEE;
-                        afkKneeCredit = batchKnee - carryKnee;
-                        newCarry = (afkExhausted && _pendingBoxCount != 0)
-                            ? uint16(batchOpens)
-                            : 0;
-                    }
-                    if (newCarry != carry) _openBountyCarry = newCarry;
-                }
-            }
-            // Human-box leg — the read-buffer sweep lives in the lootbox module (delegatecall
-            // runs it in this Game's storage, the same nested pattern as _openAfkingBox's
-            // resolveAfkingBox). It counts boxes opened plus bets resolved, not entries: one order can
-            // carry up to MAX_BOXES_PER_ORDER boxes.
-            //
-            // The legs stop sharing a call only when the afking leg does REAL work: the sweep
-            // always runs its first entry whatever its size, so stacking a maximum entry on a
-            // call that already spent its weight on afking OPENS could blow past the ceiling —
-            // afking keeps those calls, and the human leg gets whole fresh ones. But a walk
-            // that only SCANNED (opens == 0 — a drained ring, or a stuck/wrapped
-            // _pendingBoxCount, whose unchecked decrement is documented safe precisely
-            // because a wrong walk finds nothing) must hand the REMAINDER on, exactly as the
-            // shared budget always did — gating on units consumed would let a scan-only walk
-            // starve the rewarded human sweep on every crank, permanently under a wedged
-            // counter. Scan + remainder is budget-bounded (<= OPEN_WEIGHT_BUDGET total), so
-            // the stacked case stays within the shared-budget ceiling.
-            bool sweptFrontier;
-            // Passed in WALK UNITS, not steps: the sweep prices its own entries, because
-            // only it knows how many boxes each holds.
-            uint256 humanSteps = opened == 0
-                ? (unitsUsed < openBudget ? openBudget - unitsUsed : 0)
-                : 0;
-            if (humanSteps != 0) {
-                // Snapshot the monotonic human-box frontier: the sweep advances it over
-                // already-opened / dead entries (skips) even when it opens nothing, and that
-                // advance is real forward progress (later sweeps start past the skips). Commit
-                // it rather than reverting NoWork and rolling it back — so the rewarded crank
-                // grinds through a long skip run itself, cumulatively across calls, instead of
-                // rescanning the same prefix forever. Bounty is still paid only for actual opens.
-                bool frontierComplete = humanReadComplete;
-                uint48 frontierCur = boxCursor;
-                (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameLootboxModule.openHumanBoxes.selector,
-                        redemptionProgress ? humanSteps | OPEN_STRICT_BUDGET_FLAG : humanSteps
-                    )
-                );
-                if (!ok) _revertDelegate(data);
-                (uint256 humanOpened, uint256 humanUnits) = abi.decode(data, (uint256, uint256));
-                uint256 humanCharge = humanUnits;
-                if (redemptionProgress) {
-                    humanCharge = humanUnits >> 128;
-                    humanUnits = uint128(humanUnits);
-                }
-                opened += humanOpened;
-                spentUnits += humanCharge;
-                // Knee credit in WORK, not boxes: one entry-weight of walk units is about one
-                // single-box open's worth of gas, and boxes after an entry's first cost a
-                // fraction of that. Crediting per box would let a single five-small order
-                // saturate the knee at ~a third of the work five separate entries cost.
-                if (humanOpened != 0) {
-                    afkKneeCredit += humanUnits / OPEN_HUMAN_ENTRY_WEIGHT;
-                }
-                sweptFrontier = humanReadComplete != frontierComplete || boxCursor != frontierCur;
-            }
-            if (opened > 0) {
-                // Priced after the open legs: box resolution never writes
-                // level/jackpotPhaseFlag, so this equals the entry-time price — and the
-                // lookup is skipped entirely on the NoWork probe. The knee basis is the
-                // carry-netted credit, so a forced-split chunk whose opens were already
-                // knee-credited pays nothing extra (opened > 0 still suppresses NoWork).
-                uint256 unit = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
-                    _mintPriceInContext();
-                uint256 k = afkKneeCredit < OPEN_KNEE ? afkKneeCredit : OPEN_KNEE;
-                bountyEarned = (unit * k) / OPEN_KNEE;
-                bountyKind = MINER_BOUNTY_BOX_OPEN;
-            } else if (!redemptionProgress) {
-                // NO BOX OPENED, so the crank settles decimator winners, then goes to the craps
-                // table — LAST, and only here. A call that spent its weight budget opening boxes
-                // is already ~9.1M of gas, and stacking a settle batch on top of that would push
-                // it past the ceiling; the same reason the human sweep only runs on a call the
-                // afking walk left idle. `opened == 0` is also exactly when no box bounty was
-                // priced, so the one credit below stays one category and cannot be stacked.
-                (uint256 decSettled, uint256 decUnits, bool decMoved) = _decimatorSettle(
-                    spentUnits < DEC_WALK_BUDGET ? DEC_WALK_BUDGET - spentUnits : 0
-                );
-                spentUnits += decUnits;
-                if (decSettled != 0) {
-                    // Knee credit in work, as for the human sweep: one entry-weight of walk
-                    // units per credit. Priced after the leg, which never writes
-                    // level/jackpotPhaseFlag.
-                    uint256 unit = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
-                        _mintPriceInContext();
-                    uint256 k = decUnits / OPEN_HUMAN_ENTRY_WEIGHT;
-                    if (k > OPEN_KNEE) k = OPEN_KNEE;
-                    bountyEarned = (unit * k) / OPEN_KNEE;
-                    bountyKind = MINER_BOUNTY_DECIMATOR;
-                } else {
-                    (bool readMoved, bool readSettled) = ICrapsKeeper(ContractAddresses.CRAPS).keepRngCohort(
-                        _rngReadBuffer(), _crapsUnitBudget(spentUnits)
-                    );
-                    if (readSettled || (!readMoved && _crapsKeep(_crapsUnitBudget(spentUnits)))) {
-                        bountyEarned = CRAPS_KEEP_FLAT_FLIP;
-                        bountyKind = MINER_BOUNTY_CRAPS_KEEP;
-                    } else if (!readMoved && !sweptFrontier && !afkProgress && !decMoved) {
-                        // Request is its own empty-work stage. Skip-only progress commits without bounty.
-                        // A delegatecall retains the keeper's identity for LINK donation credit.
-                        // Failed/ineligible requests remain an atomic NoWork result.
-                        (bool requested,) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-                            abi.encodeWithSelector(IDegenerusGameAdvanceModule.requestLootboxRng.selector)
-                        );
-                        if (!requested) revert NoWork();
-                    }
-                }
-                // else: a leg advanced its cursor past a skip run — commit it, no bounty.
-            }
-        }
+        _runRngConsumers(rewarded);
+    }
 
-        // One combined keeper credit, CEI-last, after all committed work.
-        // Skipped at 0 (e.g. a mult==0 gameover advance); the category
-        // still ran, so we return rather than reverting NoWork().
+    /// @dev Daily advancement and its bounded stages have exclusive priority.
+    function _runAdvance(bool rewarded) private returns (uint8 mult) {
+        // Post-gameover dailyIdx freezes, so _advanceDue stays true while the
+        // only remaining advance work is the one-time final sweep. Revert the idle
+        // no-op (checked BEFORE the advance, so a still-pending sweep runs and commits).
+        if (rewarded && gameOver && !_finalSweepPending()) revert NoWork();
+        // Read pay-eligibility BEFORE the advance — it sees the pre-advance day (the
+        // advance bumps dailyIdx). The advance work runs regardless; an ineligible
+        // keeper just earns no bounty (real participants get first shot, free cranks
+        // are welcome). The bounty unit is likewise priced strictly PRE-advance (the
+        // advance mutates level/jackpotPhaseFlag), and only when a bounty can pay.
+        bool eligible = rewarded && _bountyEligible(msg.sender);
+        uint256 unit;
+        if (eligible) {
+            unit =
+                (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
+                _mintPriceInContext();
+        }
+        (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameAdvanceModule.advanceGame.selector)
+        );
+        if (!ok) _revertDelegate(data);
+        mult = abi.decode(data, (uint8));
+        if (mult > 0 && eligible) {
+            _creditWorkBounty(MINER_BOUNTY_ADVANCE, unit * ADVANCE_RATIO_NUM * mult, 0);
+        }
+    }
+
+    /// @dev All basic read consumers share one allowance. A category must finish before
+    ///      the next begins; every reported charge is subtracted with checked arithmetic.
+    ///      Any downstream failure rolls back all earlier work and bounty accounting.
+    function _runRngConsumers(bool rewarded) private {
+        uint256 remaining = MineFlipBudget.WORK_BUDGET;
+        uint256 redemptionBounty;
+        uint256 workCredit;
+        uint256 bountyEarned;
+        uint8 bountyKind;
+        bool moved;
+        uint8 stage = _rngConsumerStage();
+        if (stage == 1) {
+            (bool done, uint256 charged, uint256 quote) =
+                IsDGNRS(ContractAddresses.SDGNRS).processRedemptionSettlement(remaining);
+            remaining -= charged;
+            redemptionBounty = quote;
+            moved = charged != 0;
+            if (done) {
+                _tryCompleteRng();
+                stage = _rngConsumerStage();
+            }
+        }
+        if (stage == 2) {
+            (uint256 opened, uint256 charged, uint256 credit) = _openAfkingWork(remaining);
+            remaining -= charged;
+            moved = moved || charged != 0;
+            workCredit += credit;
+            if (opened != 0) bountyKind = MINER_BOUNTY_BOX_OPEN;
+            stage = _rngConsumerStage();
+        }
+        if (stage == 3 && remaining != 0) {
+            (uint256 opened, uint256 charged, uint256 credit) = _openHumanWork(remaining);
+            remaining -= charged;
+            moved = moved || charged != 0;
+            workCredit += credit;
+            if (opened != 0) bountyKind = MINER_BOUNTY_BOX_OPEN;
+            stage = _rngConsumerStage();
+        }
+        if (stage == 4 && remaining != 0) {
+            (uint256 settled, uint256 charged, bool progressed) = _decimatorSettle(remaining);
+            remaining -= charged;
+            moved = moved || progressed;
+            if (settled != 0) {
+                workCredit += charged / OPEN_HUMAN_ENTRY_WEIGHT;
+                if (bountyKind == 0) bountyKind = MINER_BOUNTY_DECIMATOR;
+            }
+            stage = _rngConsumerStage();
+        }
+        if (stage == 5 && remaining != 0) {
+            (bool progressed, bool settled, uint64 charged) =
+                craps.keepRngCohortBudgeted(_rngReadBuffer(), uint64(remaining));
+            remaining -= charged;
+            moved = moved || progressed;
+            if (settled) {
+                bountyEarned = CRAPS_KEEP_FLAT_FLIP;
+                if (bountyKind == 0) bountyKind = MINER_BOUNTY_CRAPS_KEEP;
+            }
+            stage = _rngConsumerStage();
+        }
+        // Scheduled lifecycle maintenance follows the read cohort, including on bootstrap
+        // before a word exists. It may arm fresh write-side work for the next request.
+        if ((stage == 6 || (stage == 0 && _rngComplete())) && remaining != 0) {
+            (bool progressed,, uint64 charged) = craps.keepScheduledBudgeted(uint64(remaining));
+            remaining -= charged;
+            moved = moved || progressed;
+            if (progressed) {
+                bountyEarned = CRAPS_KEEP_FLAT_FLIP;
+                if (bountyKind == 0) bountyKind = MINER_BOUNTY_CRAPS_KEEP;
+            }
+            _tryCompleteRng();
+            if (_rngComplete() && remaining >= RNG_REQUEST_UNITS) moved = _requestNextRng() || moved;
+        }
+        if (!moved) revert NoWork();
+        if (workCredit != 0) {
+            uint256 unit = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / _mintPriceInContext();
+            uint256 knee = workCredit < OPEN_KNEE ? workCredit : OPEN_KNEE;
+            bountyEarned += unit * knee / OPEN_KNEE;
+        }
         if (rewarded) _creditWorkBounty(bountyKind, bountyEarned, redemptionBounty);
+    }
+
+    /// @dev Preserve AFKing's split-batch bounty carry while spending the shared allowance.
+    function _openAfkingWork(uint256 allowance)
+        private returns (uint256 opened, uint256 charged, uint256 kneeCredit)
+    {
+        uint256 carry = _openBountyCarry;
+        bool exhausted;
+        (opened, charged, exhausted) = _autoOpen(allowance);
+        if (charged == 0) return (opened, charged, 0);
+        uint256 batchOpens = carry + opened;
+        uint256 carryKnee = carry < OPEN_KNEE ? carry : OPEN_KNEE;
+        uint16 nextCarry;
+        if (batchOpens >= OPEN_BATCH) {
+            uint256 beyond = batchOpens - OPEN_BATCH;
+            kneeCredit = OPEN_KNEE - carryKnee + (beyond < OPEN_KNEE ? beyond : OPEN_KNEE);
+            if (exhausted && _pendingBoxCount != 0) nextCarry = uint16(beyond);
+        } else {
+            kneeCredit = (batchOpens < OPEN_KNEE ? batchOpens : OPEN_KNEE) - carryKnee;
+            if (exhausted && _pendingBoxCount != 0) nextCarry = uint16(batchOpens);
+        }
+        if (nextCarry != carry) _openBountyCarry = nextCarry;
+    }
+
+    function _openHumanWork(uint256 allowance)
+        private returns (uint256 opened, uint256 charged, uint256 kneeCredit)
+    {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector,
+                allowance | OPEN_STRICT_BUDGET_FLAG)
+        );
+        if (!ok) _revertDelegate(data);
+        uint256 packed;
+        (opened, packed) = abi.decode(data, (uint256, uint256));
+        charged = packed >> 128;
+        if (opened != 0) kneeCredit = uint128(packed) / OPEN_HUMAN_ENTRY_WEIGHT;
+    }
+
+    /// @dev Only expected eligibility refusals are optional. OOG and unexpected failures
+    ///      propagate, restoring every preceding cursor, payout and completion marker.
+    function _requestNextRng() private returns (bool requested) {
+        bytes memory data;
+        (requested, data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall{
+            gas: RNG_REQUEST_UNITS * MineFlipBudget.GAS_PER_UNIT
+        }(abi.encodeWithSelector(IDegenerusGameAdvanceModule.requestLootboxRng.selector));
+        if (requested) return true;
+        if (data.length == 4) {
+            bytes4 reason = bytes4(data);
+            if (reason == bytes4(keccak256("GasTooHigh()"))
+                || reason == bytes4(keccak256("PreResetWindow()"))
+                || reason == bytes4(keccak256("InsufficientLink()"))
+                || reason == bytes4(keccak256("NoPendingLootbox()"))
+                || reason == bytes4(keccak256("BelowThreshold()"))
+                || reason == bytes4(keccak256("RngNotReady()"))) return false;
+        }
+        _revertDelegate(data);
     }
 
     /// @dev One credit for the combined call; events retain each reward's category.
@@ -2073,40 +2000,33 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     function drainAfkingBoxes(
         uint256 count
     ) external returns (uint256 opened, uint256 stepsUsed) {
-        if (count > SUBSCRIBER_CAP) count = SUBSCRIBER_CAP;
+        if (count == 0 || count > OPEN_BATCH) count = OPEN_BATCH;
         uint256 unitsUsed;
-        (opened, unitsUsed, ) = _autoOpen(count * OPEN_ITEM_WEIGHT);
+        (opened, unitsUsed, ) = _autoOpen(count * OPEN_ITEM_WEIGHT + AFK_CALL_UNITS);
         stepsUsed = (unitsUsed + OPEN_ITEM_WEIGHT - 1) / OPEN_ITEM_WEIGHT;
     }
 
 
-    /// @dev The craps leg's own budget derivation, exposed for the same reason the slot one is:
-    ///      it reads nothing but a compile-time constant, so a suite can grade the shared
-    ///      envelope — and the zero it must return on a fully spent box walk — without cranking
-    ///      a whole `mineFlip`.
+    /// @dev The allowance remaining after the single router reserve and earlier work.
     function keeperCrapsUnitBudget(uint256 spentUnits) external pure returns (uint64) {
-        return _crapsUnitBudget(spentUnits);
+        return uint64(spentUnits >= MineFlipBudget.WORK_BUDGET ? 0 : MineFlipBudget.WORK_BUDGET - spentUnits);
     }
 
-    /// @dev The shared walk budget the three legs divide, so a fixture names it once.
     function keeperOpenWeightBudget() external pure returns (uint256) {
-        return OPEN_WEIGHT_BUDGET;
+        return MineFlipBudget.BASIC_BUDGET;
     }
 
-    /// @dev The WORK the craps leg may spend, in the same walk units the box legs already burned
-    ///      `spentUnits` of — the remainder of one shared budget, so the three legs cannot stack.
-    ///
-    ///      SATURATING on the raw unit remainder, floored at zero. Dividing the spend into seats
-    ///      first would round a fully consumed 1,920-unit walk down to `1920/27 = 71` seats and
-    ///      leave 9 seats of craps work stacked on top of a full-budget call; the raw remainder
-    ///      is what makes a spent budget mean spent.
-    function _crapsUnitBudget(uint256 spentUnits) private pure returns (uint64) {
-        unchecked {
-            if (spentUnits >= OPEN_WEIGHT_BUDGET) return 0;
-            uint256 allowance = OPEN_WEIGHT_BUDGET - spentUnits;
-            if (allowance <= CRAPS_ROUTER_TAIL_UNITS) return 0;
-            allowance -= CRAPS_ROUTER_TAIL_UNITS;
-            return allowance < CRAPS_MIN_START_UNITS ? 0 : uint64(allowance);
+    /// @notice Unrewarded box valve; the same units, category order and ceiling as MineFlip.
+    function openBoxes(uint256 maxCount) external returns (uint256 opened) {
+        if (maxCount == 0) return 0;
+        uint256 allowance = maxCount >= OPEN_BATCH
+            ? MineFlipBudget.WORK_BUDGET : MineFlipBudget.clamp(maxCount * OPEN_ITEM_WEIGHT + AFK_CALL_UNITS);
+        uint256 charged;
+        (opened, charged,) = _autoOpen(allowance);
+        allowance -= charged;
+        if (allowance != 0 && _rngConsumerStage() == 3) {
+            (uint256 humanOpened,,) = _openHumanWork(allowance);
+            opened += humanOpened;
         }
     }
 
@@ -2131,28 +2051,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             );
         if (!ok) _revertDelegate(data);
         (settled, unitsUsed, moved) = abi.decode(data, (uint256, uint256, bool));
-    }
-
-    /// @dev THE CRAPS LEG. The table's doors are permissionless and its SCHEDULED CURSOR is its
-    ///      own: `keepScheduled` names the oldest slot still owing work and does the next piece —
-    ///      crossing spent slots, sweeping a lapsed day's reservations back to credits, shutting
-    ///      a closed window, or settling a batch within the allowance. This crank adds no
-    ///      authority; what it adds is that the protocol's own keeper drives that cursor, so no
-    ///      scheduled window is ever left hanging on nobody's initiative — the `openSlot - 1`
-    ///      probe this replaces abandoned any field that outlasted one budget.
-    /// @param budgetUnits How much WORK the walk may spend, in the shared walk units the box
-    ///        legs left of the call's weight budget. Zero still does the
-    ///        cheap lifecycle work: shutting a window is one state change and it is the
-    ///        time-critical half, since a window left open past its close is one the field can
-    ///        keep re-tuning against.
-    /// @return worked Whether the table reports real progress — the gate on the flat bounty and
-    ///         on the caller's no-work revert.
-    function _crapsKeep(uint64 budgetUnits) private returns (bool worked) {
-        // The table's own cursor decides what is owed and does the next piece of it; the crank
-        // pays only when the table says something moved. BARE: the walk has no revert of its
-        // own, so a call that fails did so for gas and takes the whole crank with it — the
-        // outcome never depends on the gas the caller picked.
-        (worked, ) = craps.keepScheduled(budgetUnits);
     }
 
     /// @dev The 30-days-post-gameover final sweep is still owed: game over, the sweep

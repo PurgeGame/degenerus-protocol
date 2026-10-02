@@ -232,9 +232,9 @@ contract CrapsHighReserveTest is CrapsPins {
 
     function testFuzz_chunkingAndRetriesCannotChangeTheDraw(uint256 seed, uint8 rawHeads, bool tail) public {
         if (tail) {
-            for (uint256 word = 1; ; ++word) {
-                if (table.highMultOfWord(word) == 100) { _setDailyWord(day, word); multiple = 100; break; }
-            }
+            // Accepted window terms are frozen when the day opens.
+            dayStart += 1 days;
+            _openDay(100);
         }
         uint256 heads = 1 + uint256(rawHeads) % 7;
         for (uint160 i; i < heads; ++i) _enter(address(0x1000 + i), true, i % 2 == 0);

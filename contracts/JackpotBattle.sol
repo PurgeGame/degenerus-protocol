@@ -51,20 +51,37 @@ contract JackpotBattle is CrapsBattleStorage {
 
     /// @notice Bounded keeper settlement of every armed field committed to a word.
     function keepRngCohort(uint48 index, uint64 budget) external returns (bool moved, bool settled) {
+        (moved, settled,) = _keepRngCohort(index, budget);
+    }
+
+    /// @notice Settle the read cohort in commitment order using MineFlip work units.
+    function keepRngCohortBudgeted(uint48 index, uint64 budget)
+        external returns (bool moved, bool settled, uint64 charged)
+    {
+        return _keepRngCohort(index, budget);
+    }
+
+    function _keepRngCohort(uint48 index, uint64 budget)
+        private returns (bool moved, bool settled, uint64 charged)
+    {
         if (index > 1) revert BadJackpotField();
+        budget = _readWorkAllowance(budget);
         uint48 physical = index;
-        if (_rngPending[physical] == 0 || budget == 0) return (false, false);
+        if (_rngPending[physical] == 0 || budget < _KEEP_HOP_UNITS || _readCrapsStage() != 5
+            || _wordAt(index) == 0) return (false, false, 0);
         uint64[] storage slots = _rngSlots[physical];
         uint64 pos = _rngSlotCursor[physical];
         // One field per call; direct settlements may leave a bounded skip-only frontier.
         uint256 steps;
         while (pos < slots.length && steps++ < 16) {
+            if (budget - charged < _KEEP_HOP_UNITS) break;
+            charged += uint64(_KEEP_HOP_UNITS);
             uint64 slot = slots[pos];
             uint256 board = _battles[_rngBattleKey(slot)];
             if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board)) { ++pos; moved = true; continue; }
-            if (_wordAt(index) == 0) break;
+            _rngSlotCursor[physical] = pos;
             uint64 beforeCursor = _bonusCursor[slot];
-            IReadCohortLifecycle(address(this)).resolveRngSlot(slot, budget);
+            charged += IReadCohortLifecycle(address(this)).resolveRngSlot(slot, budget - charged);
             uint256 afterBoard = _battles[_rngBattleKey(slot)];
             settled = _bonusCursor[slot] != beforeCursor || afterBoard != board;
             moved = moved || settled;
@@ -102,6 +119,8 @@ contract JackpotBattle is CrapsBattleStorage {
     function completeRngSlot(uint64 slot, uint48 index) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
         if (index > 1) revert BadJackpotField();
+        uint64 pos = _rngSlotCursor[index];
+        if (pos < _rngSlots[index].length && _rngSlots[index][pos] == slot) _rngSlotCursor[index] = pos + 1;
         if (--_rngPending[index] == 0) {
             IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, false);
         }

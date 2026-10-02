@@ -28,6 +28,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {EntropyLib} from "./libraries/EntropyLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
+import {MineFlipBudget} from "./libraries/MineFlipBudget.sol";
 
 
 /// @notice Interface for game contract player-facing functions used by sDGNRS.
@@ -53,6 +54,8 @@ interface IDegenerusGamePlayer {
     function claimableWinningsOf(address player) external view returns (uint256);
     /// @notice Check if VRF request is pending (RNG locked).
     function rngLocked() external view returns (bool);
+    /// @notice Current ordered RNG consumer stage (1 = redemption settlement).
+    function rngConsumerStage() external view returns (uint8);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
     /// @notice Check if `operator` is approved to act for `owner` (game operator approval).
@@ -151,6 +154,12 @@ contract sDGNRS {
 
     /// @notice Thrown when a player tries to claim before the period is resolved
     error NotResolved();
+
+    /// @notice Earlier RNG consumers must finish before live redemptions can settle.
+    error RedemptionStageBlocked();
+
+    /// @notice Live claims must consume the current beneficiary queue in FIFO order.
+    error RedemptionOutOfOrder();
 
     /// @notice Thrown when a gambling burn would exceed 160 ETH daily EV cap per wallet
     error ExceedsDailyRedemptionCap();
@@ -343,8 +352,10 @@ contract sDGNRS {
     DayPending internal pendingAggregate;
 
     /// @dev One live beneficiary cohort, consumed before another day can request RNG.
+    ///      Manual claims leave the empty cohort pending until the keeper clears its
+    ///      queue metadata and retries the Game's session-completion check.
     function redemptionSettlementPending() external view returns (bool) {
-        return _redemptionWord != 1 && _redemptionCursor < _redemptionPlayers.length;
+        return _redemptionWord != 1 && _redemptionPlayers.length != 0;
     }
 
     function beginRedemptionSettlement(uint24 day, uint256 word) external {
@@ -354,7 +365,7 @@ contract sDGNRS {
         if (_redemptionWord == 1) _redemptionWord = word;
     }
 
-    // Shared router walk units (~4.7k gas each). Reserve a whole beneficiary before
+    // Shared MineFlipBudget units. Reserve a whole beneficiary before
     // settlement: first-claim costs plus each unchanged, at-most-5-ETH box chunk.
     uint256 private constant REDEMPTION_BASE_UNITS = 40;
     uint256 private constant REDEMPTION_CHUNK_UNITS = 28;
@@ -367,10 +378,17 @@ contract sDGNRS {
         external returns (bool done, uint256 chargedUnits, uint256 rewardQuote)
     {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
+        if (budget > MineFlipBudget.BASIC_BUDGET) budget = MineFlipBudget.BASIC_BUDGET;
         if (game.gameOver() || game.livenessTriggered()) return (true, 0, 0);
         uint256 cursor = _redemptionCursor;
         uint256 total = _redemptionPlayers.length;
-        if (_redemptionWord == 1 || cursor >= total) return (true, 0, 0);
+        if (_redemptionWord == 1 || total == 0) return (true, 0, 0);
+        if (game.rngConsumerStage() != 1) revert RedemptionStageBlocked();
+        if (cursor == total) {
+            if (budget < REDEMPTION_FINISH_UNITS) return (false, 0, 0);
+            _finishRedemptionSettlement();
+            return (true, REDEMPTION_FINISH_UNITS, 0);
+        }
         uint24 day = _redemptionQueueDay;
         uint16 roll = redemptionPeriods[day];
         uint256 word = _redemptionWord;
@@ -394,15 +412,30 @@ contract sDGNRS {
         chargedUnits += REDEMPTION_FINISH_UNITS;
         done = cursor == total;
         if (done) {
-            _redemptionWord = 1;
-            _redemptionCursor = 0;
-            _redemptionQueueDay = 0;
-            address[] storage players = _redemptionPlayers;
-            assembly ("memory-safe") { sstore(players.slot, 0) }
+            _finishRedemptionSettlement();
         } else {
             _redemptionCursor = uint32(cursor);
         }
         if (settled != 0) rewardQuote = _redemptionBounty(settled);
+    }
+
+    function _finishRedemptionSettlement() private {
+        _redemptionWord = 1;
+        _redemptionCursor = 0;
+        _redemptionQueueDay = 0;
+        address[] storage players = _redemptionPlayers;
+        assembly ("memory-safe") { sstore(players.slot, 0) }
+    }
+
+    /// @dev Advance before external payout calls. Keep the cohort pending through
+    ///      the last claim so its nested Game calls still execute in stage 1.
+    function _takeRedemptionHead(address player, uint24 day) private {
+        uint256 cursor = _redemptionCursor;
+        if (
+            day != _redemptionQueueDay || cursor >= _redemptionPlayers.length ||
+            _redemptionPlayers[cursor] != player
+        ) revert RedemptionOutOfOrder();
+        _redemptionCursor = uint32(cursor + 1);
     }
 
     /// @notice Supply immediately after the last century refill (initial supply before the first).
@@ -921,7 +954,8 @@ contract sDGNRS {
     ///      `pendingRedemptions[player][day]`; deletes that slot on a full claim.
     ///      The FLIP escrow removed at submit pays here only when the day+1 coinflip won:
     ///      principal plus that day's win reward. A loss pays no FLIP; terminal mode skips it.
-    ///      Live game: PERMISSIONLESS — anyone may settle `player`'s claim, all value to `player`.
+    ///      Live game: PERMISSIONLESS — anyone may settle the next FIFO claim during
+    ///      the redemption consumer stage, with all value going to `player`.
     ///      Both halves of the rolled ETH route to the Game (50% credits the player's claimable
     ///      winnings, 50% funds lootbox rewards), so a third-party trigger pushes no ETH and the
     ///      winner holds no exclusive timing control over the lootbox draw.
@@ -959,13 +993,17 @@ contract sDGNRS {
             !game.isOperatorApproved(player, msg.sender)
         ) revert Unauthorized();
 
+        if (!isTerminal) {
+            if (game.rngConsumerStage() != 1) revert RedemptionStageBlocked();
+            _takeRedemptionHead(player, day);
+        }
         // Single live claims use the same pinned session word as the forced keeper drain.
         if (!_claimRedemptionFor(player, day, roll, isTerminal, 0)) revert NoClaim();
     }
 
     /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
-    /// @dev Players with nothing pending for `day` are skipped, not reverted, so one stale
-    ///      address can't poison a mass-claim sweep. LIVE-GAME ONLY: in terminal mode a batch could
+    /// @dev `players` must be the next exact FIFO prefix in the redemption consumer stage.
+    ///      Empty claims in that prefix are skipped. LIVE-GAME ONLY: in terminal mode a batch could
     ///      settle only entries the caller is the player or approved operator for (all others revert),
     ///      which the single claimRedemption already does — so the batch reverts once game is over.
     /// @param players Claimants whose redemptions to settle.
@@ -978,11 +1016,13 @@ contract sDGNRS {
         // hard-codes the live split, so leaving it open would queue lootbox-rolled entries
         // against the already-public terminal word.
         if (game.gameOver() || game.livenessTriggered()) revert Unauthorized();
+        if (game.rngConsumerStage() != 1) revert RedemptionStageBlocked();
 
         // The forced cohort's session word is identical for every player in this batch.
         uint256 rngWordNext = _redemptionQueueDay == day ? _redemptionWord : 0;
         uint256 settled;
         for (uint256 i; i < players.length; ++i) {
+            _takeRedemptionHead(players[i], day);
             if (_claimRedemptionFor(players[i], day, roll, false, rngWordNext)) {
                 unchecked {
                     ++settled;

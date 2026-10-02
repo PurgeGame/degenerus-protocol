@@ -54,7 +54,7 @@ contract StallDaysNeverHappened is DeployProtocol {
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
         game.advanceGame(); // backfill tx
         assertTrue(game.rngLocked(), "lock still held after the backfill");
-        assertTrue(game.rngWordForDay(R + 1) != 0, "R+1 has a derived word");
+        assertEq(game.rngWordForDay(R + 1), 0, "older gap word is not retained in the two-day ring");
         assertTrue(game.rngWordForDay(R + 2) != 0, "R+2 has a derived word");
         assertTrue(game.rngWordForDay(W) != 0, "W recorded");
         assertEq(_dailyIdx(), W - 1, "gap days skipped: index parked at W-1");
@@ -110,7 +110,8 @@ contract StallDaysNeverHappened is DeployProtocol {
     }
 
     function _foilDraw(uint24 day) private view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT))));
+        uint256 word = uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT))));
+        return uint24(word >> 217) == day ? word : 0;
     }
 
     function _runStageNewDay(uint256 vrfWord) internal {
@@ -122,12 +123,16 @@ contract StallDaysNeverHappened is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
+            // Box opening is disabled under the daily lock. After its seal,
+            // finish the delivered consumers before requesting another cohort.
+            if (!game.rngLocked()) _finishReadConsumers();
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
             game.advanceGame();
             _fulfillPending(vrfWord);
         }
+        revert("harness: day never settled");
     }
 
     function _fulfillPending(uint256 vrfWord) internal {
@@ -143,7 +148,10 @@ contract StallDaysNeverHappened is DeployProtocol {
 
     function _advanceUntilUnlocked() internal {
         for (uint256 i; i < 64; i++) {
-            if (!game.rngLocked()) return;
+            if (!game.rngLocked()) {
+                _finishReadConsumers();
+                return;
+            }
             game.advanceGame();
         }
         revert("harness: lock never released");

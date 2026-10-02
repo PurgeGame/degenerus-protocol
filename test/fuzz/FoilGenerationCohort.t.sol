@@ -19,10 +19,9 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule {
     }
     function enqueue(address player) external {
         uint24 lvl = 1;
-        require(foilRecord[lvl][player] == 0);
-        foilRecord[lvl][player] = uint256(20_000) << _FOIL_MULT_SHIFT;
-        uint256 pos = lvlEntryOwner[lvl].length;
-        lvlEntryOwner[lvl].push(EntryOwner(player, 0));
+        require(_foilRecordWord(player, lvl) == 0);
+        foilRecord[lvl & 3][player] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
+        uint256 pos = uint256(_registerEntryOwner(player, lvl) >> OWNER_IDX_SHIFT) - 1;
         foilQueue[_foilWriteKey()].push(((pos + 1) << 192) | (uint256(lvl) << 160) | uint160(player));
     }
     function commit(uint256 word) external {
@@ -34,7 +33,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule {
         rngWordCurrent = word;
         _setRngSessionPublished(true);
     }
-    function record(address player) external view returns (uint256) { return foilRecord[1][player]; }
+    function record(address player) external view returns (uint256) { return _foilRecordWord(player, 1); }
     function lines(address player) external view returns (uint32[4] memory) { return _foilStoredLines(player, 1); }
     function pending() external view returns (bool) { return _foilDrainPending(); }
     function length(bool read) external view returns (uint256) {
@@ -47,9 +46,9 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule {
         // Three gold quadrants qualify for the first ladder rung, no all-gold ticket.
         foilRecord[1][player] = uint256(day) | (uint256(20_000) << _FOIL_MULT_SHIFT)
             | (uint256(0x0038_3838) << _FOIL_LINES_SHIFT)
-            | (uint256(day) << _FOIL_GENERATED_DAY_SHIFT) | _FOIL_READY;
+            | (uint256(day) << _FOIL_GENERATED_DAY_SHIFT) | (uint256(1) << _FOIL_LEVEL_SHIFT) | _FOIL_READY;
     }
-    function claimableDraw(uint24 day) external view returns (bool) { return _foilClaimOpen(day); }
+    function claimableDraw(uint24 day) external view returns (bool) { return _foilGoldClaimOpen(day); }
 }
 
 contract FoilGenerationCohortTest is Test {
@@ -135,7 +134,7 @@ contract FoilGenerationCohortTest is Test {
         h.claimGoldenTicket(A, 1);
     }
 
-    function test_GoldAndMatchExpireOnSecondDayEvenWithoutOverwrite() public {
+    function test_GoldExpiresOnSecondDayEvenWithoutOverwrite() public {
         uint24 day = GameTimeLib.currentDayIndex();
         h.seedGold(A, day);
         h.seedWord(day, 99);

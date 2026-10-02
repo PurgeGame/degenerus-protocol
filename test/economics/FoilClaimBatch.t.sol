@@ -6,6 +6,34 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
+
+/// @dev Advance the environment without replaying hundreds of unrelated game days.
+///      Claims and draws still run through the production facade and modules.
+contract FoilMatchTimeSeeder is DegenerusGame {
+    function liveWithReusedWords(uint24 newLevel) external returns (uint256) {
+        dailyIdx = _simulatedDayIndex();
+        purchaseStartDay = dailyIdx;
+        rngLockedFlag = false;
+        _setRngRequestActive(false);
+        if (newLevel != 0) level = newLevel;
+        _recordDailyRng(dailyIdx - 1, 12345);
+        _recordDailyRng(dailyIdx, 67890);
+        return dailyIdx;
+    }
+    function recorded(uint24 day) external view returns (uint256) { return _recordedDailyWord(day); }
+    function purchaseAt(uint24 targetLevel) external {
+        level = targetLevel - 1;
+        jackpotPhaseFlag = false;
+        lastPurchaseDay = false;
+        phaseTransitionActive = false;
+        rngLockedFlag = false;
+        dailyIdx = _simulatedDayIndex();
+        purchaseStartDay = dailyIdx;
+        _setRngRequestActive(false);
+    }
+}
 
 /// @title FoilClaimBatch — behavioural coverage for claimFoilMatchMany
 /// @notice The batch claimer is handed out as one shared tuple list that many senders may
@@ -109,7 +137,7 @@ contract FoilClaimBatch is DeployProtocol {
             _completeDay(_seed(nPurchaseDays, d));
             _endDay = game.currentDayView();
             (uint32 board, uint24 drawLevel) = _foilDraw(_endDay);
-            bytes32 outer = keccak256(abi.encode(uint256(drawLevel), uint256(58)));
+            bytes32 outer = keccak256(abi.encode(uint256(drawLevel & 3), uint256(58)));
             bytes32 firstSlot = keccak256(abi.encode(_fb[0], outer));
             uint256 first = uint256(vm.load(address(game), firstSlot));
             if (first >> 255 != 0 && uint24(first) <= _endDay && drawLevel != 0) {
@@ -244,8 +272,8 @@ contract FoilClaimBatch is DeployProtocol {
 
     /// @dev Storage slots (scripts/layout/golden/DegenerusGame.json): `dailyFoilDraw` packs a
     ///      day's main set [0..31] and level [64..] (bits [32..63] reserved, always zero);
-    ///      `foilRecord[L][player]` holds the pack's resolveDay in its low 24 bits and multBps
-    ///      at [24..39]; `rngWordByDay` is what the pack's four lines derive from.
+    ///      `foilRecord[L & 3][player]` stores the exact level at [208..231] and
+    ///      `dailyFoilDraw[day & 1]` stores its exact draw day at [217..240].
     uint256 private constant FOIL_DRAW_SLOT = 60;
     uint256 private constant FOIL_RECORD_SLOT = 58;
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
@@ -254,10 +282,11 @@ contract FoilClaimBatch is DeployProtocol {
     bytes32 private constant FOIL_SEED_TAG = keccak256("foil-seed");
     uint256 private constant FOIL_FACES_T8 = 80_000;
 
-    /// @dev dailyFoilDraw[day]: main set [0..31], level [64..87]. Bits [32..63] are reserved
+    /// @dev Authenticate the exact day in dailyFoilDraw[day & 1]. Bits [32..63] are reserved
     ///      and always read zero.
     function _foilDraw(uint24 day) internal view returns (uint32 mainSet, uint24 lvl) {
-        uint256 draw = uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT))));
+        uint256 draw = uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT))));
+        if (uint24(draw >> 217) != day) return (0, 0);
         mainSet = uint32(draw);
         lvl = uint24(draw >> 64);
     }
@@ -316,12 +345,9 @@ contract FoilClaimBatch is DeployProtocol {
     ///      tier 8 (symbol AND color both match every quadrant) regardless of what the day's
     ///      real board actually rolled — only the win set is forced, never the level.
     function _forceWinSetToLine(uint24 day, uint32 sel) internal {
-        (, uint24 lvl) = _foilDraw(day);
-        vm.store(
-            address(game),
-            keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT)),
-            bytes32(uint256(sel) | (uint256(lvl) << 64))
-        );
+        bytes32 slot = keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT));
+        uint256 draw = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((draw & ~uint256(type(uint32).max)) | uint256(sel)));
     }
 
     /// @dev Buy one foil pack for `p` at whichever level is active right now (mirrors
@@ -333,7 +359,7 @@ contract FoilClaimBatch is DeployProtocol {
         lvl = game.jackpotPhase() ? game.level() : game.level() + 1;
         vm.prank(p);
         game.purchase{value: 10 * priceWei}(p, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
-        bytes32 inner = keccak256(abi.encode(uint256(lvl), FOIL_RECORD_SLOT));
+        bytes32 inner = keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT));
         uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(p, inner))));
         multBps = uint16(rec >> 24);
         for (uint256 i; i < 50 && rec >> 255 == 0; ++i) {
@@ -387,7 +413,7 @@ contract FoilClaimBatch is DeployProtocol {
     ///      onto a still-empty record (level 0: the zero value, not a real day shape).
     function _tickUntilSealed(uint24 day, uint256 maxTicks) internal {
         for (uint256 i; i < maxTicks; ++i) {
-            if (uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT)))) != 0) return;
+            if (uint24(uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)))) >> 217) == day) return;
             _tick();
         }
         revert("harness: day never sealed within the bound");
@@ -421,13 +447,13 @@ contract FoilClaimBatch is DeployProtocol {
         uint16 multBps,
         string memory tag
     ) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT));
+        bytes32 slot = keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT));
         (, uint24 recordedLvl) = _foilDraw(day);
         assertEq(uint256(recordedLvl), uint256(lvl), string.concat(tag, ": dailyFoilDraw level mismatch"));
         uint256 reserved = (uint256(vm.load(address(game), slot)) >> 32) & type(uint32).max;
         assertEq(reserved, 0, string.concat(tag, ": dailyFoilDraw bits 32..63 must read zero"));
 
-        uint256 record = uint256(vm.load(address(game), keccak256(abi.encode(player, keccak256(abi.encode(uint256(lvl), FOIL_RECORD_SLOT))))));
+        uint256 record = uint256(vm.load(address(game), keccak256(abi.encode(player, keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))))));
         uint32 sel = uint32(record >> 56);
         multBps;
         _forceWinSetToLine(day, sel);
@@ -503,10 +529,328 @@ contract FoilClaimBatch is DeployProtocol {
     ///      because here overshoot cannot skip a shape we care about.
     function _driveUntilSealedByWarp(uint24 day, uint256 maxDays) internal {
         for (uint256 i; i < maxDays; ++i) {
-            if (uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), FOIL_DRAW_SLOT)))) != 0) return;
+            if (uint24(uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)))) >> 217) == day) return;
             _completeDay(uint256(keccak256(abi.encode("flat-face-day", day, i))));
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }
         revert("harness: day never sealed within the bound");
+    }
+
+    bytes32 private constant BOX_SPIN_SIG = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+    bytes32 private constant NO_MATCH = keccak256("NoClaimableMatch()");
+    uint256 private constant SEEDED = uint256(1) << 216;
+
+    function _drawWord() private view returns (uint256) {
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(_endDay & 1), FOIL_DRAW_SLOT))));
+    }
+
+    function _setDrawWord(uint256 w) private {
+        vm.store(address(game), keccak256(abi.encode(uint256(_endDay & 1), FOIL_DRAW_SLOT)), bytes32(w));
+    }
+
+    function _deferMatch(uint256 daysLater, uint24 newLevel) private {
+        vm.warp(vm.getBlockTimestamp() + daysLater * 1 days);
+        bytes memory runtime = address(game).code;
+        vm.etch(address(game), type(FoilMatchTimeSeeder).runtimeCode);
+        FoilMatchTimeSeeder(payable(address(game))).liveWithReusedWords(newLevel);
+        if (daysLater >= 2) {
+            assertEq(FoilMatchTimeSeeder(payable(address(game))).recorded(_endDay), 0, "original word overwritten");
+        }
+        vm.etch(address(game), runtime);
+        assertFalse(game.livenessTriggered(), "fixture remains live");
+    }
+
+    function _forcePayoutSeed(uint128 seed) private {
+        _setDrawWord((_drawWord() & ~(uint256(type(uint128).max) << 88)) | (uint256(seed) << 88));
+    }
+
+    function _forceTier(uint8 tier) private {
+        uint32 board = uint32(_drawWord());
+        uint32 line;
+        for (uint256 q; q < 4; ++q) {
+            // Every symbol hits (+1); the first tier-4 colors also hit (+1).
+            uint8 part = uint8(board >> (8 * q));
+            if (q >= tier - 4) part ^= 8;
+            line |= uint32(part) << (8 * q);
+        }
+        uint24 lvl = uint24(_drawWord() >> 64);
+        bytes32 slot = keccak256(abi.encode(_fb[0], keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
+        uint256 record = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((record & ~(uint256(type(uint32).max) << 152)) | (uint256(line) << 152)));
+    }
+
+    function _claimPrimarySpin(uint8 expectedTier) private returns (bytes32 digest, uint256 gross, uint256 ethPaid) {
+        uint256 beforePasses = game.whalePassClaimAmount(_fb[0]);
+        vm.recordLogs();
+        game.claimFoilMatch(_fb[0], _endDay, 3);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool matchSeen;
+        bool spinSeen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == FOIL_CLAIMED_SIG) {
+                (, uint8 tier,) = abi.decode(logs[i].data, (uint256, uint8, uint256));
+                assertEq(tier, expectedTier);
+                matchSeen = true;
+            }
+            if (!spinSeen && logs[i].topics[0] == BOX_SPIN_SIG) {
+                digest = keccak256(logs[i].data);
+                (,, gross, ethPaid) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
+                spinSeen = true;
+            }
+        }
+        assertTrue(matchSeen && spinSeen, "real match and primary payout executed");
+        assertEq(game.whalePassClaimAmount(_fb[0]) - beforePasses, expectedTier == 8 ? 1 : 0);
+    }
+
+    function test_persistentSeed_realDrawRecordsCommittedWord() public view {
+        uint256 draw = _drawWord();
+        uint256 word = game.rngWordForDay(_endDay);
+        assertGt(word, 1, "real daily word");
+        assertTrue(draw & SEEDED != 0);
+        uint128 expected = uint128(uint256(keccak256(abi.encode(word, _endDay, keccak256("foil-payout-seed")))));
+        assertEq(uint128(draw >> 88), expected);
+        assertEq(uint32(draw >> 32), 0, "reserved board gap");
+        assertEq(uint24(draw >> 217), _endDay, "exact retained draw day");
+    }
+
+    function test_expiry_allTiersCurrenciesSameOnFollowingDay() public {
+        for (uint8 tier = 4; tier <= 8; ++tier) {
+            for (uint256 currency; currency < 3; ++currency) {
+                uint256 snapshot = vm.snapshotState();
+                uint128 seed;
+                for (;; ++seed) {
+                    uint256 c = uint256(keccak256(abi.encode(uint256(seed), uint256(_endDay), uint256(3), keccak256("foil-currency")))) % 100;
+                    if ((c < 40 ? 0 : c < 80 ? 1 : 2) == currency) break;
+                }
+                _forcePayoutSeed(seed);
+                _forceTier(tier);
+                uint256 ready = vm.snapshotState();
+                (bytes32 prompt,,) = _claimPrimarySpin(tier);
+                vm.revertToState(ready);
+                _deferMatch(1, 0);
+                (bytes32 delayed,,) = _claimPrimarySpin(tier);
+                assertEq(delayed, prompt, "currency/spin/gross/ETH unchanged with identical pools");
+                vm.expectRevert(bytes4(NO_MATCH));
+                game.claimFoilMatch(_fb[0], _endDay, 3);
+                vm.revertToState(snapshot);
+            }
+        }
+    }
+
+    function _setFuturePool(uint128 amount) private {
+        uint256 pools = uint256(vm.load(address(game), bytes32(uint256(2))));
+        vm.store(address(game), bytes32(uint256(2)), bytes32(uint256(uint128(pools)) | (uint256(amount) << 128)));
+    }
+
+    function test_persistentSeed_livePoolChangesEthShareButNotSpin() public {
+        _forceTier(4);
+        // Find a winning ETH payout using the real resolver, not a mirrored payout formula.
+        bool found;
+        for (uint128 seed; seed < 100; ++seed) {
+            uint256 c = uint256(keccak256(abi.encode(uint256(seed), uint256(_endDay), uint256(3), keccak256("foil-currency")))) % 100;
+            if (c >= 40) continue;
+            _forcePayoutSeed(seed);
+            uint256 ready = vm.snapshotState();
+            _setFuturePool(1_000_000 ether);
+            (, uint256 promptGross, uint256 promptEth) = _claimPrimarySpin(4);
+            vm.revertToState(ready);
+            if (promptEth == 0) continue;
+            // Change live pricing without skipping a century queue-recycling boundary.
+            _deferMatch(1, 21);
+            _setFuturePool(0);
+            (, uint256 delayedGross, uint256 delayedEth) = _claimPrimarySpin(4);
+            assertEq(delayedGross, promptGross, "fixed spin, saved activity, historical level price");
+            assertEq(delayedEth, 0, "empty live pool converts ETH share to recirculation");
+            assertGt(promptEth, delayedEth, "waiting can change realized ETH despite fixed entropy");
+            found = true;
+            break;
+        }
+        assertTrue(found, "winning ETH vector exercised");
+    }
+
+    function test_persistentSeed_zeroSeedIsValidButUnseededRecordIsNot() public {
+        _forcePayoutSeed(0);
+        uint256 seeded = _drawWord();
+        _setDrawWord(seeded & ~SEEDED);
+        vm.expectRevert(bytes4(NO_MATCH));
+        game.claimFoilMatch(_fb[0], _endDay, 3);
+        _setDrawWord(seeded);
+        _deferMatch(1, 0);
+        _claimPrimarySpin(8);
+    }
+
+    function test_expiry_batchClaimsOnFollowingDayAndReplay() public {
+        _deferMatch(1, 0);
+        address[] memory players = new address[](2);
+        uint24[] memory days_ = new uint24[](2);
+        uint8[] memory tickets = new uint8[](2);
+        for (uint256 i; i < 2; ++i) { players[i] = _fb[i]; days_[i] = _endDay; tickets[i] = 3; }
+        game.claimFoilMatchMany(players, days_, tickets);
+        for (uint256 i; i < 2; ++i) {
+            vm.expectRevert(bytes4(NO_MATCH));
+            game.claimFoilMatch(players[i], _endDay, 3);
+        }
+        vm.expectRevert(StaleBatch.selector);
+        game.claimFoilMatchMany(players, days_, tickets);
+    }
+
+    function test_expiry_rejectsSecondFollowingDayEvenWithRetainedRecords() public {
+        uint256 draw = _drawWord();
+        _deferMatch(2, 0);
+        assertEq(_drawWord(), draw, "expiry does not depend on slot replacement");
+        vm.expectRevert(bytes4(NO_MATCH));
+        game.claimFoilMatch(_fb[0], _endDay, 3);
+
+        address[] memory players = new address[](1);
+        uint24[] memory days_ = new uint24[](1);
+        uint8[] memory tickets = new uint8[](1);
+        players[0] = _fb[0]; days_[0] = _endDay; tickets[0] = 3;
+        vm.expectRevert(StaleBatch.selector);
+        game.claimFoilMatchMany(players, days_, tickets);
+    }
+
+    function test_reuse_drawAndClaimBanksRollOverWithoutReplayingPriorWins() public {
+        uint256 draw = _drawWord();
+        game.claimFoilMatch(_fb[0], _endDay, 3);
+        for (uint24 delta = 1; delta <= 2; ++delta) {
+            _deferMatch(1, 0);
+            uint24 day = _endDay + delta;
+            uint256 current = (draw & ~(uint256(type(uint24).max) << 217)) | (uint256(day) << 217);
+            vm.store(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)), bytes32(current));
+            game.claimFoilMatch(_fb[0], day, 3);
+            vm.expectRevert(bytes4(NO_MATCH));
+            game.claimFoilMatch(_fb[0], day, 3);
+        }
+        vm.expectRevert(bytes4(NO_MATCH));
+        game.claimFoilMatch(_fb[0], _endDay, 3);
+        vm.expectRevert(bytes4(NO_MATCH));
+        game.claimFoilMatch(_fb[0], _endDay + 1, 3);
+        uint256 markers = uint256(vm.load(address(game), keccak256(abi.encode(_fb[0], uint256(59)))));
+        assertEq(uint24(markers >> (uint256((_endDay + 2) & 1) * 32)), _endDay + 2);
+        assertEq(uint24(markers >> (uint256((_endDay + 1) & 1) * 32)), _endDay + 1);
+    }
+
+    function test_reuse_fourTicketsHaveIndependentClaimBits() public {
+        uint256 draw = _drawWord();
+        uint24 lvl = uint24(draw >> 64);
+        bytes32 slot = keccak256(abi.encode(_fb[0], keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
+        uint256 pack = uint256(vm.load(address(game), slot));
+        uint256 lines;
+        for (uint256 i; i < 4; ++i) lines |= uint256(uint32(draw)) << (56 + i * 32);
+        pack = (pack & ~(uint256(type(uint128).max) << 56)) | lines;
+        vm.store(address(game), slot, bytes32(pack));
+        for (uint256 i; i < 4; ++i) game.claimFoilMatch(_fb[0], _endDay, i);
+        for (uint256 i; i < 4; ++i) {
+            vm.expectRevert(bytes4(NO_MATCH));
+            game.claimFoilMatch(_fb[0], _endDay, i);
+        }
+    }
+
+    function test_reuse_rejectsMismatchedDrawAndPackTags() public {
+        uint256 draw = _drawWord();
+        _setDrawWord((draw & ~(uint256(type(uint24).max) << 217)) | (uint256(_endDay + 2) << 217));
+        vm.expectRevert(bytes4(NO_MATCH));
+        game.claimFoilMatch(_fb[0], _endDay, 3);
+        _setDrawWord(draw);
+
+        uint24 lvl = uint24(draw >> 64);
+        bytes32 slot = keccak256(abi.encode(_fb[0], keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
+        uint256 pack = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((pack & ~(uint256(type(uint24).max) << 208)) | (uint256(lvl + 4) << 208)));
+        vm.expectRevert(bytes4(NO_MATCH));
+        game.claimFoilMatch(_fb[0], _endDay, 3);
+        vm.store(address(game), slot, bytes32(pack));
+        _claimPrimarySpin(8);
+    }
+
+    function test_reuse_realPurchaseProtectsLivePackThenOverwritesExpiredSlot() public {
+        uint24 oldLevel = uint24(_drawWord() >> 64);
+        uint24 nextLevel = oldLevel + 4;
+        bytes32 slot = keccak256(abi.encode(_fb[0], keccak256(abi.encode(uint256(oldLevel & 3), FOIL_RECORD_SLOT))));
+        uint256 oldRecord = uint256(vm.load(address(game), slot));
+        // A previously settled gold award must not mark the replacement pack as paid.
+        oldRecord |= uint256(1) << 232;
+        vm.store(address(game), slot, bytes32(oldRecord));
+        bytes memory runtime = address(game).code;
+        vm.etch(address(game), type(FoilMatchTimeSeeder).runtimeCode);
+        FoilMatchTimeSeeder(payable(address(game))).purchaseAt(nextLevel);
+        vm.etch(address(game), runtime);
+
+        uint256 cost = 10 * PriceLookupLib.priceForLevel(nextLevel);
+        for (uint256 delta; delta < 2; ++delta) {
+            uint256 beforeBalance = _fb[0].balance;
+            uint256 beforeGameBalance = address(game).balance;
+            vm.expectRevert(bytes4(keccak256("FoilRecordBusy()")));
+            vm.prank(_fb[0]);
+            game.purchase{value: cost}(_fb[0], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+            assertEq(_fb[0].balance, beforeBalance, "rejected buy keeps buyer funds");
+            assertEq(address(game).balance, beforeGameBalance, "rejected buy keeps game funds");
+            assertEq(uint256(vm.load(address(game), slot)), oldRecord, "live pack metadata and all lines survive");
+            _deferMatch(1, 0);
+        }
+
+        vm.prank(_fb[0]);
+        game.purchase{value: cost}(_fb[0], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        uint256 replacement = uint256(vm.load(address(game), slot));
+        assertEq(uint24(replacement >> 208), nextLevel, "same physical slot carries new exact level");
+        assertEq(uint128(replacement >> 56), 0, "old four lines cleared");
+        assertEq(uint24(replacement), 0, "new pack waits for a fresh eligible draw");
+        assertEq(uint24(replacement >> 184), 0, "old generation day cleared");
+        assertEq(replacement & ((uint256(1) << 232) | (uint256(1) << 255)), 0, "gold paid and ready flags cleared");
+        assertGt(uint16(replacement >> 24), 0, "new purchase freezes its own boost");
+        DegenerusGameLens lens = new DegenerusGameLens();
+        assertFalse(lens.foilRecordOf(address(game), oldLevel, _fb[0]).present, "old logical record disappears");
+        assertTrue(lens.foilRecordOf(address(game), nextLevel, _fb[0]).present, "new logical record remains");
+        vm.expectRevert(bytes4(keccak256("FoilAlreadyBought()")));
+        vm.prank(_fb[0]);
+        game.purchase{value: cost}(_fb[0], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+    }
+
+    function test_reuse_realPurchaseCannotReplaceUndrainedPack() public {
+        uint24 oldLevel = uint24(_drawWord() >> 64);
+        uint24 nextLevel = oldLevel + 4;
+        bytes32 slot = keccak256(abi.encode(_fb[0], keccak256(abi.encode(uint256(oldLevel & 3), FOIL_RECORD_SLOT))));
+        uint256 pending = uint256(vm.load(address(game), slot)) & ~(uint256(1) << 255);
+        vm.store(address(game), slot, bytes32(pending));
+        _deferMatch(4, 0);
+        bytes memory runtime = address(game).code;
+        vm.etch(address(game), type(FoilMatchTimeSeeder).runtimeCode);
+        FoilMatchTimeSeeder(payable(address(game))).purchaseAt(nextLevel);
+        vm.etch(address(game), runtime);
+        uint256 beforeBalance = _fb[0].balance;
+        uint256 beforeGameBalance = address(game).balance;
+        uint256 cost = 10 * PriceLookupLib.priceForLevel(nextLevel);
+        vm.expectRevert(bytes4(keccak256("FoilRecordBusy()")));
+        vm.prank(_fb[0]);
+        game.purchase{value: cost}(_fb[0], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        assertEq(_fb[0].balance, beforeBalance);
+        assertEq(address(game).balance, beforeGameBalance);
+        assertEq(uint256(vm.load(address(game), slot)), pending, "paid undrained pack survives");
+    }
+
+    function test_persistentSeed_domainEligibilityAndTerminalGuards() public {
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], 0, 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], uint256(_endDay) + (1 << 24), 3);
+        uint256 futureDay = game.currentDayView() + 1;
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], futureDay, 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], _endDay, 4);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(makeAddr("no-pack"), _endDay, 3);
+        uint256 draw = _drawWord();
+        _setDrawWord(0);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], _endDay, 3);
+        _setDrawWord(draw);
+        uint24 lvl = uint24(draw >> 64);
+        bytes32 slot = keccak256(abi.encode(_fb[0], keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
+        uint256 pack = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32(pack & ~(uint256(1) << 255)));
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], _endDay, 3);
+        vm.store(address(game), slot, bytes32((pack & ~uint256(type(uint24).max)) | uint256(_endDay + 1)));
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], _endDay, 3);
+        vm.store(address(game), slot, bytes32(pack));
+        vm.warp(vm.getBlockTimestamp() + 40 days);
+        assertTrue(game.livenessTriggered());
+        vm.expectRevert(bytes4(keccak256("GameOver()")));
+        game.claimFoilMatch(_fb[0], _endDay, 3);
     }
 }

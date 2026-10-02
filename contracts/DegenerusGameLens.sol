@@ -214,7 +214,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 key;
     }
 
-    /// @notice A player's foil-pack record for a cycle level (foilRecord[lvl][player]).
+    /// @notice A player's retained foil-pack record for a cycle level.
     struct FoilRecordEntry {
         bool present;
         uint24 resolveDay; // first eligible draw; zero while pending
@@ -537,8 +537,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         r.capacity = uint8(word >> 224);
         r.winners = uint8(word >> 232);
         r.paid = uint8(word >> 240);
-        r.rngWord = _sload(game, bytes32(slot + 1));
-        word = _sload(game, bytes32(slot + 2));
+        word = _sload(game, bytes32(slot + 1));
         r.cursor = uint64(word);
         r.champion = uint64(word >> 64);
         r.next = uint24(word >> 128);
@@ -560,11 +559,30 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             queueSlot := decBattleQueue.slot
             root := decBattleHeap.slot
         }
-        if (index >= r.winners || uint24(_sload(game, queueSlot)) != lvl) revert E();
+        if (index >= r.winners || uint24(_sload(game, queueSlot)) != lvl
+            || (r.phase != 1 && r.phase != 2)) revert E();
+        uint256 rngWord = _decActiveWordOf(game);
+        if (rngWord == 0) revert E();
         uint256 stored = _sload(game, _mapSlot(uint256(index), root));
         node.score = stored >> 64;
-        node.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), r.rngWord, lvl, uint64(stored))))
+        node.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), rngWord, lvl, uint64(stored))))
             & ~uint256(type(uint64).max)) | uint64(stored);
+    }
+
+    /// @dev The pending battle owns this published session until its final payout.
+    function _decActiveWordOf(address game) private view returns (uint256 word) {
+        bytes32 flagsSlot;
+        bytes32 wordSlot;
+        uint256 offset;
+        assembly {
+            flagsSlot := rngFlagsAndNudges.slot
+            offset := rngFlagsAndNudges.offset
+            wordSlot := rngWordCurrent.slot
+        }
+        uint256 flags = _sload(game, flagsSlot) >> (offset * 8);
+        if (flags & (uint256(1) << 15) == 0 || flags & (uint256(1) << 13) != 0) return 0;
+        word = _sload(game, wordSlot);
+        if (word == RNG_WORD_WAITING) return 0;
     }
 
     function decSettleCursorOf(address game)
@@ -596,6 +614,22 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         assembly { base := lvlTraitEntry.slot }
         bytes32 slot = bytes32(uint256(_mapSlot(uint256(lvl & 1), base)) + trait);
         return _findPackedIndex(game, slot, ownerIndices, offset, maxWords, true);
+    }
+
+    /// @notice Permanent wallet ID, or zero before its first registration.
+    function walletIdOf(address game, address player) external view returns (uint32) {
+        uint256 base;
+        assembly { base := ticketOwnerId.slot }
+        return uint32(_sload(game, _mapSlot(player, base)));
+    }
+
+    /// @notice Wallet owning an ID; zero for an unallocated or zero ID.
+    function walletOfId(address game, uint32 id) external view returns (address) {
+        if (id == 0) return address(0);
+        uint256 base;
+        assembly { base := ticketOwners.slot }
+        if (id > uint256(_sload(game, bytes32(base)))) return address(0);
+        return address(uint160(uint256(_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + id - 1)))));
     }
 
     /// @notice Find a registry position in a bounded page of a packed ticket queue.
@@ -648,8 +682,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                          FOIL PACKS                                  |
       +======================================================================+*/
 
-    /// @notice A player's foil-pack record for a cycle level (foilRecord[lvl][player]):
+    /// @notice A player's retained foil-pack record for a cycle level:
     ///         presence, resolve day, frozen boost (bps) and frozen activity score.
+    /// @dev Records use four reusable slots per player; an overwritten level returns
+    ///      an absent, zeroed entry. This view does not provide permanent history.
     function foilRecordOf(
         address game,
         uint24 lvl,
@@ -661,9 +697,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         }
         uint256 w = _sload(
             game,
-            _mapSlot(player, uint256(_mapSlot(uint256(lvl), base)))
+            _mapSlot(player, uint256(_mapSlot(uint256(lvl & 3), base)))
         );
-        f.present = w != 0;
+        if (w == 0 || uint24(w >> _FOIL_LEVEL_SHIFT) != lvl) return f;
+        f.present = true;
         f.resolveDay = uint24(w);
         f.multBps = uint16(w >> _FOIL_MULT_SHIFT);
         f.activityScore = uint16(w >> _FOIL_SCORE_SHIFT);

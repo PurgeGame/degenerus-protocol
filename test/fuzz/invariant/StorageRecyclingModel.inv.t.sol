@@ -5,6 +5,13 @@ import {Test} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {CohortRecyclingHarness} from "../RngCohortRecycling.t.sol";
 import {TicketRecyclingHarness} from "../TicketStorageRecycling.t.sol";
+import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
+
+/// @dev This storage model has no redemption consumer. The production completion
+/// check still queries its pinned external frontier, which must exist in the fixture.
+contract StorageRecyclingSdgnrsFrontier {
+    function redemptionSettlementPending() external pure returns (bool) { return false; }
+}
 
 /// @dev Independent lifetime books against the production binary storage primitives.
 /// The monotonically increasing reference epoch exists only in this test oracle.
@@ -167,6 +174,7 @@ contract StorageRecyclingReferenceInvariant is StdInvariant, Test {
     CohortReferenceHandler cohort;
     TicketReferenceHandler tickets;
     function setUp() public {
+        vm.etch(ContractAddresses.SDGNRS, address(new StorageRecyclingSdgnrsFrontier()).code);
         cohort = new CohortReferenceHandler(new CohortRecyclingHarness());
         tickets = new TicketReferenceHandler(new TicketRecyclingHarness());
         // Every campaign starts beyond actual reuse/retirement, not a vacuous virgin state.

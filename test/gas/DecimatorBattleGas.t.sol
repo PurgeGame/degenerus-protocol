@@ -11,6 +11,7 @@ contract DecimatorBattleGasTest is Test {
 
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         h = new DecimatorBattleHarness();
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
     }
@@ -53,8 +54,7 @@ contract DecimatorBattleGasTest is Test {
                 uint256 used = gasBefore - gasleft();
                 assertGt(work, 0);
                 assertTrue(moved);
-                // The 2,500-unit clamp plus at most one item past it (a bounded run is <= 108).
-                assertLe(units, 2500 + 108, "bounded single-run budget overshoot");
+                assertLe(units, 1824, "strict shared worker allowance");
                 assertLe(used * 10, units * 4700 * 9, "every call within 90% of its charge");
                 assertLt(used, 10_000_000, "decimator keeper leg gas ceiling");
                 if (used > peakGas) peakGas = used;

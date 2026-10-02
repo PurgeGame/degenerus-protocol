@@ -15,9 +15,9 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         earlyTicketLevel = 203;
         _setTicketBufferLevel(201);
         _setTicketBufferLevel(202);
-        foilRecord[201][foilOwner] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT);
-        uint256 pos = lvlEntryOwner[201].length;
-        lvlEntryOwner[201].push(EntryOwner(foilOwner, 0));
+        foilRecord[201 & 3][foilOwner] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
+            | (uint256(201) << _FOIL_LEVEL_SHIFT);
+        uint256 pos = uint256(_registerEntryOwner(foilOwner, 201) >> OWNER_IDX_SHIFT) - 1;
         foilQueue[_foilReadKey()].push(((pos + 1) << 192) | (uint256(201) << 160) | uint160(foilOwner));
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
@@ -39,14 +39,14 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         _seedQueued(_tqReadKey(203), 203, owner, uint80(100) << 8);
     }
     function seedPaidFoil(uint24 lvl, uint24 day, address owner) external {
-        foilRecord[lvl][owner] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT);
-        uint256 pos = lvlEntryOwner[lvl].length;
-        lvlEntryOwner[lvl].push(EntryOwner(owner, 0));
+        foilRecord[lvl & 3][owner] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
+            | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
+        uint256 pos = uint256(_registerEntryOwner(owner, lvl) >> OWNER_IDX_SHIFT) - 1;
         foilQueue[_foilReadKey()].push(((pos + 1) << 192) | (uint256(lvl) << 160) | uint160(owner));
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
     }
-    function foilRecordWord(uint24 lvl, address owner) external view returns (uint256) { return foilRecord[lvl][owner]; }
+    function foilRecordWord(uint24 lvl, address owner) external view returns (uint256) { return _foilRecordWord(owner, lvl); }
     function retireBeforeFoilWord() external { _setTicketBufferLevel(203); }
     function runProductionMint(uint24 anchor) external returns (bool finished, bool worked) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(

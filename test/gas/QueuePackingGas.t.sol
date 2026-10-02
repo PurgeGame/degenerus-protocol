@@ -11,7 +11,7 @@ contract QueuePackingGasSeeder is DegenerusGame {
 
     function emptyPurchaseLevel() external {
         level = 110;
-        lvlEntryOwner[111].push(EntryOwner(address(1), 0));
+        _registerEntryOwner(address(1), 111);
     }
 
     function queued(uint24 lvl, address player) external view returns (uint80) {
@@ -64,6 +64,31 @@ contract QueuePackingEmptyPurchaseGas is DeployProtocol {
         uint80 owed = QueuePackingGasSeeder(payable(address(game))).queued(111, BUYER);
         assertEq(uint32(owed >> 8), 4);
         assertGt(owed >> 48, 1, "gas fixture must use a nonzero registry index");
+    }
+}
+
+/// @dev A real paid first purchase establishes the wallet's ID before a later-level purchase.
+contract QueuePackingReturningPurchaseGas is DeployProtocol {
+    address internal constant BUYER = address(0xABC126);
+    function setUp() public {
+        _deployProtocol();
+        vm.deal(BUYER, 100 ether);
+        vm.prank(BUYER);
+        game.purchase{value: 0.01 ether}(BUYER, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        bytes memory code = address(game).code;
+        vm.etch(address(game), type(QueuePackingGasSeeder).runtimeCode);
+        QueuePackingGasSeeder(payable(address(game))).emptyPurchaseLevel();
+        vm.etch(address(game), code);
+    }
+    function test_ReturningWallet_LaterLevel_Cold() public {
+        vm.prank(BUYER);
+        uint256 beforeGas = gasleft();
+        game.purchase{value: 0.04 ether}(BUYER, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        emit log_named_uint("QUEUE_RETURNING_PURCHASE_LATER_LEVEL", beforeGas - gasleft());
+        vm.etch(address(game), type(QueuePackingGasSeeder).runtimeCode);
+        uint80 owed = QueuePackingGasSeeder(payable(address(game))).queued(111, BUYER);
+        assertEq(uint32(owed >> 8), 4);
+        assertGt(owed >> 48, 1);
     }
 }
 

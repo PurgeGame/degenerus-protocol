@@ -526,7 +526,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 }
             }
 
-            _emitDailyWinningTraits(questDay, winningTraitsPacked, lvl);
+            _emitDailyWinningTraits(questDay, winningTraitsPacked, lvl, randWord);
 
             dailyJackpotCoinTicketsPending = true;
             return;
@@ -539,7 +539,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             EntropyLib.hash2(randWord, lvl)
         );
 
-        _emitDailyWinningTraits(questDay, winningTraitsPacked, lvl);
+        _emitDailyWinningTraits(questDay, winningTraitsPacked, lvl, randWord);
 
         // Daily 4% drip from futurePrizePool every ordinary purchase day.
         uint256 futureBal = _getFuturePrizePool();
@@ -1818,7 +1818,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     function emitDailyWinningTraits(uint256 randWord) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         // The sealed day, matching payDailyJackpot: dailyIdx + 1, never the wall clock.
-        _emitDailyWinningTraits(dailyIdx + 1, _rollMainTraits(randWord), 1);
+        _emitDailyWinningTraits(dailyIdx + 1, _rollMainTraits(randWord), 1, randWord);
     }
 
     /// @dev Awards a FLIP draw over trait-matched ticket holders across [minLevel, maxLevel]:
@@ -1995,7 +1995,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             }
             // A singleton completes its visit immediately; it needs no circular-walk setup.
             if (len == 1) {
-                winners[i++] = address(uint160(_entryRecord(candidate, uint32(_tqWordAt(queue, 0)))));
+                winners[i++] = _ticketOwnerAt(uint32(_tqWordAt(queue, 0)));
                 walk.position = 0;
                 walk.left = 0;
                 continue;
@@ -2013,7 +2013,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 if (lanes > len - walk.position) lanes = len - walk.position;
                 if (lanes > take) lanes = take;
                 for (uint256 j; j < lanes; ++j) {
-                    winners[i++] = address(uint160(_entryRecord(candidate, uint32(packed))));
+                    winners[i++] = _ticketOwnerAt(uint32(packed));
                     packed >>= 32;
                 }
                 walk.position += lanes;
@@ -2025,10 +2025,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
             | (walk.position << 138) | (walk.left << 170);
     }
 
-    /// @dev Records the day's board for the foil claim to read (foil == jackpot by
-    ///      construction; one write per day) and emits it.
-    function _emitDailyWinningTraits(uint24 questDay, uint32 mainTraitsPacked, uint24 lvl) private {
-        dailyFoilDraw[questDay] = _packFoilDraw(mainTraitsPacked, lvl);
+    /// @dev Records the day's board in the two-slot draw ring for foil claims
+    ///      (foil == jackpot by construction; one write per day) and emits it.
+    function _emitDailyWinningTraits(uint24 questDay, uint32 mainTraitsPacked, uint24 lvl, uint256 randWord) private {
+        uint24 slot = questDay & 1;
+        uint24 storedDay = uint24(dailyFoilDraw[slot] >> _FOIL_DRAW_DAY_SHIFT);
+        // A retry or stale callback must neither replace a newer sealed draw nor
+        // interrupt the advance. An unused slot has day zero; draw days are nonzero.
+        if (storedDay >= questDay) return;
+        dailyFoilDraw[slot] = _packFoilDraw(mainTraitsPacked, lvl, questDay, randWord);
         emit DailyWinningTraits(questDay, mainTraitsPacked);
     }
 

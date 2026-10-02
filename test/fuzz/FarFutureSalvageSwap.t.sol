@@ -88,7 +88,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     }
 
     /// @dev Seed `whole` far-future tickets for `who` at level L (packed: owed=whole*4 entries << 8 | rem).
-    ///      Pushes `who` into ticketQueue[ffk(L)] and returns the index of that push.
+    ///      Pushes `who` into ticketQueue[_ticketQueueStorageKey(ffk(L))] and returns the index of that push.
     function _seedFarTickets(address who, uint24 L, uint32 whole) internal returns (uint256 idx) {
         return TicketQueueStorage.seed(address(game), ffk.ffKey(L), L, who, uint80(whole) * 4 << 8);
     }
@@ -653,7 +653,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     }
 
     /// @notice (e) Swap-pop maintains membership <=> packed != 0: a full sell-out pops the seller from
-    ///         ticketQueue[ffk]; a partial sell does NOT pop (seller stays enrolled, packed != 0); the
+    ///         ticketQueue[_ticketQueueStorageKey(ffk)]; a partial sell does NOT pop (seller stays enrolled, packed != 0); the
     ///         far-future sampler returns only live holders after the pop; and a stale queueIndex
     ///         (q[idx] != player) REVERTS the line.
     function test_FullSaleSwapsTailAcrossQueueWords() public {

@@ -39,13 +39,20 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
     {
         uint24 rk = writeSide ? _tqWriteKey(lvl) : _tqReadKey(lvl);
         _seedQueued(rk, lvl, player, (uint80(entries) << 8) | uint80(rem));
-        posPlusOne = entryOwnerPosition[rk][player];
+        posPlusOne = ticketOwnerId[player];
+    }
+
+    function seedFuture(uint24 lvl, address player, uint32 entries) external returns (uint32) {
+        _seedQueued(_tqFarFutureKey(lvl), lvl, player, uint80(entries) << 8);
+        return ticketOwnerId[player];
+    }
+
+    function pendingWord(uint24 lvl, address player) external view returns (uint256) {
+        return ticketPending[_ticketPendingStorageKey(lvl)][ticketOwnerId[player]];
     }
 
     function seedFoil(uint24 lvl, uint24 resolveDay, address player) external returns (uint256 index) {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        uint256 ownerIdx = owners.length;
-        owners.push(EntryOwner(player, 0));
+        uint256 ownerIdx = uint256(_registerEntryOwner(player, lvl) >> OWNER_IDX_SHIFT) - 1;
         foilQueue[resolveDay & 1].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
         index = foilQueue[resolveDay & 1].length - 1;
 
@@ -126,6 +133,9 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
 
     /// @dev Entries (and remainder) still owed at registry position `posPlusOne`.
     function owedAt(uint24 lvl, uint32 posPlusOne) external view returns (uint256) {
-        return (_entryRecord(lvl, posPlusOne) >> 160) & ((uint256(1) << 40) - 1);
+        uint256 mask = (uint256(1) << 40) - 1;
+        return (_entryPacked(lvl, posPlusOne) & mask)
+            + (_entryPacked(lvl | TICKET_SLOT_BIT, posPlusOne) & mask)
+            + (_entryPacked(lvl | TICKET_FAR_FUTURE_BIT, posPlusOne) & mask);
     }
 }

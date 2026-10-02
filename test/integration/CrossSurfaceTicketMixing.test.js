@@ -68,9 +68,9 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 );
 
 // ---------------------------------------------------------------------------
-// Slot 13 maps (encoded queue key, player) to a uint32 registry position plus one.
-// Slot 67 maps the bare level to one-slot owner records: address at bit 0, uint80 owed at bit 160.
-// The helper derives both keccak paths; the public accessor independently attests owed totals.
+// Slot 13 maps wallets to stable IDs; slot 67 is the global immutable address array.
+// Slot 79 holds three pending lanes per logical level and ID. The helper decodes
+// the selected queue lane; the public accessor independently attests owed totals.
 async function readTicketsOwedSlot(gameAddress, wk, buyer) {
   const slot = await entryOwnerRecordSlot(gameAddress, wk, buyer);
   const word = await readEntriesOwed(gameAddress, wk, buyer);
@@ -526,7 +526,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       const queueBody = extractBody(storage, "function _queueEntries(");
       expect(queueBody, "_queueEntries body not found").to.not.equal(null);
       expect(
-        /_setEntryOwed\(targetLevel,\s*uint32\(packed\s*>>\s*OWNER_IDX_SHIFT\),\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(
+        /_setEntryOwed\(wk,\s*uint32\(packed\s*>>\s*OWNER_IDX_SHIFT\),\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(
           queueBody
         ),
         "_queueEntries must pack `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` with rem carried from the existing slot"

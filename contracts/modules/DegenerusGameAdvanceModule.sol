@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
 import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
 
 /*
@@ -279,21 +280,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///      wait for the daily word it would have shared anyway.
     uint96 private constant MIN_LINK_FOR_CRAPS_RNG = 10 ether;
 
-    /// @dev Per-call afking process-STAGE gas-weight budget. Every day is uniform: the streak is
-    ///      computed on read from the Sub slot (no per-buy `playerQuestStates` STATICCALL, no
-    ///      settle day), so there is a SINGLE budget. The STAGE consumes a gas-weight per
-    ///      iteration — buys and finalizes are weighted by true marginal cost (a lootbox buy
-    ///      ≈34k = `SUB_STAGE_LOOTBOX_WEIGHT` (10), a ticket buy ≈73k = `SUB_STAGE_TICKET_WEIGHT`
-    ///      (21), a cross-contract sub-ending finalize (cancel-reclaim / funding-kill) ≈29k =
-    ///      `SUB_STAGE_EVICT_WEIGHT` (8)) — and ends the chunk on accumulated weight, not raw
-    ///      count, so EVERY composition (including a saturated all-evict swap-pop chunk) stays on
-    ///      the <10M target with deep headroom to the 16.7M advance-chain ceiling. The budget
-    ///      sizes the evict chunk at ≈312 finalizes so a saturated all-evict crank stays below 10M.
-    ///      A large set drains across several advanceGame calls. On the one chunk per level that
-    ///      delivers sDGNRS's automatic whale purchase, the STAGE first charges
-    ///      `SUB_STAGE_SDGNRS_WHALE_WEIGHT` against this same budget, so that chunk's subscriber
-    ///      allowance shrinks by the purchase's weight and the composition stays on target.
-    uint256 private constant SUB_STAGE_WEIGHT_BUDGET = 2500;
+    // The next request is indivisible; stage work leaves this reserve or defers it.
+    uint256 private constant REQUEST_UNITS = 512;
 
     /// @dev Seat-tenure drawing prize rate: whole FLIP per funded tenure day of the
     ///      drawn winner (pure days — dailyQuantity does not scale the prize).
@@ -313,6 +301,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///         the gameover path = no bounty). Standalone callers earn nothing — the unified
     ///         afking router pays the re-homed bounty (2x * mult) only when mult > 0.
     function advanceGame() external returns (uint8 mult) {
+        (mult,) = _advanceGame(MineFlipBudget.WORK_BUDGET);
+    }
+
+    /// @notice Basic stages report a common-unit charge; jackpot stages consume this tx.
+    function advanceGameBudgeted(uint256 allowance) external returns (uint8 mult, uint256 charged) {
+        return _advanceGame(MineFlipBudget.clamp(allowance));
+    }
+
+    function _advanceGame(uint256 allowance) private returns (uint8 mult, uint256 charged) {
         mult = 1;
         uint48 ts = uint48(block.timestamp);
         uint24 wallDay = _simulatedDayIndexAt(ts);
@@ -395,7 +392,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 // Gameover path: advance ran but earns NO router bounty (the flip-credit
                 // coin is worthless at gameover) — return mult = 0 so mineFlip pays nothing.
                 emit Advance(goStage, lvl);
-                return 0;
+                return (0, allowance);
             }
         }
 
@@ -406,7 +403,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             _setRngRequestActive(false);
             _tryCompleteRng();
             emit Advance(STAGE_READ_WAIT, lvl);
-            return 0;
+            return (0, 32);
         }
 
         // --- Mid-day path: same-day queue draining ---
@@ -432,7 +429,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 // (resolved on leftover budget) remains, else foil's boosted entries
                 // silently under-resolve into the jackpot.
                 if (midFound || _foilDrainPending()) {
-                    (, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
+                    (, bool ticketsFinished, uint256 ticketCharge) = _runProcessTicketBatch(purchaseLevel, allowance);
+                    charged += ticketCharge;
                     // Commit unconditionally: the outer gate already proved there was
                     // work to attempt, and every outcome the worker can return carries
                     // progress worth keeping. A finished walk that resolved no buyers
@@ -449,7 +447,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                     }
                     emit Advance(STAGE_TICKETS_WORKING, lvl);
                     // Mid-day partial-drain: mult = 1 (no escalation).
-                    return mult;
+                    return (mult, charged);
                 }
             }
 
@@ -538,8 +536,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                         // store and emit directly.
                         _finalizeLootboxRng(cw);
                     }
-                    (bool preWorked, bool preFinished) = _runProcessTicketBatch(purchaseLevel);
-                    if (preWorked || !preFinished) {
+                    (bool preWorked, bool preFinished, uint256 ticketCharge) = _runProcessTicketBatch(purchaseLevel, allowance);
+                    charged += ticketCharge;
+                    if (!preFinished || (preWorked && locked)) {
                         stage = STAGE_TICKETS_WORKING;
                         break;
                     }
@@ -577,7 +576,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // The STAGE runs strictly pre-RNG (before rngGate writes the day's word), so
             // _recordedDailyWord(processDay) is uncommitted when a sub is stamped — the
             // load-bearing freeze property. The box reads the LIVE level +
-            // _recordedDailyWord(lastAutoBoughtDay) at open.
+            // the active published session word at open, before any next request.
             //
             // Forward-looking per-day reset: the first UNLOCKED advance entry of a new
             // `day` flips the drain gate + cursor BEFORE that day's STAGE runs (locked
@@ -613,7 +612,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 }
                 if (!subsFullyProcessed) {
                     if (_subscribers.length != 0) {
-                        _runSubscriberStage(day);
+                        charged += _runSubscriberStage(day, allowance - charged);
                         if (_subCursor < _subscribers.length) {
                             // Partial drain: more subs remain this cycle — break before
                             // rngGate and return mult (no RNG request yet). subsFullyProcessed
@@ -624,6 +623,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                     }
                     subsFullyProcessed = true;
                 }
+            }
+
+            // A finishing basic batch may request only when the indivisible request
+            // still fits. Daily application and jackpots always start a fresh transaction.
+            if (charged != 0 && (locked || allowance - charged < REQUEST_UNITS)) {
+                stage = STAGE_SUBS_WORKING;
+                break;
             }
 
             // RNG: use existing word or request new one. Precompute the day's coinflip reward
@@ -645,6 +651,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             (uint256 rngWord, uint32 gapDays) = rngGate(ts, day, purchaseLevel, lastPurchase, coinflipBonus, dIdx);
             psd += uint24(gapDays);
             if (rngWord == 1) {
+                charged += REQUEST_UNITS;
                 // Sentinel from an already-locked entry = the daily retry re-firing the
                 // outstanding request. The original request's swap already committed the
                 // read cohort; swapping again would flip it back to the write slot
@@ -710,12 +717,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
 
             // Unified sweep over the windowed read keys (routed cohort first); an
             // empty-window call is the foil drain's continuation vehicle.
-            (bool ticketWorked, bool ticketsFinished) = _runProcessTicketBatch(purchaseLevel);
+            (bool ticketWorked, bool ticketsFinished,) = _runProcessTicketBatch(purchaseLevel, allowance);
+            charged = allowance;
             if (ticketWorked || !ticketsFinished) {
                 stage = STAGE_TICKETS_WORKING;
                 break;
             }
             ticketsFullyProcessed = true; // set before jackpot/phase logic
+
+            charged = allowance; // independently calibrated daily/jackpot transaction
 
             // === PURCHASE PHASE ===
             if (!inJackpot) {
@@ -931,16 +941,17 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///      accumulated gas-weight reaches SUB_STAGE_WEIGHT_BUDGET; it persists _subCursor
     ///      itself. The STAGE caller decides drained-vs-partial by re-reading _subCursor against
     ///      _subscribers.length. No per-day epoch is written — the box reads the LIVE level +
-    ///      _recordedDailyWord(day) at open.
+    ///      the active published session word at open; pending boxes block the next request.
     /// @param processDay The boundary-pinned process day (seeds the open).
-    function _runSubscriberStage(uint24 processDay) private {
+    function _runSubscriberStage(uint24 processDay, uint256 allowance) private returns (uint256 charged) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
-                    IGameAfkingModule.processSubscriberStage.selector, processDay, SUB_STAGE_WEIGHT_BUDGET
+                    IGameAfkingModule.processSubscriberStageBudgeted.selector, processDay, allowance
                 )
             );
         if (!ok) _revertDelegate(data);
+        (, charged) = abi.decode(data, (uint256, uint256));
     }
 
     /// @dev Bubble up revert reason from delegatecall failure.
@@ -1673,11 +1684,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///         delta, so a batch that both starts and finishes in one call (cursor returns
     ///         to 0) still reports its work and the chain breaks before BAF/jackpot.
     /// @return finished True when the whole window and the foil drain are caught up.
-    function _runProcessTicketBatch(uint24 lvl) private returns (bool worked, bool finished) {
+    function _runProcessTicketBatch(uint24 lvl, uint256 allowance) private returns (bool worked, bool finished, uint256 charged) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE
-            .delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector, lvl));
+            .delegatecall(abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatchBudgeted.selector, lvl, allowance));
         if (!ok) _revertDelegate(data);
-        (finished, worked) = abi.decode(data, (bool, bool));
+        (finished, worked, charged) = abi.decode(data, (bool, bool, uint256));
         if (finished && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == MID_DAY_FUTURE_POOL) {
             // A daily retry may have committed current-level buys while the next-level
             // snapshot was waiting. Finish the ordinary sweep before paying its jackpot.

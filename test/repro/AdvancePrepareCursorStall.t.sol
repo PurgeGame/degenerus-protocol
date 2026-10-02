@@ -141,7 +141,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
                 emit log_named_uint("  cursor", cur);
             }
 
-            // The drain deletes ticketQueue[rk] when the cohort fully materializes.
+            // The drain deletes ticketQueue[_ticketQueueStorageKey(rk)] when the cohort fully materializes.
             if (_queueLen(rk) == 0) {
                 drained = true;
                 break;

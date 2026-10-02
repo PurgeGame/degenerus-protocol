@@ -98,7 +98,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
 
         // Keep registry position 0 out of every seeded level (a zero lane index understates gas).
         for (uint24 L = pl; L <= pl + 4; ++L) {
-            if (lvlEntryOwner[L].length == 0) lvlEntryOwner[L].push(EntryOwner(address(1), 0));
+            if (ticketOwners.length == 0) _registerEntryOwner(address(1), L);
         }
 
         for (uint8 q; q < 4; ++q) {

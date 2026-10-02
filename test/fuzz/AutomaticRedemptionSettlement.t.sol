@@ -7,6 +7,13 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 
 contract RedemptionTerminalSeeder is DegenerusGame {
     function end() external { gameOver = true; }
+    function seedLiveRedemptionWord(uint256 word) external {
+        rngWordCurrent = word;
+        _setRngSessionPublished(true);
+        _setRngRequestActive(false);
+        _setRngComplete(false);
+        rngLockedFlag = false;
+    }
 }
 contract RedemptionRejectEth {
     receive() external payable { revert(); }
@@ -30,13 +37,9 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     }
 
     function _complete(uint256 word) internal {
-        for (uint256 i; i < 200; ++i) {
-            if (!game.rngLocked()) {
-                _finishReadConsumers();
-                if (sdgnrs.redemptionSettlementPending()) { game.mineFlip(); continue; }
-            }
-            if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+        for (uint256 i; i < 500; ++i) {
+            if (!game.advanceDue() && !game.rngLocked() && game.rngComplete()) return;
+            game.mineFlip();
             uint256 req = mockVRF.lastRequestId();
             if (req != 0 && req != fulfilled) {
                 (,, bool done) = mockVRF.pendingRequests(req);
@@ -61,6 +64,12 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         sdgnrs.resolveRedemptionPeriod(roll, day);
         sdgnrs.beginRedemptionSettlement(day, word);
         vm.stopPrank();
+        // This fixture injects a chosen roll instead of making a fresh request.
+        // Match the already-drained session's published-word lifecycle too.
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(RedemptionTerminalSeeder).runtimeCode);
+        RedemptionTerminalSeeder(payable(address(game))).seedLiveRedemptionWord(word);
+        vm.etch(address(game), original);
     }
 
     function test_AdvanceAutomaticallySettlesTopupsAndBothRecipients() public {
@@ -81,7 +90,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         assertFalse(game.rngLocked());
     }
 
-    function test_ManualClaimAheadOfCursorCannotPayTwice() public {
+    function test_ManualFifoClaimThenKeeperCannotPayTwice() public {
         uint24 day = game.currentDayView();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _burn(bob, sdgnrs.totalSupply() / 1000);

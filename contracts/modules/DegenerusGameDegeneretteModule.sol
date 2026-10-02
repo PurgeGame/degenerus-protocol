@@ -31,6 +31,7 @@ import {
     IDegenerusGameBoonModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
@@ -326,6 +327,7 @@ contract DegenerusGameDegeneretteModule is
     ///      spin scores 7+ (win box plus the sDGNRS award). Outcomes key on
     ///      (word, index, symbol, spin), not the owner, so every bet on one symbol at one index
     ///      hits together; the ETH floor prices that case, never an average.
+    uint256 private constant BET_CALL_UNITS = 6;
     uint256 private constant BET_ENTRY_WEIGHT_ETH = 36;
     uint256 private constant BET_ENTRY_WEIGHT_FLIP = 4;
     // Every ETH spin may also transfer sDGNRS. Charge the cold award tail per
@@ -430,13 +432,12 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Delegatecall target of the lootbox module's openHumanBoxes, which reaches a bet
     ///      queue only after that index's box entries and only once its word has landed.
     ///      Each bet is priced in walk units from its own word (see BET_ENTRY_WEIGHT_*) and
-    ///      a zeroed word costs one unit to skip, so the call stays inside `budget`. The first
-    ///      bet runs whatever it costs when `mustRunFirst` (nothing opened yet this call), so
-    ///      no wide bet can wedge the cursor.
+    ///      a zeroed word costs one unit to skip. Even the first bet must fit the remaining
+    ///      allowance; a fresh full allowance can fit the largest supported bet.
     /// @param index The swept RNG index.
     /// @param pos Queue position to resume from.
     /// @param budget Walk units left in the crank call.
-    /// @param mustRunFirst True when the crank has opened nothing yet.
+    /// @param mustRunFirst Retained for ABI compatibility; first items obey the same budget.
     /// @param rngWord The index's committed word (already loaded by the sweep).
     /// @return resolved Bets resolved.
     /// @return newPos Position to resume from (the queue length once drained).
@@ -454,7 +455,12 @@ contract DegenerusGameDegeneretteModule is
         // The frozen-pool ETH path reverts Insolvent when the pending buffer runs short, and a
         // revert here would stall the whole box frontier behind this queue. The freeze only
         // runs inside the RNG lock the sweep already waits out; hold the queue while it is up.
-        if (prizePoolFrozen) return (0, pos, 0, 0);
+        mustRunFirst; // Compatibility input; every item now reserves its full cost.
+        budget = MineFlipBudget.clamp(budget);
+        if (prizePoolFrozen || budget <= BET_CALL_UNITS || _rngConsumerStage() != 3
+            || index != _rngReadBuffer() || rngWord == 0 || rngWord != _lootboxWord(index)) return (0, pos, 0, 0);
+        // Reserve the delegate frame and final accumulated owner/pool writes.
+        unitsSpent = BET_CALL_UNITS;
         uint256[] storage queue = degeneretteQueue[index & 1];
         uint256 qlen = queue.length;
         ResolveAcc memory acc;
@@ -470,7 +476,7 @@ contract DegenerusGameDegeneretteModule is
             uint256 cost = _betWeight(bet);
             // BREAK, never skip: the cursor is monotonic, so a bet that does not fit stays
             // at the cursor for the next call's fresh budget.
-            if ((resolved != 0 || !mustRunFirst) && unitsSpent + cost > budget) break;
+            if (cost > budget - unitsSpent) break;
             queue[pos] = bet | BET_PROCESSED;
             unchecked {
                 ++pos;

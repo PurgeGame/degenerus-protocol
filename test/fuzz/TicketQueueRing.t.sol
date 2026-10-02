@@ -15,7 +15,7 @@ contract TicketQueueRingHarness is DegenerusGameStorage {
     function physical(uint24 key) external pure returns (uint24) { return _ticketQueueStorageKey(key); }
     function count(uint24 key) external view returns (uint256) { return _ticketQueueLength(key); }
     function owed(uint24 key, address player) external view returns (uint80) { return _entriesOwed(key, player); }
-    function position(uint24 key, address player) external view returns (uint32) { return entryOwnerPosition[key][player]; }
+    function position(uint24 key, address player) external view returns (uint32) { return ticketOwnerId[player]; }
     function prepare(uint24 lvl) external returns (bool) { return _prepareTicketLevel(lvl); }
     function flip() external { ticketWriteSlot = !ticketWriteSlot; }
     function reveal(uint24 key, uint8 trait) external {
@@ -25,9 +25,9 @@ contract TicketQueueRingHarness is DegenerusGameStorage {
         uint256 n = _ticketQueueLength(key);
         for (uint256 i; i < n; ++i) {
             uint32 pos = _tqPositionAt(q, i);
-            uint80 packed = uint80(_entryRecord(lvl, pos) >> 160);
+            uint80 packed = uint80(_entryRecord(key, pos) >> 160);
             _bucketAppendRun(_traitBufferBase(lvl), trait, pos - 1, uint32(packed >> 8), lvl);
-            _setEntryOwed(lvl, pos, 0);
+            _setEntryOwed(key, pos, 0);
         }
         _releaseTicketQueue(key);
     }

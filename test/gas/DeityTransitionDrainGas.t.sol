@@ -18,9 +18,9 @@ contract DeityTransitionQueueSeeder is DegenerusGameStorage {
             address who = address(0xF0100000 + i);
             uint80 packed = _registerEntryOwner(who, target);
             uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
-            entryOwnerPosition[key][who] = pos;
+            ticketOwnerId[who] = pos;
             _tqAppend(key, pos);
-            _setEntryOwed(target, pos, packed | (uint80(1_000_000) << 8));
+            _setEntryOwed(key, pos, packed | (uint80(1_000_000) << 8));
         }
     }
 }

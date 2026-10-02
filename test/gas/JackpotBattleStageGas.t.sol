@@ -68,7 +68,7 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
         deityBySymbol[VAULT_DEITY_SYMBOL] = address(0);
         deityBySymbol[SDGNRS_DEITY_SYMBOL] = address(0);
 
-        if (lvlEntryOwner[s.lvl].length == 0) lvlEntryOwner[s.lvl].push(EntryOwner(address(1), 0));
+        if (ticketOwners.length == 0) _registerEntryOwner(address(1), s.lvl);
         for (uint8 q; q < 4; ++q) {
             _seedBucketClear(s.lvl, mainTraits[q]);
             if (s.ticketHolders != 0) {

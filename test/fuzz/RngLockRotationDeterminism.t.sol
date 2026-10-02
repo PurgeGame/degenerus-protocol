@@ -310,10 +310,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         uint256 vrfWord,
         uint256 rotSeed
     ) public {
-        // The contract zero-guards a delivered 0 word to 1 (AdvanceModule:1796),
-        // and rngWord==1 is the rngGate "request new RNG" sentinel
-        // (AdvanceModule:298) which livelocks the subsequent drain. Exclude both;
-        // a real 256-bit VRF word collides with {0,1} only negligibly.
+        // Final words 0 and 1 remain pending; their recovery is tested separately.
         vm.assume(vrfWord != 0 && vrfWord != 1);
 
         // Common pre-request steady state: complete the first post-deploy day.
@@ -390,12 +387,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         uint256 vrfWord,
         uint256 rotSeed
     ) public {
-        // The contract zero-guards a delivered 0 word to 1 (AdvanceModule:1796):
-        // a delivered 0 would be stored as 1, breaking the exact == vrfWord
-        // equality and the byte-identity of the per-index word. Exclude 0; a real
-        // 256-bit VRF word is 0 only with negligible probability. (1 is a legal
-        // mid-day word here -- the mid-day branch writes the index directly and is
-        // not subject to the daily rngGate==1 sentinel.)
+        // Both daily and mid-day sessions reserve final words 0 and 1.
         vm.assume(vrfWord > 1);
 
         // Setup runs BEFORE the snapshot so both runs share identical pre-request
@@ -441,7 +433,10 @@ contract RngLockRotationDeterminism is DeployProtocol {
         // Deliver the SAME vrfWord on the NEW coordinator's re-issued request
         // (NOT the abandoned old request, which the :1793 requestId guard rejects).
         newVRF.fulfillRandomWords(reissueReqId, vrfWord);
-        // The mid-day branch wrote the word directly into the preserved slot N.
+        // The callback stores the word; advance publishes it before consumers run.
+        assertEq(_readRngWordCurrent(), vrfWord, "rotation callback preserves the delivered word");
+        assertEq(_lootboxRngWord(reservedIndexA), 0, "callback alone does not publish the cohort");
+        assertTrue(_advanceTolerant(), "publish the rotated mid-day session");
         assertEq(
             _lootboxRngWord(reservedIndexA),
             vrfWord,
@@ -466,6 +461,9 @@ contract RngLockRotationDeterminism is DeployProtocol {
         // Deliver the SAME vrfWord on the ORIGINAL coordinator -- no rotation.
         uint256 baselineReqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(baselineReqId, vrfWord);
+        assertEq(_readRngWordCurrent(), vrfWord, "baseline callback preserves the delivered word");
+        assertEq(_lootboxRngWord(reservedIndexB), 0, "callback alone does not publish the baseline cohort");
+        assertTrue(_advanceTolerant(), "publish the baseline mid-day session");
         assertEq(
             _lootboxRngWord(reservedIndexB),
             vrfWord,

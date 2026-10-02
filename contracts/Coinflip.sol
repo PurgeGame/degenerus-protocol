@@ -1432,7 +1432,7 @@ contract Coinflip {
         _settleCoinflipDay(epoch, rewardPercent, win);
     }
 
-    /// @dev Exact normal-day reward derivation, also used for synthetic gap results.
+    /// @dev Tagged reward derivation for normal days and raw-root gap results.
     function _coinflipReward(uint8 bonus, uint256 rngWord, uint24 epoch) private pure returns (uint16 rewardPercent) {
         // Separate reward size from every other draw using the daily word.
         uint256 seedWord = uint256(keccak256(abi.encodePacked(REWARD_PERCENT_TAG, rngWord, epoch)));
@@ -1464,13 +1464,18 @@ contract Coinflip {
     }
 
     /// @notice Fill only compact result bytes for at most 31 skipped days.
-    /// @dev Same outcomes as the old full-word backfill; no daily RNG archive writes.
+    /// @dev Raw root bits 1..31 supply wins in the caller's original day order; bit 0
+    ///      stays separate for the recovery day. Tagged rewards use the root and actual day.
+    ///      Skipping an already-settled prefix must not restart the bit sequence.
+    ///      The Game's shared recovery caller caps the range to 31 days before this call.
     function processCoinflipGap(uint256 root, uint24 start, uint24 end) external onlyDegenerusGameContract {
+        if (end <= start) return;
+        uint24 originalStart = start;
         if (start <= flipsClaimableDay) start = flipsClaimableDay + 1;
         if (end <= start) return;
-        if (uint256(end) - start > 31) revert Insufficient();
-        uint16[31] memory rewards;
-        uint32 wins;
+        // Zero-bonus gap rewards are at most 150; 31 reward bytes fit in one word.
+        uint256 rewardsPacked;
+        uint32 wins = uint32(root >> (1 + uint256(start) - originalStart));
         uint24 key = start >> 5;
         uint256 packed = coinflipDayResultPacked[key];
         for (uint24 day = start; day < end; ++day) {
@@ -1480,21 +1485,19 @@ contract Coinflip {
                 key = nextKey;
                 packed = coinflipDayResultPacked[key];
             }
-            uint256 word = uint256(keccak256(abi.encodePacked(root, day)));
-            if (word == 0) word = 1;
             uint256 offset = day - start;
-            uint16 reward = _coinflipReward(0, word, day);
-            rewards[offset] = reward;
-            bool win = word & 1 != 0;
-            if (win) wins |= uint32(1) << offset;
+            uint16 reward = _coinflipReward(0, root, day);
+            rewardsPacked |= uint256(reward) << (offset * 8);
+            bool win = wins & (uint32(1) << offset) != 0;
             uint256 shift = (day & 31) * 8;
             packed = (packed & ~(uint256(255) << shift)) | (uint256(win ? reward : 1) << shift);
         }
         coinflipDayResultPacked[key] = packed;
         // Preserve per-day funding, seed-window transitions, and sequential sDGNRS carry.
         for (uint24 day = start; day < end; ++day) {
-            uint256 offset = day - start;
-            _settleCoinflipDay(day, rewards[offset], wins & (uint32(1) << offset) != 0);
+            _settleCoinflipDay(day, uint8(rewardsPacked), wins & 1 != 0);
+            rewardsPacked >>= 8;
+            wins >>= 1;
         }
     }
 

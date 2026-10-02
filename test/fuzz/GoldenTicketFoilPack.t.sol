@@ -31,17 +31,16 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         uint24 resolveDay,
         uint16 score
     ) external {
-        foilRecord[lvl][buyer] =
+        foilRecord[lvl & 3][buyer] =
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
-            (uint256(score) << _FOIL_SCORE_SHIFT);
+            (uint256(score) << _FOIL_SCORE_SHIFT) |
+            (uint256(lvl) << _FOIL_LEVEL_SHIFT);
     }
 
     function pushFoilBuyer(uint24 day, uint24 lvl, address buyer) external {
         // Register the buyer at the cycle level the way the live buy does, carrying the
         // position above the level in the bucketed word.
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
-        uint256 ownerIdx = owners.length;
-        owners.push(EntryOwner(buyer, 0));
+        uint256 ownerIdx = uint256(_registerEntryOwner(buyer, lvl) >> OWNER_IDX_SHIFT) - 1;
         foilQueue[_foilReadKey()].push(
             ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
         );
@@ -126,16 +125,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         address buyer,
         uint24 lvl
     ) external view returns (bool) {
-        return
-            foilMatchClaimed[
-                keccak256(
-                    abi.encode(
-                        buyer,
-                        uint256(lvl),
-                        keccak256("foil-golden-ticket")
-                    )
-                )
-            ];
+        return _foilRecordWord(buyer, lvl) & _FOIL_GOLD_CLAIMED != 0;
     }
 
     function packGold(
@@ -639,6 +629,7 @@ contract GoldenTicketFoilPack is Test {
     ///      pool-sized grand from the drain and then pull 7,500,000 FLIP on top of it.
     ///      The push burns the pack's claim marker, so the pull is shut.
     function testGrandBurnsTheClaimMarker() public {
+        seedAndDrain(ALL_GOLD_WORD);
         h.setPools(50 ether, 400 ether);
         assertFalse(h.goldenTicketClaimed(BUYER, LVL), "unmarked before the push");
 

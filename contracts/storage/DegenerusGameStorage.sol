@@ -233,7 +233,7 @@ abstract contract DegenerusGameStorage {
     uint32 internal constant ROUND_UNITS = 38;
     /// @dev Retained extra admission reserve for eight split appends in one quadrant.
     uint32 internal constant ROUND_SPLIT_UNITS = 32;
-    /// @dev Units per seat join: cold queue and combined owner/owed reads, a remainder
+    /// @dev Units per seat join: cold queue, immutable owner and pending-word reads, a remainder
     ///      zeroing write and the eventual write-back (14.2k) -> 2 units.
     uint32 internal constant SEAT_JOIN_UNITS = 2;
 
@@ -725,8 +725,8 @@ abstract contract DegenerusGameStorage {
     ///        early-bird and the jackpot-phase bonus draws all see L+1 minted.
     ///
     ///      EXAMPLE (level 5 purchase phase, level = 4, purchaseLevel = 5):
-    ///      - ticketQueue[4..5] read cohorts → swept every advance
-    ///      - ticketQueue[6+] → far-future space; 6 can mint once level 5 meets its goal
+    ///      - ticketQueue[_ticketQueueStorageKey(4..5)] read cohorts → swept every advance
+    ///      - ticketQueue[_ticketQueueStorageKey(6+)] → far-future space; 6 can mint once level 5 meets its goal
     ///
     ///      Physical level slots 1..100 repeat every century; absolute logical keys must
     ///      pass through _ticketQueueStorageKey. ticketQueueLevels authenticates the target.
@@ -735,17 +735,15 @@ abstract contract DegenerusGameStorage {
     ///      disjoint far-future key space (bit 22). Raw-level indices above hold only when
     ///      ticketWriteSlot is false.
     ///      The length word counts QUEUED OWNERS. Data word w holds eight uint32 lanes for
-    ///      positions 8w..8w+7, low lane first, each naming lvlEntryOwner[level][lane - 1].
+    ///      positions 8w..8w+7, low lane first, each naming ticketOwners[lane - 1].
     ///      Zero is reserved: every append takes the nonzero ownerIdx+1 field from the owed
     ///      word. Never use Solidity array indexing, push, pop or delete on this mapping.
     ///      Readers are length-gated; append overwrites the selected lane after queue reuse.
     mapping(uint24 => uint256[]) internal ticketQueue;
 
-    /// @dev Last registry position plus one for a player on each encoded queue key.
-    ///      The position survives drainage; its registry record's owed field decides whether
-    ///      the player is still queued. Re-enrolment registers a fresh immutable owner so
-    ///      read and write cohorts never share an owed record.
-    mapping(uint24 => mapping(address => uint32)) internal entryOwnerPosition;
+    /// @dev Permanent one-based uint32 wallet ID. Queue membership and owed balances
+    ///      live in ticketPending's separate physical-cohort lanes.
+    mapping(address => uint32) internal ticketOwnerId;
 
     /// @dev Cursor for ticket queue processing (dual-purpose).
     ///      - SETUP phase: tracks near-future level progress (1-4), reset to 0 when done.
@@ -792,7 +790,7 @@ abstract contract DegenerusGameStorage {
         uint32 take
     );
 
-    /// @notice Emitted when an owner takes a position in a level's entry registry.
+    /// @notice Emitted on queue or foil enrollment with the wallet's permanent zero-based index.
     ///         Packed trait-bucket lanes name these positions; separate queue cohorts and
     ///         foil purchases may register the same owner more than once at a level.
     event EntryOwnerRegistered(uint24 indexed lvl, uint32 idx, address indexed owner);
@@ -1132,14 +1130,13 @@ abstract contract DegenerusGameStorage {
                 if (rngBypass) return;
                 revert E();
             }
-            entryOwnerPosition[wk][buyer] = uint32(packed >> OWNER_IDX_SHIFT);
             _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
         }
         emit EntriesQueued(buyer, targetLevel, entries);
         unchecked {
             owed += entries;
         }
-        _setEntryOwed(targetLevel, uint32(packed >> OWNER_IDX_SHIFT),
+        _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT),
             (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
     }
 
@@ -1195,7 +1192,6 @@ abstract contract DegenerusGameStorage {
                 if (rngBypass) return;
                 revert E();
             }
-            entryOwnerPosition[wk][buyer] = uint32(packed >> OWNER_IDX_SHIFT);
             _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
         }
         emit EntriesQueuedScaled(buyer, targetLevel, entriesScaled);
@@ -1221,7 +1217,7 @@ abstract contract DegenerusGameStorage {
         }
         uint80 newPacked = (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
         if (newPacked != packed) {
-            _setEntryOwed(targetLevel, uint32(packed >> OWNER_IDX_SHIFT), newPacked);
+            _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT), newPacked);
         }
     }
 
@@ -1293,7 +1289,6 @@ abstract contract DegenerusGameStorage {
                 room = packed != 0;
                 if (!room && !rngBypass) revert E();
                 if (room) {
-                    entryOwnerPosition[wk][buyer] = uint32(packed >> OWNER_IDX_SHIFT);
                     _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
                 }
             }
@@ -1301,7 +1296,7 @@ abstract contract DegenerusGameStorage {
                 unchecked {
                     owed += entriesPerLevel;
                 }
-                _setEntryOwed(lvl, uint32(packed >> OWNER_IDX_SHIFT),
+                _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT),
                     (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
             }
 
@@ -1449,21 +1444,20 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Register a freshly queued entry's owner at its target level. Every sink calls
-    ///      this on the first push, so the drain never allocates a registry record (it only
-    ///      updates existing owed bits), and each owed word carries its position from queue
-    ///      time. Returns the owner bits for
-    ///      the caller's owed word, or zero when the level's registry is full: positions are
-    ///      stored plus one in 32-bit lanes, so a level holds at most 2^32 - 1 owners. The
-    ///      sinks decide what a full registry means — a paid purchase reverts, an advance-chain
-    ///      award is dropped — so the drain never meets an owed word without a position.
+    /// @dev Resolve or allocate the wallet's permanent nonzero uint32 ID before
+    ///      queueing. Generated lanes use ID minus one. Existing IDs remain usable
+    ///      when the lifetime registry is full; return zero only for a new wallet.
+    ///      Paid sinks revert on exhaustion; advance awards retain their cap policy.
     function _registerEntryOwner(address buyer, uint24 targetLevel) internal returns (uint80) {
-        EntryOwner[] storage owners = lvlEntryOwner[targetLevel];
-        uint256 idx = owners.length;
-        if (idx >= type(uint32).max - 1) return 0;
-        owners.push(EntryOwner(buyer, 0));
-        emit EntryOwnerRegistered(targetLevel, uint32(idx), buyer);
-        return uint80((idx + 1) << OWNER_IDX_SHIFT);
+        uint32 id = ticketOwnerId[buyer];
+        if (id == 0) {
+            if (ticketOwners.length >= type(uint32).max) return 0;
+            ticketOwners.push(buyer);
+            id = uint32(ticketOwners.length);
+            ticketOwnerId[buyer] = id;
+        }
+        emit EntryOwnerRegistered(targetLevel, id - 1, buyer);
+        return uint80(id) << OWNER_IDX_SHIFT;
     }
 
     // =========================================================================
@@ -1516,31 +1510,83 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Address-facing lookup. Queue drains already hold the registry position.
+    /// @dev Pending balances retain 128 physical levels independently of the 100-root
+    ///      queue ring, so a delayed current cohort and L+100 never share a balance word.
+    function _ticketPendingStorageKey(uint24 key) internal pure returns (uint24 physical) {
+        uint24 lvl = key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
+        unchecked { return lvl == 0 ? 0 : ((lvl - 1) & 127) + 1; }
+    }
+
+    function _entryLaneShift(uint24 key) internal pure returns (uint256) {
+        return key & TICKET_FAR_FUTURE_BIT != 0 ? 84 : (key & TICKET_SLOT_BIT != 0 ? 42 : 0);
+    }
+
+    function _entryPacked(uint24 key, uint32 id) internal view returns (uint80 packed) {
+        uint24 physical = _ticketPendingStorageKey(key);
+        assembly ("memory-safe") {
+            mstore(0, physical)
+            mstore(32, ticketPending.slot)
+            mstore(32, keccak256(0, 64))
+            mstore(0, id)
+            let word := sload(keccak256(0, 64))
+            let shift := 0
+            switch and(key, 0x400000)
+            case 0 { if and(key, 0x800000) { shift := 42 } }
+            default { shift := 84 }
+            if eq(and(shr(add(126, mul(div(shift, 42), 24)), word), 0xffffff), and(key, 0x3fffff)) {
+                let lane := and(shr(shift, word), 0x3ffffffffff)
+                if and(lane, 0x20000000000) { packed := or(shl(48, id), and(lane, 0x1ffffffffff)) }
+            }
+        }
+    }
+
     function _entriesOwed(uint24 key, address player) internal view returns (uint80) {
-        uint32 pos = entryOwnerPosition[key][player];
-        if (pos == 0) return 0;
-        return uint80(_entryRecord(key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), pos) >> 160);
+        uint32 id = ticketOwnerId[player];
+        return id == 0 ? 0 : _entryPacked(key, id);
     }
 
-    /// @dev Read the owner and owed word together by registry position plus one.
-    function _entryRecord(uint24 lvl, uint32 pos) internal view returns (uint256 record) {
-        if (pos == 0) revert E();
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
+    /// @dev Stable identity lookup with explicit bounds and shared protocol error.
+    function _ticketOwnerAt(uint32 id) internal view returns (address owner) {
+        if (id == 0 || id > ticketOwners.length) revert E();
         assembly ("memory-safe") {
-            mstore(0, owners.slot)
-            record := sload(add(keccak256(0, 32), sub(pos, 1)))
+            mstore(0, ticketOwners.slot)
+            owner := and(sload(add(keccak256(0, 32), sub(id, 1))), 0xffffffffffffffffffffffffffffffffffffffff)
         }
     }
 
-    /// @dev Rewrite only the owed field, preserving the registry's immutable owner address.
-    function _setEntryOwed(uint24 lvl, uint32 pos, uint80 packed) internal {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
+    /// @dev All queue-domain balances share one word; no owner address is needed.
+    function _entriesOwedTotal(uint24 lvl, address player) internal view returns (uint32 total) {
+        uint32 id = ticketOwnerId[player];
+        if (id == 0) return 0;
+        uint256 word = ticketPending[_ticketPendingStorageKey(lvl)][id];
         assembly ("memory-safe") {
-            mstore(0, owners.slot)
-            let slot := add(keccak256(0, 32), sub(pos, 1))
-            sstore(slot, or(and(sload(slot), 0xffffffffffffffffffffffffffffffffffffffff), shl(160, and(packed, 0xffffffffffffffffffff))))
+            if eq(and(shr(126, word), 0xffffff), lvl) { total := and(shr(8, word), 0xffffffff) }
+            if eq(and(shr(150, word), 0xffffff), lvl) { total := add(total, and(shr(50, word), 0xffffffff)) }
+            if eq(and(shr(174, word), 0xffffff), lvl) { total := add(total, and(shr(92, word), 0xffffffff)) }
+            total := and(total, 0xffffffff)
         }
+    }
+
+    /// @dev Synthesized compatibility record; key MUST name the actual queue domain.
+    function _entryRecord(uint24 key, uint32 id) internal view returns (uint256) {
+        return uint256(uint160(_ticketOwnerAt(id))) | (uint256(_entryPacked(key, id)) << 160);
+    }
+
+    /// @dev Reload at writeback and mask only this lane, preserving all other cohorts.
+    function _setEntryOwed(uint24 key, uint32 id, uint80 packed) internal {
+        uint24 physical = _ticketPendingStorageKey(key);
+        uint256 shift = _entryLaneShift(key);
+        uint256 oldWord = ticketPending[physical][id];
+        uint256 next;
+        assembly ("memory-safe") {
+            let tagShift := add(126, mul(div(shift, 42), 24))
+            let mask := or(shl(shift, 0x3ffffffffff), shl(tagShift, 0xffffff))
+            next := or(and(oldWord, not(mask)), shl(255, 1))
+            if packed {
+                next := or(next, or(shl(shift, or(and(packed, 0x1ffffffffff), 0x20000000000)), shl(tagShift, and(key, 0x3fffff))))
+            }
+        }
+        ticketPending[physical][id] = next;
     }
 
     /// @dev Divide a not-yet-snapped owed balance by 2^s, folding the shifted-out
@@ -1624,7 +1670,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Resolve one valid lane from an already loaded word; registry index zero is valid.
     function _bucketOwnerFromWordUnchecked(uint24 lvl, uint256 word, uint256 k) internal view returns (address owner) {
-        EntryOwner[] storage owners = lvlEntryOwner[lvl];
+        address[] storage owners = ticketOwners;
         assembly ("memory-safe") {
             let idx := and(shr(shl(5, and(k, 7)), word), 0xffffffff)
             mstore(0, owners.slot)
@@ -1833,10 +1879,10 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Resolve a length-gated queue lane against the bare level's owner registry.
+    /// @dev Resolve a length-gated queue lane against the permanent global owner registry.
     ///      A zero lane is invalid and cannot alias registry element zero.
-    function _tqOwnerAt(uint256[] storage q, uint24 lvl, uint256 k) internal view returns (address owner) {
-        return address(uint160(_entryRecord(lvl, _tqPositionAt(q, k))));
+    function _tqOwnerAt(uint256[] storage q, uint24 /* lvl */, uint256 k) internal view returns (address owner) {
+        return _ticketOwnerAt(_tqPositionAt(q, k));
     }
 
     /// @dev Remove a verified queue index by replacing it with the last lane. Clear only
@@ -3159,7 +3205,6 @@ abstract contract DegenerusGameStorage {
         uint8 capacity;
         uint8 winners;
         uint8 paid;
-        uint256 rngWord;
         uint64 cursor;
         uint64 champion;
         uint24 next;
@@ -3576,9 +3621,9 @@ abstract contract DegenerusGameStorage {
     ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
     ///        accumulator (72b): affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)
     ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
-    ///      stored roll floor) and sources its RNG word from
-    ///      `_recordedDailyWord(lastAutoBoughtDay)`, so the only frozen-at-stamp inputs are the
-    ///      two genuinely-per-sub fields — `score` (activity score) and `amount`
+    ///      stored roll floor) and uses the active published session word. Every stamped box
+    ///      must finish before the next request. The frozen per-sub inputs are
+    ///      `score` (activity score) and `amount`
     ///      (mp×qty spend). `fundingSource` lives in the sparse `_fundingSourceOf` map
     ///      (absent ⇒ self, the common case stores nothing). `lastAutoBoughtDay`
     ///      double-duties as the success-marker AND the frozen seed `day`.
@@ -3855,16 +3900,19 @@ abstract contract DegenerusGameStorage {
     // Foil Pack
     // =========================================================================
 
-    /// @dev One pack per level/player. Purchase freezes boost and activity, but no day.
+    /// @dev Four reusable pack slots per player, keyed by level & 3 and authenticated
+    ///      by the full level at bits 208..231. Purchase freezes boost and activity, but no day.
     ///      Materialization writes four uint32 lines at bits 56..183, the first
     ///      eligible draw at bits 0..23, generation day at bits 184..207, and ready
-    ///      at bit 255. No historical reveal word is needed after generation.
+    ///      at bit 255. Bit 232 marks gold paid. No historical reveal word is needed after generation.
     mapping(uint24 => mapping(address => uint256)) internal foilRecord;
 
-    /// @dev Per-pack gold and per-draw match dedup, set before payout.
-    mapping(bytes32 => bool) internal foilMatchClaimed;
+    /// @dev Two reusable day lanes per player, set before payout. Each 32-bit lane
+    ///      stores its exact day [0..23] and four ticket claim bits [24..27].
+    mapping(address => uint256) internal foilMatchClaimed;
 
-    /// @dev Sealed winning traits at bits 0..31 and level at bits 64..87.
+    /// @dev Two reusable draws keyed by day & 1: traits [0..31], level [64..87],
+    ///      payout seed [88..215], seed-present flag 216, exact day [217..240].
     mapping(uint24 => uint256) internal dailyFoilDraw;
 
     /// @dev Normal-ticket read/write cohorts (keys 0/1), frozen before their RNG
@@ -3902,11 +3950,17 @@ abstract contract DegenerusGameStorage {
 
     uint256 internal constant _FOIL_LINES_SHIFT = 56;
     uint256 internal constant _FOIL_GENERATED_DAY_SHIFT = 184;
+    uint256 internal constant _FOIL_LEVEL_SHIFT = 208;
+    uint256 internal constant _FOIL_GOLD_CLAIMED = uint256(1) << 232;
     uint256 internal constant _FOIL_READY = uint256(1) << 255;
 
     uint256 private constant _FOIL_DRAW_MAIN_MASK = (uint256(1) << 32) - 1;
     uint256 private constant _FOIL_DRAW_LEVEL_SHIFT = 64;
     uint256 private constant _FOIL_DRAW_LEVEL_MASK = (uint256(1) << 24) - 1;
+    uint256 internal constant _FOIL_DRAW_SEED_SHIFT = 88;
+    uint256 internal constant _FOIL_DRAW_SEEDED = uint256(1) << 216;
+    uint256 internal constant _FOIL_DRAW_DAY_SHIFT = 217;
+    bytes32 internal constant FOIL_PAYOUT_SEED_TAG = keccak256("foil-payout-seed");
 
     /// @dev Domain-separated seed for the drain-side match-line roll, so the foil
     ///      tuples derive from a keccak lane disjoint from the normal-ticket LCG
@@ -3930,7 +3984,7 @@ abstract contract DegenerusGameStorage {
         view
         returns (bool present, uint16 multBps, uint24 resolveDay, uint16 activityScore)
     {
-        uint256 packed = foilRecord[uint24(lvl)][player];
+        uint256 packed = _foilRecordWord(player, uint24(lvl));
         present = packed != 0;
         resolveDay = uint24(packed & _FOIL_RESOLVEDAY_MASK);
         multBps = uint16((packed >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK);
@@ -3942,7 +3996,7 @@ abstract contract DegenerusGameStorage {
     ///      queue drain reads only this field to boost the resolved entries.
     function _foilMultFor(address player, uint256 lvl) internal view returns (uint16) {
         return uint16(
-            (foilRecord[uint24(lvl)][player] >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK
+            (_foilRecordWord(player, uint24(lvl)) >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK
         );
     }
 
@@ -3960,11 +4014,11 @@ abstract contract DegenerusGameStorage {
     }
 
     function _foilStoredLines(address player, uint24 lvl) internal view returns (uint32[4] memory lines) {
-        uint256 packed = foilRecord[lvl][player] >> _FOIL_LINES_SHIFT;
+        uint256 packed = _foilRecordWord(player, lvl) >> _FOIL_LINES_SHIFT;
         for (uint256 i; i < 4; ++i) lines[i] = uint32(packed >> (i * 32));
     }
 
-    function _foilClaimOpen(uint256 day) internal view returns (bool) {
+    function _foilGoldClaimOpen(uint256 day) internal view returns (bool) {
         uint256 today = _simulatedDayIndex();
         return day != 0 && day <= today && today - day <= 1;
     }
@@ -3973,13 +4027,64 @@ abstract contract DegenerusGameStorage {
     ///      pack for this cycle. Keyed on the active ticket level — the same cycle
     ///      key the buy's record write and ticket queue use.
     function _foilBoughtThisLevel(address player, uint256 lvl) internal view returns (bool) {
-        return foilRecord[uint24(lvl)][player] != 0;
+        return _foilRecordWord(player, uint24(lvl)) != 0;
     }
 
-    /// @dev Pack a daily foil draw record (the sealed winning set and the cycle level)
-    ///      for storage in dailyFoilDraw.
-    function _packFoilDraw(uint32 mainSet, uint24 lvl) internal pure returns (uint256) {
-        return uint256(mainSet) | (uint256(lvl) << _FOIL_DRAW_LEVEL_SHIFT);
+    /// @dev All logical pack reads authenticate the full level before using a recycled slot.
+    function _foilRecordWord(address player, uint24 lvl) internal view returns (uint256 packed) {
+        packed = foilRecord[lvl & 3][player];
+        if (uint24(packed >> _FOIL_LEVEL_SHIFT) != lvl) return 0;
+    }
+
+    /// @dev Only a new purchase may reuse a pack slot. Preserve pending materialization,
+    ///      late-generated gold claims and both live match days, even across stalled/turbo
+    ///      transitions. A collision rejects that purchase; it never blocks the advance.
+    function _foilRecordReusable(uint256 packed) internal view returns (bool) {
+        if (packed == 0) return true;
+        uint24 oldLevel = uint24(packed >> _FOIL_LEVEL_SHIFT);
+        if (packed & _FOIL_READY == 0 || oldLevel >= level
+            || _foilGoldClaimOpen(uint24(packed >> _FOIL_GENERATED_DAY_SHIFT))) return false;
+        uint24 today = _simulatedDayIndex();
+        (, , uint24 todayLevel) = _foilDrawFor(today);
+        (, , uint24 yesterdayLevel) = _foilDrawFor(today == 0 ? 0 : today - 1);
+        return oldLevel != todayLevel && oldLevel != yesterdayLevel;
+    }
+
+    function _foilMatchAlreadyClaimed(address player, uint24 day, uint256 ticketIndex)
+        internal view returns (bool)
+    {
+        uint256 lane = foilMatchClaimed[player] >> (uint256(day & 1) * 32);
+        return uint24(lane) == day && lane & (uint256(1) << (24 + ticketIndex)) != 0;
+    }
+
+    /// @dev Expiry is checked before this write. Replacing an old parity lane cannot
+    ///      reopen that old day's claims, and preserves the other still-live day.
+    function _markFoilMatchClaimed(address player, uint24 day, uint256 ticketIndex) internal {
+        uint256 shift = uint256(day & 1) * 32;
+        uint256 packed = foilMatchClaimed[player];
+        uint256 lane = uint32(packed >> shift);
+        if (uint24(lane) != day) lane = day;
+        lane |= uint256(1) << (24 + ticketIndex);
+        foilMatchClaimed[player] = (packed & ~(uint256(type(uint32).max) << shift)) | (lane << shift);
+    }
+
+    /// @dev Seal the board and payout entropy together. The explicit flag admits a zero
+    ///      truncated seed while rejecting old records that never stored payout entropy.
+    function _packFoilDraw(uint32 mainSet, uint24 lvl, uint24 day, uint256 rngWord)
+        internal pure returns (uint256)
+    {
+        uint256 seed = uint128(uint256(keccak256(abi.encode(rngWord, day, FOIL_PAYOUT_SEED_TAG))));
+        return uint256(mainSet) | (uint256(lvl) << _FOIL_DRAW_LEVEL_SHIFT)
+            | (seed << _FOIL_DRAW_SEED_SHIFT) | _FOIL_DRAW_SEEDED
+            | (uint256(day) << _FOIL_DRAW_DAY_SHIFT);
+    }
+
+    /// @dev Exact-tag lookup, deliberately without a wall-age gate: an in-flight
+    ///      purchase jackpot can still need its sealed logical day after a stall.
+    function _foilDrawWord(uint256 day) internal view returns (uint256 packed) {
+        if (day == 0 || day > type(uint24).max) return 0;
+        packed = dailyFoilDraw[uint24(day) & 1];
+        if (uint24(packed >> _FOIL_DRAW_DAY_SHIFT) != day) return 0;
     }
 
     /// @dev Unpack the daily foil draw for a day (one SLOAD). present = (slot !=
@@ -3989,7 +4094,7 @@ abstract contract DegenerusGameStorage {
         view
         returns (bool present, uint32 mainSet, uint24 lvl)
     {
-        uint256 packed = dailyFoilDraw[uint24(day)];
+        uint256 packed = _foilDrawWord(day);
         present = packed != 0;
         mainSet = uint32(packed & _FOIL_DRAW_MAIN_MASK);
         lvl = uint24((packed >> _FOIL_DRAW_LEVEL_SHIFT) & _FOIL_DRAW_LEVEL_MASK);
@@ -4037,21 +4142,9 @@ abstract contract DegenerusGameStorage {
     ///      never change.
     uint128[] internal centuryPrizePools;
 
-    /// @dev Per-level owner registry behind the packed trait buckets. Append-only and never
-    ///      released: a lane in lvlTraitEntry[level] is a position in this array, written
-    ///      when the entry is queued (or the foil pack bought), so every in-length lane
-    ///      resolves to a nonzero owner. One owner may hold several positions at a level
-    ///      (a queue entry per double-buffer generation, a foil pack); sampling is over
-    ///      lanes, so each still resolves to the right address.
-    struct EntryOwner {
-        address owner;
-        uint80 owed;
-    }
-
-    /// @dev One slot per registration: immutable owner in bits 0..159, mutable owed word
-    ///      in bits 160..239. Owed packs ownerIdx+1 at bit 48, snap at bit 40, entries at bit 8, then rem.
-    ///      Every queue cohort gets its own registration; trait buckets read only the address.
-    mapping(uint24 => EntryOwner[]) internal lvlEntryOwner;
+    /// @dev Stable global owner registry. Queues store ID = index + 1; generated
+    ///      trait lanes store the zero-based index. IDs are never reassigned.
+    address[] internal ticketOwners;
 
     /// @dev The seats a ticket drain left occupied when its write budget ran out: up to
     ///      eight queue indices plus one (lane j = bits 32j..32j+31, zero = empty), in queue
@@ -4087,7 +4180,7 @@ abstract contract DegenerusGameStorage {
     // One slot of tally state, then one slot of payout state, then the claimed bitmap.
     // All zero for the life of the game; written only once the dead ending latches.
 
-    /// @dev Tally cursor over lvlEntryOwner[terminal level]: positions counted so far.
+    /// @dev Tally cursor within one terminal ticket queue; deadTallyFoilDay selects the queue during stage 0.
     uint32 internal deadTallyPos;
 
     /// @dev Tally cursor over the undrained foil buckets: the resolve day being counted.
@@ -4140,6 +4233,11 @@ abstract contract DegenerusGameStorage {
     ///      Zero means the first century: its level is already the physical slot number.
     mapping(uint24 => uint24) internal ticketQueueLevels;
 
+    /// @dev Reusable 128-slot pending words keyed by physical level and permanent wallet ID.
+    ///      Lanes A/B/FF occupy 0..125; their full level tags occupy 126..197.
+    ///      Bit255 stays nonzero after all lanes and tags are consumed.
+    mapping(uint24 => mapping(uint32 => uint256)) internal ticketPending;
+
     /// @dev Resolved payload markers, masked before every live decode.
     uint256 internal constant BOX_PROCESSED = uint256(1) << 255;
     uint256 internal constant BET_PROCESSED = uint256(1) << 255;
@@ -4171,11 +4269,30 @@ abstract contract DegenerusGameStorage {
         return _rngComplete();
     }
 
+    /// @dev One ordering authority for keeper and manual read consumers. The read
+    ///      cohort alone determines the stage; fresh write-side work cannot cut in.
+    ///      0 blocked, 1 redemption, 2 AFKing, 3 human/Degenerette, 4 Decimator,
+    ///      5 read-bound Craps, 6 drained. Timed claims use their retained results.
+    function _rngConsumerStage() internal view returns (uint8) {
+        uint256 packed = lootboxRngPacked;
+        if (gameOver || rngLockedFlag || _rngRequestActive() || !_rngSessionPublished()
+            || _currentRngWord() == 0 || !ticketsFullyProcessed
+            || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0
+            || rngFlagsAndNudges & (uint16(1) << 13) != 0 || _livenessTriggered()) return 0;
+        if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return 1;
+        if (_pendingBoxCount != 0) return 2;
+        if (!humanReadComplete) return 3;
+        if (decBattleQueue != 0) return 4;
+        if (packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) != 0) return 5;
+        return 6;
+    }
+
     /// @dev Checked only at consumer-completion transitions, never by a fresh request.
     function _rngConsumersComplete() internal view returns (bool) {
         uint256 packed = lootboxRngPacked;
         if (!_rngSessionPublished() || _currentRngWord() == 0 || !ticketsFullyProcessed
-            || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 || !humanReadComplete) return false;
+            || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 || !humanReadComplete
+            || _pendingBoxCount != 0 || decBattleQueue != 0) return false;
         if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return false;
         return packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) == 0;
     }
