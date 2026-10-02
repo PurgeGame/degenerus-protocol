@@ -352,14 +352,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     }
 
     /// @notice Terminal handling always precedes live-game mutations.
-    function runTerminalPhase(uint256 allowance) external {
+    function runTerminalPhase(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
-        if (!MineFlipGas.canRun(meter, 100_000, 150_000)) return;
+        if (!MineFlipGas.canRun(meter, 100_000, 150_000)) return result;
         if (address(this) != ContractAddresses.GAME || (!gameOver && !_livenessTriggered())) revert E();
-        (bool handled, uint8 stage) = _handleGameOverPath(_simulatedDayIndex(), level, MineFlipGas.remaining(meter) - GasBounds.DAILY_PHASE_TAIL);
+        (bool handled, uint8 stage, bool progressed) = _handleGameOverPath(_simulatedDayIndex(), level, MineFlipGas.remaining(meter) - GasBounds.DAILY_PHASE_TAIL);
         MineFlipGas.finish(meter);
         if (!handled) revert E();
-        emit Advance(stage, level);
+        result.progressed = progressed;
+        if (progressed) emit Advance(stage, level);
     }
 
     /// @notice Fresh daily boundary only; the caller seals and sends in this same transaction.
@@ -479,15 +480,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         }
 
     }
-    function _handleGameOverPath(uint24 day, uint24 lvl, uint256 allowance) private returns (bool shouldReturn, uint8 stage) {
+    function _handleGameOverPath(uint24 day, uint24 lvl, uint256 allowance) private returns (bool shouldReturn, uint8 stage, bool progressed) {
         // The sole caller, runTerminalPhase, already authenticated terminal liveness.
         (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameGameOverModule.runGameOverAdvance.selector, day, lvl, allowance)
         );
         if (!ok) _revertDelegate(data);
         bool unlock;
-        (shouldReturn, stage, unlock) = abi.decode(data, (bool, uint8, bool));
-        if (unlock) _unlockRng(day);
+        (shouldReturn, stage, unlock, progressed) = abi.decode(data, (bool, uint8, bool, bool));
+        if (unlock) { _unlockRng(day); progressed = true; }
     }
 
     function _endPhase(uint24 lvl) private {

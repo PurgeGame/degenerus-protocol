@@ -136,6 +136,13 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     event DeadVrfClaimed(address indexed player, uint256 amount);
 
     // error E() — inherited from DegenerusGameStorage
+    error RngNotReady();
+
+    // Memory-only accounting shared by terminal checkpoints; no persistent progress marker.
+    struct TerminalWork {
+        bool progressed;
+        bytes refusal;
+    }
 
     /// @dev claimDeadVrf reference kinds, in the top byte of each reference.
     uint256 private constant DEAD_REF_CREATED = 0;
@@ -157,30 +164,41 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///        cohort at the terminal level draws on it. There is no retry here: if that
     ///        request goes unanswered for _VRF_DEAD_TIMEOUT the dead ending takes over.
     function handleGameOverAdvance(uint24 day, uint24 lvl) external returns (bool, uint8, bool) {
-        return _runGameOverAdvance(day, lvl, MineFlipGas.available());
+        (bool handled, uint8 stage, bool unlock,) = _runGameOverAdvance(day, lvl, MineFlipGas.available());
+        return (handled, stage, unlock);
     }
 
-    function runGameOverAdvance(uint24 day, uint24 lvl, uint256 allowance) external returns (bool, uint8, bool) {
+    function runGameOverAdvance(uint24 day, uint24 lvl, uint256 allowance) external returns (bool, uint8, bool, bool) {
         return _runGameOverAdvance(day, lvl, allowance);
     }
 
     function _runGameOverAdvance(uint24 day, uint24 lvl, uint256 allowance)
-        private returns (bool shouldReturn, uint8 stage, bool unlock)
+        private returns (bool shouldReturn, uint8 stage, bool unlock, bool progressed)
     {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
-        (shouldReturn, stage, unlock) = _handleGameOverAdvance(day, lvl, meter);
+        TerminalWork memory work;
+        (shouldReturn, stage, unlock) = _handleGameOverAdvance(day, lvl, meter, work);
+        progressed = work.progressed;
         MineFlipGas.finish(meter);
+        if (!progressed && work.refusal.length != 0) {
+            bytes memory reason = work.refusal;
+            assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+        }
     }
 
-    function _handleGameOverAdvance(uint24 day, uint24 lvl, MineFlipGas.Meter memory meter)
+    function _handleGameOverAdvance(uint24 day, uint24 lvl, MineFlipGas.Meter memory meter, TerminalWork memory work)
         private returns (bool shouldReturn, uint8 stage, bool unlock)
     {
         if (gameOver) {
             if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) {
-                bool done = _handleGameOverDrain(day, meter);
+                bool done = _handleGameOverDrain(day, meter, work);
                 return (true, STAGE_GAMEOVER, done);
             }
-            if (MineFlipGas.canRun(meter, GasBounds.TERMINAL_FINAL_SWEEP, GasBounds.TERMINAL_SWEEP_TAIL)) handleFinalSweep();
+            if (MineFlipGas.canRun(meter, GasBounds.TERMINAL_FINAL_SWEEP, GasBounds.TERMINAL_SWEEP_TAIL)) {
+                uint256 swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK);
+                handleFinalSweep();
+                work.progressed = swept != _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK);
+            }
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -219,6 +237,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             earlyBirdWhalePasses = 0;
             (address top, ) = affiliate.affiliateTop(drainLevel);
             terminalAffiliate = top;
+            work.progressed = true;
         }
 
         // --- Deterministic ending ---
@@ -230,9 +249,14 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 _setRngRequestActive(false);
                 _setRngSessionPublished(false);
                 rngWordCurrent = RNG_WORD_WAITING;
+                work.progressed = true;
             }
-            if (!_tallyDeadVrf(drainLevel, meter)) return (true, STAGE_TICKETS_WORKING, false);
-            _handleGameOverDrain(day, meter);
+            // These are the persisted tally frontiers, including empty-cohort stage advances.
+            bytes32 beforeTally = _deadTallyCheckpoint();
+            bool tallied = _tallyDeadVrf(drainLevel, meter);
+            work.progressed = work.progressed || beforeTally != _deadTallyCheckpoint();
+            if (!tallied) return (true, STAGE_TICKETS_WORKING, false);
+            _handleGameOverDrain(day, meter, work);
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -246,11 +270,15 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // stay in the terminal pot). Until delivered it is waited out like any request in flight.
         if (_rngRequestActive() && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) {
             uint256 preFreeze = _currentRngWord();
-            if (preFreeze == 0) return (true, STAGE_GAMEOVER, false);
+            if (preFreeze == 0) {
+                if (!work.progressed) revert RngNotReady();
+                return (true, STAGE_GAMEOVER, false);
+            }
             _finalizeLootboxRng(preFreeze);
             if (rngLockedFlag) _clearAppliedNudges();
             _setRngRequestActive(false);
             rngLockedFlag = false;
+            work.progressed = true;
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -260,7 +288,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             if (!_rngRequestActive() || rngWordCurrent == RNG_WORD_WAITING) {
                 // No terminal word yet. Wait out a request in flight: a mid-day lootbox request,
                 // or this path's own terminal request.
-                if (_rngRequestActive()) return (true, STAGE_GAMEOVER, false);
+                if (_rngRequestActive()) {
+                    if (!work.progressed) revert RngNotReady();
+                    return (true, STAGE_GAMEOVER, false);
+                }
                 if (_ticketQueueLength(_tqReadKey(drainLevel)) != 0 || _foilDrainPending()) {
                     // Before the ending's own swap, the read side is a cohort an earlier request
                     // committed (a mid-day swap, or a dropped pre-freeze daily request) and its
@@ -272,7 +303,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     if (
                         _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
                             && _lootboxWord(_rngReadBuffer()) != 0
-                            && _terminalDrainBatch(drainLevel, meter)
+                            && _terminalDrainBatch(drainLevel, meter, work)
                     ) return (true, STAGE_TICKETS_WORKING, false);
                 }
                 if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST + 100_000, GasBounds.TERMINAL_TAIL)) {
@@ -289,12 +320,15 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 }
                 // The swap window closes as the terminal request goes out (sent below, or
                 // retried by later calls if the coordinator refuses it).
-                _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
+                if (_lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) {
+                    _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
+                    work.progressed = true;
+                }
             }
             // Request the terminal word, or apply it once it has landed. Either way this
             // transaction ends here, so the word's application (which may derive up to a
             // deadman's worth of skipped days) never shares a transaction with a drain batch.
-            _applyTerminalRng(uint48(block.timestamp), day, lvl, meter);
+            _applyTerminalRng(uint48(block.timestamp), day, lvl, meter, work);
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -302,12 +336,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // per transaction. A finishing batch still returns, so the payout runs in its own.
         if (
             (_ticketQueueLength(_tqReadKey(drainLevel)) != 0 || _foilDrainPending())
-                && _terminalDrainBatch(drainLevel, meter)
+                && _terminalDrainBatch(drainLevel, meter, work)
         ) {
             return (true, STAGE_TICKETS_WORKING, false);
         }
 
-        bool payoutDone = _handleGameOverDrain(day, meter);
+        bool payoutDone = _handleGameOverDrain(day, meter, work);
         return (true, STAGE_GAMEOVER, payoutDone);
     }
 
@@ -317,11 +351,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      The caller arms a one-shot refusal timer; coordinator failure leaves it unchanged.
     function requestTerminalRng() public returns (bool requested) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
-        requested = _requestTerminalRng(_simulatedDayIndex(), meter);
+        TerminalWork memory work;
+        requested = _requestTerminalRng(_simulatedDayIndex(), meter, work);
         MineFlipGas.finish(meter);
     }
 
-    function _requestTerminalRng(uint24 day, MineFlipGas.Meter memory meter) private returns (bool requested) {
+    function _requestTerminalRng(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool requested) {
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0 || _rngRequestActive()) revert E();
         if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST, GasBounds.TERMINAL_TAIL)) return false;
         if (rngRequestDay == 0) {
@@ -329,6 +364,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             rngRequestTime = uint48(block.timestamp) & ~uint48(1);
             _setRngSessionPublished(false);
             rngWordCurrent = RNG_WORD_WAITING;
+            work.progressed = true;
         }
         // The admitted bound covers coordinator gas, EIP-150 and all request
         // bookkeeping. Gas failures are never interpreted as a semantic refusal.
@@ -350,8 +386,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             _setDecDayOneActive(false);
             if (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags)) _setTicketRedemptionOpen(false);
             requested = true;
+            work.progressed = true;
         } catch (bytes memory reason) {
             MineFlipGas.rethrowGasFailure(reason);
+            // Native mining bubbles a repeated refusal when nothing else advanced.
+            // Compatibility request helpers retain their best-effort boolean result.
+            work.refusal = reason;
         }
     }
 
@@ -363,11 +403,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @notice Compatibility entry; native terminal work supplies its remaining meter.
     function applyTerminalRng(uint48 ts, uint24 day, uint24 lvl) public {
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
-        _applyTerminalRng(ts, day, lvl, meter);
+        TerminalWork memory work;
+        _applyTerminalRng(ts, day, lvl, meter, work);
         MineFlipGas.finish(meter);
     }
 
-    function _applyTerminalRng(uint48, uint24 day, uint24 lvl, MineFlipGas.Meter memory meter) private {
+    function _applyTerminalRng(uint48, uint24 day, uint24 lvl, MineFlipGas.Meter memory meter, TerminalWork memory work) private {
         if (_terminalWordApplied()) return;
         uint256 currentWord = _currentRngWord();
         if (_rngRequestActive() && currentWord != 0) {
@@ -381,9 +422,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             if (lvl != 0) coinflip.processCoinflipPayouts(0, currentWord, day);
             _resolvePendingRedemption(currentWord);
             _finalizeLootboxRng(currentWord);
+            work.progressed = true;
             return;
         }
-        if (!_rngRequestActive()) _requestTerminalRng(day, meter);
+        if (!_rngRequestActive()) _requestTerminalRng(day, meter, work);
     }
 
     /// @dev One terminal drain batch: TICKET_SLOT_BIT on the anchor asks the worker for its
@@ -401,7 +443,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      when no winning bucket is populated yet — a starved call could afford it and forfeit
     ///      the whole undrained cohort.
     /// @return ran True if a batch ran, finished or not.
-    function _terminalDrainBatch(uint24 drainLevel, MineFlipGas.Meter memory meter) private returns (bool ran) {
+    function _terminalDrainBatch(uint24 drainLevel, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool ran) {
         uint256 allowance = MineFlipGas.forwardable(MineFlipGas.remaining(meter), 100_000);
         if (allowance == 0) return true;
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
@@ -417,7 +459,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         }
         // A successful no-progress checkpoint still owns this transaction: low
         // supplied gas must not turn unprocessed entries into forfeited entries.
-        abi.decode(data, (MineFlipGas.Result));
+        MineFlipGas.Result memory result = abi.decode(data, (MineFlipGas.Result));
+        work.progressed = work.progressed || result.progressed;
         return true;
     }
 
@@ -442,16 +485,18 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @custom:reverts TransferFailed When an stETH or ETH transfer fails.
     function handleGameOverDrain(uint24 day) public virtual {
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
-        _handleGameOverDrain(day, meter);
+        TerminalWork memory work;
+        _handleGameOverDrain(day, meter, work);
         MineFlipGas.finish(meter);
     }
 
-    function _handleGameOverDrain(uint24 day, MineFlipGas.Meter memory meter) private returns (bool done) {
+    function _handleGameOverDrain(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return true;
-        if (gameOver) return _resumeTerminalPayout(day, meter);
+        if (gameOver) return _resumeTerminalPayout(day, meter, work);
         // At most 32 deity refunds, terminal burns and accounting, with no draw
         // admitted until the remaining allowance is measured after this setup.
         if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_SETUP, GasBounds.TERMINAL_TAIL)) return false;
+        work.progressed = true; // Admitted one-time terminal setup below sets gameOver.
 
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint24 lvl = level;
@@ -609,16 +654,17 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         jackpotWork.lvl = terminalLevel;
         jackpotWork.budget = uint128(remaining);
         jackpotWork.quadrant = 255;
-        return _resumeTerminalPayout(day, meter);
+        return _resumeTerminalPayout(day, meter, work);
     }
 
-    function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter) private returns (bool done) {
+    function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
         uint256 allowance = MineFlipGas.forwardable(MineFlipGas.remaining(meter), 100_000);
         if (allowance == 0) return false;
         (MineFlipGas.Result memory result,) = IDegenerusGame(address(this)).runTerminalJackpotWork(
             jackpotWork.budget, jackpotWork.lvl, _lootboxWord(_rngReadBuffer()), allowance
         );
-        if (result.done) _finishTerminalPayout();
+        work.progressed = work.progressed || result.progressed;
+        if (result.done) { _finishTerminalPayout(); work.progressed = true; }
         return result.done;
     }
 
@@ -720,6 +766,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
         finished = _tallyDeadVrf(lvl, meter);
         MineFlipGas.finish(meter);
+    }
+
+    function _deadTallyCheckpoint() private view returns (bytes32) {
+        return keccak256(abi.encode(deadTallyStage, deadTallyPos, deadTallyFoilDay, deadTallyFoilIdx));
     }
 
     function _tallyDeadVrf(uint24 lvl, MineFlipGas.Meter memory meter) private returns (bool finished) {

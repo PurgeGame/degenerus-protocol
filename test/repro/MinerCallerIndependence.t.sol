@@ -6,9 +6,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {stdStorage, StdStorage} from "forge-std/StdStorage.sol";
 
 /// @notice Automatic work depends on committed game state, never on caller privileges or credits.
 contract MinerCallerIndependenceTest is DeployProtocol {
+    using stdStorage for StdStorage;
     address private constant DONOR = address(0xD010);
     address private constant OUTSIDER = address(0xD011);
     address private constant OWNER = address(0xD012);
@@ -33,6 +35,9 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         assertFalse(game.advanceDue(), "real deployment reaches idle");
         assertFalse(game.boxesPending(), "no box can hide the empty-queue control");
         vm.fee(1 gwei);
+        // The canonical local address file can leave the optional feed unpinned.
+        stdstore.target(address(admin)).sig("linkEthPriceFeed()").checked_write(address(mockFeed));
+        mockFeed.setUpdatedAt(vm.getBlockTimestamp());
         uint256 weiPerLink = admin.linkAmountToEth(1 ether);
         assertGt(weiPerLink, 0, "installed LINK feed makes the charge nonzero");
         charge = 201_000 * block.basefee * 6 * 1 ether / weiPerLink;
@@ -129,10 +134,12 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         bytes32 credits = _creditDigest();
         bytes32 state = _commitmentDigest();
         vm.prank(DONOR);
+        vm.expectRevert(bytes4(keccak256("BelowThreshold()")));
         game.mineFlip{gas: 15_000_000}();
         assertEq(_creditDigest(), credits, "automatic donor call cannot redeem credit");
         assertEq(_commitmentDigest(), state, "automatic call cannot waive the value threshold");
         vm.prank(OUTSIDER);
+        vm.expectRevert(bytes4(keccak256("BelowThreshold()")));
         game.mineFlip{gas: 15_000_000}();
         assertEq(_creditDigest(), credits, "automatic sentinel has no spending authority");
         assertEq(_commitmentDigest(), state);

@@ -55,11 +55,13 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
             (uint24 rk, bool foil, bool pending) = _selectProducer(anchor);
             if (!pending) {
                 result.done = true;
+                result.progressed = result.progressed || ticketCursor != 0 || ticketLevel != 0 || ticketSoloOffset != 0;
                 ticketCursor = 0;
                 ticketLevel = 0;
                 ticketSoloOffset = 0;
                 if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == MID_DAY_FUTURE_POOL) {
                     _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 1);
+                    result.progressed = true;
                     // The isolated pool's word does not commit the ordinary write queue.
                     result.done = !rngLockedFlag && !_foilDrainPending();
                 }

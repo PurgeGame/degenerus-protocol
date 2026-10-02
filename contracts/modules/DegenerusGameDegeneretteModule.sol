@@ -34,6 +34,7 @@ import {
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {IDegenerusGameMinerModule} from "../interfaces/IDegenerusGameModules.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
@@ -413,6 +414,7 @@ contract DegenerusGameDegeneretteModule is
 
     /// @notice Consume the active session's FIFO bet queue after human boxes finish.
     function runDegeneretteWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
+        if (prizePoolFrozen) revert IDegenerusGameMinerModule.NoWork();
         return _runDegeneretteWork(gasAllowance);
     }
 

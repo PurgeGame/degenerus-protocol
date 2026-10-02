@@ -144,6 +144,10 @@ contract StateEngineIntegrationTest is DeployProtocol {
         (, paid) = _drain(HIGH_GAS);
         assertGt(paid, 0, "normal measured work earns metered incentive");
         assertEq(_outcome(burnDay), low, "gas partitions changed player results or request sequence");
+        vm.revertToState(snap);
+        (, paid) = _drain(16_700_000);
+        assertGt(paid, 0);
+        assertEq(_outcome(burnDay), low, "16.7M changed player results or request sequence");
     }
 
     function test_SmallGasCheckpointCannotRequestRngOrEarnBounty() public {

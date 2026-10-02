@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {IDegenerusGameMinerModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
 contract AfkingMembershipHarness is GameAfkingModule {
     function seed(address pending, address clean, uint8 quantity) external returns (uint24 processDay) {
@@ -89,9 +90,8 @@ contract AfkingPendingMembershipTest is Test {
         h.seed(PLAYER, address(0), 1);
         h.deliver();
         h.corruptEmptySet();
-        MineFlipGas.Result memory result = h.runAfkingWork(9_000_000);
-        assertFalse(result.progressed);
-        assertFalse(result.done);
+        vm.expectRevert(IDegenerusGameMinerModule.NoWork.selector);
+        h.runAfkingWork(9_000_000);
         (uint256 pending,,,,,) = h.state(PLAYER);
         assertEq(pending, 1);
     }

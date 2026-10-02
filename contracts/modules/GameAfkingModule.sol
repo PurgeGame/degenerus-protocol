@@ -35,6 +35,7 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {
     IDegenerusGameLootboxModule,
+    IDegenerusGameMinerModule,
     IDegenerusGameWhaleModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
@@ -1635,6 +1636,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @notice Open stamped boxes belonging to the unlocked active session.
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
+        if (_pendingBoxCount != 0 && _subscribers.length == 0) revert IDegenerusGameMinerModule.NoWork();
         return _runAfkingWork(gasAllowance);
     }
 

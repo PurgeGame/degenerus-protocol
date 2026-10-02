@@ -504,6 +504,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertEq(RecyclingState.currentWord(address(game)), 0, "idle ID cannot authorize a terminal callback");
         for (uint256 i; i < 3; ++i) {
             vm.warp(vm.getBlockTimestamp() + 1 hours);
+            vm.expectRevert(abi.encodeWithSignature("Error(string)", "refused"));
             game.mineFlip();
             assertEq((uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max, stamp, "refusal cannot reset the timeout");
         }

@@ -64,7 +64,7 @@ contract TerminalAffiliateKnownWordTest is DeployProtocol {
 
         mockVRF.fulfillRandomWords(requestId, WORD);
         vm.expectCall(
-            address(game), abi.encodeWithSelector(game.runTerminalJackpot.selector, 100 ether, uint24(11), WORD)
+            address(game), abi.encodeWithSelector(game.runTerminalJackpotWork.selector, 100 ether, uint24(11), WORD)
         );
         vm.recordLogs();
         _finishTerminal();

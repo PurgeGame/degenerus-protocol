@@ -1062,7 +1062,14 @@ abstract contract DegenerusGameStorage {
             return ended != 0 && block.timestamp >= ended + 30 days && _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) == 0
                 ? MinerAction.Terminal : MinerAction.Idle;
         }
-        if (_livenessTriggered()) return MinerAction.Terminal;
+        if (_livenessTriggered()) {
+            // The first terminal call must latch its cohort. Once latched, waiting
+            // cannot advance it; a dead VRF still takes precedence over the wait.
+            if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
+                && _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) == 0
+                && _rngRequestActive() && _currentRngWord() == 0 && !_vrfDead()) return MinerAction.Wait;
+            return MinerAction.Terminal;
+        }
         if (_rngRequestActive() && _currentRngWord() == 0) {
             return MinerAction.Wait;
         }

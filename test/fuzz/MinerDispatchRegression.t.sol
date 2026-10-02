@@ -184,6 +184,7 @@ contract MinerDispatchRegressionTest is Test {
     function test_NoProgressResultDoesNotDispatchOrNormalizeAnythingElse() public {
         _tickets(5);
         vm.recordLogs();
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         game.mineFlip();
         assertEq(vm.getRecordedLogs().length, 0, "a no-op must not emit paid work");
         _assertRolledBack();

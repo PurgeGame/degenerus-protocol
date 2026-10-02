@@ -42,6 +42,9 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         MinerAction first = _nextMinerAction();
         if (first == MinerAction.Idle) revert NoWork();
         if (first == MinerAction.Wait) revert RngNotReady();
+        if (gasleft() < WORKER_BOUNDARY + RETURN_RESERVE + MineFlipGas.CHECK_RESERVE) {
+            revert MineFlipGas.InsufficientExecutionGas();
+        }
         bool rewardEligible = first != MinerAction.Terminal;
         uint256 rewardPrice = PriceLookupLib.priceForLevel(_activeTicketLevel());
         uint256 rewardDueAt = _minerRewardDueAt(first);
@@ -58,8 +61,10 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
 
             if (action == MinerAction.CertifyRead) {
+                bool wasComplete = _rngComplete();
                 _tryCompleteRng();
                 if (!_rngComplete()) revert E();
+                if (wasComplete) break;
                 moved = true;
                 continue;
             }
@@ -82,6 +87,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             bool request = action == MinerAction.RequestDaily || action == MinerAction.RequestMidday;
 
             if (action == MinerAction.Terminal) {
+                basicResult = true;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;
                 callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runTerminalPhase.selector, allowance);
             } else if (action == MinerAction.DailyGap) {
@@ -150,7 +156,10 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             if (externalWorker) (ok, result) = target.call{gas: forwarded}(callData);
             else (ok, result) = target.delegatecall{gas: forwarded}(callData);
             if (!ok) {
-                if (action != MinerAction.RequestMidday || !_middayRefusal(result)) _revertWork(result);
+                // A declined next step must not undo an already committed prefix.
+                // Accounting/invariant errors still bubble, including WorkGasBound.
+                if (!moved || !(_checkpointRefusal(result)
+                    || (action == MinerAction.RequestMidday && _middayRefusal(result)))) _revertWork(result);
                 unpaidAttemptGas = beforeCall - gasleft();
                 break;
             }
@@ -158,19 +167,33 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             if (basicResult) {
                 // Preserve the full Result ABI and bool validation without allocating a struct.
                 (bool progressed, bool done,) = abi.decode(result, (bool, bool, uint256));
-                moved = moved || progressed;
                 if (action == MinerAction.Tickets && done) {
-                    ticketsFullyProcessed = true;
-                    _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
-                    moved = true;
+                    // An empty queue can still advance its one-time certificate.
+                    if (!ticketsFullyProcessed) { ticketsFullyProcessed = true; progressed = true; }
+                    if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
+                        _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
+                        progressed = true;
+                    }
                 }
+                if (!progressed) {
+                    // done describes eligibility/completion, not work performed.
+                    // Never redispatch an unchanged worker, even if it says done.
+                    unpaidAttemptGas = beforeCall - gasleft();
+                    if (!moved) {
+                        if (done) revert NoWork();
+                        revert MineFlipGas.InsufficientExecutionGas();
+                    }
+                    break;
+                }
+                moved = true;
                 if (!done) break;
             } else moved = true;
             // A request commits the next cohort; terminal stages own their continuation.
             if (action == MinerAction.Terminal || request) break;
         }
 
-        if (!moved) return;
+        // The only remaining zero-progress exit is a failed engine admission check.
+        if (!moved) revert MineFlipGas.InsufficientExecutionGas();
         // This top-level meter starts with all available gas; worker allowance checks
         // retain the actual bounds. No successful call can overspend this initial amount.
         uint256 used = rewardStart - gasleft() - unpaidAttemptGas;
@@ -222,7 +245,18 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             || selector == IDegenerusGameRngModule.BelowThreshold.selector;
     }
 
+    function _checkpointRefusal(bytes memory data) private pure returns (bool) {
+        if (data.length == 0) return true;
+        if (data.length != 4) return false;
+        bytes4 selector = bytes4(data);
+        return selector == MineFlipGas.InsufficientExecutionGas.selector
+            || selector == EmptyRevert.selector || selector == NoWork.selector || selector == RngNotReady.selector;
+    }
+
     function _revertWork(bytes memory data) private pure {
+        if (data.length == 0 || (data.length == 4 && bytes4(data) == EmptyRevert.selector)) {
+            revert MineFlipGas.InsufficientExecutionGas();
+        }
         assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
 }

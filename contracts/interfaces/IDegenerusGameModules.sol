@@ -39,6 +39,8 @@ interface IDegenerusGameTicketModule {
 }
 
 interface IDegenerusGameMinerModule {
+    error NoWork();
+    error RngNotReady();
     function mineFlip() external;
     function minerAction() external view returns (uint8);
 }
@@ -63,7 +65,7 @@ interface IDegenerusGameAdvanceModule {
     function applyDailyWord() external;
     function applyDailyGap() external;
     function runDailyPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
-    function runTerminalPhase(uint256 allowance) external;
+    function runTerminalPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
 
 }
 
@@ -73,7 +75,7 @@ interface IDegenerusGameAdvanceModule {
 ///         hosted here for the advance module's EIP-170 headroom.
 interface IDegenerusGameGameOverModule {
     function runGameOverAdvance(uint24 day, uint24 level, uint256 allowance)
-        external returns (bool shouldReturn, uint8 stage, bool unlock);
+        external returns (bool shouldReturn, uint8 stage, bool unlock, bool progressed);
     /// @notice Best-effort terminal request, independent of normal read completion.
     function requestTerminalRng() external returns (bool);
 

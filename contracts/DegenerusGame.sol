@@ -133,6 +133,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice mineFlip found nothing to do (raised by the miner engine).
     error NoWork();
+    /// @notice mineFlip cannot advance until its committed randomness arrives.
+    error RngNotReady();
+    /// @notice mineFlip could not admit any useful execution step with the supplied gas.
+    error InsufficientExecutionGas();
     /// @notice Thrown when a tunable parameter is set outside its permitted range.
     error OutOfBounds();
 

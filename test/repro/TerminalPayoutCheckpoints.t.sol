@@ -64,7 +64,7 @@ contract TerminalPayoutCheckpointsTest is Test {
         uint24 day = h.seed(110, 0xAC4DE45EDBEEF, affiliateWinner);
         vm.deal(address(h), 1000 ether);
         vm.cool(address(h));
-        (,, bool unlocked) = h.runGameOverAdvance{gas: 10_000_000}(day, 110, 6_700_000);
+        (,, bool unlocked,) = h.runGameOverAdvance{gas: 10_000_000}(day, 110, 6_700_000);
         assertFalse(unlocked);
         (bool ended, uint256 paid, uint256 time, uint256 budget,) = h.terminalState();
         assertTrue(ended);
@@ -77,7 +77,7 @@ contract TerminalPayoutCheckpointsTest is Test {
         uint256 calls;
         while (paid == 0 && calls++ < 8) {
             vm.cool(address(h));
-            (,, unlocked) = h.runGameOverAdvance{gas: 10_000_000}(day + 2, 110, 6_700_000);
+            (,, unlocked,) = h.runGameOverAdvance{gas: 10_000_000}(day + 2, 110, 6_700_000);
             (, paid, time,,) = h.terminalState();
         }
         assertEq(paid, 1);

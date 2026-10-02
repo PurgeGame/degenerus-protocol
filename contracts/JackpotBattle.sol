@@ -987,14 +987,14 @@ contract JackpotBattle is CrapsBattleStorage {
                 break;
             }
             if (cur % _BONUS_SLOTS_PER_DAY > _BONUS_PERIODS_PER_DAY) { ++cur; continue; }
-            Window memory w = _windowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
-            uint256 g = _battles[w.key];
             if (_slotIndex[cur] == 0) {
                 if (cur >= open || _isJackpotSlot(cur)) { result.done = true; break; }
+                Window memory w = _windowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
                 _armSlot(cur, w);
                 result.progressed = true;
                 break;
             }
+            uint256 g = _battles[bytes32(uint256(cur))];
             uint256 entrants = uint32(g);
             if (entrants == 0 || uint32(g >> _BG_RESOLVED_SHIFT) == entrants) { ++cur; continue; }
             // Committed settlement is exclusively the read FIFO; daily battles have their own tx.
