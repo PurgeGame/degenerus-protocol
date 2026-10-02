@@ -634,7 +634,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertLe(coldPerEvict, GasBounds.SUBSCRIBER_ITEM_GAS, "R1: cold eviction fits its native item reservation");
         assertLe(perBuy, GasBounds.SUBSCRIBER_ITEM_GAS, "R1: funded buy fits its native item reservation");
         assertLe(GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS + MineFlipGas.CHECK_RESERVE,
-            MineFlipGas.MAX_STEP_GAS, "R1: item and checkpoint are admissible as one complete operation");
+            10_000_000, "R1: item and checkpoint meet the chunk sizing guideline");
 
         // Derive conservative throughput from reservations, not the retired
         // 2500/8 weight quotient. Actual cheap expirations can admit more items;

@@ -3,11 +3,10 @@ pragma solidity 0.8.34;
 
 /// @notice Gas admission at deterministic checkpoints in the permissionless game engine.
 /// @dev Caller gas may select a safe checkpoint, never an outcome. Each operation
-///      must fit its caller's available gas and return reservation. The 10M limit
-///      applies to one operation plus its checkpoint tail, never the whole transaction.
+///      must fit its caller's available gas and return reservation. Admission has
+///      no fixed chunk or transaction ceiling.
 library MineFlipGas {
     uint256 internal constant MIN_REWARDED_GAS = 1_000_000;
-    uint256 internal constant MAX_STEP_GAS = 10_000_000;
     uint256 internal constant CHECK_RESERVE = 2_000;
     uint256 internal constant CALL_RESERVE = 12_000;
 
@@ -48,7 +47,6 @@ library MineFlipGas {
     ///      includes every accumulated flush, checkpoint write and return cost.
     function canRun(Meter memory meter, uint256 nextMax, uint256 tail) internal view returns (bool) {
         uint256 required = nextMax + tail + CHECK_RESERVE;
-        if (required > MAX_STEP_GAS) return false;
         if (required > remaining(meter)) return false;
         return gasleft() >= required;
     }

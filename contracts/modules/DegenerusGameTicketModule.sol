@@ -204,9 +204,6 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         uint8 rem = uint8(packed);
         uint256 stream = TicketEntropy.identity(rk, lvl, qi, player);
         uint256 available = MineFlipGas.remaining(meter);
-        // One aligned generation chunk is an indivisible step, even when the
-        // transaction has enough gas to run several chunks consecutively.
-        if (available > MineFlipGas.MAX_STEP_GAS) available = MineFlipGas.MAX_STEP_GAS;
         // A low-gas miner may commit a shorter aligned prefix. Never consume
         // any of the reserve needed to write its complete continuation state.
         uint256 actual = gasleft();

@@ -109,7 +109,7 @@ contract TicketCheckpointDeterminismTest is Test {
         h.commit(WORD, false);
         compare(1, 2, 1_300_000, true);
     }
-    function test_unboundedTransactionStillCapsEachSoloChunkAndPreservesInventory() public {
+    function test_largerAllowanceExpandsSoloChunksAndPreservesInventory() public {
         h.credit(player(0), 1, 300_075);
         h.commit(WORD, false);
         uint256 snap = vm.snapshotState();
@@ -122,21 +122,24 @@ contract TicketCheckpointDeterminismTest is Test {
         MineFlipGas.Result memory result = h.runTicketWork{gas: 30_000_000}(2, 30_000_000);
         uint256 used = beforeGas - gasleft();
         assertTrue(result.done && result.progressed);
-        assertGt(used, MineFlipGas.MAX_STEP_GAS, "transaction performs several steps past10M");
+        assertLt(used, 30_000_000, "execution fits the supplied gas");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 chunks;
         uint256 entries;
+        uint256 largestBound;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0]
                 != keccak256("TraitsGenerated(address,uint256,uint32)")) continue;
             (, uint32 take) = abi.decode(logs[i].data, (uint256, uint32));
-            assertLe(GasBounds.TICKET_SOLO_BASE + uint256(take) * GasBounds.TICKET_ENTRY_MAX
-                + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE, MineFlipGas.MAX_STEP_GAS,
-                "one indivisible generation chunk reserves its entire flush within10M");
+            uint256 bound = GasBounds.TICKET_SOLO_BASE + uint256(take) * GasBounds.TICKET_ENTRY_MAX
+                + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE;
+            assertLe(bound, 30_000_000, "chunk and complete checkpoint fit the supplied allowance");
+            if (bound > largestBound) largestBound = bound;
             entries += take;
             ++chunks;
         }
         assertGt(chunks, 1);
+        assertGt(largestBound, 10_000_000, "solo sizing has no fixed 10M clamp");
         assertEq(entries, count);
         (bytes32 actual, uint256 actualCount) = h.digest(1);
         assertEq(actualCount, count);

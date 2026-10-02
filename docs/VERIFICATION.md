@@ -83,11 +83,13 @@ commands use raw Hardhat and therefore bypass runner-level pin restoration.
 See [the test usefulness review](TEST_REVIEW.md) for retired checks, repaired
 fixtures and the distinction between model, structural and runtime coverage.
 
-Gas expectations, including transaction intrinsic gas, are <=10M for ordinary
-calls, <=11M for unusual calls and <=11.5M for extreme cases. No transaction may
-exceed 11.5M. Fixture gas limits permit setup and multiple transactions; they are
-not the production ceiling. Lower gas usage is acceptable. Do not raise a ceiling
-to make a regression pass.
+The 10M gas figure is a sizing and benchmark guideline for indivisible work, not a
+runtime chunk or transaction cap. Each checkpoint admits the next chunk only when
+its conservative worst-case cost, complete call/return/flush overhead and safety
+margin fit both the remaining worker allowance and actual available gas. A larger
+supplied budget may admit a chunk above 10M. Network transaction/block limits remain
+separate. Fixture gas limits do not establish cold bounds. Gas may only select safe
+continuation, never a semantic fallback or committed outcome.
 
 ## Deep and symbolic checks
 

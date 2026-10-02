@@ -39,8 +39,12 @@ results or a deployed instance.
 
 Operational assumptions, including scheduled progression, are disclosed in Known Issues.
 
-Gas expectations are at most 10M for ordinary calls, 11M for unusual calls and 11.5M
-for extreme cases; 11.5M is the hard transaction ceiling, including intrinsic gas.
+The 10M gas figure is a sizing guideline for indivisible work, not a runtime cap.
+Each checkpoint must reserve the next chunk's conservative worst-case cost, its
+complete call/return/flush envelope and a safety margin against both the remaining
+worker allowance and actual available gas. Larger supplied budgets may admit larger
+chunks. Network transaction/block limits remain separate constraints. Caller gas
+may select a safe continuation checkpoint, never a committed game outcome.
 At game over, fair ETH distribution and completion take priority. FLIP has no
 post-game value by design; unfinished Craps or other FLIP bookkeeping does not
 justify adding prerequisites to ETH release.

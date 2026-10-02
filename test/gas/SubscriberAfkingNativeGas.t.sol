@@ -122,6 +122,8 @@ contract SubscriberNativeGasHost is DegenerusGame {
 }
 
 contract SubscriberAfkingNativeGasTest is DeployProtocol {
+    // Benchmark guideline only; runtime admission uses the caller's remaining gas.
+    uint256 private constant STEP_GAS_TARGET = 10_000_000;
     SubscriberNativeGasHost private host;
     address private constant PLAYER = address(0xA11CE123);
     function setUp() public {
@@ -146,7 +148,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         assertTrue(result.progressed && result.done);
         assertLe(used, GasBounds.SUBSCRIBER_WHALE_GAS + GasBounds.SUBSCRIBER_TAIL_GAS,
             "whale action exceeds saved atomic envelope");
-        assertLe(used, MineFlipGas.MAX_STEP_GAS);
+        assertLe(used, STEP_GAS_TARGET);
         assertEq(host.claimableOf(ContractAddresses.SDGNRS), 1_600 ether, "all100 paid passes bought");
         uint256 purchaseLogs;
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -179,7 +181,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
             assertEq(result.rewardBasis, 1, "exactly one subscriber processed");
             assertLe(used, GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS,
                 "cold full item exceeds saved atomic envelope");
-            assertLe(used, MineFlipGas.MAX_STEP_GAS);
+            assertLe(used, STEP_GAS_TARGET);
             if (mode == 3 || mode == 4) assertEq(host.memberCount(), 0, "expired member removed");
             else {
                 (uint24 bought, uint24 opened) = host.delivered(PLAYER);
@@ -201,7 +203,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         assertEq(host.pendingBoxes(), 0);
         assertLe(used, GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS,
             "cold full AFKing grant exceeds saved atomic envelope");
-        assertLe(used, MineFlipGas.MAX_STEP_GAS);
+        assertLe(used, STEP_GAS_TARGET);
         (uint24 bought, uint24 opened) = host.delivered(player);
         assertEq(opened, bought);
     }

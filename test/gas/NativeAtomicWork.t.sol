@@ -62,7 +62,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
         assertTrue(result.done);
         assertEq(result.rewardBasis, 1);
         assertTrue(host.bet() >> 255 != 0, "whole bet completed atomically");
-        assertLt(used, 10_000_000, "one immutable bet must fit the per-step ceiling");
+        assertLt(used, 10_000_000, "one immutable bet meets the chunk sizing guideline");
     }
 
     function test_Max25EthSpinsWithHighScoreAndWinBoxFitOneStep() public {
@@ -126,7 +126,7 @@ contract NativeAtomicDecimatorTest is Test {
         uint256 used = beforeGas - gasleft();
         assertEq(result.rewardBasis, 1);
         assertEq(host.roundOf(5).cursor, longest);
-        assertLt(used, 10_000_000, "one real dice run must fit the per-step ceiling");
+        assertLt(used, 10_000_000, "one real dice run meets the chunk sizing guideline");
         emit log_named_uint("atomic_decimator_long_run_rolls", rolls);
         emit log_named_uint("cold_atomic_decimator_run_and_heap", used);
     }
