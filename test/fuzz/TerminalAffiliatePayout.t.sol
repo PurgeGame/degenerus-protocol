@@ -90,7 +90,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
     ///      the ending's first transaction, which also latches the cohort level and the affiliate.
     function _latchAndRequest() private returns (uint256 requestId) {
         uint256 before = mockVRF.lastRequestId();
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngLocked(), "terminal word requested");
         requestId = mockVRF.lastRequestId();
         assertGt(requestId, before, "the ending's own terminal request");
@@ -101,7 +101,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
     function _applyTerminalWord(uint256 requestId) private {
         mockVRF.fulfillRandomWords(requestId, WORD);
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         assertFalse(game.gameOver(), "applying the word does not pay out");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID, "no award with the word");
@@ -115,7 +115,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         _fixture(abi.encodeCall(TerminalAffiliateSeeder.deliverPreFreezeWord, (PRE_FREEZE_WORD)));
         bytes32 applied = keccak256("LootboxRngApplied(uint48,uint256,uint256)");
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         assertFalse(game.rngLocked(), "pre-freeze request dropped");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool finalized;
@@ -134,7 +134,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         uint256 previous = game.claimableWinningsOf(winner);
         uint256 previousLiability = uint256(vm.load(address(game), bytes32(uint256(1)))) >> 128;
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.gameOver(), "real terminal advance completes");
         assertEq(game.claimableWinningsOf(winner), previous + share);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -202,7 +202,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
     function testNoDistributableFundsPreservesExistingLiability() public {
         _seed(10, 0, 100 ether, 100 ether);
         _rank(TOP, 11, 1000 ether, address(0xB001));
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.gameOver());
         assertEq(game.claimableWinningsOf(TOP), 0);
         assertEq(game.claimableWinningsOf(CREDITOR), 100 ether);
@@ -238,7 +238,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         (address top,) = affiliate.affiliateTop(11);
         assertEq(top, LATE, "post-death score really changed the leader");
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID);
         assertEq(game.claimableWinningsOf(TOP), 2 ether);
@@ -258,7 +258,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         _rank(address(0xAFF3), 11, 10_000 ether, address(0xB003)); // word public, payout pending
         vm.expectCall(address(game), abi.encodeWithSelector(game.runTerminalJackpot.selector, 100 ether, uint24(11), WORD));
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.gameOver(), "terminal payout ran");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID, "no affiliate award");

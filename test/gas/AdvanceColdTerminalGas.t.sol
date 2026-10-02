@@ -70,7 +70,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         if (_fresh()) _applyTerminalWord();
         vm.recordLogs();
         uint256 before = gasleft();
-        game.advanceGame{gas: 11_500_000 - 21_064}();
+        game.mineFlip{gas: 11_500_000 - 21_064}();
         uint256 used = before - gasleft() + 21_064;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 winners;
@@ -96,7 +96,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
     ///      answers it with the word the winning buckets were seeded for.
     function _requestTerminalWord() private {
         uint256 before = mockVRF.lastRequestId();
-        game.advanceGame();
+        game.mineFlip();
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, before, "the ending sends its own terminal request");
         assertFalse(game.gameOver(), "the payout waits for the terminal word");
@@ -111,7 +111,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         uint24 day = game.currentDayView();
         vm.recordLogs();
         uint256 before = gasleft();
-        game.advanceGame{gas: 11_500_000 - 21_064}();
+        game.mineFlip{gas: 11_500_000 - 21_064}();
         uint256 used = before - gasleft() + 21_064;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 applied;

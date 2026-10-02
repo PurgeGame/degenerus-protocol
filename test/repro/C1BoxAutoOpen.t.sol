@@ -116,7 +116,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -135,7 +135,7 @@ contract C1BoxAutoOpen is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
     }
 
@@ -176,7 +176,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256("c1_midday_word")) | 1);
 
         assertFalse(game.rngLocked(), "post-fulfill: NOT locked (mid-day branch)");
-        game.advanceGame(); // Required keeper publication after the minimal callback.
+        game.mineFlip(); // Required keeper publication after the minimal callback.
         assertGt(_word(N), 0, "the VRF word landed at _lootboxWord(N) (box at N IS ready)");
         assertEq(_idx(), N ^ 1, "LR_INDEX is N+1 while the ready word sits at N");
         assertEq(_base(N, actor), baseAtCreate, "pre-open: box at N still closed");

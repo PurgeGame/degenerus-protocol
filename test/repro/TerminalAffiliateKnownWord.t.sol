@@ -50,7 +50,7 @@ contract TerminalAffiliateKnownWordTest is DeployProtocol {
     function test_AffiliateIsFixedBeforeTheTerminalWord() public {
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
         uint256 before = mockVRF.lastRequestId();
-        game.advanceGame(); // latches the cohort level and the (empty) affiliate, requests the word
+        game.mineFlip(); // latches the cohort level and the (empty) affiliate, requests the word
         uint256 requestId = mockVRF.lastRequestId();
         assertGt(requestId, before, "the ending's own terminal request");
         (address top,) = affiliate.affiliateTop(11);
@@ -74,7 +74,7 @@ contract TerminalAffiliateKnownWordTest is DeployProtocol {
 
     function _finishTerminal() private {
         for (uint256 i; i < 8 && !game.gameOver(); ++i) {
-            game.advanceGame();
+            game.mineFlip();
         }
         assertTrue(game.gameOver(), "terminal drain and payout completed");
     }

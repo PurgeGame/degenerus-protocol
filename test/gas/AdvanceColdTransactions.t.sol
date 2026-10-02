@@ -133,7 +133,7 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(id, uint256(keccak256("cold-subscriber-setup")) | 1);
             }
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
         }
         revert("setup did not settle");
     }
@@ -141,7 +141,7 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
     function _check(bytes32 workEvent, uint256 minimum, uint256 maximum) internal {
         vm.recordLogs();
         uint256 before = gasleft();
-        game.advanceGame{gas: TX_CAP - INTRINSIC}();
+        game.mineFlip{gas: TX_CAP - INTRINSIC}();
         uint256 used = before - gasleft() + INTRINSIC;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 work;

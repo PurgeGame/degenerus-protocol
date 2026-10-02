@@ -56,7 +56,7 @@
 //
 // Per-entry-point delta on runTerminalJackpot / payDailyJackpot (each measured
 // independently via the deployFullProtocol fixture; receipt.gasUsed captured
-// at the advanceGame() tx whose Advance event reports the matching stage):
+// at the mineFlip() tx whose Advance event reports the matching stage):
 //   1 helper call (`_pickSoloQuadrant`)                    ≈ 310 gas (worst-case)
 //   1 effectiveEntropy mask derivation                     ≈  50 gas
 //   1 substitution at call site                            ≈   0 gas (rebind)
@@ -176,13 +176,13 @@ async function heavyPurchases(game, buyers) {
 // gasUsed.
 async function driveOneCycle(game, deployer, mockVRF, advanceModule, word) {
   await advanceToNextDay();
-  await game.connect(deployer).advanceGame();
+  await game.connect(deployer).mineFlip();
   const requestId = await getLastVRFRequestId(mockVRF);
   try { await mockVRF.fulfillRandomWords(requestId, word); } catch (_) {}
   const stagesObserved = [];
   for (let i = 0; i < 200; i++) {
     let tx;
-    try { tx = await game.connect(deployer).advanceGame(); }
+    try { tx = await game.connect(deployer).mineFlip(); }
     catch (_) { break; }
     const receipt = await tx.wait();
     const events = await getEvents(tx, advanceModule, "Advance");

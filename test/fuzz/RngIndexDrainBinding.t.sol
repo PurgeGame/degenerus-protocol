@@ -87,7 +87,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     {
         _finishReadBoxes();
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -95,7 +95,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
         }
         logs = vm.getRecordedLogs();
     }
@@ -103,7 +103,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     function _advanceAndCheck(bool checkWrongWord) internal returns (uint256 batches, uint256 entries, uint256 buyerEntries) {
         DrainSnapshot memory snap = _snapshotDrain(game);
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 word = snap.index == 0 ? 0 : _wordAt(game, snap.index - 1);
         DrainResult memory result = _checkDrain(game, snap, logs, word, buyer);

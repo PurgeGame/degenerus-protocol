@@ -28,7 +28,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *     Jackpot→purchase housekeeping folds into the last jackpot day.
  *
  *   Turbo (1 physical day):
- *     Target already met when purchaseDays ≤ 1 (checked at top of advanceGame).
+ *     Target already met when purchaseDays ≤ 1 (checked at top of mineFlip).
  *     Counter 0→1 in one physical day.
  *     Entire jackpot completes via same-day advance cycles. BAF levels arm
  *     at purchase-day settlement to preserve their last-purchase window.
@@ -66,10 +66,10 @@ describe("JackpotDuration", function () {
   /**
    * Drive one VRF cycle on the CURRENT day (no time advancement).
    * Caller must ensure advanceToNextDay() was called first so that
-   * day != dailyIdx (advanceGame reverts with NotTimeYet otherwise).
+   * day != dailyIdx (mineFlip reverts with NotTimeYet otherwise).
    */
   async function driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, word) {
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     const requestId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(requestId, word);
@@ -79,7 +79,7 @@ describe("JackpotDuration", function () {
     let lastStage = -1n;
     for (let i = 0; i < 200; i++) {
       try {
-        const tx = await game.connect(deployer).advanceGame();
+        const tx = await game.connect(deployer).mineFlip();
         const events = await getAdvanceEvents(tx, advanceModule);
         if (events.length > 0) {
           lastStage = events[0].args.stage;
@@ -93,7 +93,7 @@ describe("JackpotDuration", function () {
   }
 
   /**
-   * Drive one VRF cycle: next day → advanceGame → fulfill → drain all processing.
+   * Drive one VRF cycle: next day → mineFlip → fulfill → drain all processing.
    * Returns the last Advance stage observed.
    */
   async function driveOneCycle(game, deployer, mockVRF, advanceModule, word) {
@@ -185,7 +185,7 @@ describe("JackpotDuration", function () {
    */
   async function driveTurboCompletion(game, deployer, mockVRF, advanceModule) {
     const levelBefore = await game.level();
-    // Advance to next day so advanceGame doesn't revert with NotTimeYet
+    // Advance to next day so mineFlip doesn't revert with NotTimeYet
     await advanceToNextDay();
     // First cycle — triggers standard (purchaseDays=2)
     await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
@@ -335,9 +335,9 @@ describe("JackpotDuration", function () {
       const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 15)];
       await heavyPurchases(game, buyers);
 
-      // Advance to day 2 before calling advanceGame → purchaseDays = 2 - 1 = 1
+      // Advance to day 2 before calling mineFlip → purchaseDays = 2 - 1 = 1
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       // purchaseDays=1 triggers turbo (one-day schedule)
       const days = await game.jackpotDuration();
       expect(days).to.equal(1, "Turbo should activate on day 2 (purchaseDays=1)");

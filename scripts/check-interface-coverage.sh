@@ -37,11 +37,15 @@ MAPPINGS=(
   "contracts/interfaces/IJackpotBattle.sol:IJackpotBattle|contracts/CrapsBattle.sol:CrapsBattle+contracts/JackpotBattle.sol:JackpotBattle"
   "contracts/interfaces/IsDGNRS.sol:IsDGNRS|contracts/sDGNRS.sol:sDGNRS"
   "contracts/interfaces/IVaultCoin.sol:IVaultCoin|contracts/FLIP.sol:FLIP"
-  # IDegenerusGameModules.sol contains the 12 module interfaces. Each module is deployed
+  # IDegenerusGameModules.sol contains the module interfaces. Each module is deployed
   # as a separate contract that DegenerusGame delegatecalls into. Check the module
   # contract itself (code runs from the module, storage lives on DegenerusGame via
   # shared DegenerusGameStorage inheritance).
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameAdvanceModule|contracts/modules/DegenerusGameAdvanceModule.sol:DegenerusGameAdvanceModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameMinerModule|contracts/modules/DegenerusGameMinerModule.sol:DegenerusGameMinerModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameRngModule|contracts/modules/DegenerusGameRngModule.sol:DegenerusGameRngModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameTicketModule|contracts/modules/DegenerusGameTicketModule.sol:DegenerusGameTicketModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotDrawModule|contracts/modules/DegenerusGameJackpotDrawModule.sol:DegenerusGameJackpotDrawModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameGameOverModule|contracts/modules/DegenerusGameGameOverModule.sol:DegenerusGameGameOverModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotModule|contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDecimatorModule|contracts/modules/DegenerusGameDecimatorModule.sol:DegenerusGameDecimatorModule"

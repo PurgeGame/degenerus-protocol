@@ -4,9 +4,13 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
+import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
 import {VaultHistorySeeder} from "./AdvanceNestedSettlementGas.t.sol";
 
 /// @dev Controlled, committed resolver state, not a replay of the first 99 levels.
@@ -34,6 +38,14 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         // dump, whose 40% must move the 17 ETH (+ a quarter of the skim) the pinned
         // BAF pools were tuned for.
         yieldAccumulator = 18.25 ether + uint256(nextPool) / 400;
+
+        // The synthetic jump skips the bootstrap cohorts at levels 2..100.
+        // Retire only their physical queue headers before binding the century's
+        // separately seeded population; production never discards a live queue.
+        for (uint24 oldLevel = 1; oldLevel <= 100; ++oldLevel) {
+            uint256[] storage oldQueue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(oldLevel))];
+            assembly ("memory-safe") { sstore(oldQueue.slot, 0) }
+        }
 
         // Perpetual tickets populate every BAF candidate level in a live game. The
         // far-future scatter bands now start at lvl+2 (102), not lvl+5. Band 2's four
@@ -109,8 +121,39 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
     }
 }
 
+/// @dev Complete production facade plus exact native worker seams. The seams do
+/// not seed progress or replace any production work inside the measured phase.
+contract CenturyNativeGasHost is DegenerusGame {
+    function publishOnly() external {
+        _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
+    }
+    function prepareTicketsOnly() external returns (bool done) {
+        MineFlipGas.Result memory result = abi.decode(_native(ContractAddresses.GAME_TICKET_MODULE,
+            abi.encodeWithSignature("runTicketWork(uint24,uint256)", level, uint256(9_000_000))),
+            (MineFlipGas.Result));
+        done = result.done;
+        if (done) {
+            // Identical normalization to Miner after a completed native read.
+            ticketsFullyProcessed = true;
+            _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
+        }
+    }
+    function applyOnly() external {
+        _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord()"));
+    }
+    function dailyOnly() external returns (MineFlipGas.Result memory) {
+        return abi.decode(_native(ContractAddresses.GAME_ADVANCE_MODULE,
+            abi.encodeWithSignature("runDailyPhase(uint256)", uint256(9_000_000))), (MineFlipGas.Result));
+    }
+    function _native(address target, bytes memory data) private returns (bytes memory result) {
+        (bool ok, bytes memory reason) = target.delegatecall(data);
+        if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+        return reason;
+    }
+}
+
 abstract contract CenturyConsolidationFixture is FreshWordLeg {
-    uint256 internal constant CAP = 16_777_216;
+    uint256 internal constant CAP = 10_000_000;
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint256 internal constant WORD = 0x0ee7fcb287531227df7efcfddb3f0151121ee9e59765e743a190d8e26ee417fd;
     bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
@@ -160,7 +203,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         // mock's full shares-based balanceOf path rather than its empty fast path.
         vm.deal(address(game), uint256(s.nextPool) + s.futurePool + 68.25 ether + uint256(s.nextPool) / 400);
         mockStETH.mint(address(game), 50 ether);
-        _armFreshWord(word, 400);
+        _armCenturyWord(word, 400);
         assertEq(game.level(), 100, "real request must pre-increment the level");
         assertEq(game.rngWordForDay(400), 0, "the word-apply transaction must apply fresh RNG");
         assertFalse(game.decWindow(), "real century request closes the burn window");
@@ -282,11 +325,43 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         }
     }
 
+    function _armCenturyWord(uint256 word, uint24 day) private {
+        for (uint24 i = 1; i <= 7; ++i) {
+            vm.store(address(crapsBattle), keccak256(abi.encode(uint256(day - i), CRAPS_DAY_STAKED_SLOT)),
+                bytes32((uint256(500_000 ether) << 128) | uint256(1_000_000 ether)));
+        }
+        vm.prank(address(game));
+        coinflip.processCoinflipPayouts(0, uint256(keccak256("yesterday")) | 1, day - 1);
+        uint256 beforeRequest = mockVRF.lastRequestId();
+        // A synthetic day-400 jump leaves real day-2 table housekeeping ahead
+        // of a fresh request. Drive that ordered work instead of assuming the
+        // very first mineFlip can skip directly to the request.
+        for (uint256 calls; mockVRF.lastRequestId() == beforeRequest; ++calls) {
+            assertLt(calls, 512, "century request preparation stalled");
+            game.mineFlip{gas: 12_000_000}();
+        }
+        assertEq(mockVRF.lastRequestId(), beforeRequest + 1, "one real daily request");
+        mockVRF.fulfillRandomWords(beforeRequest + 1, word);
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(ProtocolBoonDrawSeeder).runtimeCode);
+        ProtocolBoonDrawSeeder(address(game)).seedPools(day, word);
+        vm.etch(address(game), original);
+    }
+
     function test_CenturyConsolidationFullColdTransaction() public {
         // No protocol reads before each call: setUp writes are committed, all accessed storage
         // starts cold, and original-vs-current SSTORE pricing is realistic.
+        vm.etch(address(game), type(CenturyNativeGasHost).runtimeCode);
         _checkWordApply();
-        _driveBattle(STAGE_PURCHASE_BATTLE);
+        _driveNativeBattle();
+        // The actual Miner can compose further work after consolidation. Pin its
+        // aggregate ceiling independently, then restore the exact cold boundary
+        // for the isolated native cost and unchanged detailed payout assertions.
+        uint256 snapshot = vm.snapshotState();
+        (, uint256 composed,) = _advanceTx(false);
+        emit log_named_uint("century_composed_miner_including_intrinsic", composed);
+        assertLe(composed, CAP, "complete composed miner transaction exceeds 10M");
+        vm.revertToState(snapshot);
         _checkConsolidation();
     }
 
@@ -302,7 +377,23 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
                 abi.encodeWithSignature("mintPrize(address,uint256)", ContractAddresses.VAULT, 1 ether)
             );
         }
-        (uint256 used, Vm.Log[] memory logs) = _applyWord(false, CAP);
+        CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
+        host.publishOnly();
+        uint256 reads;
+        while (!host.prepareTicketsOnly{gas: 12_000_000}()) {
+            assertLt(++reads, 32, "century ticket prerequisites stalled");
+        }
+        uint256 checkpoint = vm.snapshotState();
+        (, uint256 composed,) = _advanceTx(false);
+        emit log_named_uint("century_composed_daily_apply_including_intrinsic", composed);
+        assertLe(composed, CAP, "complete daily-application miner transaction exceeds 10M");
+        vm.revertToState(checkpoint);
+        vm.recordLogs();
+        host.applyOnly{gas: 12_000_000}();
+        uint256 used = _coldCallGas();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertLt(used, GasBounds.DAILY_APPLY, "century daily apply exceeds saved bound");
+        assertEq(_dailyLegLogs(logs), 0, "native application cannot pay a daily leg");
         emit log_named_uint("century_word_apply_including_intrinsic", used);
         assertEq(
             _countTopic(logs, keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")),
@@ -318,10 +409,48 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         }
     }
 
+    function _coldCallGas() private returns (uint256 used) {
+        used = vm.lastCallGas().gasTotalUsed;
+        if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
+    }
+
+    function _nativePhaseTx() private returns (uint8 stage, uint256 used, Vm.Log[] memory logs) {
+        vm.recordLogs();
+        MineFlipGas.Result memory result = CenturyNativeGasHost(payable(address(game))).dailyOnly{gas: 12_000_000}();
+        used = _coldCallGas();
+        logs = vm.getRecordedLogs();
+        assertTrue(result.progressed, "native daily phase must make progress");
+        stage = 255;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) {
+                (stage,) = abi.decode(logs[i].data, (uint8, uint24));
+            }
+        }
+    }
+
+    function _driveNativeBattle() private {
+        IJackpotBattle battle = IJackpotBattle(address(crapsBattle));
+        (,,, bool complete) = battle.jackpotProgress();
+        uint256 steps;
+        uint256 largest;
+        while (!complete) {
+            assertLt(steps++, 40, "the native jackpot battle stalled");
+            (uint8 stage, uint256 used, Vm.Log[] memory logs) = _nativePhaseTx();
+            assertEq(stage, STAGE_PURCHASE_BATTLE, "committed battle precedes consolidation");
+            assertEq(_dailyLegLogs(logs), 0, "battle cannot execute consolidation payouts");
+            assertLe(used, CAP, "native battle transaction exceeds 10M");
+            if (used > largest) largest = used;
+            (,,, complete) = battle.jackpotProgress();
+        }
+        assertTrue(game.rngLocked(), "daily lock survives until post-battle phases");
+        emit log_named_uint("native_jackpot_battle_steps", steps);
+        emit log_named_uint("native_jackpot_battle_largest_tx_including_intrinsic", largest);
+    }
+
     /// @dev The consolidation stage after the battle: BAF, decimator, yield surplus, growth round and
     ///      level quest in one transaction.
     function _checkConsolidation() private {
-        (uint8 stage, uint256 used, Vm.Log[] memory logs) = _advanceTx(false);
+        (uint8 stage, uint256 used, Vm.Log[] memory logs) = _nativePhaseTx();
         uint256 ethAwards;
         uint256 ticketAwards;
         uint256 whaleAwards;
@@ -413,7 +542,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(growth, 1, "growth round must seal");
         assertEq(quest, 1, "new level quest must roll");
         if (expectHousePass) assertGt(highPasses, 0, "house pass credit must execute");
-        assertLt(used, CAP, "full century transaction exceeds cap");
+        assertLt(used, GasBounds.POOL_CONSOLIDATION, "native century phase exceeds saved admission bound");
     }
 }
 

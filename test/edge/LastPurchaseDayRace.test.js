@@ -26,7 +26,7 @@ const BOOTSTRAP_PRIZE_POOL = eth(50);
  *
  * Trigger sequence:
  *   1. Mint pool past threshold while pool is unfrozen.
- *   2. advanceGame on day where purchaseDays > 1 → turbo skipped → request
+ *   2. mineFlip on day where purchaseDays > 1 → turbo skipped → request
  *      VRF with isTicketJackpotDay=false → freeze pool past threshold,
  *      rngLockedFlag=true, no level pre-increment.
  *   3. Many days pass (gap window).
@@ -72,22 +72,22 @@ async function heavyPurchases(game, buyers) {
 async function driveCycleToDailyClose(game, deployer, mockVRF, word, gapDays = 0) {
   await advanceToNextDay();
   for (let i = 0; i < gapDays; i++) await advanceToNextDay();
-  await game.connect(deployer).advanceGame();
+  await game.connect(deployer).mineFlip();
   const requestId = await getLastVRFRequestId(mockVRF);
   try { await mockVRF.fulfillRandomWords(requestId, word); } catch {}
   for (let i = 0; i < 200; i++) {
     if (!(await game.rngLocked())) return;
-    try { await game.connect(deployer).advanceGame(); } catch { return; }
+    try { await game.connect(deployer).mineFlip(); } catch { return; }
   }
 }
 
-/** Drive advanceGame until lock clears, panic surfaces, or limit hit. */
+/** Drive mineFlip until lock clears, panic surfaces, or limit hit. */
 async function drain(game, caller, advanceModule, maxIters = 400) {
   const trace = { stages: {}, lastStage: -1, panic: null, iters: 0 };
   for (let i = 0; i < maxIters; i++) {
     trace.iters = i + 1;
     try {
-      const tx = await game.connect(caller).advanceGame();
+      const tx = await game.connect(caller).mineFlip();
       const receipt = await tx.wait();
       for (const log of receipt.logs) {
         try {
@@ -138,7 +138,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       await heavyPurchases(game, buyers);
       expect(await game.nextPrizePoolView()).to.be.gte(BOOTSTRAP_PRIZE_POOL);
 
-      // Phase B: skip 2 days WITHOUT advanceGame so the freeze cycle
+      // Phase B: skip 2 days WITHOUT mineFlip so the freeze cycle
       // happens with purchaseDays = 2 > 1 (turbo's day-window guard
       // closes regardless of fix). This avoids the legitimate day-1
       // turbo path and forces the request-with-isTicketJackpotDay=false
@@ -151,7 +151,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       // = lastPurchase = false (lpd is still false). No level pre-increment.
       // Pool freezes at past-threshold value. lock=true.
       // Caller is alice (who minted) so the daily mint gate passes.
-      await game.connect(alice).advanceGame();
+      await game.connect(alice).mineFlip();
       expect(await game.rngLocked()).to.equal(true, "Phase C must leave VRF pending");
       expect(await game.level()).to.equal(0n, "Level must NOT pre-increment (target was reached but lpd=false)");
       const frozenPool = await game.nextPrizePoolView();
@@ -203,7 +203,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
   // Step 3b: Multi-day-drain (testnet exact pattern).
   // ---------------------------------------------------------------------------
   // The testnet failure happened when the drain spanned multiple wall-clock
-  // days. Each new day's first call to advanceGame re-enters rngGate's
+  // days. Each new day's first call to mineFlip re-enters rngGate's
   // fresh-word branch (rngWordByDay[new_day] is still 0) and re-runs the
   // gap-day backfill against the same stale `dailyIdx`, DOUBLE-COUNTING the
   // bump.
@@ -242,7 +242,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       await advanceToNextDay();
       await advanceToNextDay();
       await advanceToNextDay();
-      await game.connect(alice).advanceGame();
+      await game.connect(alice).mineFlip();
       expect(await game.rngLocked()).to.equal(true);
       expect(await game.level()).to.equal(0n);
 
@@ -277,7 +277,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
         }
         let lastStage = -1;
         try {
-          const tx = await game.connect(alice).advanceGame();
+          const tx = await game.connect(alice).mineFlip();
           const receipt = await tx.wait();
           for (const log of receipt.logs) {
             try {
@@ -316,7 +316,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
 
   // Disabled: synthetic-storage test (too entangled with heavy-mints prior state)
   describe.skip("direct-state invariant (disabled)", function () {
-    it("with the bug state forced via setStorageAt, advanceGame does not panic", async function () {
+    it("with the bug state forced via setStorageAt, mineFlip does not panic", async function () {
       const { game, deployer, mockVRF, advanceModule, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -337,7 +337,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       const ts = block.timestamp;
       const DEPLOY_DAY_BOUNDARY = Math.floor((ts - 82620) / 86400) - 0;
       // Day index = (ts-82620)/86400 - DEPLOY_DAY_BOUNDARY + 1. We want
-      // current day to be N where N is where advanceGame's day comes from.
+      // current day to be N where N is where mineFlip's day comes from.
       // Skip ahead a few days first so we have a >1 day spread.
       await advanceToNextDay();
       await advanceToNextDay();
@@ -389,7 +389,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       // For setStorageAt, simplest: psd = old_psd, and we'll let the
       // backfill bump it during the actual call. But we want ONE call to
       // panic, not N calls. So set psd = day - 1 directly, dailyIdx
-      // distinct from day so advanceGame takes new-day path.
+      // distinct from day so mineFlip takes new-day path.
       //
       // Practical approach: leave psd=1 (initial), set dailyIdx=1 (also
       // initial). After our 3 advanceToNextDay calls, day ≈ 4.
@@ -398,7 +398,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       // Since reading day index requires the same library logic the contract uses,
       // simplest is to set psd to a large value relative to dailyIdx and let
       // the contract's day() figure itself out. We pick psd = 0xfffffff and
-      // verify the trigger via successful advanceGame (with fix) / panic (without).
+      // verify the trigger via successful mineFlip (with fix) / panic (without).
       //
       // For a clean test, write psd such that purchaseDays will be 1 from the
       // contract's perspective. We use a getStorageAt round-trip for confidence:
@@ -439,7 +439,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       let panicMsg = "";
       let stage = -1;
       try {
-        const tx = await game.connect(alice).advanceGame();
+        const tx = await game.connect(alice).mineFlip();
         const receipt = await tx.wait();
         for (const log of receipt.logs) {
           try {
@@ -459,13 +459,13 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
 
       expect(panicked).to.equal(
         false,
-        `advanceGame panicked from forced bug state: ${panicMsg} — turbo guard not preventing the desync`
+        `mineFlip panicked from forced bug state: ${panicMsg} — turbo guard not preventing the desync`
       );
     });
   });
 
   // ===========================================================================
-  // Step 2: Stress test. Random advanceGame + mint sequences over many
+  // Step 2: Stress test. Random mineFlip + mint sequences over many
   //          simulated days. Any panic = fix is incomplete.
   // ===========================================================================
   describe("stress (no panic ever)", function () {
@@ -503,7 +503,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
             const days = 1 + (rand() % 5);
             for (let d = 0; d < days; d++) await advanceToNextDay();
           } else if (action === 2) {
-            // advanceGame (fulfil VRF first if pending).
+            // mineFlip (fulfil VRF first if pending).
             const reqId = await getLastVRFRequestId(mockVRF);
             if (reqId > 0n) {
               try {
@@ -512,7 +512,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
             }
             const caller = allBuyers[rand() % allBuyers.length];
             try {
-              await game.connect(caller).advanceGame();
+              await game.connect(caller).mineFlip();
             } catch (e) {
               const msg = (e && (e.shortMessage || e.message)) || "";
               if (msg.includes("0x11") || msg.toLowerCase().includes("panic")) {
@@ -557,7 +557,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       await heavyPurchases(game, buyers);
 
       await advanceToNextDay();
-      await game.connect(alice).advanceGame();
+      await game.connect(alice).mineFlip();
 
       expect(await game.jackpotDuration()).to.equal(
         1n,

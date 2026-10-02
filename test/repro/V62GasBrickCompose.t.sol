@@ -7,15 +7,15 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title V62GasBrickCompose -- regression guard for the V62-02 fix.
 ///
-/// @notice V62-02 (adjudicated vs frozen c4d48008): the new-day advanceGame path ran the afking
+/// @notice V62-02 (adjudicated vs frozen c4d48008): the new-day mineFlip path ran the afking
 ///         subscriber STAGE then, when the cursor reached the set end in ONE chunk
 ///         (subsFullyProcessed == true), FELL THROUGH to rngGate -> _backfillGapDays with no
 ///         intervening stage-break. The v60 decouple (AdvanceModule STAGE_GAP_BACKFILLED) breaks
 ///         AFTER rngGate -- it decouples the gap backfill from the DOWNSTREAM daily jackpot, not
-///         from the UPSTREAM subscriber stage. So a single advanceGame() could run BOTH a saturated
+///         from the UPSTREAM subscriber stage. So a single mineFlip() could run BOTH a saturated
 ///         all-evict subscriber chunk (~9.7M cold, measured in V56AfkingGasMarginal::testResidualR1)
 ///         AND the widest gap backfill in one tx -- summing past EIP-7825's 16,777,216 per-tx
-///         cap, permanently bricking advanceGame during stall recovery.
+///         cap, permanently bricking mineFlip during stall recovery.
 ///
 ///         THE FIX (AdvanceModule, the VRF-outstanding entry gate): the subscriber STAGE never
 ///         runs while rngLockedFlag is set [request -> unlock]. A buffered word / pending gap
@@ -60,8 +60,8 @@ contract V62GasBrickCompose is DeployProtocol {
     // Bounds + composition geometry
     // -------------------------------------------------------------------------
 
-    /// @dev The hard EIP-7825 per-transaction gas cap. A single advanceGame tx above this can never
-    ///      complete -> permanent advanceGame DoS / forced unrecoverable game-over (the brick).
+    /// @dev The hard EIP-7825 per-transaction gas cap. A single mineFlip tx above this can never
+    ///      complete -> permanent mineFlip DoS / forced unrecoverable game-over (the brick).
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
     /// @dev SUB_STAGE_WEIGHT_BUDGET (AdvanceModule): the per-chunk gas-weight budget. With
@@ -171,11 +171,11 @@ contract V62GasBrickCompose is DeployProtocol {
     }
 
     /// @dev Seed the all-evict subscriber set + the widest-gap backfill precondition, then bracket ONE
-    ///      advanceGame() and decompose what ran. `evictCount` sizes the evicting set; `cold` re-colds
+    ///      mineFlip() and decompose what ran. `evictCount` sizes the evicting set; `cold` re-colds
     ///      the game storage (vm.cool) before the bracketed advance (the realistic first-touch regime).
     function _seedAndMeasure(uint256 evictCount, bool cold) internal returns (Result memory r) {
         // ---- (A) Build the all-evict subscriber set ----
-        // Settle clean first (no in-flight RNG -> advanceGame won't revert RngNotReady).
+        // Settle clean first (no in-flight RNG -> mineFlip won't revert RngNotReady).
         _settleClean(uint256(keccak256(abi.encodePacked("v62_base_", _u(evictCount)))) | 1);
 
         // Grounded subs (seat + funded -> the D-11/D-12 subscribe gates pass), as
@@ -249,7 +249,7 @@ contract V62GasBrickCompose is DeployProtocol {
             if (!game.advanceDue()) break;
             if (cold) vm.cool(address(game)); // realistic stall-recovery first-touch per leg
             uint256 gasBefore = gasleft();
-            game.advanceGame();
+            game.mineFlip();
             uint256 gasUsed = gasBefore - gasleft();
 
             uint256 subsNow = _subscriberCount();
@@ -366,7 +366,7 @@ contract V62GasBrickCompose is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }

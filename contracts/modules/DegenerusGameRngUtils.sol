@@ -43,7 +43,8 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     }
 
     /// @dev Fill packed coinflip results and settle funding for gap days
-    ///      caused by VRF stall. Coinflip consumes raw bits 1..31, anchored at startDay;
+    ///      caused by VRF stall. Coinflip uses double-or-nothing payouts and raw win bits
+    ///      1..31, anchored at startDay;
     ///      other daily consumers retain the final gap day's keccak256(vrfWord, gapDay).
     ///      NOTE: Gap days get zero nudges (totalFlipReversals not consumed).
     ///      NOTE: resolveRedemptionPeriod is NOT called for backfilled gap days —
@@ -53,7 +54,7 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     /// @param startDay First gap day (dailyIdx + 1).
     /// @param endDay Current day (exclusive — not backfilled, handled by normal path).
     function _backfillGapDays(uint256 vrfWord, uint24 startDay, uint24 endDay) internal {
-        // Bounded for gas (~9M). A live gap never reaches the bound (the deadman ends the game
+        // Bound the number of per-day settlements. A live gap never reaches the bound (the deadman ends the game
         // first); on the normal ending the days past it hold no ticket or foil entry.
         if (endDay - startDay > GAP_BACKFILL_MAX_DAYS) endDay = startDay + GAP_BACKFILL_MAX_DAYS;
         coinflip.processCoinflipGap(vrfWord, startDay, endDay);
@@ -77,4 +78,17 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         emit DailyRngApplied(day, rawWord, nudges, finalWord);
         return finalWord;
     }
+    /// @dev Move fresh contributions to the pending pool while a daily commitment is frozen.
+    function _freezePool() internal {
+        if (!prizePoolFrozen) {
+            prizePoolFrozen = true;
+            uint256 futureBal = _getFuturePrizePool();
+            uint256 seed = futureBal / 100;
+            _setFuturePrizePool(futureBal - seed);
+            // The seed opens the pending buffer; buys route here until the unfreeze.
+            _setPendingPools(0, uint128(seed));
+        }
+    }
+
+
 }

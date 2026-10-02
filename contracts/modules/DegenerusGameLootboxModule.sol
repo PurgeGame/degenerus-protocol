@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -29,12 +31,12 @@ import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
-import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule, IGameAfkingModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
-import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
@@ -75,9 +77,7 @@ interface ICrapsPassDelivery {
  * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
-    // Internal router encoding; never used by the ordinary public box allowance.
-    uint256 private constant OPEN_STRICT_BUDGET_FLAG = uint256(1) << 255;
-    uint256 private constant OPEN_CALL_UNITS = 24;
+    // One owner's full order and presale leg are indivisible; accumulation order is retained.
 
     // =========================================================================
     // Errors
@@ -1251,175 +1251,36 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (!okBoon) revert EmptyRevert();
     }
 
-    /// @notice Permissionless, bounded settlement of the current read buffer's boxes and bets.
-    /// @dev Delegatecall runs in Game storage. The queue is frozen at request time; producers
-    ///      continue in the other buffer. Retry preserves both the selector and the cursor.
-    ///      Every entry reserves its full cost before execution. Skips are charged, so calls eventually
-    ///      finish every entry. Completion is committed only after boxes and bets are exhausted.
-    /// @param budget Walk budget in the shared open-weight unit (~4.7k gas each) — the same
-    ///        unit the afking leg spends. An entry costs OPEN_HUMAN_ENTRY_WEIGHT plus
-    ///        OPEN_HUMAN_BOX_WEIGHT for each box; a bet its per-bet weight; a skip or
-    ///        index-header costs one. Neither entries nor boxes are the unit, because neither
-    ///        predicts the gas.
-    /// @return opened Total boxes opened plus bets resolved this call.
-    /// @return unitsSpent When anything opened: the walk units credited — the crank's work-based
-    ///         bounty basis. Boxes count their walk weight; each resolved bet counts only a small
-    ///         flat credit (DegenerusGameDegeneretteModule.BET_WORK_CREDIT_GAS), far below the
-    ///         worst-case price the budget charged it, and a skipped zeroed bet counts nothing.
-    ///         When nothing opened (no bounty is paid): every unit the walk consumed, skips and
-    ///         index headers included, so a caller that spends the rest of the shared budget on
-    ///         another leg cannot overspend it.
-    ///         Crediting the knee per BOX would let one five-small order saturate it at a
-    ///         fraction of the work five distinct entries represent.
-    function openHumanBoxes(uint256 budget) external returns (uint256 opened, uint256 unitsSpent) {
-        // Internal router encoding: bit 255 requests separate charge reporting. In that mode the
-        // second result packs execution charge above bounty credit (128 bits each).
-        bool packedCharge = budget & OPEN_STRICT_BUDGET_FLAG != 0;
-        budget = MineFlipBudget.clamp(budget & ~OPEN_STRICT_BUDGET_FLAG);
-        // Entry-gate: the open path's state-gated reverts — rngLock and the terminal-jackpot
-        // liveness control — are excluded pre-loop, so the loop body cannot fail on them. What
-        // remains is retryable downstream failure (a Boon delegatecall or both Craps pass doors
-        // failing reverts the whole call and leaves the cursor where it was).
-        if (rngLockedFlag || _livenessTriggered()) return (0, 0);
+    /// @notice Open the active session's human orders in FIFO order, after AFKing.
+    function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
+        return _runHumanBoxWork(gasAllowance);
+    }
 
-        if (budget <= OPEN_CALL_UNITS || _rngConsumerStage() != 3) return (0, 0);
-        uint48 idx = _rngReadBuffer();
-        uint256 cur = boxCursor;
-        // Free slot-0 read (the entry-gate above already SLOAD'd slot 0 for rngLockedFlag): probe
-        // the presale leg until presale is fully drained. The flag is flipped (below) once this
-        // sweep completes presaleCloseBuffer, after which every entry skips the cold
-        // presaleBoxEth SLOAD. Cached once per call.
-        bool checkPresale = !presaleDrained;
-        // `level`'s sole writer (advanceGame) is unreachable from this sweep, so the open level
-        // is invariant across the whole call — read `level + 1` once and thread it into every leg.
-        uint24 currentLevel = level + 1;
+    /// @notice Compatibility entrypoint. The supplied budget cannot choose a shorter prefix.
+    function openHumanBoxes(uint256) external returns (uint256 opened, uint256 gasUsed) {
+        uint256 beforeGas = gasleft();
+        MineFlipGas.Result memory result = _runHumanBoxWork(MineFlipGas.available());
+        return (result.rewardBasis, beforeGas - gasleft());
+    }
 
-        // Covers entry/stage probes, cursor persistence, completion and the presale dust tail.
-        uint256 steps = OPEN_CALL_UNITS;
-        uint256 uncredited; // bet budget headroom above the work the bets actually ran
-        while (steps < budget) {
-            unchecked {
-                ++steps; // each index visit costs a step (bounds an empty-index crawl)
-            }
-            // Orphan-index coupling: never advance past an un-worded index, or its boxes maroon.
-            // The word is loaded once per index and threaded into every open below.
-            uint256 indexWord = _lootboxWord(idx);
-            if (indexWord == 0) break;
+    function _runHumanBoxWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+            abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork.selector, gasAllowance)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (MineFlipGas.Result));
+    }
 
-            address[] storage queue = boxPlayers[idx & 1];
-            uint256 qlen = queue.length;
-            while (cur < qlen && steps < budget) {
-                address player = queue[cur];
-                // Open if EITHER leg is still owed: the box order or the presale leg
-                // (presaleBoxEth, probed only while boxes are outstanding). Both are zeroed on
-                // open, so a zero/zero entry is already-drained (or never carried a box of this
-                // type) and is skipped. Each leg's word is loaded ONCE here and threaded into
-                // its open — the skip-check values double as the open's inputs.
-                uint256 word = _boxOrder(idx, player);
-                uint256 stored = checkPresale ? presaleBoxEth[idx & 1][player] : 0;
-                uint256 boxes = _boxOrderCount(word);
-                if (boxes == 0 && stored == 0) {
-                    unchecked {
-                        ++cur;
-                        ++steps; // a skip still costs a step, so a long drained prefix cannot wall
-                    }
-                    continue;
-                }
-
-                // Charge what the entry ACTUALLY costs, in the shared walk unit. The floor is
-                // the per-entry weight — the cold per-player settlement every entry pays however
-                // few boxes it holds — plus a lighter weight for each box. Boxes after the first
-                // ride the lanes the first one already opened. A flat step per entry stopped
-                // meaning anything the moment counts landed, and a flat step per BOX would
-                // over-charge wide entries by ~5x.
-                uint256 cost = OPEN_HUMAN_ENTRY_WEIGHT + boxes * OPEN_HUMAN_BOX_WEIGHT
-                    + (stored == 0 ? 0 : OPEN_HUMAN_ENTRY_WEIGHT);
-                // Leave an unaffordable entry at the cursor for the next fresh allowance.
-                if (cost > budget - steps) break;
-                unchecked {
-                    ++cur;
-                    steps += cost;
-                }
-
-                // Free of lock/liveness/unready-index reverts under the entry-gate + the word!=0
-                // index gate above: resolves the box AND presale legs (each robust to being empty). The cached
-                // values cannot go stale across the box leg's external calls: no callee on that
-                // path hands control to player code, and a presaleBoxEth write at a worded index
-                // is unreachable from the buy path.
-                _openLootBoxLegWith(player, idx, word, indexWord, currentLevel);
-                if (stored != 0) {
-                    presaleBoxEth[idx & 1][player] = 0; // dequeue before resolution
-                    _resolvePresaleBox(player, idx, stored, indexWord, currentLevel);
-                }
-                unchecked {
-                    // The presale leg counts as one open: `opened` feeds the crank's progress
-                    // and bounty accounting, and a presale-only entry is real work.
-                    opened += boxes + (stored != 0 ? 1 : 0);
-                }
-            }
-
-            if (cur < qlen) break; // budget hit mid-index — resume here next call
-
-            // Degenerette bets placed at this index follow its box entries on the same cursor
-            // (cur = qlen + bet position). Both lists are frozen once the word lands, since
-            // placement and box deposits require an unset word, so the combined position is
-            // stable. The degenerette module prices each bet and resolves within the budget.
-            uint256 blen = degeneretteQueue[idx & 1].length;
-            if (cur - qlen < blen) {
-                if (steps >= budget) break;
-                (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameDegeneretteModule.sweepDegeneretteBets.selector,
-                        idx,
-                        cur - qlen,
-                        budget - steps,
-                        false,
-                        indexWord
-                    )
-                );
-                if (!ok) revert EmptyRevert();
-                (uint256 resolved, uint256 betPos, uint256 betUnits, uint256 betWork) = abi.decode(
-                    data,
-                    (uint256, uint256, uint256, uint256)
-                );
-                if (betUnits > budget - steps || betWork > betUnits) revert Invariant();
-                unchecked {
-                    opened += resolved;
-                    steps += betUnits;
-                    // Bets are budgeted at worst case but credited a small flat amount each.
-                    if (betUnits > betWork) uncredited += betUnits - betWork;
-                }
-                cur = qlen + betPos;
-                if (betPos < blen) break; // budget hit mid-queue — resume here next call
-            }
-            humanReadComplete = true;
-            cur = 0;
-            break;
+    /// @notice Resolve one fully admitted human order atomically; the AFKing
+    ///         box worker owns queue ordering, cursor updates and completion.
+    function resolveHumanBoxOrder(address player, uint48 idx, uint256 word, uint256 stored,
+        uint256 indexWord, uint24 currentLevel) external
+    {
+        _openLootBoxLegWith(player, idx, word, indexWord, currentLevel);
+        if (stored != 0) {
+            presaleBoxEth[idx & 1][player] = 0;
+            _resolvePresaleBox(player, idx, stored, indexWord, currentLevel);
         }
-
-        // Credited work only matters when something opened (the bounty). A walk that opened
-        // nothing reports what it consumed, so the router's craps leg sizes from the real spend.
-        unitsSpent = opened == 0 ? steps : steps - uncredited;
-        if (packedCharge) unitsSpent |= steps << 128;
-        boxCursor = uint48(cur);
-        // Presale is fully drained once the cursor has advanced PAST the close index (every box at
-        // indices <= presaleCloseBuffer is now opened). One-way, sweep-only; gated on presaleOver so
-        // it never fires before the close index is meaningful (zero while presale is open / never
-        // closed). Thereafter every open path skips the cold presaleBoxEth SLOAD. The drain is
-        // the one moment every presale roll has drawn, so the pool remainder paid here to the
-        // closing buyer is the curve's variance dust: no box opened out of order can move
-        // another box's DGNRS into it.
-        if (presaleOver && checkPresale && humanReadComplete && idx == presaleCloseBuffer) {
-            presaleDrained = true;
-            uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
-            if (remaining != 0) {
-                address closer = presaleCloser;
-                emit PresaleBoxRemainderSwept(
-                    closer, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, closer, remaining)
-                );
-            }
-        }
-        _tryCompleteRng();
     }
 
     /// @dev Resolve a presale box off the salted committed word: 50% a FLIP-valued budget

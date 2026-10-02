@@ -52,7 +52,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
         bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), uint256(12)));
 
         uint256 beforeGas = gasleft();
-        game.advanceGame{gas: 16_777_216 - 21_064}();
+        game.mineFlip{gas: 16_777_216 - 21_064}();
         uint256 used = beforeGas - gasleft() + 21_064;
         emit log_named_uint("cold 32-deity renewal transition close including intrinsic", used);
         emit log_named_uint("headroom_to_16p7M_gas", 16_777_216 - used);
@@ -66,7 +66,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
         }
         // The close cannot re-run, so no owner gets a second perpetual ticket.
         vm.expectRevert(bytes4(keccak256("NotTimeYet()")));
-        game.advanceGame{gas: 16_777_216 - 21_064}();
+        game.mineFlip{gas: 16_777_216 - 21_064}();
         _checkOwners();
     }
 

@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract DecimatorBattleGasTest is Test {
@@ -50,13 +51,12 @@ contract DecimatorBattleGasTest is Test {
                 vm.cool(address(h));
                 vm.cool(ContractAddresses.CRAPS_ENGINE);
                 uint256 gasBefore = gasleft();
-                (uint256 work, uint256 units, bool moved) = h.settleDecimatorWinners(type(uint256).max);
+                MineFlipGas.Result memory result = h.runDecimatorWork{gas: 15_000_000}(14_000_000);
                 uint256 used = gasBefore - gasleft();
-                assertGt(work, 0);
-                assertTrue(moved);
-                assertLe(units, 1824, "strict shared worker allowance");
-                assertLe(used * 10, units * 4700 * 9, "every call within 90% of its charge");
-                assertLt(used, 10_000_000, "decimator keeper leg gas ceiling");
+                assertGt(result.rewardBasis, 0);
+                assertTrue(result.progressed);
+                assertLe(used, 14_020_000, "native allowance including external call frame");
+                assertLt(used, 15_000_000, "decimator worker fits supplied gas");
                 if (used > peakGas) peakGas = used;
                 ++batches;
             }

@@ -2,9 +2,9 @@
 pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
+import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 
-contract JackpotBattleDrawHarness is DegenerusGameJackpotModule {
+contract JackpotBattleDrawHarness is DegenerusGameJackpotDrawModule {
     function seed(uint24 target, address[] memory owners, bool gaps) external {
         for (uint256 i; i < owners.length; ++i) {
             // Queue positions need not equal registry positions (e.g. after a salvage swap).

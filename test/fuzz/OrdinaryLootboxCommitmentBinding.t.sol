@@ -89,7 +89,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
 
     function _requestDaily() private {
         for (uint256 i; i < 50 && !game.rngLocked(); ++i) {
-            game.advanceGame();
+            game.mineFlip();
         }
         assertTrue(game.rngLocked(), "real daily request must engage");
         uint256 request = mockVRF.lastRequestId();
@@ -100,7 +100,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
 
     function _finishDaily() private {
         for (uint256 i; i < 100 && game.rngLocked(); ++i) {
-            game.advanceGame();
+            game.mineFlip();
         }
         assertFalse(game.rngLocked(), "bounded daily processing must finish");
     }
@@ -329,7 +329,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         assertTrue(fulfilled, "callback really fulfilled");
         if (perturb) _perturb(index, orders, false);
         if (daily) _finishDaily();
-        else game.advanceGame(); // publish delivered midday word before opening
+        else game.mineFlip(); // publish delivered midday word before opening
         assertEq(game.level(), 0, "opening denomination intentionally held fixed");
         assertEq(_word(index), word, "exact delivered word reaches its committed index");
         assertEq(_word((index ^ 1)), 0, "later purchases remain unrevealed");

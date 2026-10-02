@@ -152,7 +152,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
 
   const receipts = [];
   const advance = async () => {
-    const r = await (await game.connect(deployer).advanceGame({ gasLimit: AUDIT_GAS_CEILING })).wait();
+    const r = await (await game.connect(deployer).mineFlip({ gasLimit: AUDIT_GAS_CEILING })).wait();
     expect(r.gasUsed < AUDIT_GAS_CEILING, "every real advance must fit the 11.5M hard cap").to.equal(true);
     receipts.push(r);
     return r;

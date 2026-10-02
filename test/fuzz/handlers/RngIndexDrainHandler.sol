@@ -204,7 +204,7 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         if (game.gameOver()) { ++ghost_gameOverBranchEntered; return; }
         DrainSnapshot memory snap = _snapshotDrain(game);
         vm.recordLogs();
-        try game.advanceGame() {} catch {
+        try game.mineFlip() {} catch {
             // Reverted logs are not committed state and must not be scored.
             vm.getRecordedLogs();
             return;

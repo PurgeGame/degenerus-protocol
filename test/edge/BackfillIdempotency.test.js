@@ -22,7 +22,7 @@ async function readClocks(game) {
 }
 
 async function advanceStage(game, advanceModule) {
-  const receipt = await (await game.advanceGame()).wait();
+  const receipt = await (await game.mineFlip()).wait();
   const topic = advanceModule.interface.getEvent("Advance").topicHash;
   const gameAddress = (await game.getAddress()).toLowerCase();
   const events = receipt.logs

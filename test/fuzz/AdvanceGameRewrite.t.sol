@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title AdvanceHarness -- Exposes drain-gate logic and freeze/queue helpers for advanceGame rewrite tests.
+/// @title AdvanceHarness -- Exposes drain-gate logic and freeze/queue helpers for mineFlip rewrite tests.
 contract AdvanceHarness is DegenerusGameAdvanceModule {
     // --- Freeze / Unfreeze ---
     function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
@@ -78,7 +78,7 @@ contract AdvanceHarness is DegenerusGameAdvanceModule {
         return _getPendingPools();
     }
 
-    /// @dev Simulates the pre-RNG drain gate logic from advanceGame.
+    /// @dev Simulates the pre-RNG drain gate logic from mineFlip.
     ///      Returns (shouldBounce, proceeded):
     ///        - (true, false)  = read slot non-empty, caller should be bounced
     ///        - (false, true)  = read slot empty or already processed, proceed to do{} block

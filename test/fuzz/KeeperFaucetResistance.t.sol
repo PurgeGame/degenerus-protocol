@@ -25,7 +25,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @notice A self-keeper / Sybil round-trip is net-zero-or-negative across the v55 router legs: the
 ///         `mineFlip()` open-leg pro-rated below-knee reward (`unit * min(opened, OPEN_KNEE) / OPEN_KNEE`,
 ///         GameAfkingModule.sol:1003-1004), the advance-leg bounty (`unit * ADVANCE_RATIO_NUM * mult`,
-///         GameAfkingModule.sol:995 — the buy folded into advanceGame's STAGE, so the buy reward rides this
+///         GameAfkingModule.sol:995 — the buy folded into mineFlip's STAGE, so the buy reward rides this
 ///         advance bounty), and the bet-sweep share of the open bounty (credited at the work run), each valued
 ///         at the 0.5-gwei peg, stay strictly below the REAL gas the identical work burns at every realistic
 ///         submission price (>= 1 gwei). The reward never reads gasleft()/tx.gasprice, so it cannot scale up
@@ -39,7 +39,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///
 /// @dev The five call-site deltas applied (D-351-01):
 ///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineFlip()`.
-///   Δ4 autoBuy: the per-sub buy folded into `advanceGame()`'s STAGE; the standalone autoBuy has NO
+///   Δ4 autoBuy: the per-sub buy folded into `mineFlip()`'s STAGE; the standalone autoBuy has NO
 ///      successor. The faucet BUY-leg round-trip reframes onto the ADVANCE-leg bounty (the buy reward rides
 ///      `unit * ADVANCE_RATIO_NUM * mult`; there is NO separate flat-1.5x buy bounty in v55). The faucet
 ///      OPEN-leg round-trip reframes onto the AFKING open leg (a STAGE-stamped afking box, opened via
@@ -469,7 +469,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

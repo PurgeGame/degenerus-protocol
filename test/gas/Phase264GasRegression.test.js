@@ -67,9 +67,9 @@
 // per-call helper-attribution delta `measured - baseline` must satisfy
 // `delta <= PER_CALL_GAS_DELTA_BOUND` (= 120K).
 //
-// Baseline source: STAGE_RNG_REQUESTED (1) — a minimal advanceGame call that
+// Baseline source: STAGE_RNG_REQUESTED (1) — a minimal mineFlip call that
 // requests VRF entropy and emits Advance(1) without running any jackpot logic,
-// helper, or distribution. Stage 1 is the floor of advanceGame overhead at
+// helper, or distribution. Stage 1 is the floor of mineFlip overhead at
 // HEAD `cf564816` and is per-cycle uniform across the lifecycle. The pinned
 // BASELINE_NO_COIN_JACKPOT_GAS captures this floor.
 //
@@ -211,14 +211,14 @@ async function setupSplitTriggeringFixture(fixture, count) {
   return players;
 }
 
-/** Drain advanceGame calls in the current day, recording (stage, gasUsed) pairs.
+/** Drain mineFlip calls in the current day, recording (stage, gasUsed) pairs.
  *  Stops when rngLocked goes false or the call reverts (game-over edge). */
 async function drainAdvances(game, deployer, advanceModule) {
   const stagesObserved = [];
   for (let i = 0; i < 200; i++) {
     let tx;
     try {
-      tx = await game.connect(deployer).advanceGame();
+      tx = await game.connect(deployer).mineFlip();
     } catch (_) {
       break;
     }
@@ -233,14 +233,14 @@ async function drainAdvances(game, deployer, advanceModule) {
 }
 
 /** One full VRF cycle: nextDay → request → fulfill → drain → return all (stage, gasUsed) pairs.
- *  Captures the FIRST advanceGame() call's receipt (stage 1 / RNG_REQUESTED) plus
+ *  Captures the FIRST mineFlip() call's receipt (stage 1 / RNG_REQUESTED) plus
  *  every drain-loop advance's receipt afterward. */
 async function runOneCycle(game, deployer, mockVRF, advanceModule, vrfWord) {
   await advanceToNextDay();
   const stagesObserved = [];
   let firstTx;
   try {
-    firstTx = await game.connect(deployer).advanceGame();
+    firstTx = await game.connect(deployer).mineFlip();
   } catch (_) {
     return stagesObserved;
   }
@@ -276,7 +276,7 @@ function firstAt(observations, targetStage) {
  *
  * Stage 1 is the minimal-overhead advance state (request VRF entropy + emit
  * Advance(1) + bounty creditFlip). It runs no jackpot logic, no helper, no
- * distribution. It is the floor of advanceGame fixed cost at HEAD `cf564816`
+ * distribution. It is the floor of mineFlip fixed cost at HEAD `cf564816`
  * and serves as the pinned BASELINE_NO_COIN_JACKPOT_GAS reference.
  *
  * The `delta = measured - baseline` is INTERPRETED at the regression-invariant
@@ -393,7 +393,7 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
       // difference vs the stage-1 floor at HEAD).
       expect(
         literalDelta <= LITERAL_DELTA_HARD_BOUND,
-        `payDailyFlipJackpot literal delta ${literalDelta} > ${LITERAL_DELTA_HARD_BOUND} — structural regression (advanceGame stage 6 path grew dramatically vs stage-1 floor)`,
+        `payDailyFlipJackpot literal delta ${literalDelta} > ${LITERAL_DELTA_HARD_BOUND} — structural regression (mineFlip stage 6 path grew dramatically vs stage-1 floor)`,
       ).to.equal(true);
       expect(
         literalDelta > 0,

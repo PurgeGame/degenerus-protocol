@@ -286,7 +286,7 @@ contract SolvencyActionHandler is Test {
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);

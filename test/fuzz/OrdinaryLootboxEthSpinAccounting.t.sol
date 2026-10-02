@@ -67,12 +67,12 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         mockVRF.fundSubscription(1, 100e18);
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 50 && !game.rngLocked(); ++i) {
-            game.advanceGame();
+            game.mineFlip();
         }
         assertTrue(game.rngLocked(), "bootstrap reached a real daily request");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         for (uint256 i; i < 100 && game.rngLocked(); ++i) {
-            game.advanceGame();
+            game.mineFlip();
         }
         assertFalse(game.rngLocked(), "bootstrap daily processing finished");
         game.openBoxes(type(uint256).max);
@@ -256,7 +256,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled);
         mockVRF.fulfillRandomWords(request, WORD);
-        game.advanceGame(); // publish the delivered midday word
+        game.mineFlip(); // publish the delivered midday word
         assertEq(_index(), (index ^ 1));
         uint256 initialFuture = game.futurePrizePoolView();
         if (laterPurchase) {

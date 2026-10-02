@@ -171,7 +171,7 @@ contract CustomCohortRecyclingTest is CrapsPins {
         vm.warp(block.timestamp + 60);
         uint48 index = table.closeBattle(slot);
         _setWord(index, uint256(keccak256("large custom field")) | 1);
-        table.resolveSlot(slot, 1);
+        table.resolveSeats(slot, 1);
         assertFalse(cohort.rngCohortComplete(index), "one settled seat cannot complete the field");
         for (uint256 i; i < 65 && !cohort.rngCohortComplete(index); ++i) cohort.keepRngCohort(index, 20_000);
         assertTrue(cohort.rngCohortComplete(index));

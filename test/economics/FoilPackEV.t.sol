@@ -29,7 +29,7 @@ contract FoilPackEV is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _advance() internal {
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
     }
 
     function _completeDay(uint256 vrfWord) internal {

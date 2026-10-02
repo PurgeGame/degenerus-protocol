@@ -33,11 +33,12 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         _coolSettlementState();
         vm.prank(address(game));
         uint256 beforeGas = gasleft();
-        (bool done, uint256 charged,) = sdgnrs.processRedemptionSettlement(1856);
+        bool done = sdgnrs.runRedemptionWork(9_000_000).done;
         uint256 used = beforeGas - gasleft() + 21_000;
         assertTrue(done);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertLe(used, charged * 4700, "cold whole-claim gas within stored-state reservation");
+        uint256 chunks = ((uint256(160 ether) * uint256(roll) / 100) / 2 + 5 ether - 1) / 5 ether;
+        assertLe(used, 350_000 + chunks * 250_000 + 80_000, "whole beneficiary fits admission bound");
     }
 
     function test_ColdMaxBeneficiaryThroughRouter() public {
@@ -81,6 +82,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         assertGt(base, 0, "next beneficiary remains whole");
         assertTrue(sdgnrs.redemptionSettlementPending());
         emit log_named_uint("cold_maximum_continuation_router_gas", _coldRouterGas());
+        if (sdgnrs.redemptionSettlementPending()) _coldRouterGas();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 

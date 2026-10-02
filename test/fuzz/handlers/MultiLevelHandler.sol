@@ -138,7 +138,7 @@ contract MultiLevelHandler is Test {
 
     /// @notice Advance game (crucial for level transitions)
     /// @param actorSeed Seed for actor selection
-    function advanceGame(uint256 actorSeed) external useActor(actorSeed) {
+    function mineFlip(uint256 actorSeed) external useActor(actorSeed) {
         calls_advanceGame++;
 
         if (game.gameOver()) return;
@@ -146,7 +146,7 @@ contract MultiLevelHandler is Test {
         uint256 levelBefore = game.level();
 
         vm.prank(currentActor);
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
 
         _checkLevelTransition(levelBefore);
     }

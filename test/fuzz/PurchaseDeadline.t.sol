@@ -114,7 +114,7 @@ contract PurchaseDeadlineIntegrationTest is DeployProtocol {
     }
 
     function _advanceWithVrf() private {
-        game.advanceGame();
+        game.mineFlip();
         uint256 id = mockVRF.lastRequestId();
         if (id != 0) {
             (, , bool fulfilled) = mockVRF.pendingRequests(id);

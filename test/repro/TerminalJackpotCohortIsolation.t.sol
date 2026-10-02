@@ -248,19 +248,19 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         vm.deal(address(game), 100 ether);
 
         // The pre-freeze daily request's word only finalizes the lootbox index it reserved.
-        game.advanceGame();
+        game.mineFlip();
         assertFalse(game.rngLocked(), "pre-freeze request dropped");
         assertEq(_holderEntryCount(LEVEL, committedBuyer), 0, "finalizing the index runs no drain batch");
 
         // The read cohort that request committed drains on its word, before the terminal swap.
-        game.advanceGame();
+        game.mineFlip();
         assertGt(_holderEntryCount(LEVEL, committedBuyer), 0, "pre-request read cohort materialized");
         assertEq(_holderEntryCount(LEVEL, frozenBuyer), 0, "write cohort waits for the terminal word");
 
         // The one terminal swap takes the write cohort bought before the freeze, then the terminal
         // request goes out: from here the terminal draw's cohort is fixed.
         uint256 before = mockVRF.lastRequestId();
-        game.advanceGame();
+        game.mineFlip();
         uint256 requestId = mockVRF.lastRequestId();
         assertGt(requestId, before, "terminal request sent after the swap");
 
@@ -271,16 +271,16 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         mockVRF.fulfillRandomWords(requestId, TERMINAL_WORD);
 
         // Apply the terminal word, then drain the swapped cohort on it.
-        game.advanceGame();
+        game.mineFlip();
         assertEq(_holderEntryCount(LEVEL, frozenBuyer), 0, "the application runs no drain batch");
-        game.advanceGame();
+        game.mineFlip();
         assertGt(_holderEntryCount(LEVEL, frozenBuyer), 0, "pre-request write cohort drawn on the terminal word");
         assertFalse(game.gameOver(), "terminal jackpot remains isolated in its own tx");
         assertEq(_holderEntryCount(LEVEL, lateBuyer), 0, "post-request write cohort not materialized");
         assertEq(_totalQueuedOwed(LEVEL, lateBuyer), ENTRIES, "late write cohort remains queued");
 
         // The payout must not promote the write buffer; it pays the current-level jackpot and latches.
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.gameOver(), "game-over latches after committed snapshot drains");
         assertEq(_holderEntryCount(LEVEL, lateBuyer), 0, "late cohort never enters terminal traits");
         assertEq(_totalQueuedOwed(LEVEL, lateBuyer), ENTRIES, "late cohort remains excluded at latch");
@@ -306,7 +306,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         vm.deal(address(game), 100 ether);
 
         // No RNG boundary existed, so terminal entry must first swap write->read, then request VRF.
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngLocked(), "terminal VRF request opened after cohort snapshot");
         assertFalse(game.gameOver(), "waiting for terminal word");
         (bool writeSlot, bool readDrained) = _ticketBufferState();
@@ -317,16 +317,16 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         mockVRF.fulfillRandomWords(requestId, TERMINAL_WORD);
 
         // The terminal word is applied in its own transaction.
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngWordForDay(game.currentDayView()) != 0, "terminal word applied");
         assertEq(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "the application runs no drain batch");
 
         // Drain the frozen cohort, then settle in a separate transaction.
-        game.advanceGame();
+        game.mineFlip();
         assertGt(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "purchase cohort materialized at level+1");
         assertFalse(game.gameOver(), "payout remains isolated after the finishing batch");
 
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.gameOver(), "purchase-phase terminal settlement completes");
         assertEq(_totalQueuedOwed(LEVEL + 1, committedBuyer), 0, "committed purchase queue drained");
     }
@@ -350,7 +350,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngLocked(), "terminal request opened");
         seeder = _installSeeder();
         (uint256 writeLength, uint256 readLength, bool ready) = seeder.foilState(LEVEL + 1, foilBuyer);
@@ -362,10 +362,10 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
 
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), TERMINAL_WORD);
-        game.advanceGame();
+        game.mineFlip();
         assertEq(_holderEntryCount(LEVEL + 1, foilBuyer), 0, "application does not generate entries");
         for (uint256 i; i < 8 && _holderEntryCount(LEVEL + 1, foilBuyer) == 0; ++i) {
-            game.advanceGame();
+            game.mineFlip();
             assertFalse(game.gameOver(), "foil generation completes before terminal payout");
         }
         assertEq(_holderEntryCount(LEVEL + 1, foilBuyer), 16, "all paid foil entries enter final inventory");
@@ -376,7 +376,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertFalse(lateReady, "post-request foil remains unprocessed");
         _restoreGame();
 
-        for (uint256 i; i < 8 && !game.gameOver(); ++i) game.advanceGame();
+        for (uint256 i; i < 8 && !game.gameOver(); ++i) game.mineFlip();
         assertTrue(game.gameOver(), "terminal payout completes");
         assertEq(_holderEntryCount(LEVEL + 1, foilBuyer), 16, "foil entries retained after payout");
         assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "post-request foil never enters draw");
@@ -407,11 +407,11 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
-        game.advanceGame(); // Release the earlier request; retain its delivered word.
+        game.mineFlip(); // Release the earlier request; retain its delivered word.
         seeder = _installSeeder();
         assertEq(seeder.foilCursorState(), 1, "earlier partial foil cursor preserved");
         _restoreGame();
-        for (uint256 i; i < 12 && mockVRF.lastRequestId() == 0; ++i) game.advanceGame();
+        for (uint256 i; i < 12 && mockVRF.lastRequestId() == 0; ++i) game.mineFlip();
         assertGt(mockVRF.lastRequestId(), 0, "terminal request follows old read completion");
         assertTrue(game.rngLocked(), "terminal word still pending");
         assertEq(_holderEntryCount(LEVEL + 1, processedBuyer), 16, "processed prefix not duplicated");
@@ -424,14 +424,14 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
 
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), TERMINAL_WORD);
-        game.advanceGame();
+        game.mineFlip();
         assertFalse(game.gameOver(), "application cannot pay terminal jackpot");
         for (uint256 i; i < 8 && _holderEntryCount(LEVEL + 1, writeBuyer) == 0; ++i) {
-            game.advanceGame();
+            game.mineFlip();
             assertFalse(game.gameOver(), "finishing foil drain returns before payout");
         }
         assertEq(_holderEntryCount(LEVEL + 1, writeBuyer), 16, "terminal write generated exactly once");
-        for (uint256 i; i < 8 && !game.gameOver(); ++i) game.advanceGame();
+        for (uint256 i; i < 8 && !game.gameOver(); ++i) game.mineFlip();
         assertTrue(game.gameOver(), "terminal payout completes");
         assertEq(_holderEntryCount(LEVEL + 1, processedBuyer), 16, "prefix still exactly sixteen");
         assertEq(_holderEntryCount(LEVEL + 1, readBuyer), 16, "old read still exactly sixteen");
@@ -464,24 +464,24 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
 
         // The first entry latches the promoted level while the last-purchase request still holds
         // the lock; that request's word then only finalizes its lootbox index and it is dropped.
-        game.advanceGame();
+        game.mineFlip();
         assertFalse(game.rngLocked(), "pre-freeze request dropped");
 
         // The promoted read cohort drains on that word.
-        game.advanceGame();
+        game.mineFlip();
         assertGt(_holderEntryCount(LEVEL, committedBuyer), 0, "sealed purchase cohort drains at promoted level");
         assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "later level+1 write cohort remains excluded");
         assertEq(_totalQueuedOwed(LEVEL + 1, lateBuyer), ENTRIES, "later write cohort remains queued");
 
         // Terminal request, word application and payout, one transaction each.
         uint256 before = mockVRF.lastRequestId();
-        game.advanceGame();
+        game.mineFlip();
         uint256 requestId = mockVRF.lastRequestId();
         assertGt(requestId, before, "terminal request sent");
         mockVRF.fulfillRandomWords(requestId, TERMINAL_WORD);
-        game.advanceGame();
+        game.mineFlip();
         assertFalse(game.gameOver(), "payout runs apart from the word's application");
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.gameOver(), "locked-transition terminal settlement completes");
         assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "later level+1 write cohort never drawn");
         assertEq(_totalQueuedOwed(LEVEL + 1, lateBuyer), ENTRIES, "later write cohort remains queued at latch");
@@ -493,7 +493,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
         vm.mockCallRevert(address(mockVRF), bytes4(keccak256("requestRandomWords((bytes32,uint256,uint16,uint32,uint32,bytes))")), abi.encodeWithSignature("Error(string)", "refused"));
-        game.advanceGame();
+        game.mineFlip();
         uint256 state = uint256(game.extsload(bytes32(0)));
         uint256 stamp = (state >> 48) & type(uint48).max;
         assertGt(stamp, 1, "first attempt arms a real refusal timer");
@@ -504,7 +504,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertEq(RecyclingState.currentWord(address(game)), 0, "idle ID cannot authorize a terminal callback");
         for (uint256 i; i < 3; ++i) {
             vm.warp(vm.getBlockTimestamp() + 1 hours);
-            game.advanceGame();
+            game.mineFlip();
             assertEq((uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max, stamp, "refusal cannot reset the timeout");
         }
         vm.warp(stamp + 14 days);
@@ -512,7 +512,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertTrue(seeder.exposedVrfDead(), "unanswered terminal attempt expires without a live ID");
         _restoreGame();
         vm.clearMockedCalls();
-        for (uint256 i; i < 5 && !game.gameOver(); ++i) game.advanceGame();
+        for (uint256 i; i < 5 && !game.gameOver(); ++i) game.mineFlip();
         assertTrue(game.gameOver(), "refused terminal RNG cannot strand the ending");
     }
 
@@ -525,7 +525,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         // The request has had nothing delivered for 14 days: VRF is dead, and the ending uses no
         // entropy at all. The committed cohort is counted, never drawn or drained.
         assertTrue(game.livenessTriggered(), "the dead request is the only trigger in this fixture");
-        for (uint256 i; i < 5 && !game.gameOver(); ++i) game.advanceGame();
+        for (uint256 i; i < 5 && !game.gameOver(); ++i) game.mineFlip();
         assertTrue(game.gameOver(), "the deterministic ending completes");
         assertEq(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "no ticket was materialized");
         assertEq(_totalQueuedOwed(LEVEL + 1, committedBuyer), ENTRIES, "the cohort stays queued for its claim");

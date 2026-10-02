@@ -89,6 +89,10 @@ export const DEPLOY_ORDER = [
   // predicted address. No storage, no ctor args, no deploy-time dependents:
   // GAME calls it at runtime through a compile-time constant.
   "JACKPOT_BATTLE",       // N+31: JackpotBattle
+  "GAME_TICKET_MODULE",  // N+32: deterministic ticket materialization
+  "GAME_MINER_MODULE",  // N+33: the permissionless state engine
+  "GAME_RNG_MODULE",     // N+34: request, retry and publication
+  "GAME_JACKPOT_DRAW_MODULE", // N+35: daily battle and FLIP drawings
 ];
 
 /**
@@ -127,6 +131,10 @@ export const KEY_TO_CONTRACT = {
   CRAPS: "CrapsBattle",
   CRAPS_ENGINE: "CrapsEngine",
   JACKPOT_BATTLE: "JackpotBattle",
+  GAME_TICKET_MODULE: "DegenerusGameTicketModule",
+  GAME_MINER_MODULE: "DegenerusGameMinerModule",
+  GAME_RNG_MODULE: "DegenerusGameRngModule",
+  GAME_JACKPOT_DRAW_MODULE: "DegenerusGameJackpotDrawModule",
 };
 
 /**

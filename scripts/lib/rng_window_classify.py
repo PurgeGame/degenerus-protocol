@@ -11,7 +11,7 @@ after a large refactor (a reviewer must re-confirm every row).
 Class meanings (see scripts/rng-window-manifest.tsv header):
   DECL            storage declaration of the word/cursor variable
   PRODUCER        writes a word/cursor (runs in the exempt advance/callback path)
-  EXEMPT-ADVANCE  read inside advanceGame / the VRF request-response / seal /
+  EXEMPT-ADVANCE  read inside the mining engine / the VRF request-response / seal /
                   gap-backfill flow — v45-exempt heartbeat (no player interleave)
   CONSUMER-SEALED player-reachable read that consumes a SEALED, write-once word
                   for a value decision (safe by write-once + post-unlock read)
@@ -23,20 +23,29 @@ Class meanings (see scripts/rng-window-manifest.tsv header):
 import sys
 
 EXEMPT_ADVANCE = {
-    "advanceGame", "rngGate", "_applyDailyRng", "_finalizeRngRequest",
-    "_finalizeLootboxRng", "_backfillGapDays",
-    "_gameOverEntropy", "_handleGameOverPath",
-    "requestLootboxRng", "updateVrfCoordinatorAndSub", "rawFulfillRandomWords",
-    "_lrAdvanceIndexClearPending", "handleGameOverDrain",
+    "applyDailyGap", "applyDailyWord", "runDailyPhase", "prepareRequestBoundary",
+    "publishRng", "requestDailyRng", "requestLootboxRng", "_requestLootboxRng", "retryRng",
+    "_applyDailyRng", "_finalizeLootboxRng", "_backfillGapDays",
+    "_handleGameOverAdvance", "_handleGameOverPath", "_handleGameOverDrain",
+    "_requestTerminalRng", "_applyTerminalRng", "_resumeTerminalPayout",
+    "updateVrfCoordinatorAndSub", "rawFulfillRandomWords",
 }
 CONSUMER_SEALED = {
-    "_tryClaimFoilMatch", "_payFoilTier", "_processFoilDrain", "_resolveBet",
-    "_openBoxBoth", "openHumanBoxes", "_openLootBoxLeg", "issueDeityBoon",
-    "processTicketBatch", "_farFutureSeed", "_autoOpen", "deityBoonData",
+    "_tryClaimFoilMatch", "_payFoilTier", "_runFoilWork", "_resolveBet",
+    "_openBoxBoth", "_runHumanBoxWork", "_openLootBoxLeg", "issueDeityBoon",
+    "_runTicketWork", "_runAfkingWork", "_runDecimatorWork", "_runDegeneretteWork",
+    "_lootboxWord", "_shareOf", "_keepScheduled", "_keepRngCohort", "_windowTerms",
 }
-GATE = {"_placeDegeneretteBetCore", "_buyPresaleBoxFor", "boxesPending", "_foilDrainPending"}
+GATE = {
+    "_placeDegeneretteBetCore", "_buyPresaleBoxFor", "boxesPending", "_foilDrainPending",
+    "_nextMinerAction", "_rngConsumerStage", "_rngConsumersComplete",
+    "_rngRetryDue", "_terminalWordApplied", "runDecimatorJackpot",
+}
 CURSOR = {"_recordLootboxEntry", "_recordAfkingCoverBox", "_purchaseForWithCached"}
-ACCESSOR = {"rngWordForDay", "isRngFulfilled", "_lrRead", "_lrAdd", "_lrWrite"}
+ACCESSOR = {
+    "rngWordForDay", "isRngFulfilled", "_lrRead", "_lrAdd", "_lrWrite", "_decActiveWordOf",
+    "_currentRngWord", "_recordedDailyWord", "_retainedDailyWord", "_nudgeCount",
+}
 
 
 def classify(fn, ident, mode):

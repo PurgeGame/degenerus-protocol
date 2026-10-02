@@ -41,13 +41,13 @@ contract DegeneretteBetInvariant is DeployProtocol {
         targetContract(address(degHandler));
 
         // SEED the fuzzer onto a reachable bet sequence. Without an explicit selector allow-list the
-        // unguided fuzzer hammers advanceGame/warpTime and drives the game to game-over (where
+        // unguided fuzzer hammers mineFlip/warpTime and drives the game to game-over (where
         // placeDegeneretteBet is permanently unreachable) before a single bet is ever placed -- so
         // invariant_solvencyUnderDegenerette passes VACUOUSLY (measured: betsPlaced == 0, 0 reverts).
         // The property under test is Degenerette-bet solvency, so the Degenerette handler exposes only
-        // the bet lifecycle (place/resolve/purchase/fulfill) -- NOT advanceGame -- keeping the game live
+        // the bet lifecycle (place/resolve/purchase/fulfill) -- NOT mineFlip -- keeping the game live
         // so bets actually execute. The GameHandler exposes purchase (to grow real ETH pools) and
-        // claimWinnings (the withdrawal leg solvency must survive); advanceGame is excluded from both.
+        // claimWinnings (the withdrawal leg solvency must survive); mineFlip is excluded from both.
         bytes4[] memory degSelectors = new bytes4[](4);
         degSelectors[0] = DegeneretteHandler.placeEthBet.selector;
         degSelectors[1] = DegeneretteHandler.resolveBets.selector;

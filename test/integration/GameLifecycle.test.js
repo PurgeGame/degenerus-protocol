@@ -27,7 +27,7 @@ import { boCustom } from "../helpers/boxOrder.js";
  *  - Bootstrap prize pool target = 50 ETH
  *  - TICKET_SCALE = 100 (ticketQuantity=100 = 1 full ticket unit)
  *
- * advanceGame():
+ * mineFlip():
  *  - Standard flow, always grants FLIP bounty; requires mint-gate pass (CREATOR bypass).
  *
  * Advance event is emitted by DegenerusGameAdvanceModule (via delegatecall),
@@ -39,10 +39,10 @@ import { boCustom } from "../helpers/boxOrder.js";
  *  STAGE_PURCHASE_DAILY     = 6  (daily purchase-phase jackpot processed, RNG unlocked)
  *
  * VRF flow for first day cycle:
- *  1. advanceGame() → requests VRF → stage=1 (rngLocked=true).
+ *  1. mineFlip() → requests VRF → stage=1 (rngLocked=true).
  *  2. mockVRF.fulfillRandomWords(id, word) → rngWordCurrent set (isRngFulfilled=true).
- *  3. advanceGame() → processes word, runs ticket batches → stage=5 repeatedly.
- *  4. advanceGame() again → finishes tickets, unlocks RNG → stage=6, rngLocked=false.
+ *  3. mineFlip() → processes word, runs ticket batches → stage=5 repeatedly.
+ *  4. mineFlip() again → finishes tickets, unlocks RNG → stage=6, rngLocked=false.
  *
  * Using cap=200 drastically reduces number of batch calls needed vs cap=1.
  * The game pre-queues 16 vault+DGNRS perpetual tickets for each of levels 1-100
@@ -88,16 +88,16 @@ describe("GameLifecycle", function () {
 
   /**
    * Drive the game through a complete VRF cycle:
-   *  1. advanceGame() → triggers VRF request.
+   *  1. mineFlip() → triggers VRF request.
    *  2. Fulfill VRF.
-   *  3. Call advanceGame() repeatedly until RNG is unlocked.
+   *  3. Call mineFlip() repeatedly until RNG is unlocked.
    *
    * Returns the last Advance event emitted.
    */
   async function driveFullVRFCycle(game, mockVRF, advanceModule, caller) {
 
     // Step 1: trigger VRF request.
-    await game.connect(caller).advanceGame();
+    await game.connect(caller).mineFlip();
     expect(await game.rngLocked()).to.equal(
       true,
       "Expected rngLocked=true after VRF request"
@@ -112,7 +112,7 @@ describe("GameLifecycle", function () {
     for (let i = 0; i < 30; i++) {
       const locked = await game.rngLocked();
       if (!locked) break;
-      const tx = await game.connect(caller).advanceGame();
+      const tx = await game.connect(caller).mineFlip();
       const events = await getAdvanceEvents(tx, advanceModule);
       if (events.length > 0) lastAdvanceEvent = events[0];
     }
@@ -192,17 +192,17 @@ describe("GameLifecycle", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // advanceGame – first call (triggers VRF request)
+  // mineFlip – first call (triggers VRF request)
   // ---------------------------------------------------------------------------
 
-  describe("advanceGame first call", function () {
+  describe("mineFlip first call", function () {
     it("succeeds after advancing to next day (dailyIdx initialized to currentDayIndex)", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       // dailyIdx is initialized to currentDayIndex in the constructor, so
-      // advanceGame reverts with NotTimeYet on deploy day. Advance to next day first.
+      // mineFlip reverts with NotTimeYet on deploy day. Advance to next day first.
       await advanceToNextDay();
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await game.connect(deployer).mineFlip();
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
@@ -210,22 +210,22 @@ describe("GameLifecycle", function () {
       expect(await game.rngLocked()).to.equal(true);
     });
 
-    it("after advancing to next day, advanceGame() issues a VRF request", async function () {
+    it("after advancing to next day, mineFlip() issues a VRF request", async function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
 
       expect(await game.rngLocked()).to.equal(true);
       const lastId = await getLastVRFRequestId(mockVRF);
       expect(lastId).to.be.gt(0);
     });
 
-    it("advanceGame emits Advance(stage=1) on VRF request (parsed from module ABI)", async function () {
+    it("mineFlip emits Advance(stage=1) on VRF request (parsed from module ABI)", async function () {
       const { game, deployer, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await game.connect(deployer).mineFlip();
       const events = await getAdvanceEvents(tx, advanceModule);
 
       expect(events.length).to.be.gt(0);
@@ -243,7 +243,7 @@ describe("GameLifecycle", function () {
       const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
 
       expect(await game.rngLocked()).to.equal(true);
       expect(await game.isRngFulfilled()).to.equal(false);
@@ -251,16 +251,16 @@ describe("GameLifecycle", function () {
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 99999n);
 
-      // Word stored; RNG still locked until advanceGame processes it.
+      // Word stored; RNG still locked until mineFlip processes it.
       expect(await game.isRngFulfilled()).to.equal(true);
       expect(await game.rngLocked()).to.equal(true);
     });
 
-    it("subsequent advanceGame calls after fulfillment eventually unlock RNG", async function () {
+    it("subsequent mineFlip calls after fulfillment eventually unlock RNG", async function () {
       const { game, deployer, mockVRF, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);
@@ -269,7 +269,7 @@ describe("GameLifecycle", function () {
       let unlocked = false;
       for (let i = 0; i < 30; i++) {
         if (!await game.rngLocked()) { unlocked = true; break; }
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       }
 
       expect(unlocked).to.equal(true);
@@ -281,7 +281,7 @@ describe("GameLifecycle", function () {
       const { game, deployer, mockVRF, advanceModule } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 777n);
@@ -289,7 +289,7 @@ describe("GameLifecycle", function () {
       let finalStage = null;
       for (let i = 0; i < 30; i++) {
         if (!await game.rngLocked()) break;
-        const tx = await game.connect(deployer).advanceGame();
+        const tx = await game.connect(deployer).mineFlip();
         const events = await getAdvanceEvents(tx, advanceModule);
         if (events.length > 0) finalStage = Number(events[0].args.stage);
       }
@@ -474,7 +474,7 @@ describe("GameLifecycle", function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
 
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
 
       const info = await game.purchaseInfo();
       expect(info.rngLocked_).to.equal(true);
@@ -524,7 +524,7 @@ describe("GameLifecycle", function () {
 
       // Trigger RNG lock (level 0, purchaseLevel = 1 → 1 % 10 != 0)
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       expect(await game.rngLocked()).to.equal(true);
 
       // Coinflip deposits flow during RNG locks (no deposit-level lock exists).
@@ -548,14 +548,14 @@ describe("GameLifecycle", function () {
 
       // Drive a full VRF cycle and collect all advance stages emitted
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame(); // RNG request → stage 1
+      await game.connect(deployer).mineFlip(); // RNG request → stage 1
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);
 
       const allStages = [];
       for (let i = 0; i < 30; i++) {
         if (!(await game.rngLocked())) break;
-        const tx = await game.connect(deployer).advanceGame();
+        const tx = await game.connect(deployer).mineFlip();
         const events = await getAdvanceEvents(tx, advanceModule);
         for (const e of events) allStages.push(Number(e.args.stage));
       }

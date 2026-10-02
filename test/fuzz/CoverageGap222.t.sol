@@ -33,13 +33,13 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     // ====================================================================
-    //  SECTION A: DegenerusGame.sol — purchase* / claim* / advanceGame
+    //  SECTION A: DegenerusGame.sol — purchase* / claim* / mineFlip
     //             lifecycle tests. One lifecycle test exercises many
     //             CRITICAL_GAP rows in a single natural caller chain.
     // ====================================================================
 
-    /// @notice Drive a full purchase -> advanceGame() cycle.
-    /// @dev Closes gaps: game.purchase, game.advanceGame, game.currentDayView
+    /// @notice Drive a full purchase -> mineFlip() cycle.
+    /// @dev Closes gaps: game.purchase, game.mineFlip, game.currentDayView
     ///      (EXEMPT), game.purchaseInfo (EXEMPT), wireVrf (admin-path).
     ///      D-14 target: the purchase flow takes the DirectEth branch
     ///      of MintPaymentKind dispatch inside _purchaseFor.
@@ -69,9 +69,9 @@ contract CoverageGap222 is DeployProtocol {
             // Purchase may revert during setup window — acceptable.
         }
 
-        // Advance to next day and try advanceGame.
+        // Advance to next day and try mineFlip.
         vm.warp(block.timestamp + 1 days);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         ok;
 
         // Observable effect: game contract is still live.

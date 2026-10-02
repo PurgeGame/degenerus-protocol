@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {JackpotBattleFieldLib} from "../libraries/JackpotBattleFieldLib.sol";
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+
+import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol";
 
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
@@ -34,7 +38,7 @@ import {PackedTicketSampleLib} from "../libraries/PackedTicketSampleLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
-import {IDegenerusGameWhaleModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 
 /// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
@@ -43,8 +47,6 @@ interface IWwxrpMintPrize {
     /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
     function mintPrize(address to, uint256 amount) external;
 }
-
-import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
 
 /**
  * @title DegenerusGameJackpotModule
@@ -76,7 +78,7 @@ import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
  *      - EntropyLib.hash2 provides full-diffusion keccak derivation for sub-selections.
  *      - Winner selection intentionally allows duplicates (more tickets = more chances).
  */
-contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
+contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -135,8 +137,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
 
     /// @dev `JackpotWhalePassWin.source` values.
     // Source 1 was the retired solo-only half-pass conversion.
-    uint8 private constant WHALE_PASS_SRC_BAF_DIRECT = 2;
-    uint8 private constant WHALE_PASS_SRC_AWARD_TICKETS = 3;
     // Sources 4 (early bird) and 5 (quadrant conversion) are emitted by WhaleModule.
 
     /// @dev Golden ticket armed: the main board rolled 4 gold colors and the solo bucket
@@ -187,7 +187,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // -------------------------------------------------------------------------
 
     /// @dev Small-lootbox threshold for the jackpot lootbox portion split.
-    uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
 
     /// @dev Golden-ticket consolation when the armed ticket's resolving main board shows 0 golds: 100 WWXRP.
     uint256 private constant GOLDEN_TICKET_WWXRP = 100 ether;
@@ -201,7 +200,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @dev Sentinel traitId stamped on BAF jackpot payout events so indexers can
     ///      distinguish BAF wins from trait-bucketed daily/coin wins. Sits above
     ///      uint8.max (255) so it never collides with a real trait id.
-    uint16 private constant BAF_TRAIT_SENTINEL = 420;
 
     // -------------------------------------------------------------------------
     // Constants — Share Distribution (Basis Points)
@@ -224,11 +222,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // Constants — Entropy Salts
     // -------------------------------------------------------------------------
 
-    uint256 private constant BAF_TICKET_TAG = 0x4261665469636b6574; // "BafTicket"
     bytes32 private constant HERO_SYMBOL_TAG = keccak256("degenerus.jackpot.hero-symbol");
 
     /// @dev Domain separator for per-pull level sampling in level 1's trait-matched FLIP draw.
-    bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");
 
     /// @dev Domain separator for rolling current-pool daily jackpot percentage.
     bytes32 private constant DAILY_CURRENT_BPS_TAG =
@@ -271,23 +267,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint16 private constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
 
     /// @dev Domain separator for the daily future jackpot battle's entropy derivation.
-    bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
 
     /// @dev Most awarded entries one draw call collects: the chunk the battle accepts.
-    uint256 private constant JACKPOT_BATTLE_ENTRANTS = JackpotBattleFieldLib.MAX_CHUNK;
-
-    /// @dev Work units each settle call gives the jackpot battle's table resolver.
-    uint64 private constant JACKPOT_BATTLE_SETTLE_UNITS = 1_500;
-
-    /// @dev What the call that seals the field charges its own draw, in the same walk units, before
-    ///      it settles on the rest: the level snapshot, board batch, seal and comp credit, then each
-    ///      drawn entry's reads, write and log. Rounded up from ~496k plus ~44k per entry measured
-    ///      at a full chunk, where the dedupe scan is dearest.
-    uint256 private constant JACKPOT_DRAW_BASE_UNITS = 110;
-    uint256 private constant JACKPOT_DRAW_ENTRY_UNITS = 10;
 
     /// @dev Most winners of level 1's trait-matched FLIP draw, each paid one equal share.
-    uint256 private constant COIN_DRAW_SHARES = 50;
 
     /// @dev Daily: 32 per non-solo quadrant. Empty buckets redistribute the cap in whole
     ///      groups of eight.
@@ -306,8 +289,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     uint256 private constant ENTRIES_PER_TICKET = 4;
 
     /// @dev Daily jackpot max scale (6.36x) producing bucket counts 152/104/48/1 at 200+ ETH.
-    ///      All 305 winners (152 + 104 + 48 + 1) are paid in a single call.
+    ///      The four quadrants can span calls; their original payout order is fixed.
     uint32 private constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
+
+    error JackpotWorkMismatch();
+
+    uint256 private constant JACKPOT_SETUP_GAS = GasBounds.JACKPOT_SETUP_GAS;
+    uint256 private constant JACKPOT_PLAN_GAS = GasBounds.JACKPOT_PLAN_GAS;
+    uint256 private constant JACKPOT_FINAL_GAS = GasBounds.JACKPOT_FINAL_GAS;
+    uint256 private constant JACKPOT_TAIL_GAS = GasBounds.JACKPOT_TAIL_GAS;
+    uint256 private constant ETH_WINNER_GAS_MAX = GasBounds.JACKPOT_ETH_WINNER_GAS_MAX;
+    uint256 private constant TICKET_DRAW_GAS_MAX = GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX;
+    uint256 private constant TICKET_AWARD_GAS_MAX = GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX;
 
     // =========================================================================
     // External Entry Points (delegatecall targets)
@@ -321,52 +314,41 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param targetLvl Level to sample winners from (typically lvl+1).
     /// @param rngWord VRF entropy seed.
     /// @return paidWei Total ETH distributed (callers deduct from source pool).
-    function runTerminalJackpot(
-        uint256 poolWei,
-        uint24 targetLvl,
-        uint256 rngWord
-    ) external returns (uint256 paidWei) {
+    function runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord)
+        external returns (uint256 paidWei)
+    {
+        (, paidWei) = _runTerminalJackpot(poolWei, targetLvl, rngWord, MineFlipGas.available());
+    }
+
+    function runTerminalJackpotWork(uint256 poolWei, uint24 targetLvl, uint256 rngWord, uint256 allowance)
+        external returns (MineFlipGas.Result memory result, uint256 paidDelta)
+    {
+        return _runTerminalJackpot(poolWei, targetLvl, rngWord, allowance);
+    }
+
+    function _runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord, uint256 allowance)
+        private returns (MineFlipGas.Result memory result, uint256 paidDelta)
+    {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-
-        // The gold rush never arms, resolves, or bans on a terminal board.
-        uint32 winningTraitsPacked = _rollBoard(rngWord, _NO_QUADRANT_BAN);
-        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
-            winningTraitsPacked
-        );
-        uint256 effectiveEntropy = _soloAdjustedEntropy(
-            traitIds,
-            EntropyLib.hash2(rngWord, targetLvl)
-        );
-
-        // The winner geometry is always the full-size one, never scaled by the pot: the pot is
-        // read from the balance, which anyone can raise once the terminal word is public, and
-        // a pot-scaled count would let that choose how many winners are drawn.
-        uint16[4] memory bucketCounts = JackpotBucketLib.bucketCountsForPool(
-            poolWei == 0 ? 0 : JackpotBucketLib.JACKPOT_SCALE_SECOND_WEI,
-            effectiveEntropy,
-            DAILY_JACKPOT_SCALE_MAX_BPS
-        );
-        uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
-            FINAL_DAY_SHARES_PACKED,
-            uint8(effectiveEntropy & 3)
-        );
-
-        paidWei = _processDailyEth(
-            targetLvl,
-            poolWei,
-            effectiveEntropy,
-            traitIds,
-            shareBps,
-            bucketCounts,
-            false, // not jackpot phase
-            false, // no solo bucket, golden ticket never arms here
-            // Exact shares, no ticket-unit rounding: terminal winners are paid in ETH, and the
-            // pot is read from the balance after the terminal word is public, so rounding to a
-            // unit would let a forced-ETH or stETH nudge swing a whole unit between buckets.
-            // Zero, written as a runtime value (targetLvl is a uint24, so the shift is always 0):
-            // a literal would let the optimizer clone the whole helper for this one call site.
-            uint256(targetLvl) >> 24
-        );
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        JackpotWork storage work = jackpotWork;
+        if (work.kind == 0 || (work.kind == 3 && work.quadrant == 255)) {
+            if (!MineFlipGas.canRun(meter, JACKPOT_SETUP_GAS, JACKPOT_TAIL_GAS)) return (result, 0);
+            if (work.kind == 0) {
+                work.kind = 3;
+                work.lvl = targetLvl;
+                work.budget = uint128(poolWei);
+            } else if (work.lvl != targetLvl) revert JackpotWorkMismatch();
+            work.quadrant = 0;
+            work.traits = _rollBoard(rngWord, _NO_QUADRANT_BAN);
+            work.finalDay = true;
+            result.progressed = true;
+        } else if (work.kind != 3 || work.lvl != targetLvl) revert JackpotWorkMismatch();
+        uint256 beforePaid = work.paid;
+        _resumeEth(work, rngWord, meter, result);
+        paidDelta = uint256(work.paid) - beforePaid;
+        if (result.done) delete jackpotWork;
+        MineFlipGas.finish(meter);
     }
 
     /// @notice Pays purchase phase jackpots OR rolling daily jackpots at level end.
@@ -391,243 +373,145 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
     /// @param lvl Current game level.
     /// @param randWord VRF entropy for winner selection and trait derivation.
-    function payDailyJackpot(
-        bool isJackpotPhase,
-        uint24 lvl,
-        uint256 randWord
-    ) external {
-        // The day being SEALED, not the wall day: dailyIdx has not advanced yet on this
-        // path, so dailyIdx + 1 is the logical day this word resolves. The two diverge
-        // when processing straddles the 22:57 break or the word lands a day late — the
-        // advance clamps to the logical day, and a wall-day key here would write the foil
-        // board (and the traits event) under the WRONG day, stranding that day's claims.
-        uint24 questDay = dailyIdx + 1;
-        uint32 winningTraitsPacked = _rollMainTraits(randWord);
+    function payDailyJackpot(bool isJackpotPhase, uint24 lvl, uint256 randWord) external {
+        _runDailyJackpot(isJackpotPhase, lvl, randWord, MineFlipGas.available());
+    }
 
-        // An armed golden ticket resolves against the first main board rolled after the
-        // arm draw — this draw, whenever dailyIdx has advanced past the arm draw's
-        // index. Runs before any pool math so the ladder's futurePrizePool debit is
-        // visible to every later read in this call.
-        {
-            uint256 g = goldenTicket;
-            if (
-                (g >> 189) & 1 != 0 &&
-                dailyIdx > uint24((g >> 165) & 0xFFFFFF)
-            ) {
-                _resolveGoldenTicket(g, winningTraitsPacked, lvl);
+    function runDailyJackpot(bool isJackpotPhase, uint24 lvl, uint256 randWord, uint256 allowance)
+        external returns (MineFlipGas.Result memory result)
+    {
+        return _runDailyJackpot(isJackpotPhase, lvl, randWord, allowance);
+    }
+
+    function _runDailyJackpot(bool isJackpotPhase, uint24 lvl, uint256 randWord, uint256 allowance)
+        private returns (MineFlipGas.Result memory result)
+    {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        JackpotWork storage work = jackpotWork;
+        uint8 kind = isJackpotPhase ? 2 : 1;
+        if (work.kind == 0) {
+            if (!MineFlipGas.canRun(meter, JACKPOT_SETUP_GAS, JACKPOT_TAIL_GAS)) return result;
+            _startDailyEth(work, kind, lvl, randWord);
+            result.progressed = true;
+        } else if (work.kind != kind || work.lvl != lvl) revert JackpotWorkMismatch();
+        _resumeEth(work, randWord, meter, result);
+        if (result.done) {
+            if (isJackpotPhase) {
+                if (work.finalDay) {
+                    uint256 unpaid = uint256(work.budget) - work.paid;
+                    _setCurrentPrizePool(_getCurrentPrizePool() - unpaid);
+                    if (unpaid != 0) _addFuturePrizePool(unpaid);
+                }
+                _emitDailyWinningTraits(dailyIdx + 1, work.traits, lvl, randWord);
+                dailyJackpotCoinTicketsPending = true;
+            }
+            delete jackpotWork;
+        }
+        MineFlipGas.finish(meter);
+    }
+
+    /// @dev Price once. Every later quadrant debits its source and credits its
+    ///      liability in the same call, including across transaction boundaries.
+    function _startDailyEth(JackpotWork storage work, uint8 kind, uint24 lvl, uint256 word) private {
+        work.kind = kind;
+        work.lvl = lvl;
+        uint32 traits = _rollMainTraits(word);
+        work.traits = traits;
+        uint256 g = goldenTicket;
+        if ((g >> 189) & 1 != 0 && dailyIdx > uint24((g >> 165) & 0xFFFFFF)) {
+            _resolveGoldenTicket(g, traits, lvl);
+        }
+        uint256 ticketBudget;
+        uint256 budget;
+        uint256 unit;
+        if (kind == 2) {
+            uint8 counter = jackpotCounter;
+            bool finalDay = _isFinalJackpotDay(counter, jackpotFlags);
+            work.finalDay = finalDay;
+            uint256 current = _getCurrentPrizePool();
+            uint256 bps = finalDay ? 10_000 : _dailyCurrentPoolBps(counter, word);
+            if (!finalDay && counter != 0) bps *= 2;
+            budget = current * bps / 10_000;
+            ticketBudget = budget / 5;
+            budget -= ticketBudget;
+            uint256 entries;
+            (entries, unit) = _budgetToEntries(ticketBudget, lvl + 1);
+            _setCurrentPrizePool(current - ticketBudget);
+            _addNextPrizePool(ticketBudget);
+            dailyTicketBudgetsPacked = entries << 8;
+            if (counter == 0) dailyTicketBudgetsPacked |= _priceEarlyBirdTickets(lvl + 1) << 144;
+        } else {
+            _emitDailyWinningTraits(dailyIdx + 1, traits, lvl, word);
+            uint256 slice = _getFuturePrizePool() / 25;
+            ticketBudget = slice * PURCHASE_REWARD_JACKPOT_TICKET_BPS / 10_000;
+            uint256 insurance = slice * PURCHASE_INSURANCE_BPS / 10_000;
+            budget = slice - ticketBudget - insurance;
+            unit = PriceLookupLib.priceForLevel(lvl + 1) >> 2;
+            if (slice != 0) {
+                (uint128 next, uint128 future) = _getPrizePools();
+                _setPrizePools(next + uint128(ticketBudget), future - uint128(ticketBudget + insurance));
+                if (insurance != 0) yieldAccumulator += insurance;
+            }
+            if (ticketBudget != 0) {
+                (uint256 entries,) = _budgetToEntries(ticketBudget / 2, lvl);
+                if (entries >= ENTRIES_PER_TICKET) dailyTicketBudgetsPacked = entries << 208;
             }
         }
+        work.budget = uint128(budget);
+        work.unit = uint128(unit);
+    }
 
-        if (isJackpotPhase) {
-            uint256 dailyEthBudget;
-            uint256 dailyUnit; // ticket unit from _budgetToEntries, threaded into _processDailyEth
-            bool isFinalPhysicalDay;
-            uint256 curPool;
-            {
-                uint8 counter = jackpotCounter;
-                isFinalPhysicalDay = _isFinalJackpotDay(counter, jackpotFlags);
-                bool isEarlyBirdDay = (counter == 0);
-                curPool = _getCurrentPrizePool();
-                uint16 dailyBps;
-                if (isFinalPhysicalDay) {
-                    dailyBps = 10_000; // Final physical day: 100% of remaining pool
-                } else {
-                    dailyBps = _dailyCurrentPoolBps(counter, randWord);
-                    // The standard schedule pays a doubled slice on its middle day.
-                    if (counter != 0) {
-                        dailyBps *= 2;
-                    }
-                }
-                uint256 budget = (curPool * dailyBps) / 10_000;
-
-                // Gas optimization: 20% = 1/5 (cheaper than * 2000 / 10000)
-                uint256 dailyTicketBudget = budget / 5;
-                // Jackpot phase: the currentPrizePool floor (>= 10 ETH) dwarfs the ticket price, so
-                // budget and dailyTicketBudget are always nonzero — no zero-guard needed.
-                budget -= dailyTicketBudget;
-
-                // Calculate daily ticket units (distributed in Phase 2 via payDailyJackpotCoinAndTickets)
-                uint256 dailyEntries;
-                (dailyEntries, dailyUnit) = _budgetToEntries(
-                    dailyTicketBudget,
-                    lvl + 1
-                );
-                // dailyEntries is always >= 1 in jackpot phase (the currentPrizePool floor dwarfs
-                // the ticket price), so the daily-ticket credit is unconditional: the budget moves
-                // current -> next to back the tickets Phase 2 queues. curPool is still exact:
-                // nothing above writes currentPrizePool.
-                curPool -= dailyTicketBudget;
-                _setCurrentPrizePool(curPool);
-                _addNextPrizePool(dailyTicketBudget);
-
-                // Store ticket units for Phase 2 distribution (dailyEntries at bits 8..71). The
-                // jackpot battle's pending bit was latched at the request and has already cleared:
-                // the battle completes before the daily runs.
-                dailyTicketBudgetsPacked = dailyEntries << 8;
-
-                // Day 1 only: price the early-bird ticket jackpot (3% of futurePrizePool, moved
-                // future -> next now) and latch its entries at bits 144..207 of the same word.
-                // The winners (up to another 128) are drawn from the next advance's own stage
-                // (payEarlyBirdTickets), so the day-1 ETH leg and the early-bird leg never
-                // share a tx. Nothing since the golden-ticket resolve writes the future pool,
-                // so the 3% is priced off the same basis it always was, ahead of the ETH leg.
-                if (isEarlyBirdDay) {
-                    dailyTicketBudgetsPacked |= _priceEarlyBirdTickets(lvl + 1) << 144;
-                }
-
-                dailyEthBudget = budget;
-            }
-
-            uint8[4] memory traitIdsDaily = JackpotBucketLib
-                .unpackWinningTraits(winningTraitsPacked);
-            uint256 effectiveEntropyDaily = _soloAdjustedEntropy(
-                traitIdsDaily,
-                EntropyLib.hash2(randWord, lvl)
-            );
-            bool armGold = _allGold(traitIdsDaily);
-
-            if (dailyEthBudget != 0) {
-                uint16[4] memory bucketCountsDaily = JackpotBucketLib
-                    .bucketCountsForPool(
-                        dailyEthBudget,
-                        effectiveEntropyDaily,
-                        DAILY_JACKPOT_SCALE_MAX_BPS
-                    );
-
-                // Final physical day uses weighted shares (60/13/13/13) for the big payout;
-                // other days use equal shares (20/20/20/20).
-                uint64 sharesPacked = isFinalPhysicalDay
-                    ? FINAL_DAY_SHARES_PACKED
-                    : DAILY_JACKPOT_SHARES_PACKED;
-                uint16[4] memory shareBpsDaily = JackpotBucketLib
-                    .shareBpsByBucket(sharesPacked, uint8(effectiveEntropyDaily & 3));
-
-                uint256 paidDailyEth = _processDailyEth(
-                    lvl,
-                    dailyEthBudget,
-                    effectiveEntropyDaily,
-                    traitIdsDaily,
-                    shareBpsDaily,
-                    bucketCountsDaily,
-                    true, // jackpot phase: each quadrant can convert 25% to full passes
-                    armGold,
-                    dailyUnit
-                );
-                if (isFinalPhysicalDay) {
-                    uint256 unpaidDailyEth = dailyEthBudget - paidDailyEth;
-                    // curPool tracks the live value: nothing since the ticket
-                    // deduction writes currentPrizePool.
-                    _setCurrentPrizePool(curPool - dailyEthBudget);
-                    if (unpaidDailyEth != 0) {
-                        _addFuturePrizePool(unpaidDailyEth);
-                    }
-                } else {
-                    _setCurrentPrizePool(curPool - paidDailyEth);
-                }
-            }
-
-            _emitDailyWinningTraits(questDay, winningTraitsPacked, lvl, randWord);
-
-            dailyJackpotCoinTicketsPending = true;
-            return;
+    /// @dev The next quadrant is always the original largest-first quadrant.
+    ///      Winner selection, pass conversion and gold arming remain indivisible.
+    function _resumeEth(JackpotWork storage work, uint256 word, MineFlipGas.Meter memory meter,
+        MineFlipGas.Result memory result) private
+    {
+        if (!MineFlipGas.canRun(meter, JACKPOT_PLAN_GAS, JACKPOT_TAIL_GAS)) return;
+        uint8[4] memory traits = JackpotBucketLib.unpackWinningTraits(work.traits);
+        uint256 entropy = _soloAdjustedEntropy(traits, EntropyLib.hash2(word, work.lvl));
+        uint16[4] memory counts;
+        if (work.kind == 1) {
+            uint16[4] memory base = [uint16(24), 16, 8, 1];
+            for (uint8 q; q < 4; ++q) counts[q] = base[(q + uint8(entropy & 3)) & 3];
+        } else {
+            uint256 sizing = work.kind == 3
+                ? (work.budget == 0 ? 0 : JackpotBucketLib.JACKPOT_SCALE_SECOND_WEI)
+                : work.budget;
+            counts = JackpotBucketLib.bucketCountsForPool(sizing, entropy, DAILY_JACKPOT_SCALE_MAX_BPS);
         }
-
-        // Purchase phase path - ETH and ticket legs
-        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(winningTraitsPacked);
-        uint256 effectiveEntropy = _soloAdjustedEntropy(
-            traitIds,
-            EntropyLib.hash2(randWord, lvl)
+        uint16[4] memory bps = JackpotBucketLib.shareBpsByBucket(
+            work.finalDay ? FINAL_DAY_SHARES_PACKED : DAILY_JACKPOT_SHARES_PACKED, uint8(entropy & 3)
         );
-
-        _emitDailyWinningTraits(questDay, winningTraitsPacked, lvl, randWord);
-
-        // Daily 4% drip from futurePrizePool every ordinary purchase day.
-        uint256 futureBal = _getFuturePrizePool();
-        uint256 ethDaySlice = futureBal / 25;
-
-        uint256 ethPool = ethDaySlice;
-        uint256 ticketLegBudget;
-        uint256 insuranceCut;
-        if (ethPool != 0) {
-            // Both legs are sized off the whole slice, so the split is 75/23/2 and the
-            // ETH leg keeps the two flooring remainders. Deducting before bucket sizing
-            // leaves the day's whole-granule rounding working off the payable figure.
-            ticketLegBudget = (ethPool * PURCHASE_REWARD_JACKPOT_TICKET_BPS) / 10_000;
-            insuranceCut = (ethPool * PURCHASE_INSURANCE_BPS) / 10_000;
-            ethPool -= ticketLegBudget + insuranceCut;
-        }
-
-        // Fixed bucket counts [24, 16, 8, 1] = 49 winners, rotated by entropy.
-        uint256 paidEth;
-        if (ethPool != 0) {
-            uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
-                DAILY_JACKPOT_SHARES_PACKED,
-                uint8(effectiveEntropy & 3)
-            );
-            uint16[4] memory bucketCounts;
-            {
-                uint16[4] memory base;
-                base[0] = 24;
-                base[1] = 16;
-                base[2] = 8;
-                base[3] = 1;
-                uint8 offset = uint8(effectiveEntropy & 3);
-                for (uint8 i; i < 4; ) {
-                    bucketCounts[i] = base[(i + offset) & 3];
-                    unchecked {
-                        ++i;
-                    }
+        uint8 remainder = JackpotBucketLib.soloBucketIndex(entropy);
+        uint256[4] memory shares = JackpotBucketLib.bucketShares(work.budget, bps, counts, remainder, work.unit);
+        uint8[4] memory order = JackpotBucketLib.bucketOrderLargestFirst(counts);
+        bool jackpotPhase = work.kind == 2;
+        bool armGold = jackpotPhase && _allGold(traits);
+        uint8 cursor = work.quadrant;
+        while (cursor < 4) {
+            uint8 q = order[cursor];
+            uint256 bound = shares[q] == 0 || counts[q] == 0
+                ? 10_000 : 160_000 + uint256(counts[q]) * ETH_WINNER_GAS_MAX;
+            if (!MineFlipGas.canRun(meter, bound, JACKPOT_TAIL_GAS)) break;
+            if (shares[q] != 0 && counts[q] != 0) {
+                (uint256 paid, uint256 liability) = _processBucket(
+                    work.lvl, traits[q], q, counts[q], shares[q], EntropyLib.hash2(entropy, q),
+                    jackpotPhase, armGold && q == remainder
+                );
+                work.paid += uint128(paid);
+                if (liability != 0) claimablePool += uint128(liability);
+                if (jackpotPhase) _setCurrentPrizePool(_getCurrentPrizePool() - paid);
+                else if (work.kind == 1 && paid != 0) {
+                    (uint128 next, uint128 future) = _getPrizePools();
+                    _setPrizePools(next, future - uint128(paid));
                 }
             }
-            paidEth = _processDailyEth(
-                lvl,
-                ethPool,
-                effectiveEntropy,
-                traitIds,
-                shareBps,
-                bucketCounts,
-                false, // not jackpot phase
-                false, // no solo bucket, golden ticket never arms here
-                PriceLookupLib.priceForLevel(lvl + 1) >> 2
-            );
+            ++cursor;
+            ++result.rewardBasis;
+            result.progressed = true;
         }
-
-        // Single packed-slot RMW folds every leg: credit the ticket leg's backing to nextPrizePool
-        // and debit the future pool (drip consumed + ETH paid + insurance skim). ticketLegBudget and
-        // insuranceCut are nonzero only when ethDaySlice is, so both ride this write;
-        // the deferred ticket stage does not credit next itself. futureBal is still exact —
-        // nothing above writes prizePoolsPacked (purchase-phase distribution never reaches the solo
-        // whale-pass leg). The ticket leg, the skim and the ETH leg partition ethDaySlice exactly and
-        // paidEth never exceeds the ETH leg, so the three debits sum to at most the 4% slice and the
-        // subtraction cannot underflow. The accumulator write touches its own slot, leaving the
-        // packed read above exact.
-        if (ethDaySlice != 0) {
-            (uint128 nextBal, uint128 futBal) = _getPrizePools();
-            _setPrizePools(
-                nextBal + uint128(ticketLegBudget),
-                futBal -
-                    uint128(ticketLegBudget) -
-                    uint128(paidEth) -
-                    uint128(insuranceCut)
-            );
-            if (insuranceCut != 0) {
-                yieldAccumulator += insuranceCut;
-            }
-        }
-
-        // Price the ticket leg here and pay it from its own advance stage
-        // (payPurchaseDailyTickets): the 120-winner cold draw is the heaviest block of
-        // the purchase daily, so it never shares a transaction with the ETH and FLIP
-        // legs. The packed-slot write above already moved the whole budget to
-        // nextPrizePool; only the entries it backs wait in the top field of
-        // dailyTicketBudgetsPacked. A 50% conversion keeps the pool/ticket backing
-        // ratio. The day stays locked until that stage seals it.
-        if (ticketLegBudget != 0) {
-            (uint256 entries, ) = _budgetToEntries(ticketLegBudget / 2, lvl);
-            // Awards are whole tickets, so a leg under one ticket pays nobody: seal now
-            // rather than spend a crank on an empty stage.
-            if (entries >= ENTRIES_PER_TICKET) dailyTicketBudgetsPacked = entries << 208;
-        }
+        if (cursor != work.quadrant) work.quadrant = cursor;
+        result.done = cursor == 4;
     }
 
     /// @notice The ticket leg of the purchase-phase daily, from its own advance stage.
@@ -640,22 +524,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      stages. Clears the field it consumes; the caller seals the day.
     /// @param randWord VRF entropy (the day's recorded word).
     function payPurchaseDailyTickets(uint256 randWord) external {
-        uint256 packed = dailyTicketBudgetsPacked;
-        uint256 entries = packed >> 208;
-        uint24 lvl = level + 1;
-        (, uint32 winningTraitsPacked, ) = _foilDrawFor(uint256(dailyIdx) + 1);
-        uint256 entropy = EntropyLib.hash2(randWord, lvl);
-        _distributeTicketJackpot(
-            lvl,
-            lvl,
-            winningTraitsPacked,
-            entries,
-            entropy,
-            PURCHASE_PHASE_TICKET_MAX_WINNERS,
-            242,
-            entropy // the ETH leg's own entropy picks the solo quadrant
-        );
-        dailyTicketBudgetsPacked = packed & ((uint256(1) << 208) - 1);
+        _runTicketWork(4, randWord, MineFlipGas.available());
+    }
+
+    function runPurchaseDailyTickets(uint256 word, uint256 allowance)
+        external returns (MineFlipGas.Result memory)
+    {
+        return _runTicketWork(4, word, allowance);
     }
 
     /// @notice Phase 2 of the daily jackpot: the day's own ticket leg.
@@ -670,36 +545,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      `_rollMainTraits`).
     /// @param randWord VRF entropy (the day's recorded word, the one Phase 1 used).
     function payDailyJackpotCoinAndTickets(uint256 randWord) external {
-        if (!dailyJackpotCoinTicketsPending) return;
+        _runTicketWork(6, randWord, MineFlipGas.available());
+    }
 
-        uint256 dailyEntries = uint64(dailyTicketBudgetsPacked >> 8);
-        uint24 lvl = level;
-        uint32 mainTraitsPacked = _rollMainTraits(randWord);
-
-        // --- Ticket Distribution ---
-        // Distribute daily tickets to current level trait winners (main traits)
-        if (dailyEntries != 0) {
-            uint256 entropy = EntropyLib.hash2(randWord, lvl);
-            _distributeTicketJackpot(
-                lvl,
-                lvl + 1,
-                mainTraitsPacked,
-                dailyEntries,
-                entropy,
-                TICKET_JACKPOT_MAX_WINNERS,
-                241,
-                entropy // the ETH leg's own entropy picks the solo quadrant
-            );
-        }
-
-        // Complete the daily jackpot cycle: the counter advances in the tx that seals the day
-        // or ends the level, so the ticket-routing predicate (which keys off the counter under
-        // the lock) never sees it ahead of its seal.
-        unchecked {
-            jackpotCounter += 1;
-        }
-        dailyJackpotCoinTicketsPending = false;
-        dailyTicketBudgetsPacked = 0;
+    function runDailyJackpotTickets(uint256 word, uint256 allowance)
+        external returns (MineFlipGas.Result memory)
+    {
+        return _runTicketWork(6, word, allowance);
     }
 
     /// @dev Prices the early-bird ticket jackpot from the unified future pool: the full 3%
@@ -753,33 +605,129 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     ///      coin+tickets stages. The lock held since the request keeps every input frozen.
     /// @param randWord VRF entropy (the day's recorded word).
     function payEarlyBirdTickets(uint256 randWord) external {
-        uint256 packed = dailyTicketBudgetsPacked;
-        uint24 lvl = level + 1;
-        uint32 traits = _rollMainTraits(randWord);
-        uint256 soloEntropy = EntropyLib.hash2(randWord, level);
-        _distributeTicketJackpot(
-            lvl,
-            lvl,
-            traits,
-            uint64(packed >> 144),
-            EntropyLib.hash2(randWord, lvl),
-            EARLY_BIRD_MAX_WINNERS,
-            239,
-            soloEntropy
-        );
-        dailyTicketBudgetsPacked = packed & ((uint256(1) << 144) - 1);
-        uint256 halfPasses = earlyBirdWhalePasses;
-        if (halfPasses != 0) {
-            earlyBirdWhalePasses = 0;
-            _awardWhalePass(
-                lvl,
-                traits,
-                halfPasses,
-                randWord,
-                true,
-                _pickSoloQuadrant(JackpotBucketLib.unpackWinningTraits(traits), soloEntropy)
-            );
+        _runTicketWork(5, randWord, MineFlipGas.available());
+    }
+
+    function runEarlyBirdTickets(uint256 word, uint256 allowance)
+        external returns (MineFlipGas.Result memory)
+    {
+        return _runTicketWork(5, word, allowance);
+    }
+
+    struct TicketWorkPlan {
+        uint24 sourceLvl;
+        uint24 queueLvl;
+        uint8 salt;
+        uint256 entropy;
+        uint256 entriesEach;
+        uint8[4] traits;
+        uint16[4] counts;
+        uint256[4] lens;
+        address[4] deities;
+    }
+
+    function _runTicketWork(uint8 kind, uint256 word, uint256 allowance)
+        private returns (MineFlipGas.Result memory result)
+    {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        JackpotWork storage work = jackpotWork;
+        if (work.kind == 0) {
+            if (kind == 6 && !dailyJackpotCoinTicketsPending) { result.done = true; return result; }
+            if (!MineFlipGas.canRun(meter, JACKPOT_SETUP_GAS, JACKPOT_TAIL_GAS)) return result;
+            work.kind = kind;
+            work.lvl = kind == 6 ? level : level + 1;
+            uint256 packed = dailyTicketBudgetsPacked;
+            work.budget = kind == 4 ? uint128(packed >> 208)
+                : uint128(uint64(packed >> (kind == 5 ? 144 : 8)));
+            if (kind == 4) (, work.traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
+            else work.traits = _rollMainTraits(word);
+            result.progressed = true;
+        } else if (work.kind != kind) revert JackpotWorkMismatch();
+        if (MineFlipGas.canRun(meter, JACKPOT_PLAN_GAS, JACKPOT_TAIL_GAS)) {
+            TicketWorkPlan memory plan = _ticketWorkPlan(work, word);
+            _resumeTicketWork(work, plan, meter, result);
         }
+        if (work.quadrant == 4 && MineFlipGas.canRun(meter, JACKPOT_FINAL_GAS, JACKPOT_TAIL_GAS)) {
+            if (kind == 4) dailyTicketBudgetsPacked &= (uint256(1) << 208) - 1;
+            else if (kind == 5) {
+                dailyTicketBudgetsPacked &= (uint256(1) << 144) - 1;
+                uint256 halfPasses = earlyBirdWhalePasses;
+                if (halfPasses != 0) {
+                    earlyBirdWhalePasses = 0;
+                    _awardWhalePass(work.lvl, work.traits, halfPasses, word, true,
+                        _pickSoloQuadrant(JackpotBucketLib.unpackWinningTraits(work.traits), EntropyLib.hash2(word, level)));
+                }
+            } else {
+                unchecked { ++jackpotCounter; }
+                dailyJackpotCoinTicketsPending = false;
+                dailyTicketBudgetsPacked = 0;
+            }
+            delete jackpotWork;
+            result.progressed = true;
+            result.done = true;
+        }
+        MineFlipGas.finish(meter);
+    }
+
+    function _ticketWorkPlan(JackpotWork storage work, uint256 word)
+        private view returns (TicketWorkPlan memory plan)
+    {
+        plan.sourceLvl = work.lvl;
+        plan.queueLvl = work.kind == 6 ? work.lvl + 1 : work.lvl;
+        plan.salt = work.kind == 4 ? 242 : work.kind == 5 ? 239 : 241;
+        plan.entropy = EntropyLib.hash2(word, work.lvl);
+        plan.traits = JackpotBucketLib.unpackWinningTraits(work.traits);
+        uint256 tickets = work.budget / ENTRIES_PER_TICKET;
+        if (tickets == 0) return plan;
+        uint16 cap = work.kind == 4 ? PURCHASE_PHASE_TICKET_MAX_WINNERS
+            : work.kind == 5 ? EARLY_BIRD_MAX_WINNERS : TICKET_JACKPOT_MAX_WINNERS;
+        if (tickets < cap) cap = uint16(tickets);
+        if (cap >= 8) cap &= ~uint16(7);
+        uint256 soloEntropy = work.kind == 5 ? EntropyLib.hash2(word, level) : plan.entropy;
+        (plan.counts,, plan.lens, plan.deities) = _computeBucketCounts(
+            work.lvl, plan.traits, cap, plan.entropy, _pickSoloQuadrant(plan.traits, soloEntropy)
+        );
+        plan.entriesEach = (tickets / cap) * ENTRIES_PER_TICKET;
+    }
+
+    /// @dev Regenerating the frozen source draw has no side effects. Awarded
+    ///      tickets only enter a queue; they never mutate these source buckets.
+    function _resumeTicketWork(JackpotWork storage work, TicketWorkPlan memory plan,
+        MineFlipGas.Meter memory meter, MineFlipGas.Result memory result) private
+    {
+        uint8 q = work.quadrant;
+        while (q < 4) {
+            uint16 count = plan.counts[q];
+            if (count == 0) {
+                if (!MineFlipGas.canRun(meter, 10_000, JACKPOT_TAIL_GAS)) break;
+                ++q;
+                result.progressed = true;
+                continue;
+            }
+            uint256 drawBound = 50_000 + uint256(count) * TICKET_DRAW_GAS_MAX;
+            if (!MineFlipGas.canRun(meter, drawBound + TICKET_AWARD_GAS_MAX, JACKPOT_TAIL_GAS)) break;
+            (address[] memory winners, uint256[] memory indexes) = _randTraitTicket(
+                plan.sourceLvl, EntropyLib.hash2(plan.entropy, q), plan.traits[q], uint8(count),
+                uint8(plan.salt + q), plan.lens[q], plan.deities[q]
+            );
+            uint256 i = work.winner;
+            while (i < winners.length) {
+                if (!MineFlipGas.canRun(meter, TICKET_AWARD_GAS_MAX, JACKPOT_TAIL_GAS)) break;
+                address winner = winners[i];
+                if (winner != address(0)) {
+                    _queueEntries(winner, plan.queueLvl, uint32(plan.entriesEach), true);
+                    emit JackpotTicketWin(winner, plan.queueLvl, plan.traits[q], uint32(plan.entriesEach),
+                        plan.sourceLvl, indexes[i], false);
+                }
+                ++i;
+                ++result.rewardBasis;
+                result.progressed = true;
+            }
+            if (i != winners.length) { work.winner = uint16(i); break; }
+            work.winner = 0;
+            ++q;
+        }
+        if (q != work.quadrant) work.quadrant = q;
     }
 
     /// @dev Bounded sibling-module award. Early bird passes latched claim units and the
@@ -881,166 +829,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // =========================================================================
     // Internal Helpers — Ticket Rewards
     // =========================================================================
-
-    /// @dev Distributes ticket rewards to winners drawn from winning trait pools.
-    /// @param sourceLvl Level whose ticket queue supplies candidate winners.
-    /// @param queueLvl Level at which the awarded tickets are queued.
-    /// @param winningTraitsPacked Packed winning trait IDs for the 4 buckets.
-    /// @param entries Total entries backing this draw (converted to whole tickets).
-    /// @param entropy RNG state driving winner selection.
-    /// @param maxWinners Cap on the draw's total winner count (lowered to the whole tickets the
-    ///        budget covers, rounded down to eight, then split across active buckets).
-    /// @param saltBase Base salt for per-bucket entropy derivation.
-    /// @param soloEntropy The pre-splice value the day's ETH leg fed `_soloAdjustedEntropy`,
-    ///        so the solo pick reproduces exactly. The solo quadrant already pays the day's
-    ///        headline ETH prize to a single winner, so it is dropped from every ticket draw
-    ///        on the board: matching it means the big prize or nothing, never a consolation
-    ///        trickle.
-    function _distributeTicketJackpot(
-        uint24 sourceLvl,
-        uint24 queueLvl,
-        uint32 winningTraitsPacked,
-        uint256 entries,
-        uint256 entropy,
-        uint16 maxWinners,
-        uint8 saltBase,
-        uint256 soloEntropy
-    ) private {
-        if (entries == 0) return;
-
-        // Awards are whole tickets only. Flooring the winner count to the whole tickets
-        // the budget covers makes every winner worth at least one ticket, so no winner is
-        // ever queued a bare quarter and none is credited zero.
-        uint256 tickets = entries / ENTRIES_PER_TICKET;
-        if (tickets == 0) return;
-
-        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
-            winningTraitsPacked
-        );
-        uint16 cap = maxWinners;
-        if (tickets < cap) cap = uint16(tickets);
-        // Full packed-word draws whenever the budget funds eight winners. Tiny
-        // budgets keep their individual slots instead of losing the draw entirely.
-        if (cap >= 8) cap &= ~uint16(7);
-
-        (
-            uint16[4] memory counts,
-            uint8 activeCount,
-            uint256[4] memory lens,
-            address[4] memory deities
-        ) = _computeBucketCounts(
-                sourceLvl,
-                traitIds,
-                cap,
-                entropy,
-                _pickSoloQuadrant(traitIds, soloEntropy)
-            );
-        if (activeCount == 0) return;
-
-        // One figure for the whole distribution: every winner in every bucket takes the
-        // SAME number of whole tickets. The `tickets % cap` leftover is not queued — two
-        // winners comparing their awards must never find one short, and the event feed
-        // carries a single number per draw.
-        _distributeTicketsToBuckets(
-            sourceLvl,
-            queueLvl,
-            traitIds,
-            counts,
-            lens,
-            deities,
-            (tickets / cap) * ENTRIES_PER_TICKET,
-            entropy,
-            saltBase
-        );
-    }
-
-    /// @dev Distributes tickets across all buckets. `lens`/`deities` carry the
-    ///      per-trait bucket lengths and deity addresses read once by
-    ///      _computeBucketCounts (stable for the whole distribution: nothing on
-    ///      this path writes lvlTraitEntry or deityBySymbol).
-    function _distributeTicketsToBuckets(
-        uint24 sourceLvl,
-        uint24 queueLvl,
-        uint8[4] memory traitIds,
-        uint16[4] memory counts,
-        uint256[4] memory lens,
-        address[4] memory deities,
-        uint256 entriesEach,
-        uint256 entropy,
-        uint8 saltBase
-    ) private {
-        for (uint8 traitIdx; traitIdx < 4; ) {
-            if (counts[traitIdx] != 0) {
-                // Award size prices the result; only the draw and bucket identify its seed.
-                // Derive each bucket independently so skipping another bucket cannot reroll it.
-                uint256 bucketEntropy = EntropyLib.hash2(entropy, traitIdx);
-                _distributeTicketsToBucket(
-                    sourceLvl,
-                    queueLvl,
-                    traitIds[traitIdx],
-                    counts[traitIdx],
-                    bucketEntropy,
-                    uint8(saltBase + traitIdx),
-                    entriesEach,
-                    lens[traitIdx],
-                    deities[traitIdx]
-                );
-            }
-            unchecked {
-                ++traitIdx;
-            }
-        }
-    }
-
-    /// @dev Distributes tickets to winners in a single bucket. Every winner receives
-    ///      `entriesEach` — a whole number of tickets, identical across the whole draw.
-    function _distributeTicketsToBucket(
-        uint24 sourceLvl,
-        uint24 queueLvl,
-        uint8 traitId,
-        uint16 count,
-        uint256 entropy,
-        uint8 salt,
-        uint256 entriesEach,
-        uint256 bucketLen,
-        address deity
-    ) private {
-        (
-            address[] memory winners,
-            uint256[] memory ticketIndexes
-        ) = _randTraitTicket(
-                sourceLvl,
-                entropy,
-                traitId,
-                uint8(count),
-                salt,
-                bucketLen,
-                deity
-            );
-
-        uint256 len = winners.length;
-        for (uint256 i; i < len; ) {
-            address winner = winners[i];
-            if (winner != address(0)) {
-                _queueEntries(winner, queueLvl, uint32(entriesEach), true);
-                // ticketCount carries the entries count awarded (price/4 units;
-                // _budgetToEntries already returns entries). It is always a whole
-                // multiple of ENTRIES_PER_TICKET.
-                emit JackpotTicketWin(
-                    winner,
-                    queueLvl,
-                    traitId,
-                    uint32(entriesEach),
-                    sourceLvl,
-                    ticketIndexes[i],
-                    false
-                );
-            }
-            unchecked {
-                ++i;
-            }
-        }
-    }
 
     /// @dev Computes bucket winner counts for active trait buckets (including virtual deity entries).
     ///      Also returns each trait's bucket length and deity address so the
@@ -1298,93 +1086,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     // =========================================================================
     // Daily Jackpot ETH — Distribution
     // =========================================================================
-
-    /// @dev Unified ETH distribution across trait buckets. All buckets are paid in a single
-    ///      call. The winner total is bounded by the bucket geometry: base [24,16,8,1] at the
-    ///      DAILY_JACKPOT_SCALE_MAX_BPS ceiling gives 152 + 104 + 48 + 1 = 305, and each bucket
-    ///      is independently clamped to MAX_BUCKET_WINNERS in _processBucket.
-    ///
-    ///      JACKPOT PHASE vs PURCHASE/TERMINAL:
-    ///      - Jackpot phase (isJackpotPhase=true): each bucket converts up to 25% to whole
-    ///        whale passes for one fresh winner; the remaining budget pays the ETH draw.
-    ///      - Purchase/terminal (isJackpotPhase=false): All buckets paid uniformly.
-    ///
-    /// @param lvl The level whose winners are being paid.
-    /// @param ethPool Total ETH to distribute.
-    /// @param entropy VRF-derived random word for winner selection.
-    /// @param traitIds The 4 winning trait IDs.
-    /// @param shareBps Basis-point share for each of the 4 buckets.
-    /// @param bucketCounts Number of holders in each trait bucket.
-    /// @param isJackpotPhase True during jackpot phase (all buckets eligible for conversion).
-    /// @param armGold True when the main board rolled 4 golds — the solo bucket
-    ///        winner becomes the armed golden-ticket candidate for the next draw.
-    /// @param unit Per-winner rounding unit; non-solo bucket shares round down to a
-    ///        multiple of unit * winnerCount (0 skips rounding).
-    /// @return paidEth Total ETH actually paid out in this call.
-    function _processDailyEth(
-        uint24 lvl,
-        uint256 ethPool,
-        uint256 entropy,
-        uint8[4] memory traitIds,
-        uint16[4] memory shareBps,
-        uint16[4] memory bucketCounts,
-        bool isJackpotPhase,
-        bool armGold,
-        uint256 unit
-    ) private returns (uint256 paidEth) {
-        if (ethPool == 0) {
-            return 0;
-        }
-
-        uint8 remainderIdx = JackpotBucketLib.soloBucketIndex(entropy);
-        uint256[4] memory shares = JackpotBucketLib.bucketShares(
-            ethPool, shareBps, bucketCounts, remainderIdx, unit
-        );
-
-        uint8[4] memory order = JackpotBucketLib.bucketOrderLargestFirst(
-            bucketCounts
-        );
-
-        uint256 liabilityDelta;
-
-        for (uint8 j; j < 4; ) {
-            uint8 traitIdx = order[j];
-
-            uint16 count = bucketCounts[traitIdx];
-            uint256 share = shares[traitIdx];
-            if (count == 0 || share == 0) {
-                unchecked {
-                    ++j;
-                }
-                continue;
-            }
-
-            // Keep winner selection independent of the pool and other buckets' payouts.
-            uint256 bucketEntropy = EntropyLib.hash2(entropy, traitIdx);
-
-            uint256 paidDelta;
-            uint256 claimDelta;
-            (paidDelta, claimDelta) = _processBucket(
-                lvl,
-                traitIds[traitIdx],
-                traitIdx,
-                count,
-                share,
-                bucketEntropy,
-                isJackpotPhase,
-                armGold && isJackpotPhase && traitIdx == remainderIdx
-            );
-            paidEth += paidDelta;
-            liabilityDelta += claimDelta;
-            unchecked {
-                ++j;
-            }
-        }
-
-        if (liabilityDelta != 0) {
-            claimablePool += uint128(liabilityDelta);
-        }
-    }
 
     /// @dev Resolves and pays one trait bucket. Selects up to MAX_BUCKET_WINNERS
     ///      ticket holders for the bucket and credits each winner. Jackpot-phase
@@ -1752,33 +1453,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         }
     }
 
-    /// @dev A cursor belongs to exactly one (level, trait) bucket. It caches a packed word
-    ///      for eight outputs even when other buckets' draws are interleaved. Callers gate
-    ///      empty pools; no storage writer can change these buckets during a draw.
-    function _drawBucketEntry(
-        uint24 lvl,
-        uint8 trait,
-        uint256 len,
-        uint256 effectiveLen,
-        address deity,
-        uint256 randomWord,
-        uint256 salt,
-        uint256 pull,
-        PackedTicketSampleLib.Cursor memory cursor
-    ) private view returns (address winner, uint256 index) {
-        if (cursor.used == 0) {
-            uint256 base = PackedTicketSampleLib.begin(
-                cursor, effectiveLen, EntropyLib.hash4(randomWord, trait, salt, pull)
-            );
-            if (base < len) cursor.word = _bucketWordAtUnchecked(lvl, trait, base);
-        }
-        bool redrawn;
-        (index, redrawn) = PackedTicketSampleLib.next(cursor, effectiveLen);
-        if (index >= len) return (deity, type(uint256).max);
-        uint256 word = redrawn ? _bucketWordAtUnchecked(lvl, trait, index) : cursor.word;
-        winner = _bucketOwnerFromWordUnchecked(lvl, word, index);
-    }
-
     /// @notice Level 1's trait-matched FLIP draw over level-1 ticket holders.
     /// @dev Runs in level 1's purchase-day advance, after emitDailyWinningTraits rolled and
     ///      recorded the day's main board, which it re-rolls from the same word. Awards 0.25% of
@@ -1791,13 +1465,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param minLevel Minimum target level for the coin distribution (inclusive).
     /// @param maxLevel Maximum target level for the coin distribution (inclusive).
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external {
-        _awardDailyCoinToTraitWinners(
-            minLevel,
-            maxLevel,
-            _rollMainTraits(randWord),
-            _calcDailyCoinBudget(lvl, level),
-            randWord
-        );
+        _delegateJackpotDraw(abi.encodeWithSelector(
+            IDegenerusGameJackpotDrawModule.awardDailyFlipJackpot.selector,
+            minLevel, maxLevel, _rollMainTraits(randWord), _calcDailyCoinBudget(lvl, level), randWord
+        ));
     }
 
     /// @notice One step of the daily jackpot battle, in either phase (see _playJackpotBattle).
@@ -1806,7 +1477,21 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
     /// @param lvl The mint ceiling: the draw's levels start above it.
     /// @param randWord The day's recorded VRF word.
     function payPurchaseJackpotBattle(uint24 lvl, uint256 randWord) external {
-        _playJackpotBattle(lvl, randWord);
+        _delegateJackpotDraw(abi.encodeWithSelector(
+            IDegenerusGameJackpotDrawModule.runPurchaseJackpotBattle.selector, lvl, randWord, MineFlipGas.available()
+        ));
+    }
+
+    function runPurchaseJackpotBattle(uint24, uint256, uint256)
+        external returns (MineFlipGas.Result memory)
+    {
+        return abi.decode(_delegateJackpotDraw(msg.data), (MineFlipGas.Result));
+    }
+
+    function _delegateJackpotDraw(bytes memory callData) private returns (bytes memory data) {
+        bool ok;
+        (ok, data) = ContractAddresses.GAME_JACKPOT_DRAW_MODULE.delegatecall(callData);
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
 
     /// @notice Roll, record and emit level 1's purchase-day board without running any
@@ -1819,210 +1504,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         // The sealed day, matching payDailyJackpot: dailyIdx + 1, never the wall clock.
         _emitDailyWinningTraits(dailyIdx + 1, _rollMainTraits(randWord), 1, randWord);
-    }
-
-    /// @dev Awards a FLIP draw over trait-matched ticket holders across [minLevel, maxLevel]:
-    ///      up to COIN_DRAW_SHARES winners, one equal whole-unit share each. Each pull samples
-    ///      its own random level via keccak256(randomWord, FLIP_LEVEL_TAG, i) and rotates trait
-    ///      deterministically via i % 4. Empty (lvl', trait_i) buckets skip, and neither an
-    ///      unfilled share nor the sub-share remainder is minted, so no share can be short.
-    ///      Per-trait deity addresses are cached at loop entry. Each (level, trait) owns an
-    ///      independent eight-lane cursor.
-    function _awardDailyCoinToTraitWinners(
-        uint24 minLevel,
-        uint24 maxLevel,
-        uint32 winningTraitsPacked,
-        uint256 coinBudget,
-        uint256 randomWord
-    ) private {
-        uint256 units = coinBudget / FlipRoundLib.FLIP_ROUND_UNIT;
-        if (units == 0) return;
-        uint256 cap = units < COIN_DRAW_SHARES ? units : COIN_DRAW_SHARES;
-        uint256 amount = (units / cap) * FlipRoundLib.FLIP_ROUND_UNIT;
-
-        uint8[4] memory traitIds = JackpotBucketLib.unpackWinningTraits(
-            winningTraitsPacked
-        );
-
-        // Per-trait deity cache: deityBySymbol is level-independent, so one read per trait
-        // serves every pull of that trait.
-        address[4] memory deityCache;
-        for (uint8 t; t < 4; ) {
-            uint8 trait = traitIds[t];
-            uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
-            if (fullSymId < 32) {
-                deityCache[t] = deityBySymbol[fullSymId];
-            }
-            unchecked { ++t; }
-        }
-
-        uint24 range = maxLevel - minLevel + 1;
-        PackedTicketSampleLib.Cursor[] memory cursors = new PackedTicketSampleLib.Cursor[](uint256(range) * 4);
-
-        address[] memory players = new address[](cap);
-        uint256[] memory amounts = new uint256[](cap);
-        uint256 paid;
-        for (uint256 i; i < cap; ) {
-            uint8 traitIdx = uint8(i & 3);
-            uint8 trait_i = traitIds[traitIdx];
-            (address winner, uint24 lvlPrime, uint256 ticketIdx) = _drawCoinEntry(
-                minLevel, range, trait_i, deityCache[traitIdx], randomWord, i, cursors
-            );
-            if (winner != address(0)) {
-                emit JackpotFlipWin(winner, lvlPrime, trait_i, amount, ticketIdx);
-                players[paid] = winner;
-                amounts[paid] = amount;
-                unchecked { ++paid; }
-            }
-            unchecked { ++i; }
-        }
-        if (paid != 0) {
-            assembly ("memory-safe") {
-                mstore(players, paid)
-                mstore(amounts, paid)
-            }
-            coinflip.creditFlipBatch(players, amounts);
-        }
-    }
-
-    /// @dev Keep the existing independent level draw for each pull. Only repeated draws
-    ///      from the same (level, trait) consume further lanes of its cached random word.
-    function _drawCoinEntry(
-        uint24 minLevel,
-        uint24 range,
-        uint8 trait,
-        address deity,
-        uint256 randomWord,
-        uint256 pull,
-        PackedTicketSampleLib.Cursor[] memory cursors
-    ) private view returns (address winner, uint24 lvl, uint256 index) {
-        uint24 offset = uint24(uint256(keccak256(abi.encode(randomWord, FLIP_LEVEL_TAG, pull))) % range);
-        lvl = minLevel + offset;
-        uint256 len = _bucketLength(lvl, trait);
-        uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
-        if (effectiveLen != 0) {
-            (winner, index) = _drawBucketEntry(
-                lvl, trait, len, effectiveLen, deity, randomWord, lvl, pull,
-                cursors[uint256(offset) * 4 + (trait >> 6)]
-            );
-        }
-    }
-
-    /// @dev The daily jackpot battle over unminted future levels, played as one closed craps battle,
-    ///      one bounded step per call. While the field is open a call draws up to
-    ///      JACKPOT_BATTLE_ENTRANTS awarded entries (see _collectJackpotChunk), reads their saved
-    ///      boards in one batch and appends them; the chunk that reaches the award target, or finds
-    ///      no eligible level, seals the field and settles on whatever of JACKPOT_BATTLE_SETTLE_UNITS
-    ///      its own draw left. After that each call settles seats on the full budget. The latch
-    ///      clears once the field completes.
-    function _playJackpotBattle(uint24 lvl, uint256 rngWord) private {
-        IJackpotBattle battle = IJackpotBattle(ContractAddresses.CRAPS);
-        (,, bool started, bool complete) = battle.jackpotProgress();
-        if (started) {
-            if (complete || battle.advanceJackpotBattle(JACKPOT_BATTLE_SETTLE_UNITS)) {
-                dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
-            }
-            return;
-        }
-        uint256 battleWord = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
-        (uint256 word, uint256 cursor, uint256 remaining) = battle.prepareJackpotBattle(lvl, battleWord);
-        (address[] memory winners, uint256 next, bool exhausted) = _collectJackpotChunk(lvl, word, cursor, remaining);
-        uint256[] memory field = JackpotBattleFieldLib.prepare(winners);
-        bool last = exhausted || winners.length == remaining;
-        battle.appendJackpotBattle(field, next, last);
-        if (!last) return;
-        uint256 drawUnits = JACKPOT_DRAW_BASE_UNITS + winners.length * JACKPOT_DRAW_ENTRY_UNITS;
-        if (drawUnits < JACKPOT_BATTLE_SETTLE_UNITS
-            && battle.advanceJackpotBattle(uint64(JACKPOT_BATTLE_SETTLE_UNITS - drawUnits))) {
-            dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
-        }
-    }
-
-    /// @dev A visit walks one level once, starting at a random queue position and wrapping.
-    ///      Levels are drawn WITH replacement, so later visits can award the same wallets again.
-    ///      Memory only; the continuation fits in JackpotRound.drawCursor without new storage.
-    struct JackpotDrawWalk {
-        uint256 ordinal;
-        uint256 offset;
-        uint256 position;
-        uint256 left;
-    }
-
-    /// @dev Snapshot the eligible levels once (99 bounded queue reads), then collect at most
-    ///      JACKPOT_BATTLE_ENTRANTS seats per call by walking randomly selected levels. Repeated
-    ///      wallets keep separate seats. Cursor: next visit ordinal [0:31], eligible-level bitset
-    ///      [32:130], active level offset [131:137], next queue position [138:169], positions left
-    ///      in the visit [170:201]. A chunk boundary never starts a new visit or changes its draw.
-    ///      All registries and queues remain frozen under the daily lock, including across
-    ///      midnight and retries. Packed queue words are loaded once per group of up to eight.
-    function _collectJackpotChunk(uint24 lvl, uint256 word, uint256 cursor, uint256 remaining)
-        internal view returns (address[] memory winners, uint256 next, bool exhausted)
-    {
-        uint256 eligible = (cursor >> 32) & ((uint256(1) << 99) - 1);
-        uint24[99] memory levels;
-        uint256 count;
-        for (uint256 offset; offset < 99; ++offset) {
-            uint24 candidate = lvl + 1 + uint24(offset);
-            bool live = cursor == 0 ? _ticketQueueLength(_tqFarFutureKey(candidate)) != 0
-                : eligible & (uint256(1) << offset) != 0;
-            if (live) {
-                eligible |= uint256(1) << offset;
-                levels[count++] = candidate;
-            }
-        }
-        uint256 wanted = remaining < JACKPOT_BATTLE_ENTRANTS ? remaining : JACKPOT_BATTLE_ENTRANTS;
-        if (count == 0) return (new address[](0), 0, true);
-        winners = new address[](wanted);
-        JackpotDrawWalk memory walk = JackpotDrawWalk(
-            uint32(cursor), (cursor >> 131) & 127, uint32(cursor >> 138), uint32(cursor >> 170)
-        );
-        uint256 i;
-        while (i < wanted) {
-            uint256 entropy;
-            if (walk.left == 0) {
-                entropy = EntropyLib.hash2(word, walk.ordinal++);
-                walk.offset = levels[entropy % count] - lvl - 1;
-            }
-            uint24 candidate = lvl + 1 + uint24(walk.offset);
-            uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(candidate))];
-            uint256 len = _ticketQueueLength(_tqFarFutureKey(candidate));
-            // An unexpectedly emptied level forfeits one award and ends this visit. Charging a
-            // position keeps even that fail-open path bounded when selection uses replacement.
-            if (len == 0) {
-                walk.left = 0;
-                ++i;
-                continue;
-            }
-            // A singleton completes its visit immediately; it needs no circular-walk setup.
-            if (len == 1) {
-                winners[i++] = _ticketOwnerAt(uint32(_tqWordAt(queue, 0)));
-                walk.position = 0;
-                walk.left = 0;
-                continue;
-            }
-            if (walk.left == 0) {
-                walk.position = (entropy >> 128) % len;
-                walk.left = len;
-            }
-            uint256 take = wanted - i;
-            if (take > walk.left) take = walk.left;
-            walk.left -= take;
-            while (take != 0) {
-                uint256 packed = _tqWordAt(queue, walk.position) >> ((walk.position & 7) << 5);
-                uint256 lanes = 8 - (walk.position & 7);
-                if (lanes > len - walk.position) lanes = len - walk.position;
-                if (lanes > take) lanes = take;
-                for (uint256 j; j < lanes; ++j) {
-                    winners[i++] = _ticketOwnerAt(uint32(packed));
-                    packed >>= 32;
-                }
-                walk.position += lanes;
-                if (walk.position == len) walk.position = 0;
-                take -= lanes;
-            }
-        }
-        next = walk.ordinal | (eligible << 32) | (walk.offset << 131)
-            | (walk.position << 138) | (walk.left << 170);
     }
 
     /// @dev Records the day's board in the two-slot draw ring for foil claims
@@ -2068,287 +1549,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
     }
 
-    // -------------------------------------------------------------------------
-    // Reward Jackpots (BAF + Decimator Dispatch)
-    // -------------------------------------------------------------------------
-
-    /**
-     * @notice Execute BAF (Big-Ass Flip) jackpot distribution.
-     * @dev Large winners (>=5% of pool) receive 50% ETH / 50% lootbox.
-     *      Small winners (<5% of pool) alternate: even-index gets 100% ETH,
-     *      odd-index gets 100% lootbox (gas-efficient batching).
-     *
-     * @param poolWei Total ETH for BAF distribution.
-     * @param lvl Level triggering the BAF.
-     * @param rngWord VRF entropy for winner selection.
-     * @return claimableDelta ETH credited to claimable balances.
-     *         Refund, lootbox, and whale pass ETH stay in futurePool implicitly.
-     *
-     * ## Payout Split
-     *
-     * | Winner Size        | Portion | Reward Type                              |
-     * |--------------------|---------|------------------------------------------|
-     * | Large (>=5% pool)  | 50%     | Claimable ETH (immediate)                |
-     * | Large (>=5% pool)  | 50%     | Lootbox future tickets (claimWhalePass)  |
-     * | Small even-index   | 100%    | Claimable ETH (immediate)                |
-     * | Small odd-index    | 100%    | Lootbox future tickets                   |
-     *
-     * ## Lootbox Flow (Tiered by Amount)
-     *
-     * **All payouts:**
-     * - Large lootbox payouts defer via `claimWhalePass` for gas safety
-     *
-     * All lootbox ETH stays in futurePrizePool (source pool).
-     *
-     */
-    function runBafJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
-    ) external returns (uint256 claimableDelta) {
+    /// @notice The BAF draw and its ordered payouts share the cold draw module.
+    function runBafJackpot(uint256, uint24, uint256) external returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert OnlySelf();
-        // Get winners and payout info from jackpots contract
-        (address[] memory winnersArr, uint256[] memory amountsArr, ) = jackpots
-            .runBafJackpot(poolWei, lvl, rngWord);
-
-        // ---------------------------------------------------------------------
-        // Process each winner with gas-optimized payout structure
-        // Large winners (>=5% of pool): 50% ETH, 50% lootbox (balanced)
-        // Small winners (<5% of pool): alternate 100% ETH or 100% lootbox (gas-efficient)
-        // ---------------------------------------------------------------------
-
-        uint256 largeWinnerThreshold = poolWei / 20; // 5% of total BAF pool
-
-        // Ticket-roll floor. A roll can land on the floor level exactly (its 30% leg), and the
-        // swap that would commit that queue already fired at this level's RNG request. A normal
-        // phase swaps again on jackpot day 2 and drains lvl there, so the floor is lvl. Turbo
-        // collapses the whole phase inside one lock — no further swap fires for the level, so
-        // a floor-lvl award would be committed and materialized only after lvl's draws ended
-        // (the trailing sweep reaches it, but drawless). Route the floor one level out so the
-        // awards land where they still draw.
-        uint24 ticketFloorLvl = (jackpotFlags & JACKPOT_TURBO) != 0 ? lvl + 1 : lvl;
-
-        uint256 winnersLen = winnersArr.length;
-        for (uint256 i; i < winnersLen; ) {
-            address winner = winnersArr[i];
-            uint256 amount = amountsArr[i];
-
-            // Large winners: keep 50/50 split for balanced payout
-            if (amount >= largeWinnerThreshold) {
-                uint256 ethPortion = amount / 2;
-                uint256 lootboxPortion = amount - ethPortion;
-
-                // Credit ETH half to claimable balance
-                _creditClaimable(winner, ethPortion);
-                claimableDelta += ethPortion;
-                emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, ethPortion, 0);
-
-                // Lootbox half: small amounts awarded immediately, large deferred
-                if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
-                    // Small lootbox: award immediately (2 rolls, probabilistic targeting).
-                    // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll
-                    // with the real targetLevel and scaled ticketCount.
-                    uint256 cd;
-                    (, cd) = _awardJackpotTickets(
-                        winner,
-                        lootboxPortion,
-                        ticketFloorLvl,
-                        EntropyLib.hash4(rngWord, lvl, BAF_TICKET_TAG, i)
-                    );
-                    claimableDelta += cd;
-                } else {
-                    // Large lootbox: defer to claim (whale pass equivalent). The sub-half-pass
-                    // remainder is folded into claimableDelta so the caller's memFuture debit
-                    // and claimablePool credit both move it out of futurePool exactly once.
-                    claimableDelta += _queueWhalePassClaimCore(winner, lootboxPortion);
-                    emit JackpotWhalePassWin(
-                        winner,
-                        lootboxPortion / HALF_WHALE_PASS_PRICE,
-                        WHALE_PASS_SRC_BAF_DIRECT
-                    );
-                }
-            }
-            // Small winners: alternate between 100% ETH and 100% lootbox for gas efficiency
-            else if (i % 2 == 0) {
-                // Even index: 100% ETH (immediate liquidity)
-                _creditClaimable(winner, amount);
-                claimableDelta += amount;
-                emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, amount, 0);
-            } else {
-                // Odd index: 100% lootbox (upside exposure).
-                // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll;
-                // whale-pass fallback (amount > LOOTBOX_CLAIM_THRESHOLD) emits
-                // JackpotWhalePassWin inside _awardJackpotTickets.
-                uint256 cd;
-                (, cd) = _awardJackpotTickets(
-                    winner,
-                    amount,
-                    ticketFloorLvl,
-                    EntropyLib.hash4(rngWord, lvl, BAF_TICKET_TAG, i)
-                );
-                claimableDelta += cd;
-            }
-
-            unchecked {
-                ++i;
-            }
-        }
-
-        // Ticket-leg lootbox ETH stays in futurePool implicitly. The ETH halves and the
-        // whale-pass remainders are returned in claimableDelta, which the caller deducts
-        // from memFuture and credits to claimablePool in one batch. No storage write here.
-    }
-
-    /**
-     * @notice Unified jackpot ticket award function for all jackpots.
-     * @dev Awards tickets by amount tier:
-     *      Very small (<= 0.5 ETH): one probabilistic roll
-     *      Medium (0.5-5 ETH): split in half, 2 probabilistic rolls
-     *      Large (> 5 ETH): whale-pass half-passes at 2.25 ETH each (100 entries = 25 tickets
-     *      per half-pass); the sub-half-pass remainder is credited as claimable ETH
-     *      Uses actual game ticket pricing for target levels.
-     *
-     * @param winner Address to receive rewards.
-     * @param amount ETH amount for ticket conversion.
-     * @param minTargetLevel Minimum target level for tickets.
-     * @param entropy RNG state.
-     * @return newEntropy Updated entropy state.
-     * @return claimableDelta Wei credited to claimableWinnings on the whale-pass remainder leg
-     *         (0 on the ticket-roll legs), folded by the caller into futurePool→claimablePool.
-     */
-    function _awardJackpotTickets(
-        address winner,
-        uint256 amount,
-        uint24 minTargetLevel,
-        uint256 entropy
-    ) private returns (uint256 newEntropy, uint256 claimableDelta) {
-        // Large amounts (> 5 ETH): defer to whale pass claim system
-        if (amount > LOOTBOX_CLAIM_THRESHOLD) {
-            claimableDelta = _queueWhalePassClaimCore(winner, amount);
-            emit JackpotWhalePassWin(
-                winner,
-                amount / HALF_WHALE_PASS_PRICE,
-                WHALE_PASS_SRC_AWARD_TICKETS
-            );
-            return (entropy, claimableDelta);
-        }
-
-        // Very small amounts (<= 0.5 ETH): single roll
-        if (amount <= SMALL_LOOTBOX_THRESHOLD) {
-            return (_jackpotTicketRoll(winner, amount, minTargetLevel, entropy), 0);
-        }
-
-        // Medium amounts (0.5-5 ETH): split in half, 2 rolls
-        uint256 halfAmount = amount / 2;
-
-        // First roll
-        entropy = _jackpotTicketRoll(
-            winner,
-            halfAmount,
-            minTargetLevel,
-            entropy
-        );
-
-        // Second roll (with remainder if amount was odd)
-        uint256 secondAmount = amount - halfAmount;
-        entropy = _jackpotTicketRoll(
-            winner,
-            secondAmount,
-            minTargetLevel,
-            entropy
-        );
-
-        return (entropy, 0);
-    }
-
-    /**
-     * @notice Resolve a single jackpot ticket roll into ticket awards.
-     * @dev Selects target level based on probability, then Bernoulli-collapses
-     *      the scaled ticket count to a whole-ticket count before queueing.
-     *      Uses actual game pricing for the selected target level.
-     *      Entropy use in the per-roll keccak word `entropy` (evolved via
-     *      EntropyLib.hash2 on entry, so it is full-diffusion keccak output):
-     *        full word        path/level selection — `entropy % 100` range roll,
-     *                         `(entropy / 100) % 4` near offset,
-     *                         `(entropy / 100) % 46` far offset (modular reductions
-     *                         of the whole 256-bit value)
-     *        bits[96..127]    jackpotTicketRoundUp % 100 — Bernoulli whole-ticket
-     *                         collapse sub-roll (uint32 window, modulo bias ~2e-8)
-     *      The round-up slice is a 32-bit window of a word whose full-width residues
-     *      drive the path roll; with keccak diffusion the correlation between the two
-     *      is negligible.
-     * @param winner Address to receive tickets.
-     * @param amount ETH amount for this roll.
-     * @param minTargetLevel Minimum target level (usually current level during SETUP phase).
-     * @param entropy RNG state.
-     * @return Updated entropy state.
-     */
-    function _jackpotTicketRoll(
-        address winner,
-        uint256 amount,
-        uint24 minTargetLevel,
-        uint256 entropy
-    ) private returns (uint256) {
-        entropy = EntropyLib.hash2(entropy, entropy);
-
-        // Roll for outcome (0-99 for percentage-based probabilities)
-        uint256 entropyDiv100 = entropy / 100;
-        uint256 roll = entropy - (entropyDiv100 * 100);
-        uint24 targetLevel;
-
-        if (roll < 30) {
-            // 30% chance: minimum level ticket
-            targetLevel = minTargetLevel;
-        } else if (roll < 95) {
-            // 65% chance: +1 to +4 levels ahead
-            uint256 offset = 1 + (entropyDiv100 % 4); // 1-4 inclusive
-            targetLevel = minTargetLevel + uint24(offset);
-        } else {
-            // 5% chance: +5 to +50 levels ahead (rare)
-            uint256 offset = 5 + (entropyDiv100 % 46); // 5-50 inclusive
-            targetLevel = minTargetLevel + uint24(offset);
-        }
-
-        // Calculate tickets for target level
-        uint256 targetPrice = PriceLookupLib.priceForLevel(targetLevel);
-
-        uint256 wholeTicketsScaled = (amount * QTY_SCALE) / targetPrice;
-
-        // Bernoulli-collapse the scaled count to a whole-ticket count: the
-        // fractional part rounds up with probability frac/QTY_SCALE using
-        // bits[96..127] of the per-roll entropy word — a uint32 window, wide enough
-        // that the % QTY_SCALE modulo bias is negligible (~2e-8).
-        // Saturate at the uint32 ceiling instead of wrapping: an award above 4,294,967,295
-        // scaled units (~42.9M whole tickets) in a single roll is only reachable at
-        // economically-impossible prize sizes; a graceful cap avoids a silent modular wrap
-        // to a tiny count.
-        uint32 scaledWholeTickets = wholeTicketsScaled > type(uint32).max
-            ? type(uint32).max
-            : uint32(wholeTicketsScaled);
-        uint32 whole = scaledWholeTickets / uint32(QTY_SCALE);
-        uint32 frac = scaledWholeTickets % uint32(QTY_SCALE);
-        bool roundedUp = false;
-        if (frac != 0 && (uint32(entropy >> 96) % uint32(QTY_SCALE)) < frac) {
-            unchecked {
-                whole += 1;
-            }
-            roundedUp = true;
-        }
-        _queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true);
-
-        // ticketCount is the entries count (whole<<2, 4 per whole ticket) queued above;
-        // roundedUp is true iff the bits[96..127] Bernoulli sub-roll incremented the
-        // underlying whole-ticket count.
-        emit JackpotTicketWin(
-            winner,
-            targetLevel,
-            BAF_TRAIT_SENTINEL,
-            wholeTicketsToEntries(whole),
-            minTargetLevel,
-            0,
-            roundedUp
-        );
-
-        return entropy;
+        return abi.decode(_delegateJackpotDraw(msg.data), (uint256));
     }
 }

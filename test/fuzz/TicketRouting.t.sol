@@ -179,7 +179,7 @@ contract TicketRoutingTest is Test {
     }
 
     function testRngGuardAllowsWithBypass() public {
-        // rngLocked=true, rngBypass=true (advanceGame passes true during phase transition)
+        // rngLocked=true, rngBypass=true (mineFlip passes true during phase transition)
         harness.setRngLockedFlag(true);
         harness.queueTicketsWithBypass(buyer, 17, 1);
         uint24 ffKey = harness.tqFarFutureKey(17);

@@ -2,6 +2,8 @@
 pragma solidity 0.8.34;
 
 import "forge-std/Test.sol";
+import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -26,6 +28,8 @@ contract FSMEmptyDependencies {
     function isVaultOwner(address) external pure returns (bool) {
         return true;
     }
+
+    function minerMaintenancePending() external pure returns (bool) { return false; }
 
     function balanceOf(address) external pure returns (uint256) {
         return 0;
@@ -83,13 +87,21 @@ contract FSMEmptyJackpotModule is DegenerusGameStorage {
 
 /// @dev Test setup and read access only; all three claimed state transitions execute production
 ///      Advance/GameOver bytecode. Recording a delivered word models the VRF callback input.
-contract FSMAdvanceHarness is DegenerusGameAdvanceModule {
+contract FSMAdvanceHarness is DegenerusGameMinerModule {
+    /// @dev Mirrors only the Game retry forwarding stub; Admin ownership is covered by
+    ///      DailyRngStallRecovery using the actual Admin contract.
+    function retryRng() external {
+        (bool ok, bytes memory reason) = ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data);
+        if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+    }
     function seed(uint24 initialLevel, uint24 initialDay, uint24 purchaseDay, bool lastPurchase) external {
         level = initialLevel;
         dailyIdx = initialDay;
         purchaseStartDay = purchaseDay;
         lastPurchaseDay = lastPurchase;
         ticketsFullyProcessed = true;
+        subsFullyProcessed = true;
+        _afkingResetDay = _simulatedDayIndex();
         lootboxRngPacked = 0;
         // vm.etch does not run Storage's inline initializers. Install the same idle
         // genesis authority and nonzero waiting metadata before invoking production transitions.
@@ -145,10 +157,12 @@ contract GameFSMSymbolicTest is Test {
 
     function setUp() public {
         // Etching avoids the production module's deployment size constraint on test-only accessors.
-        machine = FSMAdvanceHarness(address(0xF501));
+        machine = FSMAdvanceHarness(ContractAddresses.GAME);
         vm.etch(address(machine), type(FSMAdvanceHarness).runtimeCode);
         vm.deal(address(machine), 0);
         vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, type(DegenerusGameGameOverModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameAdvanceModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_RNG_MODULE, type(DegenerusGameRngModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(FSMEmptyJackpotModule).runtimeCode);
         bytes memory deps = type(FSMEmptyDependencies).runtimeCode;
         vm.etch(ContractAddresses.VRF_COORDINATOR, deps);
@@ -185,7 +199,7 @@ contract GameFSMSymbolicTest is Test {
         assert(machine.gameOver());
         assert(FSMEmptyDependencies(ContractAddresses.COIN).burns() == 1);
         vm.warp(block.timestamp + uint256(elapsedDays) * 1 days);
-        bytes memory result = _mustCall(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
+        bytes memory result = _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
         assert(abi.decode(result, (uint8)) == 0);
         assert(machine.gameOver());
         assert(machine.sealedDay() == 10);
@@ -197,7 +211,7 @@ contract GameFSMSymbolicTest is Test {
     function check_lastPurchase_promotesOnceAcrossRetry(uint16 initialLevel) public {
         vm.warp(_dayStart(31) + 120);
         machine.seed(initialLevel, 30, 30, true);
-        _mustCall(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
+        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
         assert(machine.level() == uint24(initialLevel) + 1);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(locked && requestId == 1);
@@ -206,7 +220,8 @@ contract GameFSMSymbolicTest is Test {
         assert(FSMEmptyDependencies(ContractAddresses.CRAPS).battleLocks() == 1);
 
         vm.warp(block.timestamp + 20 hours + 2);
-        _mustCall(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
+        vm.prank(ContractAddresses.ADMIN);
+        _mustCall(abi.encodeCall(FSMAdvanceHarness.retryRng, ()));
         (bool stillLocked, uint48 retryTime, uint256 retryId) = machine.requestState();
         assert(stillLocked && retryId == 2);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 2);
@@ -240,11 +255,11 @@ contract GameFSMSymbolicTest is Test {
         uint24 day = uint24(initialDay) + uint24(gap) + 1;
         vm.warp(_dayStart(day) + 120);
         machine.seed(1, initialDay, initialDay, false);
-        _mustCall(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
+        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
         assert(machine.sealedDay() == initialDay);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 1);
         machine.recordDeliveredWord(42);
-        _mustCall(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
+        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
         uint24 afterGap = gap == 0 ? uint24(initialDay) : day - 1;
         assert(machine.sealedDay() == afterGap);
         assert(afterGap >= initialDay);
@@ -253,16 +268,16 @@ contract GameFSMSymbolicTest is Test {
         assert(FSMEmptyDependencies(ContractAddresses.COINFLIP).lastSettlementDay() == day);
         assert(machine.battlePending());
         // The empty battle's own transaction completes before the purchase daily can seal.
-        _mustCall(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
+        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
         assert(!machine.battlePending());
         assert(machine.sealedDay() == afterGap);
-        _mustCall(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
+        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
         assert(machine.sealedDay() == day);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);
         assert(machine.level() == 1);
         assert(FSMEmptyDependencies(ContractAddresses.COINFLIP).settlements() == uint256(gap) + 1);
-        (bool repeated,) = address(machine).call(abi.encodeCall(DegenerusGameAdvanceModule.advanceGame, ()));
+        (bool repeated,) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
         assert(!repeated);
         assert(machine.sealedDay() == day);
     }

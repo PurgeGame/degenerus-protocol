@@ -20,15 +20,15 @@ contract StallResilience is DeployProtocol {
 
     // ── Helpers ──────────────────────────────────────────────────────
 
-    /// @dev Complete a full day: advanceGame -> VRF fulfill -> loop until unlocked.
+    /// @dev Complete a full day: mineFlip -> VRF fulfill -> loop until unlocked.
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.advanceGame();
+        game.mineFlip();
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
         }
         _finishReadConsumers();
     }
@@ -62,19 +62,19 @@ contract StallResilience is DeployProtocol {
 
     /// @dev Resume after coordinator swap. The swap re-issues the in-flight request on the
     ///      new coordinator (preserve+re-issue), so a pending request already exists. Fulfil
-    ///      it first so the re-issued word is delivered, then drain via advanceGame.
-    ///      If nothing was in flight (no re-issue), advanceGame fires a fresh request which
+    ///      it first so the re-issued word is delivered, then drain via mineFlip.
+    ///      If nothing was in flight (no re-issue), mineFlip fires a fresh request which
     ///      is then fulfilled.
     function _resumeAfterSwap(MockVRFCoordinator newVRF, uint256 vrfWord) internal {
         uint256 reqId = newVRF.lastRequestId();
         if (reqId == 0) {
-            game.advanceGame();
+            game.mineFlip();
             reqId = newVRF.lastRequestId();
         }
         newVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
         }
     }
 
@@ -83,7 +83,7 @@ contract StallResilience is DeployProtocol {
     function _catchUp(MockVRFCoordinator vrf, uint256 word) internal {
         uint24 wallDay = game.currentDayView();
         for (uint256 i = 0; i < 60; i++) {
-            game.advanceGame();
+            game.mineFlip();
             uint256 id = vrf.lastRequestId();
             if (id != 0) {
                 (,, bool done) = vrf.pendingRequests(id);
@@ -107,7 +107,7 @@ contract StallResilience is DeployProtocol {
 
         // Warp to the next day, trigger VRF request (this will stall)
         vm.warp(block.timestamp + 1 days);
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngLocked(), "Day 3 VRF request pending");
 
         // Stall: warp +3 days without fulfilling (gap days: 3, 4, 5; current day after warp: 6)
@@ -158,7 +158,7 @@ contract StallResilience is DeployProtocol {
 
         // Warp to the next day (day 3), trigger VRF request (will stall)
         vm.warp(block.timestamp + 1 days);
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Purchase during stall at day 3 (stakes go to day 4)
@@ -217,14 +217,14 @@ contract StallResilience is DeployProtocol {
         // Warp to day 2
         vm.warp(block.timestamp + 1 days);
 
-        // Purchase with lootbox amount BEFORE advanceGame so lootboxEth[preStallIndex][buyer] has value
+        // Purchase with lootbox amount BEFORE mineFlip so lootboxEth[preStallIndex][buyer] has value
         // lootboxRngIndex is still preStallIndex (2), so this writes to lootboxEth[2][buyer]
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
-        // advanceGame triggers VRF request, which reserves lootbox index preStallIndex (2)
+        // mineFlip triggers VRF request, which reserves lootbox index preStallIndex (2)
         // and increments lootboxRngIndex to 3
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngLocked(), "Day 2 VRF pending");
 
         // The stalled request reserved preStallIndex

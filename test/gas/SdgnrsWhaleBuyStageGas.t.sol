@@ -6,7 +6,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title SdgnrsWhaleBuyStageGas -- calibration of `SUB_STAGE_SDGNRS_WHALE_WEIGHT`.
 /// @notice Measures the COLD incremental gas of sDGNRS's automatic whale purchase inside the
-///         afking process STAGE (the first advanceGame call of a new day), for 0 / 5 / 10 / 100
+///         afking process STAGE (the first mineFlip call of a new day), for 0 / 5 / 10 / 100
 ///         paid passes, in the state the buy really fires in: the stored level just promoted
 ///         (here set directly), genesis deity coverage on levels 1..100 (so the span's first 99
 ///         levels are nonzero-to-nonzero owed updates) and the far-end level unregistered for
@@ -67,7 +67,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     }
 
     /// @dev Level 4 (standard price), sDGNRS funded, a new day: cool everything and bracket the
-    ///      first advanceGame call, which runs the day's reset + STAGE (+ the RNG request).
+    ///      first mineFlip call, which runs the day's reset + STAGE (+ the RNG request).
     ///      Non-vacuity: with `expectBuy` the latch must flip inside that call.
     function _measureFirstAdvanceOfDay(uint256 claimable, bool expectBuy) internal returns (uint256 used) {
         _setLevel(4);
@@ -85,7 +85,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         vm.cool(address(crapsBattle));
         vm.cool(address(afkingSubToken));
         uint256 before = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         used = before - gasleft();
 
         // The attempt latches the level either way; the claimable debit tells buy from no-buy.

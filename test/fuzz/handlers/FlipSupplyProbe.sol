@@ -108,9 +108,9 @@ contract FlipSupplyProbe is Test {
         _reconcile(t0, v0);
     }
 
-    function advanceGame(uint256 actorSeed) external {
+    function mineFlip(uint256 actorSeed) external {
         (uint256 t0, uint256 v0) = _before();
-        gameH.advanceGame(actorSeed);
+        gameH.mineFlip(actorSeed);
         _reconcile(t0, v0);
     }
 
@@ -156,7 +156,7 @@ contract FlipSupplyProbe is Test {
         _reconcile(t0, v0);
     }
 
-    /// @notice Crank advanceGame (feeding VRF words) to resolve coinflip days so claimable accrues.
+    /// @notice Crank mineFlip (feeding VRF words) to resolve coinflip days so claimable accrues.
     function crankAdvance(uint256 word) external {
         (uint256 t0, uint256 v0) = _before();
         address cranker = _gameActor(0);
@@ -173,7 +173,7 @@ contract FlipSupplyProbe is Test {
             }
             if (!game.advanceDue() && !game.rngLocked()) break;
             vm.prank(cranker);
-            try game.advanceGame() {} catch { break; }
+            try game.mineFlip() {} catch { break; }
         }
         _reconcile(t0, v0);
     }

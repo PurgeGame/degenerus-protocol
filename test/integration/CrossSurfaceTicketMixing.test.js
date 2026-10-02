@@ -344,7 +344,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         const snapshot = await hre.ethers.provider.send("evm_snapshot", []);
         await mockVRF.fulfillRandomWords(request, word);
         // Publication is a keeper step; the callback only stores the final word.
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
         const receipt = await (await game.openBoxes(hre.ethers.MaxUint256)).wait();
         const ticketAward = receipt.logs.some((log) => {
           try {
@@ -355,7 +355,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         await hre.ethers.provider.send("evm_revert", [snapshot]);
         if (ticketAward) {
           await mockVRF.fulfillRandomWords(request, word);
-          await game.connect(deployer).advanceGame();
+          await game.connect(deployer).mineFlip();
           return index;
         }
       }

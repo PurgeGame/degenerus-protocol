@@ -8,7 +8,7 @@
  * across 7 state sequences:
  *   1. Fresh deploy
  *   2. After purchase
- *   3. After advanceGame (VRF request)
+ *   3. After mineFlip (VRF request)
  *   4. After VRF fulfillment + processing
  *   5. After claimWinnings (if any winner)
  *   6. After adminStakeEthForStEth
@@ -79,14 +79,14 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
   });
 
   // ===========================================================================
-  // Checkpoint 3: After advanceGame (VRF request issued)
+  // Checkpoint 3: After mineFlip (VRF request issued)
   // ===========================================================================
-  it("3. After advanceGame (VRF request) — solvency invariant holds", async function () {
+  it("3. After mineFlip (VRF request) — solvency invariant holds", async function () {
     const { game, mockStETH, deployer } = await loadFixture(deployFullProtocol);
 
-    // Advance to next day and call advanceGame — this issues a VRF request
+    // Advance to next day and call mineFlip — this issues a VRF request
     await advanceToNextDay();
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
 
     await assertSolvencyInvariant(game, mockStETH);
   });
@@ -101,16 +101,16 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
 
     // Advance and trigger VRF
     await advanceToNextDay();
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
 
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 123456n);
 
-      // Process the fulfilled word (may take multiple advanceGame calls)
+      // Process the fulfilled word (may take multiple mineFlip calls)
       for (let i = 0; i < 15; i++) {
         if (!(await game.rngLocked())) break;
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       }
     }
 
@@ -210,14 +210,14 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
 
     // Trigger game-over via 912-day liveness timeout (level 0).
     // The terminal drain is multi-tx (entropy round → ticket-drain pass →
-    // gameOver drain), so loop advanceGame — fulfilling any VRF request it
+    // gameOver drain), so loop mineFlip — fulfilling any VRF request it
     // issues — until gameOver latches (established pattern from GameOver.test.js).
     await advanceTime(SECONDS_912_DAYS + 86400);
 
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         /* may revert mid-sequence; keep driving */
       }

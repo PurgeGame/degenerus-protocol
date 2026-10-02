@@ -51,7 +51,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     }
 
     function _process(uint256 budget) internal returns (bool done) {
-        (done,,) = sdgnrs.processRedemptionSettlement(budget);
+        done = sdgnrs.runRedemptionWork(budget).done;
     }
 
     function _burn(address player, uint256 amount) internal {
@@ -98,13 +98,13 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         sdgnrs.claimRedemption(alice, day);
         uint256 remaining = sdgnrs.pendingRedemptionEthValue();
         vm.prank(address(game));
-        assertFalse(_process(14));
+        assertFalse(_process(14_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), remaining);
         vm.prank(address(game));
-        assertTrue(_process(1856));
+        assertTrue(_process(9_000_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         vm.prank(address(game));
-        assertTrue(_process(1856));
+        assertTrue(_process(9_000_000));
     }
 
     function test_LiveSettlementDoesNotPushEthToRecipient() public {
@@ -116,7 +116,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         _burn(address(receiver), sdgnrs.balanceOf(address(receiver)));
         _resolve(day, 100, 99);
         vm.prank(address(game));
-        assertTrue(_process(1856));
+        assertTrue(_process(9_000_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertEq(address(receiver).balance, 0);
     }
@@ -129,7 +129,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         _resolve(day, 175, 99);
         vm.prank(address(game));
         uint256 beforeGas = gasleft();
-        assertTrue(_process(1856));
+        assertTrue(_process(9_000_000));
         uint256 used = beforeGas - gasleft() + 21_000;
         emit log_named_uint("maximum_redemption_settlement_gas", used);
         assertLe(used, 10_000_000);

@@ -30,14 +30,14 @@ const COIN_PURCHASE_CUTOFF_LVL0 = 220; // 250 - 30 days
 /**
  * Trigger game over at level 0 via the idle-timeout liveness path.
  * The drain is multi-tx (entropy round, then a ticket-drain pass, then the
- * terminal gameOver drain), so loop advanceGame — fulfilling any VRF request —
+ * terminal gameOver drain), so loop mineFlip — fulfilling any VRF request —
  * until gameOver latches.
  */
 async function triggerGameOverAtLevel0(game, caller, mockVRF) {
   for (let i = 0; i < 12; i++) {
     const reqBefore = await getLastVRFRequestId(mockVRF);
     try {
-      await game.connect(caller).advanceGame();
+      await game.connect(caller).mineFlip();
     } catch {
       /* may revert mid-sequence; keep driving */
     }
@@ -376,9 +376,9 @@ describe("SecurityEconHardening", function () {
 
       const claimAfterFirst = await game.claimableWinningsOf(alice.address);
 
-      // Calling advanceGame again should not increase claimable (drain already done)
+      // Calling mineFlip again should not increase claimable (drain already done)
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         // May revert or be a no-op
       }

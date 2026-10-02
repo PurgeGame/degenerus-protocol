@@ -8,7 +8,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 /// @dev Actual paid custom seats, actual engine and Game keeper routing. Every
 /// measured call starts cold and is offered the unmodified transaction ceiling.
 contract CustomRngCohortGasTest is DeployProtocol {
-    uint256 private constant CAP = 16_777_216;
+    uint256 private constant CAP = 10_000_000;
     uint256 private constant SEATS = 320;
     uint32 private constant BOARD = 1 | (uint32(1) << 3) | (uint32(1) << 6)
         | (uint32(1) << 9) | (uint32(1) << 12) | (uint32(1) << 15) | (uint32(1) << 18);
@@ -18,7 +18,7 @@ contract CustomRngCohortGasTest is DeployProtocol {
         mockVRF.fundSubscription(1, 100 ether);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 128 && (game.advanceDue() || game.rngLocked()); ++i) {
-            game.advanceGame();
+            game.mineFlip();
             uint256 request = mockVRF.lastRequestId();
             if (request != 0) {
                 (,, bool fulfilled) = mockVRF.pendingRequests(request);
@@ -43,7 +43,7 @@ contract CustomRngCohortGasTest is DeployProtocol {
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled, "custom close requests its fresh session");
         mockVRF.fulfillRandomWords(request, uint256(keccak256("cold deep high custom")) | 2);
-        game.advanceGame(); // Publication is required before any consumer uses the word.
+        game.mineFlip(); // Publication is required before any consumer uses the word.
         (bytes32 key,,) = crapsBattle.customBattleOf(slot);
         uint256 maxGas;
         uint256 finalGas;

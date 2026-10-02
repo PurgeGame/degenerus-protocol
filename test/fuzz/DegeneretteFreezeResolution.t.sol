@@ -783,13 +783,13 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.revertToState(snap);
 
         // The guard checks `_livenessTriggered()` (the live terminal CONDITION), not the
-        // stored `gameOver` flag (which the advanceGame drain latches afterward).
+        // stored `gameOver` flag (which the mineFlip drain latches afterward).
         // _livenessTriggered() is true at level 0 once
         // currentDay - purchaseStartDay > _DEPLOY_IDLE_TIMEOUT_DAYS (365), with
         // lastPurchaseDay/jackpotPhaseFlag false (fresh-deploy default). Warp well past it.
         // This is the exact predicate the guard gates on, so the warp reproduces the
         // post-game-over state for the §1 path without needing to drive the VRF-entropy
-        // advanceGame drain that flips the stored flag.
+        // mineFlip drain that flips the stored flag.
         vm.warp(block.timestamp + 366 days);
         assertEq(game.level(), 0, "repro precondition: still at level 0 (deploy-idle path)");
         assertTrue(

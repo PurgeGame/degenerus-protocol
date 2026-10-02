@@ -63,7 +63,7 @@ contract CompositionHandler is Test {
     // Action: Purchase then Advance (MINT then ADV sequence)
     // =========================================================================
 
-    /// @notice Purchase tickets then call advanceGame -- tests MINT->ADV composition
+    /// @notice Purchase tickets then call mineFlip -- tests MINT->ADV composition
     function action_purchaseThenAdvance(
         uint256 actorSeed,
         uint256 qty
@@ -85,7 +85,7 @@ contract CompositionHandler is Test {
 
         // Now advance
         vm.prank(currentActor);
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
 
         _checkCompositionInvariants(currentActor);
     }
@@ -128,7 +128,7 @@ contract CompositionHandler is Test {
     // Action: Advance Full Cycle (ADV -> JACK -> MINT -> END -> OVER chain)
     // =========================================================================
 
-    /// @notice Call advanceGame multiple times to drive through orchestration sequence
+    /// @notice Call mineFlip multiple times to drive through orchestration sequence
     function action_advanceFullCycle(
         uint256 actorSeed
     ) external useActor(actorSeed) {
@@ -149,7 +149,7 @@ contract CompositionHandler is Test {
         // Try to advance 3 times (may trigger VRF, jackpot, etc.)
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(currentActor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
 
         // Try to fulfill VRF if pending
@@ -163,7 +163,7 @@ contract CompositionHandler is Test {
 
         // Advance again after VRF
         vm.prank(currentActor);
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
 
         _checkCompositionInvariants(currentActor);
     }

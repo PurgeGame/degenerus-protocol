@@ -11,7 +11,7 @@ import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title VRFPathHandler -- Invariant handler for VRF path lifecycle testing
-/// @notice Wraps purchase/advanceGame/VRF/coordinatorSwap/warp operations while
+/// @notice Wraps purchase/mineFlip/VRF/coordinatorSwap/warp operations while
 ///         tracking ghost variables for TEST-01 (lootbox index lifecycle),
 ///         TEST-02 (stall-to-recovery state machine), and TEST-03 (gap backfill).
 contract VRFPathHandler is Test {
@@ -78,7 +78,7 @@ contract VRFPathHandler is Test {
     ///      lastPurchaseDay bool at byte 17. Constants mirror _DEPLOY_IDLE_TIMEOUT_DAYS
     ///      (365) and the 120-day mid-game idle timeout; past either deadline an in-flight
     ///      pre-deadline request suppresses the trigger for _VRF_GRACE_PERIOD (14 days).
-    ///      Once true at an advanceGame entry, that advance routes into the staged
+    ///      Once true at an mineFlip entry, that advance routes into the staged
     ///      terminal flow, whose entropy path (_gameOverEntropy) by design does NOT
     ///      backfill gap days.
     function _livenessMirror() internal view returns (bool) {
@@ -154,14 +154,14 @@ contract VRFPathHandler is Test {
     }
 
     /// @notice Advance game while tracking index lifecycle and recovery state
-    function advanceGame() external {
+    function mineFlip() external {
         calls_advanceGame++;
 
         if (game.gameOver()) return;
 
         uint48 indexBefore = _lootboxRngIndex();
         bool lockedBefore = game.rngLocked();
-        // Capture dailyIdx BEFORE advanceGame updates it — this is the contract's
+        // Capture dailyIdx BEFORE mineFlip updates it — this is the contract's
         // gap start reference (rngGate backfills from dailyIdx+1 to currentDay).
         uint48 dailyIdxBefore = _dailyIdx();
         // Latch liveness at entry: an advance that runs while the trigger holds routes
@@ -170,7 +170,7 @@ contract VRFPathHandler is Test {
         // VRF-grace trigger from any later read.
         if (_livenessMirror()) ghost_livenessLatched = true;
 
-        try game.advanceGame() {} catch {
+        try game.mineFlip() {} catch {
             return;
         }
 
@@ -197,7 +197,7 @@ contract VRFPathHandler is Test {
 
         // TEST-02: recovery detection after coordinator swap
         // Only check gap days after the FULL recovery cycle completes:
-        // advanceGame transitioned the game from locked to unlocked, meaning
+        // mineFlip transitioned the game from locked to unlocked, meaning
         // the VRF word was consumed and gap days were backfilled in this call.
         // Skip check once liveness has latched — the staged terminal flow uses
         // _gameOverEntropy which does NOT call _backfillGapDays, and it unlocks
@@ -293,7 +293,7 @@ contract VRFPathHandler is Test {
 
         if (indexAfter > indexBefore) {
             ghost_expectedIndex += (indexAfter - indexBefore);
-            // Same trailing-suffix rule as advanceGame: the previously pending index
+            // Same trailing-suffix rule as mineFlip: the previously pending index
             // must be worded before a new one is opened.
             if (indexBefore >= 2 && _lootboxRngWord(indexBefore - 1) == 0) {
                 ghost_orphanedIndices++;

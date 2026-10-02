@@ -160,7 +160,7 @@ contract WhaleSybilHandler is Test {
 
     /// @notice Advance game
     /// @param actorSeed Seed for actor selection (uses whales or sybils alternately)
-    function advanceGame(uint256 actorSeed) external {
+    function mineFlip(uint256 actorSeed) external {
         calls_advanceGame++;
 
         if (game.gameOver()) return;
@@ -176,7 +176,7 @@ contract WhaleSybilHandler is Test {
         }
 
         vm.prank(caller);
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
     }
 
     /// @notice Fulfill VRF

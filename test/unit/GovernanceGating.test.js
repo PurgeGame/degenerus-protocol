@@ -89,7 +89,7 @@ async function jumpToNextGameDayBoundary(offsetSeconds = 5) {
 
 /**
  * Advance the game through one full day cycle.
- * Run the real keeper chain until the target day seals and its read work finishes.
+ * Run the real miner chain until the target day seals and its read work finishes.
  * Prior read consumers may run before a new daily request; the retained request ID
  * alone does not mean there is a new request to fulfill.
  */
@@ -109,7 +109,7 @@ async function advanceGameOneDay(game, caller, mockVRF) {
     }
     await game.connect(caller).mineFlip();
   }
-  throw new Error("keeper chain did not seal the target day and finish its read consumers");
+  throw new Error("miner chain did not seal the target day and finish its read consumers");
 }
 
 describe("Governance & Gating (Phase 43)", function () {
@@ -441,202 +441,58 @@ describe("Governance & Gating (Phase 43)", function () {
     });
   });
 
-  // ===========================================================================
-  // GATE-01 through GATE-04: advanceGame liveness + the mintFlip advance-bounty
-  // SOFT pay-gate (357 advance-incentive redesign, HEAD'' 61315ecd)
-  // ===========================================================================
-  //
-  // The 357 redesign DROPPED the MustMintToday hard revert. advanceGame() is now
-  // PURE LIVENESS: anyone may crank it any time; the dead _enforceDailyMintGate /
-  // MustMintToday / vault / caller arguments were removed. The error no longer
-  // exists in the contract surface, so asserting revertedWithCustomError(...,
-  // "MustMintToday") would itself error on an unknown selector — those assertions
-  // are gone.
-  //
-  // The must-mint tier ladder moved to _bountyEligible(address) in
-  // DegenerusGameMintStreakUtils, surfaced as the view game.bountyEligible(addr).
-  // It is now a SOFT PAY gate: mintFlip() reads bountyEligible(msg.sender)
-  // BEFORE the self-call and pays the advance bounty only when mult>0 && eligible.
-  // The advance WORK is always permitted regardless of eligibility.
-  //
-  // Tier ladder (cheapest-first short-circuit):
-  //   minted today/yesterday → true; deity pass → true; anyone 30+ min into the
-  //   day → true; any pass holder 15+ min in → true; active afking sub → true;
-  //   DGVE-majority owner → true; else false (no bounty, but advance still runs).
-  //
-  // The elapsed time check uses: elapsed = (block.timestamp - 82620) % 1 days
-  //
-  // CRITICAL: position the block timestamp just past a day boundary (within the
-  // first few seconds) to land BELOW the 15-minute window. jumpToNextGameDayBoundary(5)
-  // gives 5 seconds past the boundary; advanceToNextDay() lands ~19h in (always >30m).
-
-  describe("GATE-01: advanceGame is permissionless liveness (no MustMintToday)", function () {
-    it("a same-day minter is bountyEligible AND can advance", async function () {
-      const { game, deployer, alice, mockVRF } =
-        await loadFixture(deployFullProtocol);
-
-      // Process day 1 and day 2 to get dailyIdx >= 2
-      // (timing doesn't matter for deployer — it holds 100% DGVE)
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-
-      // Jump to day 3, positioned 5 seconds past the boundary (below the 15-min window)
+  // Mining participation is open. This compatibility view says nothing about whether
+  // one call performs enough successful work to cross the measured-gas reward floor.
+  describe("Mining participation is independent of role and day windows", function () {
+    it("all addresses pass before and after the former time windows", async function () {
+      const { game, deployer, alice, bob, carol } = await loadFixture(deployFullProtocol);
       await jumpToNextGameDayBoundary(5);
-
-      // Alice purchases (mints) on day 3 -- creates a mint record for today
-      const info = await game.purchaseInfo();
-      const cost = info.priceWei; // 1 full ticket
-      await game
-        .connect(alice)
-        .purchase(
-          alice.address,
-          400,
-          0,
-          ZERO_BYTES32,
-          MintPaymentKind.DirectEth,false, 
-          { value: cost }
-        );
-
-      // Soft pay-gate: minted-today → bountyEligible == true.
+      for (const account of [ZERO_ADDRESS, deployer.address, alice.address, bob.address, carol.address]) {
+        expect(await game.bountyEligible(account)).to.equal(true);
+      }
+      await advanceTime(16 * 60);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
-
-      // Liveness: advanceGame never reverts for a mint-gate reason (MustMintToday
-      // is gone). It may revert NotTimeYet for ordinary game-state reasons, but
-      // NEVER for a removed gate — and it does not for alice on this fresh day.
-      await expect(game.connect(alice).advanceGame()).to.not.be.reverted;
-    });
-  });
-
-  describe("GATE-02: 30-minute window flips bountyEligible true; advance always works", function () {
-    it("non-minter is ineligible in the first seconds, eligible after 30 min", async function () {
-      const { game, deployer, alice, mockVRF } =
-        await loadFixture(deployFullProtocol);
-
-      // Process day 1 and day 2
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-
-      // Jump to day 3, 5 seconds past boundary (< 15 min)
-      await jumpToNextGameDayBoundary(5);
-
-      // Fresh non-minter, non-DGVE, no pass, < 15 min in → NOT bounty-eligible …
-      expect(await game.bountyEligible(alice.address)).to.equal(false);
-      // … yet the advance WORK is still permitted (pure liveness, no MustMintToday).
-      await expect(game.connect(alice).advanceGame()).to.not.be.reverted;
-
-      // Advance 31 minutes past the day boundary
-      await advanceTime(31 * 60);
-
-      // Now the 30-minute window makes anyone bounty-eligible.
+      await advanceTime(15 * 60);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
     });
-  });
 
-  describe("GATE-03: DGVE majority holder is always bountyEligible", function () {
-    it("deployer (100% DGVE) is eligible without minting", async function () {
-      const { game, deployer, mockVRF } =
-        await loadFixture(deployFullProtocol);
-
-      // Process day 1 and day 2
+    it("a fresh non-minter can run due work immediately after the reset", async function () {
+      const { game, deployer, alice, mockVRF } = await loadFixture(deployFullProtocol);
       await advanceToNextDay();
       await advanceGameOneDay(game, deployer, mockVRF);
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-
-      // Jump to day 3, 5 seconds past boundary (the DGVE tier must not depend on time)
       await jumpToNextGameDayBoundary(5);
-
-      // Deployer has NOT minted today, but holds 100% DGVE → bountyEligible via the
-      // DGVE-majority tier (the cold-path isVaultOwner read).
-      expect(await game.bountyEligible(deployer.address)).to.equal(true);
+      expect(await game.bountyEligible(alice.address)).to.equal(true);
+      await expect(game.connect(alice).mineFlip()).to.not.be.reverted;
+      expect(await game.rngLocked()).to.equal(true);
     });
 
-    it("alice with >50.1% DGVE is eligible without minting", async function () {
-      const { game, vault, deployer, alice, mockVRF } =
-        await loadFixture(deployFullProtocol);
+    it("a same-day purchase does not change mining participation", async function () {
+      const { game, alice } = await loadFixture(deployFullProtocol);
+      expect(await game.bountyEligible(alice.address)).to.equal(true);
+      const { priceWei } = await game.purchaseInfo();
+      await game.connect(alice).purchase(
+        alice.address, 400, 0, ZERO_BYTES32, MintPaymentKind.DirectEth, false, { value: priceWei }
+      );
+      expect(await game.bountyEligible(alice.address)).to.equal(true);
+    });
 
+    it("DGVE transfer changes governance while both participants remain open to mining", async function () {
+      const { game, vault, deployer, alice } = await loadFixture(deployFullProtocol);
       const dgve = await getDgveToken(vault);
-
-      // Transfer 52% DGVE to alice
-      const amount = (INITIAL_SUPPLY * 52n) / 100n;
-      await dgve.connect(deployer).transfer(alice.address, amount);
-
-      // Process day 1 and day 2 using deployer
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-
-      // Jump to day 3, 5 seconds past boundary
-      await jumpToNextGameDayBoundary(5);
-
-      // Alice has NOT minted but holds >50.1% DGVE → bountyEligible.
+      expect(await game.bountyEligible(deployer.address)).to.equal(true);
+      expect(await game.bountyEligible(alice.address)).to.equal(true);
+      await dgve.connect(deployer).transfer(alice.address, INITIAL_SUPPLY * 52n / 100n);
+      expect(await vault.isVaultOwner(alice.address)).to.equal(true);
+      expect(await vault.isVaultOwner(deployer.address)).to.equal(false);
+      expect(await game.bountyEligible(deployer.address)).to.equal(true);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
     });
-  });
 
-  describe("GATE-04: ineligible keeper earns no bounty, but the advance still works", function () {
-    it("alice (0% DGVE, no mint, <15 min) is ineligible yet can advance", async function () {
-      const { game, deployer, alice, mockVRF } =
-        await loadFixture(deployFullProtocol);
-
-      // Process through day 2 to get dailyIdx >= 2
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-
-      // Jump to day 3, 5 seconds past boundary
-      await jumpToNextGameDayBoundary(5);
-
-      // alice: 0% DGVE, never minted, no deity pass, no afking sub, < 15 min in.
-      expect(await game.bountyEligible(alice.address)).to.equal(false);
-      // The advance work is still permissionless — MustMintToday no longer exists.
-      await expect(game.connect(alice).advanceGame()).to.not.be.reverted;
-    });
-
-    it("bob (0% DGVE, no mint) is likewise ineligible within the 15-min window", async function () {
-      const { game, deployer, bob, mockVRF } =
-        await loadFixture(deployFullProtocol);
-
-      // Process through day 2
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-
-      // Jump to day 3, 5 seconds past boundary
-      await jumpToNextGameDayBoundary(5);
-
-      expect(await game.bountyEligible(bob.address)).to.equal(false);
-      await expect(game.connect(bob).advanceGame()).to.not.be.reverted;
-    });
-
-    it("carol is ineligible in the first seconds, then eligible after 30 min", async function () {
-      const { game, deployer, carol, mockVRF } =
-        await loadFixture(deployFullProtocol);
-
-      // Process through day 2
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-      await advanceToNextDay();
-      await advanceGameOneDay(game, deployer, mockVRF);
-
-      // Jump to day 3, 5 seconds past boundary
-      await jumpToNextGameDayBoundary(5);
-
-      // Within the first seconds: ineligible (the soft pay-gate withholds the bounty).
-      expect(await game.bountyEligible(carol.address)).to.equal(false);
-
-      // Advance past 30 minutes
-      await advanceTime(31 * 60);
-
-      // After 30 min: the anyone-tier flips eligibility true.
-      expect(await game.bountyEligible(carol.address)).to.equal(true);
+    it("open mining participation does not grant governance authority", async function () {
+      const { game, alice } = await loadFixture(deployFullProtocol);
+      expect(await game.bountyEligible(alice.address)).to.equal(true);
+      await expect(game.connect(alice).setLootboxRngThreshold(eth("1")))
+        .to.be.revertedWithCustomError(game, "OnlyVault");
     });
   });
 

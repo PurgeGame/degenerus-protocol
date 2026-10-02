@@ -67,7 +67,7 @@ contract GameFSMInvariant is DeployProtocol {
     ///      decrease). The FSMHandler's recoverAndDrain crank drives the game through many
     ///      request/fulfill/unlock cycles so this stamp actually advances (non-vacuous).
     ///
-    ///      A stronger "advanceGame never hard-stalls" ghost was implemented and empirically found
+    ///      A stronger "mineFlip never hard-stalls" ghost was implemented and empirically found
     ///      FLAKY: within-day / backlog drain makes real progress that is invisible through the
     ///      exposed views, so a bounded crank false-positives on a large legitimate backlog and no
     ///      sound threshold-free version is wireable without a contract-exposed progress counter. It

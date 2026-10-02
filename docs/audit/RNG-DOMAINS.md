@@ -25,6 +25,71 @@ is known. Existing commitment guards remain necessary.
   explicit domains. Numeric ordinals, owners and period identifiers provide
   uniqueness within those domains; they are not sources of entropy.
 
+## Ticket checkpoint generator V2 (2026-10-02)
+
+Ticket materialization is owned by `DegenerusGameTicketModule`. This is an
+intentional predeployment change to ordinary ticket outcomes: legacy seeds
+contained remaining owed and call-local progress, so changing a batch split
+changed the traits. The new output must be identical across every successful
+stopping schedule, including lower transaction gas, cold/warm storage and access
+lists. The invariant compares each trait bucket’s **ordered owner lanes**, final
+round counter, consumed debts and downstream fixed-input samples, not merely
+owner/trait histograms.
+
+An ordinary solo identity packs:
+
+| Bits | Value |
+| --- | --- |
+| 248–255 | `0x20` ordinary half zero; `0x21` ordinary half one; `0x22` frozen future |
+| 224–247 | Absolute level |
+| 192–223 | Frozen queue position |
+| 32–191 | Player address |
+| 0–31 | Zero while hashing the identity |
+
+For absolute **solo** offset `i`, a sixteen-entry group uses
+`keccak256(abi.encode(identity, committedWord, uint256(i / 16)))` and the existing
+uint64 LCG/distribution within that group. Solo offset starts at zero when an
+owner first enters solo processing, including a survivor of canonical seated
+rounds. It never includes the mutable remaining balance, global registry ID,
+transaction gas, call count or an unrelated write-cohort mutation. Unfinished
+solo runs stop only after a multiple of sixteen entries. The final tail resolves
+its fraction and clears debt and progress atomically; a winning fraction is one
+additional emitted entry, not one additional whole debt to subtract.
+
+The fraction uses
+`keccak256(abi.encode(uint256(keccak256("DEGENERUS_TICKET_REMAINDER_V2")), identity, committedWord)) % 100 < remainder`.
+Round and solo engines use that same immutable fractional identity. Round traits
+retain `keccak256(abi.encode(level, globalRound, committedWord))`. A round must
+first fill eight live seats or reach the actual frozen frontier; incomplete
+selection cannot roll or send waiting entries through the solo engine. Surviving
+seats preserve queue order. No other work may change the global round counter.
+
+`TraitsGenerated(address,uint256,uint32)` retains its ABI. The emitted key is
+`identity | absoluteStartOffset`, so a decoder clears its low32 bits before group
+hashing. The event’s count includes any final fractional bonus; no prior event in
+the transaction is required to recover the offset. Widened local arithmetic
+allows the final group to end at `2^32` without wrapping. Foil events use domain
+`0x23` and offset zero; they retain their existing four-line, buy-time-boosted
+`FOIL_SEED_TAG` algorithm. Seated `EntryTraitsRevealed` events directly reveal the
+credited entries and their ordered owners.
+
+Producer order is also part of the invariant. Normally ordinary queues precede
+the committed future pool and foil FIFO. If a parity dependency starts foil early,
+its continuation keeps precedence across transactions, even after its first pack
+makes a buffer ready. Only the exact older queue blocking the FIFO head may
+interrupt it. Foil levels need not be monotonic. Terminal continuation preserves
+an active solo offset and seats when finishing the same old cohort on its old
+word; genuine repoints, completed queues and retired buffers clear progress.
+
+Each indivisible miner operation, including its complete checkpoint tail, must
+fit within 10M gas. There is no fixed transaction gas cap: a transaction may
+perform several operations. Available gas may select an earlier safe checkpoint,
+with the complete flush reserved; it must not change the final ticket inventory.
+Actual failures still revert atomically, and an OOG failure cannot become an
+allowed terminal or prize-delivery fallback. Miner compensation requires at least
+1M measured execution gas and successful nonterminal progress; entry gas is not
+an eligibility condition.
+
 ## Century-refill amendment (2026-09-22)
 
 The century refill uses the committed transition word already passed through
@@ -98,8 +163,9 @@ Claims during frozen pools retain the existing pending-pool solvency check.
 Recovery takes Coinflip wins directly from bits 1 through 31 of the committed
 raw recovery word, leaving bit 0 for the recovery day's normal flip. Each gap
 bit is anchored to the originally requested start day, even when retrying an
-already-settled prefix. Gap reward percentages use the tagged reward draw from
-the raw root and the absolute day, with no daily nudge bonus. Ordered backing and
+already-settled prefix. Gap rewards are fixed at 100% profit: double the stake
+on a win, zero on a loss, before the existing auto-rebuy bonus. The recovery day's
+normal reward draw is unchanged. Ordered backing and
 record-pool settlement is unchanged. The eight-bit results are stored in batches
 of 32 days per storage word. Other daily consumers retain only the final gap
 day's derived word, `H(rawRoot, gapDay)`; its parity does not specify that day's
@@ -112,6 +178,17 @@ game claimable and half opens a redemption lootbox, subject to the existing dust
 rule; surviving escrow FLIP credits its owner. Terminal redemptions retain their
 roll, receipt, and global ETH reservation until an authorized withdrawal. They
 have no expiry and need no historical RNG for that withdrawal.
+
+Miner compensation is separate from these outcome domains. It measures execution gas,
+requires at least 1M gas and successful nonterminal progress, and uses capped
+`block.basefee` with an age-based FLIP multiplier. The accepted callback timestamp
+occupies the low 48 bits of `lootboxRngPacked` solely as a reward-age anchor; no
+entropy derivation or consumer payout reads those bits. Partial work preserves
+that timestamp. New daily requests and scheduled maintenance use their own due-time
+anchors, and optional standalone midday requests use the base tier. Admin transport
+retries are outside the mining chain and receive no miner compensation. The miner
+selector is caller-independent; only explicit donor requests can spend LINK credit.
+Gas price, work age and the multiplier affect miner stake compensation only.
 
 ## Domain map
 
@@ -172,7 +249,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Daily / level quests | `H(word, DAILY_QUEST_TAG)` / `H(word, LEVEL_QUEST_TAG)` | Global quests; forced-type policy unchanged |
 | Skim bps / variance | `H(word, SKIM_BPS_TAG)` / `H(word, SKIM_VARIANCE_TAG)` | Second variance draw hashes the first variance word |
 | sDGNRS century refill | `H(word, CENTURY_REFILL_TAG XOR completedLevel) % 51 + 25` | Tag = `H("sdgnrs.century.refill")`; fixed level and transition word; no caller, amount, timestamp or pool balance in seed |
-| Coinflip reward percent | packed `H(REWARD_PERCENT_TAG, word, uint24(epoch))` | Gap days use the raw recovery root as `word`; separate from win bits |
+| Coinflip reward percent | packed `H(REWARD_PERCENT_TAG, word, uint24(epoch))` | Normally resolved days only; gap rewards are fixed at 100% profit, with win/loss from raw recovery bits |
 | Foil packs | `FOIL_SEED_TAG` on frozen normal cohort word; `FOIL_CCY_TAG` / `FOIL_SPIN_TAG` on immutable packed payout seed | Stored lines bind buyer, level and ticket ordinal; payout binds draw day and ticket ordinal |
 | Protocol/deity boons | existing issuer/day/slot domains | Shared issuer menu intentional; winner cohort closed before request |
 | Incinerator / WWXRP draws | existing contract/day/draw domains | Weighted stake intervals choose probability, not hash input entropy |

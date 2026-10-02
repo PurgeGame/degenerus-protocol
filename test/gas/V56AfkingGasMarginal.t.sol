@@ -52,7 +52,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 /// @notice The DUAL BOUND (USER-LOCKED this phase): every batched per-tx loop in the daily advance / afking
 ///         chain must be sized so its WORST-CASE gas TARGETS < 10,000,000 (GAS_TARGET — the design comfort
 ///         target) AND PROVABLY NEVER EXCEEDS 16,700,000 (EFFECTIVE_GAS_CEILING — the HARD never-exceed kill
-///         ceiling; a breach = advanceGame DoS / forced game-over). The headroom (16.7M − the measured chunk
+///         ceiling; a breach = mineFlip DoS / forced game-over). The headroom (16.7M − the measured chunk
 ///         at the chosen batch) is the safety margin that absorbs measurement variance + worst-case
 ///         outliers. foundry.toml inflates block_gas_limit to 30e9 for the harness; the bar is the 16.7M.
 ///         For each batched loop the harness DERIVES the max safe batch: max N = the largest integer with
@@ -116,7 +116,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      fixed_overhead + N×worst_case_per_item_marginal < GAS_TARGET.
     uint256 internal constant GAS_TARGET = 10_000_000;
 
-    /// @dev The 16.7M HARD never-exceed kill ceiling (USER-LOCKED dual bound). A breach = advanceGame DoS /
+    /// @dev The 16.7M HARD never-exceed kill ceiling (USER-LOCKED dual bound). A breach = mineFlip DoS /
     ///      forced game-over. foundry.toml inflates block_gas_limit to 30e9 for the harness; the never-exceed
     ///      bar is this 16.7M. The headroom (16.7M − the measured-at-target chunk) is the safety margin.
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
@@ -165,7 +165,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev The hard EIP-7825 per-transaction gas bar. The D-06 per-advance asserts use this exact value
     ///      (16_777_216), not the harness EFFECTIVE_GAS_CEILING comfort constant (16_700_000): EVERY single
-    ///      advanceGame tx in a worst-case multi-day VRF-stall resume must stay strictly under it.
+    ///      mineFlip tx in a worst-case multi-day VRF-stall resume must stay strictly under it.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
     /// @dev A worst-case VRF/keeper stall length (days) for the D-06 gap-resume resume. The gap backfill is
@@ -464,11 +464,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         resume: rngGate backfills the (capped 30-day) gap on ONE advance, and the gap/jackpot decouple
     ///         (DegenerusGameAdvanceModule:369-372 `if (gapDays != 0) { stage = STAGE_GAP_BACKFILLED; break; }`)
     ///         defers the up-to-305-winner daily jackpot to the NEXT advance — so the backfill (~9M) and the
-    ///         jackpot (~6M+) NEVER execute in one tx. Asserts the D-06 bar: EACH advanceGame tx (advance N =
+    ///         jackpot (~6M+) NEVER execute in one tx. Asserts the D-06 bar: EACH mineFlip tx (advance N =
     ///         the gap-backfill break, advance N+1 = the deferred jackpot) is STRICTLY under 16,777,216
     ///         (EIP-7825) INDIVIDUALLY — NOT the ~25M total. This is the empirical answer to the proof's
     ///         per-tx gap-resume ESTIMATE (~15.8M), bracketing each advance separately (gasleft before/after a
-    ///         single advanceGame call). At a worst-case SUBSCRIBER_CAP=2000 STAGE the backfill advance ALSO
+    ///         single mineFlip call). At a worst-case SUBSCRIBER_CAP=2000 STAGE the backfill advance ALSO
     ///         processes the resumed-day STAGE, so the full-cap sizing is load-bearing here.
     function testGapResumePerAdvanceCeilingAndDecouple() public {
         // Heavy state: a funded STAGE at scale, driven through an ORGANIC gap resume. The
@@ -505,7 +505,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // The stamp-before-request ordering: the ring walks to completion, then rngGate fires
         // the request (cheap) — no word exists yet, so no backfill/jackpot can share this tx. ----
         uint256 gasBeforeN = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         uint256 advNGas = gasBeforeN - gasleft();
 
         // D-06: advance N (the STAGE chunk + request) is strictly under the EIP-7825 per-tx ceiling.
@@ -532,7 +532,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // ---- Advance N+1: the gap-backfill leg (STAGE gated out — rngLocked; rngGate backfills the
         // gap ALONE and breaks STAGE_GAP_BACKFILLED, deferring the jackpot downstream) ----
         uint256 gasBeforeNp1 = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         uint256 advNp1Gas = gasBeforeNp1 - gasleft();
 
         // D-06: advance N+1 (the lone backfill) is strictly under the EIP-7825 per-tx ceiling.
@@ -567,7 +567,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // cheap STAGE/open marginal fixture builds no full prize-pool/ticket economics) is captured regardless,
         // and assert it stays under the EIP cap.
         uint256 gbNp2 = gasleft();
-        (bool okNp2, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool okNp2, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         uint256 advNp2Gas = gbNp2 - gasleft();
         okNp2; // completion is fixture-state-dependent; the per-tx GAS is the load-bearing D-06 measurement.
 
@@ -1166,7 +1166,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _warpToBoundary(false);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         advGas = gasBefore - gasleft();
 
         require(_subscriberCount() < preCount, "evict non-vacuity: the stage funding-killed subs");
@@ -1182,7 +1182,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _warpToBoundary(false);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         chunkGas = gasBefore - gasleft();
     }
 
@@ -1213,7 +1213,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _warpToBoundary(landOnSettleDay);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         advGas = gasBefore - gasleft();
 
         // Non-vacuity: every measured sub got a NEW stamp this cycle (a real STAGE buy, not a skip).
@@ -1332,11 +1332,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
             // Fulfill any in-flight request FIRST (before advancing) — a stamping advance can leave the game
-            // rngLocked with an unfilled word, and advanceGame() would revert RngNotReady if called while the
+            // rngLocked with an unfilled word, and mineFlip() would revert RngNotReady if called while the
             // word is 0. Fulfilling at the loop top clears the lock so the next advance can proceed.
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }
@@ -1348,7 +1348,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }
@@ -1594,7 +1594,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         vm.cool(address(game)); // re-cold all game storage -> each Sub slot is a cold first-touch in the STAGE
         uint256 gasBefore = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         advGas = gasBefore - gasleft();
 
         for (uint256 i; i < n; ++i) {
@@ -1632,13 +1632,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         vm.cool(address(game)); // re-cold all game storage -> the finalize cross-contract read is a cold touch
         uint256 gasBefore = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         advGas = gasBefore - gasleft();
 
         require(_subscriberCount() < preCount, "cold evict non-vacuity: the stage funding-killed subs");
     }
 
-    /// @dev LIVE binding-stage worst case: a saturated all-evict crank measured cold through the REAL advanceGame
+    /// @dev LIVE binding-stage worst case: a saturated all-evict crank measured cold through the REAL mineFlip
     ///      STAGE loop (not the analytic projection). Builds more evicting subs than one chunk admits, so the
     ///      contract's weight budget caps the chunk at SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT finalizes;
     ///      the measured single-tx gas is the true binding worst case. Asserts the <10M target and the EIP-7825 cap.
@@ -1739,7 +1739,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint32 farDay = game.currentDayView();
         require(farDay > dIdx0 + 1, "fixture: a multi-day gap opened (wallDay >> dailyIdx)");
         require(game.advanceDue(), "fixture: advanceDue after the gap");
-        game.advanceGame();
+        game.mineFlip();
         require(game.rngLocked(), "fixture: the far-day advance requested a word (RNG LOCK engaged)");
         require(_dailyIdx() == dIdx0, "fixture: the request advance did NOT seal (dailyIdx unchanged)");
 
@@ -1770,7 +1770,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 consumeCalls;
         while (_dailyIdx() == idxBeforeConsume && consumeCalls < DRAIN_MAX_ITERATIONS) {
             vm.recordLogs();
-            game.advanceGame();
+            game.mineFlip();
             Vm.Log[] memory consumeLogs = vm.getRecordedLogs();
             for (uint256 i; i < consumeLogs.length; ++i) {
                 assertTrue(
@@ -1817,7 +1817,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         vm.cool(address(game)); // cold first-touch -> each skip is a realistic cold Sub-slot read
         uint256 gasBefore = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         advGas = gasBefore - gasleft();
 
         // Non-vacuity: each sub SKIPPED (still stamped to the poked future day, NOT re-stamped to processDay).

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -24,8 +26,11 @@ pragma solidity 0.8.34;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {TicketEntropy} from "../libraries/TicketEntropy.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {
+    IDegenerusGameTicketModule,
     IDegenerusGameDegeneretteModule,
     IDegenerusGameJackpotModule
 } from "../interfaces/IDegenerusGameModules.sol";
@@ -837,401 +842,27 @@ contract DegenerusGameFoilPackModule is
 
 
 
-    /// @dev Seats of the round drain, kept in queue order so a vacated seat is refilled by
-    ///      the next entry and the seated set is always the first unexhausted entries from
-    ///      the cursor — the property a budget-split resume rebuilds from storage alone.
-    struct RoundSeats {
-        address[8] player;
-        uint32[8] queueIdx;
-        uint32[8] owed;
-        uint8[8] rem;
-        uint256[8] ownerIdx;
-        uint256 seated;
-        uint256 cur;
-        uint24 lvl;
-        uint24 rk;
-        // Queue lanes are read-only during the call; adjacent seats share this cached word.
-        uint256 queueBase;
-        uint256 queueWordIndex;
-        uint256 queueWord;
+    /// @dev Compatibility selectors; all ordinary ticket generation lives in Ticket.
+    function generateTraitRun(uint256 identity, uint32 startIndex, uint32 count, uint256 entropy, uint256 ownerIdx)
+        external returns (uint256 writes)
+    {
+        return abi.decode(_ticketWorkerCall(abi.encodeWithSelector(
+            IDegenerusGameTicketModule.generateTraitRun.selector, identity, startIndex, count, entropy, ownerIdx
+        )), (uint256));
     }
 
-    /// @notice Per-entry trait generation in the Game's storage context, called by Mint.
-    /// @dev Inputs and LCG sequence match Mint's original generator. Keeping this writer
-    ///      here leaves Mint under EIP-170; scratch memory stays local to the delegatecall.
-    ///      Caller has prepared the full level and validated ownerIdx; no external calls.
-    uint64 private constant TICKET_LCG_MULT = 6364136223846793005;
-
-    function generateTraitRun(
-        uint256 baseKey,
-        uint32 startIndex,
-        uint32 count,
-        uint256 entropyWord,
-        uint256 ownerIdx
-    ) external returns (uint256 writes) {
-        uint32[256] memory counts;
-        uint8[256] memory touchedTraits;
-        uint16 touchedLen;
-
-        uint32 endIndex;
-        unchecked {
-            endIndex = startIndex + count;
-        }
-        uint32 i = startIndex;
-
-        // Generate traits in groups of 16, using LCG for deterministic randomness.
-        while (i < endIndex) {
-            uint32 groupIdx = i >> 4;
-
-            // Hash all inputs so player address (stored in baseKey bits 191-32)
-            // reaches the low 32 bits of s. LCG iteration preserves low-bit
-            // independence, so the category bucket — derived from the low 32
-            // bits of s — inherits whatever entropy the seed's low bits carry.
-            uint256 seed = uint256(
-                keccak256(abi.encode(baseKey, entropyWord, groupIdx))
-            );
-            uint64 s = uint64(seed) | 1;
-            uint8 offset = uint8(i & 15);
-            unchecked {
-                s = s * (TICKET_LCG_MULT + uint64(offset)) + uint64(offset);
-            }
-
-            for (uint8 j = offset; j < 16 && i < endIndex; ) {
-                unchecked {
-                    s = s * TICKET_LCG_MULT + 1; // LCG step
-
-                    // Generate trait using weighted distribution, add quadrant offset.
-                    uint8 traitId = DegenerusTraitUtils.traitFromWord(s) +
-                        (uint8(i & 3) << 6);
-
-                    // Track first occurrence of each trait for batch writing.
-                    if (counts[traitId]++ == 0) {
-                        touchedTraits[touchedLen++] = traitId;
-                    }
-                    ++i;
-                    ++j;
-                }
-            }
-        }
-
-        // Extract level from baseKey for storage slot calculation.
-        uint24 lvl = uint24(baseKey >> 224);
-
-        // Calculate the storage slot for this level's trait buckets.
-        // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
-        // with dynamic array elements at keccak256(keccak256(key . slot) + index).
-        // This relies on the standard Solidity storage layout (stable since 0.4.x).
-        // Safe here because the contract is non-upgradeable.
-        uint256 levelSlot = _traitBufferBase(lvl);
-
-        // Batch-write the packed lanes, one run per distinct trait.
-        for (uint16 u; u < touchedLen; ) {
-            uint8 traitId = touchedTraits[u];
-            uint32 occurrences = counts[traitId];
-            // Restore the all-zero invariant on the shared scratch buffer.
-            counts[traitId] = 0;
-            (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, lvl);
-            unchecked {
-                writes += f * 3 + d;
-                ++u;
-            }
-        }
+    function drainRounds(uint24 rk, uint24 lvl, uint32 room, uint256 idx, uint256 total, uint256 entropy, uint8 shift)
+        external returns (uint256 nextIdx, uint32 used)
+    {
+        return abi.decode(_ticketWorkerCall(abi.encodeWithSelector(
+            IDegenerusGameTicketModule.drainRounds.selector, rk, lvl, room, idx, total, entropy, shift
+        )), (uint256, uint32));
     }
 
-    /// @notice Seated round drain (delegatecall target of the mint module's two queue drains).
-    /// @dev Fills up to eight seats from the queue at `idx`, then runs
-    ///      rounds: each round rolls four traits (one per quadrant) off (lvl, round, entropy)
-    ///      and gives every seat one ticket with them, written as one lane word per quadrant.
-    ///      A seat with fewer than four entries left takes the leading quadrants only. Rare
-    ///      colors (>= ROUND_SPLIT_COLOR) spread the seats across the quadrant's eight
-    ///      symbols instead. Exhausted seats roll their fractional remainder, write back
-    ///      zero and are refilled; the loop ends when the seat floor or the budget is not
-    ///      met, writing back every seated balance.
-    /// @return nextIdx The scan frontier: every lower index is exhausted or recorded in
-    ///         ticketSeats (the resume cursor).
-    /// @return used Write units charged.
-    function drainRounds(
-        uint24 rk,
-        uint24 lvl,
-        uint32 room,
-        uint256 idx,
-        uint256 total,
-        uint256 entropy,
-        uint8 shift
-    ) external returns (uint256 nextIdx, uint32 used) {
-        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
-
-        RoundSeats memory st;
-        st.lvl = lvl;
-        st.rk = rk;
-        st.cur = idx;
-        uint256 queueBase;
-        assembly ("memory-safe") {
-            mstore(0, queue.slot)
-            queueBase := keccak256(0, 32)
-        }
-        st.queueBase = queueBase;
-        st.queueWordIndex = type(uint256).max;
-        uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
-        uint256 levelSlot = _traitBufferBase(lvl);
-        uint32 round = ticketRound;
-        // The next round starts only if a fully split one still fits the budget, so a call
-        // never exceeds its budget even in the rarest roll.
-        uint32 roundCost = ROUND_UNITS + 4 * ROUND_SPLIT_UNITS;
-
-        // Re-seat what the previous chunk left seated (queue order), then fill from the
-        // frontier. A seat drained meanwhile by the per-entry engine reads as exhausted and
-        // is skipped.
-        uint256 word = ticketSeats;
-        while (word != 0) {
-            used = _seatEntry(st, (word & 0xffffffff) - 1, lvl, entropy, snapDone, shift, used);
-            word >>= 32;
-        }
-
-        while (true) {
-            used = _fillSeats(st, total, lvl, entropy, snapDone, shift, room, used);
-            if (st.seated < ROUND_MIN_SEATS || used + roundCost > room) break;
-            used += _runRound(st, lvl, levelSlot, round, entropy);
-            unchecked {
-                ++round;
-            }
-        }
-        ticketRound = round;
-
-        // Write back the seated balances and record the seats; the cursor the caller
-        // persists is the frontier.
-        uint256 seated = st.seated;
-        for (uint256 j; j < seated; ) {
-            _setEntryOwed(st.rk, uint32(st.ownerIdx[j] + 1),
-                uint80((st.ownerIdx[j] + 1) << OWNER_IDX_SHIFT) |
-                (uint80(st.owed[j]) << 8) | uint80(st.rem[j]) | snapDone);
-            word |= (uint256(st.queueIdx[j]) + 1) << (32 * j);
-            unchecked {
-                ++j;
-            }
-        }
-        if (word != ticketSeats) {
-            used += ticketSeats == 0 ? 3 : 1;
-            ticketSeats = word;
-        }
-        nextIdx = st.cur;
-    }
-
-    /// @dev Fill empty seats from the queue frontier.
-    function _fillSeats(
-        RoundSeats memory st,
-        uint256 total,
-
-        uint24 lvl,
-        uint256 entropy,
-        uint80 snapDone,
-        uint8 shift,
-        uint32 room,
-        uint32 used
-    ) private returns (uint32) {
-        while (st.seated < ROUND_SEATS && st.cur < total) {
-            if (used + SEAT_JOIN_UNITS > room) break;
-            used = _seatEntry(st, st.cur, lvl, entropy, snapDone, shift, used);
-            unchecked {
-                ++st.cur;
-            }
-        }
-        return used;
-    }
-
-    /// @dev Seat queue entry `qi` if it still owes anything. Zero-owed entries resolve their
-    ///      remainder roll here (skipped or seated with one entry) exactly as the per-entry
-    ///      path does; a fully drained entry is skipped without a write.
-    function _seatEntry(
-        RoundSeats memory st,
-        uint256 qi,
-
-        uint24 lvl,
-        uint256 entropy,
-        uint80 snapDone,
-        uint8 shift,
-        uint32 used
-    ) private returns (uint32) {
-        uint256 wordIndex = qi >> 3;
-        if (wordIndex != st.queueWordIndex) {
-            uint256 queueBase = st.queueBase;
-            uint256 lanes;
-            assembly ("memory-safe") { lanes := sload(add(queueBase, wordIndex)) }
-            st.queueWord = lanes;
-            st.queueWordIndex = wordIndex;
-        }
-        uint32 ownerPos = uint32(st.queueWord >> ((qi & 7) << 5));
-        uint256 record = _entryRecord(st.rk, ownerPos);
-        address p = address(uint160(record));
-        uint80 packed = uint80(record >> 160);
-        if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
-            packed = _snapOwedPacked(packed, shift);
-        }
-        uint32 owed = uint32(packed >> 8);
-        uint8 rem = uint8(packed);
-        if (owed == 0) {
-            bool skip;
-            (packed, skip) = _resolveZeroOwedRemainder(
-                packed,
-                st.rk,
-                ownerPos,
-                entropy,
-                (uint256(lvl) << 224) | (qi << 192) | (uint256(uint160(p)) << 32),
-                snapDone
-            );
-            // A dust entry reads its queue lane and combined owner/owed record, then clears owed.
-            ++used;
-            if (skip) return used;
-            owed = 1;
-            rem = 0;
-        }
-        uint256 j = st.seated;
-        st.player[j] = p;
-        st.queueIdx[j] = uint32(qi);
-        st.owed[j] = owed;
-        st.rem[j] = rem;
-        // _entryRecord authenticated ownerPos as a nonzero, in-range global ID.
-        unchecked { st.ownerIdx[j] = uint256(ownerPos) - 1; }
-        used += SEAT_JOIN_UNITS;
-        st.seated = j + 1;
-        return used;
-    }
-
-    /// @dev A single-lane append, charged per physical bucket write.
-    function _chargeRun(uint256 levelSlot, uint8 trait, uint256 ownerIdx, uint24 lvl) private returns (uint32) {
-        (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, trait, ownerIdx, 1, lvl);
-        return uint32(f * 3 + d);
-    }
-
-    /// @dev A whole-word append, charged per physical bucket write.
-    function _chargeLanes(uint256 levelSlot, uint8 trait, uint256 lanes, uint256 n, uint24 lvl) private returns (uint32) {
-        (uint256 f, uint256 d) = _bucketAppendLanes(levelSlot, trait, lanes, n, lvl);
-        return uint32(f * 3 + d);
-    }
-
-    /// @dev One quadrant of a round: roll its trait off the seed slice, write one lane word
-    ///      (or eight single lanes across the symbols for a rare color), and return the units
-    ///      charged plus this quadrant's contribution to the seat-trait word and mask.
-    function _runQuadrant(
-        RoundSeats memory st,
-        uint256 levelSlot,
-        uint256 seed,
-        uint256 q
-    ) private returns (uint32 units, uint256 traitBits, uint32 maskBits) {
-        uint64 slice = uint64(seed >> (64 * q));
-        uint8 base = DegenerusTraitUtils.traitFromWord(slice) | uint8(q << 6);
-        bool split = ((base >> 3) & 7) >= ROUND_SPLIT_COLOR;
-        // Bits 40..42 of the slice are unused by traitFromWord: the split rotation.
-        uint256 rot = (slice >> 40) & 7;
-        uint256 lanes;
-        uint256 n;
-        uint256 seated = st.seated;
-        for (uint256 j; j < seated; ) {
-            if (st.owed[j] > q) {
-                uint8 trait = base;
-                if (split) {
-                    trait = (base & 0xF8) | uint8((n + rot) & 7);
-                    units += _chargeRun(levelSlot, trait, st.ownerIdx[j], st.lvl);
-                } else {
-                    lanes |= st.ownerIdx[j] << (32 * n);
-                }
-                traitBits |= uint256(trait) << (32 * j + 8 * q);
-                maskBits |= uint32(1) << uint32(4 * j + q);
-                unchecked {
-                    ++n;
-                }
-            }
-            unchecked {
-                ++j;
-            }
-        }
-        if (!split && n != 0) {
-            units += _chargeLanes(levelSlot, base, lanes, n, st.lvl);
-        }
-    }
-
-    /// @dev One round: roll, write the four quadrant words, emit, consume, compact.
-    function _runRound(
-        RoundSeats memory st,
-        uint24 lvl,
-        uint256 levelSlot,
-        uint32 round,
-        uint256 entropy
-    ) private returns (uint32 used) {
-        uint256 seed = uint256(keccak256(abi.encode(lvl, round, entropy)));
-        uint256 seated = st.seated;
-        uint256 seatTraits;
-        uint32 seatMask;
-        used = 4; // direct reveals and seat loops; every write charges itself below
-
-        for (uint256 q; q < 4; ) {
-            (uint32 u, uint256 traitBits, uint32 maskBits) = _runQuadrant(st, levelSlot, seed, q);
-            used += u;
-            seatTraits |= traitBits;
-            seatMask |= maskBits;
-            unchecked {
-                ++q;
-            }
-        }
-
-        _emitEntryTraits(st, lvl, seatTraits, seatMask, 0);
-        if (seated > 4) _emitEntryTraits(st, lvl, seatTraits >> 128, seatMask >> 16, 4);
-
-        // Consume one ticket per seat; exhausted seats roll their remainder, then leave.
-        uint256 k;
-        for (uint256 j; j < seated; ) {
-            uint32 owed = st.owed[j];
-            uint8 rem = st.rem[j];
-            unchecked {
-                owed -= owed > 4 ? 4 : owed;
-            }
-            if (owed == 0) {
-                if (rem != 0) {
-                    uint256 baseKey = (uint256(lvl) << 224) |
-                        (uint256(st.queueIdx[j]) << 192) |
-                        (uint256(uint160(st.player[j])) << 32);
-                    if (_rollRemainder(entropy, baseKey, rem)) owed = 1;
-                    rem = 0;
-                }
-                if (owed == 0) {
-                    _setEntryOwed(st.rk, uint32(st.ownerIdx[j] + 1), 0);
-                    unchecked {
-                        ++used;
-                        ++j;
-                    }
-                    continue;
-                }
-            }
-            if (k != j) {
-                st.player[k] = st.player[j];
-                st.queueIdx[k] = st.queueIdx[j];
-                st.ownerIdx[k] = st.ownerIdx[j];
-            }
-            st.owed[k] = owed;
-            st.rem[k] = rem;
-            unchecked {
-                ++k;
-                ++j;
-            }
-        }
-        st.seated = k;
-    }
-
-    /// @dev One ABI word carries sixteen trait bytes plus their sixteen presence bits.
-    ///      Unused trailing seats have zero topics even when compaction left stale memory.
-    function _emitEntryTraits(
-        RoundSeats memory st,
-        uint24 lvl,
-        uint256 traits,
-        uint32 mask,
-        uint256 offset
-    ) private {
-        uint256 prefix = uint256(lvl) << 160;
-        uint256 p0 = prefix | uint160(st.player[offset]);
-        uint256 p1 = offset + 1 < st.seated ? prefix | uint160(st.player[offset + 1]) : 0;
-        uint256 p2 = offset + 2 < st.seated ? prefix | uint160(st.player[offset + 2]) : 0;
-        uint256 p3 = offset + 3 < st.seated ? prefix | uint160(st.player[offset + 3]) : 0;
-        emit EntryTraitsRevealed(p0, p1, p2, p3, uint144(uint128(traits)) | (uint144(uint16(mask)) << 128));
+    function _ticketWorkerCall(bytes memory callData) private returns (bytes memory data) {
+        bool ok;
+        (ok, data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(callData);
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
 
     /// @dev Payable delegate worker: records the presale leg in the reusable cohort.
@@ -1252,55 +883,50 @@ contract DegenerusGameFoilPackModule is
     ///      the Game's storage context, so it reads/writes the same
     ///      foilQueue/foilGenerationDay/foilCursor/foilRecord and the lvlTraitEntry
     ///      buckets the jackpot samples.
-    /// @param room The leftover write budget for this batch.
     /// @return done True iff the committed foil read cohort is exhausted.
     /// @return drained True if this call resolved at least one foil buyer.
-    function processFoilDrain(uint32 room)
-        external
-        returns (bool done, bool drained)
-    {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        return _processFoilDrain(room);
+    function processFoilDrain(uint32) external returns (bool done, bool drained) {
+        MineFlipGas.Result memory result = _runFoilWork(MineFlipGas.available());
+        return (result.done, result.progressed);
     }
 
-    /// @dev Materialize the frozen normal-ticket cohort under its pinned word.
-    ///      The queue length is released in constant work after the final buyer.
-    function _processFoilDrain(uint32 room) private returns (bool done, bool drained) {
+    function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory) {
+        return _runFoilWork(allowance);
+    }
+
+    function _runFoilWork(uint256 allowance) private returns (MineFlipGas.Result memory result) {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         uint256[] storage packs = foilQueue[_foilReadKey()];
         uint256 cursor = foilCursor;
         uint256 total = packs.length;
-        if (cursor >= total) return (true, false);
         uint256 entropy = _lootboxWord(_rngReadBuffer());
-        if (entropy == 0) return (false, false);
-        if (foilGenerationDay == 0) {
-            uint24 day = _simulatedDayIndex();
-            foilGenerationDay = day;
-            (bool drawn, , ) = _foilDrawFor(day);
-            foilFirstDrawDay = drawn ? day + 1 : day;
-        }
         bool terminal = gameOver || _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
             || _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint32[256] memory counts;
         uint8[256] memory touchedTraits;
-        while (cursor < total) {
-            // Adds one warm record write to the old 83-unit materialization bound.
-            if (room < FOIL_PACK_ENTRIES * 5 + 4) break;
+        // Includes a cold pack, all bucket flushes, and the possible grand push.
+        while (entropy != 0 && cursor < total && MineFlipGas.canRun(meter, GasBounds.FOIL_PACK, 100_000)) {
             uint24 packLevel = uint24(packs[cursor] >> 160);
             if (!_ticketLevelRetired(packLevel) && !(terminal && packLevel != _gameOverTicketLevel(level))
                 && !_prepareTicketLevelAfterFoil(packLevel)) break;
-            (bool grand, uint32 units) = _resolveFoilBuyer(packs[cursor], entropy, terminal, counts, touchedTraits);
-            drained = true;
-            room = units >= room ? 0 : room - units;
+            if (foilGenerationDay == 0) {
+                uint24 day = _simulatedDayIndex();
+                foilGenerationDay = day;
+                (bool drawn,,) = _foilDrawFor(day);
+                foilFirstDrawDay = drawn ? day + 1 : day;
+            }
+            _resolveFoilBuyer(packs[cursor], entropy, terminal, counts, touchedTraits);
+            result.progressed = true;
+            result.rewardBasis += FOIL_PACK_ENTRIES;
             ++cursor;
-            if (grand) room = room < GRAND_DRAIN_UNITS ? 0 : room - GRAND_DRAIN_UNITS;
         }
-        if (cursor < total) {
-            foilCursor = uint32(cursor);
-            return (false, drained);
-        }
-        assembly ("memory-safe") { sstore(packs.slot, 0) }
-        foilCursor = 0;
-        return (true, drained);
+        result.done = cursor >= total;
+        if (result.done) {
+            assembly ("memory-safe") { sstore(packs.slot, 0) }
+            foilCursor = 0;
+        } else if (cursor != foilCursor) foilCursor = uint32(cursor);
+        MineFlipGas.finish(meter);
     }
 
     /// @dev Generate and store the four boosted lines from the committed read word,
@@ -1385,7 +1011,7 @@ contract DegenerusGameFoilPackModule is
                 }
             }
 
-            uint256 baseKey = (uint256(lvl) << 224) |
+            uint256 baseKey = (uint256(TicketEntropy.FOIL) << 248) | (uint256(lvl) << 224) |
                 (uint256(uint160(buyer)) << 32);
             emit TraitsGenerated(buyer, baseKey, FOIL_PACK_ENTRIES);
 
@@ -1519,7 +1145,7 @@ contract DegenerusGameFoilPackModule is
         // for 7.5M FLIP on top of a pool-sized grand. The marker closes that outright
         // rather than leaving it to the pull's re-derivation.
         foilRecord[lvl & 3][player] |= _FOIL_GOLD_CLAIMED;
-        (bool ok, ) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
+        (bool ok, bytes memory reason) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameJackpotModule.payGoldenTicketGrand.selector,
                 player,
@@ -1527,7 +1153,9 @@ contract DegenerusGameFoilPackModule is
                 golds
             )
         );
-        if (!ok) revert EmptyRevert();
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+        }
         // flipCredit 0: the grand's own legs are stamped by GoldenTicketWin.
         emit GoldenTicketFoil(player, lvl, golds, allGold, 0);
     }

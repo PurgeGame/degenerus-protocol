@@ -37,7 +37,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
         // setUp was a separate transaction. No production storage is read before measurement.
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.advanceGame{gas: 16_777_216 - 21_064}();
+        game.mineFlip{gas: 16_777_216 - 21_064}();
         uint256 used = beforeGas - gasleft() + 21_064;
         emit log_named_uint("century refill + seed + 32 deity grants, cold gas including intrinsic", used);
         assertLt(used, 10_000_000, "comfort target");

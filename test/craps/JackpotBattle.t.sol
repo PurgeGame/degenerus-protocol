@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
 import {CrapsPreferenceStore} from "./CrapsPreferenceStore.sol";
 
@@ -164,6 +165,30 @@ contract JackpotBattleTest is CrapsPins {
         (r,,) = cold.jackpotBattleOf(slot);
     }
 
+    function test_RunDailyBattleWorkUsesParentAllowanceAndFinishesLockedDailyField() public {
+        _enter(alice, false);
+        _enter(bob, false);
+        _lock(50_000 ether);
+        _start(0xD4117, 5, address(0xD1000));
+        vm.expectRevert();
+        table.runDailyBattleWork(9_000_000);
+        vm.prank(ContractAddresses.GAME);
+        MineFlipGas.Result memory result = table.runDailyBattleWork(1_000_000);
+        assertFalse(result.progressed);
+        assertEq(table.bonusCursorOf(slot), 0);
+        uint256 iterations;
+        while (!result.done && iterations++ < 20) {
+            vm.prank(ContractAddresses.GAME);
+            uint256 before = gasleft();
+            result = table.runDailyBattleWork(3_000_000);
+            assertLt(before - gasleft(), 3_000_000, "full native call respects parent remainder");
+            assertTrue(result.progressed, "funded daily continuation must move while game remains locked");
+        }
+        assertTrue(result.done);
+        assertTrue(table.battleOf(table.keyOfSlot(slot)).finalized);
+        assertTrue(game.rngLocked());
+    }
+
     function test_EarlyFloorAwardsOnePerTenThousandAdded() public {
         _lock(CrapsPriceLib.jackpotAdded(25_000 ether, 0));
         vm.prank(ContractAddresses.GAME);
@@ -309,15 +334,20 @@ contract JackpotBattleTest is CrapsPins {
         (uint64 active,,,) = api.jackpotProgress();
         assertEq(active, detached, "the lock did not detach");
         _start(123, 40, address(0x1000));
-        vm.prank(ContractAddresses.GAME); api.advanceJackpotBattle(1);
+        table.resolveSeats(detached, 1);
         assertEq(table.bonusCursorOf(detached), 1);
-        uint256 lane = flip.compLane();
         uint64 daySlot = uint64(uint256(day) * 8);
+        table.keepScheduled(type(uint64).max);
+        assertEq(table.keeperSlot(), daySlot, "daily lock prevents maintenance interleaving");
+        assertEq(table.bonusCursorOf(detached), 1);
+        _finish(300);
+        uint256 settledLane = flip.compLane();
+        game.setRngLocked(false);
+        game.setRngConsumerStage(7);
         for (uint256 i; i < 20 && table.keeperSlot() <= daySlot; ++i) table.keepScheduled(type(uint64).max);
         assertGt(table.keeperSlot(), daySlot, "the keeper never swept the lapsed day");
-        assertEq(table.bonusCursorOf(detached), 1, "the sweep moved the battle's settle cursor");
-        assertEq(flip.compLane(), lane, "the sweep refunded awards as reservations");
-        _finish(300);
+        assertEq(table.bonusCursorOf(detached), 40, "the sweep moved the completed battle cursor");
+        assertEq(flip.compLane(), settledLane, "the sweep refunded awards as reservations");
         assertEq(table.battleOf(bytes32(uint256(detached))).resolved, 40);
     }
 
@@ -370,7 +400,8 @@ contract JackpotBattleTest is CrapsPins {
     function test_PaidOwnThenDayThenAwarded_OneWalkFinalizesOnce() public {
         _enter(alice, false); _enter(bob, true);
         _lock(1_000_000 ether); _start(17, 2, alice);
-        vm.prank(ContractAddresses.GAME); assertFalse(api.advanceJackpotBattle(1));
+        table.resolveSeats(slot, 1);
+        assertFalse(table.battleOf(bytes32(uint256(slot))).finalized);
         assertEq(table.bonusCursorOf(slot), 1);
         vm.recordLogs();
         vm.prank(ContractAddresses.GAME); assertTrue(api.advanceJackpotBattle(type(uint64).max));

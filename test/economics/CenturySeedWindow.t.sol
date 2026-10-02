@@ -196,7 +196,7 @@ contract CenturySeedWindow is DeployProtocol {
     // ------------------------------------------------------------------
     // BRICK-SAFETY — the arm rides the daily crank, so it must be TOTAL
     // ------------------------------------------------------------------
-    // `armCenturySeed` is called from `advanceGame`'s transition close. A revert anywhere
+    // `armCenturySeed` is called from `mineFlip`'s transition close. A revert anywhere
     // inside it does not fail one feature, it stalls the daily crank at a level boundary —
     // the game cannot leave the jackpot phase. These pin the two arithmetic sites that could
     // ever throw, plus the whole schedule end to end.

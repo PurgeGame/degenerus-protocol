@@ -345,7 +345,7 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         vm.warp(block.timestamp + 400 days);
         for (uint256 i; i < 240 && !game.gameOver(); ++i) {
             if (game.advanceDue() || game.rngLocked()) {
-                try game.advanceGame() {} catch {}
+                try game.mineFlip() {} catch {}
             }
             uint256 req = mockVRF.lastRequestId();
             if (req != 0) {

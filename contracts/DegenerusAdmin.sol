@@ -106,6 +106,9 @@ interface IVRFCoordinatorV2_5Owner {
 
 /// @dev Game contract admin interface (VRF + liquidity).
 interface IDegenerusGameAdmin {
+    /// @notice Retry an unanswered VRF request once, after the original request's 20-hour timeout.
+    function retryRng() external;
+
     /// @notice Timestamp of the last successfully processed VRF fulfillment.
     function lastVrfProcessed() external view returns (uint48);
 
@@ -855,6 +858,12 @@ contract DegenerusAdmin {
     // =========================================================================
     // VRF COORDINATOR SWAP GOVERNANCE
     // =========================================================================
+
+    /// @notice Retry the game's unanswered VRF request without changing its committed inputs.
+    /// @dev The game enforces the 20-hour timeout, one retry per request and terminal precedence.
+    function retryGameRng() external onlyOwner {
+        gameAdmin.retryRng();
+    }
 
     /// @notice Propose an emergency VRF coordinator swap.
     /// @dev Two paths:

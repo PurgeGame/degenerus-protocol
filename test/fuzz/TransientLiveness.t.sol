@@ -43,6 +43,18 @@ contract TransientLivenessHarness is DegenerusGameStorage {
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 2);
     }
 
+    function gapCheckpoint(bool gapApplied, bool daily, bool active, bool published, uint24 dayAge, uint256 word)
+        external
+    {
+        rngGapApplied = gapApplied;
+        rngLockedFlag = daily;
+        _setRngRequestActive(active);
+        _setRngSessionPublished(published);
+        rngRequestDay = _simulatedDayIndex() - dayAge;
+        rngRequestTime = uint48(block.timestamp);
+        rngWordCurrent = word;
+    }
+
     function liveness() external view returns (bool) {
         return _livenessTriggered();
     }
@@ -89,6 +101,59 @@ contract TransientLivenessUnitTest is Test {
         assertFalse(h.liveness(), "a day that holds its word is finished on it");
     }
 
+    function test_currentPublishedDailyGapCheckpointFinishesItsWord() public {
+        _seedPastDeadline();
+        h.gapCheckpoint(true, true, true, true, 0, 777);
+        assertFalse(h.liveness(), "gap credit cannot preempt its owed current-day word");
+    }
+
+    function test_gapCheckpointExceptionRequiresEveryCommitmentGuard() public {
+        _seedPastDeadline();
+        h.gapCheckpoint(false, true, true, true, 0, 777);
+        assertTrue(h.liveness(), "ordinary daily commitment does not create gap credit");
+        h.gapCheckpoint(true, false, true, true, 0, 777);
+        assertTrue(h.liveness(), "midday commitment cannot defer the deadline");
+        h.gapCheckpoint(true, true, false, true, 0, 777);
+        assertTrue(h.liveness(), "inactive commitment cannot defer the deadline");
+        h.gapCheckpoint(true, true, true, false, 0, 777);
+        assertTrue(h.liveness(), "unpublished commitment cannot defer the deadline");
+        h.gapCheckpoint(true, true, true, true, 1, 777);
+        assertTrue(h.liveness(), "yesterday's commitment cannot defer today's ending");
+        h.gapCheckpoint(true, true, true, true, 0, 1);
+        assertTrue(h.liveness(), "waiting sentinel cannot defer the deadline");
+        h.gapCheckpoint(true, true, true, true, 0, 0);
+        assertTrue(h.liveness(), "absent word cannot defer the deadline");
+    }
+
+    function test_gapReceiptDoesNotSuppressEndingAfterMidnight() public {
+        _seedPastDeadline();
+        h.gapCheckpoint(true, true, true, true, 0, 777);
+        assertFalse(h.liveness(), "current day's owed word may finish");
+        // Model that day's completed seal while retaining the receipt as a defensive
+        // negative control. Midnight must invalidate the current-day exemption itself.
+        h.seed(5, 31, uint48(block.timestamp), 0);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(h.liveness(), "old gap receipt cannot postpone the next caught-up day's ending");
+    }
+
+    function test_gapCheckpointCannotUndoEndingLatchOrDeadman() public {
+        _seedPastDeadline();
+        h.gapCheckpoint(true, true, true, true, 0, 777);
+        h.latchEnding();
+        assertTrue(h.liveness(), "gap checkpoint cannot undo an ending latch");
+        h = new TransientLivenessHarness();
+        h.seed(5, 100, 0, 100);
+        h.setPools(10 ether, 9 ether);
+        h.gapCheckpoint(true, true, true, true, 0, 777);
+        assertTrue(h.liveness(), "deadman remains higher priority than gap completion");
+    }
+
+    function _seedPastDeadline() private {
+        h.seed(5, 31, 0, 1);
+        h.setPools(10 ether, 9 ether);
+        assertTrue(h.liveness(), "control: caught-up unmet deadline triggers");
+    }
+
     function test_startedEndingStaysTriggeredEvenIfTargetMet() public {
         h.seed(5, 31, 0, 1);
         h.setPools(10 ether, 11 ether);
@@ -108,7 +173,8 @@ contract TransientLivenessSeeder is DegenerusGame {
         currentPrizePool = 0;
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
-        _afkingResetDay = day;
+        // No preparation has begun for today; an unattended day must remain a gap.
+        _afkingResetDay = dailyIdx;
     }
 }
 
@@ -118,6 +184,7 @@ contract TransientLivenessIntegrationTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        mockVRF.fundSubscription(1, 100e18);
         vm.warp(block.timestamp + 500 days);
         vm.deal(BUYER, 10 ether);
         vm.deal(BUYER2, 10 ether);
@@ -132,7 +199,7 @@ contract TransientLivenessIntegrationTest is DeployProtocol {
     }
 
     function _advanceWithVrf() private {
-        game.advanceGame();
+        game.mineFlip{gas: 15_000_000}();
         uint256 id = mockVRF.lastRequestId();
         if (id != 0) {
             (, , bool fulfilled) = mockVRF.pendingRequests(id);
@@ -143,7 +210,9 @@ contract TransientLivenessIntegrationTest is DeployProtocol {
     /// @dev Run today's advance chain until the day seals (the lock releases on a new daily index).
     function _sealToday() private {
         uint24 day = game.currentDayView();
-        for (uint256 i; i < 200; ++i) {
+        // The synthetic 500-day jump also leaves one expired scheduled Craps day per
+        // maintenance checkpoint. Drain those real prerequisites before expecting a request.
+        for (uint256 i; i < 750; ++i) {
             _advanceWithVrf();
             if (!game.rngLocked() && game.rngWordForDay(day) != 0) return;
         }

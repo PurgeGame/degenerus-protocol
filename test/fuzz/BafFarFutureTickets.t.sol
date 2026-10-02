@@ -5,7 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title BafFarFutureTicketsTest -- Regression test for the RngLocked revert
-///        during BAF reward jackpot processing in advanceGame.
+///        during BAF reward jackpot processing in mineFlip.
 ///
 /// @notice The bug: during the purchase→jackpot transition at level 10 (BAF fires),
 ///         _runRewardJackpots → _runBafJackpot → _awardJackpotTickets → _jackpotTicketRoll
@@ -23,7 +23,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @dev Injects 20 BAF leaderboard entries to maximize the probability of hitting the 5%
 ///      far-future branch. With ~20 rolls, P(at least one far-future) ≈ 64%. Multiple
 ///      VRF words are tested via the fuzz parameter to push coverage higher.
-///      If any VRF word causes RngLocked revert, advanceGame halts and the game is stuck
+///      If any VRF word causes RngLocked revert, mineFlip halts and the game is stuck
 ///      at level 10 — caught by assertGt(finalLevel, 10).
 contract BafFarFutureTicketsTest is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
@@ -73,7 +73,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
                 _fulfillVrfIfPending(vrfSeed);
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
             }
@@ -116,7 +116,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
                 _fulfillVrfIfPending(vrfSeed);
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
             }

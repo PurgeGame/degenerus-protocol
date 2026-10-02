@@ -124,7 +124,7 @@ contract EthSolvencyInvariant is DeployProtocol {
         for (uint256 day; day < 3; ++day) {
             vm.warp(block.timestamp + 1 days);
             for (uint256 step; step < 20; ++step) {
-                gameHandler.advanceGame(0);
+                gameHandler.mineFlip(0);
                 vrfHandler.fulfillVrf(uint256(keccak256(abi.encode(day, step))));
                 invariant_balanceReconciliation();
             }

@@ -25,7 +25,7 @@ interface IFreezeCohortKeeper {
 ///         cursors read alongside the word are a distinct bug class), and assert byte-equality
 ///         across an isolated in-window player action.
 ///
-/// @dev THE FREEZE WINDOW. `advanceGame()` at the day boundary fires the daily VRF request and
+/// @dev THE FREEZE WINDOW. `mineFlip()` at the day boundary fires the daily VRF request and
 ///      latches `rngLockedFlag = true` / `rngRequestTime = block.timestamp` (AdvanceModule). From
 ///      that moment until `mockVRF.fulfillRandomWords` delivers the word (which clears the latch),
 ///      `rngLocked() == true` — that interval IS the open window. The daily consumption that runs
@@ -49,12 +49,12 @@ interface IFreezeCohortKeeper {
 ///                                                          a non-VRF in-window read is its own
 ///                                                          bug class.
 ///
-///      ISOLATING THE EXEMPT MUTATOR. advanceGame is the heartbeat that LEGITIMATELY progresses the
+///      ISOLATING THE EXEMPT MUTATOR. mineFlip is the heartbeat that LEGITIMATELY progresses the
 ///      window (it is the v45-exempt mutator). To attribute a change to a PLAYER action rather than
 ///      the heartbeat, every in-window player action snapshots the enumerated set immediately
 ///      BEFORE the call and immediately AFTER the call alone (no advance in between) — a frozen
 ///      slot must be byte-equal across the player action in isolation. ghost_frozenSlotMutations
-///      counts only player-attributable changes; advanceGame's own progression is never measured.
+///      counts only player-attributable changes; mineFlip's own progression is never measured.
 ///
 ///      NON-VACUITY. ghost_windowsOpened / ghost_inWindowActions must both be > 0 after a run, else
 ///      the freeze assertion is vacuous (the window never opened or no in-window action fired). The
@@ -176,7 +176,7 @@ contract RngWindowFreezeHandler is Test {
     // Action: openWindow — drive the daily VRF request so rngLocked() latches true
     // =========================================================================
 
-    /// @notice Satisfy the daily purchase gate with a small actor buy, then advanceGame() to fire
+    /// @notice Satisfy the daily purchase gate with a small actor buy, then mineFlip() to fire
     ///         the daily VRF request — which latches rngLockedFlag = true (the window opens). Does
     ///         NOT fulfill the request (that is closeWindow's job), so the window stays open for the
     ///         in-window action handlers. Idempotent: if the window is already open it just records.
@@ -202,7 +202,7 @@ contract RngWindowFreezeHandler is Test {
 
         _drainReadConsumers();
 
-        // Small daily-gate buy so advanceGame has a reason to request the daily word.
+        // Small daily-gate buy so mineFlip has a reason to request the daily word.
         (, , , , uint256 priceWei) = game.purchaseInfo();
         uint256 oneTicket = priceWei; // 400 entries == 1 price (project_ticket_entry_price_units)
         if (oneTicket != 0 && oneTicket <= currentActor.balance) {
@@ -221,7 +221,7 @@ contract RngWindowFreezeHandler is Test {
             _drainReadConsumers();
             vm.warp(block.timestamp + 1 days);
             vm.prank(currentActor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             if (game.rngLocked()) break;
             // Not yet latched — clear any non-daily in-flight request to keep progressing.
             uint256 reqId = vrf.lastRequestId();
@@ -271,7 +271,7 @@ contract RngWindowFreezeHandler is Test {
     // In-window action: a ticket / lootbox purchase
     // =========================================================================
 
-    /// @notice Attempt a purchase WHILE the window is open. advanceGame is the only exempt mutator;
+    /// @notice Attempt a purchase WHILE the window is open. mineFlip is the only exempt mutator;
     ///         a plain purchase must not touch the frozen word/cursor set. Isolation-checked.
     function tryInWindowPurchase(uint256 actorSeed, uint256 qtySeed, uint256 boxSeed) external useActor(actorSeed) {
         calls_inWindowPurchase++;
@@ -319,8 +319,8 @@ contract RngWindowFreezeHandler is Test {
     // =========================================================================
 
     /// @notice Close the window: fulfill the in-flight daily VRF request (which STORES rngWordCurrent but
-    ///         leaves rngLockedFlag set — AdvanceModule.rawFulfillRandomWords only buffers the word for the
-    ///         daily branch), THEN advanceGame to drive the day processing that calls _unlockRng (clearing
+    ///         leaves rngLockedFlag set — RngModule.rawFulfillRandomWords only buffers the word for the
+    ///         daily branch), THEN mineFlip to drive the day processing that calls _unlockRng (clearing
     ///         rngLockedFlag). This is the EXEMPT heartbeat completing — it is NOT measured against the
     ///         freeze property; it simply re-opens the fuzzer to drive a fresh window next round. The
     ///         player-attributable freeze check already ran in isolation at each in-window action above.
@@ -338,13 +338,14 @@ contract RngWindowFreezeHandler is Test {
         if (reqId == 0) return;
         (, , bool fulfilled) = vrf.pendingRequests(reqId);
         if (!fulfilled) {
-            // Non-zero word (the contract treats word==0 as not-yet-landed).
+            uint24 requestDayBefore = _rngRequestDay();
             try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("closew", wordSeed))) | 1) {} catch {}
+            _checkRequestDay(requestDayBefore); // Callback accepts entropy; it cannot move the logical day.
         }
-        // Fulfillment only buffers the daily word; the lock clears when a subsequent advanceGame processes
+        // Fulfillment only buffers the daily word; the lock clears when a subsequent mineFlip processes
         // the day (the EXEMPT heartbeat). Drive it until rngLocked() falls (capped).
         for (uint256 i; i < 8 && game.rngLocked(); i++) {
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
     }
 
@@ -354,7 +355,7 @@ contract RngWindowFreezeHandler is Test {
     function _drainReadConsumers() internal {
         if (game.rngLocked()) return;
         if (_requestActive()) {
-            if (game.isRngFulfilled()) { try game.advanceGame() {} catch {} }
+            if (game.isRngFulfilled()) { try game.mineFlip() {} catch {} }
             else return;
         }
         uint48 read = RecyclingState.readBuffer(address(game));
@@ -367,7 +368,7 @@ contract RngWindowFreezeHandler is Test {
             if (ticketsDone && midDayDone && game.boxIndexComplete(read) && packed & (uint256(1) << (250 + (read & 1))) == 0) return;
             try game.openBoxes(512) {} catch {}
             if (!ticketsDone || !midDayDone) {
-                try game.advanceGame() {} catch {}
+                try game.mineFlip() {} catch {}
             }
             try craps.keepRngCohort(read, 64) {} catch {}
         }
@@ -395,7 +396,7 @@ contract RngWindowFreezeHandler is Test {
     //   (11) rngLockedFlag              — slot 0 byte 19 : the fulfillment branch selector (flip
     //                                                      would reroute the word to the daily buffer).
     // Same isolation discipline as the daily set: snapshot immediately before the player action,
-    // re-read immediately after it alone; advanceGame / requestLootboxRng / the VRF callback are
+    // re-read immediately after it alone; mineFlip / requestLootboxRng / the VRF callback are
     // the exempt machinery and are never measured.
     // =========================================================================
 
@@ -523,8 +524,8 @@ contract RngWindowFreezeHandler is Test {
     }
 
     /// @notice Close the mid-day window: fulfill the in-flight lootbox request. The mid-day
-    ///         rawFulfillRandomWords branch finalizes directly — lands the word at LR_INDEX - 1 and
-    ///         clears vrfRequestId / rngRequestTime (no advanceGame needed). Exempt machinery.
+    ///         callback stores the accepted word while preserving request metadata and logical day;
+    ///         mineFlip publishes it before read consumers. Callback machinery is exempt from payload freeze.
     function closeMidDayWindow(uint256 wordSeed) external {
         calls_closeMidDayWindow++;
         if (!_midDayWindowOpen()) return;
@@ -532,7 +533,9 @@ contract RngWindowFreezeHandler is Test {
         if (reqId == 0) return;
         (, , bool fulfilled) = vrf.pendingRequests(reqId);
         if (!fulfilled) {
+            uint24 requestDayBefore = _rngRequestDay();
             try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("closemid", wordSeed))) | 1) {} catch {}
+            _checkRequestDay(requestDayBefore);
         }
     }
 
@@ -565,6 +568,7 @@ contract RngWindowFreezeHandler is Test {
     uint256 private _snapDayPayload1;
     uint256 private _snapDayTags; // _recordedDailyWord(currentDay)
     uint256 private _snapLootboxReadiness;
+    uint24 private _snapRequestDay; // rngRequestDay: slot5 low24, immutable within the committed session.
     uint256 private _snapNudges; // _nudgeCount frozen by the daily lock; midday nudges remain writable.
     uint256 private _snapLootboxWord; // _lootboxWord(activeIndex)
     uint256 private _snapLootboxCursor; // lootboxRngPacked low 48 bits (the index cursor)
@@ -579,7 +583,8 @@ contract RngWindowFreezeHandler is Test {
         _snapshotFoilDraws();
         _snapDay = game.currentDayView();
         _snapNudges = _nudgeCount();
-        _snapIndex = _activeLootboxIndex() - 1;
+        _snapRequestDay = _rngRequestDay();
+        _snapIndex = _activeLootboxIndex() ^ 1;
         _snapDayWord = _rngWordByDay(_snapDay);
         _snapDayTags = uint256(vm.load(address(game), bytes32(uint256(34)))); // rngDayTags
         _snapDayPayload0 = uint256(vm.load(address(game), keccak256(abi.encode(uint256(0), RNG_WORD_BY_DAY_SLOT))));
@@ -591,11 +596,12 @@ contract RngWindowFreezeHandler is Test {
     }
 
     /// @dev Re-read the enumerated set after an ISOLATED in-window player action (no advance ran in
-    ///      between) and flag any change. Because advanceGame — the only legitimate mutator of this
+    ///      between) and flag any change. Because mineFlip — the only legitimate mutator of this
     ///      set — was NOT called between the snapshot and here, any delta is attributable to the
     ///      player action alone. Compares the SAME day/index leaf the snapshot used.
     function _checkFrozenAfterIsolatedAction() internal {
         _checkFoilDraws();
+        _checkRequestDay(_snapRequestDay);
         if (_nudgeCount() != _snapNudges) { ghost_frozenSlotMutations++; ghost_lastMutatedSlotTag = 12; }
         if (_dailyRingChanged()) {
             ghost_frozenSlotMutations++;
@@ -620,6 +626,7 @@ contract RngWindowFreezeHandler is Test {
     // The enumerated MID-DAY snapshot + isolation freeze check
     // =========================================================================
 
+    uint24 private _snapMidRequestDay; // A midday request retains logical day zero across player actions.
     uint256 private _snapMidCursor; // LR_INDEX (slot 33 low 48)
     uint256 private _snapMidReadiness;
     uint256 private _snapMidLeafWord; // _lootboxWord(LR_INDEX - 1)
@@ -635,6 +642,7 @@ contract RngWindowFreezeHandler is Test {
     ///      the pending fulfillment will write.
     function _snapshotMidDaySet() internal {
         _snapshotFoilDraws();
+        _snapMidRequestDay = _rngRequestDay();
         _snapMidCursor = _lootboxRngIndexCursor();
         _snapMidLeafIndex = uint48(_snapMidCursor) ^ 1;
         _snapMidLeafWord = _lootboxRngWord(_snapMidLeafIndex);
@@ -651,6 +659,7 @@ contract RngWindowFreezeHandler is Test {
     ///      discipline to _checkFrozenAfterIsolatedAction, over the mid-day consumption's set.
     function _checkMidDayFrozenAfterIsolatedAction() internal {
         _checkFoilDraws();
+        _checkRequestDay(_snapMidRequestDay);
         if (_lootboxRngIndexCursor() != _snapMidCursor) {
             ghost_frozenSlotMutations++;
             ghost_lastMutatedSlotTag = 5;
@@ -699,6 +708,17 @@ contract RngWindowFreezeHandler is Test {
     /// @dev Check the retained rngWordCurrent payload even while readiness makes it unusable.
     function _lootboxRngWord(uint48) internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_WORD_SLOT)));
+    }
+
+    function _rngRequestDay() private view returns (uint24) {
+        return uint24(uint256(vm.load(address(game), bytes32(uint256(5)))));
+    }
+
+    function _checkRequestDay(uint24 expected) private {
+        if (_rngRequestDay() != expected) {
+            ghost_frozenSlotMutations++;
+            ghost_lastMutatedSlotTag = 14;
+        }
     }
 
     function _nudgeCount() private view returns (uint256) {

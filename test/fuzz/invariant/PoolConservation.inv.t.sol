@@ -35,7 +35,7 @@ import {PoolFlowHandler} from "../handlers/PoolFlowHandler.sol";
 ///             SHRINKS the obligation, so the bound stays directionally safe without subtracting it.
 ///
 ///         NON-VACUITY. The conservation property is only meaningful if pool-to-pool transfers actually ran.
-///         afterInvariant gates acceptance on ghost_advances > 0 — a campaign where advanceGame never succeeded
+///         afterInvariant gates acceptance on ghost_advances > 0 — a campaign where mineFlip never succeeded
 ///         (no consolidation/skim/jackpot transfer ran) is a vacuous green and FAILS. A focused non-vacuity test
 ///         additionally drives the handler's advance action directly and asserts ghost_advances > 0 so a
 ///         transfer that silently minted unbacked credit could not hide behind a "nothing moved" green.
@@ -139,7 +139,7 @@ contract PoolConservation is DeployProtocol {
     // =========================================================================
 
     /// @notice afterInvariant runs once at the END of the campaign. The conservation property is only meaningful
-    ///         if advanceGame actually ran the consolidation/skim/jackpot transfer machinery at least once —
+    ///         if mineFlip actually ran the consolidation/skim/jackpot transfer machinery at least once —
     ///         otherwise no value ever moved between pools and the bound holds vacuously. Gating on
     ///         ghost_advances > 0 makes a "green because nothing moved" pass impossible: if no advance succeeded
     ///         across the 256/128 run, this campaign FAILS.
@@ -147,7 +147,7 @@ contract PoolConservation is DeployProtocol {
         assertGt(
             handler.ghost_advances(),
             0,
-            "NON-VACUITY: advanceGame must succeed > 0 times (else no pool-to-pool transfer ran and conservation is vacuous)"
+            "NON-VACUITY: mineFlip must succeed > 0 times (else no pool-to-pool transfer ran and conservation is vacuous)"
         );
     }
 
@@ -156,7 +156,7 @@ contract PoolConservation is DeployProtocol {
     // =========================================================================
 
     /// @notice Drive the handler's advance action directly (deterministic seeds spanning the actor pool) and
-    ///         assert ghost_advances > 0 — i.e. advanceGame ran the consolidation/skim/jackpot transfers at the
+    ///         assert ghost_advances > 0 — i.e. mineFlip ran the consolidation/skim/jackpot transfers at the
     ///         fixture level independent of the fuzzer's sequencing. A transfer that silently minted unbacked
     ///         credit would still move value here and so could be caught by the invariants. Also asserts the two
     ///         conservation bounds hold AFTER the directly-driven transfers (real movement, still conserved).
@@ -172,7 +172,7 @@ contract PoolConservation is DeployProtocol {
         assertGt(
             handler.ghost_advances(),
             0,
-            "fixture: advanceGame ran > 0 times (real consolidation/skim/jackpot transfers occurred)"
+            "fixture: mineFlip ran > 0 times (real consolidation/skim/jackpot transfers occurred)"
         );
 
         // The conservation bounds must hold after the directly-driven transfers — value was RESHAPED across the

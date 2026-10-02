@@ -22,7 +22,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///             covers 128 tickets at priceForLevel(lvl+1)).
 ///         The daily's other 96-winner ticket leg likewise runs from its own stage
 ///         (payDailyJackpotCoinAndTickets). This suite measures BOTH txs on the
-///         REAL advanceGame bytecode at every cap, with every winner a distinct address holding no
+///         REAL mineFlip bytecode at every cap, with every winner a distinct address holding no
 ///         claimable / no queued entries (cold SSTOREs), on the worst ETH-leg branch (all-gold board
 ///         -> golden-ticket arm on the solo ETH winner + four fresh whale-pass draws) with an armed golden
 ///         ticket resolving as a GRAND in the same call, and asserts each tx under the EIP-7825 cap.
@@ -110,9 +110,9 @@ contract DayOneSeeder is DegenerusGame, BucketSeed {
     }
 }
 
-/// @dev Shared measurement seam: warp, etch-seed-restore, drive the live advanceGame, classify winners.
+/// @dev Shared measurement seam: warp, etch-seed-restore, drive the live mineFlip, classify winners.
 abstract contract DayOneFixture is DeployProtocol {
-    /// @dev EIP-7825 per-transaction gas cap. A single advanceGame tx above this is a permanent DoS.
+    /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this is a permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     /// @dev The 10M soft design target the drains are sized to (USER dual bound).
     uint256 internal constant GAS_TARGET = 10_000_000;
@@ -184,11 +184,11 @@ abstract contract DayOneFixture is DeployProtocol {
         vm.deal(address(game), 10_000 ether);
     }
 
-    /// @dev One advanceGame tx: gas used and a tally of what it emitted.
+    /// @dev One mineFlip tx: gas used and a tally of what it emitted.
     function _measure() internal returns (uint256 used, Tally memory t) {
         vm.recordLogs();
         uint256 g0 = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         used = g0 - gasleft();
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -359,7 +359,7 @@ contract JackpotDayOnePlainBoard is DayOneFixture {
 contract JackpotDayOneEarlyBirdCold is DayOneFixture {
     function setUp() public {
         _seed(_allGoldWord("jackpot-day-one-gold"), ETH_HOLDERS, EB_HOLDERS * 10, true);
-        game.advanceGame();
+        game.mineFlip();
     }
 
     function test_EarlyBirdStageColdAfterCompletedEthStage() public {

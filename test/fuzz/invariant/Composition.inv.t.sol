@@ -51,7 +51,7 @@ contract CompositionInvariant is DeployProtocol {
     }
 
     /// @notice Game level must monotonically increase (never decrease)
-    /// @dev Level transitions only happen in advanceGame() and always increment.
+    /// @dev Level transitions only happen in mineFlip() and always increment.
     function invariant_levelMonotonicallyIncreasing() public view {
         assertEq(
             compositionHandler.ghost_levelDecreased(),

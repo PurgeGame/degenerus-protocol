@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -120,13 +122,14 @@ interface IsDGNRS {
     function pendingRedemptionEthValue() external view returns (uint256);
 
     /// @notice Resolve day `dayToResolve`'s gambling-burn pool with RNG results.
-    /// @dev Only callable by game contract during advanceGame. Writes redemptionPeriods[dayToResolve],
+    /// @dev Only callable by game contract during mineFlip. Writes redemptionPeriods[dayToResolve],
     ///      emits RedemptionResolved, then invalidates the reusable aggregate via its day stamp.
     /// @param roll The random roll (25-175).
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
     function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external;
     function redemptionSettlementPending() external view returns (bool);
     function beginRedemptionSettlement(uint24 day, uint256 word) external;
+    function runRedemptionWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function processRedemptionSettlement(uint256 budget)
-        external returns (bool done, uint256 chargedUnits, uint256 rewardQuote);
+        external returns (bool done, uint256 gasUsed, uint256 rewardBasis);
 }

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {Test} from "forge-std/Test.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameLootboxModule, IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {MineFlipBudget} from "../../contracts/libraries/MineFlipBudget.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {Craps} from "../../contracts/Craps.sol";
 
@@ -29,6 +30,21 @@ contract BudgetReadFixture is DegenerusGame {
     function order(address owner) external view returns (uint256) { return _boxOrder(_rngReadBuffer(), owner); }
     function cursor() external view returns (uint256) { return boxCursor; }
     function bet() external view returns (uint256) { return degeneretteQueue[_rngReadBuffer()][0]; }
+    function workHuman(uint256 allowance) external returns (MineFlipGas.Result memory) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+            abi.encodeWithSignature("runHumanBoxWork(uint256)", allowance)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (MineFlipGas.Result));
+    }
+    function workBet(uint256 allowance) external returns (MineFlipGas.Result memory) {
+        humanReadComplete = true;
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
+            abi.encodeWithSignature("runDegeneretteWork(uint256)", allowance)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (MineFlipGas.Result));
+    }
     function sweep(uint256 allowance) external returns (uint256 opened, uint256 report) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector, allowance)
@@ -36,14 +52,7 @@ contract BudgetReadFixture is DegenerusGame {
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (uint256, uint256));
     }
-    function sweepBet(uint256 allowance, bool legacyFirst) external returns (uint256, uint256, uint256, uint256) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameDegeneretteModule.sweepDegeneretteBets.selector,
-                _rngReadBuffer(), 0, allowance, legacyFirst, _lootboxWord(_rngReadBuffer()))
-        );
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-        return abi.decode(data, (uint256, uint256, uint256, uint256));
-    }
+
 }
 
 contract MineFlipHumanBudgetTest is DeployProtocol {
@@ -64,17 +73,16 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         host.publishRead();
         assertEq(BoxOrderLib.boCount(host.order(BUYER)), 100);
     }
-    function test_FirstWideBoxWaitsForItsFullAllowanceWithEitherReturnEncoding() public {
+    function test_FirstWideBoxWaitsForItsAtomicAllowance() public {
         _queueWideBox();
         uint256 beforeOrder = host.order(BUYER);
-        (uint256 opened, uint256 charged) = host.sweep(639);
-        assertEq(opened, 0); assertLe(charged, 639);
-        assertEq(host.order(BUYER), beforeOrder); assertEq(host.cursor(), 0);
-        (opened, charged) = host.sweep(PACKED | 639);
-        assertEq(opened, 0); assertLe(charged >> 128, 639);
-        assertEq(host.order(BUYER), beforeOrder); assertEq(host.cursor(), 0);
-        (opened, charged) = host.sweep(PACKED | 640);
-        assertEq(opened, 100); assertEq(charged >> 128, 640);
+        MineFlipGas.Result memory result = host.workHuman(2_000_000);
+        assertFalse(result.progressed);
+        assertEq(host.order(BUYER), beforeOrder);
+        assertEq(host.cursor(), 0);
+        result = host.workHuman{gas: 10_000_000}(9_000_000);
+        assertEq(result.rewardBasis, 100);
+        assertTrue(result.done);
         assertEq(host.order(BUYER), 0);
     }
     function test_HumanCannotBypassEarlierConsumers() public {
@@ -83,41 +91,46 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         for (uint8 stage; stage <= 2; ++stage) {
             host.priorWork(stage);
             vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(stage == 1));
-            (uint256 opened, uint256 charged) = host.sweep(PACKED | 1824);
-            assertEq(opened, 0); assertEq(charged, 0);
-            assertEq(host.order(BUYER), beforeOrder); assertEq(host.cursor(), 0);
+            MineFlipGas.Result memory result = host.workHuman(9_000_000);
+            assertFalse(result.progressed);
+            assertEq(host.order(BUYER), beforeOrder);
+            assertEq(host.cursor(), 0);
         }
     }
-    function test_BetLegacyFirstFlagCannotOvershootAndChargeIncludesFlushReserve() public {
+    function test_BetReservesWholeSlipBeforeMutation() public {
         vm.prank(BUYER);
         game.placeDegeneretteBet{value: 0.125 ether}(BUYER, 0, uint128(0.005 ether), 25, 9);
         host.publishRead();
         uint256 beforeBet = host.bet();
-        (uint256 resolved, uint256 pos, uint256 charged,) = host.sweepBet(241, true);
-        assertEq(resolved, 0); assertEq(pos, 0); assertEq(charged, 6);
+        MineFlipGas.Result memory result = host.workBet(500_000);
+        assertFalse(result.progressed);
         assertEq(host.bet(), beforeBet);
-        (resolved, pos, charged,) = host.sweepBet(242, true);
-        assertEq(resolved, 1); assertEq(pos, 1); assertEq(charged, 242);
+        result = host.workBet{gas: 10_000_000}(9_000_000);
+        assertEq(result.rewardBasis, 1);
+        assertTrue(result.done);
         assertTrue(host.bet() != beforeBet);
+    }
+    function test_LowGasBoxCallWaitsForTheAtomicEntry() public {
+        _queueWideBox();
+        uint256 beforeOrder = host.order(BUYER);
+        (bool ok,) = address(host).call{gas: 2_000_000}(abi.encodeCall(host.workHuman, (9_000_000)));
+        assertTrue(ok);
+        assertEq(host.order(BUYER), beforeOrder);
+        assertEq(host.cursor(), 0);
     }
     function test_DownstreamFailureRollsBackBoxMarkerAndCursor() public {
         _queueWideBox();
         uint256 beforeOrder = host.order(BUYER);
         bytes memory code = ContractAddresses.GAME_BOON_MODULE.code;
         vm.etch(ContractAddresses.GAME_BOON_MODULE, hex"fe");
-        vm.expectRevert(); host.sweep(PACKED | 640);
-        assertEq(host.order(BUYER), beforeOrder); assertEq(host.cursor(), 0);
+        vm.expectRevert(); host.workHuman(9_000_000);
+        assertEq(host.order(BUYER), beforeOrder);
+        assertEq(host.cursor(), 0);
         vm.etch(ContractAddresses.GAME_BOON_MODULE, code);
-        (uint256 opened, uint256 charged) = host.sweep(PACKED | 640);
-        assertEq(opened, 100); assertLe(charged >> 128, 640);
+        MineFlipGas.Result memory result = host.workHuman{gas: 10_000_000}(9_000_000);
+        assertEq(result.rewardBasis, 100);
     }
-    function testFuzz_TinyAllowanceIsAlwaysSafe(uint8 raw) public {
-        _queueWideBox();
-        uint256 allowance = uint256(raw) % 25;
-        (uint256 opened, uint256 charged) = host.sweep(PACKED | allowance);
-        assertEq(opened, 0); assertLe(charged >> 128, allowance);
-        assertEq(BoxOrderLib.boCount(host.order(BUYER)), 100); assertEq(host.cursor(), 0);
-    }
+
 }
 
 contract BudgetDecimatorFixture is DecimatorBattleHarness {
@@ -147,18 +160,24 @@ contract MineFlipDecimatorBudgetTest is Test {
         host.seal(LVL, 30 ether, word);
     }
     function test_RunRankAndPayEachReserveBeforeMutation() public {
-        (uint256 done, uint256 charged, bool moved) = host.settleDecimatorWinners(121);
-        assertEq(done, 0); assertLe(charged, 121); assertFalse(moved); assertEq(host.roundOf(LVL).cursor, 0);
-        (done, charged, moved) = host.settleDecimatorWinners(122);
-        assertEq(done, 1); assertLe(charged, 122); assertTrue(moved); assertEq(host.roundOf(LVL).cursor, 1);
-        (done, charged, moved) = host.settleDecimatorWinners(22);
-        assertEq(done, 0); assertLe(charged, 22); assertFalse(moved); assertEq(host.roundOf(LVL).phase, 1);
-        (done, charged, moved) = host.settleDecimatorWinners(23);
-        assertEq(done, 1); assertEq(charged, 23); assertTrue(moved); assertEq(host.roundOf(LVL).phase, 2);
-        (done, charged, moved) = host.settleDecimatorWinners(27);
-        assertEq(done, 0); assertLe(charged, 27); assertFalse(moved); assertEq(host.roundOf(LVL).paid, 0);
-        (done, charged, moved) = host.settleDecimatorWinners(28);
-        assertEq(done, 1); assertEq(charged, 28); assertTrue(moved); assertEq(host.roundOf(LVL).phase, 3);
+        MineFlipGas.Result memory result = host.runDecimatorWork(500_000);
+        assertFalse(result.progressed);
+        assertEq(host.roundOf(LVL).cursor, 0);
+        result = host.runDecimatorWork(1_000_000);
+        assertEq(result.rewardBasis, 1);
+        assertEq(host.roundOf(LVL).cursor, 1);
+        result = host.runDecimatorWork(400_000);
+        assertFalse(result.progressed);
+        assertEq(host.roundOf(LVL).phase, 1);
+        result = host.runDecimatorWork(700_000);
+        assertTrue(result.progressed);
+        assertEq(host.roundOf(LVL).phase, 2);
+        result = host.runDecimatorWork(100_000);
+        assertFalse(result.progressed);
+        assertEq(host.roundOf(LVL).paid, 0);
+        result = host.runDecimatorWork(400_000);
+        assertTrue(result.done);
+        assertEq(host.roundOf(LVL).phase, 3);
         assertEq(host.queue(), 0);
     }
     function test_DecimatorCannotBypassAnyEarlierStage() public {
@@ -166,8 +185,8 @@ contract MineFlipDecimatorBudgetTest is Test {
         for (uint8 stage; stage < 4; ++stage) {
             host.priorWork(stage);
             vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(stage == 1));
-            (uint256 done, uint256 charged, bool moved) = host.settleDecimatorWinners(1824);
-            assertEq(done, 0); assertEq(charged, 0); assertFalse(moved);
+            MineFlipGas.Result memory result = host.runDecimatorWork(9_000_000);
+            assertFalse(result.progressed);
             assertEq(abi.encode(host.roundOf(LVL)), beforeRound);
         }
     }
@@ -175,12 +194,14 @@ contract MineFlipDecimatorBudgetTest is Test {
         bytes memory beforeRound = abi.encode(host.roundOf(LVL));
         uint256 reserved = host.reserved();
         vm.etch(ContractAddresses.CRAPS_ENGINE, hex"fe");
-        vm.expectRevert(); host.settleDecimatorWinners(122);
-        assertEq(abi.encode(host.roundOf(LVL)), beforeRound); assertEq(host.reserved(), reserved);
+        vm.expectRevert(); host.runDecimatorWork(9_000_000);
+        assertEq(abi.encode(host.roundOf(LVL)), beforeRound);
+        assertEq(host.reserved(), reserved);
     }
-    function testFuzz_ChargedUnitsNeverExceedSuppliedAllowance(uint16 raw) public {
-        uint256 allowance = raw;
-        (, uint256 charged,) = host.settleDecimatorWinners(allowance);
-        assertLe(charged, MineFlipBudget.clamp(allowance));
+    function test_LowGasSimulationWaitsWithoutMutatingRound() public {
+        bytes memory beforeRound = abi.encode(host.roundOf(LVL));
+        (bool ok,) = address(host).call{gas: 500_000}(abi.encodeCall(host.runDecimatorWork, (9_000_000)));
+        assertTrue(ok);
+        assertEq(abi.encode(host.roundOf(LVL)), beforeRound);
     }
 }

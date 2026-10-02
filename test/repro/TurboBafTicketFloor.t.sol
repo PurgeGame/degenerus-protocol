@@ -204,7 +204,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -265,7 +265,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -299,13 +299,13 @@ contract TurboBafTicketFloor is DeployProtocol {
         simTime += 1 days + 1;
         vm.warp(simTime);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("advanceGame()")
+            abi.encodeWithSignature("mineFlip()")
         );
         ok; // the promotion entry may or may not revert once its stage breaks
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
             (ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (game.jackpotPhase()) _assertLateTicketsMaterialized();
             if (!ok) break;

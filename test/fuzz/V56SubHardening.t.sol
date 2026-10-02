@@ -66,7 +66,7 @@ contract V56SubHardening is DeployProtocol {
     uint256 private constant OFF_PENDINGFLIP = 23;    // uint24 pendingFlip          (bytes 23..25)
     uint256 private constant OFF_STREAKLATCH = 26;    // uint16 subStreakLatch       (bytes 26..27)
 
-    uint256 private constant DEITY_SHIFT = 184;       // HAS_DEITY_PASS_SHIFT in mintPacked_ (bounty-eligibility tier only; confers nothing for afking gating)
+    uint256 private constant DEITY_SHIFT = 184;       // HAS_DEITY_PASS_SHIFT in mintPacked_ (confers nothing for afking credentials or mining participation)
 
     /// @dev The game `level` lives in slot 0 at byte 12 (uint24) — poked up to drive the level-crossing
     ///      membership-survival proof (the fixture level does not advance organically).
@@ -82,6 +82,9 @@ contract V56SubHardening is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        // The unified miner also requests midday RNG after the read consumers finish.
+        // Fund the mock so a clean-state fixture cannot stall on InsufficientLink.
+        mockVRF.fundSubscription(admin.subscriptionId(), 1_000 ether);
         _t = block.timestamp + 1 days;
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
@@ -118,8 +121,7 @@ contract V56SubHardening is DeployProtocol {
     }
 
     /// @notice D-11 (deity confers nothing for afking gating): a deity holder WITHOUT an AFKing Subscription Token still
-    ///         reverts NoCoin() — the successor of the old deity-sentinel-bypass proof. Deity is a
-    ///         bounty-eligibility tier only now; it has no bearing on the afking credential.
+    ///         reverts NoCoin(). Deity ownership has no bearing on the afking credential.
     function testD11DeityHolderWithoutCoinRevertsNoCoin() public {
         address p = makeAddr("d11_deity_nocoin");
         _grantDeityPass(p);           // deity bit set — confers nothing for the coin gate
@@ -378,120 +380,87 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // 357 advance-incentive redesign (HEAD'' = 61315ecd) — advanceGame is pure
-    // liveness; the must-mint ladder is the SOFT pay-gate _bountyEligible(addr),
-    // surfaced as game.bountyEligible(addr). mineFlip() reads it BEFORE the
-    // self-call and pays the advance bounty only when mult>0 && eligible.
+    // Mining participation is open to every address. The compatibility view does
+    // not promise payment: successful work must independently clear the gas floor.
+    // Subscription credentials and RNG lifecycle controls still apply.
     // =========================================================================
 
-    /// @notice advanceGame LIVENESS: a coinless / unfunded non-DGVE EOA, in the first seconds of a fresh
-    ///         day (dailyIdx >= 2), can crank advanceGame() with NO MustMintToday revert — that error was
-    ///         removed; the advance work is unconditionally permitted. The pre-357 hard gate would have
-    ///         reverted a fresh non-minter in the first 15 min; HEAD'' does not. We settle clean, warp one
-    ///         day so advanceDue() is true, position 5s past the boundary (below the 15-min window so the
-    ///         caller is NOT even bounty-eligible), and assert the crank succeeds.
     function testAdvanceGameLivenessFreshNonMinterNotGated() public {
-        // Settle the protocol clean so the next day-roll makes exactly one advance due.
         _settleClean(uint256(keccak256("live_settle")) | 1);
-        // Roll to a fresh day, positioned a few seconds past the boundary (< 15 min in).
         _warpToDayBoundary(5);
-        assertTrue(game.advanceDue(), "fixture: advance is due on the fresh day");
-
-        address keeper = makeAddr("fresh_keeper"); // coinless, unfunded, non-DGVE, no afking sub
-        assertFalse(game.bountyEligible(keeper), "first-15-min fresh non-minter is NOT bounty-eligible");
-
-        // The advance WORK is permissionless — no MustMintToday (that error no longer exists). It may
-        // request VRF / partially process, but it must NOT revert for any removed mint-gate reason.
-        vm.prank(keeper);
-        game.advanceGame(); // MUST NOT revert
-        // Liveness held: the advance ran (it consumed the due-state or requested the word).
-        assertTrue(!game.advanceDue() || game.rngLocked(), "advanceGame ran the due work (no gate revert)");
+        assertTrue(game.advanceDue(), "fixture: fresh day has work");
+        address miner = makeAddr("fresh_miner");
+        assertTrue(game.bountyEligible(miner), "mining has no participant gate");
+        vm.recordLogs();
+        vm.prank(miner);
+        game.mineFlip();
+        _assertMinerProgress(miner);
     }
 
-    /// @notice bountyEligible truth table @ HEAD'': false for a fresh non-minter/non-DGVE in the first
-    ///         15 min; true after 30 min elapsed; true for a deity holder; true for an active afking sub;
-    ///         true for the DGVE owner (CREATOR). The same-day-minter tier is covered by the funded-buy
-    ///         arm below (a delivered cover-buy stamps DAY_SHIFT). The time tiers read block.timestamp
-    ///         arithmetic ((ts - 82620) % 1 days); the deity/sub/DGVE tiers are time-independent.
-    function testBountyEligibleTruthTable() public {
-        // Settle past the genesis day so dailyIdx >= 2 — the `gateIdx == 0` first-day branch makes
-        // EVERYONE eligible (nothing to earn against yet), which would mask the per-tier checks below.
+    function testBountyEligibleIsOpenAcrossRolesAndDayWindows() public {
         _settleClean(uint256(keccak256("be_settle")) | 1);
-        // Land deterministically in the first-15-min window of a fresh day.
         _warpToDayBoundary(5);
-        require(game.currentDayView() >= 2, "fixture: past the gateIdx==0 first-day bypass");
-
-        // (1) fresh non-minter, non-DGVE, no coin, no sub, < 15 min in -> ineligible.
         address fresh = makeAddr("be_fresh");
-        assertFalse(game.bountyEligible(fresh), "fresh non-minter <15min: ineligible");
-
-        // (2) deity holder -> eligible at any time (the deity tier short-circuits before the clock).
-        //     Deity confers nothing for afking gating; this is a bounty-eligibility tier only.
         address deity = makeAddr("be_deity");
-        _grantDeityPass(deity);
-        assertTrue(game.bountyEligible(deity), "deity holder: eligible");
-
-        // (3) active afking sub -> eligible (dailyQuantity != 0; the auto-buy participation tier).
         address sub = makeAddr("be_sub");
-        _grantSeat(sub);                // clears D-11 so the sub can be created
-        _fundPool(sub, 50 ether);      // grounds D-12
+        assertTrue(game.bountyEligible(fresh), "fresh address needs no purchase or pass");
+        assertTrue(game.bountyEligible(deity), "open before receiving a deity pass");
+        assertTrue(game.bountyEligible(sub), "open before subscribing");
+        assertTrue(game.bountyEligible(address(0)), "compatibility view is unconditional");
+        _grantDeityPass(deity);
+        _grantSeat(sub);
+        _fundPool(sub, 50 ether);
         _subscribeLootbox(sub, 1);
-        assertTrue(_dailyQtyOf(sub) != 0, "fixture: the afking sub is active");
-        assertTrue(game.bountyEligible(sub), "active afking sub: eligible");
-
-        // (4) DGVE majority owner (CREATOR holds 100% DGVE + a permanent deity pass) -> eligible.
-        assertTrue(game.bountyEligible(ContractAddresses.CREATOR), "DGVE owner (CREATOR): eligible");
-
-        // (5) the SAME fresh non-minter becomes eligible once 30+ min have elapsed into the day (the
-        //     anyone-tier). Advance the clock 31 min and re-read — the only state change is time.
-        _t += 31 minutes;
+        assertGt(_dailyQtyOf(sub), 0, "fixture: subscription exists");
+        assertTrue(game.bountyEligible(deity), "deity status does not change participation");
+        assertTrue(game.bountyEligible(sub), "subscription does not change participation");
+        assertTrue(game.bountyEligible(ContractAddresses.CREATOR), "vault ownership is irrelevant to mining");
+        _t += 16 minutes;
         vm.warp(_t);
-        assertTrue(game.bountyEligible(fresh), "after 30 min: anyone-tier flips the fresh keeper eligible");
+        assertTrue(game.bountyEligible(fresh), "no fifteen-minute participation window");
+        _t += 15 minutes;
+        vm.warp(_t);
+        assertTrue(game.bountyEligible(fresh), "no thirty-minute participation window");
     }
 
-    /// @notice mineFlip pay soft-gate (ELIGIBLE): a deity-holding keeper cranking mineFlip when an
-    ///         advance is due earns the advance bounty (coinflipAmount strictly increases). The deity tier
-    ///         makes the keeper eligible regardless of the clock, so mult>0 && eligible -> bountyEarned>0.
-    function testMintFlipEligibleKeeperEarnsAdvanceBounty() public {
-        _settleClean(uint256(keccak256("pay_e_settle")) | 1);
+    function testDeityPassDoesNotBypassPendingRng() public {
+        _settleClean(uint256(keccak256("deity_rng_settle")) | 1);
         _warpToDayBoundary(5);
-        assertTrue(game.advanceDue(), "fixture: advance due so mineFlip runs the advance leg");
-
-        address keeper = makeAddr("pay_eligible");
-        _grantDeityPass(keeper);       // eligible via the deity tier (time-independent)
-        assertTrue(game.bountyEligible(keeper), "fixture: the keeper is bounty-eligible");
-
-        uint256 before = coinflip.coinflipAmount(keeper);
-        vm.prank(keeper);
-        game.mineFlip();             // advance leg runs; mult>0 && eligible -> bounty credited
-        assertGt(coinflip.coinflipAmount(keeper), before, "ELIGIBLE keeper earned a nonzero advance bounty");
+        address miner = makeAddr("deity_miner");
+        _grantDeityPass(miner);
+        assertTrue(game.bountyEligible(miner));
+        // Maintenance may checkpoint before the request. The same unrestricted miner
+        // runs each necessary step, without supplying a VRF response.
+        for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
+            vm.prank(miner);
+            game.mineFlip();
+        }
+        assertTrue(game.rngLocked(), "fixture: request is waiting for fulfillment");
+        vm.prank(miner);
+        vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
+        game.mineFlip();
     }
 
-    /// @notice mineFlip pay soft-gate (INELIGIBLE): a fresh non-minter keeper (first 15 min, no coin,
-    ///         no sub, non-DGVE) cranking mineFlip still performs the advance WORK but earns ZERO
-    ///         advance bounty (mult>0 but !eligible -> bountyEarned == 0; the creditFlip is skipped).
-    ///         Directional invariant: the work is done (advance consumed), the keeper's flip balance is
-    ///         byte-unchanged.
-    function testMintFlipIneligibleKeeperEarnsZeroButWorkRuns() public {
-        _settleClean(uint256(keccak256("pay_i_settle")) | 1);
-        _warpToDayBoundary(5);         // < 15 min in
-        assertTrue(game.advanceDue(), "fixture: advance due so mineFlip runs the advance leg");
-
-        address keeper = makeAddr("pay_ineligible"); // coinless, unfunded, non-DGVE, no sub
-        assertFalse(game.bountyEligible(keeper), "fixture: the keeper is NOT bounty-eligible");
-
-        uint256 before = coinflip.coinflipAmount(keeper);
-        vm.prank(keeper);
-        game.mineFlip();             // advance work runs regardless; bounty withheld
-        assertEq(coinflip.coinflipAmount(keeper), before, "INELIGIBLE keeper earned ZERO advance bounty");
-        // The work still ran (the due-state was consumed or the word was requested) — pure liveness.
-        assertTrue(!game.advanceDue() || game.rngLocked(), "the advance work ran for the ineligible keeper too");
+    function testOpenMiningDoesNotBypassSubscriptionCoinRequirement() public {
+        _settleClean(uint256(keccak256("subscription_gate_settle")) | 1);
+        _warpToDayBoundary(5);
+        address miner = makeAddr("coinless_miner");
+        _fundPool(miner, 50 ether);
+        assertTrue(game.bountyEligible(miner));
+        vm.prank(miner);
+        vm.expectRevert(abi.encodeWithSignature("NoCoin()"));
+        game.subscribe(address(0), false, false, 1, address(0));
+        assertEq(_subscriberIndexOf(miner), 0, "subscription credential still required");
+        vm.recordLogs();
+        vm.prank(miner);
+        game.mineFlip();
+        _assertMinerProgress(miner);
     }
 
     /// @notice Vault keeper routing: DegenerusVault.gameAdvance() now routes through game.mineFlip()
-    ///         (earning the bounty); it performs the crank when work is due and reverts NoWork() when
+    ///         (subject to the successful-work reward floor); it performs the crank when work is due and reverts NoWork() when
     ///         idle. The vault is owner-gated (onlyVaultOwner) — prank as CREATOR (the DGVE majority
-    ///         owner, also a permanent deity holder -> always eligible). Both arms asserted.
+    ///         owner). Mining participation itself has no ownership requirement. Both arms asserted.
     function testVaultGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm first: settle clean, do NOT roll the day -> nothing due -> NoWork().
         _settleClean(uint256(keccak256("vault_idle")) | 1);
@@ -509,16 +478,16 @@ contract V56SubHardening is DeployProtocol {
         // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the vault crank");
+        vm.recordLogs();
         vm.prank(ContractAddresses.CREATOR);
         vault.gameAdvance();           // MUST NOT revert — routes through mineFlip and does the work
-        assertTrue(!game.advanceDue() || game.rngLocked(), "vault.gameAdvance ran the due advance work");
+        _assertMinerProgress(address(vault));
     }
 
     /// @notice sDGNRS keeper routing: sDGNRS.gameAdvance() routes through game.mineFlip()
     ///         and is PERMISSIONLESS (no owner gate). It performs the crank when work is due and reverts
-    ///         NoWork() when idle. (sDGNRS self-subscribed at construction -> it holds an afking sub, so
-    ///         when it is the msg.sender of mineFlip it is bounty-eligible — but the routing/NoWork
-    ///         behavior is what this proves.)
+    ///         NoWork() when idle. These assertions cover routing, without assuming that a small
+    ///         call earns compensation.
     function testSdgnrsGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm: clean, no day-roll -> NoWork().
         _settleClean(uint256(keccak256("sdgnrs_idle")) | 1);
@@ -536,9 +505,26 @@ contract V56SubHardening is DeployProtocol {
         // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the sDGNRS crank");
+        vm.recordLogs();
         vm.prank(makeAddr("anyone_sdgnrs2"));
         sdgnrs.gameAdvance();          // MUST NOT revert — routes through mineFlip and does the work
-        assertTrue(!game.advanceDue() || game.rngLocked(), "sdgnrs.gameAdvance ran the due advance work");
+        _assertMinerProgress(address(sdgnrs));
+    }
+
+    /// @dev MinerWork is emitted only after committed progress. A checkpoint can leave
+    ///      more work due without locking RNG, and a small successful step may be unpaid.
+    function _assertMinerProgress(address miner) internal {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 signature = keccak256("MinerWork(address,uint8,uint256,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2
+                || logs[i].topics[0] != signature
+                || logs[i].topics[1] != bytes32(uint256(uint160(miner)))) continue;
+            (, uint256 executionGas,) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+            assertGt(executionGas, 0, "committed work has a positive measured gas delta");
+            return;
+        }
+        fail("miner did not commit progress");
     }
 
     // =========================================================================
@@ -548,7 +534,7 @@ contract V56SubHardening is DeployProtocol {
 
     /// @dev Warp to a fresh day boundary + `offsetSeconds` (the daily reset is 82620s past midnight).
     ///      Lands deterministically in the first seconds of a NEW day so advanceDue() is true and the
-    ///      bounty time-tiers (15-min / 30-min) are below threshold. Mirrors the v56 gas-marginal
+    ///      removed participation windows cannot be hidden by a late-day timestamp. Mirrors the v56 gas-marginal
     ///      `_warpToBoundary` day-roll, threaded through the accumulating-timestamp workaround.
     function _warpToDayBoundary(uint256 offsetSeconds) internal {
         uint256 dayLen = 1 days;
@@ -587,7 +573,7 @@ contract V56SubHardening is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }
@@ -598,9 +584,10 @@ contract V56SubHardening is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
+        fail("fixture: miner consumers did not settle");
     }
 
     function _fulfillPending(uint256 vrfWord) internal {
@@ -624,7 +611,7 @@ contract V56SubHardening is DeployProtocol {
         game.depositAfkingFunding{value: amount}(who);
     }
 
-    /// @dev Deity bit only — a bounty-eligibility tier now; confers nothing for the afking coin gate.
+    /// @dev Deity bit only; it confers nothing for the afking coin gate or mining participation.
     function _grantDeityPass(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));

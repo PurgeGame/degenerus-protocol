@@ -17,13 +17,13 @@ import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 ///         while it can still FIND work — leaving "flag set, no work, every entry point
 ///         reverts" reachable. The handler drives random sequences (ticket/lootbox/foil/whale
 ///         buys, mid-day lootbox requests as a player or as the CRAPS table, VRF fulfilment
-///         with delays and stalls, advanceGame / mineFlip cranks, intra-day and cross-day
+///         with delays and stalls, mineFlip / mineFlip cranks, intra-day and cross-day
 ///         warps including the pre-reset minute, prize-pool seeding to force turbo and normal
 ///         last-purchase-day seals) and after EVERY action runs an isolated liveness check.
 ///
 ///         THE CHECK (inside vm.snapshotState / revertToState, so it never perturbs the run):
 ///           1. With VRF cooperating and WITHOUT moving time, fulfil any pending request and
-///              crank advanceGame until it reverts (quiescence) or N cranks pass.
+///              crank mineFlip until it reverts (quiescence) or N cranks pass.
 ///           2. At quiescence the game must be sealed and idle: terminal revert is
 ///              NotTimeYet, today's word exists, rngLocked is false, LR_MID_DAY == 0,
 ///              ticketsFullyProcessed is true (nothing staged without a worker), and
@@ -80,7 +80,7 @@ contract AdvanceLivenessHandler is Test {
     uint8 public constant V_LATCH_STUCK = 3; // LR_MID_DAY set at quiescence
     uint8 public constant V_NOT_SEALED = 4; // today's word missing / rng still locked at quiescence
     uint8 public constant V_STAGED_NO_WORKER = 5; // !ticketsFullyProcessed while idle and sealed
-    uint8 public constant V_ADVANCE_DUE_LIES = 6; // advanceDue() true but advanceGame reverts
+    uint8 public constant V_ADVANCE_DUE_LIES = 6; // advanceDue() true but mineFlip reverts
     uint8 public constant V_REQUEST_BLOCKED = 7; // requestLootboxRng blocked by a liveness gate
 
     struct Violation {
@@ -224,7 +224,7 @@ contract AdvanceLivenessHandler is Test {
         _fulfillPending();
     }
 
-    /// Crank n times. Bit i of `bits`: fulfil before crank i; bit (i+32): mineFlip instead of advanceGame.
+    /// Crank n times. Bit i of `bits`: fulfil before crank i; bit (i+32): mineFlip instead of mineFlip.
     function actCrank(uint256 n, uint256 bits) external action("crank") {
         n = bound(n, 1, 40);
         for (uint256 i = 0; i < n; i++) {
@@ -234,7 +234,7 @@ contract AdvanceLivenessHandler is Test {
                 vm.prank(_actor(bits >> 64));
                 (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             } else {
-                (ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             }
             if (!ok && (bits >> 100) & 1 == 0) break;
         }
@@ -292,7 +292,7 @@ contract AdvanceLivenessHandler is Test {
 
     /// Biased compound: reach a sealed NORMAL last purchase day with the frozen next-level
     /// pool non-empty and tickets on the write side, then fire a mid-day request, fulfil and
-    /// drain it through mineFlip/advanceGame. The liveness post-condition then judges it.
+    /// drain it through mineFlip/mineFlip. The liveness post-condition then judges it.
     function actLastPurchaseDayMidday(uint256 seed) external action("lastPurchaseDayMidday") {
         ghost_biasedRuns++;
         if (game.gameOver()) return;
@@ -424,12 +424,12 @@ contract AdvanceLivenessHandler is Test {
         }
     }
 
-    /// Fulfil + advanceGame until it reverts or MAX_CRANKS successes.
+    /// Fulfil + mineFlip until it reverts or MAX_CRANKS successes.
     function _crankToQuiescence() internal returns (bool quiet, bytes4 sel, uint256 cranks) {
         for (cranks = 0; cranks < MAX_CRANKS; cranks++) {
             if (game.gameOver()) return (true, bytes4(0), cranks);
             _fulfillPending();
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) {
                 bytes4 stopped = _sel(ret);
                 // Advance can be idle while this session still has required consumers.
@@ -556,10 +556,10 @@ contract AdvanceLivenessHandler is Test {
                 vm.prank(actors[0]);
                 (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (ok && !game.advanceDue()) {
-                    (ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                    (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 }
             } else {
-                (ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             }
             if (!ok) return;
         }

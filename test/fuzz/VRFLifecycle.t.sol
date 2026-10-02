@@ -23,24 +23,24 @@ contract VRFLifecycle is DeployProtocol {
         // Initially no VRF requests
         assertEq(mockVRF.lastRequestId(), 0, "Should have no requests initially");
 
-        // Trigger a VRF request by calling advanceGame
-        // At deploy time (timestamp=86400), dayIndex=1 > dailyIdx=0, so advanceGame proceeds
-        game.advanceGame();
+        // Trigger a VRF request by calling mineFlip
+        // At deploy time (timestamp=86400), dayIndex=1 > dailyIdx=0, so mineFlip proceeds
+        game.mineFlip();
 
         // VRF request should have been sent
-        assertTrue(game.rngLocked(), "rngLocked should be true after advanceGame");
+        assertTrue(game.rngLocked(), "rngLocked should be true after mineFlip");
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(reqId > 0, "Should have a VRF request");
 
         // Fulfill the VRF request
         mockVRF.fulfillRandomWords(reqId, 12345);
 
-        // RNG word is stored but game still locked until advanceGame processes it
+        // RNG word is stored but game still locked until mineFlip processes it
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         assertTrue(fulfilled, "VRF request should be fulfilled");
     }
 
-    /// @notice Full VRF daily cycle: purchase -> warp day -> advanceGame -> VRF fulfill -> unlock
+    /// @notice Full VRF daily cycle: purchase -> warp day -> mineFlip -> VRF fulfill -> unlock
     function test_fullVrfDailyCycle() public {
         assertEq(game.level(), 0, "Game should start at level 0");
 
@@ -62,8 +62,8 @@ contract VRFLifecycle is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
 
         // Trigger VRF request
-        game.advanceGame();
-        assertTrue(game.rngLocked(), "rngLocked after advanceGame");
+        game.mineFlip();
+        assertTrue(game.rngLocked(), "rngLocked after mineFlip");
 
         // Fulfill VRF
         uint256 reqId = mockVRF.lastRequestId();
@@ -72,7 +72,7 @@ contract VRFLifecycle is DeployProtocol {
         // Drive advances until RNG unlocks
         for (uint256 i = 0; i < 30; i++) {
             if (!game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
         }
 
         assertFalse(game.rngLocked(), "rngLocked should be false after full cycle");
@@ -129,7 +129,7 @@ contract VRFLifecycle is DeployProtocol {
         // triggers turbo mode (jackpotFlags=2) at level 0, causing a
         // purchaseLevel=0 underflow in _consolidatePoolsAndRewardJackpots.
         {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (ok) {
                 uint256 reqId = mockVRF.lastRequestId();
                 if (reqId > 0) {
@@ -150,7 +150,7 @@ contract VRFLifecycle is DeployProtocol {
                             } catch {}
                         }
                     }
-                    (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                    (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                     if (!ok) break;
                 }
             }
@@ -171,8 +171,8 @@ contract VRFLifecycle is DeployProtocol {
                 }
             }
 
-            // Try advanceGame -- may revert if not ready
-            try game.advanceGame() {} catch { continue; }
+            // Try mineFlip -- may revert if not ready
+            try game.mineFlip() {} catch { continue; }
 
             // Fulfill VRF if a new request was fired
             reqId = mockVRF.lastRequestId();
@@ -197,7 +197,7 @@ contract VRFLifecycle is DeployProtocol {
                         } catch {}
                     }
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (!ok) break;
             }
 
@@ -217,8 +217,8 @@ contract VRFLifecycle is DeployProtocol {
         assertEq(vrfHandler.ghost_vrfFulfillments(), 0, "No-op when no requests");
 
         // Trigger a VRF request
-        game.advanceGame();
-        assertTrue(game.rngLocked(), "rngLocked after advanceGame");
+        game.mineFlip();
+        assertTrue(game.rngLocked(), "rngLocked after mineFlip");
 
         // Fulfill via handler
         vrfHandler.fulfillVrf(99999);

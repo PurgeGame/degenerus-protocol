@@ -4,23 +4,11 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 
-/// @title GapDayRewalkAfkingStage -- Regression for the re-walked gap day / afking STAGE freeze
-///        (P1-fable H-1): a day whose rngWordByDay entry is already committed never runs the
-///        STAGE, and a seal that does not release the VRF lock holds no seat drawing.
-///
-/// @notice Scenario: a daily VRF request fired on day R goes unanswered for three calendar days
-///         (no keeper cranks). The word lands on day W = R+3. The advance:
-///           #1  clamps to R (Buffered arm), resolves R with the late word, seals R.
-///           #2  wall-day W: STAGE(W) runs on an uncommitted word, then a FRESH request fires.
-///           #3  fresh word lands; rngGate backfills _recordedDailyWord(R+1), [R+2] = keccak(word, g)
-///               and records W's word in the SAME tx, then breaks (STAGE_GAP_BACKFILLED).
-///           #4  re-walks G1 = R+1 with the lock held (STAGE skipped), seals R+1 (lock off).
-///           #5  re-walks G2 = R+2 with the lock DOWN and G2's word public: STAGE off, no drawing.
-///           #6  wall-day W again with the lock down and W's word public: STAGE off, no drawing.
-///         The next wall day (uncommitted word) runs the STAGE and its lock-releasing seal draws.
-///
-///         Observed through `lastAutoBoughtDay` / `_afkingResetDay` storage reads and the
-///         AfkingDelivered / SubDrawWon logs of each crank.
+/// @title GapDayRewalkAfkingStage — skipped days never stage subscriptions or draw seats.
+/// @notice A request committed on R is fulfilled on W = R+3. The engine completes R's
+///         consumers before staging W and requesting its fresh word. The fresh word credits
+///         the intervening gap without purchases or seat draws on either skipped day.
+///         Only the last gap word and W are retained in the tagged two-day word ring.
 contract GapDayRewalkAfkingStage is DeployProtocol {
     // forge inspect DegenerusGame storage: _subOf@52 (address => Sub, one packed slot); slot 0 packs
     // purchaseStartDay u24 @0 · dailyIdx u24 @3 · ...
@@ -33,6 +21,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     uint256 private constant AFKING_RESET_OFF = 4;
 
     bytes32 private constant AFKING_DELIVERED_SIG = keccak256("AfkingDelivered(address,uint256)");
+    bytes32 private constant DAILY_RNG_APPLIED_SIG = keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)");
     bytes32 private constant SUB_DRAW_WON_SIG = keccak256("SubDrawWon(address,uint24,uint24,uint256)");
 
     uint256 private constant WORD_NORMAL = 0xA11CE;
@@ -64,70 +53,73 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         _runStageNewDay(WORD_NORMAL ^ 1);
         _drainOpens();
 
-        // ---- Day R: STAGE(R) stamps, then the daily request fires and the lock engages. ----
+        // Day R stamps subscriptions before committing the daily request. Scheduled
+        // maintenance may require an earlier checkpoint, so await the actual request.
         _t += 1 days;
         vm.warp(_t);
-        game.advanceGame();
+        _requestDaily();
         uint24 R = game.currentDayView();
         assertEq(_lastBought(atk), R, "day R: STAGE stamped the attacker");
         assertEq(_afkingResetDay(), R, "day R: STAGE reset stamped R");
         assertTrue(game.rngLocked(), "day R: request outstanding");
         uint256 reqR = mockVRF.lastRequestId();
 
-        // ---- VRF outage: three calendar days pass with no fulfilment and no crank. ----
         _t += 3 days;
         vm.warp(_t);
         uint24 W = game.currentDayView();
         assertEq(W, R + 3, "wall day is R+3");
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
 
-        // ---- #1: Buffered clamp resolves R with the late word and seals it. ----
-        _advanceUntilUnlocked();
-        assertEq(_dailyIdx(), R, "#1 sealed R");
-        assertTrue(game.rngWordForDay(R) != 0, "#1 recorded R's word");
-        assertEq(game.rngWordForDay(R + 1), 0, "#1 did not touch R+1");
-        assertTrue(_lastOpened(atk) < R, "R box pending");
-
-        // ---- #2: the ONE wall-day STAGE(W), on a word not yet committed; fresh request. ----
-        assertEq(game.rngWordForDay(W), 0, "#2 enters with W's word uncommitted");
-        _finishReadConsumers();
-        game.advanceGame();
-        assertTrue(game.rngLocked(), "#2 fired the fresh request");
-        assertEq(_afkingResetDay(), W, "#2 ran STAGE(W)");
-        assertEq(_lastBought(atk), R, "#2 STAGE(W) skipped the attacker (pending R box)");
-        assertEq(_lastBought(bystander), R, "#2 STAGE(W) skipped the bystander (pending R box)");
+        // A crank may both finish R and request W. Observe the request boundary, not
+        // a historical intermediate unlock that the serialized engine can cross atomically.
+        vm.recordLogs();
+        for (uint256 i; i < 128 && mockVRF.lastRequestId() == reqR; ++i) {
+            game.mineFlip{gas: 15_000_000}();
+        }
+        Vm.Log[] memory recoveryLogs = vm.getRecordedLogs();
+        _assertNoGapLogs(recoveryLogs, R, W);
+        assertEq(_dailyIdx(), R, "late word sealed the committed day R");
+        _assertAppliedWord(recoveryLogs, R, WORD_LATE);
+        assertEq(game.rngWordForDay(R), 0, "public word view expires history older than yesterday");
+        assertEq(game.rngWordForDay(R + 1), 0, "R completion did not invent a gap word");
+        assertEq(_lastOpened(atk), R, "R box completes before the next request");
+        assertEq(game.rngWordForDay(W), 0, "W was staged before its word was known");
+        assertTrue(game.rngLocked(), "fresh W request is outstanding");
+        assertEq(_afkingResetDay(), W, "one wall-day STAGE ran for W");
+        assertEq(_lastBought(atk), W, "W stamps after R's box has completed");
+        assertEq(_lastBought(bystander), W, "bystander follows the same serialized order");
         uint256 reqW = mockVRF.lastRequestId();
         assertTrue(reqW != reqR, "fresh request id");
         mockVRF.fulfillRandomWords(reqW, WORD_FRESH);
         uint256 predictedG2 = uint256(keccak256(abi.encodePacked(WORD_FRESH, uint24(R + 2))));
 
-        // ---- #3: backfill R+1, R+2 and record W in one tx; break with the lock held. ----
-        game.advanceGame();
-        assertTrue(game.rngLocked(), "#3 still locked");
-        assertTrue(game.rngWordForDay(R + 1) != 0, "#3 backfilled R+1");
-        assertEq(game.rngWordForDay(R + 2), predictedG2, "#3 backfilled R+2 = keccak(vrfWord, R+2)");
-        assertTrue(game.rngWordForDay(W) != 0, "#3 recorded W's word");
-        assertEq(_dailyIdx(), W - 1, "#3 skipped the gap days: index parked at W-1");
-
-        // The gap words are public but the lock is up, so nothing player-side can move
-        // against them: the subscription upsert is refused outright.
+        // Smaller calls expose the post-gap, pre-jackpot checkpoint without changing
+        // the logical word or permitting a subscription change while W remains locked.
+        vm.recordLogs();
+        for (uint256 i; i < 64 && game.rngWordForDay(W) == 0; ++i) {
+            game.mineFlip{gas: 5_000_000}();
+        }
+        assertTrue(game.rngLocked(), "W remains locked before its daily battle finishes");
+        assertEq(game.rngWordForDay(R + 1), 0, "older gap word retired from the two-day ring");
+        assertEq(game.rngWordForDay(R + 2), predictedG2, "last gap word derives from W's fresh word");
+        assertEq(game.rngWordForDay(W), WORD_FRESH, "W records its fresh word");
+        assertEq(_dailyIdx(), W - 1, "gap credited without running either skipped day");
         vm.prank(atk);
         vm.expectRevert(RngLocked.selector);
         game.subscribe(address(0), false, false, 2, address(0));
 
-        // The remaining advances pay W's jackpot under the lock and seal W. STAGE(W) ran
-        // once, at #2, before the request; no gap day ever ran a STAGE or a seat draw.
-        vm.recordLogs();
         _advanceUntilUnlocked();
-        (uint256 delivW,) = _countAfkingLogs(vm.getRecordedLogs());
-        assertEq(_dailyIdx(), W, "#4 sealed W");
-        assertEq(_afkingResetDay(), W, "#4: STAGE(W) ran exactly once (at #2)");
-        assertEq(_lastBought(atk), R, "#4: attacker not stamped on any gap day");
-        assertEq(_lastBought(bystander), R, "#4: bystander not stamped on any gap day");
-        assertEq(delivW, 0, "#4: no AfkingDelivered while sealing W");
-        assertEq(game.rngWordForDay(W + 1), 0, "#4: unlocked with no word ahead");
-        _drainOpens();
-        assertEq(_lastOpened(atk), R, "R box opened through the valve");
+        Vm.Log[] memory sealLogs = vm.getRecordedLogs();
+        _assertNoGapLogs(sealLogs, R, W);
+        (uint256 delivW,) = _countAfkingLogs(sealLogs);
+        assertEq(_dailyIdx(), W, "W sealed");
+        assertEq(_afkingResetDay(), W, "W's stage was not repeated after publication");
+        assertEq(_lastBought(atk), W, "attacker was not stamped on any gap day");
+        assertEq(_lastBought(bystander), W, "bystander was not stamped on any gap day");
+        assertEq(delivW, 0, "no subscription purchases while sealing known words");
+        assertEq(game.rngWordForDay(W + 1), 0, "no future daily word");
+        _settleClean(WORD_FRESH);
+        assertEq(_lastOpened(atk), W, "W box completes through the ordered engine");
 
         // ---- Positive control: the next day runs the STAGE (uncommitted word) and the drawing. ----
         _t += 1 days;
@@ -136,10 +128,10 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         assertEq(N, W + 1, "next wall day");
         assertEq(game.rngWordForDay(N), 0, "N's word uncommitted before its STAGE");
         vm.recordLogs();
-        game.advanceGame();
+        _requestDaily();
         (uint256 delivN,) = _countAfkingLogs(vm.getRecordedLogs());
         assertEq(_afkingResetDay(), N, "N: STAGE reset");
-        assertEq(_lastBought(atk), N, "N: STAGE stamped the attacker (R box opened by the valve)");
+        assertEq(_lastBought(atk), N, "N: STAGE stamped the attacker after W completed");
         assertTrue(delivN != 0, "N: AfkingDelivered on the normal-day STAGE");
         assertTrue(game.rngLocked(), "N: request outstanding");
         // Pick a fulfil word whose seat draw lands on a player slot (ring: VAULT, sDGNRS, atk, bystander).
@@ -186,11 +178,46 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked() && !game.boxesPending()) return;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked() && !game.boxesPending()) return;
-            game.advanceGame();
-            _fulfillPending(vrfWord);
+            if (game.rngComplete() && !game.advanceDue() && !game.rngLocked() && !game.boxesPending()) return;
+            game.mineFlip{gas: 15_000_000}();
+        }
+        revert("harness: current cohort never completed");
+    }
+
+    function _requestDaily() internal {
+        for (uint256 i; i < 128; ++i) {
+            if (game.rngLocked()) return;
+            game.mineFlip{gas: 15_000_000}();
+        }
+        revert("harness: daily request never committed");
+    }
+
+    function _assertAppliedWord(Vm.Log[] memory logs, uint24 day, uint256 word) internal view {
+        uint256 matches;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0
+                || logs[i].topics[0] != DAILY_RNG_APPLIED_SIG) continue;
+            (uint24 appliedDay, uint256 rawWord,, uint256 finalWord) =
+                abi.decode(logs[i].data, (uint24, uint256, uint256, uint256));
+            if (appliedDay != day) continue;
+            assertEq(rawWord, word, "committed day receives its own raw word");
+            assertEq(finalWord, word, "committed day receives its own unnudged word");
+            ++matches;
+        }
+        assertEq(matches, 1, "committed day's word applied exactly once");
+    }
+
+    function _assertNoGapLogs(Vm.Log[] memory logs, uint24 R, uint24 W) internal view {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
+            uint24 day;
+            if (logs[i].topics[0] == AFKING_DELIVERED_SIG) {
+                day = uint24(abi.decode(logs[i].data, (uint256)) >> 128);
+            } else if (logs[i].topics[0] == SUB_DRAW_WON_SIG) {
+                (day,,) = abi.decode(logs[i].data, (uint24, uint24, uint256));
+            } else continue;
+            assertTrue(day <= R || day >= W, "no subscription charge or seat draw on a gap day");
         }
     }
 
@@ -208,7 +235,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     function _advanceUntilUnlocked() internal {
         for (uint256 i; i < 64; i++) {
             if (!game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip{gas: 15_000_000}();
         }
         revert("harness: lock never released");
     }

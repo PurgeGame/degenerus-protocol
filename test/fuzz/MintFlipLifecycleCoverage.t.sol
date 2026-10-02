@@ -32,7 +32,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   `test_OpenLegSpansMultipleCalls`). Reuses the V56SecUnmanipulable / AutoOpenCursorRing afking
 ///   drive VERBATIM (deity-pass + funded-sub + new-day STAGE harness, the fulfill-first settle loop,
 ///   the accumulating-`t` warp, the post-PACK Sub-slot offset block, the packed-cursor slot reads).
-///   The full day cycle is driven through the production valves (advanceGame / openBoxes / mineFlip);
+///   The full day cycle is driven through the production valves (mineFlip / openBoxes / mineFlip);
 ///   per-sub markers are read from `_subOf[player]`. Test-only: ZERO contracts/*.sol mutation.
 contract MintFlipLifecycleCoverage is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -91,7 +91,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         address[] memory subs = _spawnSubs(N, "life_");
 
         // --- STAMP phase: one full day cycle stamps every in-set sub + lands the day's word. The STAGE
-        // runs inside advanceGame across weight-budgeted advance calls until subsFullyProcessed. ---
+        // runs inside mineFlip across weight-budgeted advance calls until subsFullyProcessed. ---
         _runStageNewDay(uint256(keccak256("life_stamp")) | 1);
         _settleClean(uint256(keccak256("life_stampc")) | 1);
 
@@ -409,7 +409,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }
@@ -420,7 +420,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }

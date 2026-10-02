@@ -56,14 +56,14 @@ describe("JackpotAffiliateBonus", function () {
   }
 
   async function driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, word) {
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     const requestId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(requestId, word);
     } catch {}
     for (let i = 0; i < 200; i++) {
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         break;
       }
@@ -292,7 +292,7 @@ describe("JackpotAffiliateBonus", function () {
       expect(baseline).to.be.gt(0n, "Should have baseline freshFlip pre-standard");
 
       // Trigger standard via full cycle (day 3, purchaseDays=2)
-      // Standard tier is set during daily processing, not at advanceGame entry
+      // Standard tier is set during daily processing, not at mineFlip entry
       await advanceToNextDay();
       await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 42n);
       expect(await game.jackpotDuration()).to.equal(3, "Should be standard");

@@ -22,9 +22,8 @@ import {
  * RNG-locked operation blocking, 3-day stall detection, emergency recovery,
  * and state consistency after a full retry cycle.
  *
- * Custom errors (RngNotReady, RngLocked, VrfUpdateNotReady) are defined in
- * DegenerusGameAdvanceModule.  Because the game uses delegatecall, reverts
- * from that module bubble up through DegenerusGame._revertDelegate().
+ * Custom errors from the miner and RNG modules bubble through the Game's
+ * delegatecall facade; the Admin route owns the retry authorization check.
  * Hardhat's revertedWithCustomError() must be given the module contract as
  * the source of truth for the ABI so the error selector is resolved
  * correctly.
@@ -35,54 +34,53 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Drain pending ticket batches after VRF fulfillment.
- * Calls advanceGame() until rngLocked becomes false or the iteration
- * limit is reached.
- *
- * NOTE: With DEPLOY_DAY_BOUNDARY=0 in tests, the first advanceGame()
- * backfills ~20k gap days and extends purchaseStartDay far into the
- * future. If a second call is needed (odd number of _swapAndFreeze
- * toggles), day-index arithmetic is underflow-safe with ternary guard.
- * This is a test-env artifact — production DEPLOY_DAY_BOUNDARY makes
- * gaps 0–3 days. We catch and stop rather than propagating.
+ * Finish the complete committed consumer cycle after a test's fulfillment.
+ * A late word can finish its original day and let the same mining call request
+ * a catch-up word. Fulfill only those subsequent requests while draining; the
+ * original stalled request and its retry are always fulfilled by the test.
  */
-async function drainTickets(game, caller) {
-  for (let i = 0; i < 30; i++) {
-    if (!(await game.rngLocked())) break;
-    try {
-      await game.connect(caller).advanceGame();
-    } catch {
-      break;
+async function drainCommittedWork(game, caller, mockVRF) {
+  const originalId = await getLastVRFRequestId(mockVRF);
+  for (let i = 0; i < 256; i++) {
+    if ((await game.rngComplete()) && !(await game.rngLocked())) return;
+    const id = await getLastVRFRequestId(mockVRF);
+    if (id > 0n) {
+      const request = await mockVRF.pendingRequests(id);
+      if (!request.fulfilled) {
+        expect(id).to.be.gt(originalId, "the test must fulfill its own original request");
+        await (await mockVRF.fulfillRandomWords(id, 5n)).wait();
+      }
     }
+    await (await game.connect(caller).mineFlip({ gasLimit: 15_000_000 })).wait();
   }
+  throw new Error("committed RNG consumer cycle did not complete");
 }
 
 /**
- * Issue the first VRF request by calling advanceGame().
+ * Process prerequisite checkpoints until the next daily VRF request is waiting.
  * Assumes a new day has already elapsed or the caller is on day 0.
  */
 async function issueFirstRequest(game, caller) {
-  await game.connect(caller).advanceGame();
+  for (let i = 0; i < 256; i++) {
+    const tx = await game.connect(caller).mineFlip({ gasLimit: 15_000_000 });
+    await tx.wait();
+    expect(await game.gameOver()).to.equal(false, "request fixture must stay live");
+    if ((await game.rngLocked()) && !(await game.isRngFulfilled())) return tx;
+  }
+  throw new Error("daily request prerequisites did not complete");
 }
 
 /**
- * Seal the genesis day: advance one day, request + fulfill + drain so dailyIdx
- * catches up. In the test env DEPLOY_DAY_BOUNDARY=0 makes the very first
- * advanceGame backfill ~20k gap days; sealing once lands subsequent request/
- * timeout/retry cycles on a normal (non-backfill) day. The daily VRF retry
- * timeout is 20h (rngLockedFlag path); stalls are driven same-day so the retry
- * fires inside rngGate.
+ * Seal the genesis day and every consumer before beginning a new stalled cycle.
+ * The deployment fixture pins its actual deployment-day boundary.
  */
 async function sealGenesisDay(game, caller, mockVRF) {
   await advanceToNextDay();
-  await game.connect(caller).advanceGame();
+  await issueFirstRequest(game, caller);
   const id = await getLastVRFRequestId(mockVRF);
-  if (id > 0n) {
-    try {
-      await mockVRF.fulfillRandomWords(id, 5n);
-    } catch {}
-  }
-  await drainTickets(game, caller);
+  expect(id).to.be.gt(0n);
+  await (await mockVRF.fulfillRandomWords(id, 5n)).wait();
+  await drainCommittedWork(game, caller, mockVRF);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,8 +93,8 @@ describe("RngStall", function () {
   // =========================================================================
 
   describe("20-hour timeout and retry", function () {
-    it("advanceGame after the 20h timeout issues a new higher requestId", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+    it("Admin retry after the 20h timeout issues a new higher requestId", async function () {
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       // Seal the genesis day so the request/retry runs on a normal day.
       await sealGenesisDay(game, deployer, mockVRF);
@@ -108,11 +106,11 @@ describe("RngStall", function () {
       const firstRequestId = await getLastVRFRequestId(mockVRF);
       expect(await game.rngLocked()).to.equal(true);
 
-      // Stall past the 20h daily VRF retry timeout (same day) to trigger a retry.
+      // Stall past the 20h daily VRF retry timeout to trigger a retry.
       await advanceTime(20 * 3600 + 60);
 
       // Retry call — should succeed and emit a new VRF request.
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await admin.connect(deployer).retryGameRng();
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
@@ -124,7 +122,7 @@ describe("RngStall", function () {
     });
 
     it("rngLocked remains true immediately after the retry request", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       await sealGenesisDay(game, deployer, mockVRF);
 
@@ -132,27 +130,27 @@ describe("RngStall", function () {
       await issueFirstRequest(game, deployer);
 
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
 
       // A new VRF request was issued, so the lock must still be held.
       expect(await game.rngLocked()).to.equal(true);
     });
 
     it("fulfilling the retry requestId and processing unlocks RNG", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       await sealGenesisDay(game, deployer, mockVRF);
 
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      // Trigger timeout (same-day stall past the 20h daily retry threshold).
+      // Trigger timeout (stall past the 20h daily retry threshold).
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
 
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 7654321n);
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
 
       expect(await game.rngLocked()).to.equal(
         false,
@@ -161,7 +159,7 @@ describe("RngStall", function () {
     });
 
     it("isRngFulfilled becomes true after the retry fulfillment", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       await sealGenesisDay(game, deployer, mockVRF);
 
@@ -169,12 +167,12 @@ describe("RngStall", function () {
       await issueFirstRequest(game, deployer);
 
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
 
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 999n);
 
-      // Word is now stored but not yet consumed by advanceGame.
+      // Word is now stored but not yet consumed by mineFlip.
       expect(await game.isRngFulfilled()).to.equal(true);
     });
   });
@@ -183,8 +181,8 @@ describe("RngStall", function () {
   // 2. Before 20-Hour Timeout Reverts
   // =========================================================================
 
-  describe("advanceGame before 20-hour timeout reverts", function () {
-    it("calling advanceGame at 1h elapsed reverts with RngNotReady", async function () {
+  describe("mineFlip before 20-hour timeout reverts", function () {
+    it("calling mineFlip at 1h elapsed reverts with RngNotReady", async function () {
       const { game, deployer, advanceModule } = await loadFixture(
         deployFullProtocol
       );
@@ -195,11 +193,11 @@ describe("RngStall", function () {
       await advanceTime(3600); // 1 hour — well under the 20h threshold.
 
       await expect(
-        game.connect(deployer).advanceGame()
+        game.connect(deployer).mineFlip()
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
-    it("calling advanceGame at 6h elapsed reverts with RngNotReady", async function () {
+    it("calling mineFlip at 6h elapsed reverts with RngNotReady", async function () {
       const { game, deployer, advanceModule } = await loadFixture(
         deployFullProtocol
       );
@@ -210,12 +208,12 @@ describe("RngStall", function () {
       await advanceTime(6 * 3600); // 6 hours — under the 20h threshold.
 
       await expect(
-        game.connect(deployer).advanceGame()
+        game.connect(deployer).mineFlip()
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
     it("a non-owner never fires the retry, even past 20h", async function () {
-      const { game, alice, mockVRF, advanceModule } = await loadFixture(
+      const { game, alice, mockVRF, advanceModule, admin, rngModule } = await loadFixture(
         deployFullProtocol
       );
 
@@ -227,13 +225,13 @@ describe("RngStall", function () {
       await advanceTime(20 * 3600 + 60);
 
       await expect(
-        game.connect(alice).advanceGame()
-      ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
+        admin.connect(alice).retryGameRng()
+      ).to.be.revertedWithCustomError(admin, "NotOwner");
       expect(await getLastVRFRequestId(mockVRF)).to.equal(stalledId);
     });
 
     it("the vault owner cannot retry before 20h (no head start)", async function () {
-      const { game, deployer, advanceModule } = await loadFixture(
+      const { game, deployer, advanceModule, admin, rngModule } = await loadFixture(
         deployFullProtocol
       );
 
@@ -243,12 +241,12 @@ describe("RngStall", function () {
       await advanceTime(19 * 3600 + 59 * 60);
 
       await expect(
-        game.connect(deployer).advanceGame()
-      ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
+        admin.connect(deployer).retryGameRng()
+      ).to.be.revertedWithCustomError(rngModule, "RngNotReady");
     });
 
-    it("calling advanceGame at 20h+ triggers retry (no revert)", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(
+    it("calling Admin at 20h+ triggers retry (no revert)", async function () {
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(
         deployFullProtocol
       );
 
@@ -261,7 +259,7 @@ describe("RngStall", function () {
       await advanceTime(20 * 3600 + 1);
 
       // Should not revert — retries the VRF request
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await admin.connect(deployer).retryGameRng();
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -273,7 +271,7 @@ describe("RngStall", function () {
 
   describe("consecutive timeouts and the single-use retry", function () {
     it("the retry issues one strictly increasing requestId; a second timeout is refused", async function () {
-      const { game, deployer, mockVRF, advanceModule } = await loadFixture(
+      const { game, deployer, mockVRF, advanceModule, admin, rngModule } = await loadFixture(
         deployFullProtocol,
       );
 
@@ -285,21 +283,21 @@ describe("RngStall", function () {
 
       // The single timeout retry (same-day stall past 20h).
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
       const id2 = await getLastVRFRequestId(mockVRF);
       expect(id2).to.be.gt(id1, "Retry request must exceed first");
 
       // The retry is single-use per daily commitment: another 20h stall does
-      // not re-request — advanceGame reverts until the retried word arrives.
+      // not re-request — Admin rejects any second retry.
       await advanceTime(20 * 3600 + 60);
       await expect(
-        game.connect(deployer).advanceGame(),
-      ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
+        admin.connect(deployer).retryGameRng(),
+      ).to.be.revertedWithCustomError(rngModule, "RngNotReady");
       expect(await getLastVRFRequestId(mockVRF)).to.equal(id2);
     });
 
     it("fulfilling the retried request after the retry is spent recovers the game", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       await sealGenesisDay(game, deployer, mockVRF);
 
@@ -308,7 +306,7 @@ describe("RngStall", function () {
 
       // Spend the single retry (same-day stall past 20h).
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
 
       // Further stall: no more retries; the retried request's own late
       // fulfillment is the recovery path.
@@ -319,13 +317,12 @@ describe("RngStall", function () {
       // Word must be accepted by the game.
       expect(await game.isRngFulfilled()).to.equal(true);
 
-      // Drain processes the word. May not fully unlock due to
-      // DEPLOY_DAY_BOUNDARY=0 gap backfill extending purchaseStartDay.
-      await drainTickets(game, deployer);
+      // Drain the original word and any subsequent catch-up commitment.
+      await drainCommittedWork(game, deployer, mockVRF);
     });
 
     it("game state remains sane while a spent-retry stall persists", async function () {
-      const { game, deployer, mockVRF, advanceModule } = await loadFixture(
+      const { game, deployer, mockVRF, advanceModule, admin, rngModule } = await loadFixture(
         deployFullProtocol,
       );
 
@@ -335,14 +332,14 @@ describe("RngStall", function () {
       await issueFirstRequest(game, deployer);
 
       // Spend the single retry, then hold the stall across three more 20h
-      // windows — each advanceGame refuses rather than re-requesting.
+      // windows — each Admin retry is refused.
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
       for (let i = 0; i < 3; i++) {
         await advanceTime(20 * 3600 + 60);
         await expect(
-          game.connect(deployer).advanceGame(),
-        ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
+          admin.connect(deployer).retryGameRng(),
+        ).to.be.revertedWithCustomError(rngModule, "RngNotReady");
       }
 
       expect(await game.rngLocked()).to.equal(true);
@@ -350,7 +347,7 @@ describe("RngStall", function () {
 
       const finalId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(finalId, 42n);
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
 
       expect(await game.rngLocked()).to.equal(false);
     });
@@ -362,7 +359,7 @@ describe("RngStall", function () {
 
   describe("fulfilling a stale requestId after timeout retry", function () {
     it("fulfilling the old requestId is silently ignored by the game", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       await sealGenesisDay(game, deployer, mockVRF);
 
@@ -372,7 +369,7 @@ describe("RngStall", function () {
 
       // Trigger timeout and get a new requestId (same-day stall past 20h).
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
       const newRequestId = await getLastVRFRequestId(mockVRF);
 
       expect(newRequestId).to.be.gt(oldRequestId);
@@ -389,7 +386,7 @@ describe("RngStall", function () {
     });
 
     it("fulfilling the new requestId after ignoring the stale one works", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       await sealGenesisDay(game, deployer, mockVRF);
 
@@ -398,7 +395,7 @@ describe("RngStall", function () {
       const oldRequestId = await getLastVRFRequestId(mockVRF);
 
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
       const newRequestId = await getLastVRFRequestId(mockVRF);
 
       // First try with stale id (raw, silently ignored).
@@ -412,12 +409,12 @@ describe("RngStall", function () {
       await mockVRF.fulfillRandomWords(newRequestId, 5555n);
       expect(await game.isRngFulfilled()).to.equal(true);
 
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
       expect(await game.rngLocked()).to.equal(false);
     });
 
     it("stale fulfillment does not affect rngLocked state", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       await sealGenesisDay(game, deployer, mockVRF);
 
@@ -426,7 +423,7 @@ describe("RngStall", function () {
       const staleId = await getLastVRFRequestId(mockVRF);
 
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
 
       const gameAddr = await game.getAddress();
       await mockVRF.fulfillRandomWordsRaw(staleId, gameAddr, 7777n);
@@ -440,7 +437,7 @@ describe("RngStall", function () {
   // 5. RNG Locked Blocks Operations
   // =========================================================================
 
-  describe("rngLocked blocks reverseFlip and early advanceGame", function () {
+  describe("rngLocked blocks reverseFlip and early mineFlip", function () {
     it("reverseFlip reverts with RngLocked while VRF is pending", async function () {
       const { game, deployer, advanceModule } = await loadFixture(
         deployFullProtocol
@@ -456,7 +453,7 @@ describe("RngStall", function () {
       ).to.be.revertedWithCustomError(advanceModule, "RngLocked");
     });
 
-    it("advanceGame before timeout reverts with RngNotReady", async function () {
+    it("mineFlip before timeout reverts with RngNotReady", async function () {
       const { game, deployer, advanceModule } = await loadFixture(
         deployFullProtocol
       );
@@ -464,11 +461,11 @@ describe("RngStall", function () {
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
 
-      // Advance only 30 minutes — far under the 18h threshold.
+      // Advance only 30 minutes — far under the 20h threshold.
       await advanceTime(30 * 60);
 
       await expect(
-        game.connect(deployer).advanceGame()
+        game.connect(deployer).mineFlip()
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
@@ -519,7 +516,7 @@ describe("RngStall", function () {
 
       const requestId = await getLastVRFRequestId(mockVRF);
 
-      // Fulfill after only 1 hour (well within the 18-hour window).
+      // Fulfill after only 1 hour (well within the 20-hour window).
       await advanceTime(3600);
       await mockVRF.fulfillRandomWords(requestId, 87654321n);
 
@@ -540,7 +537,7 @@ describe("RngStall", function () {
       // Word accepted before processing.
       expect(await game.isRngFulfilled()).to.equal(true);
 
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
     });
 
     it("no retry requestId is issued when fulfillment comes before timeout", async function () {
@@ -558,7 +555,7 @@ describe("RngStall", function () {
       const lastId = await getLastVRFRequestId(mockVRF);
       expect(lastId).to.equal(requestId);
 
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
     });
   });
 
@@ -568,32 +565,32 @@ describe("RngStall", function () {
 
   describe("RNG state consistency after timeout-retry-fulfill-process cycle", function () {
     it("rngLocked is false and isRngFulfilled is false after complete cycle", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       // Cycle 1: normal day advance.
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await issueFirstRequest(game, deployer);
       const id1 = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(id1, 111n);
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
 
       // Cycle 2: trigger timeout and retry.
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame(); // new request.
+      await issueFirstRequest(game, deployer); // new request.
       await advanceToNextDay();
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame(); // retry.
+      await admin.connect(deployer).retryGameRng(); // retry.
 
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 222n);
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
 
       expect(await game.rngLocked()).to.equal(false);
       expect(await game.isRngFulfilled()).to.equal(false);
     });
 
     it("game is not in gameover and not in jackpot phase after retry cycle", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       await sealGenesisDay(game, deployer, mockVRF);
 
@@ -601,32 +598,32 @@ describe("RngStall", function () {
       await issueFirstRequest(game, deployer);
 
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
 
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 333n);
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
 
       expect(await game.gameOver()).to.equal(false);
       expect(await game.jackpotPhase()).to.equal(false);
     });
 
     it("can proceed to the next day's advance after a retry cycle completes", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(deployFullProtocol);
+      const { game, deployer, mockVRF, admin, rngModule } = await loadFixture(deployFullProtocol);
 
       // Day 1: seal genesis, then first request, timeout, retry, fulfill, drain.
       await sealGenesisDay(game, deployer, mockVRF);
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
       await advanceTime(20 * 3600 + 60);
-      await game.connect(deployer).advanceGame();
+      await admin.connect(deployer).retryGameRng();
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 444n);
-      await drainTickets(game, deployer);
+      await drainCommittedWork(game, deployer, mockVRF);
 
       // Day 2: fresh normal advance must succeed without errors (no brick).
       await advanceToNextDay();
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await game.connect(deployer).mineFlip();
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
@@ -637,7 +634,7 @@ describe("RngStall", function () {
       let newId = await getLastVRFRequestId(mockVRF);
       for (let i = 0; i < 10 && newId <= retryId; i++) {
         if (await game.jackpotPhase()) break;
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
         newId = await getLastVRFRequestId(mockVRF);
       }
       expect(newId).to.be.gt(retryId);

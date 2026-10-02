@@ -43,7 +43,7 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
 
     function test_EmptyFoilWalkAndCompleteCachedDailyShareOneTransaction() public {
         vm.recordLogs();
-        game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
+        game.mineFlip{gas: EIP7825_TX_GAS_CAP - 21_064}();
         uint256 used = _transactionGas();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 ethAwards;
@@ -69,7 +69,7 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
 
         // The priced ticket leg pays from the next advance on the same recorded word.
         vm.recordLogs();
-        game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
+        game.mineFlip{gas: EIP7825_TX_GAS_CAP - 21_064}();
         used = _transactionGas();
         logs = vm.getRecordedLogs();
         tickets = 0;

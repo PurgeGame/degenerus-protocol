@@ -38,6 +38,7 @@ import sys
 # same scope-tracking extractor serves every identifier-registry gate (RNGW
 # uses the default; the SOLV pool-write gate passes the counted-term set).
 VRF_WORD_IDENTIFIERS = [
+    "rngRequestDay",  # pinned logical commitment day, independent of transport retries
     "rngWordCurrent",
     "_currentRngWord",
     "rngWordByDay",
@@ -228,10 +229,14 @@ def classify_mode(masked_line: str, ident: str) -> str:
     declaration (`uint256 internal x = ...;`) is a DECL, not a WRITE."""
     if re.search(DECL_RE_TMPL + re.escape(ident) + r"\b", masked_line):
         return "DECL"
-    pat = re.compile(
-        r"\b" + re.escape(ident) + r"\b\s*(\[[^\]]*\]\s*)?(?P<op>[-+*/|&^]?=)(?![=])"
-    )
-    if pat.search(masked_line):
+    # Solidity writes include nested mapping/array cells and struct members, plus
+    # deletes and increments. Treat any write as stricter than a same-line read.
+    target = r"\b" + re.escape(ident) + r"\b(?:\s*(?:\[[^\]]*\]|\.[A-Za-z_][A-Za-z0-9_]*))*"
+    if re.search(target + r"\s*(?:[-+*/|&^]?=(?!=)|\+\+|--)", masked_line):
+        return "WRITE"
+    if re.search(r"\bdelete\s+" + target, masked_line):
+        return "WRITE"
+    if re.search(r"(?:\+\+|--)\s*" + target, masked_line):
         return "WRITE"
     return "READ"
 
@@ -244,15 +249,43 @@ def scan_file(path: str, relpath: str):
     raw_lines = src.split("\n")
     fn_by_line = enclosing_functions(masked)
 
+    # Follow directly bound storage references within their function. A storage
+    # parameter is also attributed when its struct type has exactly one bound
+    # root in this file (e.g. JackpotWork storage work -> jackpotWork). Ambiguous
+    # roots are all reported, conservatively, rather than silently discarded.
+    roots_by_type = {}
+    aliases = {}
+    binding_re = re.compile(r"\b([A-Za-z_]\w*)\s+storage\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\b")
+    for match in binding_re.finditer(masked):
+        typ, alias, root = match.groups()
+        if root not in VRF_WORD_IDENTIFIERS:
+            continue
+        line = masked.count("\n", 0, match.start())
+        fn = fn_by_line[line]
+        aliases.setdefault(fn, {}).setdefault(alias, set()).add(root)
+        roots_by_type.setdefault(typ, set()).add(root)
+    for match in re.finditer(r"\bfunction\s+(\w+)\s*\(([^)]*)\)", masked, re.S):
+        fn, params = match.groups()
+        for typ, alias in re.findall(r"\b(\w+)\s+storage\s+(\w+)\b", params):
+            if typ in roots_by_type:
+                aliases.setdefault(fn, {}).setdefault(alias, set()).update(roots_by_type[typ])
+
     records = []
     for idx, mline in enumerate(masked_lines):
+        fn = fn_by_line[idx] if idx < len(fn_by_line) else "<file-scope>"
+        code = raw_lines[idx].strip() if idx < len(raw_lines) else ""
+        modes = {}
         for ident in VRF_WORD_IDENTIFIERS:
-            # Whole-word match on the masked (comment-free) line.
             if re.search(r"\b" + re.escape(ident) + r"\b", mline):
-                mode = classify_mode(mline, ident)
-                fn = fn_by_line[idx] if idx < len(fn_by_line) else "<file-scope>"
-                code = raw_lines[idx].strip() if idx < len(raw_lines) else ""
-                records.append((relpath, fn, ident, mode, idx + 1, code))
+                modes[ident] = classify_mode(mline, ident)
+        for alias, roots in aliases.get(fn, {}).items():
+            if (not re.search(r"\bstorage\s+" + re.escape(alias) + r"\s*=", mline)
+                    and re.search(r"\b" + re.escape(alias) + r"\b", mline)
+                    and classify_mode(mline, alias) == "WRITE"):
+                for root in roots:
+                    modes[root] = "WRITE"
+        for ident, mode in modes.items():
+            records.append((relpath, fn, ident, mode, idx + 1, code))
     return records
 
 

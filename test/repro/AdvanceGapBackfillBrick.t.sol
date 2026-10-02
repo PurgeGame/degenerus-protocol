@@ -15,7 +15,7 @@ contract PurchaseStartDaySeeder is DegenerusGame {
 
 /// @title AdvanceGapBackfillBrick — regression for finding C2 (AdvanceModule purchase-phase-stall brick).
 ///
-/// @notice Before the fix, a purchase-phase VRF stall of a few days made `advanceGame` revert with
+/// @notice Before the fix, a purchase-phase VRF stall of a few days made `mineFlip` revert with
 ///         an arithmetic underflow (Panic 0x11) on every subsequent call — a PERMANENT brick with
 ///         no liveness escape. A bounds-only fix still let a target-met cached replay enter jackpot
 ///         without the request-time level promotion. The final fix gates both transition latches to
@@ -49,21 +49,21 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
     }
 
-    /// @dev Complete a full day: advanceGame -> fulfill the pending daily word -> drain until unlocked.
+    /// @dev Complete a full day: mineFlip -> fulfill the pending daily word -> drain until unlocked.
     function _completeDay(uint256 vrfWord) internal {
         _requestDailyAfterDraining();
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
         }
     }
 
     /// @dev A new daily request first drains the previous word's boxes/bets/fields.
     ///      Keep the clock fixed and let production routing do that bounded work.
     function _requestDailyAfterDraining() private {
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.advanceGame();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip();
         assertTrue(game.rngLocked(), "prior cohort drained and daily request started");
     }
 
@@ -92,7 +92,7 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
     }
 
     function _advanceAndFulfill(uint256 salt) private {
-        try game.advanceGame() {
+        try game.mineFlip() {
             if (!game.rngLocked()) return;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId == 0) return;
@@ -102,7 +102,7 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
             }
         } catch (bytes memory reason) {
             if (_isArithmeticPanic(reason)) {
-                revert("C2 REGRESSION: advanceGame underflow-panicked (the brick is back)");
+                revert("C2 REGRESSION: mineFlip underflow-panicked (the brick is back)");
             }
             // NotTimeYet/RngNotReady are ordinary bounded-loop control flow; the state assertions
             // below make a permanently swallowed failure non-vacuous.
@@ -173,14 +173,9 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         uint256 resumedRoot = game.rngWordForDay(resumeDay);
         assertGt(resumedRoot, 1, "current resume-day root is retained");
         assertEq(game.rngWordForDay(firstGapDay), 0, "old first gap-day full word expired");
-        uint256 rewardSeed = uint256(keccak256(abi.encodePacked(
-            keccak256("degenerus.coinflip.reward-percent"), resumedRoot, firstGapDay
-        )));
-        uint256 rewardRoll = rewardSeed % 20;
-        uint16 expectedReward = rewardRoll == 0 ? 50 : rewardRoll == 1 ? 150 : uint16(rewardSeed % 38 + 78);
         bool expectedWin = resumedRoot & 2 != 0;
         (uint16 gapReward, bool gapWon) = coinflip.getCoinflipDayResult(firstGapDay);
-        assertEq(gapReward, expectedWin ? expectedReward : 1, "first gap has its canonical stored result");
+        assertEq(gapReward, expectedWin ? 100 : 1, "first gap is double or nothing with canonical loss sentinel");
         assertEq(gapWon, expectedWin, "first gap uses bit 1 of the resume root");
         assertTrue(game.rngWordForDay(resumeDay - 1) != 0, "last gap day retains yesterday's full word");
         // Make the target met only AFTER the backfill. The wall day is the only day left to

@@ -12,9 +12,11 @@ import {FLIP} from "../../contracts/FLIP.sol";
 /// @dev Expose the production RNG gate; settlement, quests, burn and craps are all real.
 contract AutoDecimatorAdvanceHarness is DegenerusGameAdvanceModule {
     function applyOpeningWord(uint24 day) external {
-        bool lastPurchase = !jackpotPhaseFlag && lastPurchaseDay;
-        uint24 purchaseLevel = lastPurchase && rngLockedFlag ? level : level + 1;
-        rngGate(uint48(block.timestamp), day, purchaseLevel, lastPurchase, 0, dailyIdx);
+        if (_recordedDailyWord(day) != 0) return;
+        (bool ok, bytes memory err) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+            abi.encodeWithSelector(DegenerusGameAdvanceModule.applyDailyWord.selector)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(err, 32), mload(err)) }
     }
 }
 
@@ -24,9 +26,11 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         purchaseStartDay = day - 1;
         level = lvl;
         rngRequestTime = uint48(block.timestamp);
+        rngRequestDay = day;
+        ticketsFullyProcessed = true;
         rngLockedFlag = true;
         _setRngRequestActive(true);
-        _setRngSessionPublished(false);
+        _setRngSessionPublished(true);
         _setRngComplete(false);
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         _setDecWindowOpen(true);
@@ -238,8 +242,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // (see processTicketBatch's far-future continuation block). That first call resolves
         // the pool and returns early (STAGE_TICKETS_WORKING); the second call finds the gate
         // clear and reaches rngGate, where the opening-day decimator burn fires.
-        game.advanceGame();
-        game.advanceGame();
+        game.mineFlip();
+        game.mineFlip();
         (uint256 spent, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(spent, CAP);
         assertEq(count, 1);
@@ -256,10 +260,10 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         vm.deal(address(game), 1000 ether);
         // As in test_RealAdvanceGameReachesTheOpeningEntry: _mintCeiling() = level(99)+1 = 100,
         // and genesis queued VAULT+SDGNRS perpetual entries into level 100's far-future pool at
-        // deploy. The first advanceGame() call mints that pool inside the daily drain gate and
+        // deploy. The first mineFlip() call mints that pool inside the daily drain gate and
         // returns early; the second reaches rngGate and the opening-day decimator entry.
-        game.advanceGame();
-        game.advanceGame();
+        game.mineFlip();
+        game.mineFlip();
         (uint256 weight,) = harness.entry(100);
         assertGt(weight, 0);
         (uint256 previousWeight,) = harness.entry(99);

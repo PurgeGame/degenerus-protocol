@@ -40,6 +40,10 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
+interface IGameMinerMaintenance {
+    function minerMaintenancePending() external view returns (bool);
+}
+
 /**
  * @title DegenerusGameStorage
  * @author Burnie Degenerus
@@ -529,6 +533,7 @@ abstract contract DegenerusGameStorage {
         rngFlagsAndNudges ^= uint16(1) << 12;
         humanReadComplete = false;
         boxCursor = 0;
+        degeneretteCursor = 0;
         _setRngComplete(false);
         _setRngSessionPublished(false);
     }
@@ -609,7 +614,9 @@ abstract contract DegenerusGameStorage {
     ///      Tracks flip activity for jackpot sizing adjustments. Co-resident with
     ///      lastVrfProcessedTimestamp (both written in _applyDailyRng); bounded by
     ///      supply/RNG_NUDGE_BASE_COST << 2^64 since every nudge burns >= 100 FLIP.
-    uint64 private __nudgeLayoutGap; // Counter moved to slot 0; preserve downstream slot offsets.
+    uint24 internal rngRequestDay; // Logical daily identity, independent of transport/retry time.
+    bool internal rngGapApplied;
+    uint32 private __nudgeLayoutGap; // Preserve downstream slot offsets.
 
     /// @dev Timestamp of the last successfully processed VRF word.
     ///      Used by governance to detect VRF stalls (time-based vs day-gap-based); game
@@ -777,6 +784,11 @@ abstract contract DegenerusGameStorage {
     ///      keys its derivation off this value, so a budget-split resume continues the
     ///      same sequence. Never reset.
     uint32 internal ticketRound;
+
+    /// @dev Absolute solo position for the current authenticated ticket owner.
+    uint32 internal ticketSoloOffset;
+    /// @dev Independent read-side bet cursor; packed into unused ticket-control bytes.
+    uint48 internal degeneretteCursor;
 
     // =========================================================================
     // Ticket Queue Helpers
@@ -1021,31 +1033,58 @@ abstract contract DegenerusGameStorage {
     ///      mirrors the unified sweep's window [purchaseLevel-1 .. _mintCeiling()]; a
     ///      fixed scan of at most three read keys plus the frozen pool's key, not unbounded.
     function _advanceDue() internal view returns (bool) {
-        if (_rngRequestActive() && !rngLockedFlag && rngWordCurrent != RNG_WORD_WAITING) return true;
-        if (_simulatedDayIndex() != dailyIdx) {
-            if (!rngLockedFlag && !_rngRequestActive() && !_livenessTriggered()
-                && !_lootboxReadComplete()) return !ticketsFullyProcessed;
-            return true;
+        MinerAction action = _nextMinerAction();
+        return action != MinerAction.Idle && action != MinerAction.Wait;
+    }
+
+    /// @dev Derived actions only: no independently stored engine stage can become stale.
+    enum MinerAction {
+        Idle, Terminal, Wait, Publish, Tickets, DailyGap, DailyApply, DailyPhase,
+        Redemption, Afking, HumanBoxes, Degenerette, Decimator, Craps,
+        CertifyRead, PrepareSubscriptions, Maintenance, RequestDaily, RequestMidday
+    }
+
+    function _minerMaintenancePending() internal view returns (bool) {
+        return IGameMinerMaintenance(ContractAddresses.CRAPS).minerMaintenancePending();
+    }
+
+    function _nextMinerAction() internal view returns (MinerAction) {
+        if (gameOver) {
+            if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) return MinerAction.Terminal;
+            uint256 ended = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
+            return ended != 0 && block.timestamp >= ended + 30 days && _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) == 0
+                ? MinerAction.Terminal : MinerAction.Idle;
         }
-        if (!ticketsFullyProcessed) {
-            uint24 lvl = level;
-            uint24 purchaseLevel = (!jackpotPhaseFlag &&
-                lastPurchaseDay &&
-                rngLockedFlag)
-                ? lvl
-                : lvl + 1;
-            uint24 t = purchaseLevel == 0 ? 0 : purchaseLevel - 1;
-            uint24 end = _mintCeiling();
-            for (; t <= end; ) {
-                if (_ticketQueueLength(_tqReadKey(t)) > 0) return true;
-                unchecked {
-                    ++t;
-                }
+        if (_livenessTriggered()) return MinerAction.Terminal;
+        if (_rngRequestActive() && _currentRngWord() == 0) {
+            return MinerAction.Wait;
+        }
+        if (_rngRequestActive() && !_rngSessionPublished()) return MinerAction.Publish;
+        if (!_rngComplete()) {
+            if (!_rngSessionPublished() || _currentRngWord() == 0) return MinerAction.Wait;
+            if (!ticketsFullyProcessed) return MinerAction.Tickets;
+            if (rngLockedFlag) {
+                if (_recordedDailyWord(rngRequestDay) != 0) return MinerAction.DailyPhase;
+                return rngRequestDay > dailyIdx + 1 ? MinerAction.DailyGap : MinerAction.DailyApply;
             }
-            if (_frozenPoolDue() && _ticketQueueLength(_tqFarFutureKey(end)) > 0) return true;
-            if (_foilDrainPending()) return true;
+            uint8 consumer = _rngConsumerStage();
+            if (consumer == 1) return MinerAction.Redemption;
+            if (consumer == 2) return MinerAction.Afking;
+            if (consumer == 3) return MinerAction.HumanBoxes;
+            if (consumer == 4) return MinerAction.Degenerette;
+            if (consumer == 5) return MinerAction.Decimator;
+            if (consumer == 6) return MinerAction.Craps;
+            return consumer == 7 ? MinerAction.CertifyRead : MinerAction.Wait;
         }
-        return false;
+        // The old read certificate stays valid while NEW subscriptions are stamped.
+        bool dailyDue = _afkingResetDay > dailyIdx || _simulatedDayIndex() > dailyIdx;
+        if (dailyDue && (_afkingResetDay <= dailyIdx || !subsFullyProcessed)) return MinerAction.PrepareSubscriptions;
+        if (_minerMaintenancePending()) return MinerAction.Maintenance;
+        if (dailyDue) return MinerAction.RequestDaily;
+        if (_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) != 0
+            || _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) != 0
+            || ((lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1) != 0) return MinerAction.RequestMidday;
+        return MinerAction.Idle;
     }
 
     /// @dev True while the early-bird ticket leg of a jackpot-phase day-1 daily waits for its
@@ -1944,6 +1983,7 @@ abstract contract DegenerusGameStorage {
             sstore(q.slot, 0)
         }
         if (ticketSeats != 0) ticketSeats = 0;
+        if (ticketSoloOffset != 0) ticketSoloOffset = 0;
     }
 
     // =========================================================================
@@ -2831,6 +2871,12 @@ abstract contract DegenerusGameStorage {
         if (lvl != 0 && _getNextPrizePool() > _prizePoolTarget(lvl + 1)) return false;
         // A day that holds its word is finished on it.
         if (_recordedDailyWord(today) != 0) return false;
+        // Gap credit advances dailyIdx before the separate daily-word action. Preserve
+        // that already published current-day commitment across this checkpoint; otherwise
+        // becoming caught up would trigger the deadline between credit and application.
+        // An older day's commitment cannot defer today's ending.
+        if (rngGapApplied && rngLockedFlag && rngRequestDay == today
+            && _rngRequestActive() && _rngSessionPublished() && rngWordCurrent > RNG_WORD_WAITING) return false;
         // Only a caught-up day fires. A gap behind dailyIdx is a stall of that length and waits for
         // the backfill the next daily word runs to credit it.
         return today == idx + 1;
@@ -2857,8 +2903,9 @@ abstract contract DegenerusGameStorage {
             if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0) return true;
             if (_lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) return false;
         }
-        return rngWordCurrent == RNG_WORD_WAITING
-            && (!rngLockedFlag || _recordedDailyWord(_simulatedDayIndexAt(t)) == 0);
+        // Active/waiting authority is sufficient. A previously recorded day cannot
+        // excuse an unanswered terminal or replacement request.
+        return rngWordCurrent == RNG_WORD_WAITING;
     }
 
     /// @dev Returns the day index for a specific timestamp.
@@ -2909,7 +2956,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     //
     // Layout (LSB -> MSB):
-    //   [bits   0:47]   unused layout gap (the old increasing index)
+    //   [bits   0:47]   workReadyAt              uint48 (accepted callback timestamp; reward age only)
     //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
@@ -2930,6 +2977,10 @@ abstract contract DegenerusGameStorage {
         | (uint256(5) << 176);                      // middayMaxBasefeeGwei = 5
 
     // ---- lootboxRng shifts and masks ----
+    // Retained after completion, overwritten only by a new accepted callback. Consumers
+    // consult it only for the current read cohort; new requests never inherit its age.
+    uint256 internal constant LR_WORK_READY_SHIFT = 0;
+    uint256 internal constant LR_WORK_READY_MASK = 0xFFFFFFFFFFFF;
     uint256 internal constant LR_PENDING_ETH_SHIFT = 48;
     uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
     uint256 internal constant LR_THRESHOLD_SHIFT = 112;
@@ -3845,7 +3896,7 @@ abstract contract DegenerusGameStorage {
     ///      time the sweep fully drains an index and advances the frontier.
     uint48 internal boxCursor;
 
-    /// @dev True only after every box, presale leg and bet in the sealed read buffer finishes.
+    /// @dev True only after every human box and presale leg in the sealed read buffer finishes.
     ///      Fresh requests clear it; retries preserve it and the cursor.
     bool internal humanReadComplete = true;
     uint40 private __boxFrontierLayoutGap; // Preserve the former six-byte frontier footprint.
@@ -4271,20 +4322,24 @@ abstract contract DegenerusGameStorage {
 
     /// @dev One ordering authority for keeper and manual read consumers. The read
     ///      cohort alone determines the stage; fresh write-side work cannot cut in.
-    ///      0 blocked, 1 redemption, 2 AFKing, 3 human/Degenerette, 4 Decimator,
-    ///      5 read-bound Craps, 6 drained. Timed claims use their retained results.
+    ///      0 blocked, 1 redemption, 2 AFKing, 3 human boxes, 4 Degenerette,
+    ///      5 Decimator, 6 read-bound Craps, 7 drained. Timed claims are independent.
     function _rngConsumerStage() internal view returns (uint8) {
         uint256 packed = lootboxRngPacked;
-        if (gameOver || rngLockedFlag || _rngRequestActive() || !_rngSessionPublished()
-            || _currentRngWord() == 0 || !ticketsFullyProcessed
-            || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0
+        if (gameOver || rngLockedFlag || _rngRequestActive()
             || rngFlagsAndNudges & (uint16(1) << 13) != 0 || _livenessTriggered()) return 0;
+        // Preparation stamps belong to the NEXT commitment and cannot reopen old work.
+        if (_rngComplete()) return 7;
+        if (!_rngSessionPublished()
+            || _currentRngWord() == 0 || !ticketsFullyProcessed
+            || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0) return 0;
         if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return 1;
         if (_pendingBoxCount != 0) return 2;
         if (!humanReadComplete) return 3;
-        if (decBattleQueue != 0) return 4;
-        if (packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) != 0) return 5;
-        return 6;
+        if (degeneretteCursor < degeneretteQueue[_rngReadBuffer()].length) return 4;
+        if (decBattleQueue != 0) return 5;
+        if (packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) != 0) return 6;
+        return 7;
     }
 
     /// @dev Checked only at consumer-completion transitions, never by a fresh request.
@@ -4292,6 +4347,7 @@ abstract contract DegenerusGameStorage {
         uint256 packed = lootboxRngPacked;
         if (!_rngSessionPublished() || _currentRngWord() == 0 || !ticketsFullyProcessed
             || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 || !humanReadComplete
+            || degeneretteCursor < degeneretteQueue[_rngReadBuffer()].length
             || _pendingBoxCount != 0 || decBattleQueue != 0) return false;
         if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return false;
         return packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) == 0;
@@ -4386,6 +4442,7 @@ abstract contract DegenerusGameStorage {
         if (old != 0 && (ticketLevel & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) == old) {
             ticketLevel = 0;
             ticketCursor = 0;
+            ticketSoloOffset = 0;
         }
         _setTicketBufferLevel(lvl);
         return true;
@@ -4410,4 +4467,19 @@ abstract contract DegenerusGameStorage {
         }
         return levelPrizePool[lvl];
     }
+
+    /// @dev One resumable jackpot leg. The existing session lock freezes its word
+    ///      and source buckets; only pricing and payout progress need persistence.
+    struct JackpotWork {
+        uint128 budget;
+        uint128 unit;
+        uint128 paid;
+        uint32 traits;
+        uint24 lvl;
+        uint16 winner;
+        uint8 kind;
+        uint8 quadrant;
+        bool finalDay;
+    }
+    JackpotWork internal jackpotWork;
 }

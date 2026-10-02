@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {Craps} from "./Craps.sol";
 import {CrapsPriceLib} from "./libraries/CrapsPriceLib.sol";
@@ -119,7 +120,11 @@ interface IReadCohortLifecycle {
     function admitCustom(uint64 slot) external;
     function registerRngSlot(uint48 index, uint64 slot, bytes32 key) external;
     function completeRngSlot(uint64 slot, uint48 index) external;
-    function resolveRngSlot(uint64 slot, uint64 budget) external returns (uint64 charged);
+    function resolveRngSlot(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory);
+    function finalizeBattle(CrapsBattleStorage.Window calldata w, uint256 board, uint256 word) external;
+    function payProgressive(CrapsBattleStorage.Window calldata w, uint256 peak, uint256 score, uint256 winnerId, uint256 winnerWord, address winner) external;
+    function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory);
 }
 
 contract CrapsBattle is CrapsBattleStorage {
@@ -137,19 +142,14 @@ contract CrapsBattle is CrapsBattleStorage {
         }
     }
 
-    function resolveRngSlot(uint64 slot, uint64 budget) external returns (uint64 charged) {
+    function resolveRngSlot(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != address(this)) revert OnlyGame();
-        if (!_readCrapsFrontier(slot)) return 0;
-        return _resolveSlotWork(slot, _readWorkAllowance(budget), true);
+        return _resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS);
     }
 
-    function advanceJackpotBattle(uint64 budgetUnits) external returns (bool complete) {
-        if (msg.sender != _GAME) revert OnlyGame();
-        uint64 slot = _activeJackpotSlot;
-        _resolveSlot(slot, budgetUnits);
-        uint256 g = _battles[bytes32(uint256(slot))];
-        return uint32(g >> _BG_RESOLVED_SHIFT) == uint32(g);
-    }
+    function advanceJackpotBattle(uint64) external returns (bool) { _delegateJackpot(); }
+
+    function runDailyBattleWork(uint256) external returns (MineFlipGas.Result memory) { _delegateJackpot(); }
 
     function _isJackpotSlot(uint256 slot) internal pure returns (bool) {
         return slot < _CUSTOM_SLOT_BASE && slot % _BONUS_SLOTS_PER_DAY >= _BONUS_PERIODS_PER_DAY;
@@ -548,374 +548,181 @@ contract CrapsBattle is CrapsBattleStorage {
     ///         Permissionless. Scheduled windows and the daily jackpot never settle here: the
     ///         keeper and the advance settle those in order, so no caller picks which goes first.
     /// @param slot The custom battle's slot.
-    /// @param budgetUnits HOW MUCH WORK to do, in walk units (see `_resolveSlot`).
+    /// @dev The legacy allowance is ignored; execution uses the fixed protocol budget.
     /// @custom:reverts NoSuchBattle If `slot` is not a custom battle.
     /// @custom:reverts RngNotReady If the battle has not closed, or its table has no word yet.
-    function resolveSlot(uint64 slot, uint64 budgetUnits) external {
+    function resolveSlot(uint64 slot, uint64) external {
         if (slot < _CUSTOM_SLOT_BASE) revert NoSuchBattle();
         uint256 board = _battles[_slotWindow(slot).key];
         if (board != 0 && uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board)) return;
         if (!_readCrapsFrontier(slot)) revert RngNotReady();
-        _resolveSlotWork(slot, _readWorkAllowance(budgetUnits), true);
+        _resolveSlotWork(slot, MineFlipGas.available());
     }
 
-    /// @notice Settle a slot's entrants — bonus window, daily jackpot or custom battle — in id
-    ///         order, from wherever its cursor stands.
-    /// @dev THE settle lane, and the only one there is. A slot's readiness is uniform — every
-    ///      member shut onto the same table — so the arm and the word are proven ONCE here and
-    ///      every member the walk then examines settles. The cursor advances to the last id
-    ///      actually RESOLVED, and `id <= cursor` is sound because the walk starts AT the cursor,
-    ///      so the settled set is contiguous by construction. A lane that could start anywhere
-    ///      would break that.
-    ///
-    ///      ⚠ THE SECOND ARGUMENT IS A WORK BUDGET IN WALK UNITS, NOT A SEAT COUNT. That is a
-    ///      deliberate public change with an unchanged selector: both arguments are still
-    ///      `uint64`, so an integration that keeps passing a head count will settle far fewer
-    ///      seats than it intended rather than reverting. The reason is that a seat's cost is not
-    ///      a constant — a three-roll bust and a four-hundred-roll one differ by two orders of
-    ///      magnitude, and whether a run PAYS decides whether it adds a deferred credit — so each
-    ///      settled seat charges its own OUTCOME (`_SEAT_UNITS`) and a bust-heavy table walks
-    ///      many more seats per call than a correlated hot one, which is exactly the behaviour a
-    ///      fixed count cannot express. The charge is deterministic, so the same chain state
-    ///      stops the same batch at the same seat on every node.
-    ///
-    ///      Zero settles nothing. Any nonzero budget completes at least one seat, because the
-    ///      charge is levied AFTER a seat rather than before: a run cannot be stopped halfway
-    ///      without storing a resumable engine state that costs more than the overshoot it would
-    ///      save. A caller repeats the call to walk a deeper field.
-    /// @param slot A window's `day * _BONUS_SLOTS_PER_DAY + period + 1`, or a custom battle's.
-    /// @param budgetUnits HOW MUCH WORK to do, in the protocol's walk units — not how many seats.
-    ///        Each settled seat charges its own outcome (see `_SEAT_UNITS`), and the walk stops
-    ///        after the first seat whose charge meets or crosses the budget. Zero settles
-    ///        nothing; any nonzero budget completes at least one seat.
-    /// @custom:reverts RngNotReady If the slot has not shut, or its table has no word yet.
-    function _resolveSlot(uint64 slot, uint64 budgetUnits) internal {
-        _resolveSlotWork(slot, budgetUnits, false);
+    /// @dev One resolver for normal cohorts and the dedicated daily jackpot transaction.
+    /// The compatibility argument cannot select a stopping point. Only protocol gas consumed
+    /// controls the protocol cap. Limited caller gas may stop safely before another atomic seat.
+    function _resolveSlot(uint64 slot, uint64) internal {
+        _resolveSlotWork(slot, MineFlipGas.available());
     }
 
     /// @dev Normal read cohorts reserve each whole seat before running it. The
     /// independent game-only jackpot transaction keeps its established meter.
-    function _resolveSlotWork(uint64 slot, uint64 budgetUnits, bool strict) internal returns (uint64 charged) {
-        if (budgetUnits == 0 || (strict && budgetUnits < _READ_BATCH_UNITS + _READ_SEAT_RESERVE)) return 0;
-        // Unarmed reads as zero: the slot has not shut, so no table has been chosen yet.
+    function _resolveSlotWork(uint64 slot, uint256 allowance) internal returns (MineFlipGas.Result memory result) {
+        if (allowance == 0) return result;
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) return result;
+        uint256 childAllowance = _resolverAllowance(MineFlipGas.remaining(meter));
+        result = IReadCohortLifecycle(address(this)).resolveRngSlot(slot, childAllowance);
+        MineFlipGas.finish(meter);
+    }
+
+    function _resolveSlotRange(uint64 slot, uint256 allowance, uint64 seatLimit) internal returns (MineFlipGas.Result memory result) {
+        if (allowance == 0) return result;
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX)) return result;
         Window memory w = _slotWindow(slot);
         uint256 board = _battles[w.key];
-        if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board) && board != 0) return 0;
+        if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board) && board != 0) {
+            result.done = true;
+            return result;
+        }
         uint256 word = _slotWord(slot);
         if (word == 0) revert RngNotReady();
-        // The whole field plays these. Read once here rather than out of every header — which is
-        // what lets a bet be a single word.
-        unchecked {
-            // The field IS 1..entrants. There is no id space to scan and nothing to skip: every
-            // read below is a member of this battle.
-            uint64 end0 = uint64((_battles[w.key] & _MASK32) + 1);
-            uint64 end = end0;
-            uint64 from = _bonusCursor[slot] + 1;
-            // THE ABSOLUTE CEILING, and it is not the budget's job. It bounds the two credit
-            // arrays and the loop counter whatever the caller asked for, so one call can never be
-            // made to allocate unboundedly; the BUDGET is what stops a production crank.
-            if (from + _RESOLVE_MAX_SEATS < end) end = from + _RESOLVE_MAX_SEATS;
-            if (end <= from) return 0;
-            // The field is the window's OWN seats followed by the day's, as one dense 1..entrants
-            // range — so a single cursor still covers both and nothing here has to skip or scan.
-            // Only where a seat's word LIVES differs. A jackpot field's awarded seats follow its
-            // paid ones in the same range; its word exists only once the whole field is sealed, so
-            // one walk may cross from paid into awarded seats and still finalize exactly once.
-            (uint256 dayBase, uint64 dayN) = _dayField(slot);
-            (uint256 put, uint256 hi, uint256 used) = _settleBatch(slot, from, end, (end0 - 1) - dayN - w.drawn, dayBase, w, word, budgetUnits, strict);
-            charged = uint64(used);
-            // Booked to the day the field PLAYED, not the day someone got round to settling it.
-            // Settlement is permissionless and unbounded in time, so keying the books to `now`
-            // would let a holder of unsettled slots choose which day's boost budget their action
-            // inflates.
-            //
-            // A CUSTOM BATTLE IS NOT BOOKED AT ALL — not to its close day, not to its settlement
-            // day, not to a day of its own. Its bankroll is its creator's terms and its entrants'
-            // burn, and the day books are what SIZE the protocol's own subsidy: letting a table
-            // anyone can open at any depth feed that denominator would let custom volume mint
-            // scheduled emission. So the two products share the engine and share nothing else.
-            //
-            // `done` is the last seat ACTUALLY resolved, never the end the batch was offered:
-            // the cursor, the action and the credit arrays all key off the same figure, so a
-            // budget that stops early can never book work it did not do or skip work it did.
-            //
-            // The jackpot battle books its paid fees once, when its field seals; its Added-funded
-            // bankroll is never action.
+        uint64 end0 = uint64(uint32(board)) + 1;
+        uint64 from = _bonusCursor[slot] + 1;
+        uint64 end = end0;
+        if (from + seatLimit < end) end = from + seatLimit;
+        if (end <= from) { result.done = true; return result; }
+        (uint256 dayBase, uint64 dayN) = _dayField(slot);
+        (uint256 put, uint256 hi) = _settleBatch(slot, from, end, (end0 - 1) - dayN - w.drawn, dayBase, w, word, meter);
+        uint64 afterCursor = _bonusCursor[slot];
+        result.progressed = afterCursor >= from;
+        result.rewardBasis = result.progressed ? afterCursor - from + 1 : 0;
+        result.done = afterCursor + 1 == end0;
+        if (result.progressed) {
             if (slot < _CUSTOM_SLOT_BASE && !_isJackpotSlot(slot)) {
                 _bookDay(uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY), put, hi);
             } else if (_isJackpotSlot(slot)) {
-                // One cold-module call per bounded batch. It examines only paid seats already
-                // resolved here, so neither retries nor batch size can create another draw.
                 IHighRollerReserve(address(this)).settleHighRollerReserve(slot);
             }
         }
+        MineFlipGas.finish(meter);
     }
 
-    /// @dev The walk itself, on a frame of its own. Split out of `_resolveSlot` for STACK, not for
-    ///      structure: the loop carries the two credit arrays, their cursor, the batch bounds, the
-    ///      two id bases and the running action, and via-IR runs out of slots with the readiness
-    ///      checks and the decoded window still live above it. The same split the session loops in
-    ///      `Craps` use, for the same reason.
-    /// @param slot        The window/battle slot being walked.
-    /// @param from        First dense seat ordinal to resolve, inclusive.
-    /// @param end         One past the last dense seat ordinal offered this call.
-    /// @param ownN        The field's own entrant count — seats above it are day tickets.
-    /// @param dayBase     The bet-id base for day-ticket seats beyond `ownN`.
-    /// @param w           The window being settled.
-    /// @param word        The window's settling word.
-    /// @param budgetUnits The charge budget metering how many seats this call actually walks.
-    /// @return staked The bankroll this batch's seats put up — the action a later day's bonus
-    ///         budget is drawn against.
-    /// @return high The high-lane part of that action.
-    /// @dev The walk writes the slot's cursor ITSELF, to the last seat actually resolved — the
-    ///      budget makes that necessary: the offered `end` is a ceiling rather than a plan, and
-    ///      booking the offer instead of the outcome would strand every seat the charge stopped
-    ///      short of.
+    /// @dev Each atomic seat includes sole-high and final-field payments. Credit arrays are
+    /// flushed once; the admission tail grows for every already accumulated cold beneficiary.
     function _settleBatch(
-        uint64 slot,
-        uint64 from,
-        uint64 end,
-        uint64 ownN,
-        uint256 dayBase,
-        Window memory w,
-        uint256 word,
-        uint256 budgetUnits,
-        bool strict
-    ) private returns (uint256 staked, uint256 high, uint256 charged) {
-        unchecked {
-            if (strict) {
-                budgetUnits -= _READ_BATCH_UNITS;
-                charged = _READ_BATCH_UNITS;
+        uint64 slot, uint64 from, uint64 end, uint64 ownN, uint256 dayBase,
+        Window memory w, uint256 word, MineFlipGas.Meter memory meter
+    ) private returns (uint256 staked, uint256 high) {
+        address[] memory players = new address[](end - from);
+        uint256[] memory amounts = new uint256[](end - from);
+        uint256 k;
+        uint256 freePtr;
+        assembly ("memory-safe") { freePtr := mload(0x40) }
+        for (uint64 n = from; n < end; ++n) {
+            if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + (k + 1) * _CREDIT_GAS_MAX)) break;
+            assembly ("memory-safe") { mstore(0x40, freePtr) }
+            uint256 id = _seatId(slot, n, ownN, dayBase, w.entrants - ownN - w.drawn);
+            SeatResult memory result = _resolve(id, n, _bets[id], w, word);
+            staked += result.staked;
+            high += result.high;
+            if (result.paid != 0) {
+                players[k] = result.player;
+                amounts[k] = result.paid;
+                ++k;
             }
-            // One batched credit for the whole walk. `creditFlipBatch` skips nothing we have to
-            // pre-filter, but a busted run pays zero and a zero word still costs calldata, so the
-            // arrays are packed and then trimmed to what actually pays.
-            address[] memory players = new address[](end - from);
-            uint256[] memory amounts = new uint256[](end - from);
-            uint256 k;
-            uint256 freePtr;
-            assembly ("memory-safe") {
-                freePtr := mload(0x40)
-            }
-            for (uint64 n = from; n < end; ++n) {
-                uint256 finalCharge = n == w.entrants ? _READ_FINAL_UNITS : 0;
-                uint256 reserve = _READ_SEAT_RESERVE + (finalCharge == 0 ? 0 : _FINAL_UNITS + finalCharge);
-                if (strict && budgetUnits < reserve) break;
-                // Every allocation made while resolving the previous seat is dead now. Reuse that
-                // memory instead of expanding it once per entrant; the credit arrays and `w` were
-                // allocated below this saved pointer and remain intact.
-                assembly ("memory-safe") {
-                    mstore(0x40, freePtr)
-                }
-                uint256 id = _seatId(slot, n, ownN, dayBase, w.entrants - ownN - w.drawn);
-                SeatResult memory result = _resolve(id, n, _bets[id], w, word);
-                staked += result.staked;
-                high += result.high;
-                if (result.paid != 0) {
-                    players[k] = result.player;
-                    amounts[k] = result.paid;
-                    ++k;
-                }
-                _bonusCursor[slot] = n;
-                // THE CHARGE IS THE SEAT'S OWN OUTCOME — its rolls and whether it pays — so a
-                // bust-heavy field walks many more seats than a paying one on the same budget,
-                // and the stopping point is a pure function of chain state: no gas meter, no
-                // schedule dependence, the same batch boundary on every node.
-                //
-                // CHECKED AFTER THE SEAT, because a run cannot be half-settled without storing a
-                // resumable engine state, and that state costs more than the overshoot. So one
-                // complete seat may cross the budget; the hard bound is what covers it.
-                uint256 cost = result.cost + (strict ? finalCharge : 0);
-                charged += cost;
-                if (strict) assert(cost <= reserve);
-                if (cost >= budgetUnits) break;
-                budgetUnits -= cost;
-            }
-
-            if (k != 0) {
-                assembly ("memory-safe") {
-                    mstore(players, k)
-                    mstore(amounts, k)
-                }
-                ICoinflipStake(ContractAddresses.COINFLIP).creditFlipBatch(players, amounts);
-            }
+            _bonusCursor[slot] = n;
+        }
+        if (k != 0) {
+            assembly ("memory-safe") { mstore(players, k) mstore(amounts, k) }
+            ICoinflipStake(ContractAddresses.COINFLIP).creditFlipBatch(players, amounts);
         }
     }
 
-    /// @notice One step of the scheduled keeper: find the oldest scheduled slot still owing work
-    ///         and do the next piece of it, whatever that piece is — cross a spent slot, sweep a
-    ///         lapsed day's reservations back to credits, shut a window whose close has passed,
-    ///         or settle a batch of an armed field within `budgetUnits`.
-    /// @dev PERMISSIONLESS, and the ONE source of scheduled liveness. Walking from the oldest
-    ///      slot still owing work means a field that outlasts one budget — or whose word came
-    ///      late, the daily event above all — is never left behind the rewarded crank.
-    ///      This cursor cannot pass a slot that still owes anything, so nothing scheduled is ever
-    ///      forgotten; a slot whose work is already done is detected and crossed, never wedged on.
-    ///
-    ///      WHAT IT WILL NOT DO is wait for the impossible. It stops — reporting no progress and
-    ///      earning no bounty — on a window still taking bets, an armed field whose word has not
-    ///      landed, a day the advance has not opened yet, and a settle it lacks budget for. All
-    ///      four resolve themselves; polling them pays nobody.
-    /// @param budgetUnits Shared work allowance. Zero performs no lifecycle or settlement work.
-    /// @return progressed Whether ANY state moved: the cursor, a sweep, an arm, or settled seats.
-    ///         The keeper's bounty gate, so a poll can never be farmed.
-    /// @return slot Where the cursor stands after the call.
-    function keepScheduled(uint64 budgetUnits) external returns (bool progressed, uint64 slot) {
-        (progressed, slot,) = _keepScheduled(budgetUnits);
-    }
+    /// @notice Progress the globally eligible Craps category within its available gas.
+    /// @dev The historical budget argument is retained only for ABI compatibility.
+    function keepScheduled(uint64) external returns (bool, uint64) { _delegateJackpot(); }
 
-    function keepScheduledBudgeted(uint64 budgetUnits)
-        external returns (bool progressed, uint64 slot, uint64 charged)
-    {
-        return _keepScheduled(budgetUnits);
-    }
+    function keepScheduledBudgeted(uint64) external returns (bool, uint64, uint64) { _delegateJackpot(); }
 
-    function _keepScheduled(uint64 budgetUnits)
-        private returns (bool progressed, uint64 slot, uint64 charged)
-    {
-        // Never zero: the constructor births the cursor at genesis + 1's separator.
+
+
+    /// @notice Constant-time predicate for the next scheduled maintenance step.
+    /// @dev Read settlement and the dedicated daily battle have their own earlier stages.
+    function minerMaintenancePending() external view returns (bool) {
         uint64 cur = _keeperSlot;
-        budgetUnits = _readWorkAllowance(budgetUnits);
-        if (budgetUnits < _KEEP_HOP_UNITS) return (false, cur, 0);
-        uint8 stage = _readCrapsStage();
-        uint48 read = _writeBuffer() ^ 1;
-        // Maintenance can create the first commitment without a published session.
-        // It cannot jump ahead of another live read consumer category.
-        if (stage != 5 && stage != 6
-            && !(stage == 0 && _rngPending[read] == 0 && _wordAt(read) == 0)) return (false, cur, 0);
-        uint24 today = _currentDayIndex();
-        (,, uint256 open) = _currentBonusSlot();
-        unchecked {
-            for (uint256 hops = 0; hops < _KEEP_MAX_HOPS; ++hops) {
-                if (budgetUnits - charged < _KEEP_HOP_UNITS) break;
-                charged += uint64(_KEEP_HOP_UNITS);
-                uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
-                if (cur % _BONUS_SLOTS_PER_DAY == 0) {
-                    // THE SEPARATOR. An opened day is crossed into its windows; today and the
-                    // future wait for the advance to open them; a day the advance never opened is
-                    // LAPSED — nobody could have entered it, so all it holds is reservations, and
-                    // they are refunded before the WHOLE day is stepped over.
-                    if (_boostBudget[day] != 0) {
-                        ++cur;
-                        continue;
-                    }
-                    if (day >= today) break;
-                    // The sweep is this call's ONE expensive action, complete or not. A PARTIAL
-                    // one must still report its refunds as progress — the rewarded crank reverts
-                    // a no-progress call as NoWork, and a revert would undo the very credits the
-                    // sweep just committed. The day's own sweep cursor moving is that report;
-                    // crossing the finished day moves the keeper cursor and reports itself.
-                    if (budgetUnits - charged < _SWEEP_BASE_UNITS) break;
-                    charged += uint64(_SWEEP_BASE_UNITS);
-                    (bool doneAll, bool moved, uint64 used) = _sweepLapsedDay(cur, day, budgetUnits - charged);
-                    charged += used;
-                    if (doneAll) cur += uint64(_BONUS_SLOTS_PER_DAY);
-                    else if (moved) progressed = true;
-                    break;
-                }
-                if (cur % _BONUS_SLOTS_PER_DAY > _BONUS_PERIODS_PER_DAY) {
-                    ++cur;
-                    continue;
-                }
-                // Opened windows carry their compact frozen terms in the scoreboard.
-                Window memory w = _windowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
-                uint256 g = _battles[w.key];
-                uint48 idx = _slotIndex[cur];
-                if (idx == 0) {
-                    if (cur >= open || _isJackpotSlot(cur)) break;
-                    // The battle exists by construction: the cursor only enters a day's windows
-                    // through a separator that proved the day opened, and an opened day writes
-                    // all seven.
-                    if (budgetUnits - charged < _ARM_UNITS) break;
-                    charged += uint64(_ARM_UNITS);
-                    _armSlot(cur, w);
-                    progressed = true;
-                    break;
-                }
-                if (_isJackpotSlot(cur) && _slotWord(cur) == 0) break;
-                uint256 entrants = g & _MASK32;
-                // Finalized — or armed with nobody in it, which is a race with no runners and
-                // nothing owed. Either way the slot is spent.
-                if (entrants == 0 || ((g >> _BG_RESOLVED_SHIFT) & _MASK32) == entrants) {
-                    ++cur;
-                    continue;
-                }
-                // Daily jackpot work retains its independent Game transaction.
-                // All other fields obey the same read-cohort FIFO as manual custom calls.
-                if (_isJackpotSlot(cur) || !_readCrapsFrontier(cur) || _slotWord(cur) == 0) break;
-                uint64 beforeCursor = _bonusCursor[cur];
-                charged += _resolveSlotWork(cur, budgetUnits - charged, true);
-                progressed = _bonusCursor[cur] != beforeCursor;
-                g = _battles[w.key];
-                if (((g >> _BG_RESOLVED_SHIFT) & _MASK32) == (g & _MASK32)) ++cur;
-                break;
-            }
-            if (cur != _keeperSlot) {
-                _keeperSlot = cur;
-                progressed = true;
-            }
+        uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
+        uint256 period = cur % _BONUS_SLOTS_PER_DAY;
+        if (period == 0) return _boostBudget[day] != 0 || day < _currentDayIndex();
+        if (period > _BONUS_PERIODS_PER_DAY) return true;
+        uint256 board = _battles[bytes32(uint256(cur))];
+        if (_slotIndex[cur] == 0) {
+            (,, uint256 open) = _currentBonusSlot();
+            return cur < open && !_isJackpotSlot(cur);
         }
-        slot = cur;
+        uint256 entrants = uint32(board);
+        return entrants == 0 || uint32(board >> _BG_RESOLVED_SHIFT) == entrants;
     }
 
-    /// @dev Refund every seat reserved on a lapsed day, metered against the caller's budget and
-    ///      resumable mid-walk. Day tickets first: the day's OWN `_bonusCursor` entry is their
-    ///      cursor, free because a remainder-zero slot is never a battle and never settles, and
-    ///      restitution is IN KIND — a reservation was a claim on one future day seat, and a pass
-    ///      credit is exactly that claim again. Then the window-ahead seats in the day's six
-    ///      windows, each window's own cursor carrying the walk (a window that never armed never
-    ///      settles). Each seat is a vault comp, refunded at its window-ahead price back to the
-    ///      comp lane.
-    /// @param daySlot_    The day's separator slot (remainder zero), home to its refund cursor.
-    /// @param day         The lapsed day being refunded.
-    /// @param budgetUnits The charge budget metering how many seats this call refunds.
-    /// @return doneAll The whole day refunded — the separator, and its six never-opened
-    ///         windows with it, are now crossable.
-    /// @return moved Whether this call refunded anybody — real, one-time progress even when the
-    ///         day is not yet done.
-    function _sweepLapsedDay(uint64 daySlot_, uint24 day, uint64 budgetUnits)
-        private
-        returns (bool doneAll, bool moved, uint64 charged)
-    {
-        unchecked {
-            // One walk over the separator and the day's six windows: the separator holds the day
-            // tickets, the windows the window-ahead seats. Each slot's own `_bonusCursor` is its
-            // cursor — the separator never settles, and a window of a day that never opened never
-            // arms. Remainder seven takes no reservation: it is where a warm-up or skipped day's
-            // detached jackpot battle lives, and its cursor is that battle's settle cursor. Comp
-            // refunds reach the lane in one credit per call.
-            uint256 comps;
-            bool left;
-            for (uint256 s = daySlot_; s <= uint256(daySlot_) + _BONUS_PERIODS_PER_DAY; ++s) {
-                uint64 n = s == daySlot_ ? uint32(_dayTickets[s]) : uint32(_battles[bytes32(s)]);
-                uint64 done = _bonusCursor[s];
-                while (done < n) {
-                    if (budgetUnits < _SWEEP_SEAT_UNITS) {
-                        left = true;
-                        break;
-                    }
-                    budgetUnits -= uint64(_SWEEP_SEAT_UNITS);
-                    charged += uint64(_SWEEP_SEAT_UNITS);
-                    ++done;
-                    moved = true;
-                    uint256 header = _bets[(s << 64) | done];
-                    address who = address(uint160(header));
-                    bool high = header & _BET_HIGH_BIT != 0;
-                    if (s == daySlot_) {
-                        _credit(who, high, 1);
-                    } else {
-                        comps += _windowAheadPrice(s - daySlot_ - 1, high);
+    /// @notice When the oldest substantive scheduled maintenance became due, or zero.
+    /// @dev Uses only the current head: cheap cursor cleanup cannot borrow the age of a
+    ///      resolved battle. Lapsed refunds retain their original midnight across batches.
+    function minerMaintenanceDueAt() external view returns (uint256 due) {
+        uint256 cur = _keeperSlot;
+        uint256 boundary = ContractAddresses.DEPLOY_DAY_BOUNDARY;
+        // Five ordinary close offsets in 17-bit lanes; the sixth is the daily jackpot.
+        uint256 closes = uint256(20 minutes) | (uint256(6 hours + 3 minutes) << 17)
+            | (uint256(12 hours + 3 minutes) << 34) | (uint256(18 hours + 3 minutes) << 51)
+            | (uint256(1 days - 20 minutes) << 68);
+        assembly ("memory-safe") {
+            // Scratch-only mapping reads. Masks match the declared packed value widths.
+            function read(key, slot) -> value {
+                mstore(0, key)
+                mstore(32, slot)
+                value := sload(keccak256(0, 64))
+            }
+            let day := and(shr(3, cur), 0xffffff)
+            let period := and(cur, 7)
+            let midnight := add(mul(add(boundary, day), 86400), 82620)
+            switch period
+            case 0 {
+                if and(iszero(read(day, _boostBudget.slot)), iszero(lt(timestamp(), midnight))) {
+                    // One day field plus six window fields, independent of seat count.
+                    for { let p := 0 } lt(p, 7) { p := add(p, 1) } {
+                        let slot := add(cur, p)
+                        let map := _battles.slot
+                        if iszero(p) { map := _dayTickets.slot }
+                        let count := and(read(slot, map), 0xffffffff)
+                        if lt(and(read(slot, _bonusCursor.slot), 0xffffffffffffffff), count) {
+                            due := midnight
+                            break
+                        }
                     }
                 }
-                _bonusCursor[s] = done;
-                if (left) break;
             }
-            if (comps != 0) _creditComps(comps);
-            if (left) return (false, moved, charged);
-            emit CrapsDayLapsed(day, uint32(_dayTickets[daySlot_]));
-            doneAll = true;
+            default {
+                if and(lt(period, 6), iszero(and(read(cur, _slotIndex.slot), 0xffffffffffff))) {
+                    let count := or(read(cur, _battles.slot), read(sub(cur, period), _dayTickets.slot))
+                    if and(count, 0xffffffff) {
+                        let close := add(sub(midnight, 86400), and(shr(mul(sub(period, 1), 17), closes), 0x1ffff))
+                        if iszero(lt(timestamp(), close)) { due := close }
+                    }
+                }
+            }
         }
     }
+
+    function runCrapsMaintenance(uint256) external returns (MineFlipGas.Result memory) {
+        _delegateJackpot();
+    }
+
+
+
+    /// @dev Refund one lapsed day in dense reservation order. The complete comp flush and
+    /// cursor writeback are reserved before each refund, including an empty-slot scan.
+
 
     /// @notice GAME-only: bank a rolled pass award as credits and nothing else — no reservation
     ///         attempt, no external call, no way to revert past the saturation the credit lane
@@ -970,11 +777,7 @@ contract CrapsBattle is CrapsBattleStorage {
         }
     }
 
-    function _recordDiceRun(address winner, uint256 score) private {
-        if (score >= _DICE_RUN_RECORD_FLOOR) {
-            ICoinflipStake(ContractAddresses.COINFLIP).armDiceRunRecord(winner, score);
-        }
-    }
+
 
     /// @dev Whether a bet has settled. No slip carries a settled bit — its slot's cursor marks the
     ///      whole field at once, and an id's low half is its place in that field.
@@ -1148,8 +951,6 @@ contract CrapsBattle is CrapsBattleStorage {
 
     /// @dev Settle one loaded bet. The slot's terms and word are supplied by `_resolveSlot`, which
     ///      reads each once for the whole batch.
-    /// @dev The last return is the seat's WORK CHARGE in walk units — plumbing, dice and the
-    ///      deferred credit a paying run adds — computed here, where the roll count is in hand.
     function _resolve(uint256 betId, uint64 seat, uint256 header, Window memory w, uint256 word)
         private
         returns (SeatResult memory result)
@@ -1175,7 +976,7 @@ contract CrapsBattle is CrapsBattleStorage {
         // the sideboard before the main board can go looking for a lane winner.
         uint256 ride;
         if (hi) (ride, result.staked) = _foldHigh(w, s.rank, seat, word, header, s.paid);
-        bool finalized = _scoreBattle(w, s.rank, seat, word);
+        _scoreBattle(w, s.rank, seat, word);
         uint256 runCapital = _runCapital(w, header, hi);
         result.staked += runCapital;
         if (hi) result.high = result.staked;
@@ -1211,11 +1012,7 @@ contract CrapsBattle is CrapsBattleStorage {
             if (hi && uint32(_highField[w.key]) == 1) {
                 emit CrapsHighRollerPaid(betId, w.key, result.player, ride, true);
             }
-            result.cost = _SEAT_UNITS + s.totalRolls / _ROLLS_PER_UNIT + (result.paid != 0 ? _CREDIT_UNITS : 0)
-                + (finalized ? _FINAL_UNITS : 0);
-            // Reserve sampling is a warm header read/hash per paid seat, plus one packed write
-            // per batch. Finalization may also debit the reserve and credit a cold winner.
-            if (_isJackpotSlot(w.bound)) result.cost += finalized ? 9 : 1;
+
         }
         emit CrapsBetSettled(betId, result.player, _ride(s.won, runCapital, w.bankroll), result.paid);
     }
@@ -1252,34 +1049,7 @@ contract CrapsBattle is CrapsBattleStorage {
 
     /// @dev One bonus window, resolved from the day's word. Every field is a pure function of
     ///      (day, period), so a front end and this contract always agree without a call.
-    struct Window {
-        bytes32 key;
-        uint128 bankroll;
-        uint128 goal;
-        /// @dev The ten-chip round this window plays — what the match key is built on.
-        uint256 played;
-        /// @dev The maximum seven chips an entrant may place; the dice scatter the complement.
-        uint256 postedStake;
-        uint256 stakeUnits;
-        uint256 terms;
-        uint256 tier;
-        /// @dev The multiple THIS field's high-roller lane runs at, or zero where it has none. A
-        ///      scheduled window takes its own day's draw; a custom battle takes what its creator
-        ///      fixed at creation.
-        uint256 highMult;
-        bool multiEntry;
-        uint48 bound;
-        /// @dev The field's frozen entrant count — the low word of its scoreboard — and the dense
-        ///      combined ordinal of the seat being settled. Memory only: the rotation is a pure
-        ///      function of these, the slot and the word, and nothing stores it.
-        uint32 entrants;
-        uint64 seat;
-        uint32 drawn;
-        uint32 extraUnits;
-        uint256 extraPot;
-        /// @dev Jackpot only: fee-funded EXTRA bankroll per high seat, also its extra bounty.
-        uint256 highExtra;
-    }
+
 
     /// @dev The slot a day's shared field lives at — remainder ZERO, the one `_slotWindow`
     ///      refuses and no window ever takes.
@@ -2225,7 +1995,7 @@ contract CrapsBattle is CrapsBattleStorage {
         } else {
             try IFlipCoin(ContractAddresses.COIN).burnCoin(body, cost) {
                 funded = true;
-            } catch {}
+            } catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
         }
         if (!funded) {
             // THE HOUSE SITS ANYWAY, bounty included. A bonus that waits on the reserve is a bonus
@@ -2423,7 +2193,7 @@ contract CrapsBattle is CrapsBattleStorage {
                 // payment needs was just computed to finalize the field — the winner, the boost,
                 // the table's word — so a separate claim would only re-derive all of it and cost
                 // the player a second transaction to collect what is already decided.
-                _payout(w, g, word);
+                IReadCohortLifecycle(address(this)).finalizeBattle(w, g, word);
                 if (!_isJackpotSlot(w.bound)) {
                     IReadCohortLifecycle(address(this)).completeRngSlot(w.bound, _slotIndex[w.bound] - 1);
                 }
@@ -2716,134 +2486,6 @@ contract CrapsBattle is CrapsBattleStorage {
 
 
 
-    /// @dev Pay a battle the instant it finishes: the pot to the main winner, and a contested
-    ///      lane's principal and boost to the best high roller. Reached from exactly one place —
-    ///      the branch in `_scoreBattle` where the last seat scores — so it runs once by
-    ///      construction and needs no latch of its own.
-    ///
-    ///      A pot of zero pays nobody: a friendly battle still ranks and still names its winner,
-    ///      and a zero credit is a cross-contract call for no reason.
-    function _payout(Window memory w, uint256 g, uint256 word) private {
-        unchecked {
-            uint256 slot = w.bound;
-            uint256 entrants = g & _MASK32;
-            // The main boost is shared by the finalization log and the payout. Its derivation
-            // reads the day's budget and hashes the settling word, so compute it once here.
-            uint256 boost = _boostUnits(w, word);
-            bool scheduled = slot < _CUSTOM_SLOT_BASE;
-            uint256 best = (g >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
-            (Craps.SlipStop stop,, uint256 peakFlip, uint256 endFlip) = _decodeBest(best);
-            // THE SCORE, drawn once here and reused by everything downstream that reads a high
-            // point: the finalization log, the progressive's rung and the record's candidate.
-            // BOTH SIDES IN WHOLE FLIP — every scheduled bankroll is a whole-FLIP multiple of 300
-            // and the scoreboard floors the peak the same way, so every cutoff on the schedule
-            // lands on an exact figure and the flooring can only discard sub-FLIP dust.
-            uint256 score = (peakFlip * _BPS_DENOMINATOR) / (uint256(w.bankroll) / 1 ether);
-            // DONATED GRANULES AND THE WINNING SEAT, read once each: both the finalization log and
-            // the payment below want them, and a battle word is one warm slot either way.
-            // The pot this field pays out, seed and boost included. Every finished field carries
-            // the whole pot: a window nobody else wanted is still a race, and what is on it is what
-            // its winner takes.
-            emit CrapsBattleFinalized(
-                w.key,
-                stop,
-                uint64(uint32(g >> _BG_WINNER_SHIFT)),
-                peakFlip,
-                endFlip,
-                score,
-                ((entrants + w.extraUnits) * w.stakeUnits + boost + ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK)) * _BATTLE_STAKE_UNIT + w.extraPot
-            );
-            // THE COMP LANE'S SHARE: two percent of the bankroll this field actually ran, seat by
-            // seat — a high seat runs `highMult` copies — and nothing else. Bounties, donations,
-            // boosts and returns are not bankroll, and the sole rider's extra capital is bounty.
-            // Every term here was fixed before a die was thrown, so the credit is the same
-            // whichever way the field settles and however its settlement was chunked, and it is
-            // paid exactly once: finalization runs once. A custom battle earns it too — this sits
-            // above the scheduled-only branch, and a custom window with no high lane has zero
-            // high seats, so its zero multiple never enters the sum.
-            // The sideboard is read ONCE for the whole finalization — here for the count, and
-            // below for the lane's winner — so an ordinary field still asks it one question.
-            uint256 f = _highField[w.key];
-            // The jackpot battle's comp share is paid on its fees alone when its field seals.
-            if (!_isJackpotSlot(slot)) {
-                uint256 highSeats = uint32(f);
-                uint256 eligible = uint256(w.bankroll) * (entrants + w.extraUnits);
-                if (highSeats != 0) eligible += uint256(w.bankroll) * highSeats * (w.highMult - 1);
-                uint256 earned = eligible / 50;
-                if (earned != 0) _creditComps(earned);
-            }
-            // The winning seat is an index into the same own-then-day range the settle walk used,
-            // so naming it takes the same mapping back.
-            (uint256 dayBase, uint64 dayN) = _dayField(slot);
-            uint64 ownN = uint64(entrants) - dayN - w.drawn;
-
-            uint64 seat = uint64(uint32(g >> _BG_WINNER_SHIFT));
-            uint256 winnerId = _seatId(slot, seat, ownN, dayBase, dayN);
-            uint256 winnerWord = _bets[winnerId];
-            // The boost: this table's own pick from the band the window advertised, plus anything
-            // donated on top of it. Nothing about either was stored.
-            // Donations pay in full and bypass protocol-bonus rounding.
-            uint256 donated = (g >> _BG_SEED_SHIFT) & _BG_SEED_MASK;
-            boost = _roundBoost(boost);
-            // The bounties and the house money, and NOTHING else. What the field busted away is
-            // deleted where it busted.
-            uint256 pot = (w.stakeUnits * (entrants + w.extraUnits) + boost + donated) * _BATTLE_STAKE_UNIT + w.extraPot;
-            address winner = address(uint160(winnerWord));
-            // Only protocol bonus value can pay in passes; funded bounties stay liquid.
-            if (scheduled) {
-                pot -= _splitAward(w.key, winner, _SPLIT_SRC_MAIN | (boost * _BATTLE_STAKE_UNIT));
-            }
-            if (pot != 0) {
-                _creditFlip(winner, pot);
-                emit CrapsBattlePaid(winnerId, w.key, winner, pot);
-            }
-            // THE LANE. Only a contested one pays here — a field of one settled its lane on that
-            // seat's own run, and a field of none never had one.
-            uint256 heads = uint32(f);
-            if (heads >= 2) {
-                seat = uint64((f >> _HF_WINNER_SHIFT) & _MASK32);
-                uint256 hId = _seatId(slot, seat, ownN, dayBase, dayN);
-                uint256 hWord = _bets[hId];
-                _highField[w.key] = f | _HF_DONE_BIT;
-                uint256 lane = _laneBoost(w, word);
-                // The extra bounties are the seats' own posted money and pay out whole; only the
-                // lane boost is protocol money, so only it can pay in passes.
-                uint256 lanePot = heads * _highBounty(w) + lane
-                    - _splitAward(w.key, address(uint160(hWord)), _SPLIT_SRC_HIGH_CONTESTED | lane);
-                if (lanePot != 0) {
-                    address hWinner = address(uint160(hWord));
-                    _creditFlip(hWinner, lanePot);
-                    emit CrapsHighRollerPaid(hId, w.key, hWinner, lanePot, false);
-                }
-            }
-
-            // THE PROGRESSIVE, LAST, and decided by the scoreboard that just closed and by nothing
-            // else. Entry pricing and activity history do not reduce the winner's pool share.
-            //
-            // THEN THE RECORD, on the same finalized figures and once for the whole field. Never
-            // per entrant: the candidate is the winner the comparator named, and the field is
-            // closed by the time either of these can read it.
-            //
-            // BOTH ARE THE PROTOCOL'S OWN MONEY, so both are SCHEDULED-ONLY. A custom battle
-            // plays the same game and races on the same comparator; what it does not do is fund
-            // or draw on anything the protocol allocates. The single scheduled branch below
-            // carries that guard for the progressive and the record alike.
-            // `peakFlip` decodes as zero for a bust in either product, so the goal gate needs no
-            // restating.
-            //
-            // THE BIGGEST DICE RUN is the FIFTH category of the record `Coinflip` already owns,
-            // not a pool of its own: nothing here funds a record pool, adds craps action, or
-            // touches the four existing kinds. A 100x high point has necessarily crossed the
-            // scheduled target, so the floor does the whole eligibility test. Below it NOTHING is
-            // called — a field that never got near a record does not pay for a cross-contract
-            // read to be told so — and `Coinflip` logs the claim it makes.
-            if (scheduled) {
-                _payProgressive(w, peakFlip, score, winnerId, winnerWord, winner);
-                _recordDiceRun(winner, score);
-            }
-        }
-    }
-
     /// @dev `floor(pool * bps / 10_000)` that CANNOT overflow, whatever the pool comes to hold.
     ///      Dividing at the denominator FIRST bounds the multiplication by the result — which is
     ///      at most the pool itself — where a bare `pool * bps` would wrap silently inside an
@@ -2879,51 +2521,13 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @param winnerId The winner's bet id, logged with the payout.
     /// @param winnerWord The winner's settled bet header, carrying its owner address.
     /// @param winner The winner's address, credited with the payout.
-    function _payProgressive(
-        Window memory w,
-        uint256 peakFlip,
-        uint256 score,
-        uint256 winnerId,
-        uint256 winnerWord,
-        address winner
-    ) internal {
-        unchecked {
-            // RARE FIRST, and it OVERRIDES. The rare cutoff is above the common cutoff, so a run
-            // that clears it has cleared both — and takes the rare rung alone,
-            // never both. Both cutoffs are INCLUSIVE.
-            bool rare = score >= _PROG_RARE;
-            // THE RUNG, COUNTED IN DOUBLINGS of the common share: RARE is one doubling, so
-            // `500 << shift` is the whole table, 500 common and 1,000 rare.
-            uint256 shift;
-            if (rare) shift = _PROG_RARE_DOUBLINGS;
-            else if (score < _PROG_COMMON) return;
-
-            uint256 bps = _PROG_ROUTINE_COMMON_BPS << shift;
-            _payProgressiveShare(w.key, winnerId, winnerWord, peakFlip, score, bps);
-        }
+    function _payProgressive(Window memory w, uint256 peakFlip, uint256 score, uint256 winnerId, uint256 winnerWord, address winner) internal {
+        IReadCohortLifecycle(address(this)).payProgressive(w, peakFlip, score, winnerId, winnerWord, winner);
     }
 
     /// @dev The progressive's award accounting. The caller supplies the already-qualified share;
     ///      all pool debits and pass/liquid splits live here.
-    function _payProgressiveShare(bytes32 key, uint256 winnerId, uint256 winnerWord, uint256 peakFlip, uint256 score, uint256 bps) private {
-        unchecked {
-            address winner = address(uint160(winnerWord));
-            uint256 pool = _progressive;
-            uint256 candidate = _poolShare(pool, bps);
-            if (candidate == 0) return;
-            uint256 paid = candidate;
-            // The WHOLE gross award leaves the pool, pass slice included — a pass is this award
-            // paying in a different shape, and leaving its value behind would count it twice.
-            pool -= paid;
-            _progressive = pool;
-            emit CrapsProgressivePaid(
-                winnerId, key, winner, score >= _PROG_RARE, uint16(bps), peakFlip, score, candidate, paid, pool
-            );
-            // State first, credit second; every qualifying dice result receives the full award.
-            paid -= _splitAward(key, winner, _SPLIT_SRC_PROGRESSIVE | paid);
-            if (paid != 0) _creditFlip(winner, paid);
-        }
-    }
+
 
     function _betOf(uint256 betId) internal view returns (Bet memory bet) {
         uint256 header = _bets[betId];

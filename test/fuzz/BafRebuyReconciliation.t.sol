@@ -114,7 +114,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
                 _fulfillVrfIfPending();
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
                 // The level-10 jackpot phase can open and close within one day's advance

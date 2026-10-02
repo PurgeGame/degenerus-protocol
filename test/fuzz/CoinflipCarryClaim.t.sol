@@ -208,7 +208,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         coinflip.claimCoinflipCarry(address(0), 1 ether);
     }
 
-    /// The other side: day 3's payouts are applied and the lock is STILL held (advanceGame
+    /// The other side: day 3's payouts are applied and the lock is STILL held (mineFlip
     /// defers the unlock behind its chunked drains). The carry has resolved through day 3's
     /// word and rides day 4, unrequested, so the withdrawal behaves as it would post-unlock.
     /// The mocked lock is the point: it must not gate this path.

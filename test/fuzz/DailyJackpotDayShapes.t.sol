@@ -335,7 +335,7 @@ contract DailyJackpotDayShapes is Test {
 
     bytes32 private constant FLIP_WIN = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
 
-    /// @dev Runs a jackpot-phase daily (the ETH stage, then the coin+tickets stage, as advanceGame
+    /// @dev Runs a jackpot-phase daily (the ETH stage, then the coin+tickets stage, as mineFlip
     ///      sequences them) with the jackpot module's code hosted on the harness. The jackpot battle
     ///      is latched by the daily RNG request and finished before either stage runs, so neither
     ///      stage may touch its latch, even with a funded prize pool.

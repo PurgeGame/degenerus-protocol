@@ -296,7 +296,7 @@ describe("STAT-02 — per-trait share under deterministic `i % 4` rotation", fun
 //   1. driving deployFullProtocol to advance one day (which issues a VRF
 //      request),
 //   2. fulfilling the VRF request with the named seed,
-//   3. continuing advanceGame() until the daily flow processes — during which
+//   3. continuing mineFlip() until the daily flow processes — during which
 //      _applyDailyRng emits DailyRngApplied(day, rawWord, nudges, finalWord)
 //      and the helper consumes `finalWord` as its `randomWord` argument,
 //   4. harvesting the DailyRngApplied event to learn the actual `finalWord`
@@ -310,11 +310,11 @@ describe("STAT-02 — per-trait share under deterministic `i % 4` rotation", fun
 // ---------------------------------------------------------------------------
 
 async function driveOneFullDay(game, deployer, mockVRF, advanceModule, seed) {
-  // Step 1: advance one day so the day boundary lets advanceGame() proceed.
+  // Step 1: advance one day so the day boundary lets mineFlip() proceed.
   await advanceToNextDay();
 
   // Step 2: request VRF.
-  await game.connect(deployer).advanceGame();
+  await game.connect(deployer).mineFlip();
   expect(await game.rngLocked()).to.equal(true);
 
   // Step 3: fulfill VRF with the named seed.
@@ -326,7 +326,7 @@ async function driveOneFullDay(game, deployer, mockVRF, advanceModule, seed) {
   const receipts = [];
   for (let i = 0; i < 100; i++) {
     if (!(await game.rngLocked())) break;
-    const tx = await game.connect(deployer).advanceGame();
+    const tx = await game.connect(deployer).mineFlip();
     const receipt = await tx.wait();
     receipts.push({ tx, receipt });
   }

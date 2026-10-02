@@ -9,15 +9,15 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 /// @title GameOverCompositionAdvanceGas — v60 GASCEIL: the historical game-over composition
-/// @notice END-TO-END regression driving the REAL `advanceGame()` from the historical two-slot
+/// @notice END-TO-END regression driving the REAL `mineFlip()` from the historical two-slot
 ///         liveness-game-over pre-state. Before the fix, `_handleGameOverPath` composed both ticket
 ///         slots and the terminal jackpot in one transaction; the per-stage harness was blind to it.
 ///
-///         The breach (pre-fix): one liveness game-over `advanceGame()` tx runs
+///         The breach (pre-fix): one liveness game-over `mineFlip()` tx runs
 ///           round-1 ticket batch (read slot, ~6.5M, finishes) +
 ///           round-2 ticket batch (write slot, ~6.5M, finishes) +
 ///           handleGameOverDrain -> runTerminalJackpot (305 winners, ~7.3M)
-///         => ~20M > 16,777,216 (EIP-7825). advanceGame is the mandatory heartbeat; a single tx
+///         => ~20M > 16,777,216 (EIP-7825). mineFlip is the mandatory heartbeat; a single tx
 ///         over the cap = a permanent, unrecoverable game-over (the tx can never complete).
 ///
 ///         Now every step is its own transaction: the committed read snapshot drains on its own
@@ -28,7 +28,7 @@ import {Vm} from "forge-std/Vm.sol";
 /// @dev Test-only. NO contracts/*.sol is mutated. A GameSeeder (DegenerusGame subclass with seeders)
 ///      is etched onto the live game via type().runtimeCode (no constructor side effects), used to
 ///      write the worst-case pre-state into the real game storage, then the real code is restored so
-///      the measured tx runs the exact production `advanceGame()` bytecode.
+///      the measured tx runs the exact production `mineFlip()` bytecode.
 
 /// @dev Seeder overlay: writes the worst-case game-over pre-state directly into the live game storage.
 contract GameSeeder is DegenerusGame, BucketSeed {
@@ -93,7 +93,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
 }
 
 contract GameOverCompositionAdvanceGas is DeployProtocol {
-    /// @dev EIP-7825 per-transaction gas cap. A single advanceGame tx above this = permanent DoS.
+    /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this = permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     /// @dev Review ceiling and stronger fixture-specific comfort target.
     uint256 internal constant REVIEW_GAS_CAP = 11_500_000;
@@ -143,13 +143,13 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
     }
 
     // =========================================================================
-    // The headline assertion: EVERY game-over advanceGame tx stays under 11.5M.
+    // The headline assertion: EVERY game-over mineFlip tx stays under 11.5M.
     // =========================================================================
 
-    /// @notice Drive the seeded worst-case game-over through the REAL advanceGame() and assert that
+    /// @notice Drive the seeded worst-case game-over through the REAL mineFlip() and assert that
     ///         no single tx exceeds the 11.5M hard cap, while game-over still completes.
     ///
-    ///         PRE-FIX  : the first advanceGame() runs round1+round2+terminal-jackpot in ONE tx
+    ///         PRE-FIX  : the first mineFlip() runs round1+round2+terminal-jackpot in ONE tx
     ///                    (~20M). The per-tx assertion below FAILS — that failure (with the logged
     ///                    ~20M) is the demonstration of the composition DoS.
     ///         POST-FIX : each batch, the terminal request, its application and the terminal
@@ -168,7 +168,7 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
         for (uint256 i = 0; i < MAX_TERMINAL_ADVANCES; i++) {
             vm.recordLogs();
             uint256 g0 = gasleft();
-            game.advanceGame{gas: REVIEW_GAS_CAP - TX_INTRINSIC}();
+            game.mineFlip{gas: REVIEW_GAS_CAP - TX_INTRINSIC}();
             uint256 used = g0 - gasleft() + TX_INTRINSIC;
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
@@ -197,8 +197,8 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
         assertEq(winners, DAILY_ETH_MAX_WINNERS, "all 305 terminal award slots must execute");
 
         // The breach assertion. Pre-fix this FAILS on the ~20M composed tx; post-fix it PASSES.
-        assertFalse(over, "GAS-CEIL DoS: a single game-over advanceGame tx exceeded 16,777,216 (EIP-7825 brick)");
+        assertFalse(over, "GAS-CEIL DoS: a single game-over mineFlip tx exceeded 16,777,216 (EIP-7825 brick)");
         // Stronger: post-fix every game-over tx should also clear the 10M soft target.
-        assertLt(maxTxGas, GAS_TARGET, "every game-over advanceGame tx clears the 10M soft target");
+        assertLt(maxTxGas, GAS_TARGET, "every game-over mineFlip tx clears the 10M soft target");
     }
 }

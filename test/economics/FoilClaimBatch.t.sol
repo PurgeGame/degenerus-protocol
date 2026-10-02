@@ -8,6 +8,7 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @dev Advance the environment without replaying hundreds of unrelated game days.
 ///      Claims and draws still run through the production facade and modules.
@@ -68,6 +69,7 @@ contract FoilClaimBatch is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        mockVRF.fundSubscription(1, 1000 ether);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _runScenario();
     }
@@ -77,7 +79,7 @@ contract FoilClaimBatch is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _advance() internal {
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
     }
 
     function _completeDay(uint256 vrfWord) internal {
@@ -395,15 +397,20 @@ contract FoilClaimBatch is DeployProtocol {
     }
 
     /// @dev One advance tick: fulfill whatever VRF request is pending, then call
-    ///      advanceGame(). A failing call (nothing due yet) warps a day so the next tick
+    ///      mineFlip(). A failing call (nothing due yet) warps a day so the next tick
     ///      has something to do. Single-step (unlike `_completeDay`'s bounded drain loop)
     ///      so a caller can observe a one-tick state flip — e.g. `jackpotPhase()` going
     ///      true the instant the level-1 -> level-1's-own-jackpot-phase transition lands —
     ///      instead of the drain loop running straight through it.
     function _tick() internal {
         _fulfillPendingVrf();
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
-        if (!ok) vm.warp(vm.getBlockTimestamp() + 1 days);
+        uint256 requestBefore = mockVRF.lastRequestId();
+        (bool ok, ) = address(game).call{gas: 12_000_000}(abi.encodeWithSignature("mineFlip()"));
+        // A refused optional midday request may now return a successful no-op.
+        // Move to the next daily boundary instead of replaying that same refusal.
+        bool waitingForDaily = mockVRF.lastRequestId() == requestBefore
+            && game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday);
+        if (!ok || waitingForDaily) vm.warp(vm.getBlockTimestamp() + 1 days);
     }
 
     /// @dev Gates on dailyFoilDraw itself, not rngWordForDay: inside the jackpot phase the
@@ -531,6 +538,7 @@ contract FoilClaimBatch is DeployProtocol {
         for (uint256 i; i < maxDays; ++i) {
             if (uint24(uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)))) >> 217) == day) return;
             _completeDay(uint256(keccak256(abi.encode("flat-face-day", day, i))));
+            if (uint24(uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)))) >> 217) == day) return;
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }
         revert("harness: day never sealed within the bound");

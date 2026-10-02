@@ -29,7 +29,7 @@ const MintPaymentKind = { DirectEth: 0 };
  *   - Inside the deadman window (no day sealed for <= 30 days) the pause holds
  *     and liveness stays false: the jackpot phase completes normally.
  *   - Once the stall exceeds 30 days the deadman fires, overriding the pause.
- *     advanceGame then consults it separately (AdvanceModule:216,
+ *     mineFlip then consults it separately (AdvanceModule:216,
  *     `(!inJackpot && !lastPurchase) || _vrfDeadmanFired()`) to reach
  *     _handleGameOverPath and drain to terminal fund release even mid-jackpot,
  *     rather than bricking.
@@ -88,7 +88,7 @@ describe("LivenessMidJackpot", function () {
   }
 
   async function driveOneCycleSameDay(game, deployer, mockVRF, word) {
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     const reqId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(reqId, word);
@@ -97,7 +97,7 @@ describe("LivenessMidJackpot", function () {
     }
     for (let i = 0; i < 200; i++) {
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         break;
       }
@@ -111,15 +111,15 @@ describe("LivenessMidJackpot", function () {
   }
 
   /**
-   * Repeatedly call advanceGame until gameOver latches. Once the deadman has
-   * fired mid-jackpot, advanceGame enters _handleGameOverPath every call: it
+   * Repeatedly call mineFlip until gameOver latches. Once the deadman has
+   * fired mid-jackpot, mineFlip enters _handleGameOverPath every call: it
    * requests its own terminal word (fulfilled below), applies it, drains queued
    * tickets one batch per tx, then handleGameOverDrain sets gameOver.
    */
   async function driveToGameOver(game, deployer, mockVRF) {
     for (let i = 0; i < 600; i++) {
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         await advanceToNextDay();
       }
@@ -242,7 +242,7 @@ describe("LivenessMidJackpot", function () {
     );
   });
 
-  it("advanceGame does not revert mid-jackpot when the deadman has fired", async function () {
+  it("mineFlip does not revert mid-jackpot when the deadman has fired", async function () {
     const fixture = await loadFixture(deployAtJackpot);
     const { game, deployer, mockVRF } = fixture;
 
@@ -252,7 +252,7 @@ describe("LivenessMidJackpot", function () {
     await advanceTime(125 * 86400);
     expect(await game.livenessTriggered()).to.equal(true);
 
-    // advanceGame now takes the deadman game-over path instead of the jackpot
+    // mineFlip now takes the deadman game-over path instead of the jackpot
     // ticket-queue path; it must not revert, and the RNG lock must not stick.
     await driveOneCycle(game, deployer, mockVRF, 0xdeadbeefn);
 
@@ -266,7 +266,7 @@ describe("LivenessMidJackpot", function () {
     expect(await game.jackpotPhase()).to.equal(true);
     expect(await game.gameOver()).to.equal(false);
 
-    // Warp past the deadman, then drive advanceGame to the terminal drain.
+    // Warp past the deadman, then drive mineFlip to the terminal drain.
     await advanceTime(125 * 86400);
     expect(await game.livenessTriggered()).to.equal(true);
 

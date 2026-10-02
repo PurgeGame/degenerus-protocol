@@ -8,14 +8,14 @@ export async function readyDailyFixture() {
   await f.mockVRF.fundSubscription(1, eth(100));
   await advanceToNextDay();
   for (let calls = 0; calls < 50 && !(await f.game.rngLocked()); calls++) {
-    await f.game.connect(f.deployer).advanceGame();
+    await f.game.connect(f.deployer).mineFlip();
   }
   expect(await f.game.rngLocked(), "daily request must engage").to.equal(true);
   const request = await getLastVRFRequestId(f.mockVRF);
   expect(request, "fresh real VRF request").to.be.gt(0n);
   await f.mockVRF.fulfillRandomWords(request, 0xB007n);
   for (let calls = 0; calls < 100 && await f.game.rngLocked(); calls++) {
-    await f.game.connect(f.deployer).advanceGame();
+    await f.game.connect(f.deployer).mineFlip();
   }
   expect(await f.game.rngLocked(), "daily work must finish within its bound").to.equal(false);
   await f.game.openBoxes(1000);

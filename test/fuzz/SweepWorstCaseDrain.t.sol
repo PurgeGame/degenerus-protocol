@@ -182,7 +182,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         for (uint256 i; i < 12 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -201,7 +201,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
     }
 
@@ -354,11 +354,11 @@ contract SweepWorstCaseDrain is DeployProtocol {
         _driveDailyCycleOnce();
         require(!game.rngLocked(), "fixture: game unlocked");
 
-        // Settle any pending advance WITHOUT warping the clock: advanceGame catches dailyIdx up to
+        // Settle any pending advance WITHOUT warping the clock: mineFlip catches dailyIdx up to
         // the fixed sim day (fulfilling each VRF request), after which advance is not due and the
         // game is unlocked — the state where mineFlip takes the box-open arm.
         for (uint256 i = 0; i < 40 && (game.advanceDue() || game.rngLocked()); i++) {
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -452,7 +452,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("quiet", i))) | 1);
             }
             for (uint256 j; j < 4 && game.advanceDue(); j++) {
-                try game.advanceGame() {} catch {}
+                try game.mineFlip() {} catch {}
             }
             _quietCrapsTable();
             vm.prank(actor);

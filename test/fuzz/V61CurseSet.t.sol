@@ -422,7 +422,7 @@ contract V61CurseSet is DeployProtocol {
         for (uint256 d; d < 240 && !game.gameOver(); d++) {
             _fulfillPending(uint256(keccak256(abi.encode("go", d))) | 1);
             if (game.advanceDue() || game.rngLocked()) {
-                try game.advanceGame() {} catch {}
+                try game.mineFlip() {} catch {}
             }
             _fulfillPending(uint256(keccak256(abi.encode("go2", d))) | 1);
             if (!game.advanceDue() && !game.rngLocked() && !game.gameOver()) {
@@ -457,7 +457,7 @@ contract V61CurseSet is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }
@@ -467,7 +467,7 @@ contract V61CurseSet is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }

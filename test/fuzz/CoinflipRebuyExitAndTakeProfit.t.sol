@@ -26,7 +26,7 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         Together those make "observe the word, then move the position" unreachable.
 ///
 ///         The gate is that settlement marker rather than `rngLocked()`: the lock outlives
-///         the settlement (advanceGame defers `_unlockRng` behind chunked ticket drains, a
+///         the settlement (mineFlip defers `_unlockRng` behind chunked ticket drains, a
 ///         pending daily jackpot, and a phase transition), and once the day's payouts are
 ///         processed the carry has resolved through that word and rides tomorrow — whose
 ///         word is not yet requested. Both halves are asserted below, the open side under a

@@ -131,7 +131,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         assertTrue(game.livenessTriggered(), "deadline passed, caught up, VRF alive");
 
         uint256 req0 = mockVRF.lastRequestId();
-        game.advanceGame(); // the one terminal swap + terminal request
+        game.mineFlip(); // the one terminal swap + terminal request
         (uint256 rl, uint256 wl, uint256 sw) = _queues();
         assertEq(sw, 1, "swap latch set");
         assertEq(rl, owners, "the cohort moved to the read side");
@@ -140,7 +140,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         assertGt(req, req0, "terminal request sent");
 
         mockVRF.fulfillRandomWords(req, word);
-        game.advanceGame(); // applies the terminal word; returns before any drain
+        game.mineFlip(); // applies the terminal word; returns before any drain
         assertTrue(game.rngWordForDay(game.currentDayView()) != 0, "terminal word recorded");
         assertFalse(game.gameOver(), "not over yet");
         (rl,,) = _queues();
@@ -149,7 +149,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         assertGt(_unallocated(), 0, "distributable funds exist");
 
         for (uint256 i; i < preBatches; ++i) {
-            game.advanceGame();
+            game.mineFlip();
             assertFalse(game.gameOver(), "pre-batch returned before the payout");
         }
         (rl,,) = _queues();
@@ -191,7 +191,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         // Full-gas batch: runs, returns before the payout, leaves the cohort partly queued.
         uint256 before = _bucketTotal();
         uint256 g0 = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         r.batchGas = g0 - gasleft();
         assertFalse(game.gameOver(), "a batch call returns before the payout");
         assertGt(_bucketTotal(), before, "the batch drained tickets into the buckets");
@@ -208,7 +208,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         r.minBatchOkGas = type(uint256).max;
         for (uint256 g = top; g > bottom; g -= step) {
             vm.revertToState(probed);
-            try game.advanceGame{gas: g}() {
+            try game.mineFlip{gas: g}() {
                 if (g < r.minBatchOkGas) r.minBatchOkGas = g;
             } catch (bytes memory err) {
                 if (err.length == 32) {
@@ -236,7 +236,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         uint256 leakDeityPaid;
         for (uint256 g = top; g > bottom; g -= step) {
             vm.revertToState(base);
-            try game.advanceGame{gas: g}() {
+            try game.mineFlip{gas: g}() {
                 if (game.gameOver() || _jackpotPaid() != 0) {
                     (uint256 rl,,) = _queues();
                     (uint256 owed, uint256 owing) = _owedTotal();
@@ -291,7 +291,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
 
         // Honest completion from the same state, for the forfeiture comparison.
         uint256 unallocBefore = _unallocated();
-        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.advanceGame();
+        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineFlip();
         assertTrue(game.gameOver(), "honest ending completes");
         (uint256 hrl,,) = _queues();
         (uint256 hOwed,) = _owedTotal();
@@ -323,7 +323,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         _restore();
         uint256 post = vm.snapshotState();
         uint256 g0 = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         r.payoutGas = g0 - gasleft();
         assertTrue(game.gameOver(), "payout-only call ends the game");
         r.payoutCohortPaid = _cohortClaimable();
@@ -335,7 +335,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
             uint256 mid = (lo + hi) / 2;
             vm.revertToState(post);
             bool done;
-            try game.advanceGame{gas: mid}() {
+            try game.mineFlip{gas: mid}() {
                 done = game.gameOver();
             } catch {}
             if (done) hi = mid;
@@ -344,7 +344,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         r.payoutMinGas = hi;
         vm.revertToState(post);
         vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, type(PayoutGasProbe).runtimeCode);
-        try game.advanceGame{gas: r.payoutMinGas}() {
+        try game.mineFlip{gas: r.payoutMinGas}() {
             revert("probe must revert");
         } catch (bytes memory err) {
             assertEq(err.length, 32, "probe reading");

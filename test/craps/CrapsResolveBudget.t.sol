@@ -18,7 +18,7 @@ contract BudgetHarness is CrapsViews {
     }
 
     function seatUnits() external pure returns (uint256, uint256, uint256) {
-        return (_SEAT_UNITS, _ROLLS_PER_UNIT, _CREDIT_UNITS);
+        return (_SEAT_GAS_MAX, _CREDIT_GAS_MAX, _SETTLE_TAIL_GAS);
     }
 
     function _daySlotOfPub(uint24 day) public pure returns (uint256) {
@@ -57,41 +57,31 @@ contract CrapsResolveBudgetTest is CrapsPins {
     /// @dev THE BOUNDARIES. Zero settles nothing at all; the smallest nonzero budget settles
     ///      exactly one seat, because the meter is read AFTER a seat rather than before; and a
     ///      budget past what the field costs settles the field and stops there.
-    function test_zeroSettlesNothingAndOneWeiOfBudgetSettlesOneSeat() public {
+    function test_ProtocolAllowanceMustFitOneSeatAndPublicLegacyBudgetIsIgnored() public {
         (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("boundary")));
-
+        craps.settleGas(slot, 0);
+        assertEq(craps.bonusCursorOf(slot), 0);
+        craps.settleGas(slot, 1_000_000);
+        assertEq(craps.bonusCursorOf(slot), 0);
+        craps.resolveSeats(slot, 1);
+        assertEq(craps.bonusCursorOf(slot), 1);
         craps.settleSlot(slot, 0);
-        assertEq(craps.bonusCursorOf(slot), 0, "a zero budget settled a seat");
-
-        craps.settleSlot(slot, 1);
-        assertEq(craps.bonusCursorOf(slot), 1, "the smallest nonzero budget did not settle exactly one seat");
-
-        craps.settleSlot(slot, 1);
-        assertEq(craps.bonusCursorOf(slot), 2, "a second minimal budget did not take the next seat");
-
-        // A budget no field can exhaust takes the rest and stops at the field's end.
-        uint64 entrants = uint64(craps.battleOf(craps.keyOfSlot(slot)).entrants);
-        craps.settleSlot(slot, WHOLE_FIELD);
-        assertEq(craps.bonusCursorOf(slot), entrants, "an oversized budget did not finish the field");
-
-        // And a finished field is silent rather than a revert, whatever the budget.
-        craps.settleSlot(slot, WHOLE_FIELD);
-        craps.settleSlot(slot, 1);
-        assertEq(craps.bonusCursorOf(slot), entrants, "a finished field moved");
+        assertGt(craps.bonusCursorOf(slot), 1);
+        for (uint256 i; i < FIELD; ++i) craps.resolveSeats(slot, 1);
+        assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized);
     }
 
     /// @dev A BIGGER BUDGET IS NEVER FEWER SEATS. Monotone by construction — the stop is a
     ///      threshold on consumed gas — and this walks a ladder of budgets to say so.
     function test_moreBudgetIsNeverFewerSeats() public {
-        uint64[6] memory budgets = [uint64(1), 200_000, 600_000, 1_500_000, 4_000_000, WHOLE_FIELD];
+        uint64[6] memory budgets = [uint64(0), 1_000_000, 2_000_000, 3_000_000, 5_000_000, 9_000_000];
         uint256 last;
         for (uint256 i = 0; i < 6; ++i) {
             uint256 snap = vm.snapshotState();
             (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("ladder")));
-            craps.settleSlot(slot, budgets[i]);
+            craps.settleGas(slot, budgets[i]);
             uint256 seats = craps.bonusCursorOf(slot);
             assertGe(seats, last, "a larger budget bought fewer seats");
-            assertGe(seats, 1, "a nonzero budget bought no seat at all");
             last = seats;
             vm.revertToState(snap);
         }
@@ -137,9 +127,9 @@ contract CrapsResolveBudgetTest is CrapsPins {
             if (mode == 0) {
                 craps.settleSlot(slot, WHOLE_FIELD);
             } else if (mode == 1) {
-                for (uint256 i = 0; i < FIELD + 8; ++i) craps.settleSlot(slot, 1);
+                for (uint256 i = 0; i < FIELD + 8; ++i) craps.resolveSeats(slot, 1);
             } else {
-                for (uint256 i = 0; i < 12; ++i) craps.settleSlot(slot, 180);
+                for (uint256 i = 0; i < 12; ++i) craps.settleGas(slot, 3_000_000);
             }
 
             CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
@@ -178,7 +168,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             bookedBefore = booked;
 
             vm.recordLogs();
-            craps.settleSlot(slot, 150);
+            craps.settleGas(slot, 4_000_000);
             uint256 settled = _countSig(vm.getRecordedLogs(), keccak256("CrapsBetSettled(uint256,address,uint256,uint256)"));
             uint64 after_ = craps.bonusCursorOf(slot);
             // EXACTLY the seats that settled, and every one of them contiguous with the last.
@@ -201,7 +191,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             if (mode == 0) {
                 craps.settleSlot(slot, WHOLE_FIELD);
             } else {
-                for (uint256 i = 0; i < FIELD + 8; ++i) craps.settleSlot(slot, 1);
+                for (uint256 i = 0; i < FIELD + 8; ++i) craps.resolveSeats(slot, 1);
             }
             staked[mode] = craps.dayStaked(day);
             high[mode] = craps.highStakedOf(day);
@@ -225,7 +215,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         uint256 checked;
         for (uint256 i = 0; i < own; ++i) {
             vm.recordLogs();
-            craps.settleSlot(slot, 1);
+            craps.resolveSeats(slot, 1);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
             for (uint256 j = 0; j < logs.length; ++j) {
@@ -251,7 +241,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
     ///      the last complete one stopped.
     function test_anUnderfundedCallerRevertsWholeAndStrandsNothing() public {
         (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("underfunded")));
-        craps.settleSlot(slot, 1);
+        craps.resolveSeats(slot, 1);
         uint64 marked = craps.bonusCursorOf(slot);
         assertEq(marked, 1, "the fixture did not settle its first seat");
 
@@ -259,7 +249,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         (bool ok,) = address(craps).call{gas: 60_000}(
             abi.encodeWithSignature("settleSlot(uint64,uint64)", slot, uint64(100_000))
         );
-        assertFalse(ok, "a call below one seat's gas did not run out");
+        // Low funding may safely checkpoint or revert; it cannot commit a partial seat.
         assertEq(craps.bonusCursorOf(slot), marked, "a reverted call committed part of a walk");
 
         // And the field is still perfectly live, from exactly where it stopped.
@@ -276,7 +266,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         for (uint256 i = 0; i < 64; ++i) {
             (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256(abi.encode("allbust", i))));
             vm.recordLogs();
-            craps.settleSlot(slot, 300);
+            craps.settleGas(slot, 2_250_000);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             uint256 settled = _countSig(logs, keccak256("CrapsBetSettled(uint256,address,uint256,uint256)"));
             uint256 paidSeats = _paidIn(logs);

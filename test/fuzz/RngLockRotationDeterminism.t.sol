@@ -99,7 +99,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///      including RngNotReady() -- is re-thrown verbatim so a defect mode
     ///      fails the test naturally.
     function _advanceTolerant() internal returns (bool progressed) {
-        try game.advanceGame() {
+        try game.mineFlip() {
             return true;
         } catch (bytes memory err) {
             if (err.length >= 4 && bytes4(err) == NOT_TIME_YET) {
@@ -111,7 +111,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         }
     }
 
-    /// @dev Complete a full day on the ACTIVE coordinator: advanceGame -> fulfil
+    /// @dev Complete a full day on the ACTIVE coordinator: mineFlip -> fulfil
     ///      any pending request -> drain until unlocked, fulfilling any request
     ///      the drain fires. Stops on NotTimeYet().
     function _completeDay(uint256 vrfWord) internal {
@@ -136,7 +136,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     }
 
     /// @dev Drain the daily flow on the ACTIVE coordinator while rngLocked():
-    ///      advanceGame and fulfil any request the drain fires.
+    ///      mineFlip and fulfil any request the drain fires.
     function _drainUntilUnlocked(uint256 vrfWord) internal {
         MockVRFCoordinator c = _coord();
         for (uint256 i = 0; i < DRAIN_MAX_ITERATIONS; i++) {

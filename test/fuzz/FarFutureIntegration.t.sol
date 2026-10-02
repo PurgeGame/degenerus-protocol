@@ -18,7 +18,7 @@ contract FFKeyComputer is DegenerusGameStorage {
 /// @title FarFutureIntegrationTest -- TEST-05: Multi-level lifecycle proving zero FF ticket stranding
 /// @notice Deploys the full 23-contract protocol via DeployProtocol, drives the game through
 ///         level transitions past level 8 (where constructor-deposited FF entries exist), and
-///         verifies that advanceGame's internal (private) `_processFutureTicketBatch` drains FF
+///         verifies that mineFlip's internal (private) `_processFutureTicketBatch` drains FF
 ///         queues via `processTicketBatch`'s lastPurchaseDay continuation.
 ///
 ///         The constructor pre-queues 16 sDGNRS + 16 vault tickets for levels 1-100.
@@ -93,7 +93,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
         // --- Phase 2: Drive game through levels ---
         // Each level requires:
         //   1. nextPrizePool > levelPrizePool[level] (prize pool target met)
-        //   2. advanceGame daily cycles: ticket processing -> VRF -> daily jackpot -> if target met,
+        //   2. mineFlip daily cycles: ticket processing -> VRF -> daily jackpot -> if target met,
         //      transition to jackpot phase -> 1 or 3 jackpot days -> phase transition -> level++
         //
         // To fast-track: seed nextPrizePool to 49.9 ETH (just below 50 ETH target), buy a small
@@ -125,12 +125,12 @@ contract FarFutureIntegrationTest is DeployProtocol {
             // Buy tickets to push over the target and create actual ticket entries
             _buyTickets(buyer, 4000);
 
-            // Drive advanceGame + VRF fulfillment until nothing more to do today
+            // Drive mineFlip + VRF fulfillment until nothing more to do today
             for (uint256 j = 0; j < 50; j++) {
                 _fulfillVrfIfPending();
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break; // NotTimeYet = done for this day
             }

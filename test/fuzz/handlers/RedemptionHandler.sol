@@ -353,7 +353,7 @@ contract RedemptionHandler is Test {
                 }
             }
             // Successful burn — update ghosts.
-            uint32 burnDay = game.currentDayView(); // re-read defensively (in case advanceGame fires inside burn)
+            uint32 burnDay = game.currentDayView(); // re-read defensively (in case mineFlip fires inside burn)
             // v47: PendingRedemption.flipOwed removed (FLIP settled at submit) — only the
             // ethValueOwed leg is tracked; the legacy FLIP ghosts are left at zero.
             (uint96 ethOwed, , ) = sdgnrs.pendingRedemptions(currentActor, uint24(burnDay));
@@ -429,7 +429,7 @@ contract RedemptionHandler is Test {
     //                       ACTION: ADVANCE DAY
     // =========================================================================
 
-    /// @notice Advance the game by one day: warp + advanceGame + VRF fulfillment + advanceGame.
+    /// @notice Advance the game by one day: warp + mineFlip + VRF fulfillment + mineFlip.
     function action_advanceDay(uint256 randomWord) external {
         calls_advanceDay++;
 
@@ -648,7 +648,7 @@ contract RedemptionHandler is Test {
     ///      pending record before exempting that record from the immutability invariant.
     function _advanceAndRecordClaims() private {
         vm.recordLogs();
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 sig = keccak256("RedemptionClaimed(address,uint16,uint256,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {

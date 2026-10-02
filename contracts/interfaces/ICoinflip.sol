@@ -166,7 +166,7 @@ interface ICoinflip {
 
     /// @notice Backfill compact coinflip results over [start, end), at most 31 days.
     /// @dev At most 31 days; wins take raw root bits 1..31 relative to the original start.
-    ///      Already-settled prefixes retain that anchor; rewards use the tagged root/day draw.
+    ///      Already-settled prefixes retain that anchor; wins pay double the stake, losses zero.
     function processCoinflipGap(uint256 root, uint24 start, uint24 end) external;
 
     /*+======================================================================+

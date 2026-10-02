@@ -9,20 +9,20 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 /// @title AdvanceGasCeiling — the REUSABLE EIP-7825 gas-ceiling property component
-/// @notice advanceGame() is the mandatory permissionless heartbeat. A single advanceGame tx that
+/// @notice mineFlip() is the mandatory permissionless heartbeat. A single mineFlip tx that
 ///         exceeds the EIP-7825 per-tx gas cap (16,777,216) can never complete -> permanent,
 ///         unrecoverable game-over (the protocol bricks). This file factors the v60 one-shot
 ///         (test/gas/GameOverCompositionAdvanceGas.t.sol) into a shared, parameterized component so
 ///         FUZZ-03 can exercise it over many reachable pre-states AND Phase 384 / COMPO-02 can drive
-///         the SAME seeder + measure loop against the real advanceGame over its own fuzzed states
+///         the SAME seeder + measure loop against the real mineFlip over its own fuzzed states
 ///         without re-authoring the etch-seed-measure mechanism.
 ///
 ///         The three reusable seams (FUZZ-03 SC3):
 ///           (a) _etchSeedRestore(...)        — etch the GameSeeder overlay, write a worst-case
-///                                              advanceGame pre-state from PARAMETERS, restore the
+///                                              mineFlip pre-state from PARAMETERS, restore the
 ///                                              real production code so the measured tx runs the exact
-///                                              production advanceGame() bytecode, fund + warp.
-///           (b) _driveAndAssertUnderCap(...) — drive the real game.advanceGame() in a bounded loop,
+///                                              production mineFlip() bytecode, fund + warp.
+///           (b) _driveAndAssertUnderCap(...) — drive the real game.mineFlip() in a bounded loop,
 ///                                              measure gasleft() per tx, assertLe(txGas, cap) on EACH
 ///                                              tx, track the max (for the 10M soft target), and report
 ///                                              whether the heavy branch (gameOver()/terminal jackpot)
@@ -37,11 +37,11 @@ import {Vm} from "forge-std/Vm.sol";
 ///      ticketCursor, ticketLevel, lvlTraitEntry, lootboxRngWordByIndex, _lrWrite/LR_INDEX_*) are
 ///      the live c4d48008 names (confirmed against 380-01-LAYOUT-KEY.md / forge inspect storageLayout).
 
-/// @dev Seeder overlay: writes a worst-case advanceGame pre-state directly into the live game storage.
+/// @dev Seeder overlay: writes a worst-case mineFlip pre-state directly into the live game storage.
 ///      Both entrypoints share one body so the named v60 game-over regression keeps the EXACT pre-state
 ///      while Phase 384 / the fuzz can drive arbitrary reachable geometries through the same writes.
 contract GameSeeder is DegenerusGame, BucketSeed {
-    /// @notice Parameterized worst-case advanceGame seeder (the general seam Phase 384 calls).
+    /// @notice Parameterized worst-case mineFlip seeder (the general seam Phase 384 calls).
     /// @param lvl          current game level (>=10 so the bounded deity-refund loop is skipped; a
     ///                     deeper level also means deeper trait buckets)
     /// @param rngWord      the word the winning buckets are seeded for; it answers the terminal request
@@ -132,14 +132,14 @@ contract GameSeeder is DegenerusGame, BucketSeed {
 }
 
 /// @dev Reusable property base. Inherit it, call _etchSeedRestore(...) with a worst-case pre-state,
-///      then _driveAndAssertUnderCap(...) to assert every advanceGame tx clears the EIP-7825 cap and
+///      then _driveAndAssertUnderCap(...) to assert every mineFlip tx clears the EIP-7825 cap and
 ///      to learn the per-tx max + whether the heavy branch was exercised. Phase 384 / COMPO-02 import
 ///      THIS — they do not re-author the seeder or the measure loop.
 abstract contract AdvanceGasCeilingBase is DeployProtocol {
     /// @dev The word the seeded winning buckets are derived from; answers the terminal request.
     uint256 internal _terminalWord;
 
-    /// @dev EIP-7825 per-transaction gas cap. A single advanceGame tx above this = permanent DoS.
+    /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this = permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     uint256 internal constant REVIEW_GAS_CAP = 11_500_000;
     uint256 internal constant TX_INTRINSIC = 21_064;
@@ -182,9 +182,9 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         bucketCounts = JackpotBucketLib.bucketCountsForPool(GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS);
     }
 
-    /// @notice (a) Etch the GameSeeder overlay, write a worst-case advanceGame pre-state from the given
+    /// @notice (a) Etch the GameSeeder overlay, write a worst-case mineFlip pre-state from the given
     ///         parameters, restore the REAL production code (so the measured tx runs production
-    ///         advanceGame bytecode), fund the pool, and warp past the 120-day liveness threshold.
+    ///         mineFlip bytecode), fund the pool, and warp past the 120-day liveness threshold.
     /// @param lvl       game level for the seeded pre-state (>=10)
     /// @param rngWord   the word the winning buckets are seeded for; it answers the terminal request
     /// @param readOwed  committed read-slot owed size — bound near the cold write budget by the caller
@@ -208,10 +208,10 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         vm.warp(block.timestamp + 200 days);
     }
 
-    /// @notice (b) Drive the REAL game.advanceGame() in a bounded loop, asserting EVERY single tx
+    /// @notice (b) Drive the REAL game.mineFlip() in a bounded loop, asserting EVERY single tx
     ///         consumes <= REVIEW_GAS_CAP including intrinsic gas. Stops when game-over latches or the iteration budget is
     ///         spent.
-    /// @param maxTxIters cap on advanceGame txs to drive (bound so a long run never lands mid-tx).
+    /// @param maxTxIters cap on mineFlip txs to drive (bound so a long run never lands mid-tx).
     /// @return maxTxGas     the largest single-tx gas observed (surface for the < GAS_TARGET soft check)
     /// @return reachedHeavy whether the heavy branch was exercised — true once game-over latches after
     ///                      the committed ticket batch and isolated terminal jackpot. If false, the
@@ -221,7 +221,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         for (uint256 i = 0; i < maxTxIters; ++i) {
             vm.recordLogs();
             uint256 g0 = gasleft();
-            game.advanceGame{gas: REVIEW_GAS_CAP - TX_INTRINSIC}();
+            game.mineFlip{gas: REVIEW_GAS_CAP - TX_INTRINSIC}();
             uint256 used = g0 - gasleft() + TX_INTRINSIC;
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {

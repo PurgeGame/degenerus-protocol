@@ -195,11 +195,11 @@ contract DegeneretteHandler is Test {
 
     /// @notice Advance game to progress state machine
     /// @param actorSeed Seed for actor selection
-    function advanceGame(uint256 actorSeed) external useActor(actorSeed) {
+    function mineFlip(uint256 actorSeed) external useActor(actorSeed) {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
     }
 
     // --- Internal helpers ---

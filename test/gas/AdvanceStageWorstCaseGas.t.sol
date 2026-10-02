@@ -12,14 +12,14 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
-/// @title AdvanceStageWorstCaseGas — Phase 367 (GASCEIL) measured per-stage advanceGame ceiling
+/// @title AdvanceStageWorstCaseGas — Phase 367 (GASCEIL) measured per-stage mineFlip ceiling
 /// @notice Phase 367 REDO. The prior pass reported the standalone 305-winner daily jackpot stage
 ///         as "~15.08M" — that 15M was actually the now-DECOUPLED gap-backfill+jackpot COMPOSITION
 ///         (which the v56 Stage-4 decouple `break` made unreachable in one tx). This harness measures
-///         the REAL worst-case gas of each advanceGame stage's bounding loop, pushed to its capped
+///         the REAL worst-case gas of each mineFlip stage's bounding loop, pushed to its capped
 ///         maximum, with forge gasleft()-delta around the live production code path.
 ///
-///         advanceGame (DegenerusGameAdvanceModule.advanceGame, do{}while(false) one-stage-per-call)
+///         mineFlip (DegenerusGameAdvanceModule.mineFlip, do{}while(false) one-stage-per-call)
 ///         splits into TWO loop shapes:
 ///           (A) single-shot, internally winner-capped jackpot distributions (stages 8/11/12) — the
 ///               305-winner ETH leg `_processDailyEth -> _processBucket -> _addClaimableEth`;
@@ -143,7 +143,7 @@ contract AdvanceStageWorstCaseGas is Test {
     uint16 internal constant DAILY_COIN_MAX_WINNERS = 50;
     uint32 internal constant WRITES_BUDGET_SAFE = 1000;
 
-    /// @dev The hard EIP-7825 per-transaction gas cap. A breach = advanceGame DoS.
+    /// @dev The hard EIP-7825 per-transaction gas cap. A breach = mineFlip DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     /// @dev The 10M soft design comfort target (USER dual bound).
     uint256 internal constant GAS_TARGET = 10_000_000;
@@ -451,7 +451,7 @@ contract AdvanceStageWorstCaseGas is Test {
         emit log_named_uint("STAGE_8_11_12_jackpot_305_gas_measured", jackpotGas);
         emit log_named_uint("STAGE_0_1_5_6_7_ticket_batch_chunk_gas_measured", ticketGas);
 
-        // The binding stage is the heaviest single advanceGame tx across all stages.
+        // The binding stage is the heaviest single mineFlip tx across all stages.
         uint256 binding = allEvictStageGas;
         if (gapBackfillGas > binding) binding = gapBackfillGas;
         if (jackpotGas > binding) binding = jackpotGas;
@@ -459,13 +459,13 @@ contract AdvanceStageWorstCaseGas is Test {
         emit log_named_uint("BINDING_STAGE_gas", binding);
         emit log_named_uint("TIGHTEST_HEADROOM_to_16p7M_gas", EIP7825_TX_GAS_CAP - binding);
 
-        // LOAD-BEARING safety check: no advanceGame stage reaches the EIP-7825 tx cap. This is the real
+        // LOAD-BEARING safety check: no mineFlip stage reaches the EIP-7825 tx cap. This is the real
         // correctness assertion — it depends on the two stages measured live here (jackpotGas, ticketGas)
         // plus the referenced subscriber/gap-backfill magnitudes.
-        assertLt(binding, EIP7825_TX_GAS_CAP, "no advanceGame stage reaches the 16,777,216 EIP-7825 cap");
-        // Every advanceGame stage sits on the <10M soft target. The binding (heaviest) stage is the warm
+        assertLt(binding, EIP7825_TX_GAS_CAP, "no mineFlip stage reaches the 16,777,216 EIP-7825 cap");
+        // Every mineFlip stage sits on the <10M soft target. The binding (heaviest) stage is the warm
         // ticket-batch resume (~9.9M); the saturated all-evict subscriber chunk (~9.7M) sits just under it.
-        assertLt(binding, 10_500_000, "every advanceGame stage stays on the <10M soft target");
+        assertLt(binding, 10_500_000, "every mineFlip stage stays on the <10M soft target");
         assertLt(jackpotGas, binding, "the 305-winner jackpot (~7.1M) is below the binding ticket-batch stage");
     }
 }

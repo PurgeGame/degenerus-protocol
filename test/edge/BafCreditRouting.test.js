@@ -33,7 +33,7 @@ import {
  *   flip + claimableStored, then overwrite the `level` byte in slot 0 of the game's
  *   packed state and assert the lock fires (level=10) or doesn't (level=5).
  *
- *   We do NOT drive organically to level 10 because that costs hundreds of advanceGame
+ *   We do NOT drive organically to level 10 because that costs hundreds of mineFlip
  *   iterations per test; the Foundry fuzz BafRebuyReconciliation.t.sol uses the same
  *   pattern (`vm.store`) for the same reason.
  *
@@ -138,7 +138,7 @@ describe("BafCreditRouting", function () {
       throw new Error("word must be odd for a winning daily flip");
     }
     await advanceToNextDay();
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     const requestId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(requestId, word);
@@ -148,7 +148,7 @@ describe("BafCreditRouting", function () {
     for (let i = 0; i < 30; i++) {
       if (!(await game.rngLocked())) break;
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         break;
       }
@@ -159,7 +159,7 @@ describe("BafCreditRouting", function () {
    * Set up alice with a winning claimable flip:
    *   - mint FLIP to alice
    *   - alice deposits coinflip stake during day N
-   *   - advanceGame + fulfill VRF with odd word → day N+1 resolves as a win
+   *   - mineFlip + fulfill VRF with odd word → day N+1 resolves as a win
    *   - drive cycle to completion (RNG unlocked)
    * Returns the day index of the winning flip.
    */

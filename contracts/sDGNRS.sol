@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGasBounds as GasBounds} from "./libraries/MineFlipGasBounds.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -28,14 +30,12 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {EntropyLib} from "./libraries/EntropyLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
-import {MineFlipBudget} from "./libraries/MineFlipBudget.sol";
+import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 
 
 /// @notice Interface for game contract player-facing functions used by sDGNRS.
 interface IDegenerusGamePlayer {
-    /// @notice Advance the game to the next level/day.
-    function advanceGame() external;
-    /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
+    /// @notice Crank the unified miner router (advance + box opens), paying any earned bounty.
     function mineFlip() external;
     /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
     /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes
@@ -352,7 +352,7 @@ contract sDGNRS {
     DayPending internal pendingAggregate;
 
     /// @dev One live beneficiary cohort, consumed before another day can request RNG.
-    ///      Manual claims leave the empty cohort pending until the keeper clears its
+    ///      Manual claims leave the empty cohort pending until the miner clears its
     ///      queue metadata and retries the Game's session-completion check.
     function redemptionSettlementPending() external view returns (bool) {
         return _redemptionWord != 1 && _redemptionPlayers.length != 0;
@@ -365,58 +365,63 @@ contract sDGNRS {
         if (_redemptionWord == 1) _redemptionWord = word;
     }
 
-    // Shared MineFlipBudget units. Reserve a whole beneficiary before
-    // settlement: first-claim costs plus each unchanged, at-most-5-ETH box chunk.
-    uint256 private constant REDEMPTION_BASE_UNITS = 40;
-    uint256 private constant REDEMPTION_CHUNK_UNITS = 28;
-    uint256 private constant REDEMPTION_FINISH_UNITS = 12;
+    // Admission bounds cover the complete beneficiary, including every unchanged 5 ETH
+    // lootbox chunk and direct/stETH funding. These are safety floors, never work charges.
+    uint256 private constant REDEMPTION_BASE_GAS = GasBounds.REDEMPTION_BASE_GAS;
+    uint256 private constant REDEMPTION_CHUNK_GAS = GasBounds.REDEMPTION_CHUNK_GAS;
+    uint256 private constant REDEMPTION_TAIL_GAS = GasBounds.REDEMPTION_TAIL_GAS;
 
-    /// @notice Settle a bounded FIFO batch; unspent claims keep their place for the next call.
-    /// @dev Game-only. Returns conservative execution charges separately from the existing
-    ///      per-successful-claim bounty quote. Never credits the Game a keeper bounty.
-    function processRedemptionSettlement(uint256 budget)
-        external returns (bool done, uint256 chargedUnits, uint256 rewardQuote)
+    function runRedemptionWork(uint256 allowance) external returns (MineFlipGas.Result memory result) {
+        if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
+        return _runRedemptionWork(allowance);
+    }
+
+    /// @dev Compatibility ABI. The supplied historical budget no longer chooses work extent.
+    /// This route never pays a second bounty; the Game rewards its measured engine work.
+    function processRedemptionSettlement(uint256)
+        external returns (bool done, uint256 gasUsed, uint256 rewardBasis)
     {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
-        if (budget > MineFlipBudget.BASIC_BUDGET) budget = MineFlipBudget.BASIC_BUDGET;
-        if (game.gameOver() || game.livenessTriggered()) return (true, 0, 0);
+        uint256 start = gasleft();
+        MineFlipGas.Result memory result = _runRedemptionWork(MineFlipGas.available());
+        return (result.done, start - gasleft(), result.rewardBasis);
+    }
+
+    function _runRedemptionWork(uint256 allowance) private returns (MineFlipGas.Result memory result) {
+        if (allowance == 0) return result;
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        if (game.gameOver() || game.livenessTriggered()) { result.done = true; return result; }
         uint256 cursor = _redemptionCursor;
         uint256 total = _redemptionPlayers.length;
-        if (_redemptionWord == 1 || total == 0) return (true, 0, 0);
+        if (_redemptionWord == 1 || total == 0) { result.done = true; return result; }
         if (game.rngConsumerStage() != 1) revert RedemptionStageBlocked();
-        if (cursor == total) {
-            if (budget < REDEMPTION_FINISH_UNITS) return (false, 0, 0);
-            _finishRedemptionSettlement();
-            return (true, REDEMPTION_FINISH_UNITS, 0);
-        }
+        if (!MineFlipGas.canRun(meter, REDEMPTION_TAIL_GAS, 0)) return result;
         uint24 day = _redemptionQueueDay;
         uint16 roll = redemptionPeriods[day];
         uint256 word = _redemptionWord;
-        uint256 start = cursor;
-        uint256 settled;
+        uint256 initialCursor = cursor;
         while (cursor < total) {
             address player = _redemptionPlayers[cursor];
             PendingRedemption memory claim = pendingRedemptions[player][day];
-            uint256 cost = 2; // Cold queue + pending-record reads, even when already claimed.
+            uint256 nextMax = 15_000;
             if (claim.ethValueOwed != 0 || claim.flipEscrow != 0) {
                 (, , uint256 lootbox,) = _redemptionAmounts(claim.ethValueOwed, roll, false);
                 uint256 chunks = lootbox == 0 ? 0 : (lootbox - 1) / 5 ether + 1;
-                cost = REDEMPTION_BASE_UNITS + chunks * REDEMPTION_CHUNK_UNITS;
+                nextMax = REDEMPTION_BASE_GAS + chunks * REDEMPTION_CHUNK_GAS;
             }
-            if (chargedUnits + cost + REDEMPTION_FINISH_UNITS > budget) break;
-            chargedUnits += cost;
+            if (!MineFlipGas.canRun(meter, nextMax, REDEMPTION_TAIL_GAS)) break;
             ++cursor;
-            if (_claimRedemptionFor(player, day, roll, false, word)) ++settled;
-        }
-        if (cursor == start) return (false, 0, 0);
-        chargedUnits += REDEMPTION_FINISH_UNITS;
-        done = cursor == total;
-        if (done) {
-            _finishRedemptionSettlement();
-        } else {
+            // Commit the frontier before any nested calls, matching manual FIFO settlement.
             _redemptionCursor = uint32(cursor);
+            if (_claimRedemptionFor(player, day, roll, false, word)) ++result.rewardBasis;
         }
-        if (settled != 0) rewardQuote = _redemptionBounty(settled);
+        result.progressed = cursor != initialCursor;
+        result.done = cursor == total;
+        if (result.done) {
+            _finishRedemptionSettlement();
+            result.progressed = true; // Clearing a manually drained cohort is real one-time work.
+        }
+        MineFlipGas.finish(meter);
     }
 
     function _finishRedemptionSettlement() private {
@@ -499,11 +504,11 @@ contract sDGNRS {
     uint256 private constant MIN_REDEMPTION_LOOTBOX_ETH = 0.01 ether;
 
     /// @dev 1,000 FLIP in base units — the FLIP one whole ticket mints, and the ETH→FLIP conversion
-    ///      numerator for the keeper box-bounty, matching the Game's PRICE_COIN_UNIT.
+    ///      numerator for the miner box-bounty, matching the Game's PRICE_COIN_UNIT.
     ///      FLIP per ETH = PRICE_COIN_UNIT / mintPrice.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
 
-    /// @dev Keeper box-bounty target (ETH wei) per settled redemption claim. Sized so the FLIP
+    /// @dev Miner box-bounty target (ETH wei) per settled redemption claim. Sized so the FLIP
     ///      bounty's ETH-value reimburses the ~48k-gas per-box settle at the ~0.5-gwei reference.
     ///      The reward is an illiquid coinflip credit, and every pending claim costs a real sDGNRS
     ///      gambling burn (>=1 whole token, one box per wallet per day) to create, so permissionlessly
@@ -631,8 +636,8 @@ contract sDGNRS {
     //                          PLAYER ACTIONS
     // =====================================================================
 
-    /// @notice Crank the game keeper router on behalf of sDGNRS (advance + box opens)
-    /// @dev Routes through mineFlip so sDGNRS earns the keeper bounty for the work;
+    /// @notice Crank the game miner router on behalf of sDGNRS (advance + box opens)
+    /// @dev Routes through mineFlip so sDGNRS earns the miner bounty for the work;
     ///      reverts NoWork() when nothing is due.
     function gameAdvance() external {
         game.mineFlip();
@@ -789,7 +794,7 @@ contract sDGNRS {
 
     /// @notice Burn sDGNRS to claim proportional share of backing assets
     /// @dev Post-gameOver: deterministic payout. During game: gambling path with RNG roll.
-    ///      Returns (0,0,0) during game; the keeper settles the claim automatically after resolution.
+    ///      Returns (0,0,0) during game; the miner settles the claim automatically after resolution.
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received (deterministic path only)
     /// @return stethOut stETH received (deterministic path only)
@@ -997,7 +1002,7 @@ contract sDGNRS {
             if (game.rngConsumerStage() != 1) revert RedemptionStageBlocked();
             _takeRedemptionHead(player, day);
         }
-        // Single live claims use the same pinned session word as the forced keeper drain.
+        // Single live claims use the same pinned session word as the forced miner drain.
         if (!_claimRedemptionFor(player, day, roll, isTerminal, 0)) revert NoClaim();
     }
 
@@ -1030,7 +1035,7 @@ contract sDGNRS {
             }
         }
 
-        // Keeper bounty: a small FLIP flip-credit per successful claim this call, paid to the
+        // Miner bounty: a small FLIP flip-credit per successful claim this call, paid to the
         // caller. Counts only successful claims — empty (player, day) slots are skipped and earn nothing.
         // The ETH-value tracks the per-claim settle gas at the 0.5-gwei reference (FLIP per ETH =
         // PRICE_COIN_UNIT / mintPrice), so the credit holds its gas-reimbursement value across the
@@ -1134,7 +1139,7 @@ contract sDGNRS {
             uint16 actScore = claimActivityScore > 0 ? claimActivityScore - 1 : 0;
             // Burns commit before their settlement session's word is known. The forced
             // cohort pins that word, including a session delivered after a multi-day stall.
-            // Manual claims must use the same pinned entropy as the keeper drain.
+            // Manual claims must use the same pinned entropy as the miner drain.
             uint256 rngWord = rngWordNext;
             if (_redemptionQueueDay == day) rngWord = _redemptionWord;
             if (rngWord <= 1) revert NotResolved();

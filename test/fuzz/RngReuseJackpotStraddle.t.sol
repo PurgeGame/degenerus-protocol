@@ -201,7 +201,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
             _fulfillVrf();
             vm.recordLogs();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (ok) {
                 (uint8 stage, bool found) = _lastAdvanceStage(vm.getRecordedLogs());
                 if (found && stage == STAGE_JACKPOT_DAILY_STARTED) {
@@ -222,7 +222,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
             if (game.jackpotPhase()) return;
 
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) {
                 // Next wall-day: seed the next pool over target + buy so the level
                 // transition (→ jackpot phase) happens promptly.
@@ -240,7 +240,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         for (uint256 i = 0; i < 120; i++) {
             if (!game.rngLocked()) return;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) return;
         }
     }
@@ -250,7 +250,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         for (uint256 i = 0; i < 120; i++) {
             if (game.rngWordForDay(day) != 0) break;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
         return game.rngWordForDay(day);

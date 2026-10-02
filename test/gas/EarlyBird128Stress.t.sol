@@ -64,14 +64,14 @@ abstract contract EarlyBird128StressFixture is DayOneFixture {
         HeroStressSeeder(payable(address(game))).setEarlyBirdFuture(futurePool());
         vm.etch(address(game), realCode);
         vm.deal(address(game), uint256(futurePool()) + 10_000 ether);
-        game.advanceGame();
+        game.mineFlip();
         if (late()) _warpToDay(401, 3 hours);
     }
 
     function test_EarlyBird128ColdHeroAndPartialSourceWords() public {
         vm.recordLogs();
         uint256 g0 = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         uint256 used = g0 - gasleft();
         emit log_named_uint("EARLY_BIRD_128_HERO_TAIL_COLD_WORDS", used);
         Vm.Log[] memory logs = vm.getRecordedLogs();

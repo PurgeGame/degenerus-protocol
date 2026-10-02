@@ -13,25 +13,22 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 /// @notice The first fresh request after the purchase goal freezes the next level's
 ///         far-future pool. A mid-day request gives that pool an isolated work latch,
 ///         retaining the ordinary current-level write buffer for a later word. The mid-day
-///         branch of advanceGame re-runs the ticket worker only while the sweep probe still
+///         branch of mineFlip re-runs the ticket worker only while the sweep probe still
 ///         finds work (or a foil bucket is pending), and only a FINISHED return releases
 ///         ticketsFullyProcessed and the latch. The batch that empties the frozen pool must
 ///         therefore report finished itself: once the pool is empty nothing re-enters the
-///         worker, advanceGame reverts NotTimeYet, and a stuck latch would refuse every
+///         worker, mineFlip reverts NoWork, and a stuck latch would refuse every
 ///         further mid-day request (RngNotReady) until the next day's advance.
 ///
 ///         Seen live on day 33 / level 12 (blocks 47223421..47223981).
 ///
 ///         Suite shape:
-///           A  advance   — drained by advanceGame: the latch releases the same day and a
+///           A  advance   — drained by mineFlip: the latch releases the same day and a
 ///                          second mid-day request is accepted.
 ///           B  router    — drained through the mineFlip router only: same outcome.
-///           C  foil      — a sealed foil bucket is pending alongside the pool: the batch
-///                          that empties the pool must not report finished, and the latch
-///                          releases only after the foil drain, still the same day. Normal
-///                          play drains a day's sealed bucket inside that day's advance chain,
-///                          so the pending bucket is STAGED (an empty bucket for today, whose
-///                          word is sealed): it isolates the finished-flag composition.
+///           C  foil      — a real foil purchase stays in the ordinary write cohort while
+///                          the isolated future pool drains. Its next normal commitment
+///                          generates the foil before completing, still the same day.
 ///           D  craps     — an ordinary request while a craps window waits on the write buffer
 ///                          (which waives the lootbox pending-value gates, so no lootbox is
 ///                          needed) freezes and latches the same way; the latch releases the
@@ -49,7 +46,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     uint24 private constant TICKET_FAR_FUTURE_BIT = uint24(1) << 22;
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
 
-    bytes4 private constant SEL_NOT_TIME_YET = bytes4(keccak256("NotTimeYet()"));
+    bytes4 private constant SEL_NOT_TIME_YET = bytes4(keccak256("NoWork()"));
     bytes4 private constant SEL_RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
 
     function setUp() public {
@@ -65,7 +62,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // A. Drained by advanceGame
+    // A. Drained by mineFlip
     // ---------------------------------------------------------------------
 
     function testMiddayLatchReleasesAfterFrozenPoolDrainsViaAdvance() public {
@@ -94,27 +91,29 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
             if (!ok) break;
         }
         // The router only advances while advanceDue() says so; whatever it left must be
-        // the released state, with advanceGame itself refusing only as "nothing to do".
+        // the released state, with mineFlip itself refusing only as "nothing to do".
         bytes4 last = _crankAdvance(1);
 
         _assertReleased(ffKey, day, last);
     }
 
     // ---------------------------------------------------------------------
-    // C. A sealed foil bucket pending alongside the frozen pool
+    // C. Foil work preserves the isolated future-pool boundary
     // ---------------------------------------------------------------------
 
     function testMiddayLatchWaitsForFoilThenReleasesSameDay() public {
         vm.pauseGasMetering();
-        (uint24 ffKey, uint24 day) = _latchMiddayAfterTarget(false);
-        _stagePendingFoilBucket(day);
-        assertTrue(_foilPending(), "reachability: a sealed foil bucket must be pending mid-day");
+        (uint24 ffKey, uint24 day) = _latchMiddayAfterTarget(false, true);
+        assertGt(_foilWriteCount(), 0, "reachability: the paid foil awaits a normal commitment");
+        assertFalse(_foilResolved(), "the future-pool word cannot resolve the ordinary write foil");
 
         _fulfillPending();
         bytes4 last = _crankAdvance(200);
 
-        assertFalse(_foilPending(), "the mid-day drain must finish the foil bucket");
+        assertGt(_foilWriteCount(), 0, "isolated future-pool completion preserves the paid foil");
+        assertFalse(_foilResolved(), "the isolated pool never borrows the foil's future word");
         _assertReleased(ffKey, day, last);
+        assertTrue(_foilResolved(), "the next ordinary midday drain must finish the paid foil");
     }
 
     // ---------------------------------------------------------------------
@@ -142,6 +141,10 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     ///      met at the preceding daily request would have minted this pool before the seal.
     ///      The next mid-day request is therefore the first fresh word after this crossing.
     function _latchMiddayAfterTarget(bool viaCraps) internal returns (uint24 ffKey, uint24 day) {
+        return _latchMiddayAfterTarget(viaCraps, false);
+    }
+
+    function _latchMiddayAfterTarget(bool viaCraps, bool withFoil) internal returns (uint24 ffKey, uint24 day) {
         uint24 programLevel = _driveToSealedPurchaseDay();
         _finishReadConsumers();
         ffKey = (programLevel + 2) | TICKET_FAR_FUTURE_BIT;
@@ -154,6 +157,11 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         currentKey = (programLevel + 1) | (before ? TICKET_SLOT_BIT : 0);
         currentOwed = uint32(TicketQueueStorage.owed(address(game), currentKey, buyer) >> 8);
         assertGt(currentOwed, 0, "reachability: current tickets await their own commitment");
+        if (withFoil) {
+            (,,,, uint256 foilPrice) = game.purchaseInfo();
+            vm.prank(buyer);
+            game.purchase{value: foilPrice * 10}(buyer, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        }
         if (viaCraps) {
             // A shut craps window waiting on the write buffer; an ordinary caller requests.
             crapsWindowBuffer = uint48(RecyclingState.writeBuffer(address(game)));
@@ -178,7 +186,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         assertEq(_midDayLatch(), 0, "the latch must release once the frozen pool is drained");
         assertTrue(_ticketsFullyProcessed(), "the read slot must be marked drained");
         assertFalse(game.advanceDue(), "nothing is left for a keeper");
-        assertEq(lastRevert, SEL_NOT_TIME_YET, "advanceGame must refuse only as nothing-to-do");
+        assertEq(lastRevert, SEL_NOT_TIME_YET, "mineFlip must refuse only as nothing-to-do");
         assertEq(uint32(TicketQueueStorage.owed(address(game), currentKey, buyer) >> 8), currentOwed,
             "the isolated drain preserves original current-level tickets");
         assertEq(uint32(TicketQueueStorage.owed(address(game), currentKey, lateBuyer) >> 8), 40,
@@ -214,9 +222,10 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
             require(!game.gameOver(), "harness: gameOver before the seal");
             (uint24 lvl, bool inJackpot, bool lpd, bool rngL, ) = game.purchaseInfo();
             if (!inJackpot && !lpd && !rngL && _ticketsFullyProcessed()
-                && game.rngWordForDay(game.currentDayView()) != 0 && !game.advanceDue()) return lvl;
+                && game.rngWordForDay(game.currentDayView()) != 0 && game.rngComplete()
+                && !game.advanceDue()) return lvl;
             _fulfillPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) {
                 simTime += 1 days + 1;
                 vm.warp(simTime);
@@ -232,7 +241,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     function _crankAdvance(uint256 n) internal returns (bytes4 last) {
         for (uint256 i = 0; i < n; i++) {
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) return _selector(ret);
         }
     }
@@ -259,19 +268,6 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(buyer, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-    }
-
-    /// @dev Stage an empty foil bucket for `day` as the next to drain: foilCursor = 0 and
-    ///      foilGenerationDay = foilFirstDrawDay = day (slot 62, bytes 0 / 4 / 7), with no buyers
-    ///      in foilQueue[day]. `day`'s word is sealed, so _foilDrainPending reads true and the
-    ///      drain walks the bucket (resolving nobody) and moves past it.
-    function _stagePendingFoilBucket(uint24 day) internal {
-        require(RecyclingState.dailyWord(address(game), uint24(day)) != 0, "harness: the day word must be sealed");
-        uint256 s62 = uint256(vm.load(address(game), bytes32(uint256(62))));
-        require(uint24(s62 >> 56) == 0, "harness: no foil may have been bought");
-        s62 &= ~((uint256(1) << 80) - 1);
-        s62 |= (uint256(day) << 56) | (uint256(day) << 32);
-        vm.store(address(game), bytes32(uint256(62)), bytes32(s62));
     }
 
     function _middayRequest() internal {
@@ -316,14 +312,17 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         return (uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224) & 0xFF;
     }
 
-    /// @dev _foilDrainPending mirror: foilGenerationDay / foilFirstDrawDay (slot 62, bytes 4 and 7)
-    ///      against rngWordByDay (slot 10).
-    function _foilPending() internal view returns (bool) {
-        uint256 s62 = uint256(vm.load(address(game), bytes32(uint256(62))));
-        uint24 dd = uint24(s62 >> 32);
-        uint24 last = uint24(s62 >> 56);
-        if (last == 0 || dd > last) return false;
-        return RecyclingState.dailyWord(address(game), uint24(dd)) != 0;
+    function _foilWriteCount() internal view returns (uint256) {
+        return uint256(vm.load(address(game),
+            keccak256(abi.encode(uint256(_ticketWriteSlot() ? 1 : 0), uint256(61)))));
+    }
+
+    function _foilResolved() internal view returns (bool) {
+        uint24 lvl = currentKey & ~TICKET_SLOT_BIT;
+        uint256 packed = uint256(vm.load(address(game),
+            keccak256(abi.encode(buyer, keccak256(abi.encode(uint256(lvl & 3), uint256(58)))))));
+        assertEq(uint24(packed >> 208), lvl, "foil record retains the purchased level");
+        return packed >> 255 != 0;
     }
 
 }

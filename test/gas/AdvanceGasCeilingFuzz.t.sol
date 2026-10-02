@@ -3,12 +3,12 @@ pragma solidity ^0.8.26;
 
 import {AdvanceGasCeilingBase} from "./AdvanceGasCeiling.sol";
 
-/// @title AdvanceGasCeilingFuzz — FUZZ-03 GAS-CEILING: the durable EIP-7825 advanceGame property
+/// @title AdvanceGasCeilingFuzz — FUZZ-03 GAS-CEILING: the durable EIP-7825 mineFlip property
 /// @notice Exercises the REUSABLE AdvanceGasCeilingBase (test/gas/AdvanceGasCeiling.sol) over MANY
-///         reachable worst-case advanceGame pre-states, asserting EVERY single advanceGame tx in the
+///         reachable worst-case mineFlip pre-states, asserting EVERY single mineFlip tx in the
 ///         game-over drain consumes <= 11,500,000 gas including intrinsic, below EIP-7825.
 ///         Run with FOUNDRY_ISOLATE=true so each advance has fresh transaction state.
-///         advanceGame is the mandatory
+///         mineFlip is the mandatory
 ///         permissionless heartbeat — a single tx above the cap can never complete -> permanent,
 ///         unrecoverable game-over (the protocol bricks).
 ///
@@ -50,8 +50,8 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
         _deployProtocol();
     }
 
-    /// @notice The headline durable property: across reachable worst-case advanceGame pre-states
-    ///         (fuzzed bucket geometry / level / owed sizes), EVERY single advanceGame tx in the
+    /// @notice The headline durable property: across reachable worst-case mineFlip pre-states
+    ///         (fuzzed bucket geometry / level / owed sizes), EVERY single mineFlip tx in the
     ///         game-over drain stays <= EIP7825_TX_GAS_CAP (asserted per-tx inside the base) and the
     ///         heavy branch is actually reached (non-vacuity), with the per-tx max surfaced for the
     ///         < GAS_TARGET soft check.
@@ -74,7 +74,7 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
         uint256 rngWord = uint256(keccak256(abi.encodePacked("gasceil_fuzz", geomSeed))) | 1;
 
         // (a) etch the GameSeeder, write the worst-case pre-state from these params, restore the real
-        //     production code, fund + warp. (b) drive the REAL advanceGame to game-over, asserting
+        //     production code, fund + warp. (b) drive the REAL mineFlip to game-over, asserting
         //     every tx <= the EIP-7825 cap inside the base.
         _etchSeedRestore(lvl, rngWord, readOwed, writeOwed, FUZZ_BASE);
         (uint256 maxTxGas, bool reachedHeavy) = _driveAndAssertUnderCap(MAX_DRAIN_TX);
@@ -90,7 +90,7 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
         // unusually-heavy reachable geometry does not red the durable cap property — the HARD floor is
         // the 11.5M cap, asserted per-tx in the base).
         emit log_named_uint("fuzz_max_advance_tx_gas", maxTxGas);
-        assertLe(maxTxGas, REVIEW_GAS_CAP, "GAS-CEIL: fuzzed max advanceGame tx exceeded 11.5M");
+        assertLe(maxTxGas, REVIEW_GAS_CAP, "GAS-CEIL: fuzzed max mineFlip tx exceeded 11.5M");
     }
 
     /// @dev Preserve the level-51 queued-state seed as an additional reachable gas witness.
@@ -104,7 +104,7 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
     }
 
     /// @notice The named v60 game-over composition regression (the gasceil shape, fixed 6d2c8d0c),
-    ///         driven through the SAME reusable component. Pre-fix the first advanceGame ran
+    ///         driven through the SAME reusable component. Pre-fix the first mineFlip ran
     ///         round1 + round2 + terminal-jackpot in ONE ~20M tx; post-fix the drain splits across
     ///         several txs each < cap, game-over still completes, and every tx clears the 10M soft
     ///         target. Mirrors the one-shot's assertions via the extracted base.
@@ -126,6 +126,6 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
         // The breach assertion: pre-fix this FAILS on the ~20M composed tx; post-fix every tx < cap
         // (already asserted per-tx in the base) AND the max clears the 10M soft target.
         emit log_named_uint("regression_max_advance_tx_gas", maxTxGas);
-        assertLt(maxTxGas, GAS_TARGET, "every game-over advanceGame tx clears the 10M soft target");
+        assertLt(maxTxGas, GAS_TARGET, "every game-over mineFlip tx clears the 10M soft target");
     }
 }

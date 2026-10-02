@@ -447,7 +447,9 @@ contract CrapsHighRollerTest is CrapsPins {
         _closeOn(craps, slot, 0, uint256(keccak256("final")));
 
         // One of the two seats settled: the lane is loaded but not decided.
-        assertEq(_resolveForLane(craps, slot, 1, false).length, 0, "a half-settled field paid its lane");
+        vm.recordLogs();
+        craps.resolveSeats(slot, 1);
+        assertEq(_lanePaymentsIn(vm.getRecordedLogs(), false).length, 0, "a half-settled field paid its lane");
         bytes32 key = craps.battleKeyOf(a);
         (,,,, bool done) = craps.highFieldOf(key);
         assertFalse(done, "the lane latched before the field was final");

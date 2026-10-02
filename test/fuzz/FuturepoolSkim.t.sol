@@ -9,7 +9,7 @@ pragma solidity 0.8.34;
 //    (inlined into consolidation in v20.0, commit d8dbd9e3).
 //    D-03 forbids re-extracting it.
 //  - D-02 requires tests exercise the full pipeline in the single test
-//    file (no splitting). Full-pipeline tests drive game.advanceGame()
+//    file (no splitting). Full-pipeline tests drive game.mineFlip()
 //    through DeployProtocol so the consolidation flow runs end-to-end.
 //  - SkimHarness is retained (D-03 pattern) for the pure-math fuzz tests
 //    that exercise the _nextToFutureBps pure function and the packed-slot
@@ -19,9 +19,9 @@ pragma solidity 0.8.34;
 //
 // NOTE on coverage reachability: _consolidatePoolsAndRewardJackpots is
 // declared `private` on DegenerusGameAdvanceModule; a SkimHarness cannot
-// invoke it directly. The only production entry is game.advanceGame()
+// invoke it directly. The only production entry is game.mineFlip()
 // which has deep state preconditions (ticket processing, VRF, level
-// counters, purchaseStartDay offsets). This file drives advanceGame()
+// counters, purchaseStartDay offsets). This file drives mineFlip()
 // through DeployProtocol to exercise the consolidation flow from the
 // outside; direct consolidation invocation is not possible without a
 // contract visibility change that D-03 forbids.
@@ -83,7 +83,7 @@ contract SkimHarness is DegenerusGameAdvanceModule {
 /// @title FuturepoolSkimTest -- Full-pipeline integration + pure-math
 ///        coverage of the time-based future-take skim. Inherits
 ///        DeployProtocol so integration tests drive the real consolidation
-///        flow via game.advanceGame(). Full-pipeline invariants relevant
+///        flow via game.mineFlip(). Full-pipeline invariants relevant
 ///        to the skim (conservation, insurance, bps curve shape) live in
 ///        this one file per D-02's "no splitting" rule.
 contract FuturepoolSkimTest is DeployProtocol {
@@ -109,7 +109,7 @@ contract FuturepoolSkimTest is DeployProtocol {
     }
 
     // =========================================================================
-    //  Integration: production advanceGame requests real mock VRF and emits
+    //  Integration: production mineFlip requests real mock VRF and emits
     //  the actual skim. Literal expected base rates catch caller-side age offsets.
     // =========================================================================
     function test_fullPipeline_day8Trough() public { _checkTransitionSkim(8, 5, 1500); }
@@ -130,7 +130,7 @@ contract FuturepoolSkimTest is DeployProtocol {
             uint256 nextBefore = game.nextPrizePoolView();
             uint256 futureBefore = game.futurePrizePoolView();
             vm.recordLogs();
-            game.advanceGame();
+            game.mineFlip();
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics[0] != skimSig) continue;

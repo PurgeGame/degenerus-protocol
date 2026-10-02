@@ -20,7 +20,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
 const ADVANCE_GAME_STAGE6_GAS_CEILING = 10_000_000;
 
-describe("SURF-06 — advanceGame STAGE_PURCHASE_DAILY gas under the 10M per-call ceiling", function () {
+describe("SURF-06 — mineFlip STAGE_PURCHASE_DAILY gas under the 10M per-call ceiling", function () {
   this.timeout(120_000);
 
   it("stage-6 (STAGE_PURCHASE_DAILY) gas stays under ADVANCE_GAME_STAGE6_GAS_CEILING (10M)", async function () {
@@ -51,7 +51,7 @@ describe("SURF-06 — advanceGame STAGE_PURCHASE_DAILY gas under the 10M per-cal
     for (let cycle = 0; cycle < 5 && stage6Gas === null; cycle++) {
       await advanceToNextDay();
       try {
-        const tx1 = await game.connect(deployer).advanceGame();
+        const tx1 = await game.connect(deployer).mineFlip();
         await tx1.wait();
         const requestId = await getLastVRFRequestId(mockVRF);
         if (requestId > 0n) {
@@ -66,7 +66,7 @@ describe("SURF-06 — advanceGame STAGE_PURCHASE_DAILY gas under the 10M per-cal
       for (let i = 0; i < 50; i++) {
         let tx;
         try {
-          tx = await game.connect(deployer).advanceGame();
+          tx = await game.connect(deployer).mineFlip();
         } catch (_) {
           break;
         }
@@ -84,11 +84,11 @@ describe("SURF-06 — advanceGame STAGE_PURCHASE_DAILY gas under the 10M per-cal
 
     console.log(`[SURF-06 advance-gas] STAGE_PURCHASE_DAILY (stage-6) gas = ${stage6Gas} (ceiling ${ADVANCE_GAME_STAGE6_GAS_CEILING})`);
 
-    // The only load-bearing bound: a single advanceGame call must stay well under
+    // The only load-bearing bound: a single mineFlip call must stay well under
     // the 10M per-call target (and provably never approach the 16.7M block ceiling).
     expect(
       stage6Gas < ADVANCE_GAME_STAGE6_GAS_CEILING,
-      `advanceGame stage-6 gas ${stage6Gas} exceeds the ${ADVANCE_GAME_STAGE6_GAS_CEILING} per-call ceiling`,
+      `mineFlip stage-6 gas ${stage6Gas} exceeds the ${ADVANCE_GAME_STAGE6_GAS_CEILING} per-call ceiling`,
     ).to.equal(true);
   });
 });

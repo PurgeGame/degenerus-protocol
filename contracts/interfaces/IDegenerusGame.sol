@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -234,6 +236,9 @@ interface IDegenerusGame {
         uint256 rngWord
     ) external returns (uint256 paidWei);
 
+    function runTerminalJackpotWork(uint256 poolWei, uint24 targetLvl, uint256 rngWord, uint256 allowance)
+        external returns (MineFlipGas.Result memory result, uint256 paidDelta);
+
     /// @notice Roll, record and emit level 1's purchase-day board without running any
     ///         distribution. Used at purchaseLevel==1 where payDailyJackpot is skipped.
     /// @param randWord VRF entropy for the board.
@@ -275,6 +280,9 @@ interface IDegenerusGame {
     ///      lower LINK floor — it requests to settle a bound window, not to drain the lootbox
     ///      queue. Every timing gate still binds on it.
     function requestLootboxRng() external;
+
+    /// @notice Admin-only transport retry of an unanswered request after its 20-hour timeout.
+    function retryRng() external;
 
     /// @notice Mint mid-day RNG credit to a LINK donor.
     /// @dev Access: ADMIN only. Credits waive the pending-value gates on

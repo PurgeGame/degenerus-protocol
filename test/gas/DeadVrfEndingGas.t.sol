@@ -96,7 +96,7 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
     function test_ColdDeadVrfBatchFits11_5M() public {
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.advanceGame{gas: TX_CAP - INTRINSIC}();
+        game.mineFlip{gas: TX_CAP - INTRINSIC}();
         uint256 used = beforeGas - gasleft() + INTRINSIC;
         emit log_named_uint("DEAD_VRF_COLD_INCLUDING_INTRINSIC", used);
         assertLt(used, 11_500_000, "dead-VRF batch exceeds audit target");
@@ -187,7 +187,7 @@ contract DeadVrfClaimGas is DeployProtocol {
         s.seedDeadStall(9);
         uint256 uncreated = s.seedFinalBatch(10);
         vm.etch(address(game), code);
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.gameOver());
         expectedClaim = ((4400 ether * 25_600) / (25_600 + uncreated) / 256) * 256;
     }

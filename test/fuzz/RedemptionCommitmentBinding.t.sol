@@ -88,7 +88,7 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
 
     function _request() private {
         for (uint256 i; i < 50 && !game.rngLocked(); ++i) {
-            game.advanceGame();
+            game.mineFlip();
         }
         assertTrue(game.rngLocked(), "actual daily request required");
         (,, bool fulfilled) = mockVRF.pendingRequests(mockVRF.lastRequestId());
@@ -97,7 +97,7 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
 
     function _finish() private {
         for (uint256 i; i < 100 && game.rngLocked(); ++i) {
-            game.advanceGame();
+            game.mineFlip();
         }
         assertFalse(game.rngLocked(), "bounded public daily resolution required");
     }

@@ -130,7 +130,7 @@ abstract contract JackpotBattleStageFixture is DeployProtocol {
     function _measure() internal returns (uint256 used, Tally memory t) {
         vm.recordLogs();
         uint256 g0 = gasleft();
-        game.advanceGame{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
+        game.mineFlip{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
         used = g0 - gasleft() + INTRINSIC;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         address[] memory tk = new address[](TICKET_MAX + 8);
@@ -254,7 +254,7 @@ contract JackpotTicketOnlyPhaseEndX00 is JackpotBattleStageFixture {
 /// @title JackpotPhaseStageSequence — proves the retired stage 13 never runs and that a jackpot
 ///        phase's per-day stage sequence is exactly word apply (18), battle (16), ETH (10),
 ///        early-bird (14, day 1), then coin+tickets (8, or 9 on the final day).
-/// @notice Drives a REAL protocol (DeployProtocol, real advanceGame, real mock VRF) through a
+/// @notice Drives a REAL protocol (DeployProtocol, real mineFlip, real mock VRF) through a
 ///         whole standard (3-day) jackpot phase and a turbo (1-day) one, recording every
 ///         Advance(uint8,uint24) log. Filtered to {18, 16, 10, 14, 8, 9}, the sequence must be
 ///         exactly: day 1 -> 18, 16, 10, 14, 8 (or 18, 16, 10, 14, 9 on a turbo's one and only,
@@ -276,7 +276,7 @@ contract JackpotPhaseStageSequence is DeployProtocol {
     }
 
     /// @dev Fresh jackpot-phase entry at day 400, counter 0, no request outstanding yet: the
-    ///      loop below fires the day's own real VRF request on its first advanceGame() call.
+    ///      loop below fires the day's own real VRF request on its first mineFlip() call.
     function _seedFreshPhase(uint24 lvl, uint8 flags) internal {
         _deployProtocol();
         _warpToDay(400, 3 hours);
@@ -309,7 +309,7 @@ contract JackpotPhaseStageSequence is DeployProtocol {
                 }
             }
             vm.recordLogs();
-            game.advanceGame();
+            game.mineFlip();
             Vm.Log[] memory logs = vm.getRecordedLogs();
             uint8 st = 255;
             for (uint256 j; j < logs.length; ++j) {

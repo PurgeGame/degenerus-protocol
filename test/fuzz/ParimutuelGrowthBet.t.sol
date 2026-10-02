@@ -1149,7 +1149,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         for (uint256 j = 0; j < 200; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -1201,7 +1201,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _finishReadConsumers();
         bool ok;
         for (uint256 i; i < 100 && !game.rngLocked(); ++i) {
-            (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             require(ok, "harness: prerequisites and daily request must progress");
         }
         require(game.rngLocked(), "harness: the day's word must be in flight");
@@ -1287,7 +1287,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
             for (uint256 j = 0; j < 200; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
                 if (game.jackpotPhase() && game.jackpotDuration() == 1) {
@@ -1320,7 +1320,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
             for (uint256 j = 0; j < 200; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
                 // The span: draws ended, flag not yet dropped.

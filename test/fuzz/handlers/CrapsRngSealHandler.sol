@@ -48,7 +48,7 @@ import {CrapsViews} from "../../craps/CrapsViews.sol";
 ///                                             either window, so no craps door may touch the set.
 ///
 ///      ISOLATION. Every craps action snapshots the game's enumerated set immediately before and
-///      re-reads it immediately after the call alone; the exempt machinery (advanceGame, the VRF
+///      re-reads it immediately after the call alone; the exempt machinery (mineFlip, the VRF
 ///      callback, and the arm's request when NO window is open) is never measured.
 ///
 ///      NON-VACUITY. The invariant's afterInvariant gates on days opened, arms, arms taken while a
@@ -227,7 +227,7 @@ contract CrapsRngSealHandler is Test {
         // A daily window left open by openDailyWindow is completed first (exempt machinery).
         for (uint256 i; i < 4 && game.rngLocked(); i++) {
             _fulfilPending(seed + 100 + i);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
         // Both lanes: the house banks its level cut as HIGH passes and the seat spends those first.
         (uint256 hbn, uint256 hbh) = craps.passCreditsOf(ContractAddresses.SDGNRS);
@@ -239,11 +239,11 @@ contract CrapsRngSealHandler is Test {
         vm.warp(_dayStart() + 1 days + 5 minutes);
         _buyTicket();
         vm.prank(currentActor);
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
         for (uint256 i; i < 8; i++) {
             _fulfilPending(seed + i);
             vm.prank(currentActor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             if (!game.rngLocked() && _crapsDayOpen()) break;
         }
         _finishHumanRead();
@@ -294,7 +294,7 @@ contract CrapsRngSealHandler is Test {
     function fulfil(uint256 wordSeed) external {
         _fulfilPending(wordSeed);
         for (uint256 i; i < 4 && game.rngLocked(); i++) {
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
         _noteOpenedDay();
         _checkSealedHeaders();
@@ -311,7 +311,7 @@ contract CrapsRngSealHandler is Test {
             return;
         }
         if (!game.rngLocked() && game.isRngFulfilled()) {
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
         // Property (3): the request that just landed must not have been the one in flight when
         // any armed field bound its index.
@@ -339,7 +339,7 @@ contract CrapsRngSealHandler is Test {
         _buyTicket();
         for (uint256 i; i < 4 && !game.rngLocked(); i++) {
             vm.prank(currentActor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
         return game.rngLocked();
     }
@@ -739,7 +739,7 @@ contract CrapsRngSealHandler is Test {
             _fulfilPending(pickSeed);
             // Let an open daily window finish: its word seals whatever window waits on the buffer.
             for (uint256 i; i < 8 && game.rngLocked(); i++) {
-                try game.advanceGame() {} catch {}
+                try game.mineFlip() {} catch {}
                 _fulfilPending(pickSeed + 4 + i);
             }
             slot = _wordedSettleTarget(pickSeed);
@@ -753,7 +753,7 @@ contract CrapsRngSealHandler is Test {
                 // send an ordinary one, and land that.
                 _fulfilPending(pickSeed + 2);
                 for (uint256 i; i < 8 && game.rngLocked(); i++) {
-                    try game.advanceGame() {} catch {}
+                    try game.mineFlip() {} catch {}
                     _fulfilPending(pickSeed + 4 + i);
                 }
                 slot = _wordedSettleTarget(pickSeed);

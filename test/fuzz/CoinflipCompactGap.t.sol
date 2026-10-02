@@ -31,7 +31,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
             bool expectedWin = (root >> (1 + day - originalStart)) & 1 != 0;
             (uint16 reward, bool win) = coinflip.getCoinflipDayResult(day);
             assertEq(win, expectedWin, "gap win follows its original root bit");
-            assertEq(reward, expectedWin ? _expectedReward(0, root, day) : 1, "tagged reward uses root and day");
+            assertEq(reward, expectedWin ? 100 : 1, "backfill is double or nothing; loss keeps sentinel");
         }
     }
 
@@ -62,7 +62,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         }
     }
 
-    function test_OutsideBitsDoNotChangeGapWins() public {
+    function test_OutsideBitsDoNotChangeGapWinsOrFixedRewards() public {
         uint256 root = 0x9a532fac;
         _gap(root, GAP_START, GAP_END);
         bool[31] memory originalWins;
@@ -70,7 +70,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
             (, originalWins[day - GAP_START]) = coinflip.getCoinflipDayResult(day);
         }
         // A fresh disjoint range has the same offsets. Flip bit 0 and every bit
-        // above the gap slice; reward sizes may change with the tagged root roll.
+        // above the gap slice; neither outcomes nor fixed reward sizes may change.
         uint256 other = root ^ ~uint256(ALL_GAP_WINS);
         _gap(other, GAP_END, GAP_END + 31);
         _assertGap(other, GAP_END, GAP_END + 31);
@@ -85,7 +85,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         uint256 pool = coinflip.recordPool();
         uint256 backing = _backing();
         vm.recordLogs();
-        _gap(99, GAP_START, GAP_END);
+        _gap(type(uint256).max, GAP_START, GAP_END);
         assertEq(vm.getRecordedLogs().length, 0, "completed retry emits no settlement");
         assertEq(coinflip.recordPool(), pool);
         assertEq(_backing(), backing);
@@ -115,6 +115,17 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         (afterReward, afterWin) = coinflip.getCoinflipDayResult(GAP_START - 1);
         assertEq(afterReward, beforeReward, "neighbor resolution preserves earlier packed lanes");
         assertEq(afterWin, beforeWin);
+    }
+
+    function test_RecoveryDayStillUsesNormalRandomRewardAndBitZero() public {
+        uint256 root = 0x12345;
+        while (_expectedReward(0, root, GAP_END) == 100) root += 2;
+        _gap(root, GAP_START, GAP_END);
+        _assertGap(root, GAP_START, GAP_END);
+        (uint16 reward, bool win) = _resolveAndRead(0, root, GAP_END);
+        assertTrue(win, "recovery day uses root bit zero");
+        assertEq(reward, _expectedReward(0, root, GAP_END), "actual day retains its tagged amount roll");
+        assertNotEq(reward, 100, "fixture distinguishes normal roll from fixed backfill amount");
     }
 
     function test_CompletedOversizedGapRetryDoesNothing() public {
@@ -175,19 +186,49 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         uint256 batchPool = coinflip.recordPool();
         uint256 batchBacking = _backing();
         (, , uint256 batchCarry, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
-        assertGt(batchCarry, 100_000 ether, "all wins compound the funded stake");
+        uint256 expectedCarry = 100_000 ether;
+        for (uint24 day = GAP_START; day < GAP_END; ++day) {
+            uint256 payout = expectedCarry * 2;
+            expectedCarry = payout + payout * 75 / 10_000;
+        }
+        assertEq(batchCarry, expectedCarry, "every win doubles then applies the existing0.75% recycle bonus");
         assertEq(batchBacking, reserve + batchCarry, "seed reserve and rolling winnings are disjoint");
         _assertGap(ALL_GAP_WINS, GAP_START, GAP_END);
         assertTrue(vm.revertToState(snapshot));
         for (uint24 day = GAP_START; day < GAP_END; ++day) {
             // Ordinary settlement independently reaches the same per-day win/reward.
-            uint256 word = _wordForExactReward(day, _expectedReward(0, ALL_GAP_WINS, day), true);
+            uint256 word = _wordForExactReward(day, 100, true);
             _resolveAndRead(0, word, day);
         }
         (, , uint256 sequentialCarry, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
         assertEq(sequentialCarry, batchCarry, "daily carry rounding and order match");
         assertEq(_backing(), batchBacking, "backing matches ordinary settlements");
         assertEq(coinflip.recordPool(), batchPool, "record pool matches ordinary settlements");
+    }
+
+    function test_BackfillManualClaimsPayDoubleOrNothing() public {
+        _fundGap();
+        address player = makeAddr("backfill_manual_claimant");
+        uint256 stake = 100 ether + 7;
+        vm.prank(GAME);
+        coinflip.creditFlip(player, stake);
+        assertEq(coinflip.coinflipAmount(player), stake, "actual funded next-day stake");
+        uint256 snapshot = vm.snapshotState();
+        _gap(2, GAP_START, GAP_START + 1);
+        assertEq(coinflip.previewClaimCoinflips(player), stake * 2);
+        uint256 beforeBalance = coin.balanceOf(player);
+        vm.prank(player);
+        uint256 claimed = coinflip.claimCoinflips(address(0), type(uint256).max);
+        assertEq(claimed, stake * 2, "winning backfill returns stake plus100% profit");
+        assertEq(coin.balanceOf(player), beforeBalance + stake * 2);
+        assertTrue(vm.revertToState(snapshot));
+        _gap(0, GAP_START, GAP_START + 1);
+        assertEq(coinflip.previewClaimCoinflips(player), 0);
+        beforeBalance = coin.balanceOf(player);
+        vm.prank(player);
+        claimed = coinflip.claimCoinflips(address(0), type(uint256).max);
+        assertEq(claimed, 0, "losing backfill forfeits the stake");
+        assertEq(coin.balanceOf(player), beforeBalance);
     }
 
     function test_FundedGapFinalLossClearsPriorWinningCarry() public {

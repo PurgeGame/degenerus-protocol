@@ -112,7 +112,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
         // The new-day router drains the final old-session consumer before requesting again.
         _expectStampedResolve(day);
-        game.advanceGame();
+        game.mineFlip();
         assertEq(mockVRF.lastRequestId(), requestId, "final-drain call did not request new entropy");
         assertEq(_pending(), 0);
         assertEq(_openedDay(), day);
@@ -128,7 +128,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertTrue(game.rngComplete(), "cached prior completion still permits the daily seal");
 
         uint256 oldRequest = mockVRF.lastRequestId();
-        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.advanceGame();
+        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip();
         assertGt(mockVRF.lastRequestId(), oldRequest, "new stamps do not deadlock their first request");
         assertFalse(game.rngComplete());
         assertTrue(game.rngLocked());
@@ -136,7 +136,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertEq(_pending(), 1, "request lock also retains the stamp");
 
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), SESSION_WORD);
-        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.advanceGame();
+        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip();
         assertFalse(game.rngLocked(), "daily work reaches unlock");
         _expectStampedResolve(day);
         game.openBoxes(100);
@@ -166,13 +166,13 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         // The no-orphan rule retains the stamp while the eventual request binds its own day.
         vm.warp(vm.getBlockTimestamp() + 3 days);
         uint256 oldRequest = mockVRF.lastRequestId();
-        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.advanceGame();
+        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip();
         assertTrue(game.rngLocked());
         assertGt(mockVRF.lastRequestId(), oldRequest);
 
         vm.warp(vm.getBlockTimestamp() + 1 days);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), SESSION_WORD);
-        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.advanceGame();
+        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip();
         assertFalse(game.rngLocked(), "delayed request applied and unlocked");
         assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "gap processing retained only recent daily words");
         assertEq(_pending(), 1, "request-day stamp survived the gap");

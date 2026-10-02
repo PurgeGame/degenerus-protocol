@@ -45,7 +45,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         the cancel-tombstone RECLAIM path does `delete _subOf[player]`). A sub evicted at a level
 ///         crossing leaves `_fundingSourceOf[player]` readable post-eviction.
 ///
-/// @dev D-351-01 deltas applied: afKing.subscribe -> game.subscribe; afKing.autoBuy -> the advanceGame()
+/// @dev D-351-01 deltas applied: afKing.subscribe -> game.subscribe; afKing.autoBuy -> the mineFlip()
 ///      STAGE; afKing.poolOf -> afkingFundingOf; afKing.depositFor -> depositAfkingFunding; the standalone
 ///      afKing.setMode/setDrainGameCreditFirst setters (GONE) -> the flags are set via game.subscribe;
 ///      the deleted standalone-contract source-grep -> repointed to GameAfkingModule.sol. RE-DERIVED
@@ -106,12 +106,12 @@ contract AfKingFundingWaterfall is DeployProtocol {
     // Internal helpers
     // =========================================================================
 
-    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE advanceGame() (no full settle) — the
+    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE mineFlip() (no full settle) — the
     ///      STAGE is strictly PRE-RNG so the funding waterfall / eviction completes before rngGate, and a
     ///      single advance never reaches the level-transition charity call. Subs must be pre-registered.
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.advanceGame();
+        game.mineFlip();
     }
 
     /// @dev Arm the charged-slice oracle for the single tracked sub, run the STAGE once, drain logs.
@@ -128,7 +128,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

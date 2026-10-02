@@ -94,7 +94,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
     }
     function _step() private returns (uint8 stage, uint256 gasUsed) {
         vm.recordLogs();
-        game.advanceGame{gas: 10_500_000 - 21_064}();
+        game.mineFlip{gas: 10_500_000 - 21_064}();
         gasUsed = vm.lastCallGas().gasTotalUsed;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         stage = 255;
@@ -250,7 +250,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         _prepare(false,false,false,3,8); _requestAndApply();
         vm.mockCallRevert(ContractAddresses.JACKPOT_BATTLE,
             abi.encodeWithSelector(JackpotBattle.prepareJackpotBattle.selector), hex"deadbeef");
-        vm.expectRevert(bytes4(0xdeadbeef)); game.advanceGame();
+        vm.expectRevert(bytes4(0xdeadbeef)); game.mineFlip();
         assertTrue(game.rngLocked());
         vm.clearMockedCalls(); _drain(false,false);
     }

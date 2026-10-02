@@ -62,7 +62,7 @@ async function prepare(f, buyers, count, singleCustom) {
   await f.game.connect(f.deployer).requestLootboxRng();
   const request = await getLastVRFRequestId(f.mockVRF);
   await f.mockVRF.fulfillRandomWords(request, WORD);
-  await f.game.advanceGame(); // Required publication runs outside the measured open.
+  await f.game.mineFlip(); // Required publication runs outside the measured open.
   expect(await wordOf(f.game, index), "delivered word is bound to the original index").to.equal(WORD);
   expect(await indexOf(f.game)).to.equal(index ^ 1n);
   expect(await f.game.boxesPending(), "measured entry is ready").to.equal(true);

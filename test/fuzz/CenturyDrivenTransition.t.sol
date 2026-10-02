@@ -7,7 +7,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///        prize-pool doubling floor through the REAL advance path.
 ///
 /// @notice Drives the full protocol from level 0 through the level-200 transition with
-///         organic advanceGame/VRF cycles (pool seeded via vm.store each level, tickets =
+///         organic mineFlip/VRF cycles (pool seeded via vm.store each level, tickets =
 ///         the constructor's perpetual vault/sDGNRS entries). Proves, in order:
 ///         1. level 100 carries NO century floor (snapshot still zero): its target is the
 ///            plain ratchet, and the transition snapshots the achieved pool;
@@ -122,7 +122,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 
-    /// @dev Advance one calendar day: warp, then drive advanceGame + VRF fulfillment
+    /// @dev Advance one calendar day: warp, then drive mineFlip + VRF fulfillment
     ///      until the day is fully drained (advance reverts NotTimeYet). The 300-call
     ///      budget covers the century jackpot days, whose metered multi-tx drain runs
     ///      far deeper than a normal daily cycle; an undrained remainder simply
@@ -133,7 +133,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         for (uint256 j = 0; j < 300; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }

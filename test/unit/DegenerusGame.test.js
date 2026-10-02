@@ -397,21 +397,21 @@ describe("DegenerusGame", function () {
   });
 
   // ---------------------------------------------------------------------------
-  // 14. advanceGame
+  // 14. mineFlip
   // ---------------------------------------------------------------------------
-  describe("advanceGame", function () {
+  describe("mineFlip", function () {
     it("can be called by anyone", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await advanceToNextDay();
-      await expect(game.connect(alice).advanceGame()).to.not.be.reverted;
+      await expect(game.connect(alice).mineFlip()).to.not.be.reverted;
     });
 
-    it("advanceGame is handled gracefully when caller has no mint (no-op or gate revert)", async function () {
+    it("mineFlip is handled gracefully when caller has no mint (no-op or gate revert)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       // Requires daily mint to trigger advancement. Alice hasn't minted,
       // so the call either no-ops gracefully or reverts. Both are acceptable.
       try {
-        await game.connect(alice).advanceGame();
+        await game.connect(alice).mineFlip();
       } catch (e) {
         expect(e.message).to.satisfy(
           (msg) => msg.includes("revert") || msg.includes("reverted")

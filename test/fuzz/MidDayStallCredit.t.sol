@@ -110,9 +110,9 @@ abstract contract StallCreditBase is DeployProtocol {
     }
 
     /// @dev Advance as a caller who is not the vault owner (never fires the owner's retry).
-    function _adv() internal returns (uint8) {
+    function _adv() internal {
         vm.prank(stranger);
-        return game.advanceGame();
+        game.mineFlip();
     }
 
     /// @dev During a stall: advance as a stranger until the advance reverts (the day's afking
@@ -120,7 +120,7 @@ abstract contract StallCreditBase is DeployProtocol {
     function _advUntilBlocked() internal {
         for (uint256 i; i < 40; ++i) {
             vm.prank(stranger);
-            try game.advanceGame() {} catch (bytes memory err) {
+            try game.mineFlip() {} catch (bytes memory err) {
                 assertEq(bytes4(err), bytes4(keccak256("RngNotReady()")), "blocked waiting for the word");
                 assertFalse(game.rngLocked(), "blocked with no daily lock");
                 return;
@@ -143,7 +143,9 @@ abstract contract StallCreditBase is DeployProtocol {
 
     /// @dev Advance (answering every request at once) until `day` is sealed and unlocked.
     function _sealDay(uint24 day) internal {
-        for (uint256 i; i < 300; ++i) {
+        // setUp's synthetic 500-day jump leaves one expired scheduled Craps day
+        // per maintenance checkpoint before the first daily request can be sent.
+        for (uint256 i; i < 750; ++i) {
             _answer();
             (, uint24 idx) = _clock();
             if (!game.rngLocked() && idx == day && game.rngWordForDay(day) != 0) return;
@@ -314,7 +316,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         assertFalse(game.livenessTriggered(), "today holds its word");
         _warpToDay(x + 4);
         assertTrue(game.livenessTriggered(), "the next caught-up day past the deadline fires");
-        assertEq(_adv(), 0, "and the advance takes the game-over path");
+        _adv(); assertTrue(game.gameOver(), "and the advance takes the game-over path");
         (bool goLvl,) = _latches();
         assertTrue(goLvl, "the ending latched");
     }
@@ -364,7 +366,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         assertFalse(game.livenessTriggered(), "a gap waits");
         _warpToDay(x + 31);
         assertTrue(game.livenessTriggered(), "deadman");
-        assertEq(_adv(), 0, "the advance takes the game-over path");
+        _adv(); assertTrue(game.gameOver(), "the advance takes the game-over path");
     }
 
     /// @notice Whatever the last request, a game nobody seals for the deadman window ends.
@@ -376,11 +378,10 @@ contract MidDayStallCreditTest is StallCreditBase {
         _answer();
         _warpToDay(x + 31);
         assertTrue(game.livenessTriggered(), "deadman");
-        assertEq(_adv(), 0, "the advance takes the game-over path");
+        _adv(); assertTrue(game.gameOver(), "the advance takes the game-over path");
     }
 
-    /// @notice The vault owner's retry of a stalled mid-day request is unchanged: a non-owner waits,
-    ///         the owner re-fires it as the day's daily request.
+    /// @notice The Admin retry preserves a stalled mid-day request's mode and original timeout.
     function test_middayRetryTimerUnchanged() public {
         _seed(5);
         uint24 x = game.currentDayView();
@@ -392,12 +393,12 @@ contract MidDayStallCreditTest is StallCreditBase {
         _advUntilBlocked(); // no retry for a non-owner
 
         vm.prank(vaultOwner);
-        game.advanceGame();
-        assertTrue(game.rngLocked(), "the owner's retry takes the daily lock");
+        admin.retryGameRng();
+        assertFalse(game.rngLocked(), "retry preserves the original midday mode");
         (uint48 t1, uint256 id1) = _stamps();
         assertTrue(id1 != id && id1 == vrf.lastRequestId(), "a fresh request ID");
-        assertTrue(t1 > t0 && (t1 & 1) == 0, "a fresh stamp with its own retry unspent");
-        assertEq(_dayOf(t1), x + 1, "it is today's daily request");
+        assertEq(t1, t0 | 1, "retry preserves the original timestamp and spends its allowance");
+        assertEq(_dayOf(t1 & ~uint48(1)), x, "retry remains attached to its original request day");
         _catchUp(x + 1);
     }
 
@@ -455,7 +456,7 @@ contract MidDayStallCreditTest is StallCreditBase {
 
         vm.mockCallRevert(address(vrf), abi.encodeWithSelector(MockVRFCoordinator.requestRandomWords.selector), "");
         for (uint256 i; i < 20; ++i) {
-            assertEq(_adv(), 0, "game-over path");
+            _adv(); assertTrue(game.gameOver(), "game-over path");
             (uint48 t, uint256 id) = _stamps();
             if (id == 0 && t != 0 && _dayOf(t) == x + 1) break;
         }
@@ -594,14 +595,14 @@ contract MidDayStallCreditGas is StallCreditBase {
         _answer();
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         vm.prank(stranger);
-        game.advanceGame();
+        game.mineFlip();
         _log("GAS backfillAdvanceAfterLateMidday used/refund");
     }
 
     function _measureRequestAdvance(string memory label) private {
         for (uint256 i; i < 60; ++i) {
             vm.prank(stranger);
-            game.advanceGame();
+            game.mineFlip();
             Vm.Gas memory g = vm.lastCallGas(); // before the rngLocked() probe replaces it
             if (game.rngLocked()) {
                 console.log(label);

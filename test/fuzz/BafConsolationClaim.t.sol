@@ -20,7 +20,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         exclusion, dust, and zero-score claims.
 ///      2. Driven e2e: run the game organically to past level 10 with VRF words
 ///         forced even (bit 0 = 0), so the level-10 BAF skips through the real
-///         advanceGame path; then claim and verify minted WWXRP.
+///         mineFlip path; then claim and verify minted WWXRP.
 contract BafConsolationClaimTest is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 
@@ -160,7 +160,7 @@ contract BafConsolationClaimTest is DeployProtocol {
     // ==================== Driven e2e (forced-even VRF words) ====================
 
     /// @notice Drive the real game past level 10 with every VRF word forced even,
-    ///         so the level-10 BAF skips via advanceGame, then claim consolation.
+    ///         so the level-10 BAF skips via mineFlip, then claim consolation.
     function testDrivenSkipThenClaim() public {
         address[5] memory players;
         for (uint256 i = 0; i < players.length; i++) {
@@ -196,7 +196,7 @@ contract BafConsolationClaimTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfEven();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
             }
@@ -205,7 +205,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         assertTrue(injected, "BAF scores were injected");
         assertGt(game.level(), 10, "game advanced past level 10");
 
-        // Every word was even => the level-10 BAF skipped through advanceGame.
+        // Every word was even => the level-10 BAF skipped through mineFlip.
         for (uint256 i = 0; i < players.length; i++) {
             uint256 score = (1000 + i * 500) * 1 ether;
             assertEq(

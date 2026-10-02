@@ -80,7 +80,7 @@ contract LootboxTierSizes is DeployProtocol {
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -99,7 +99,7 @@ contract LootboxTierSizes is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
         }
     }
 

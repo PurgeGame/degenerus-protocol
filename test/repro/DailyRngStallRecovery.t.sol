@@ -5,28 +5,24 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 
 /// @title DailyRngStallRecovery — the council-confirmed stall-path repros.
 ///
-/// @notice (1) THE RETRY BEHIND THE GATE. The daily drain gate exists to clean the read
-///         slot before a FRESH request, but a stalled DAILY request makes that circular:
-///         the staged cohort cannot drain without the very word the stall is withholding,
-///         and rngGate's 20-hour retry sits behind the gate. The gate therefore offers the
-///         same single retry itself. Pinned here: blocked before the timeout, the vault
-///         owner's re-request at 20 hours with tickets pending (no one else's), once-only (the
-///         LSB latch), and the retried word seals the day.
+/// @notice (1) ADMIN TRANSPORT RETRY. A stalled daily request holds its committed read
+///         cohort unchanged. Mining waits for every caller; the vault owner can ask Admin
+///         for one replacement after20h, preserving the original timeout, day and buffers.
+///         Delivered entropy and terminal cutover forbid this normal-session retry.
 ///
 ///         (2) THE SEALED DAY'S KEY. Daily processing keys the foil board and the traits
 ///         event by the day being SEALED (dailyIdx + 1), never the wall clock. The two
 ///         diverge when the word lands a day late: the advance clamps to the logical day,
 ///         and a wall-day key would strand that day's foil claims under the wrong entry.
 ///
-///         (3) THE JACKPOT-PHASE RETRY AND THE COMMITTED COHORT. Jackpot-phase buys
-///         route to the CURRENT level, which the drain gate's purchaseLevel probe does
-///         not see, so a stalled jackpot-day retry reaches the rngGate sentinel. The
-///         sentinel must not swap the ticket buffer again: the committed cohort would
-///         flip back to the write slot, and past the phase transition no drain probes
-///         that level's keys — the paid cohort would strand permanently.
+///         (3) THE JACKPOT-PHASE RETRY AND THE COMMITTED COHORT. A jackpot retry must
+///         preserve the already committed ticket parity. Its replacement word must drain
+///         that same cohort before the phase leaves the level behind.
 contract DailyRngStallRecovery is DeployProtocol {
     bytes32 private constant DAILY_TRAITS_SIG =
         keccak256("DailyWinningTraits(uint24,uint32)");
@@ -45,6 +41,8 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.deal(address(game), 10_000 ether);
         vm.deal(buyer, 100 ether);
         vm.deal(keeper, 1 ether);
+        // The state engine also requests the scheduled Craps read cohort between days.
+        mockVRF.fundSubscription(1, 1_000 ether);
     }
 
     // ---------------------------------------------------------------------
@@ -67,7 +65,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -94,14 +92,17 @@ contract DailyRngStallRecovery is DeployProtocol {
         _buyTickets();
         simTime += 1 days + 1;
         vm.warp(simTime);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        require(ok, "harness: the daily request advance must succeed");
+        // Scheduled-table arming may checkpoint before the fresh daily request.
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) {
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            require(ok, "harness: the daily request advance must succeed");
+        }
         require(game.rngLocked(), "harness: the daily word must be in flight");
         stalledReqId = mockVRF.lastRequestId();
     }
 
     // ---------------------------------------------------------------------
-    // (1) The retry behind the gate
+    // (1) Administrative retry while mining waits
     // ---------------------------------------------------------------------
 
     /// Before the timeout the gate blocks exactly as before: the cohort cannot drain
@@ -113,12 +114,92 @@ contract DailyRngStallRecovery is DeployProtocol {
 
         vm.warp(simTime + 19 hours);
         vm.prank(keeper);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         assertFalse(ok, "the gate must still block inside the 20-hour window");
+        vm.prank(owner);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        admin.retryGameRng();
     }
 
-    /// At 20 hours the vault owner re-requests THROUGH the drain gate — the state this retry
-    /// exists for is precisely a nonempty staged cohort — and the fresh word seals the day.
+    function testAdminRetryOwnsAuthorityAndPreservesTheFrozenSession() public {
+        _driveDay();
+        uint256 oldId = _stallDailyRequest();
+        bytes32 state = game.extsload(bytes32(0));
+        bytes32 dayAndEpochs = game.extsload(bytes32(uint256(5)));
+        bytes32 buffer = game.extsload(bytes32(uint256(33)));
+        uint48 sent = uint48(uint256(state) >> 48);
+        vm.warp(uint256(sent) + 20 hours);
+
+        vm.prank(owner);
+        uint8 ownerAction = game.nextMinerAction();
+        vm.prank(keeper);
+        uint8 publicAction = game.nextMinerAction();
+        assertEq(ownerAction, uint8(DegenerusGameStorage.MinerAction.Wait));
+        assertEq(publicAction, ownerAction, "pending work selection is independent of caller");
+        vm.prank(owner);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        game.mineFlip();
+        vm.prank(keeper);
+        vm.expectRevert(bytes4(keccak256("NotOwner()")));
+        admin.retryGameRng();
+        vm.prank(owner);
+        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
+        game.retryRng();
+        vm.prank(ContractAddresses.ADMIN);
+        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
+        DegenerusGameRngModule(ContractAddresses.GAME_RNG_MODULE).retryRng();
+        assertEq(mockVRF.lastRequestId(), oldId, "rejected routes issued no replacement");
+
+        uint256 credit = coinflip.coinflipAmount(owner);
+        vm.prank(owner);
+        admin.retryGameRng();
+        assertGt(mockVRF.lastRequestId(), oldId, "Admin route issued the sole replacement");
+        assertEq(uint256(game.extsload(bytes32(0))), uint256(state) | (uint256(1) << 48),
+            "only the spent bit changes in lifecycle state; timeout origin stays fixed");
+        assertEq(game.extsload(bytes32(uint256(5))), dayAndEpochs, "logical day and ticket epochs stay frozen");
+        assertEq(game.extsload(bytes32(uint256(33))), buffer, "buffer identity and pending metadata stay frozen");
+        assertEq(uint256(game.extsload(bytes32(uint256(3)))), 1, "replacement still awaits entropy");
+        assertEq(coinflip.coinflipAmount(owner), credit, "administrative retry pays no miner reward");
+    }
+
+    function testAdminRetryRejectsDeliveredUnpublishedEntropy() public {
+        _driveDay();
+        uint256 id = _stallDailyRequest();
+        uint48 sent = uint48(uint256(game.extsload(bytes32(0))) >> 48);
+        mockVRF.fulfillRandomWords(id, 0xF00D);
+        bytes32 word = game.extsload(bytes32(uint256(3)));
+        assertGt(uint256(word), 1, "word delivered without a publication call");
+        vm.warp(uint256(sent) + 20 hours);
+        vm.prank(owner);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        admin.retryGameRng();
+        assertEq(mockVRF.lastRequestId(), id);
+        assertEq(game.extsload(bytes32(uint256(3))), word, "delivered entropy cannot be replaced");
+    }
+
+    function testAdminRetryRejectsTerminalAndLivenessExpiredSessions() public {
+        _driveDay();
+        uint256 id = _stallDailyRequest();
+        bytes32 state = game.extsload(bytes32(0));
+        uint48 sent = uint48(uint256(state) >> 48);
+        vm.warp(uint256(sent) + 20 hours);
+        // Isolate the explicit terminal guard while every retry-readiness predicate is true.
+        vm.store(address(game), bytes32(0), bytes32(uint256(state) | (uint256(1) << 168)));
+        assertTrue(game.gameOver());
+        vm.prank(owner);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        admin.retryGameRng();
+        vm.store(address(game), bytes32(0), state);
+        vm.warp(uint256(sent) + 15 days);
+        assertTrue(game.livenessTriggered(), "natural unanswered-request deadline expired");
+        vm.prank(owner);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        admin.retryGameRng();
+        assertEq(mockVRF.lastRequestId(), id, "terminal handling owns recovery after cutover");
+    }
+
+    /// At 20 hours Admin accepts the vault owner's retry even with a nonempty staged cohort;
+    /// the replacement word then seals the day.
     /// Nobody else can fire it.
     function testStalledDailyRetriesAt20hWithTicketsPending() public {
         vm.pauseGasMetering();
@@ -128,10 +209,10 @@ contract DailyRngStallRecovery is DeployProtocol {
 
         vm.warp(simTime + 20 hours + 1);
         vm.prank(keeper);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(admin).call(abi.encodeWithSignature("retryGameRng()"));
         assertFalse(ok, "only the vault owner fires the retry");
         vm.prank(owner);
-        (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (ok, ) = address(admin).call(abi.encodeWithSignature("retryGameRng()"));
         assertTrue(ok, "the 20-hour retry must be reachable with tickets pending");
         uint256 retryReqId = mockVRF.lastRequestId();
         assertGt(retryReqId, stalledReqId, "the retry must fire a fresh VRF request");
@@ -141,7 +222,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         mockVRF.fulfillRandomWords(retryReqId, word);
         for (uint256 j = 0; j < 200; j++) {
             (bool adv, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!adv) break;
         }
@@ -157,13 +238,13 @@ contract DailyRngStallRecovery is DeployProtocol {
 
         vm.warp(simTime + 20 hours + 1);
         vm.prank(owner);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(admin).call(abi.encodeWithSignature("retryGameRng()"));
         assertTrue(ok, "harness: first retry must fire");
 
         vm.warp(simTime + 41 hours);
         vm.prank(owner);
-        (bool second, ) = address(game).call(
-            abi.encodeWithSignature("advanceGame()")
+        (bool second, ) = address(admin).call(
+            abi.encodeWithSignature("retryGameRng()")
         );
         assertFalse(second, "the single daily retry must not re-arm itself");
     }
@@ -193,7 +274,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.recordLogs();
         for (uint256 j = 0; j < 200; j++) {
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -217,10 +298,8 @@ contract DailyRngStallRecovery is DeployProtocol {
     // (3) The jackpot-phase retry and the committed cohort
     // ---------------------------------------------------------------------
 
-    /// Jackpot-phase buys route to the CURRENT level, which the pre-RNG drain gate's
-    /// purchaseLevel probe does not see — so a stalled jackpot-day retry reaches the
-    /// rngGate sentinel instead of the gate's no-swap branch. The sentinel must not
-    /// swap again: the original request already committed the cohort to the read slot,
+    /// Jackpot-phase buys route to the CURRENT level. Admin must not swap again on retry:
+    /// the original request already committed the cohort to the read slot,
     /// and a second swap flips it back to the write slot where jackpot processing
     /// never finds it.
     function testJackpotRetryKeepsTheCommittedCohortInTheReadSlot() public {
@@ -259,11 +338,11 @@ contract DailyRngStallRecovery is DeployProtocol {
         // — the state under test.
         _clearQueue(_readKeyOf(L + 1));
 
-        // 20h retry fires through the rngGate sentinel.
+        // The Admin transport retry leaves the committed ticket buffer untouched.
         simTime += 20 hours + 1;
         vm.warp(simTime);
         vm.prank(owner);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(admin).call(abi.encodeWithSignature("retryGameRng()"));
         assertTrue(ok, "the 20-hour retry must fire in jackpot phase");
         assertEq(
             _ticketWriteSlot(),
@@ -282,7 +361,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         _fulfillPending();
         for (uint256 j = 0; j < 200; j++) {
             (bool adv, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!adv) break;
         }
@@ -308,8 +387,8 @@ contract DailyRngStallRecovery is DeployProtocol {
             simTime += 20 hours + 1;
             vm.warp(simTime);
             vm.prank(owner);
-            (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+            (bool ok, ) = address(admin).call(
+                abi.encodeWithSignature("retryGameRng()")
             );
             assertTrue(ok, "the 20-hour retry must fire on every jackpot day");
             _fulfillPending();
@@ -344,7 +423,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) {
                 simTime += 1 days + 1;
@@ -371,7 +450,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) return;
         }
@@ -386,7 +465,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         for (uint256 i = 0; i < 100; i++) {
             if (game.rngLocked()) return;
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -471,7 +550,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.warp(simTime);
         assertTrue(game.livenessTriggered(), "14 days with nothing delivered: VRF dead");
         for (uint256 j = 0; j < 20 && !game.gameOver(); j++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
         assertTrue(game.gameOver(), "the deterministic ending completes");
@@ -496,7 +575,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             if (game.gameOver()) break;
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }

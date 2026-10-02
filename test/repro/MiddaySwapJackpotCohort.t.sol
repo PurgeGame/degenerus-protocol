@@ -521,7 +521,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         vm.warp(simTime);
         for (uint256 j = 0; j < 60 && !game.gameOver(); j++) {
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             ok;
             _fulfillPending();
@@ -549,7 +549,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         );
         simTime += 1 days + 1;
         vm.warp(simTime);
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.advanceGame();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip();
         require(game.rngLocked(), "harness: the daily request must be in flight");
         // Stall-window cohort: the daily lock does not block ticket buys (they land
         // on the fresh write buffer), so bypass the checked helper's lock-skip.
@@ -569,7 +569,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             vm.warp(simTime);
             for (uint256 j = 0; j < 40; j++) {
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
             }
@@ -721,7 +721,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
 
         vm.resumeGasMetering();
         uint256 g = gasleft();
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         g -= gasleft();
         assertTrue(ok, "harness: the sweep advance must succeed");
         emit log_named_uint("six-segment sweep advance gas", g);
@@ -792,11 +792,11 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function _runPromotedCrossingDay() internal {
         simTime += 1 days + 1;
         vm.warp(simTime);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         ok; // the promotion entry may or may not revert once its stage breaks
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
     }
@@ -871,7 +871,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         _fulfillPending();
         for (uint256 i = 0; i < 100; i++) {
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -884,7 +884,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -897,7 +897,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             if (game.jackpotPhase()) return;
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) {
                 simTime += 1 days + 1;
@@ -932,7 +932,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             if (!inJackpot && lpd && !rngL) return lvl;
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) {
                 simTime += 1 days + 1;
@@ -954,7 +954,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             if (!game.rngLocked()) return;
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) return;
         }

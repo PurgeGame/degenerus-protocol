@@ -18,7 +18,7 @@ import {
  * Charity Game Hooks integration tests.
  *
  * Verifies that the game modules correctly call GNRUS hooks:
- *   1. pickCharity(level) at each level transition during advanceGame
+ *   1. pickCharity(level) at each level transition during mineFlip
  *   2. burnAtGameOver() during gameover drain to burn unallocated GNRUS
  *
  * Both hooks are direct calls (no try/catch) that surface reverts as bugs.
@@ -42,7 +42,7 @@ describe("CharityGameHooks", function () {
 
   /**
    * Purchase a large number of tickets to fill the prize pool past the 50 ETH
-   * bootstrap target, triggering a level transition on the next advanceGame cycle.
+   * bootstrap target, triggering a level transition on the next mineFlip cycle.
    *
    * At 0.01 ETH per ticket unit (TICKET_SCALE=100), and ~30% flowing to the
    * next prize pool, we need ~170 ETH of purchases. We buy in bulk from
@@ -73,12 +73,12 @@ describe("CharityGameHooks", function () {
 
   /**
    * Drive VRF cycle to completion:
-   *   1. advanceGame -> triggers VRF request
+   *   1. mineFlip -> triggers VRF request
    *   2. fulfill VRF
-   *   3. advanceGame repeatedly until RNG unlocked
+   *   3. mineFlip repeatedly until RNG unlocked
    */
   async function driveVRFCycle(game, deployer, mockVRF) {
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
@@ -88,26 +88,26 @@ describe("CharityGameHooks", function () {
     // so the first advance cycle needs many batch-processing calls.
     for (let i = 0; i < 200; i++) {
       if (!(await game.rngLocked())) break;
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
     }
   }
 
   /**
-   * driveVRFCycle variant that returns every advanceGame tx receipt so callers
+   * driveVRFCycle variant that returns every mineFlip tx receipt so callers
    * can extract events (and their block numbers) emitted during ticket processing.
    * Used by the conservation it-block to pin blockTag-based supply snapshots
    * around the exact tx that emitted LevelResolved.
    */
   async function driveVRFCycleCapturing(game, deployer, mockVRF) {
     const txs = [];
-    txs.push(await game.connect(deployer).advanceGame());
+    txs.push(await game.connect(deployer).mineFlip());
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
     }
     for (let i = 0; i < 200; i++) {
       if (!(await game.rngLocked())) break;
-      txs.push(await game.connect(deployer).advanceGame());
+      txs.push(await game.connect(deployer).mineFlip());
     }
     return txs;
   }
@@ -115,19 +115,19 @@ describe("CharityGameHooks", function () {
   /**
    * Trigger game over at level 0 via the 912-day timeout:
    *   1. Advance time past 912 days
-   *   2. advanceGame -> issues VRF request
+   *   2. mineFlip -> issues VRF request
    *   3. Fulfill VRF
-   *   4. advanceGame -> processes word, calls handleGameOverDrain
+   *   4. mineFlip -> processes word, calls handleGameOverDrain
    */
   async function triggerGameOver(game, deployer, mockVRF) {
     await advanceTime(SECONDS_912_DAYS + 86400);
     // The terminal drain is multi-tx (entropy round, ticket drain, then
-    // handleGameOverDrain), so loop advanceGame — fulfilling any VRF request —
+    // handleGameOverDrain), so loop mineFlip — fulfilling any VRF request —
     // until gameOver latches.
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         /* may revert mid-sequence; keep driving */
       }
@@ -192,7 +192,7 @@ describe("CharityGameHooks", function () {
       // Day 2: Level transition day -- capture LevelSkipped event.
       // No setCharity() calls before transition -> currentActiveBitmap == 0 -> skip-path A.
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 12345678901234567890n);
 
@@ -200,7 +200,7 @@ describe("CharityGameHooks", function () {
       let levelSkippedFound = false;
       for (let i = 0; i < 200; i++) {
         if (!(await game.rngLocked())) break;
-        const tx = await game.connect(deployer).advanceGame();
+        const tx = await game.connect(deployer).mineFlip();
         const events = await getEvents(tx, charity, "LevelSkipped");
         if (events.length > 0) {
           expect(events[0].args.level).to.equal(0);
@@ -391,14 +391,14 @@ describe("CharityGameHooks", function () {
       await advanceTime(SECONDS_912_DAYS + 86400);
 
       // Drive the multi-tx terminal drain until gameOver latches, capturing the
-      // GameOverFinalized event from whichever advanceGame tx emits it
+      // GameOverFinalized event from whichever mineFlip tx emits it
       // (handleGameOverDrain -> burnAtGameOver runs in its own tx now).
       let events = [];
       for (let i = 0; i < 12; i++) {
         const reqBefore = await getLastVRFRequestId(mockVRF);
         let tx = null;
         try {
-          tx = await game.connect(deployer).advanceGame();
+          tx = await game.connect(deployer).mineFlip();
         } catch {
           /* may revert mid-sequence */
         }

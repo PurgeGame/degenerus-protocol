@@ -28,7 +28,7 @@ const SECONDS_912_DAYS = 912 * 86400;
 
 /**
  * Drive the level-0 idle-timeout game-over flow. The terminal drain is multi-tx
- * (entropy round, ticket drain, then handleGameOverDrain), so loop advanceGame —
+ * (entropy round, ticket drain, then handleGameOverDrain), so loop mineFlip —
  * fulfilling any VRF request — until gameOver latches.
  */
 async function triggerGameOver(game, caller, mockVRF) {
@@ -36,7 +36,7 @@ async function triggerGameOver(game, caller, mockVRF) {
   for (let i = 0; i < 12; i++) {
     const reqBefore = await getLastVRFRequestId(mockVRF);
     try {
-      await game.connect(caller).advanceGame();
+      await game.connect(caller).mineFlip();
     } catch {
       /* may revert mid-sequence; keep driving */
     }

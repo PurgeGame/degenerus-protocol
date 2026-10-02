@@ -72,6 +72,10 @@ is_dead_constant() {
 declare -A ORPHAN_JUSTIFIED=(
   [DegenerusGameFoilPackModule.sol:IDegenerusGameDegeneretteModule]="_foilSpin owns the delegatecall -> GAME_DEGENERETTE_MODULE"
   [DegenerusGameMintModule.sol:IDegenerusGameLootboxModule]="_lootboxLeg owns the delegatecall -> GAME_LOOTBOX_MODULE"
+  [DegenerusGameMintModule.sol:IDegenerusGameTicketModule]="_ticketWorkCall owns the delegatecall -> GAME_TICKET_MODULE"
+  [DegenerusGameFoilPackModule.sol:IDegenerusGameTicketModule]="_ticketWorkerCall owns the delegatecall -> GAME_TICKET_MODULE"
+  [DegenerusGameAdvanceModule.sol:IDegenerusGameJackpotModule]="_runJackpotWork owns the delegatecall -> GAME_JACKPOT_MODULE"
+  [DegenerusGameJackpotModule.sol:IDegenerusGameJackpotDrawModule]="_delegateJackpotDraw owns the delegatecall -> GAME_JACKPOT_DRAW_MODULE"
 )
 
 is_orphan_justified() {
@@ -187,7 +191,8 @@ self_test_transform() {
 # the interface alone on a line and `.selector` within 5 lines.
 collect_sites() {
   local dir="$1" file lineno sel_line
-  grep -rn --include='*.sol' -E 'I(DegenerusGame|Game)[A-Za-z]+Module\.[a-zA-Z_]+\.selector' "$dir" 2>/dev/null \
+  # Uppercase members are custom errors, not function dispatch selectors.
+  grep -rn --include='*.sol' -E 'I(DegenerusGame|Game)[A-Za-z]+Module\.[a-z_][a-zA-Z_]*\.selector' "$dir" 2>/dev/null \
     | grep -v "^${dir}/interfaces/" | grep -v "^${dir}/mocks/" \
     | awk -F: '{ print $1 "\t" $2 }'
   grep -rn --include='*.sol' -E '^[[:space:]]*I(DegenerusGame|Game)[A-Za-z]+Module[[:space:]]*$' "$dir" 2>/dev/null \
@@ -246,6 +251,10 @@ while IFS=$'\t' read -r file lineno; do
   # as the target.
   if printf '%s\n' "$window" | grep -q '\.delegatecall('; then
     target=$(printf '%s\n' "$window" | grep -oE '\.GAME_[A-Z_]+_MODULE' | tail -1 | sed -E 's/^\.//')
+  elif [[ "${file##*/}" == "DegenerusGameMinerModule.sol" ]]; then
+    # The dispatcher pairs its branch-local target assignment with calldata,
+    # then performs one shared target.delegatecall below the branch chain.
+    target=$(printf '%s\n' "$window" | sed -nE 's/.*target = ContractAddresses\.(GAME_[A-Z_]+_MODULE);.*/\1/p' | tail -1)
   else
     target=""
   fi

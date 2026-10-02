@@ -11,6 +11,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title FFKeyHarness -- Exposes _tqFarFutureKey as a pure helper for the GASOPT-01 owed-slot math.
 /// @dev Inherits DegenerusGameStorage solely to surface the far-future key derivation the seed helpers
@@ -21,55 +22,9 @@ contract FFKeyHarness is DegenerusGameStorage {
     }
 }
 
-/// @title KeeperRewardRoutingSameResults -- TST-02 (Phase 351, v55.0 game-resident): the afking router
-///        reward-routing (the advance bounty re-homed onto `mineFlip()`) proven EMPIRICALLY, plus the
-///        `afkingSnapshot` batched-read same-results + the `owedMap` pointer-hoist same-results.
-///
-/// @notice This file is the PRIMARY DIFFERENTIAL same-results scaffolding (D-351-05): the
-///         `CoinflipStakeUpdated` recipient-isolated topic-decode (:COINFLIP_STAKE_UPDATED_SIG) and the
-///         `_settleGame` VRF-drain helper are the exact instruments the v55 box differential proofs
-///         (351-04/05/08) port. Both are preserved VERBATIM here.
-///
-///         The reward routing (the load-bearing re-home proof, reframed onto `mineFlip`):
-///   - `advanceGame()` called STANDALONE (directly on GAME) earns the caller NOTHING — `advanceGame`
-///     returns only `uint8 mult` and self-credits nobody (the 3 in-callee `creditFlip` sites were removed
-///     at ADV-01 and never restored; v55 keeps the advance leg unrewarded standalone).
-///   - The SAME advance driven via `game.mineFlip()` CREDITS the keeper: the router pays
-///     `unit * ADVANCE_RATIO_NUM * mult` (GameAfkingModule.sol:995). The stall multiplier is HONORED — a
-///     stalled new-day advance (`mult > 1`) credits STRICTLY MORE than the un-stalled (`mult == 1`)
-///     advance, proven by RELATIVE magnitude (not the GAS-calibrated peg constant). The mid-day
-///     partial-drain leg (`mult == 1`) is REWARDED. The gameover leg (`mult == 0`) is UNREWARDED — zero
-///     creditFlip (the one-category early-return returns at the `bountyEarned == 0` skip, no revert).
-///   All reward observation is recipient-isolated to the keeper via the `_countCoinflipStakeUpdatedFor`
-///   / `_keeperCreditCountAndAmount` oracle (topics[1] == keeper), so a box-owner's / player's winnings
-///   credit can never inflate or mask the router bounty count or amount.
-///
-///   Batched-read same-results (Foundry behavioral / value-equality — touches NO RNG/result):
-///   - `afkingSnapshot` (DegenerusGame.sol:2645 — the v55 successor to the v49 `keeperSnapshot`, renamed +
-///     relocated game-resident; D-351-01): the batched read returns the SAME
-///     `(mintPriceWei, rngLocked_, claimables[], afkingFundings[])` as N individual
-///     `mintPrice()` / `rngLocked()` / `claimableWinningsOf(player)` / `afkingFundingOf(player)`
-///     accessors, element-by-element. (`afkingSnapshot` is an OFF-hot-path Game view — called only by
-///     `DegenerusVault.sol:518` — NOT a GAS-02 STATICCALL violation; the v55 hot path reads
-///     `afkingFunding[*]` in-context.)
-///   - GASOPT-01 (DegenerusGameMintModule per-entry owed drain): the internal, now-private
-///     `_processFutureTicketBatch` ticket-processing RESULTS (per-player owed drain, reached only
-///     through `processTicketBatch`'s lastPurchaseDay continuation — the standalone external entry
-///     point and its former `owedMap` pointer-hoist implementation detail this comment originally
-///     described are gone) are byte-identical to the expected per-player accounting: a multi-player
-///     backlog drains every player's owed to zero — a broken drain would skip / double-process a
-///     player, stranding non-zero owed or mis-decrementing it. Observed via the contract's own
-///     `entriesOwedPacked` storage (the per-player owed truth) after a real advance drain.
-///
-/// @dev The five call-site deltas applied (D-351-01, PATTERNS §"five call-site deltas"):
-///   Δ3 doWork→mineFlip: `afKing.doWork()` -> `game.mineFlip()` (the rewarded router).
-///   Δ4 autoBuy: `afKing.autoBuy(N)` has NO successor — the per-sub buy folded into `advanceGame()`'s
-///      required-path STAGE; driven via a new-day `advanceGame()` + the `_settleGame` VRF drain.
-///   Δ5 views/funding: `afKing.subscriberCount()` -> `_subscribers.length` via vm.load (RE-DERIVED slot
-///      68); `afKing.depositFor` -> `game.depositAfkingFunding`; `keeperSnapshot` -> `afkingSnapshot`.
-///   The pinned-slot constants are RE-DERIVED via `forge inspect storage DegenerusGame` (the AfKing
-///   standalone-layout SUBOF_SLOT=65 / TICKET_QUEUE_SLOT=12 constants were WRONG). Zero contracts/*.sol
-///   mutation; test-only; FROZEN subject (453f8073) honored.
+/// @notice Measured miner compensation and existing batched-view/accounting regressions.
+/// @dev Reward observation is isolated to the miner recipient. Compensation depends on
+/// reported execution gas and capped base fee, independently of the supplied gas limit.
 contract KeeperRewardRoutingSameResults is DeployProtocol {
     // -------------------------------------------------------------------------
     // creditFlip-count / amount oracle — the recipient-isolated DIFFERENTIAL instrument
@@ -105,6 +60,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        vm.fee(1 gwei);
         // One keeper-local day off the deploy boundary so the day index is a clean, stable value
         // (mirrors AfKingConcurrency / V55SetMutationOpenE).
         vm.warp(block.timestamp + 1 days);
@@ -116,14 +72,14 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.deal(address(game), 5_000_000 ether);
     }
 
-    /// @dev Settle the game to a clean state: complete the pending day-advance (drive advanceGame +
+    /// @dev Settle the game to a clean state: complete the pending day-advance (drive mineFlip +
     ///      deliver the mock VRF word + drain the rngLock) until advanceDue() is false and we are not
     ///      locked. PRESERVED VERBATIM — the donor VRF-drain helper (PATTERNS §"Settle-to-clean-state
     ///      VRF drain"); 351-04/05/08 port this.
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -137,13 +93,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — advanceGame UNREWARDED-standalone vs REWARDED-via-mineFlip (multiplier honored)
-    // =========================================================================
-
-    /// @notice STANDALONE advanceGame() earns the caller NOTHING (the in-callee creditFlip sites were
-    ///         removed; advanceGame returns only `uint8 mult`), yet the day STILL ADVANCES (advance is
-    ///         fully functional standalone — it is just the unrewarded liveness fallback).
-    function testAdvanceStandaloneUnrewarded() public {
+    // Native mining reward routing.
+    /// @notice Supplying more than 10M gas cannot earn a reward for less than 1M of work.
+    function test_HighEntryTinyWorkIsUnpaid() public {
         // Settle the deploy-day advance, then roll the wall clock so a fresh day-advance is due.
         _settleGame(0x57A11A10E0001);
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
@@ -151,65 +103,46 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
 
         address caller = makeAddr("standalone_advance_caller");
-        bool lockedBefore = game.rngLocked();
 
         vm.recordLogs();
         vm.prank(caller);
-        uint8 mult = game.advanceGame();
+        game.mineFlip{gas: 15_000_000}();
 
-        // The caller earned ZERO router bounty — the standalone advance pays nothing (re-homed to mineFlip).
-        assertEq(
-            _countCoinflipStakeUpdatedFor(caller),
-            0,
-            "STANDALONE: advanceGame() credits the caller zero (no in-callee creditFlip)"
-        );
-        // And it returned a live (non-gameover) multiplier — the advance ran, it just paid nobody.
-        assertGt(mult, 0, "STANDALONE: advanceGame returned a live mult (a normal day-advance, not gameover)");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 workEvents;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game)
+                && logs[i].topics[0] == keccak256("MinerWork(address,uint8,uint256,uint256)")) {
+                (, uint256 used, uint256 paid) = abi.decode(logs[i].data, (uint8,uint256,uint256));
+                assertGt(used, 0, "a real preparation or maintenance step performed work");
+                assertLt(used, 1_000_000, "fixture must exercise sub-threshold work");
+                assertEq(paid, 0, "high entry gas cannot reward a small final work item");
+                ++workEvents;
+            }
+            if (logs[i].emitter == address(coinflip) && logs[i].topics.length > 1
+                && logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG) {
+                assertNotEq(logs[i].topics[1], bytes32(uint256(uint160(caller))), "tiny work credited the miner");
+            }
+        }
+        assertEq(workEvents, 1, "the request must report measured progress");
+        assertFalse(game.gameOver(), "liveness work remains in the live game");
 
-        // Non-vacuity: the day actually advanced (the tick happened) — advance is fully functional
-        // standalone. The single advanceGame() either cleared the advance-due predicate or engaged
-        // rngLock mid-flight for the day it just advanced.
-        bool progressed = !game.advanceDue() || (!lockedBefore && game.rngLocked());
-        assertTrue(progressed, "non-vacuity: the standalone advance ticked the day (still fully functional)");
+        // MinerWork is emitted only after actual progress; the first preparation or
+        // maintenance checkpoint need not also reach the following VRF request.
     }
 
-    /// @notice REWARDED via mineFlip with the MULTIPLIER HONORED: the SAME new-day advance, driven via
-    ///         mineFlip at a HIGHER STALL, credits the keeper STRICTLY MORE than at the un-stalled base.
-    ///         Proven by RELATIVE magnitude (the 1/2/4/6 ladder flows through `unit * ADVANCE_RATIO_NUM *
-    ///         mult`), never by the GAS-calibrated peg constant. mintPrice is identical across both
-    ///         scenarios (same deploy level), so `unit` is identical and the credit ratio == the mult ratio.
-    function testAdvanceViaMintFlipRewardedMultiplierHonored() public {
-        // Settle so we start from a clean, not-due, not-locked baseline.
+    /// @notice A delay never exempts a small checkpoint from the measured-gas cutoff.
+    function testMineFlipPricesMeasuredWorkAtBothStallTimes() public {
         _settleGame(0xADADAD0002);
-        assertFalse(game.advanceDue(), "pre: settled");
-        assertFalse(game.rngLocked(), "pre: not locked");
-
-        uint256 snap = vm.snapshot();
-
-        // --- Scenario A: lightly-stalled new-day advance (mult == 2: >= 20 min past the day boundary) ---
-        uint256 lowStallCredit = _mintFlipAdvanceCreditAtStall(31 minutes);
-        assertGt(lowStallCredit, 0, "REWARDED: the lightly-stalled advance credited the keeper (mult==2)");
-
-        // --- Scenario B: heavily-stalled new-day advance (mult == 6: >= 2 hours past the day boundary) ---
-        vm.revertTo(snap);
-        uint256 highStallCredit = _mintFlipAdvanceCreditAtStall(2 hours + 1 minutes);
-        assertGt(highStallCredit, 0, "REWARDED: the heavily-stalled advance credited the keeper (mult==6)");
-
-        // The multiplier is HONORED: the higher stall credits STRICTLY MORE (unit identical, only mult
-        // differs). At the 2h+ stall mult==6 vs the 31-min stall mult==2, so the high-stall credit is ~3x
-        // the low-stall credit - but we assert only strict ordering, never the GAS-calibrated peg.
-        assertGt(
-            highStallCredit,
-            lowStallCredit,
-            "MULTIPLIER HONORED: a higher stall credits strictly more (the 1/2/4/6 ladder flows through)"
-        );
+        assertFalse(game.advanceDue());
+        assertFalse(game.rngLocked());
+        uint256 snap = vm.snapshotState();
+        _mintFlipAdvanceCreditAtStall(31 minutes);
+        vm.revertToState(snap);
+        _mintFlipAdvanceCreditAtStall(2 hours + 1 minutes);
     }
 
-    /// @dev Drive ONE mineFlip() advance leg at `stallElapsed` past a fresh day boundary and return the
-    ///      keeper's credited router-bounty amount. Aligns the wall clock so a new-day advance is due and
-    ///      the stall window resolves to the intended multiplier. In v55 mineFlip's structural
-    ///      early-return takes the advance leg directly whenever `advanceDue()` is TRUE (no separate buy
-    ///      leg to pin — the buy folded into advanceGame's STAGE), so no buy-leg pinning is needed.
+    /// @dev Observe one real preparation checkpoint after a delayed daily reset.
     function _mintFlipAdvanceCreditAtStall(uint256 stallElapsed) internal returns (uint256) {
         // Move to the START of the NEXT calendar-day window, then add the stall offset. The advance
         // module derives day = _simulatedDayIndexAt(ts) = (ts-82620)/1days + 1, and the stall window is
@@ -221,23 +154,39 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.warp(nextDayStart + stallElapsed);
         assertTrue(game.advanceDue(), "pre: a fresh day-advance is due at the chosen stall");
 
+        uint256 rewardPrice = game.mintPrice();
+        uint256 elapsed = _rewardElapsed();
         vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip();
 
         // Read the recorded logs ONCE (vm.getRecordedLogs drains them) and derive BOTH the count and the
         // credited amount in a single pass, so the amount is not lost to a prior drain.
-        (uint256 count, uint256 amount) = _keeperCreditCountAndAmount();
-        // Exactly one router bounty credit on the advance leg.
-        assertEq(count, 1, "REWARDED: the advance leg credits the keeper exactly once via mineFlip");
+        (uint256 count, uint256 amount) = _keeperCreditCountAndAmount(rewardPrice, elapsed);
+        assertEq(count, amount == 0 ? 0 : 1, "only qualifying measured work credits the miner");
         return amount;
     }
 
     /// @dev Single-pass recorded-log read returning (count, summed amount) of the keeper's
     ///      CoinflipStakeUpdated emissions. Avoids the double-getRecordedLogs drain hazard.
-    function _keeperCreditCountAndAmount() internal returns (uint256 count, uint256 amount) {
+    function _keeperCreditCountAndAmount(uint256 rewardPrice, uint256 elapsed) internal returns (uint256 count, uint256 amount) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 declaredReward;
+        uint256 workEvents;
         for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == keccak256("MinerWork(address,uint8,uint256,uint256)")) {
+                (, uint256 used, uint256 paid) = abi.decode(logs[i].data, (uint8,uint256,uint256));
+                uint256 step = elapsed / 30 minutes;
+                if (step > 4) step = 4;
+                uint256 cap = uint256(0.5 gwei) << step;
+                uint256 rate = block.basefee < cap ? block.basefee : cap;
+                uint256 expected = used < 1_000_000 ? 0
+                    : used * rate * 1000 ether * (7500 + step * 5000) / (rewardPrice * 10_000);
+                assertEq(paid, expected, "reward prices qualifying measured gas at capped base fee");
+                assertGt(used, 0);
+                ++workEvents;
+                declaredReward += paid;
+            }
             if (
                 logs[i].emitter == address(coinflip) &&
                 logs[i].topics.length > 1 &&
@@ -248,15 +197,25 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
                 amount += abi.decode(logs[i].data, (uint256));
             }
         }
+        assertEq(workEvents, 1, "the measured work oracle must observe real progress");
+        assertEq(amount, declaredReward, "one reported reward equals the actual miner credit");
     }
 
-    /// @notice MID-DAY partial-drain leg (mult == 1) is REWARDED via mineFlip: a `day == dailyIdx`
-    ///         advance that drains a non-empty read slot returns mult=1 (ADV-05/D-07, no escalation), so
-    ///         the router credits the keeper exactly once. The mid-day partial-drain path is reachable
-    ///         only at `day == dailyIdx`; after a clean settle we stage it by seeding a multi-player
-    ///         read-slot backlog with `ticketsFullyProcessed = false` (the same condition the contract
-    ///         reaches when tickets are bought after the day already advanced). The advance then takes
-    ///         the mid-day branch, `_runProcessTicketBatch` WORKS, and `mult` returns 1.
+    function _rewardElapsed() private view returns (uint256) {
+        uint8 action = game.nextMinerAction();
+        uint256 due;
+        if (action >= uint8(DegenerusGameStorage.MinerAction.Publish)
+            && action <= uint8(DegenerusGameStorage.MinerAction.CertifyRead)) {
+            due = uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        } else if (action == uint8(DegenerusGameStorage.MinerAction.PrepareSubscriptions)
+            || action == uint8(DegenerusGameStorage.MinerAction.RequestDaily)) {
+            uint24 processedDay = uint24(uint256(vm.load(address(game), bytes32(0))) >> 24);
+            due = (uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + processedDay) * 1 days + 82_620;
+        } else if (action == uint8(DegenerusGameStorage.MinerAction.Maintenance)) due = crapsBattle.minerMaintenanceDueAt();
+        return due != 0 && vm.getBlockTimestamp() > due ? vm.getBlockTimestamp() - due : 0;
+    }
+
+    /// @notice A published mid-day ticket cohort earns the same measured-work compensation.
     function testMidDayPartialDrainRewardedViaMintFlip() public {
         // Settle to a clean, not-due, not-locked baseline: `day == dailyIdx` (the mid-day precondition).
         _settleGame(0x1D0E0003);
@@ -269,11 +228,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         uint24 purchaseLevel = uint24(game.level()) + 1;
         uint24 readKey = _readKey(purchaseLevel);
 
-        // Seed a LARGE multi-player read-slot backlog (each player owed whole tickets) and clear the
-        // fully-processed flag so advanceDue() is TRUE mid-day (read slot non-empty + not fully processed).
-        // The backlog is sized to exceed the per-batch write budget so the mid-day _runProcessTicketBatch
-        // WORKS but does NOT finish -> the advance takes the partial-drain return (mult==1) rather than
-        // fully draining and falling through to NotTimeYet.
+        // Model an authenticated, published mid-day cohort with enough ticket
+        // work to cross the reward cutoff and reach a resumable checkpoint.
         uint256 M = 200;
         address[] memory players = new address[](M);
         for (uint256 i; i < M; i++) {
@@ -281,20 +237,20 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
             _seedReadSlotTickets(readKey, players[i], 3); // 3 whole tickets each (12 entries)
         }
         _setTicketsFullyProcessed(false);
+        RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(uint256(0x1D0E0003)));
 
         assertTrue(game.advanceDue(), "pre: a mid-day partial-drain advance is due (read slot un-fully-processed)");
         assertFalse(game.rngLocked(), "pre: not locked (mid-day, no escalation)");
 
+        uint256 rewardPrice = game.mintPrice();
+        uint256 elapsed = _rewardElapsed();
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip{gas: 9_500_000}();
 
-        // The mid-day partial-drain leg IS rewardable advance-leg work - exactly one creditFlip (mult==1).
-        assertEq(
-            _countCoinflipStakeUpdatedFor(keeper),
-            1,
-            "MID-DAY: the partial-drain leg (mult==1) is rewarded - exactly one creditFlip to the keeper"
-        );
+        (uint256 count, uint256 amount) = _keeperCreditCountAndAmount(rewardPrice, elapsed);
+        assertEq(count, 1, "mid-day ticket work credits the miner exactly once");
+        assertGt(amount, 0, "mid-day ticket work exceeds the measured-gas cutoff");
     }
 
     /// @notice GAMEOVER idle crank reverts via mineFlip: post-gameover dailyIdx freezes so the advance
@@ -549,7 +505,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     function _ffQueueLen(uint24 L) internal view returns (uint256) {
-        return uint256(vm.load(address(game), _queueBaseSlot(ffk.ffKey(L))));
+        return TicketQueueStorage.length(address(game), ffk.ffKey(L));
     }
 
     // ---- mid-day read-slot seeding (current-level queue, the contract's own read key) ----
@@ -588,8 +544,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // ---- gameover latch ----
 
     /// @dev Latch the terminal gameOver public bool WITHOUT setting the gameover-time slot, so
-    ///      handleFinalSweep early-returns harmlessly ("Game not over yet" at GO_TIME==0) and advanceGame
-    ///      takes the gameover branch (mult=0). `gameOver` is the bool at byte 21 of EVM SLOT 0 (the
+    ///      handleFinalSweep early-returns harmlessly ("Game not over yet" at GO_TIME==0) and mineFlip
+    ///      sees no remaining terminal work. `gameOver` is the bool at byte 21 of EVM SLOT 0 (the
     ///      timing/FSM/flags pack). Set only that byte, preserving every other field, and confirm the
     ///      public getter flips.
     function _latchGameOver() internal {
@@ -597,6 +553,10 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << (21 * 8));
         vm.store(address(game), slot, bytes32(packed));
+        // This is an already-paid terminal state, not a freshly latched ending
+        // whose remaining final jackpot the engine must still process.
+        bytes32 ending = bytes32(uint256(19));
+        vm.store(address(game), ending, bytes32(uint256(vm.load(address(game), ending)) | (uint256(1) << 48)));
         require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 21)");
     }
 
@@ -642,7 +602,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
             // starves the drain and manufactures a fake liveness trip.
             for (uint256 j; j < 4000; j++) {
                 _fulfillVrfIfPending(uint256(keccak256(abi.encode(simTime, j, "ffdrain"))));
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (!ok) break;
             }
         }

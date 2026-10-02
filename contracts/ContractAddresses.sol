@@ -127,6 +127,15 @@ library ContractAddresses {
     // are GAME-only. Committed as its Foundry deterministic-test address (nonce N+31).
     address internal constant JACKPOT_BATTLE =
         address(0x83898D1F3C03189fF03B471dd3456908FCA4423d);
+    // State-engine modules append to the CREATE sequence; all prior identities stay fixed.
+    address internal constant GAME_TICKET_MODULE =
+        address(0x6AFc743aa4E9D98D0F53Ff111996E9817d79D301);
+    address internal constant GAME_MINER_MODULE =
+        address(0x3450a15Dc9cbDD5C0e28cC22474D88AD7e2695A3);
+    address internal constant GAME_RNG_MODULE =
+        address(0xE194aA6b80fFd71989dd196c7f84fa624b8d7D5d);
+    address internal constant GAME_JACKPOT_DRAW_MODULE =
+        address(0x98E53ecDDd253E5A7f845a713D7fc8853CF47EDE);
     // Chainlink LINK/ETH aggregator that values LINK donations. Optional:
     // address(0) leaves DegenerusAdmin's feed slot empty, so the reward lane
     // stays dark until the feed-swap governance path installs one. Patched per

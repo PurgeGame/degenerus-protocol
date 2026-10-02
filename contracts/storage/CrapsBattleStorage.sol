@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+
 import {Craps} from "../Craps.sol";
 import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {LootboxCraps} from "../LootboxCraps.sol";
 import {CrapsCustomTerms} from "../CrapsCustomTerms.sol";
-import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
 interface IGameCrapsWorkStage {
     function rngConsumerStage() external view returns (uint8);
@@ -148,41 +150,22 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         large call, which is why the budget and not the ceiling is what sizes a crank.
     uint64 internal constant _RESOLVE_MAX_SEATS = 256;
 
-    /// @notice A SEAT'S WORK, IN THE PROTOCOL'S OWN WALK UNITS (~4.7k gas each, the same unit
-    ///         every box leg budgets in) — deterministic, derived from the seat's OUTCOME after it
-    ///         settles rather than from a gas meter:
-    ///
-    ///             cost = _SEAT_UNITS + rolls / _ROLLS_PER_UNIT + (paid ? _CREDIT_UNITS : 0)
-    ///                    + (completes the field ? _FINAL_UNITS : 0)
-    ///
-    ///         The engine already reports the roll count, and rolls are what a seat's cost
-    ///         actually varies by — two orders of magnitude between a three-roll bust and a
-    ///         four-hundred-roll run — so the unit charge keeps the outcome sensitivity a flat
-    ///         per-seat weight never had, while staying replayable: the same chain state stops
-    ///         the same batch at the same seat, on every node, under every gas schedule.
-    ///
-    ///         Each weight rounds its measured cost UP so the charge is conservative everywhere:
-    ///         seat plumbing ~28k → 7 units (32.9k); dice 578-699 gas a roll → a unit per 6
-    ///         rolls (783 budgeted); a distinct cold coinflip credit 25,910 → 6 units (28.2k).
-    uint256 internal constant _SEAT_UNITS = 7;
-    uint256 internal constant _ROLLS_PER_UNIT = 6;
-    uint256 internal constant _CREDIT_UNITS = 6;
-    /// @dev What the seat that completes a field pays on top: the comp-lane credit's cold call
-    ///      into FLIP, its lane write and its log, ~27k → 6 units.
-    uint256 internal constant _FINAL_UNITS = 6;
+    // Safety bounds admit indivisible work; actual consumed gas, never these bounds, is charged.
+    // Seat includes the engine's 1,111-roll ceiling, sole-high award and full field finalization.
+    uint256 internal constant _SEAT_GAS_MAX = GasBounds.CRAPS_SEAT_GAS_MAX;
+    uint256 internal constant _CREDIT_GAS_MAX = GasBounds.CRAPS_CREDIT_GAS_MAX;
+    uint256 internal constant _SETTLE_TAIL_GAS = GasBounds.CRAPS_SETTLE_TAIL_GAS;
+    uint256 internal constant _WORK_TAIL_GAS = GasBounds.CRAPS_WORK_TAIL_GAS;
+    uint256 internal constant _MAINTENANCE_GAS_MAX = GasBounds.CRAPS_MAINTENANCE_GAS_MAX;
+    uint256 internal constant _REFUND_GAS_MAX = GasBounds.CRAPS_REFUND_GAS_MAX;
+    uint256 internal constant _SWEEP_TAIL_GAS = GasBounds.CRAPS_SWEEP_TAIL_GAS;
 
-    // Normal read work shares MineFlip's budget. Reserve the engine's hard roll
-    // ceiling before a seat, then charge its deterministic outcome. The final
-    // seat also reserves the high/progressive/pass payout tail, beyond the old
-    // comp-only finalization weight. Jackpot transactions retain their own meter.
-    uint256 internal constant _READ_BATCH_UNITS = 12;
-    uint256 internal constant _READ_FINAL_UNITS = 64;
-    // Mirrors Craps._SLIP_ROLL_CEILING (600 - 1 + 512), pinned by budget tests.
-    uint256 internal constant _READ_SEAT_RESERVE =
-        _SEAT_UNITS + 1111 / _ROLLS_PER_UNIT + _CREDIT_UNITS;
-    uint256 internal constant _KEEP_HOP_UNITS = 4;
-    uint256 internal constant _ARM_UNITS = 40;
-    uint256 internal constant _SWEEP_BASE_UNITS = 12;
+    /// @dev Carve the EIP-150 forwarding reserve and ABI/return tail from the fixed ledger.
+    /// The atomic admission check separately reserves enough available gas for a safe checkpoint.
+    function _resolverAllowance(uint256 remaining) internal pure returns (uint256) {
+        uint256 available = remaining - _WORK_TAIL_GAS - 30_000;
+        return available - available / 64 - 1;
+    }
 
     function _readCrapsStage() internal view returns (uint8) {
         return IGameCrapsWorkStage(_GAME).rngConsumerStage();
@@ -193,19 +176,11 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// their callers before this live-cohort guard.
     function _readCrapsFrontier(uint64 slot) internal view returns (bool) {
         uint48 bound = _slotIndex[slot];
-        if (bound == 0 || bound > 2 || _readCrapsStage() != 5) return false;
+        if (bound == 0 || bound > 2 || _readCrapsStage() != 6) return false;
         uint48 index = bound - 1;
         uint64 pos = _rngSlotCursor[index];
         return _rngPending[index] != 0 && pos < _rngSlots[index].length && _rngSlots[index][pos] == slot;
     }
-
-    function _readWorkAllowance(uint64 budget) internal pure returns (uint64) {
-        return uint64(MineFlipBudget.clamp(budget));
-    }
-
-    /// @notice What one lapsed-day reservation refund charges: a pass-credit write, two logs and
-    ///         the resumable sweep cursor — ~33k measured cold, rounded up.
-    uint256 internal constant _SWEEP_SEAT_UNITS = 8;
 
     /// @notice How many days of action a budget is drawn from.
     uint256 internal constant _BOOST_ACTION_WINDOW_DAYS = 7;
@@ -542,12 +517,40 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     /// @dev Resolved seat payment and action totals, returned as one memory pointer to keep the
     ///      batch resolver within the compiler's stack limit. This adds no persistent storage.
+    struct Window {
+        bytes32 key;
+        uint128 bankroll;
+        uint128 goal;
+        /// @dev The ten-chip round this window plays — what the match key is built on.
+        uint256 played;
+        /// @dev The maximum seven chips an entrant may place; the dice scatter the complement.
+        uint256 postedStake;
+        uint256 stakeUnits;
+        uint256 terms;
+        uint256 tier;
+        /// @dev The multiple THIS field's high-roller lane runs at, or zero where it has none. A
+        ///      scheduled window takes its own day's draw; a custom battle takes what its creator
+        ///      fixed at creation.
+        uint256 highMult;
+        bool multiEntry;
+        uint48 bound;
+        /// @dev The field's frozen entrant count — the low word of its scoreboard — and the dense
+        ///      combined ordinal of the seat being settled. Memory only: the rotation is a pure
+        ///      function of these, the slot and the word, and nothing stores it.
+        uint32 entrants;
+        uint64 seat;
+        uint32 drawn;
+        uint32 extraUnits;
+        uint256 extraPot;
+        /// @dev Jackpot only: fee-funded EXTRA bankroll per high seat, also its extra bounty.
+        uint256 highExtra;
+    }
+
     struct SeatResult {
         address player;
         uint256 paid;
         uint256 staked;
         uint256 high;
-        uint256 cost;
     }
 
     /// @dev One settlement's whole account, carried between the engine and the paying/preview
@@ -575,8 +578,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         ///      `CrapsEngine.settleRanked` returns the composite here instead.
         uint256 rank;
         /// @dev Dice rolls across the run. It ranks NOTHING and qualifies nothing — the
-        ///      progressive reads the high point now — and survives only as the settle walk's
-        ///      work-unit charge and as telemetry.
+        ///      progressive reads the high point now — and survives only as telemetry.
         uint256 totalRolls;
         Craps.SlipStop stop;
     }

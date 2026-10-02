@@ -38,7 +38,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
   // so re-fulfill any newly issued request id rather than only the first.
   async function settleRngDay(game, deployer, mockVRF, word) {
     await advanceToNextDay();
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     let lastFulfilled = -1n;
     for (let i = 0; i < 80; i++) {
       if (!(await game.rngLocked())) break;
@@ -47,7 +47,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
         await mockVRF.fulfillRandomWords(requestId, word + BigInt(i));
         lastFulfilled = requestId;
       } else {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       }
     }
     expect(await game.rngLocked()).to.equal(false);

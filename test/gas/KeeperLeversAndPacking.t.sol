@@ -28,7 +28,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         D-351-02 REMOVED-SURFACE DROP (BY NAME, for the 351-09 REGRESSION-BASELINE-v55 ledger): the v49
 ///         keeper `batchPurchase` is GONE from contracts (`grep -rn "function batchPurchase" contracts/`
 ///         == EMPTY). The GAS-02/03 grep gates whose subject was `batchPurchase` are removed surfaces with
-///         NO behavioral successor (the per-buy work folded into `advanceGame()`'s required-path STAGE,
+///         NO behavioral successor (the per-buy work folded into `mineFlip()`'s required-path STAGE,
 ///         which fires NO batched value-transfer). The DROPPED assertions (by their old token):
 ///           - GAS-02 AfKing `batchPurchase{value: totalValue}(players, amounts, modes)` one-transfer
 ///           - GAS-02 AfKing `creditFlip(msg.sender, bountyEarned)` (REFRAMED onto mineFlip's, kept)

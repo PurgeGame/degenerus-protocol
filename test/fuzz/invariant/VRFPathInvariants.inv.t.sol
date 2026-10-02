@@ -35,7 +35,7 @@ contract VRFPathInvariants is DeployProtocol {
     }
 
     /// @notice lootboxRngIndex equals the sum of increments observed on the two request
-    ///         paths (advanceGame daily request, requestLootboxRng mid-day request) —
+    ///         paths (mineFlip daily request, requestLootboxRng mid-day request) —
     ///         no other action allocates an index
     function invariant_indexMatchesExpected() public view {
         assertEq(

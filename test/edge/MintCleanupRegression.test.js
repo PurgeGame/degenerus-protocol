@@ -1,56 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//
-// MintCleanupRegression.test.js — Phase 291 v42.0 MINTCLN regression fixture.
-//
-// Audit subject: Phase 290 audit-subject commit `e5665117` — the MINTCLN
-// cleanup batch that landed the post-MINTCLN cleanup of `_raritySymbolBatch`
-// (3-input keccak; `owed` carried in `baseKey` low 32 bits per the
-// B2-symmetric callsite encoding at mint:426-429 + mint:763-766) and the
-// retirement of the 5-field `TraitsGenerated` event in favor of the new
-// 3-field `(player, baseKey, take)` shape declared at
-// contracts/storage/DegenerusGameStorage.sol:484-488.
-//
-// BREAKING-TOPIC-HASH NOTE (TST-MINTCLN-05 — satisfied by this JSDoc header):
-//   The v41 `TraitsGenerated(address,uint256,uint256,uint32,uint32,uint256)`
-//   topic-hash `0x5e96bf2d5c935864be60ff066e1f498150a446b5b8b94321b0097276c61ec7c9`
-//   is retired at v42. The v42 `TraitsGenerated(address,uint256,uint32)` topic
-//   hash is `0x279edf1ccbf5db78a99006a6861b4d49de10ed6016d8400ce6a1d5e415d2ebc3`.
-//   The transition is structurally breaking for any indexer that filters on
-//   the v41 topic hash. Pre-launch posture per inherited anchor
-//   `D-40N-EVT-BREAK-01` (v40 Phase 277 precedent) is carried forward at v42
-//   under anchor `D-42N-EVT-BREAK-01`: no production indexer exists at
-//   audit-subject HEAD, so the breaking transition is acceptable without an
-//   on-chain migration shim. Migration-tooling deliverables (subgraph
-//   rebuilds, off-chain indexer field-map updates, replay tools) are
-//   forward-cited to Phase 297 §9 "Deferred to Future Milestones" — the
-//   v42.0 terminal phase's `§9 Deferred to Future Milestones` register MUST
-//   carry the indexer-migration handoff entry referencing this fixture as
-//   the structural attestation.
-//
-// Per-test mapping:
-//   TST-MINTCLN-01 — multi-call drain trait-multiset equivalence (JS-replay
-//     oracle equality) + cross-call seed separation evidence
-//     (pairwise-distinct keccak inputs across emissions at one queue slot).
-//   TST-MINTCLN-02 — TraitsGenerated 3-field decode + baseKey low-32
-//     decodes to owed-at-call-entry + upper bits decompose to
-//     (lvl, queueIdx, player) per mint:426-429 + raw log topic-hash equals
-//     the v42 literal `0x279edf1c...`.
-//   TST-MINTCLN-03 — B2 path coverage: Path B at lvl=1 (current-level via
-//     `_processOneTicketEntry`, inside the minted window
-//     [purchaseLevel-1 .. _mintCeiling()]) emits during the whale-bundle
-//     drain; Path A at lvl>=2 (the whale pass's far-future span, now beyond
-//     `_mintCeiling()` since the near/far boundary shrank from `level+5` to
-//     `_mintCeiling()`) does NOT emit — those entries stay frozen in the
-//     far-future key space until their own level's last-purchase-day seal
-//     triggers the private `_processFutureTicketBatch` continuation inside
-//     `processTicketBatch`. `path-accumulator=A|B` log discrimination is
-//     retained for whichever levels do emit, per Phase 282 precedent.
-//   TST-MINTCLN-04 — `entriesOwedPacked[rk][player]` slot read decodes to
-//     the expected packed form `(uint48(owed) << 8) | uint48(rem)` (owed in
-//     bits [8..39], snap-done marker at bit 40); outer-mapping key `rk` is derived per-path via
-//     `_tqWriteKey(lvl)` (Path B) and `_tqFarFutureKey(lvl)` (Path A) —
-//     NOT raw `lvl`. Storage-layout slot index pinned to 13 (BLK-2 lock).
-//   TST-MINTCLN-05 — satisfied by this JSDoc header (no separate test case).
+// Ticket checkpoint replay and queued-storage regression. The event ABI remains
+// TraitsGenerated(address,uint256,uint32); its versioned key now carries an
+// immutable stream identity and absolute low32 offset. Historical owed-salt
+// replay must not be applied to these new domains.
 
 import { readEntriesOwed, entryOwnerRecordSlot } from "../helpers/bucketSeed.js";
 
@@ -69,9 +21,10 @@ import {
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
 import {
-  computeBaseKey,
-  raritySymbolBatchRefV42,
-  decodeOwedFromBaseKey,
+  checkpointIdentity,
+  decodeCheckpointKey,
+  ticketCheckpointTraits,
+  seatedTicketReveals,
 } from "../helpers/raritySymbolBatchRef.mjs";
 
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
@@ -133,7 +86,8 @@ async function parseTraitsGeneratedEvents(receipt, storage, deployDayBoundary) {
     if (parsed && parsed.name === "TraitsGenerated") {
       const baseKey = BigInt(parsed.args.baseKey);
       const lvl = Number((baseKey >> 224n) & 0xFFFFFFn);
-      const queueIdx = Number((baseKey >> 192n) & 0xFFFFFFFFFFFFFFFFn);
+      const queueIdx = Number((baseKey >> 192n) & 0xFFFFFFFFn);
+      const decoded = decodeCheckpointKey(baseKey);
       const playerFromBase = (baseKey >> 32n) & ((1n << 160n) - 1n);
       const indexedPlayerBn = BigInt(parsed.args.player);
       if ((indexedPlayerBn & ((1n << 160n) - 1n)) !== playerFromBase) {
@@ -147,7 +101,8 @@ async function parseTraitsGeneratedEvents(receipt, storage, deployDayBoundary) {
         take: Number(parsed.args.take),
         lvl,
         queueIdx,
-        owedAtCallEntry: decodeOwedFromBaseKey(baseKey),
+        startIndex: decoded.startIndex,
+        domain: decoded.domain,
         txHash: log.transactionHash,
         emissionDay,
         rawLog: log,
@@ -213,146 +168,45 @@ function computeRk(lvl, path, ticketWriteSlot) {
   throw new Error("computeRk: unknown path " + path);
 }
 
-function annotateStartIndices(events, pathAccumulator) {
-  const callGroups = new Map();
-  for (const e of events) {
-    const key = `${e.txHash}-${e.player}-${e.lvl}-${e.queueIdx}`;
-    if (!callGroups.has(key)) callGroups.set(key, []);
-    callGroups.get(key).push(e);
-  }
-  for (const groupEvents of callGroups.values()) {
-    let cumProcessed = 0;
-    for (const e of groupEvents) {
-      e.startIndexForReplay = cumProcessed;
-      cumProcessed = pathAccumulator(e, cumProcessed);
-    }
-  }
-}
-
-const PATH_A_ACCUMULATOR = (e, prev) => prev + e.take;
-const PATH_B_ACCUMULATOR = (e, prev) => {
-  const baseOv = prev === 0 && e.owedAtCallEntry <= 2 ? 4 : 2;
-  const writesUsed =
-    (e.take <= 256 ? e.take * 2 : e.take + 256) +
-    baseOv +
-    (e.take === e.owedAtCallEntry ? 1 : 0);
-  return prev + (writesUsed >> 1);
-};
-
-function reconstructMultisetWithAccumulator(events, pathAccumulator) {
-  annotateStartIndices(events, pathAccumulator);
+function reconstructMultisetViaReference(events, reveals) {
   const multiset = new Map();
   for (const e of events) {
-    const traits = raritySymbolBatchRefV42({
-      baseKey: e.baseKey,
-      entropyWord: e.entropyAtEmission,
-      startIndex: e.startIndexForReplay,
-      count: e.take,
-    });
-    for (const t of traits) {
-      multiset.set(t, (multiset.get(t) || 0) + 1);
-    }
+    const traits = ticketCheckpointTraits({ baseKey: e.baseKey, entropyWord: DAILY_ENTROPY, count: e.take });
+    for (const t of traits) multiset.set(t, (multiset.get(t) || 0) + 1);
   }
-  return multiset;
-}
-
-function multisetEquals(a, b) {
-  const allKeys = new Set([...a.keys(), ...b.keys()]);
-  for (const k of allKeys) {
-    if ((a.get(k) || 0) !== (b.get(k) || 0)) return false;
-  }
-  return true;
-}
-
-function reconstructMultisetViaReference(events, onChainMultiset) {
-  const candidateA = reconstructMultisetWithAccumulator(events, PATH_A_ACCUMULATOR);
-  if (onChainMultiset && multisetEquals(candidateA, onChainMultiset)) {
-    return { multiset: candidateA, pathUsed: "A" };
-  }
-  const candidateB = reconstructMultisetWithAccumulator(events, PATH_B_ACCUMULATOR);
-  if (onChainMultiset && multisetEquals(candidateB, onChainMultiset)) {
-    return { multiset: candidateB, pathUsed: "B" };
-  }
-  return { multiset: candidateB, pathUsed: "neither" };
+  for (const e of reveals) multiset.set(e.trait, (multiset.get(e.trait) || 0) + 1);
+  return { multiset, pathUsed: "versioned-checkpoint" };
 }
 
 async function pinDailyEntropy(game, deployer, mockVRF, word) {
   await advanceToNextDay();
-  await game.connect(deployer).advanceGame();
-  const requestId = await getLastVRFRequestId(mockVRF);
-  try {
-    await mockVRF.fulfillRandomWords(requestId, word);
-  } catch {
-    // tolerate race where advanceGame already fulfilled
+  const previous = await getLastVRFRequestId(mockVRF);
+  let request = previous;
+  for (let i = 0; i < 100 && request === previous; ++i) {
+    await game.connect(deployer).mineFlip({ gasLimit: 12_000_000 });
+    request = await getLastVRFRequestId(mockVRF);
   }
-}
-
-// Storage slots for entropy source lookup (post-MINTCLN; v42 contract).
-// Source: `forge inspect contracts/storage/DegenerusGameStorage.sol:DegenerusGameStorage storage-layout`.
-const RNG_WORD_BY_DAY_BASE_SLOT = 10n;
-async function readLootboxEntropy(gameAddr) {
-  const flags = BigInt(await hre.ethers.provider.getStorage(gameAddr, 0));
-  if ((flags & (1n << 255n)) === 0n) return 0n;
-  const word = BigInt(await hre.ethers.provider.getStorage(gameAddr, 3));
-  return word === 1n ? 0n : word;
-}
-
-async function readDailyEntropy(gameAddr, day) {
-  const abi = hre.ethers.AbiCoder.defaultAbiCoder();
-  const slot = hre.ethers.keccak256(
-    abi.encode(["uint256", "uint256"], [BigInt(day), RNG_WORD_BY_DAY_BASE_SLOT])
-  );
-  return BigInt(await hre.ethers.provider.getStorage(gameAddr, slot));
+  expect(request).not.to.equal(previous);
+  await mockVRF.fulfillRandomWords(request, word);
 }
 
 async function drainViaAdvanceGame(game, caller, storage, deployDayBoundary, maxIters = 300) {
-  const events = [];
-  for (let i = 0; i < maxIters; i++) {
-    let tx;
-    try {
-      tx = await game.connect(caller).advanceGame();
-    } catch {
-      break;
-    }
-    const receipt = await tx.wait();
+  const events = [], reveals = [];
+  for (let i = 0; i < maxIters; ++i) {
+    const receipt = await (await game.connect(caller).mineFlip({ gasLimit: 12_000_000 })).wait();
     const newEvents = await parseTraitsGeneratedEvents(receipt, storage, deployDayBoundary);
     events.push(...newEvents);
+    for (const log of receipt.logs) reveals.push(...seatedTicketReveals(log));
     if (!(await game.rngLocked()) && newEvents.length === 0 && i > 10) break;
   }
-  const gameAddr = await game.getAddress();
-  // Path B (lvl=1, current-level via processTicketBatch L686) sources entropy
-  // from the published shared session payload; the index does not change while
-  // alice's ticket queue at lvl=1 is being drained, so the post-drain read
-  // returns the same word the emissions consumed.
-  // Path A (lvl>=2, the whale pass's far-future span) sources entropy from the
-  // rngWord that advanceGame() loaded from rngWordByDay[day] on whichever
-  // future call finally mints it (its own level's last-purchase-day seal); not
-  // exercised by this fixture (see TST-MINTCLN-03), but resolved defensively
-  // per-emission via the per-receipt block timestamp + day index in case a
-  // future scenario progresses far enough to reach it.
-  const lootboxEntropyCache = await readLootboxEntropy(gameAddr);
-  const dailyEntropyCache = new Map();
-  for (const e of events) {
-    if (e.lvl === 1) {
-      e.entropyAtEmission = lootboxEntropyCache;
-    } else {
-      if (!dailyEntropyCache.has(e.emissionDay)) {
-        dailyEntropyCache.set(
-          e.emissionDay,
-          await readDailyEntropy(gameAddr, e.emissionDay)
-        );
-      }
-      e.entropyAtEmission = dailyEntropyCache.get(e.emissionDay);
-    }
-  }
-  return { events };
+  return { events, reveals };
 }
 
 describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture", function () {
   this.timeout(900_000);
   after(() => restoreAddresses());
 
-  describe("TST-MINTCLN-01..04 — end-to-end whale-bundle multi-call drain via advanceGame()", function () {
+  describe("TST-MINTCLN-01..04 — end-to-end whale-bundle multi-call drain via mineFlip()", function () {
     async function setupWhaleBundleAndDrain() {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, deployer, mockVRF, alice } = fixture;
@@ -369,7 +223,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       );
 
       const gameAddr = await game.getAddress();
-      const { events } = await drainViaAdvanceGame(game, deployer, storage, fixture.deployDayBoundary, 300);
+      const { events, reveals } = await drainViaAdvanceGame(game, deployer, storage, fixture.deployDayBoundary, 300);
       const ticketWriteSlotAfter = await readTicketWriteSlot(gameAddr);
 
       const aliceEvents = events.filter(
@@ -381,6 +235,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
         storage,
         allEvents: events,
         aliceEvents,
+        aliceReveals: reveals.filter((e) => e.player.toLowerCase() === alice.address.toLowerCase()),
         ticketWriteSlotPostDrain: ticketWriteSlotAfter,
         gameAddr,
       };
@@ -429,7 +284,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       );
     });
 
-    it("TST-MINTCLN-02 — each emission decodes to (player, baseKey, take) 3-tuple with baseKey low-32 = owed-at-call-entry + upper bits = (lvl, queueIdx, player); event topic-hash matches v42 literal", async function () {
+    it("TST-MINTCLN-02 — each emission decodes to (player, baseKey, take) 3-tuple with baseKey low-32 = absolute offset + upper bits = (version/domain, lvl, queueIdx, player); event topic-hash matches v42 literal", async function () {
       const { storage, aliceEvents } = await setupWhaleBundleAndDrain();
 
       const evtFragment = storage.interface.getEvent("TraitsGenerated");
@@ -446,14 +301,14 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       let topicMatchCount = 0;
       for (const e of aliceEvents) {
         const expectedBaseKey =
-          computeBaseKey(e.lvl, e.queueIdx, e.player) | BigInt(e.owedAtCallEntry);
+          checkpointIdentity({ level: e.lvl, queueIndex: e.queueIdx, player: e.player, domain: e.domain }) | BigInt(e.startIndex);
         expect(e.baseKey).to.equal(
           expectedBaseKey,
-          `baseKey for emission lvl=${e.lvl} queueIdx=${e.queueIdx} owed=${e.owedAtCallEntry} must match the (lvl, queueIdx, player, owed) carry encoding`
+          `baseKey for emission lvl=${e.lvl} queueIdx=${e.queueIdx} owed=${e.startIndex} must match the (domain, lvl, queueIdx, player, offset) encoding`
         );
-        expect(decodeOwedFromBaseKey(e.baseKey)).to.equal(
-          e.owedAtCallEntry,
-          "decodeOwedFromBaseKey must round-trip the carried owed value"
+        expect(decodeCheckpointKey(e.baseKey).startIndex).to.equal(
+          e.startIndex,
+          "decodeCheckpointKey must round-trip the absolute offset"
         );
         if (e.rawLog.topics[0] === TRAITS_GENERATED_V42_TOPIC_HASH) {
           topicMatchCount++;
@@ -465,8 +320,8 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       );
     });
 
-    it("TST-MINTCLN-01 — multi-call drain trait-multiset equivalence: v42 3-input JS-replay reconstructs on-chain credited multiset trait-by-trait + cross-call seed separation evidence (pairwise-distinct keccak inputs)", async function () {
-      const { fixture, aliceEvents } = await setupWhaleBundleAndDrain();
+    it("TST-MINTCLN-01 — multi-call drain trait-multiset equivalence: versioned checkpoint JS replay reconstructs on-chain credited multiset trait-by-trait + cross-call seed separation evidence (pairwise-distinct keccak inputs)", async function () {
+      const { fixture, aliceEvents, aliceReveals } = await setupWhaleBundleAndDrain();
       const { game, alice } = fixture;
 
       const byLevel = new Map();
@@ -478,7 +333,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       for (const [lvl, levelEvents] of byLevel.entries()) {
         const onChain = await readPlayerTraitMultiset(game, lvl, alice.address);
         const { multiset: reconstructed, pathUsed } =
-          reconstructMultisetViaReference(levelEvents, onChain);
+          reconstructMultisetViaReference(levelEvents, aliceReveals.filter((e) => e.lvl === lvl));
 
         const reconstructedTotal = Array.from(reconstructed.values()).reduce(
           (a, b) => a + b,
@@ -488,7 +343,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
           (a, b) => a + b,
           0
         );
-        const emittedTotal = levelEvents.reduce((a, e) => a + e.take, 0);
+        const emittedTotal = levelEvents.reduce((a, e) => a + e.take, 0) + aliceReveals.filter((e) => e.lvl === lvl).length;
 
         console.log(
           `[W2 lvl=${lvl}] num-emissions=${levelEvents.length} | emitted-count-sum=${emittedTotal} | on-chain=${onChainTotal} | reconstructed=${reconstructedTotal} | path-accumulator=${pathUsed}`

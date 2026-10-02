@@ -9,7 +9,7 @@ import {AdvanceLivenessHandler} from "../handlers/AdvanceLivenessHandler.sol";
 /// @title AdvanceLiveness — no "flag set, no work, every entry point reverts" state.
 ///
 /// @notice From ANY fuzzed state, with VRF cooperating and without moving time, a bounded
-///         number of advanceGame cranks must reach a sealed, idle day: terminal revert
+///         number of mineFlip cranks must reach a sealed, idle day: terminal revert
 ///         NotTimeYet, today's word recorded, rng unlocked, the mid-day latch clear, nothing
 ///         staged without a worker (ticketsFullyProcessed), advanceDue() consistent, and a
 ///         mid-day lootbox request not blocked by MidDayActive. A CRAPS-table probe request

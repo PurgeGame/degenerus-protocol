@@ -26,7 +26,7 @@
 //      chi² assertions (TST-HRROLL-01 + TST-HRROLL-02) and small-N samples
 //      for the edge cases (TST-HRROLL-04 + TST-HRROLL-05). Cross-attestation
 //      lives in a separate describe block: 16 production-path replays drive
-//      `advanceGame()` through the natural jackpot resolution chain that
+//      `mineFlip()` through the natural jackpot resolution chain that
 //      fires `DailyWinningTraits`; the event's `mainTraitsPacked` byte
 //      decodes to the on-chain hero `(quadrant, symbol)` per
 //      `_rollBoard` L1623-L1627, asserted byte-equal to the JS oracle
@@ -307,17 +307,17 @@ async function placeEthBet(game, signer, quadrant, symbol) {
   return game.connect(signer).placeDegeneretteBet(hre.ethers.ZeroAddress, CURRENCY_ETH, MIN_BET_ETH_VALUE, 1, (Number((BigInt(customTicket) >> (BigInt(quadrant) * 8n)) & 7n) | (Number(quadrant) << 3)), { value: MIN_BET_ETH_VALUE });
 }
 
-// Phase 282 / 291 pattern: drive advanceGame() to issue a VRF request,
+// Phase 282 / 291 pattern: drive mineFlip() to issue a VRF request,
 // then fulfill with the pinned word. Subsequent jackpot-resolution calls
-// inside the advanceGame chain consume rngWordByDay[day] = word.
+// inside the mineFlip chain consume rngWordByDay[day] = word.
 async function pinDailyEntropy(game, deployer, mockVRF, word) {
   await advanceToNextDay();
-  await game.connect(deployer).advanceGame();
+  await game.connect(deployer).mineFlip();
   const requestId = await getLastVRFRequestId(mockVRF);
   try {
     await mockVRF.fulfillRandomWords(requestId, word);
   } catch {
-    // Tolerate race where advanceGame already fulfilled in-line.
+    // Tolerate race where mineFlip already fulfilled in-line.
   }
 }
 
@@ -950,7 +950,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   // at flat idx 31) and all-zero-seeded baseline (HRROLL-01 early-bail at
   // total == 0) is captured + logged for traceability but NOT asserted
   // against any soft/hard window. The production path
-  //   `advanceGame()` → state machine → _emitDailyWinningTraits →
+  //   `mineFlip()` → state machine → _emitDailyWinningTraits →
   //   _rollMainTraits → _rollBoard → _rollHeroSymbol
   // triggers downstream JackpotFlipWin / coin-jackpot cascades that fire
   // differently between the two seeded states (the trait-byte rewrite at
@@ -976,7 +976,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
     "TST-HRROLL-06 — production-path gas regression (RELAXED — log-only traceability; theoretical-attestation cite 292-01-MEASUREMENT.md §3.c)",
     function () {
       it(
-        "DailyWinningTraits event fires under both worst-case-seeded and all-zero-seeded advanceGame jackpot-resolution paths across " +
+        "DailyWinningTraits event fires under both worst-case-seeded and all-zero-seeded mineFlip jackpot-resolution paths across " +
           N_GAS_SAMPLES +
           " measurements; per-sample gas-delta logged for traceability against the +" +
           GAS_DELTA_THEORETICAL +
@@ -998,8 +998,8 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
           // Run one gas-measurement sample:
           //   1. Deploy fresh fixture (per-sample to avoid contamination).
           //   2. Purchase tickets so the state machine has work to drain.
-          //   3. Day-warp + advanceGame to issue VRF request; fulfillRandomWords.
-          //   4. Drain queue via repeated advanceGame() until DailyWinningTraits
+          //   3. Day-warp + mineFlip to issue VRF request; fulfillRandomWords.
+          //   4. Drain queue via repeated mineFlip() until DailyWinningTraits
           //      fires — that's the tx whose gasUsed we capture and whose
           //      fired-event we treat as positive-path proof.
           //   5. (Optional) seed dailyHeroWagers[dailyIdx] with raw32 RIGHT
@@ -1031,19 +1031,19 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               { value: hre.ethers.parseEther("2") }
             );
 
-            // Day-warp + advanceGame to issue VRF request, then fulfill
+            // Day-warp + mineFlip to issue VRF request, then fulfill
             // with DAILY_ENTROPY. The fulfilled rngWordByDay[D] is consumed
-            // by subsequent advanceGame() calls in the drain chain.
+            // by subsequent mineFlip() calls in the drain chain.
             await pinDailyEntropy(game, deployer, mockVRF, DAILY_ENTROPY);
 
-            // Drain via repeated advanceGame() until DailyWinningTraits
+            // Drain via repeated mineFlip() until DailyWinningTraits
             // fires. Cap the drain at 30 iterations to prevent infinite
             // loops if the state machine gets stuck.
             const MAX_DRAIN_ITERS = 30;
             let finalReceipt = null;
             for (let iter = 0; iter < MAX_DRAIN_ITERS; ++iter) {
               // Seed dailyHeroWagers[dailyIdx][q] RIGHT BEFORE each
-              // advanceGame call so that whichever call triggers
+              // mineFlip call so that whichever call triggers
               // _emitDailyWinningTraits reads the seeded state. The seed is
               // re-applied per iteration because intervening _unlockRng
               // writes to dailyIdx could shift the slot index.
@@ -1059,7 +1059,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
               let tx;
               try {
-                tx = await game.connect(deployer).advanceGame();
+                tx = await game.connect(deployer).mineFlip();
               } catch {
                 // Drain ended (NotTimeYet, etc.).
                 break;
@@ -1119,11 +1119,11 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // production path reaches _rollBoard → _rollHeroSymbol.
             expect(
               worstResult.dailyWinningTraitsFired,
-              `worst-case-seeded path did not emit DailyWinningTraits (sample attempt ${totalAttempts}); advanceGame drain never reached _emitDailyWinningTraits`
+              `worst-case-seeded path did not emit DailyWinningTraits (sample attempt ${totalAttempts}); mineFlip drain never reached _emitDailyWinningTraits`
             ).to.equal(true);
             expect(
               baselineResult.dailyWinningTraitsFired,
-              `all-zero-seeded baseline path did not emit DailyWinningTraits (sample attempt ${totalAttempts}); advanceGame drain never reached _emitDailyWinningTraits`
+              `all-zero-seeded baseline path did not emit DailyWinningTraits (sample attempt ${totalAttempts}); mineFlip drain never reached _emitDailyWinningTraits`
             ).to.equal(true);
 
             if (worstResult.gasUsed === null || baselineResult.gasUsed === null) {
@@ -1146,7 +1146,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
           if (samples.length < N_GAS_SAMPLES) {
             throw new Error(
-              `TST-HRROLL-06: only ${samples.length}/${N_GAS_SAMPLES} valid samples collected after ${totalAttempts} attempts (${invalidSamples} invalid). The advanceGame() path is not reliably reaching _emitDailyWinningTraits — verify state-machine routing.`
+              `TST-HRROLL-06: only ${samples.length}/${N_GAS_SAMPLES} valid samples collected after ${totalAttempts} attempts (${invalidSamples} invalid). The mineFlip() path is not reliably reaching _emitDailyWinningTraits — verify state-machine routing.`
             );
           }
 
@@ -1264,13 +1264,13 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
               { value: hre.ethers.parseEther("2") }
             );
 
-            // Day-warp + advanceGame to issue VRF request, then fulfill
+            // Day-warp + mineFlip to issue VRF request, then fulfill
             // with the per-iteration `entropy` so that the downstream
             // _rollHeroSymbol(dailyIdx, heroEntropy = keccak256(randWord,
             // dailyIdx)) consumes this exact VRF word.
             await pinDailyEntropy(game, deployer, mockVRF, entropy);
 
-            // Drain via repeated advanceGame() until DailyWinningTraits
+            // Drain via repeated mineFlip() until DailyWinningTraits
             // fires. Seed dailyHeroWagers[dailyIdx][q] RIGHT BEFORE each
             // advance so whichever call reaches _emitDailyWinningTraits
             // reads the seeded state. Capture the dailyIdx + final-tx
@@ -1290,7 +1290,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
               let tx;
               try {
-                tx = await game.connect(deployer).advanceGame();
+                tx = await game.connect(deployer).mineFlip();
               } catch {
                 break;
               }
@@ -1324,7 +1324,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
             if (finalReceipt === null) {
               throw new Error(
-                `TST-HRROLL cross-attestation i=${i}: advanceGame drain never reached _emitDailyWinningTraits within ${MAX_DRAIN_ITERS} iters`
+                `TST-HRROLL cross-attestation i=${i}: mineFlip drain never reached _emitDailyWinningTraits within ${MAX_DRAIN_ITERS} iters`
               );
             }
 

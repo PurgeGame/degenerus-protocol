@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Every run peaks at its starting bankroll after thirty rolls, so ranking follows the
@@ -20,25 +21,25 @@ contract DecimatorPricingFlatProbe {
     }
 }
 
-/// @dev Measures one settlement call inside its own frame. Under FOUNDRY_ISOLATE each test call is
-///      a transaction, which cools storage as a real keeper call finds it; measuring here keeps
-///      that transaction's base cost, paid once per mineFlip, out of the leg's charge.
+/// @dev Native calls measured within an external frame; vm.cool and isolate exclude setup warmth.
 contract DecimatorPricingMeter {
-    function settle(DecimatorBattleHarness h, uint256 budget) external returns (uint256 used, uint256 units) {
-        uint256 before = gasleft();
-        (, units,) = h.settleDecimatorWinners(budget);
-        used = before - gasleft();
+    function settle(DecimatorBattleHarness h, uint256 allowance)
+        external returns (uint256 used, MineFlipGas.Result memory result)
+    {
+        uint256 beforeGas = gasleft();
+        result = h.runDecimatorWork(allowance);
+        used = beforeGas - gasleft();
     }
 }
 
-/// @notice The Decimator's work units against measured gas: every settlement call, cold, must cost
-///         at most 90% of the units it charges at 4,700 gas each. Real-engine fields cover every
-///         named-chip count; probe fields force the heaviest heap shapes on fresh and reused slots.
+/// @notice Native Decimator worker progression under small and large gas allocations.
+///         Real dice and forced heap/payout shapes preserve all semantic work boundaries.
 contract DecimatorPricingTest is Test {
-    uint256 private constant UNIT_GAS = 4700;
     DecimatorBattleHarness private h;
     DecimatorPricingMeter private meter;
-    uint256 private maxRatioBps;
+    uint256 private maxRunGas;
+    uint256 private maxRankGas;
+    uint256 private maxPayGas;
     uint256 private maxCallGas;
     uint24 private nextLevel = 5;
     uint256 private fieldPool = 100 ether;
@@ -84,41 +85,49 @@ contract DecimatorPricingTest is Test {
         h.seal(lvl, uint128(fieldPool + salt), uint256(keccak256(abi.encode("pricing", salt))));
     }
 
-    function _settleAll(uint256 budget) private {
+    function _settleAll(uint256 allowance) private {
         for (uint256 guard; uint24(h.queue()) != 0 && guard < 20_000; ++guard) {
+            uint24 lvl = uint24(h.queue());
+            uint8 phase = h.roundOf(lvl).phase;
+            bool ranking = phase == 1 && h.roundOf(lvl).cursor == h.roundOf(lvl).count;
             vm.cool(address(h));
             vm.cool(ContractAddresses.CRAPS_ENGINE);
-            (uint256 used, uint256 units) = meter.settle(h, budget);
-            assertLe(units, budget < 1824 ? budget : 1824, "strict shared work budget");
-            assertLe(used * 10, units * UNIT_GAS * 9, "call exceeds 90% of its charge");
-            uint256 ratio = used * 10_000 / (units * UNIT_GAS);
-            if (ratio > maxRatioBps) maxRatioBps = ratio;
+            (uint256 used, MineFlipGas.Result memory result) = meter.settle{gas: 15_000_000}(h, allowance);
+            assertTrue(result.progressed, "admitted native action progresses");
+            assertLe(used, allowance + 20_000, "native allowance plus measured call frame");
+            if (ranking) {
+                if (used > maxRankGas) maxRankGas = used;
+            } else if (phase == 2) {
+                if (used > maxPayGas) maxPayGas = used;
+            } else if (used > maxRunGas) maxRunGas = used;
             if (used > maxCallGas) maxCallGas = used;
         }
         assertEq(uint24(h.queue()), 0, "settled");
     }
 
     function _report(string memory label) private {
-        emit log_named_uint(string.concat(label, ": worst gas / charge (bps)"), maxRatioBps);
-        emit log_named_uint(string.concat(label, ": heaviest call gas"), maxCallGas);
+        emit log_named_uint(string.concat(label, ": cold RUN batch max"), maxRunGas);
+        emit log_named_uint(string.concat(label, ": cold RANK max"), maxRankGas);
+        emit log_named_uint(string.concat(label, ": cold PAY batch max"), maxPayGas);
+        emit log_named_uint(string.concat(label, ": heaviest native call"), maxCallGas);
     }
 
     /// @dev Real dice on every board size: full-budget calls and small-allowance calls.
-    function test_RealEngineCallsWithinCharge() public {
+    function test_RealEngineCallsWithAvailableGas() public {
         for (uint256 salt = 1; salt <= 3; ++salt) {
             _field(700, salt, true, 0);
-            _settleAll(2500);
+            _settleAll(14_000_000);
         }
         _field(300, 9, true, 0);
-        _settleAll(122); // small allowance still reserves the largest indivisible run
+        _settleAll(1_000_000); // small allowance still reserves the largest indivisible run
         _report("real engine");
-        assertLt(maxCallGas, 10_000_000, "a full keeper leg stays under 10M");
+        assertLt(maxCallGas, 15_000_000, "worker fits its supplied execution gas");
     }
 
     /// @dev A hot round of the 200,000-run simulation (round 259: two of its 200 entries ran past
     ///      400 rolls, 24 past 300), rebuilt exactly, so its longest runs settle through the
     ///      module.
-    function test_HotRoundCappedRunsWithinCharge() public {
+    function test_HotRoundCappedRunsWithAvailableGas() public {
         uint24 lvl = nextLevel; // level 5, the simulation's
         nextLevel += 10;
         h.open(lvl);
@@ -128,7 +137,7 @@ contract DecimatorPricingTest is Test {
         }
         vm.stopPrank();
         h.seal(lvl, 50 ether, uint256(keccak256(abi.encode("round200k", uint256(259)))));
-        _settleAll(122);
+        _settleAll(1_000_000);
         _report("hot round, small allowance");
         uint24 again = nextLevel;
         nextLevel += 10;
@@ -139,31 +148,31 @@ contract DecimatorPricingTest is Test {
         }
         vm.stopPrank();
         h.seal(again, 50 ether, uint256(keccak256(abi.encode("round200k", uint256(259)))));
-        _settleAll(2500);
+        _settleAll(14_000_000);
         _report("hot round, full calls");
     }
 
     /// @dev A pool big enough that every share buys half passes: payouts alternate ETH credits and
     ///      half-pass awards to fresh addresses, small allowance and in full calls.
-    function test_WhalePassPayoutsWithinCharge() public {
+    function test_WhalePassPayoutsWithAvailableGas() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorPricingFlatProbe).runtimeCode);
         fieldPool = 2000 ether;
         _field(1000, 300, false, 0);
-        _settleAll(122);
+        _settleAll(1_000_000);
         _field(1000, 301, false, 0);
-        _settleAll(2500);
+        _settleAll(14_000_000);
         _report("whale pass payouts");
     }
 
     /// @dev Heaviest heap shapes on fresh slots, then again on the reused slots of later rounds.
-    function test_HeapShapesWithinChargeFreshAndReused() public {
+    function test_HeapShapesWithAvailableGasFreshAndReused() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorPricingFlatProbe).runtimeCode);
         for (uint8 pass; pass < 2; ++pass) {
             for (uint8 shape = 1; shape <= 3; ++shape) {
                 _field(1000, 100 + pass * 10 + shape, false, shape);
-                _settleAll(122);
+                _settleAll(1_000_000);
                 _field(1000, 200 + pass * 10 + shape, false, shape);
-                _settleAll(2500);
+                _settleAll(14_000_000);
             }
         }
         _report("heap shapes");

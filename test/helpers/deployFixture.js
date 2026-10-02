@@ -138,6 +138,10 @@ export async function deployFullProtocol() {
 
     // Game modules
     mintModule: contracts.GAME_MINT_MODULE,
+    ticketModule: contracts.GAME_TICKET_MODULE,
+    minerModule: contracts.GAME_MINER_MODULE,
+    rngModule: contracts.GAME_RNG_MODULE,
+    jackpotDrawModule: contracts.GAME_JACKPOT_DRAW_MODULE,
     advanceModule: contracts.GAME_ADVANCE_MODULE,
     whaleModule: contracts.GAME_WHALE_MODULE,
     jackpotModule: contracts.GAME_JACKPOT_MODULE,

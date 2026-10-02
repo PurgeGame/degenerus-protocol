@@ -158,7 +158,7 @@ contract OpenBountyCarry is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }
@@ -168,7 +168,7 @@ contract OpenBountyCarry is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }

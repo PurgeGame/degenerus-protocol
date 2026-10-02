@@ -9,8 +9,8 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title V61CureBountyDecurse — TST-04 proof: the cashout-curse CURE (any buy >= 1 ticket worth clears the
-///        counter), the sub-ticket bounty STAMP (DAY_SHIFT → _bountyEligible, growth halts, NO cure), the
-///        manual-lootbox bounty eligibility, and the permissionless paid `decurse`.
+///        counter), the sub-ticket mint-day STAMP (DAY_SHIFT, NO cure), the manual-lootbox
+///        mint-day behavior, and the permissionless paid `decurse`.
 ///
 /// @notice CURE (CURSE-04, MintModule._purchaseForWith:1326-1330): every buy whose `totalCost >= priceWei`
 ///   (>=1 whole ticket worth, funding-agnostic) calls `_clearCurse(buyer)` BEFORE the post-action score read,
@@ -24,10 +24,9 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///   PRESERVES an existing curse. That truthful non-cure behavior is asserted by contrast (a curse survives a
 ///   whale-pass purchase) so the cure-vs-no-cure boundary is falsifiable in both directions.
 ///
-///   BOUNTY STAMP (CURSE-05): a sub-ticket / small-lootbox buy stamps DAY_SHIFT (the buyer becomes
-///   _bountyEligible — read via the public game.bountyEligible view) but does NOT clear the curse. A manual
-///   plain-lootbox buyer is likewise stamped bounty-eligible (the plain lootbox leg now wires through
-///   _recordLootboxMintDay, MintModule:1215).
+///   MINT-DAY STAMP (CURSE-05): the cumulative whole-ticket floor stamps DAY_SHIFT without curing a
+///   curse when each individual buy remains below the cure threshold. Read the saved field directly;
+///   bountyEligible is an unconditional compatibility view and cannot prove a mint-day write.
 ///
 ///   DECURSE (CURSE-06, GameAfkingModule.decurse:1696, dispatched DegenerusGame.sol:443): permissionless;
 ///   reverts E() if the target's curse is already 0 (no wasted burn); burns exactly PRICE_COIN_UNIT/10
@@ -254,24 +253,24 @@ contract V61CureBountyDecurse is DeployProtocol {
     }
 
     // =========================================================================
-    // BOUNTY STAMP — sub-ticket buys do NOT stamp DAY_SHIFT; crossing one whole
+    // MINT-DAY STAMP — sub-ticket buys do NOT stamp DAY_SHIFT; crossing one whole
     // ticket cumulatively does (and still does not cure)
     // =========================================================================
 
     /// @notice A genuine SUB-ticket buy (totalCost < priceWei) at a new level does NOT stamp
     ///         DAY_SHIFT — the mint-day stamp rides the whole-ticket "minted" floor (400 units
-    ///         = 4 entries x QTY_SCALE), so the buyer stays NOT _bountyEligible and the curse is
+    ///         = 4 entries x QTY_SCALE), so the saved day remains unchanged and the curse is
     ///         UNCHANGED. A second sub-ticket buy that crosses the cumulative 400-unit floor
-    ///         runs the full record path: DAY_SHIFT stamps (bounty-eligible) while the curse
+    ///         runs the full record path: DAY_SHIFT stamps while the curse
     ///         still does NOT cure (each buy's totalCost < priceWei cure threshold).
-    function testSubTicketBuyStampsBountyOnlyAtWholeTicketFloor() public {
+    function testSubTicketBuyStampsMintDayOnlyAtWholeTicketFloor() public {
         address p = makeAddr("subticket_stamp");
         _seedCurse(p, 2);
-        // Land < 15 min into the day so the time-based bounty tiers are NOT open, and seed lastEthDay far in the
-        // past so the recency tier is closed too — the buy's DAY_SHIFT stamp is the only thing that can flip it.
         _advanceWallClockToBuyWindowStart();
         _seedLastEthDay(p, 0);
-        assertTrue(!game.bountyEligible(p), "pre-buy: not bounty-eligible (stale, early in the day)");
+        assertEq(_lastEthDayOf(p), 0, "pre-buy: no mint-day stamp");
+        uint256 expectedMintDay = uint24(uint256(vm.load(address(game), bytes32(0))) >> 24);
+        assertEq(expectedMintDay, 100, "fixture: ticket minting uses the saved daily index");
 
         // 200 units == 0.5 ticket: costWei = 0.005 ETH ∈ [TICKET_MIN_BUYIN_WEI 0.0025, priceWei 0.01) ⇒ a valid
         // sub-ticket buy below both the whole-ticket minted floor and the cure threshold.
@@ -281,40 +280,38 @@ contract V61CureBountyDecurse is DeployProtocol {
         vm.prank(p);
         game.purchase{value: subCost}(p, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
-        assertTrue(!game.bountyEligible(p), "sub-ticket buy below the minted floor does NOT stamp DAY_SHIFT");
+        assertEq(_lastEthDayOf(p), 0, "sub-ticket buy below the minted floor does NOT stamp DAY_SHIFT");
         assertEq(game.curseCountOf(p), 2, "sub-ticket buy does NOT cure (totalCost < priceWei)");
 
         // Second 200-unit buy crosses the cumulative 400-unit floor: full record path runs,
-        // DAY_SHIFT stamps, buyer becomes bounty-eligible; the sub-priceWei buy still cannot cure.
+        // DAY_SHIFT stamps; the sub-priceWei buy still cannot cure.
         vm.deal(p, subCost);
         vm.prank(p);
         game.purchase{value: subCost}(p, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
-        assertTrue(game.bountyEligible(p), "crossing the whole-ticket floor stamps DAY_SHIFT => bounty-eligible");
+        assertEq(_lastEthDayOf(p), expectedMintDay, "crossing the whole-ticket floor stamps the saved mint day");
         assertEq(game.curseCountOf(p), 2, "crossing buy still does NOT cure (totalCost < priceWei)");
     }
 
-    /// @notice A manual plain-lootbox buyer is _bountyEligible: the plain lootbox leg wires through
-    ///         _recordLootboxMintDay which stamps DAY_SHIFT for a box worth at least one whole ticket
-    ///         (priceForLevel(level + 1)), closing the plain-vs-bundled gap. The lootbox leg stamps
-    ///         lastEthDay = _simulatedDayIndex() (the WALL-CLOCK day, distinct from the ticket leg's
-    ///         dailyIdx basis), so dailyIdx is aligned to the sim day here so the gate
-    ///         (gateIdx == dailyIdx) accepts the sim-day stamp. Falsifiable: not eligible before, eligible after.
-    function testManualLootboxBuyerBecomesBountyEligible() public {
-        address p = makeAddr("manual_lb_bounty");
-        // Land early in the day (time tiers closed); align dailyIdx to the sim day so the lootbox-leg stamp
-        // (sim day) satisfies the bounty gate (gateIdx == dailyIdx).
+    /// @notice Plain lootbox spend joins the cumulative minted-unit tally. A box worth one ticket
+    ///         stamps the saved daily index and cures the curse, even when the wall-clock day differs.
+    function testManualLootboxStampsMintDayAndCures() public {
+        address p = makeAddr("manual_lb_mint_day");
         _advanceWallClockToBuyWindowStart();
-        _alignDailyIdxToSimDay();
-        _seedLastEthDay(p, 0);
-        assertTrue(!game.bountyEligible(p), "pre-buy: not bounty-eligible");
+        uint32 previousDay = 99;
+        _seedLastEthDay(p, previousDay);
+        _seedCurse(p, 4);
+        assertEq(_lastEthDayOf(p), previousDay, "fixture: a prior ticket mint-day stamp exists");
+        assertEq(game.curseCountOf(p), 4, "fixture: buyer is cursed");
+        assertNotEq(game.currentDayView(), 100, "fixture: wall-clock day differs from the saved daily index");
 
-        uint256 boxAmount = _oneTicketCost(); // a plain lootbox (>= LOOTBOX_MIN) stamps DAY_SHIFT
+        uint256 boxAmount = _oneTicketCost();
         vm.deal(p, boxAmount);
         vm.prank(p);
         game.purchase{value: boxAmount}(p, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
 
-        assertTrue(game.bountyEligible(p), "manual lootbox buyer stamped DAY_SHIFT => bounty-eligible");
+        assertEq(_lastEthDayOf(p), 100, "whole-ticket-value box stamps the saved daily index");
+        assertEq(game.curseCountOf(p), 0, "one-ticket-value plain lootbox cures the curse");
     }
 
     // =========================================================================
@@ -435,6 +432,10 @@ contract V61CureBountyDecurse is DeployProtocol {
         _seedField(who, DAY_SHIFT, 0xFFFFFFFF, day);
     }
 
+    function _lastEthDayOf(address who) internal view returns (uint32) {
+        return uint32(game.mintPackedFor(who) >> DAY_SHIFT);
+    }
+
     /// @dev Field-isolated seed of dailyIdx (slot 0, byte 3, uint24).
     function _seedDailyIdx(uint256 day) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
@@ -443,21 +444,17 @@ contract V61CureBountyDecurse is DeployProtocol {
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 
-    /// @dev Align dailyIdx (the _bountyEligible gate basis, gateIdx == dailyIdx) to the live wall-clock sim day
-    ///      (game.currentDayView() == _simulatedDayIndex()). Used by the lootbox-leg bounty proof (the lootbox
-    ///      DAY_SHIFT stamp uses the sim day) and the cure-before-score contrast (so both buyers' streak bases
-    ///      are computed at a consistent day). Kept >= 1 so a far-past lastEthDay=0 stays non-eligible.
+    /// @dev Align dailyIdx to the wall-clock day so the cure-before-score contrast computes both
+    ///      buyers' streak bases at a consistent day. Keep the index nonzero.
     function _alignDailyIdxToSimDay() internal {
         uint256 simDay = uint256(game.currentDayView());
         if (simDay == 0) simDay = 1;
         _seedDailyIdx(simDay);
     }
 
-    /// @dev Warp the wall clock to just AFTER the daily reset (82620 = 22:57 UTC) so `elapsed` in
-    ///      _bountyEligible is < 15 min — i.e. the time-based bounty tiers are NOT yet open, isolating the
-    ///      DAY_SHIFT-stamp tier as the thing the buy flips.
+    /// @dev Position purchases deterministically just after the daily reset (82620 = 22:57 UTC).
     function _advanceWallClockToBuyWindowStart() internal {
-        // Land 5 minutes into the day window (< 15 min ⇒ no time-tier eligibility).
+        // Land five minutes into a fresh wall-clock day.
         uint256 dayStart = ((block.timestamp - 82620) / 1 days) * 1 days + 82620 + 1 days;
         _t = dayStart + 5 minutes;
         vm.warp(_t);

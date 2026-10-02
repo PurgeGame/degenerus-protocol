@@ -33,33 +33,38 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         // Subscribing queues indexed cover boxes, also bound to the next write cohort.
         vm.warp(vm.getBlockTimestamp() + 1 days);
         uint256 previousRequest = mockVRF.lastRequestId();
-        // Either public entry must progress without calling the other entry, even across
-        // the handoff from ticket work to boxes and then to the next daily request.
-        bytes4 forbidden = rewarded ? game.advanceGame.selector : game.mineFlip.selector;
-        vm.mockCallRevert(address(game), abi.encodeWithSelector(forbidden), "public work entry called recursively");
+        // The single engine entry handles both funded and unrewarded safe checkpoints.
+        // Funding changes transaction boundaries, never the committed cohort's identity.
+        uint256 committedWord = RecyclingState.currentWord(address(game));
+        uint48 committedRead = RecyclingState.readBuffer(address(game));
+        vm.resumeGasMetering();
         vm.recordLogs();
         for (uint256 i; i < 1024 && mockVRF.lastRequestId() == previousRequest; ++i) {
             vm.prank(address(0xC4A9));
-            if (rewarded) game.mineFlip();
-            else game.advanceGame();
+            if (rewarded) game.mineFlip{gas: 12_000_000}();
+            else game.mineFlip{gas: 9_500_000}();
+            if (mockVRF.lastRequestId() == previousRequest) {
+                assertEq(RecyclingState.currentWord(address(game)), committedWord, "continuation retains old entropy");
+                assertEq(RecyclingState.readBuffer(address(game)), committedRead, "continuation retains old read buffer");
+            }
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 bounties;
-        bool readWait;
+        bool ticketWork;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics.length != 0
                 && logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) {
                 (uint8 stage,) = abi.decode(logs[i].data, (uint8, uint24));
-                if (stage == 19) readWait = true;
                 assertTrue(stage != 18, "consumer cleanup cannot report a fresh daily word applied");
             }
             if (logs[i].emitter == address(game) && logs[i].topics.length != 0
+                && logs[i].topics[0] == keccak256("TraitsGenerated(address,uint256,uint32)")) ticketWork = true;
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0
                 && logs[i].topics[0] == keccak256("MinerBounty(uint8,address,uint256)")) ++bounties;
         }
-        assertTrue(readWait, "committing the final ticket latch emits consumer-wait stage 19");
+        assertTrue(ticketWork, "the old ticket cohort generated traits before the next request");
         if (rewarded) assertGt(bounties, 0, "mineFlip pays for completed keeper work");
-        else assertEq(bounties, 0, "standalone advance never pays a keeper bounty, including read drains");
-        vm.clearMockedCalls();
+        else assertEq(bounties, 0, "low-funded engine never pays a miner bounty, including read drains");
         assertGt(mockVRF.lastRequestId(), previousRequest, "keeper alone drained read consumers and requested the next day");
         assertTrue(game.rngLocked(), "the fresh daily request reached its lock");
         assertFalse(game.rngComplete(), "a fresh request clears the completion marker");
@@ -67,18 +72,23 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         assertEq(uint256(game.extsload(keccak256(abi.encode(RecyclingState.writeBuffer(address(game)), uint256(57))))), 0, "old read header reset once at seal");
     }
     function test_MidnightCommitsFinalTicketLatchBeforeWaitingForBoxes() public { _crossMidnight(0, true); }
-    function test_StandaloneMidnightDrainsWithoutCallingMineFlipOrPayingBounty() public { _crossMidnight(0, false); }
-    function test_MineFlipPreservesVaultOwnerForStalledRequestRetry() public {
+    function test_LowGasMidnightDrainsWithoutPayingBounty() public { _crossMidnight(0, false); }
+    function test_AdminPreservesVaultOwnerForStalledRequestRetry() public {
         vm.pauseGasMetering();
         _latchMiddayAfterTarget(false);
         uint256 request = mockVRF.lastRequestId();
+        uint48 committedRead = RecyclingState.readBuffer(address(game));
         vm.warp(vm.getBlockTimestamp() + 1 days);
         assertTrue(vault.isVaultOwner(ContractAddresses.CREATOR), "fixture creator holds the vault majority");
-        assertFalse(vault.isVaultOwner(address(game)), "self-call sender would lose retry authority");
+        assertFalse(vault.isVaultOwner(address(game)), "Game is not the vault owner");
         vm.prank(ContractAddresses.CREATOR);
-        game.mineFlip();
-        assertGt(mockVRF.lastRequestId(), request, "mineFlip retains the owner's authority to retry");
-        assertTrue(game.rngLocked(), "the retry takes the daily lock");
+        admin.retryGameRng();
+        assertGt(mockVRF.lastRequestId(), request, "Admin forwards the owner's authorized retry");
+        assertFalse(game.rngLocked(), "retry preserves the original midday request mode");
+        assertEq(RecyclingState.readBuffer(address(game)), committedRead, "retry preserves the committed cohort");
+        _fulfillPending();
+        for (uint256 i; i < 1024 && !game.rngLocked(); ++i) game.mineFlip();
+        assertTrue(game.rngLocked(), "after the midday cohort drains the next daily request locks");
     }
     // 2 protocol + 1,000 free + 998 vault seats is the reachable supply ceiling.
     function test_MidnightDefersSubscriberStampingUntilReadCohortCompletes() public { _crossMidnight(2000, true); }

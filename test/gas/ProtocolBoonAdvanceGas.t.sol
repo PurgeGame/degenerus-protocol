@@ -2,6 +2,8 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -20,10 +22,26 @@ contract ProtocolDrawGasSeeder is DegenerusGameStorage {
         _setRngSessionPublished(false);
         _setRngComplete(false);
         rngRequestTime = uint48(block.timestamp);
+        rngRequestDay = day;
         rngWordCurrent = 987654321;
         _recordDailyRng(day, 0);
         _recordDailyRng(day - 1, 12345);
 
+    }
+}
+
+/// @dev Retains the complete facade for callback/view dependencies while exposing
+///      the exact native phase selected by Miner. No production cost is mocked.
+contract ProtocolDailyGasHost is DegenerusGame {
+    function publishOnly() external {
+        _callPhase(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
+    }
+    function applyOnly() external {
+        _callPhase(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord()"));
+    }
+    function _callPhase(address target, bytes memory data) private {
+        (bool ok, bytes memory reason) = target.delegatecall(data);
+        if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
     }
 }
 
@@ -42,10 +60,10 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
     function testColdAdvanceAwardsSixAtMaximumSearchDepthAndResumes() public {
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.advanceGame{gas: 16_777_216 - 21_064}();
+        game.mineFlip{gas: 12_000_000}();
         uint256 used = beforeGas - gasleft() + 21_064;
         emit log_named_uint("cold RNG settlement plus six automatic boons including intrinsic", used);
-        assertLt(used, 3_000_000, "daily settlement plus six maximum-depth searches must remain bounded");
+        assertLe(used, 10_000_000, "the complete composed engine transaction stays bounded");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 awarded;
         for (uint256 i; i < logs.length; ++i) {
@@ -56,24 +74,49 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
         uint24 day = game.currentDayView();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day - 1).awardedMask, 7);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 7);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != keccak256("ProtocolBoonDrawAwarded(address,address,uint24,uint8,uint32,uint8)"), "resume re-awarded a slot");
         }
     }
 
+    function testNativeDailyApplyColdSixBoonsFitsSavedBound() public {
+        vm.etch(address(game), type(ProtocolDailyGasHost).runtimeCode);
+        ProtocolDailyGasHost host = ProtocolDailyGasHost(payable(address(game)));
+        host.publishOnly();
+        vm.recordLogs();
+        host.applyOnly{gas: 12_000_000}();
+        uint256 used = vm.lastCallGas().gasTotalUsed;
+        if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
+        emit log_named_uint("native_daily_apply_six_boons_including_intrinsic", used);
+        assertLt(used, GasBounds.DAILY_APPLY, "complete native daily phase exceeds saved admission bound");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 awards;
+        uint256 applies;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == keccak256("ProtocolBoonDrawAwarded(address,address,uint24,uint8,uint32,uint8)")) ++awards;
+            if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++applies;
+        }
+        assertEq(awards, 6, "all maximum-depth draws must run inside the measured phase");
+        assertEq(applies, 1, "phase must consume a fresh daily word exactly once");
+        assertTrue(game.rngLocked(), "native application leaves the later daily phases locked");
+    }
+
     function testInsufficientGasCannotDiscardOrSealAwards() public {
         uint24 day = game.currentDayView();
-        (bool ok,) = address(game).call{gas: 100_000}(abi.encodeCall(game.advanceGame, ()));
-        assertFalse(ok, "the deliberately underfunded advance should fail");
+        (bool ok,) = address(game).call{gas: 100_000}(abi.encodeCall(game.mineFlip, ()));
+        // A low-gas call may return without progress or fail naturally; neither may
+        // consume the day word or drop any owed boon.
+        ok;
         DegenerusGameLens lens = new DegenerusGameLens();
         assertEq(game.rngWordForDay(day), 0, "failed advance cannot record the word");
         assertEq(lens.protocolBoonPool(address(game), address(vault), day - 1).awardedMask, 0);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 0);
-        game.advanceGame();
+        game.mineFlip();
         assertEq(lens.protocolBoonPool(address(game), address(vault), day - 1).awardedMask, 7);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 7);
     }

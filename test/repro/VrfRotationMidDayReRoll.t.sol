@@ -42,7 +42,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.advanceGame();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip();
         assertTrue(game.rngLocked(), "daily request starts after prior consumers finish");
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -51,7 +51,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
         }
     }
 

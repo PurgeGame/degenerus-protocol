@@ -153,12 +153,12 @@ describe("PriceEscalation", function () {
   describe("price transition at level 5", function () {
     async function advanceOneLevel(game, deployer, mockVRF, word) {
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, word || 2n);
       for (let i = 0; i < 30; i++) {
         if (!(await game.rngLocked())) break;
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       }
     }
 

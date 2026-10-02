@@ -35,8 +35,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      branch re-reads the horizon).
 ///   Δ2 subscribe: `afKing.subscribe(...)` -> `game.subscribe(...)` (identical 6-arg sig).
 ///   Δ3 doWork: `afKing.doWork()` -> `game.mineFlip()`.
-///   Δ4 autoBuy: `afKing.autoBuy(N)` -> the per-sub buy folded into `advanceGame()`'s STAGE; driven via
-///      a new-day advanceGame + the `_settleGame` VRF drain.
+///   Δ4 autoBuy: `afKing.autoBuy(N)` -> the per-sub buy folded into `mineFlip()`'s STAGE; driven via
+///      a new-day mineFlip + the `_settleGame` VRF drain.
 ///   Δ5 views/cancel: `afKing.subscriptionOf(x).field` -> read `_subOf[x]` via vm.load (RE-DERIVED
 ///      slots); `afKing.poolOf` -> `afkingFundingOf`; `afKing.withdraw` -> `withdrawAfkingFunding`;
 ///      `afKing.depositFor` -> `depositAfkingFunding`.
@@ -232,21 +232,21 @@ contract AfKingSubscription is DeployProtocol {
     // Internal helpers
     // =========================================================================
 
-    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE advanceGame() (no full settle) —
+    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE mineFlip() (no full settle) —
     ///      the STAGE is strictly PRE-RNG so the crossing refresh/evict completes before rngGate and the
     ///      stage is measured on its own. Subscribers must already be registered (subscribe blocks
     ///      during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.advanceGame();
+        game.mineFlip();
     }
 
-    /// @dev Settle the game to a clean state: drive advanceGame + deliver the mock VRF word until
+    /// @dev Settle the game to a clean state: drive mineFlip + deliver the mock VRF word until
     ///      advanceDue() is false and we are not rng-locked (PATTERNS §"Settle-to-clean-state VRF drain").
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

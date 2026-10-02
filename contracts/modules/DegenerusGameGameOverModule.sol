@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -24,10 +26,12 @@ pragma solidity 0.8.34;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
-import {IDegenerusGameMintModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameTicketModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {
     IVRFCoordinator,
@@ -133,11 +137,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
     // error E() — inherited from DegenerusGameStorage
 
-    /// @dev Fixed tally budget: one queued record, foil pack, or boundary per unit.
-    ///      Includes headroom for a finishing 256-trait scan and thirty cold refunds
-    ///      through the complete delegatecall chain under the 11.5M transaction cap.
-    uint256 private constant DEAD_TALLY_UNITS = 2800;
-
     /// @dev claimDeadVrf reference kinds, in the top byte of each reference.
     uint256 private constant DEAD_REF_CREATED = 0;
     uint256 private constant DEAD_REF_QUEUED = 1;
@@ -157,10 +156,31 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///        is one this path requests itself after liveness froze purchases, and every
     ///        cohort at the terminal level draws on it. There is no retry here: if that
     ///        request goes unanswered for _VRF_DEAD_TIMEOUT the dead ending takes over.
-    function handleGameOverAdvance(uint24 day, uint24 lvl) external returns (bool shouldReturn, uint8 stage, bool unlock) {
+    function handleGameOverAdvance(uint24 day, uint24 lvl) external returns (bool, uint8, bool) {
+        return _runGameOverAdvance(day, lvl, MineFlipGas.available());
+    }
+
+    function runGameOverAdvance(uint24 day, uint24 lvl, uint256 allowance) external returns (bool, uint8, bool) {
+        return _runGameOverAdvance(day, lvl, allowance);
+    }
+
+    function _runGameOverAdvance(uint24 day, uint24 lvl, uint256 allowance)
+        private returns (bool shouldReturn, uint8 stage, bool unlock)
+    {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        (shouldReturn, stage, unlock) = _handleGameOverAdvance(day, lvl, meter);
+        MineFlipGas.finish(meter);
+    }
+
+    function _handleGameOverAdvance(uint24 day, uint24 lvl, MineFlipGas.Meter memory meter)
+        private returns (bool shouldReturn, uint8 stage, bool unlock)
+    {
         if (gameOver) {
-            // Post-gameover: check for final sweep (1 month after gameover)
-            handleFinalSweep();
+            if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) {
+                bool done = _handleGameOverDrain(day, meter);
+                return (true, STAGE_GAMEOVER, done);
+            }
+            if (MineFlipGas.canRun(meter, GasBounds.TERMINAL_FINAL_SWEEP, GasBounds.TERMINAL_SWEEP_TAIL)) handleFinalSweep();
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -189,6 +209,14 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0) {
             _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, drainLevel == lvl ? 1 : 2);
             _setRngTerminal();
+            rngRequestDay = 0;
+            // Completed quadrants already balanced their source and liabilities.
+            // Retire only the unpaid normal-day continuation; its remaining funds
+            // join the terminal pot. No paid award is repeated or clawed back.
+            delete jackpotWork;
+            dailyTicketBudgetsPacked = 0;
+            dailyJackpotCoinTicketsPending = false;
+            earlyBirdWhalePasses = 0;
             (address top, ) = affiliate.affiliateTop(drainLevel);
             terminalAffiliate = top;
         }
@@ -203,8 +231,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 _setRngSessionPublished(false);
                 rngWordCurrent = RNG_WORD_WAITING;
             }
-            if (!tallyDeadVrf(drainLevel)) return (true, STAGE_TICKETS_WORKING, false);
-            handleGameOverDrain(day);
+            if (!_tallyDeadVrf(drainLevel, meter)) return (true, STAGE_TICKETS_WORKING, false);
+            _handleGameOverDrain(day, meter);
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -228,7 +256,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // Terminal scope: the payout samples only lvlTraitEntry[drainLevel], so every probe here
         // is drainLevel-only; every other windowed cohort is dead value and is never touched.
-        if (_recordedDailyWord(day) == 0) {
+        if (!_terminalWordApplied()) {
             if (!_rngRequestActive() || rngWordCurrent == RNG_WORD_WAITING) {
                 // No terminal word yet. Wait out a request in flight: a mid-day lootbox request,
                 // or this path's own terminal request.
@@ -244,9 +272,13 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     if (
                         _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
                             && _lootboxWord(_rngReadBuffer()) != 0
-                            && _terminalDrainBatch(drainLevel)
+                            && _terminalDrainBatch(drainLevel, meter)
                     ) return (true, STAGE_TICKETS_WORKING, false);
-                } else if (
+                }
+                if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST + 100_000, GasBounds.TERMINAL_TAIL)) {
+                    return (true, STAGE_GAMEOVER, false);
+                }
+                if (
                     (_ticketQueueLength(_tqWriteKey(drainLevel)) != 0 || foilQueue[_foilWriteKey()].length != 0)
                         && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
                 ) {
@@ -262,7 +294,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             // Request the terminal word, or apply it once it has landed. Either way this
             // transaction ends here, so the word's application (which may derive up to a
             // deadman's worth of skipped days) never shares a transaction with a drain batch.
-            applyTerminalRng(uint48(block.timestamp), day, lvl);
+            _applyTerminalRng(uint48(block.timestamp), day, lvl, meter);
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -270,13 +302,13 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // per transaction. A finishing batch still returns, so the payout runs in its own.
         if (
             (_ticketQueueLength(_tqReadKey(drainLevel)) != 0 || _foilDrainPending())
-                && _terminalDrainBatch(drainLevel)
+                && _terminalDrainBatch(drainLevel, meter)
         ) {
             return (true, STAGE_TICKETS_WORKING, false);
         }
 
-        handleGameOverDrain(day);
-        return (true, STAGE_GAMEOVER, true);
+        bool payoutDone = _handleGameOverDrain(day, meter);
+        return (true, STAGE_GAMEOVER, payoutDone);
     }
 
 
@@ -284,8 +316,23 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @dev Only the terminal path delegates here, after fixing its payout level and swap.
     ///      The caller arms a one-shot refusal timer; coordinator failure leaves it unchanged.
     function requestTerminalRng() public returns (bool requested) {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
+        requested = _requestTerminalRng(_simulatedDayIndex(), meter);
+        MineFlipGas.finish(meter);
+    }
+
+    function _requestTerminalRng(uint24 day, MineFlipGas.Meter memory meter) private returns (bool requested) {
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0 || _rngRequestActive()) revert E();
-        try vrfCoordinator.requestRandomWords(VRFRandomWordsRequest({
+        if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST, GasBounds.TERMINAL_TAIL)) return false;
+        if (rngRequestDay == 0) {
+            rngRequestDay = day > dailyIdx ? day : dailyIdx + 1;
+            rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+            _setRngSessionPublished(false);
+            rngWordCurrent = RNG_WORD_WAITING;
+        }
+        // The admitted bound covers coordinator gas, EIP-150 and all request
+        // bookkeeping. Gas failures are never interpreted as a semantic refusal.
+        try vrfCoordinator.requestRandomWords{gas: GasBounds.RNG_REQUEST - 300_000}(VRFRandomWordsRequest({
             keyHash: vrfKeyHash, subId: vrfSubscriptionId,
             requestConfirmations: VRF_REQUEST_CONFIRMATIONS,
             callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex""
@@ -297,42 +344,46 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             _setRngRequestActive(true);
             _setRngSessionPublished(false);
             rngWordCurrent = RNG_WORD_WAITING;
-            rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+            // A refusal retry retains the first admitted attempt's identity and
+            // timeout. Coordinator acceptance does not restart that deadline.
             rngLockedFlag = true;
             _setDecDayOneActive(false);
             if (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags)) _setTicketRedemptionOpen(false);
             requested = true;
-        } catch {}
+        } catch (bytes memory reason) {
+            MineFlipGas.rethrowGasFailure(reason);
+        }
     }
 
-    /// @notice Apply the ending's delivered word or request it without normal consumer gates.
-    /// @dev Shared helpers preserve normal daily recording, nudges and gap derivation.
+    function _terminalWordApplied() private view returns (bool) {
+        return rngRequestDay != 0 && _rngRequestActive() && _rngSessionPublished()
+            && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) != 0;
+    }
+
+    /// @notice Compatibility entry; native terminal work supplies its remaining meter.
     function applyTerminalRng(uint48 ts, uint24 day, uint24 lvl) public {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
+        _applyTerminalRng(ts, day, lvl, meter);
+        MineFlipGas.finish(meter);
+    }
+
+    function _applyTerminalRng(uint48, uint24 day, uint24 lvl, MineFlipGas.Meter memory meter) private {
+        if (_terminalWordApplied()) return;
         uint256 currentWord = _currentRngWord();
         if (_rngRequestActive() && currentWord != 0) {
+            if (!MineFlipGas.canRun(meter, GasBounds.DAILY_GAP + GasBounds.DAILY_APPLY, GasBounds.TERMINAL_TAIL)) return;
+            day = rngRequestDay;
             uint24 first = dailyIdx + 1;
-            (uint16 firstResult, ) = coinflip.getCoinflipDayResult(first);
+            (uint16 firstResult,) = coinflip.getCoinflipDayResult(first);
             if (firstResult != 0) ++first;
             if (day > first) _backfillGapDays(_rawDailyRngWord(currentWord), first, day);
             currentWord = _applyDailyRng(day, currentWord);
-            if (lvl != 0) {
-                // Gameover settles the final day's flips but never grants a bonus (0).
-                coinflip.processCoinflipPayouts(0, currentWord, day);
-            }
+            if (lvl != 0) coinflip.processCoinflipPayouts(0, currentWord, day);
             _resolvePendingRedemption(currentWord);
             _finalizeLootboxRng(currentWord);
             return;
         }
-        if (!_rngRequestActive()) {
-            // Arm the failure timer once; coordinator refusals must never move the deadline.
-            // Discard retained entropy before attempting the ending's own fresh request.
-            if (_rngSessionPublished()) {
-                _setRngSessionPublished(false);
-                rngWordCurrent = RNG_WORD_WAITING;
-                rngRequestTime = ts & ~uint48(1);
-            }
-            requestTerminalRng();
-        }
+        if (!_rngRequestActive()) _requestTerminalRng(day, meter);
     }
 
     /// @dev One terminal drain batch: TICKET_SLOT_BIT on the anchor asks the worker for its
@@ -350,16 +401,24 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      when no winning bucket is populated yet — a starved call could afford it and forfeit
     ///      the whole undrained cohort.
     /// @return ran True if a batch ran, finished or not.
-    function _terminalDrainBatch(uint24 drainLevel) private returns (bool ran) {
-        (bool dOk, bytes memory dData) = ContractAddresses.GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector, drainLevel | TICKET_SLOT_BIT)
-            );
-        if (!dOk && (dData.length == 0 || (dData.length == 4 && bytes4(dData) == EmptyRevert.selector))) {
-            if (dData.length == 0) revert EmptyRevert();
-            assembly ("memory-safe") { revert(add(dData, 32), mload(dData)) }
+    function _terminalDrainBatch(uint24 drainLevel, MineFlipGas.Meter memory meter) private returns (bool ran) {
+        uint256 allowance = MineFlipGas.forwardable(MineFlipGas.remaining(meter), 100_000);
+        if (allowance == 0) return true;
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector,
+                drainLevel | TICKET_SLOT_BIT, allowance)
+        );
+        if (!ok) {
+            MineFlipGas.rethrowGasFailure(data);
+            if (data.length == 4 && bytes4(data) == EmptyRevert.selector) {
+                assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+            }
+            return false;
         }
-        return dOk && dData.length >= 64;
+        // A successful no-progress checkpoint still owns this transaction: low
+        // supplied gas must not turn unprocessed entries into forfeited entries.
+        abi.decode(data, (MineFlipGas.Result));
+        return true;
     }
 
     /// @notice Process game over by distributing remaining funds.
@@ -382,7 +441,17 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @custom:reverts Invariant When distributable funds exist but the RNG word is unavailable (defense-in-depth).
     /// @custom:reverts TransferFailed When an stETH or ETH transfer fails.
     function handleGameOverDrain(uint24 day) public virtual {
-        if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return; // Already processed
+        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
+        _handleGameOverDrain(day, meter);
+        MineFlipGas.finish(meter);
+    }
+
+    function _handleGameOverDrain(uint24 day, MineFlipGas.Meter memory meter) private returns (bool done) {
+        if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return true;
+        if (gameOver) return _resumeTerminalPayout(day, meter);
+        // At most 32 deity refunds, terminal burns and accounting, with no draw
+        // admitted until the remaining allowance is measured after this setup.
+        if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_SETUP, GasBounds.TERMINAL_TAIL)) return false;
 
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint24 lvl = level;
@@ -403,7 +472,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // _recordedDailyWord(day) != 0 before calling, so this revert should never fire.
         uint256 rngWord;
         if (preRefundAvailable != 0 && !dead) {
-            rngWord = _recordedDailyWord(day);
+            rngWord = _lootboxWord(_rngReadBuffer());
             if (rngWord == 0) revert Invariant();
         }
 
@@ -458,7 +527,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // Latch terminal state
         gameOver = true;
         earlyBirdWhalePasses = 0;
-        _goWrite(GO_TIME_SHIFT, GO_TIME_MASK, uint48(block.timestamp));
 
         // Burn unallocated tokens
         charityGameOver.burnAtGameOver();
@@ -466,7 +534,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // Flood FLIP's VAULT mint allowance as a one-shot worthless-token tombstone
         flip.tombstoneAtGameOver();
 
-        _goWrite(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK, 1);
         // next|future share one slot; zero both in a single SSTORE (no read needed). currentPrizePool
         // is a separate slot, still zeroed below.
         _setPrizePools(0, 0);
@@ -496,7 +563,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         uint256 postRefundReserved = uint256(claimablePool);
         uint256 available = totalFunds > postRefundReserved ? totalFunds - postRefundReserved : 0;
 
-        if (available == 0) return;
+        if (available == 0) { _finishTerminalPayout(); return true; }
 
         emit GameOverDrained(lvl, available, claimablePool);
 
@@ -517,7 +584,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             deadTotal = uint64(created * QTY_SCALE + uncreated);
             deadUncreatedLeft = uint64(uncreated);
             emit DeadVrfPayoutFixed(terminalLevel, remaining, created, uncreated, deadTraitCount);
-            return;
+            _finishTerminalPayout();
+            return true;
         }
         address top = terminalAffiliate;
         uint256 affiliateShare = remaining / 50;
@@ -535,7 +603,28 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // already promoted), otherwise purchase-phase `lvl + 1`. Any leftover from empty trait
         // buckets stays in the contract until handleFinalSweep (30 days later) folds it into the
         // three-way split to vault / sDGNRS / GNRUS.
-        IDegenerusGame(address(this)).runTerminalJackpot(remaining, terminalLevel, rngWord);
+        // Pin the pot before returning even if this call has too little allowance
+        // left to roll a first quadrant. 255 denotes priced but not yet initialized.
+        jackpotWork.kind = 3;
+        jackpotWork.lvl = terminalLevel;
+        jackpotWork.budget = uint128(remaining);
+        jackpotWork.quadrant = 255;
+        return _resumeTerminalPayout(day, meter);
+    }
+
+    function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter) private returns (bool done) {
+        uint256 allowance = MineFlipGas.forwardable(MineFlipGas.remaining(meter), 100_000);
+        if (allowance == 0) return false;
+        (MineFlipGas.Result memory result,) = IDegenerusGame(address(this)).runTerminalJackpotWork(
+            jackpotWork.budget, jackpotWork.lvl, _lootboxWord(_rngReadBuffer()), allowance
+        );
+        if (result.done) _finishTerminalPayout();
+        return result.done;
+    }
+
+    function _finishTerminalPayout() private {
+        _goWrite(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK, 1);
+        _goWrite(GO_TIME_SHIFT, GO_TIME_MASK, uint48(block.timestamp));
     }
 
     /// @notice Final sweep of all remaining funds after 30 days post-gameover.
@@ -548,6 +637,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts TransferFailed When ETH or stETH transfer fails
     function handleFinalSweep() public {
+        if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) return;
         uint256 goTime = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
         if (goTime == 0) return; // Game not over yet
         if (block.timestamp < goTime + 30 days) return; // Too early
@@ -617,8 +707,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @dev Advance-only delegate target (_handleGameOverPath, after the dead ending latched).
     ///      No ticket or foil drain runs once it is latched and every entry point that could
     ///      add a ticket is closed by the liveness trigger, so what is counted here stays
-    ///      put. Resumable, DEAD_TALLY_UNITS per call — a pure function of state, never of
-    ///      the gas supplied. Three stages:
+    ///      put. Actual-gas checkpoints retain exact record cursors and totals.
+    ///      Three stages:
     ///        0 — uncreated queued entries: the terminal read, write and future queues, snap-adjusted as the ticket drain would have applied it, in QTY_SCALE
     ///            units (a fractional remainder counts as its fraction of an entry);
     ///        1 — undrained foil packs of `lvl`, FOIL_PACK_ENTRIES entries each;
@@ -627,9 +717,14 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @param lvl The latched terminal ticket level.
     /// @return finished True once all three stages are done.
     function tallyDeadVrf(uint24 lvl) public returns (bool finished) {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
+        finished = _tallyDeadVrf(lvl, meter);
+        MineFlipGas.finish(meter);
+    }
+
+    function _tallyDeadVrf(uint24 lvl, MineFlipGas.Meter memory meter) private returns (bool finished) {
         uint256 stage = deadTallyStage;
         if (stage == 3) return true;
-        uint256 units = DEAD_TALLY_UNITS;
         uint256 uncreated = deadUncreated;
         uint24 dd = deadTallyFoilDay;
         uint256 idx = deadTallyFoilIdx;
@@ -642,7 +737,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(key)];
                 uint256 len = _ticketQueueLength(key);
                 while (pos < len) {
-                    if (units == 0) {
+                    if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_TALLY_RECORD, GasBounds.TERMINAL_TALLY_TAIL)) {
                         deadTallyPos = uint32(pos);
                         deadTallyFoilDay = dd;
                         deadUncreated = uint64(uncreated);
@@ -650,7 +745,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     }
                     uint32 id = _tqPositionAt(queue, pos);
                     uncreated += _deadWeight(_entryPacked(key, id), shift);
-                    unchecked { --units; ++pos; }
+                    unchecked { ++pos; }
                 }
                 pos = 0;
                 unchecked { ++dd; }
@@ -674,12 +769,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                         packs := keccak256(0, 32)
                     }
                     do {
-                        if (units == 0) {
+                        if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_TALLY_RECORD, GasBounds.TERMINAL_TALLY_TAIL)) {
                             _saveDeadTally(1, dd, idx, uncreated);
                             return false;
-                        }
-                        unchecked {
-                            --units;
                         }
                         // idx < n proves this cached-base read is within the day's bucket.
                         uint256 pack;
@@ -693,12 +785,11 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     } while (idx < n);
                 }
                 // Charge the day step too, so a long run of empty days stays metered.
-                if (units == 0) {
+                if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_TALLY_RECORD, GasBounds.TERMINAL_TALLY_TAIL)) {
                     _saveDeadTally(1, dd, idx, uncreated);
                     return false;
                 }
                 unchecked {
-                    --units;
                     ++dd;
                 }
                 idx = dd <= 2 && dd - 1 == _foilReadKey() ? foilCursor : 0;
@@ -706,8 +797,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             stage = 2;
         }
 
-        // Stage 2: the 256 bucket lengths, in one call once enough units remain.
-        if (units < 256) {
+        // Stage 2: reserve the entire fixed 256-bucket scan before starting it.
+        if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_TALLY_FINAL, GasBounds.TERMINAL_TALLY_TAIL)) {
             _saveDeadTally(2, dd, idx, uncreated);
             return false;
         }

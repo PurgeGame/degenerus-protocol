@@ -271,3 +271,73 @@ export function decodeOwedFromBaseKey(baseKey) {
   const bn = typeof baseKey === "bigint" ? baseKey : BigInt(baseKey);
   return Number(bn & 0xFFFFFFFFn);
 }
+
+// Checkpoint generator V2. The functions above remain historical replay oracles.
+export const CHECKPOINT_DOMAINS = Object.freeze({ half0: 0x20, half1: 0x21, future: 0x22, foil: 0x23 });
+
+export function checkpointIdentity({ level, queueIndex, player, domain = CHECKPOINT_DOMAINS.half0 }) {
+  const lvl = BigInt(level), index = BigInt(queueIndex), who = BigInt(player);
+  if (lvl < 0n || lvl > 0xffffffn || index < 0n || index > U32_MASK || who < 0n || who >= (1n << 160n)) {
+    throw new RangeError("ticket identity exceeds its packed field");
+  }
+  if (!Object.values(CHECKPOINT_DOMAINS).includes(domain)) throw new RangeError("unknown ticket domain");
+  return (BigInt(domain) << 248n) | (lvl << 224n) | (index << 192n) | (who << 32n);
+}
+
+export function decodeCheckpointKey(baseKey) {
+  const key = BigInt(baseKey);
+  const domain = Number(key >> 248n);
+  if (!Object.values(CHECKPOINT_DOMAINS).includes(domain)) throw new RangeError("unknown ticket generator version/domain");
+  return {
+    domain,
+    level: Number((key >> 224n) & 0xffffffn),
+    queueIndex: Number((key >> 192n) & U32_MASK),
+    player: `0x${((key >> 32n) & ((1n << 160n) - 1n)).toString(16).padStart(40, "0")}`,
+    startIndex: Number(key & U32_MASK),
+    identity: key & ~U32_MASK,
+  };
+}
+
+/// Replay one event independently: low32 is its absolute solo offset, never owed.
+/// Foil keeps its separate boosted four-line algorithm and must not enter this decoder.
+export function ticketCheckpointTraits({ baseKey, entropyWord, count }) {
+  const decoded = decodeCheckpointKey(baseKey);
+  if (decoded.domain === CHECKPOINT_DOMAINS.foil) throw new RangeError("foil requires its frozen boost and foil replay");
+  const start = BigInt(decoded.startIndex), n = BigInt(count), end = start + n;
+  if ((start & 15n) !== 0n || n < 0n || n > U32_MASK || end > (1n << 32n)) {
+    throw new RangeError("invalid checkpoint range");
+  }
+  const out = new Uint8Array(Number(n));
+  let written = 0;
+  for (let i = start; i < end;) {
+    const seed = BigInt(keccak256(abiCoder.encode(
+      ["uint256", "uint256", "uint256"], [decoded.identity, BigInt(entropyWord), i / 16n]
+    )));
+    let s = ((seed & U64_MASK) | 1n) * TICKET_LCG_MULT & U64_MASK;
+    for (let j = 0; j < 16 && i < end; ++j, ++i) {
+      s = (s * TICKET_LCG_MULT + 1n) & U64_MASK;
+      out[written++] = traitFromWord(s) | (Number(i & 3n) << 6);
+    }
+  }
+  return out;
+}
+
+/// Decode the anonymous EntryTraitsRevealed event's four packed owner topics.
+export function seatedTicketReveals(log) {
+  if (log.topics.length !== 4 || log.data.length !== 66) return [];
+  const topics = log.topics.map(BigInt);
+  if (topics.some((v) => v >> 184n !== 0n)) return [];
+  const word = BigInt(log.data), mask = word >> 128n, out = [];
+  for (let seat = 0; seat < 4; ++seat) {
+    if (topics[seat] === 0n) continue;
+    for (let quadrant = 0; quadrant < 4; ++quadrant) {
+      if ((mask >> BigInt(seat * 4 + quadrant) & 1n) === 0n) continue;
+      out.push({
+        lvl: Number(topics[seat] >> 160n),
+        player: `0x${(topics[seat] & ((1n << 160n) - 1n)).toString(16).padStart(40, "0")}`,
+        trait: Number(word >> BigInt(seat * 32 + quadrant * 8) & 255n),
+      });
+    }
+  }
+  return out;
+}

@@ -46,7 +46,7 @@ contract CrapsOpenerFailOpen is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("opener", seed, reqId))) | 1);
     }
 
-    /// @dev Drive one full day through `advanceGame` and return whether the craps day opened on
+    /// @dev Drive one full day through `mineFlip` and return whether the craps day opened on
     ///      it. Only the crank's two "nothing to do" gates (`NotTimeYet`, `RngNotReady`) are
     ///      tolerated; any other revert is bubbled — that revert IS the failure these pins exist
     ///      to catch.
@@ -69,7 +69,7 @@ contract CrapsOpenerFailOpen is DeployProtocol {
 
     function _crank() internal {
         vm.prank(keeper);
-        try game.advanceGame() {}
+        try game.mineFlip() {}
         catch (bytes memory err) {
             bytes4 sel = bytes4(err);
             if (sel == bytes4(keccak256("NotTimeYet()")) || sel == bytes4(keccak256("RngNotReady()"))) return;

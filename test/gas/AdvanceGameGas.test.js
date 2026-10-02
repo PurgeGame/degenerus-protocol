@@ -23,7 +23,7 @@ const AUDIT_GAS_CEILING = 11_500_000n;
 /**
  * AdvanceGame Gas Benchmark Tests
  *
- * Measures worst-case gas for every advanceGame code path.
+ * Measures worst-case gas for every mineFlip code path.
  * Each test drives the state machine to a specific stage and reports gasUsed.
  *
  * IMPORTANT: The Advance event is declared in DegenerusGameAdvanceModule,
@@ -105,19 +105,19 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
   /** Trigger game over at level 0 (multi-step VRF flow). */
   async function triggerGameOverAtLevel0(game, deployer, mockVRF) {
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 42n);
     }
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     // Drain any queued tickets: with non-empty queues the game-over path
-    // returns STAGE_TICKETS_WORKING across multiple advanceGame calls before
+    // returns STAGE_TICKETS_WORKING across multiple mineFlip calls before
     // handleGameOverDrain fires and flips gameOver=true.
     for (let i = 0; i < 50; i++) {
       if (await game.gameOver()) return;
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         return;
       }
@@ -137,12 +137,12 @@ describe("AdvanceGame Gas Benchmarks", function () {
   }
 
   /**
-   * Drive one VRF cycle: next day -> advanceGame -> fulfill -> drain all processing.
+   * Drive one VRF cycle: next day -> mineFlip -> fulfill -> drain all processing.
    * Returns the last Advance stage observed.
    */
   async function driveOneCycle(game, deployer, mockVRF, advanceModule, word) {
     await advanceToNextDay();
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     const requestId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(requestId, word);
@@ -152,7 +152,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
     let lastStage = -1n;
     for (let i = 0; i < 200; i++) {
       try {
-        const tx = await game.connect(deployer).advanceGame();
+        const tx = await game.connect(deployer).mineFlip();
         const events = await getAdvanceEvents(tx, advanceModule);
         if (events.length > 0) {
           lastStage = events[0].args.stage;
@@ -227,7 +227,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       await advanceToNextDay();
 
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await game.connect(deployer).mineFlip();
       const receipt = await tx.wait();
       const events = await getAdvanceEvents(tx, advanceModule);
       expect(events.length).to.be.gte(1);
@@ -244,7 +244,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
   // unreachable in fresh-fixture scope. The DegenerusGame constructor
   // (DegenerusGame.sol:224-231) pre-queues vault perpetual tickets for
   // levels 1-100 into ticketQueue[lvl] (raw key, since ticketWriteSlot
-  // defaults to false). The first advanceGame requests VRF and calls
+  // defaults to false). The first mineFlip requests VRF and calls
   // _swapAndFreeze which flips ticketWriteSlot=true and resets
   // ticketsFullyProcessed=false. On the second advance the new-day
   // drain block reads ticketQueue[_tqReadKey(purchaseLevel)] which
@@ -275,11 +275,11 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
 
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 999n);
 
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await game.connect(deployer).mineFlip();
       const receipt = await tx.wait();
       const events = await getAdvanceEvents(tx, advanceModule);
       const stage = events.length > 0 ? events[0].args.stage : "?";
@@ -304,7 +304,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       // First VRF cycle: processes tickets
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       let requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 111n);
 
@@ -312,7 +312,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       for (let i = 0; i < 50; i++) {
         if (!(await game.rngLocked())) break;
         try {
-          await game.connect(deployer).advanceGame();
+          await game.connect(deployer).mineFlip();
         } catch {
           break;
         }
@@ -320,12 +320,12 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       // Second day for daily jackpot path
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 222n);
 
       // This should hit the PURCHASE_DAILY path (stage=6)
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await game.connect(deployer).mineFlip();
       const receipt = await tx.wait();
       const events = await getAdvanceEvents(tx, advanceModule);
       const stage = events.length > 0 ? events[0].args.stage : "?";
@@ -349,11 +349,11 @@ describe("AdvanceGame Gas Benchmarks", function () {
       const nextPool = await game.nextPrizePoolView();
       console.log(`      nextPrizePool: ${hre.ethers.formatEther(nextPool)} ETH`);
 
-      // Drive VRF cycles, watching every advanceGame call for stage 13
+      // Drive VRF cycles, watching every mineFlip call for stage 13
       let foundGas = false;
       for (let cycle = 0; cycle < 30; cycle++) {
         await advanceToNextDay();
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
         const requestId = await getLastVRFRequestId(mockVRF);
         try {
           await mockVRF.fulfillRandomWords(
@@ -367,7 +367,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         // Drain processing, watching for stage 13
         for (let i = 0; i < 200; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -390,9 +390,9 @@ describe("AdvanceGame Gas Benchmarks", function () {
       expect(await game.jackpotPhase()).to.equal(true);
       if (!foundGas) {
         console.log("      (Stage 13 not directly captured in drain loop)");
-        // Measure a jackpot-phase advanceGame call as fallback
+        // Measure a jackpot-phase mineFlip call as fallback
         await advanceToNextDay();
-        const tx = await game.connect(deployer).advanceGame();
+        const tx = await game.connect(deployer).mineFlip();
         const receipt = await tx.wait();
         const events = await getAdvanceEvents(tx, advanceModule);
         const stage = events.length > 0 ? events[0].args.stage : "?";
@@ -422,7 +422,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       // Advance to next day and get VRF for daily jackpot
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 5555n);
 
@@ -431,7 +431,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       let found = false;
       for (let i = 0; i < 100; i++) {
         try {
-          const tx = await game.connect(deployer).advanceGame();
+          const tx = await game.connect(deployer).mineFlip();
           const receipt = await tx.wait();
           const events = await getAdvanceEvents(tx, advanceModule);
           if (events.length > 0) {
@@ -473,14 +473,14 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       // Advance to next day and get VRF
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 7777n);
 
       // Drain all ticket processing (stage 5) first
       for (let i = 0; i < 100; i++) {
         try {
-          const tx = await game.connect(deployer).advanceGame();
+          const tx = await game.connect(deployer).mineFlip();
           const events = await getAdvanceEvents(tx, advanceModule);
           if (events.length > 0 && events[0].args.stage !== 5n) {
             // We hit a non-ticket stage (likely 18 = fresh daily jackpot).
@@ -495,11 +495,11 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
 
       // Drive through remaining stages to find the fresh daily jackpot call.
-      // After that call, if resumeEthPool was set, next advanceGame hits stage 8.
+      // After that call, if resumeEthPool was set, next mineFlip hits stage 8.
       let hitDailyStart = false;
       for (let i = 0; i < 50; i++) {
         try {
-          const tx = await game.connect(deployer).advanceGame();
+          const tx = await game.connect(deployer).mineFlip();
           const receipt = await tx.wait();
           const events = await getAdvanceEvents(tx, advanceModule);
           if (events.length > 0) {
@@ -527,9 +527,9 @@ describe("AdvanceGame Gas Benchmarks", function () {
         return;
       }
 
-      // Next advanceGame should hit STAGE_JACKPOT_ETH_RESUME if pool was large enough for split
+      // Next mineFlip should hit STAGE_JACKPOT_ETH_RESUME if pool was large enough for split
       try {
-        const tx = await game.connect(deployer).advanceGame();
+        const tx = await game.connect(deployer).mineFlip();
         const receipt = await tx.wait();
         const events = await getAdvanceEvents(tx, advanceModule);
         if (events.length > 0 && events[0].args.stage === 8n) {
@@ -566,14 +566,14 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       // Run a daily jackpot and look for coin+ticket distribution (stage 17)
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 8888n);
 
       let found = false;
       for (let i = 0; i < 50; i++) {
         try {
-          const tx = await game.connect(deployer).advanceGame();
+          const tx = await game.connect(deployer).mineFlip();
           const receipt = await tx.wait();
           const events = await getAdvanceEvents(tx, advanceModule);
           if (events.length > 0) {
@@ -596,10 +596,10 @@ describe("AdvanceGame Gas Benchmarks", function () {
         // Record whatever the next call produces
         try {
           await advanceToNextDay();
-          await game.connect(deployer).advanceGame();
+          await game.connect(deployer).mineFlip();
           const rid = await getLastVRFRequestId(mockVRF);
           try { await mockVRF.fulfillRandomWords(rid, 9999n); } catch {}
-          const tx = await game.connect(deployer).advanceGame();
+          const tx = await game.connect(deployer).mineFlip();
           const receipt = await tx.wait();
           const events = await getAdvanceEvents(tx, advanceModule);
           const stage = events.length > 0 ? events[0].args.stage : "?";
@@ -633,7 +633,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       let found = false;
       for (let day = 0; day < 10; day++) {
         await advanceToNextDay();
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
         const requestId = await getLastVRFRequestId(mockVRF);
         try {
           await mockVRF.fulfillRandomWords(
@@ -646,7 +646,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
         for (let i = 0; i < 100; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -701,7 +701,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       let found = false;
       for (let day = 0; day < 12; day++) {
         await advanceToNextDay();
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
         const requestId = await getLastVRFRequestId(mockVRF);
         try {
           await mockVRF.fulfillRandomWords(requestId, BigInt(day * 2000 + 99));
@@ -711,14 +711,14 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
         for (let i = 0; i < 100; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
               const stage = events[0].args.stage;
               if (stage === 10n) {
                 // Phase ended! Next call processes the phase transition.
-                const tx2 = await game.connect(deployer).advanceGame();
+                const tx2 = await game.connect(deployer).mineFlip();
                 const receipt2 = await tx2.wait();
                 const events2 = await getAdvanceEvents(tx2, advanceModule);
                 const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
@@ -742,7 +742,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         if (!(await game.jackpotPhase())) {
           // Phase ended but we didn't capture stage 16; try next call
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             const stage = events.length > 0 ? events[0].args.stage : "?";
@@ -795,8 +795,8 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // Advance 912+ days
       await advanceTime(912 * 86400 + 86400);
 
-      // Step 1: advanceGame -> VRF request
-      const tx1 = await game.connect(deployer).advanceGame();
+      // Step 1: mineFlip -> VRF request
+      const tx1 = await game.connect(deployer).mineFlip();
       const receipt1 = await tx1.wait();
       const events1 = await getAdvanceEvents(tx1, advanceModule);
       const stage1 = events1.length > 0 ? events1[0].args.stage : "?";
@@ -808,8 +808,8 @@ describe("AdvanceGame Gas Benchmarks", function () {
         await mockVRF.fulfillRandomWords(requestId, 42n);
       }
 
-      // Step 3: advanceGame -> handleGameOverDrain (the expensive one)
-      const tx2 = await game.connect(deployer).advanceGame();
+      // Step 3: mineFlip -> handleGameOverDrain (the expensive one)
+      const tx2 = await game.connect(deployer).mineFlip();
       const receipt2 = await tx2.wait();
       const events2 = await getAdvanceEvents(tx2, advanceModule);
       const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
@@ -821,7 +821,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       for (let i = 0; i < 50; i++) {
         if (await game.gameOver()) break;
         try {
-          await game.connect(deployer).advanceGame();
+          await game.connect(deployer).mineFlip();
         } catch {
           break;
         }
@@ -850,7 +850,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // Wait 30+ days for final sweep
       await advanceTime(31 * 86400);
 
-      const tx = await game.connect(deployer).advanceGame();
+      const tx = await game.connect(deployer).mineFlip();
       const receipt = await tx.wait();
       const events = await getAdvanceEvents(tx, advanceModule);
       const stage = events.length > 0 ? events[0].args.stage : "?";
@@ -875,7 +875,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       let found = false;
       for (let cycle = 0; cycle < 30; cycle++) {
         await advanceToNextDay();
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
         const requestId = await getLastVRFRequestId(mockVRF);
         try {
           await mockVRF.fulfillRandomWords(
@@ -888,7 +888,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
         for (let i = 0; i < 200; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -951,12 +951,12 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       // Advance to next day and trigger VRF cycle
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);
 
       // First processTicketBatch call — cold SSTOREs (worst-case gas)
-      const tx1 = await game.connect(deployer).advanceGame();
+      const tx1 = await game.connect(deployer).mineFlip();
       const receipt1 = await tx1.wait();
       const events1 = await getAdvanceEvents(tx1, advanceModule);
       const stage1 = events1.length > 0 ? events1[0].args.stage : "?";
@@ -966,7 +966,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // Second processTicketBatch call — warm SSTOREs (if queue not fully drained)
       if (await game.rngLocked()) {
         try {
-          const tx2 = await game.connect(deployer).advanceGame();
+          const tx2 = await game.connect(deployer).mineFlip();
           const receipt2 = await tx2.wait();
           const events2 = await getAdvanceEvents(tx2, advanceModule);
           const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
@@ -985,7 +985,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
   // =========================================================================
 
   describe("15. VRF Callback Gas (rawFulfillRandomWords)", function () {
-    it("daily RNG path (path 1): VRF callback after advanceGame triggers request", async function () {
+    it("daily RNG path (path 1): VRF callback after mineFlip triggers request", async function () {
       const { game, deployer, mockVRF, alice, bob } =
         await loadFixture(deployFullProtocol);
 
@@ -996,8 +996,8 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       await advanceToNextDay();
 
-      // advanceGame() triggers the VRF request (stage=1, rngLockedFlag=true)
-      await game.connect(deployer).advanceGame();
+      // mineFlip() triggers the VRF request (stage=1, rngLockedFlag=true)
+      await game.connect(deployer).mineFlip();
       const requestId = await getLastVRFRequestId(mockVRF);
 
       // Fulfill: this is rawFulfillRandomWords() — capture the full receipt.
@@ -1174,7 +1174,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       for (let i = 0; i < 200; i++) {
         try {
-          const tx = await game.connect(deployer).advanceGame();
+          const tx = await game.connect(deployer).mineFlip();
           const receipt = await tx.wait();
           const events = await getAdvanceEvents(tx, advanceModule);
           if (events.length > 0) {
@@ -1215,10 +1215,10 @@ describe("AdvanceGame Gas Benchmarks", function () {
       for (let day = 0; day < 15; day++) {
         await advanceToNextDay();
 
-        // Drive all advanceGame calls for this day, capturing stages
+        // Drive all mineFlip calls for this day, capturing stages
         for (let i = 0; i < 200; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -1247,7 +1247,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         // Continue draining after fulfillment (same day, mid-day path)
         for (let i = 0; i < 200; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -1325,7 +1325,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         await advanceToNextDay();
         for (let i = 0; i < 200; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -1344,7 +1344,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         } catch {}
         for (let i = 0; i < 200; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -1400,7 +1400,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         await advanceToNextDay();
         for (let i = 0; i < 200; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -1419,7 +1419,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         } catch {}
         for (let i = 0; i < 200; i++) {
           try {
-            const tx = await game.connect(deployer).advanceGame();
+            const tx = await game.connect(deployer).mineFlip();
             const receipt = await tx.wait();
             const events = await getAdvanceEvents(tx, advanceModule);
             if (events.length > 0) {
@@ -1459,12 +1459,12 @@ describe("AdvanceGame Gas Benchmarks", function () {
 });
 
 // ===========================================================================
-// Phase 264 SURF-05 D-IMPL-06 — HEAD-only advanceGame ceiling margin record.
+// Phase 264 SURF-05 D-IMPL-06 — HEAD-only mineFlip ceiling margin record.
 //
 // The disclosed REQUIREMENTS.md SURF-05 invariant is `MAX_BLOCK_GAS /
 // WORST_CASE_ADVANCE_GAS ≥ 1.99` at the v35.0 HEAD `cf564816`. This describe
 // block re-runs the section-16 worst-case benchmark (SC-1 daily two-call split
-// at 305 players, max-scale pool — the maximally-loaded advanceGame path
+// at 305 players, max-scale pool — the maximally-loaded mineFlip path
 // across the v35.0 source tree) and records the margin explicitly.
 //
 // The section-16 SC-1/2a/2b assertions now enforce the owner's 11.5M hard
@@ -1478,7 +1478,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
 // across the captured stages, and asserts the margin is ≥ 1.99 at HEAD.
 // ===========================================================================
 
-describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEAD", function () {
+describe("Phase 264 SURF-05 — mineFlip 1.99× margin preserved at v35.0 HEAD", function () {
   this.timeout(1_800_000); // 30 min — re-runs the SC-1 305-player setup
 
   const MAX_BLOCK_GAS = 30_000_000n;
@@ -1567,7 +1567,7 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
       // Pre-VRF drain.
       for (let i = 0; i < 200; i++) {
         try {
-          const tx = await game.connect(deployer).advanceGame();
+          const tx = await game.connect(deployer).mineFlip();
           const receipt = await tx.wait();
           const events = await getAdvanceEvents(tx, advanceModule);
           if (events.length > 0) {
@@ -1595,7 +1595,7 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
       // Post-VRF drain.
       for (let i = 0; i < 200; i++) {
         try {
-          const tx = await game.connect(deployer).advanceGame();
+          const tx = await game.connect(deployer).mineFlip();
           const receipt = await tx.wait();
           const events = await getAdvanceEvents(tx, advanceModule);
           if (events.length > 0) {
@@ -1619,12 +1619,12 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
     return stageReceipts;
   }
 
-  it("preserves 1.99× margin at v35.0 HEAD across the worst-case advanceGame path", async function () {
+  it("preserves 1.99× margin at v35.0 HEAD across the worst-case mineFlip path", async function () {
     const stageReceipts = await runWorstCaseBenchmarkAtHead();
 
     expect(
       stageReceipts.size > 0,
-      "Phase 264 SURF-05: worst-case benchmark fixture failed to capture any advanceGame stages — fixture regression",
+      "Phase 264 SURF-05: worst-case benchmark fixture failed to capture any mineFlip stages — fixture regression",
     ).to.equal(true);
 
     let maxGas = 0n;
@@ -1642,7 +1642,7 @@ describe("Phase 264 SURF-05 — advanceGame 1.99× margin preserved at v35.0 HEA
 
     expect(
       margin >= REQUIRED_MARGIN,
-      `Phase 264 SURF-05: advanceGame margin ${margin.toFixed(3)} < required ${REQUIRED_MARGIN} (max-gas stage ${maxStage} = ${maxGas.toLocaleString()})`,
+      `Phase 264 SURF-05: mineFlip margin ${margin.toFixed(3)} < required ${REQUIRED_MARGIN} (max-gas stage ${maxStage} = ${maxGas.toLocaleString()})`,
     ).to.equal(true);
   });
 });

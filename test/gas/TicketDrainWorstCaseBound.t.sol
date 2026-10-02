@@ -2,67 +2,67 @@
 pragma solidity ^0.8.33;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
-/// @dev Exposes the drain's pricing constants.
-contract DrainPrices is DegenerusGameStorage {
+contract DrainPrices is DegenerusGameTicketModule {
     function recordAtQueueIndex(uint24 lvl, uint256 index) external view returns (uint256) {
         return _entryRecord(lvl, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(lvl)], index));
     }
-    function unit() external pure returns (uint256) { return UNIT_GAS_BOUND; }
-    function budget() external pure returns (uint256) { return WRITES_BUDGET_SAFE; }
-    function roundUnits() external pure returns (uint256) { return ROUND_UNITS; }
-    function splitUnits() external pure returns (uint256) { return ROUND_SPLIT_UNITS; }
-    function joinUnits() external pure returns (uint256) { return SEAT_JOIN_UNITS; }
-    function seats() external pure returns (uint256) { return ROUND_SEATS; }
+    function roundMax() external pure returns (uint256) { return ROUND_MAX; }
+    function entryMax() external pure returns (uint256) { return ENTRY_MAX; }
+    function seatMax() external pure returns (uint256) { return SEAT_MAX; }
+    function reloadMax() external pure returns (uint256) { return RELOAD_MAX; }
+    function tail() external pure returns (uint256) { return TAIL; }
 }
 
-/// @title TicketDrainWorstCaseBound — a drain call's gas is bounded by its write budget
-/// @notice Reserve the worst, charge the actual. A step starts only if its worst case fits the
-///         remaining budget; once done it charges every write it made at a price at or above
-///         the opcode cost. So a call never spends more than WRITES_BUDGET_SAFE units, and its
-///         gas is at most budget x UNIT_GAS_BOUND plus fixed overhead. This suite derives the
-///         per-write prices and the reserves from EVM costs (every write fresh, every read cold)
-///         and pins the ceiling. Lowering a price or raising the budget past the ceiling fails here.
+/// @notice Analytic cold-write floors for each indivisible checkpoint operation.
+/// @dev These assertions support admission bounds; production execution suites
+///      separately exercise complete calls and measured gas. There is no weighted
+///      write budget or fixed transaction cap: each indivisible operation and its
+///      complete checkpoint tail must fit within the protocol's per-step limit.
 contract TicketDrainWorstCaseBound is Test {
-    uint256 internal constant COLD_SLOAD = 2_100;
-    uint256 internal constant FRESH_SSTORE = 20_000 + 2_100; // zero -> nonzero, cold slot
-    uint256 internal constant DIRTY_SSTORE = 2_900 + 2_100; // nonzero -> nonzero, cold slot
-    uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
-    uint256 internal constant CEILING = 10_000_000;
-    /// @dev Everything outside charged steps: entry reads, cursor/marker writes, a queue
-    ///      release, the nested delegatecall, the foil deferral writes, the return path
-    ///      (~120k) and the crank's own pre-drain logic in the same transaction, with headroom.
-    uint256 internal constant FIXED_OVERHEAD = 1_000_000;
-    // The existing non-event loop bound is retained; only the old LOG2 is credited back.
-    // The full new emitter is bounded separately in the compiler-region audit. These
-    // analytical assertions check the proof's arithmetic, not measured execution safety.
-    uint256 internal constant OLD_ROUND_LOG = 375 + 2 * 375 + 128 * 8;
-    uint256 internal constant REVEAL_EMITTER_BOUND = 10_000;
-    uint256 internal constant ROUND_COMPUTE_BOUND = 25_000 - OLD_ROUND_LOG + REVEAL_EMITTER_BOUND;
+    uint256 private constant COLD_SLOAD = 2_100;
+    uint256 private constant FRESH_SSTORE = 22_100;
+    uint256 private constant DIRTY_SSTORE = 5_000;
+    DrainPrices private p;
+    function setUp() public { p = new DrainPrices(); }
+    function singleton() private pure returns (uint256) { return 2 * COLD_SLOAD + 2 * FRESH_SSTORE; }
 
-    DrainPrices internal p;
-
-    function setUp() public {
-        p = new DrainPrices();
+    function test_RoundReserveCoversAllRareSplitsAndDebtWrites() public view {
+        uint256 bound = 32 * singleton() + 8 * (COLD_SLOAD + DIRTY_SSTORE) + 40_000;
+        assertGe(p.roundMax(), bound);
     }
-
-    function _singleAppend() internal pure returns (uint256) {
-        return 2 * COLD_SLOAD + 2 * FRESH_SSTORE; // singleton cannot both initialize a bucket and flush its tail
+    function test_EntryReserveCoversColdBucketAndGenerator() public view {
+        assertGe(p.entryMax(), singleton() + 1_000);
     }
-
-    function _wordAppend() internal pure returns (uint256) {
-        return 2 * COLD_SLOAD + 3 * FRESH_SSTORE; // bitmap, header and completed word, with addressing allowance
+    function test_SeatAndReloadReservesCoverColdRegistryAndRemainder() public view {
+        uint256 seat = 4 * COLD_SLOAD + FRESH_SSTORE + 12_000;
+        assertGe(p.seatMax(), seat);
+        assertGe(p.reloadMax(), 8 * (4 * COLD_SLOAD + DIRTY_SSTORE + 12_000));
     }
-
-    // ---- per-write prices (what a step charges once done) --------------------------------
-
-    function test_EmptyBucketWritePrice_ThreeUnits() public view {
-        assertGe(3 * p.unit(), FRESH_SSTORE + COLD_SLOAD, "zero slot write plus read exceeds three units");
+    function test_FlushTailCoversEightDebtsAndAllControlWrites() public view {
+        uint256 flush = 8 * DIRTY_SSTORE + 3 * FRESH_SSTORE + 2 * DIRTY_SSTORE + 25_000;
+        assertGe(p.tail(), flush);
     }
-
-    function test_DirtyWritePrice_OneUnit() public view {
-        assertGe(1 * p.unit(), DIRTY_SSTORE + COLD_SLOAD, "a dirty write plus its read exceeds one unit");
+    function test_EveryCanonicalTicketStepFitsTenMillionIncludingCheckpoint() public pure {
+        uint256 tail = GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE;
+        assertEq(MineFlipGas.MAX_STEP_GAS, 10_000_000);
+        assertLe(GasBounds.TICKET_SELECT_MAX + tail, MineFlipGas.MAX_STEP_GAS);
+        assertLe(GasBounds.TICKET_SEAT_MAX + tail, MineFlipGas.MAX_STEP_GAS);
+        assertLe(GasBounds.TICKET_RELOAD_MAX + tail, MineFlipGas.MAX_STEP_GAS);
+        assertLe(GasBounds.TICKET_ROUND_MAX + tail, MineFlipGas.MAX_STEP_GAS);
+        assertLe(GasBounds.TICKET_FOIL_CALL_MAX + tail, MineFlipGas.MAX_STEP_GAS);
+        // One aligned group and its possible final fractional entry must remain
+        // admissible. A larger solo chunk is sized under this same per-step cap.
+        assertLe(GasBounds.TICKET_SOLO_BASE + 17 * GasBounds.TICKET_ENTRY_MAX + tail,
+            MineFlipGas.MAX_STEP_GAS);
+        uint256 maxEntries = (MineFlipGas.MAX_STEP_GAS - tail - GasBounds.TICKET_SOLO_BASE)
+            / GasBounds.TICKET_ENTRY_MAX;
+        assertGe(maxEntries, 17);
+        assertLe(GasBounds.TICKET_SOLO_BASE + maxEntries * GasBounds.TICKET_ENTRY_MAX + tail,
+            MineFlipGas.MAX_STEP_GAS);
     }
 
     function test_PositionLookupUsesGlobalIdentityAndPendingWithoutWalletMap() public {
@@ -90,44 +90,4 @@ contract TicketDrainWorstCaseBound is Test {
         assertEq(writes.length, 0);
     }
 
-    function test_FixedCharges() public view {
-        assertGe(1 * p.unit(), COLD_SLOAD + DIRTY_SSTORE, "a seat exit exceeds one unit");
-        // The shared registry count's first cold read belongs to fixed overhead; later reads
-        // cost 100. An already-read pending slot's dirty SSTORE adds no second cold surcharge.
-        assertGe(1 * p.unit(), 3 * COLD_SLOAD + 100 + DIRTY_SSTORE - COLD_SLOAD,
-            "queue, identity, pending and dust clear exceeds one unit");
-        assertGe(p.joinUnits() * p.unit(), 3 * COLD_SLOAD + 100 + 2 * DIRTY_SSTORE,
-            "a seat join with permanent identity and packed owed exceeds its units");
-        assertGe(4 * p.unit(), ROUND_COMPUTE_BOUND, "a round's reveals and loops exceed four units");
-        assertGe(1 * p.unit(), 16 * 400, "sixteen occurrences of LCG and scratch work exceed one unit");
-        assertGe(3 * p.unit(), 30_000, "a foil pack's record and cursor bookkeeping exceeds three units");
-    }
-
-    // ---- reserves (what must fit before a step starts) -----------------------------------
-
-    function test_RoundReserve_CoversFullySplitRound() public {
-        uint256 worst = 4 * (p.seats() * _singleAppend()) + p.seats() * (COLD_SLOAD + DIRTY_SSTORE) + ROUND_COMPUTE_BOUND;
-        emit log_named_uint("fully_split_round_worst", worst);
-        assertGe((p.roundUnits() + 4 * p.splitUnits()) * p.unit(), worst, "round reserve below a fully split round");
-        assertGe(p.roundUnits() * p.unit(), 4 * _wordAppend() + p.seats() * (COLD_SLOAD + DIRTY_SSTORE) + ROUND_COMPUTE_BOUND, "unsplit round below its units");
-    }
-
-    function test_EntryReserve_CoversTake() public view {
-        // Reserved at 6 units per occurrence for the first 256, 1 beyond.
-        assertGe(6 * p.unit(), _singleAppend() + 400, "six units below a fresh-bucket occurrence");
-        assertGe(1 * p.unit(), FRESH_SSTORE / 8 + 400, "one unit below an amortised occurrence");
-    }
-
-    function test_FoilReserve_CoversPack() public view {
-        assertGe(83 * p.unit(), 16 * _singleAppend() + 40_000, "83 units below a foil pack");
-    }
-
-    // ---- the ceiling ---------------------------------------------------------------------
-
-    function test_Budget_UnderCeilingAtUnitBound() public {
-        uint256 bound = p.budget() * p.unit() + FIXED_OVERHEAD;
-        emit log_named_uint("drain_call_gas_bound", bound);
-        assertLe(bound, CEILING, "budget x unit plus fixed overhead exceeds the 10M drain ceiling");
-        assertLt(bound, EIP7825_TX_GAS_CAP, "hard envelope must stay below the transaction cap");
-    }
 }

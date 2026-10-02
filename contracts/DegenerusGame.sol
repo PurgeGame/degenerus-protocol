@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGas} from "./libraries/MineFlipGas.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -30,7 +32,7 @@ pragma solidity 0.8.34;
  * @notice Core game contract managing state machine, VRF integration, jackpots, and prize pools.
  *
  * @dev ARCHITECTURE:
- *      - Level-centered lifecycle; advanceGame() is permissionless (caller tier gates only the keeper bounty)
+ *      - Level-centered lifecycle; mineFlip() is permissionless (caller tier gates only the miner bounty)
  *      - jackpotPhaseFlag selects the daily payout mode within a level: PURCHASE(false) / JACKPOT(true)
  *      - gameOver flag is terminal
  *      - Presale: single coin presale-box (presaleOver) latch, closing at the 50-ETH applied-box-spend cap
@@ -57,6 +59,7 @@ import {IsDGNRS} from "./interfaces/IsDGNRS.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {
     IDegenerusGameAdvanceModule,
+    IDegenerusGameMinerModule,
     IDegenerusGameMintModule,
     IDegenerusGameWhaleModule,
     IDegenerusGameLootboxModule,
@@ -81,6 +84,11 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
   |  Minimal interfaces for external contracts this contract interacts with.     |
   |  These are defined locally to avoid circular import dependencies.            |
   +==============================================================================+*/
+
+/// @dev A static self-call delegates the read-only engine query without inlining it here.
+interface IGameMinerView {
+    function minerAction() external view returns (uint8);
+}
 
 /// @dev Vault interface for DGVE ownership check (admin function access control).
 interface IDegenerusVaultOwnerGame {
@@ -123,7 +131,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Caller is not approved to act for the requested player.
     error NotApproved();
 
-    /// @notice mineFlip found nothing to do (raised by the afking router it delegates to).
+    /// @notice mineFlip found nothing to do (raised by the miner engine).
     error NoWork();
     /// @notice Thrown when a tunable parameter is set outside its permitted range.
     error OutOfBounds();
@@ -231,68 +239,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                           MODIFIERS                                  |
       +======================================================================+*/
 
-    /*+===================================================================================================+
-      |                    CORE STATE MACHINE: advanceGame()                                              |
-      +===================================================================================================+
-      |                                                                                                   |
-      |  Progresses one "tick" of work per call. advanceGame() is permissionless — anyone may call it;    |
-      |  caller tier gates only the keeper bounty (in mineFlip), never the advance work. gameOver is      |
-      |  terminal.                                                                                        |
-      |                                                                                                   |
-      |  Level-centered lifecycle. jackpotPhaseFlag selects the daily PAYOUT mode, not access:            |
-      |  • Each daily tick drains pending ticket + subscriber work, applies the day's VRF, and pays the   |
-      |    daily jackpot in the current mode. Purchases stay open in BOTH modes.                          |
-      |  • Purchase mode (false): new tickets target level+1; jackpots use the future-pool drip formula.  |
-      |    When nextPrizePool exceeds the prior level's target, the transition latch is set.              |
-      |  • On fresh randomness the level advances: staged tickets activate, pools consolidate, the level  |
-      |    quest rolls, and jackpot draws begin on a 1-day or 3-day schedule.                              |
-      |  • Jackpot mode (true): draws pay out; purchases target the current level, and the final draw     |
-      |    routes new purchases to the next level. After the final draw, housekeeping clears the payout   |
-      |    mode and resets the level-start day.                                                           |
-      |                                                                                                   |
-      |  Keeper-bounty tiers (reward only, never an advance gate): minted today/yesterday, deity pass,    |
-      |  anyone >=30 min into the day, any pass holder >=15 min in, active AFKing sub, DGVE majority.     |
-      |  The elapsed clock runs from the 22:57 UTC daily reset, not from level start.                     |
-      |                                                                                                   |
-      |  Presale — a single latch (presaleOver): the credit-gated coin-presale-box sale, active until     |
-      |  applied box spend fills exactly 50 ETH; boxes bought before close stay openable afterward. The   |
-      |  same latch labels lootbox events and gates VAULT-referral mutability. No admin setter; lootbox   |
-      |  ETH is rake-free both in and out of presale.                                                     |
-      +===================================================================================================+*/
-
-    /// @notice Advance the game state machine by one tick.
-    /// @dev Permissionless — any caller, no participation requirement. This is the primary
-    ///      driver of game progression, called repeatedly to move through states and process
-    ///      batched operations.
-    ///
-    ///      FLOW OVERVIEW:
-    ///      1. Check liveness guards (1yr deploy timeout, 30-day purchase inactivity)
-    ///      2. Process transition housekeeping during jackpot→purchase transition
-    ///      3. Gate on RNG readiness (request new VRF if needed)
-    ///      4. Process ticket batches
-    ///      5. Execute state-specific logic:
-    ///         - TRANSITION: Housekeeping + near-future ticket prep after burn completes
-    ///         - PURCHASE/JACKPOT: Process phase-specific logic
-    ///
-    ///      Returns the day-epoch stall multiplier. A standalone caller earns nothing; the
-    ///      keeper bounty is paid by the AFKing mineFlip router, which gates on _bountyEligible.
-    ///
-    ///      SECURITY:
-    ///      - Liveness guards prevent abandoned game lockup
-    ///      - RNG gating ensures fairness (no manipulation during VRF window)
-    ///      - Batched processing prevents DoS from large queues
-    ///
-    ///      Shares the AFKing work dispatcher with mineFlip, with keeper rewards disabled.
-    ///      If the next day is waiting for old read consumers, this call drains them first.
-    ///      The signature matches the module function exactly (identical selector), so the calldata
-    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    function advanceGame() external returns (uint8 mult) {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        mult = abi.decode(data, (uint8));
-    }
 
     /*+========================================================================================+
       |                    ADMIN VRF FUNCTIONS                                                 |
@@ -396,16 +342,32 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Unified permissionless afking router: do ONE category of pending work
-    ///         (advance → box open → craps upkeep) and pay ONE bounty. The bounty
-    ///         credits msg.sender (preserved via delegatecall).
-    /// @dev The signature matches the module function exactly (identical selector), so the calldata
-    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
+    /// @notice Run the next ordered game actions through safe gas checkpoints.
+    /// @dev Only this entry pays miners, after sufficient measured execution and actual progress.
     function mineFlip() external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(msg.data);
+        if (msg.data.length != 4) revert E();
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameMinerModule.mineFlip.selector)
+        );
         if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice The next action of the ordered mining engine.
+    function nextMinerAction() external view returns (uint8) {
+        return IGameMinerView(address(this)).minerAction();
+    }
+
+    /// @notice Read-only module dispatch for caller-independent work discovery.
+    function minerAction() external returns (uint8) {
+        address target = ContractAddresses.GAME_MINER_MODULE;
+        assembly ("memory-safe") {
+            let ptr := mload(0x40)
+            calldatacopy(ptr, 0, calldatasize())
+            let ok := delegatecall(gas(), target, ptr, calldatasize(), 0, 0)
+            returndatacopy(ptr, 0, returndatasize())
+            if iszero(ok) { revert(ptr, returndatasize()) }
+            return(ptr, returndatasize())
+        }
     }
 
     /// @notice Permissionless FLIP claim — pays each listed sub its accrued `pendingFlip`
@@ -1343,6 +1305,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
+    /// @notice Continue the frozen terminal payout through the shared gas allowance.
+    function runTerminalJackpotWork(uint256, uint24, uint256, uint256)
+        external returns (MineFlipGas.Result memory result, uint256 paidDelta)
+    {
+        if (msg.sender != address(this)) revert OnlySelf();
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        return abi.decode(data, (MineFlipGas.Result, uint256));
+    }
+
     /// @notice Roll, record and emit level 1's purchase-day board via jackpot module.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
     ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
@@ -1562,22 +1534,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  storage directly, so it lives in-game by construction.              |
       +======================================================================+*/
 
-    /// @notice O(1) discovery: does advanceGame() have pending work?
-    /// @dev The shared storage-level predicate (`_advanceDue`) exposed for off-chain
-    ///      keepers; the afking router reads the same predicate in-context.
+    /// @notice O(1) discovery: does mineFlip() have pending work?
+    /// @dev Queries the same derived action selector used by the miner engine.
     function advanceDue() external view returns (bool) {
-        return _advanceDue();
+        uint8 action = IGameMinerView(address(this)).minerAction();
+        return action != uint8(MinerAction.Idle) && action != uint8(MinerAction.Wait);
     }
 
-    /// @notice Would `who` earn the mineFlip advance bounty if they cranked right now?
-    /// @dev The advance work is always permitted; this only reflects pay-eligibility
-    ///      (the soft must-mint gate), so off-chain keepers can pre-check before cranking.
-    function bountyEligible(address who) external view returns (bool) {
-        return _bountyEligible(who);
+    /// @notice Every address passes the miner participation gate.
+    /// @dev Payment still requires sufficient measured work and a nonterminal successful call.
+    function bountyEligible(address) external pure returns (bool) {
+        return true;
     }
 
-    /// @notice O(1) discovery hint: does the delivered read cohort still need keeper work?
-    /// @dev Includes empty-frontier skips and Craps-only cohorts, so keepers do not idle
+    /// @notice O(1) discovery hint: does the delivered read cohort still need miner work?
+    /// @dev Includes empty-frontier skips and Craps-only cohorts, so miners do not idle
     ///      while fresh RNG waits for completion. FALSE during the daily lock or liveness.
     function boxesPending() external view returns (bool) {
         if (rngLockedFlag || _livenessTriggered()) return false;
@@ -1588,23 +1559,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Physical tags are reused; this view makes no statement about historical sessions.
     /// @param index Physical buffer tag (0 or 1).
     function boxIndexComplete(uint48 index) external view returns (bool) {
-        return index == _rngReadBuffer() && humanReadComplete;
+        return index == _rngReadBuffer() && humanReadComplete
+            && degeneretteCursor >= degeneretteQueue[index].length;
     }
 
-    /// @notice Permissionless liveness valve: open ready boxes — AFKING boxes FIRST (up to maxCount),
-    ///         then the human-box read-buffer sweep with the remaining budget — so any backlog of
-    ///         either type clears in caller-sized chunks that stay under the 16.7M per-tx ceiling.
-    ///         The caller picks a maxCount their gas affords. For the afking leg maxCount caps boxes
-    ///         opened; for the human sweep the remaining budget caps ENTRIES SCANNED (opens + skips),
-    ///         which keeps the tx gas-bounded even past a long already-opened / presale-only prefix and
-    ///         lets successive calls complete the sealed read buffer.
-    ///         Unrewarded — only mineFlip() pays a bounty.
-    /// @param maxCount Work budget, in box-open-sized units shared across both legs: the
-    ///        afking leg spends it on box opens directly; the remainder converts to the human
-    ///        sweep's walk units at the per-entry weight, so one unit buys about one human
-    ///        entry-open. An entry's boxes are charged inside the sweep at the lighter per-box
-    ///        weight — MAX_BOXES_PER_ORDER of them can ride one entry.
-    /// @return opened Total boxes opened (afking + human) plus Degenerette bets the sweep resolved.
+    /// @notice Unpaid AFK and human-box progress in the same order as mineFlip.
+    /// @dev Stops at safe gas checkpoints. Earlier read consumers must finish first.
+    /// @param maxCount Reserved compatibility argument; does not select work or outcomes.
+    /// @return opened Number of boxes opened in this call.
     function openBoxes(uint256 maxCount) external returns (uint256 opened) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
@@ -1848,10 +1810,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Chainlink VRF V2.5 integration for provably fair randomness.        |
       |                                                                      |
       |  LIFECYCLE:                                                          |
-      |  1. advanceGame() calls rngGate()                                    |
+      |  1. mineFlip() calls rngGate()                                    |
       |  2. If no valid RNG word, _requestRng() is called                    |
       |  3. Chainlink calls rawFulfillRandomWords() with random word         |
-      |  4. Next advanceGame() uses the fulfilled word                       |
+      |  4. Next mineFlip() uses the fulfilled word                       |
       |  5. After processing, _unlockRng() resets for next cycle             |
       |                                                                      |
       |  SECURITY:                                                           |
@@ -1880,6 +1842,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Retry an unanswered request through the authorized Admin entry after 20 hours.
+    /// @dev The RNG module enforces ADMIN access, terminal precedence and the single retry limit.
+    function retryRng() external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
     /// @notice Request lootbox RNG when activity threshold and LINK conditions are met.
     /// @dev Callable by anyone. Reverts if daily RNG has not been consumed, if request
     ///      windows are locked, or if pending lootbox value is below threshold. A closed craps
@@ -1892,7 +1861,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
     function requestLootboxRng() external {
         (bool ok, bytes memory data) = ContractAddresses
-            .GAME_ADVANCE_MODULE
+            .GAME_RNG_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
@@ -1984,38 +1953,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Chainlink VRF callback for random word fulfillment.
-    /// @dev Access: VRF coordinator only. Handled inline (not delegated): the body is a few
-    ///      SLOADs plus one branch, so keeping it here saves the module delegatecall's cold
-    ///      account access on every fulfillment. Both paths store the final session word.
+    /// @dev The RNG module checks coordinator identity and callback authority before storing
+    ///      the accepted word in game storage. Both paths store the final session word.
     ///      A daily lock adds the frozen nudge count. Final values 0/1 leave the request
     ///      pending for retry; every accepted word is stored unchanged. Advance publishes
     ///      the session and retires request authority later. Stale/duplicate fulfillments (wrong requestId or word already
     ///      stored) are ignored, not reverted, so a late coordinator retry never bricks.
-    /// @param requestId The request ID to match.
-    /// @param randomWords Array containing the random word (length 1).
-    function rawFulfillRandomWords(
-        uint256 requestId,
-        uint256[] calldata randomWords
-    ) external {
-        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
-        uint16 flags;
-        bool daily;
-        assembly ("memory-safe") {
-            let state := sload(rngFlagsAndNudges.slot)
-            flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
-            daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
-        }
-        if (flags & (uint16(1) << 14) == 0 || requestId != vrfRequestId || rngWordCurrent != RNG_WORD_WAITING) return;
-
-        uint256 word = randomWords[0];
-        // Addition preserves the uniform distribution. The two reserved final values
-        // leave this request waiting for its existing retry path (probability 2 / 2^256).
-        if (daily) {
-            // Decode the frozen nine-bit count from the same slot-0 snapshot: no extra SLOAD.
-            unchecked { word += ((flags >> 1) & 127) | (((flags >> 9) & 3) << 7); }
-        }
-        if (word < 2) return;
-        rngWordCurrent = word;
+    function rawFulfillRandomWords(uint256, uint256[] calldata) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /*+======================================================================+

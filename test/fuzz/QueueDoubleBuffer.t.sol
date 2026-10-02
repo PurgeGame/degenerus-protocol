@@ -378,7 +378,7 @@ contract MidDaySwapTest is Test {
         assertFalse(harness.getJackpotPhaseFlag(), "jackpot phase should be inactive");
 
         // Verify the condition: writeLen < 440 (MID_DAY_SWAP_THRESHOLD) && !jackpotPhaseFlag
-        // In the actual advanceGame, this would revert NotTimeYet()
+        // In the actual mineFlip, this would revert NotTimeYet()
         // Note: MID_DAY_SWAP_THRESHOLD removed from production code; using literal 440
         assertTrue(writeLen < 440, "write queue below threshold");
         assertFalse(harness.getJackpotPhaseFlag(), "not in jackpot -- would revert NotTimeYet");

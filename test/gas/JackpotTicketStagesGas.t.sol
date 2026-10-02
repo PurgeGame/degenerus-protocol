@@ -36,7 +36,7 @@ contract DailyTicketStageGas is BoundaryGasFixture {
     function test_ColdTicketStageWithDistinctRecipients() public {
         vm.recordLogs();
         uint256 before = gasleft();
-        game.advanceGame{gas: EIP7825_TX_GAS_CAP - 21_064}();
+        game.mineFlip{gas: EIP7825_TX_GAS_CAP - 21_064}();
         uint256 used = before - gasleft() + 21_064;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         address[96] memory recipients;

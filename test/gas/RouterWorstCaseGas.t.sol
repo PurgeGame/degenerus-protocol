@@ -14,15 +14,15 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///        STAGE + open leg. ADAPTED from the v49/331 `AfKing.doWork()` router worst case (D-351-01).
 ///
 /// @notice v55 REFRAME (the load-bearing adaptation). The standalone `AfKing` de-custody contract is
-///         DISSOLVED (`contracts/AfKing.sol` deleted); the per-sub buy is FOLDED into `advanceGame()`'s
+///         DISSOLVED (`contracts/AfKing.sol` deleted); the per-sub buy is FOLDED into `mineFlip()`'s
 ///         required-path process STAGE and the open is the game-resident open leg:
 ///           - `afKing.doWork()`            -> `game.mineFlip()`                     (Δ3 rename)
-///           - `afKing.autoBuy(total)`      -> a new-day `game.advanceGame()` STAGE     (Δ4 SEMANTIC REMAP:
+///           - `afKing.autoBuy(total)`      -> a new-day `game.mineFlip()` STAGE     (Δ4 SEMANTIC REMAP:
 ///                                             `processSubscriberStage(SUB_STAGE_BATCH)` runs PRE-RNG)
 ///           - `afKing.autoOpen(N)`         -> `game.autoOpen(N)`  (the game-resident open leg)
 ///           - `afKing.subscriberCount()`   -> `_subscribers.length` via vm.load (Δ5 slot-read)
 ///         The OLD per-keeper-tx worst case (the `doWork()` router buy/open legs) reframes onto:
-///           (1) the per-sub STAGE 50-chunk marginal (one `advanceGame()` processes up to
+///           (1) the per-sub STAGE 50-chunk marginal (one `mineFlip()` processes up to
 ///               `SUB_STAGE_BATCH = 50` funded lootbox subs PRE-RNG, partial-drains past that), AND
 ///           (2) the per-open marginal (`game.autoOpen(N)` over N ready stamped boxes after their
 ///               frozen-stamp-day word `_recordedDailyWord(stampDay)` lands).
@@ -31,7 +31,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         (DegenerusGameAdvanceModule.sol:149) chunks the STAGE so a 50-chunk
 ///         `processSubscriberStage(50)` stays well under the 16.7M advance-chain ceiling (a landed
 ///         lootbox buy ≈ 262k → 50 ≈ 13.1M). The open leg is chunked by `OPEN_BATCH`, each afking box
-///         uniform O(1). THIS suite asserts a 50-chunk STAGE (driven by `advanceGame()`) AND the open
+///         uniform O(1). THIS suite asserts a 50-chunk STAGE (driven by `mineFlip()`) AND the open
 ///         leg each stay UNDER 16.7M on the worst-case funded-lootbox-sub mix — POST-349.2, i.e.
 ///         INCLUDING the restored per-sub FLIP quest/affiliate/creditFlip side-effects (those are
 ///         intended behavior; the marginal is reported AS-IS, never subtracted — 350-SPEC §1 ⚠-note).
@@ -169,7 +169,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
         uint256 gasBefore = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         advGas = gasBefore - gasleft();
 
         // Non-vacuity: every measured sub got a NEW stamp this cycle (a real STAGE buy, not a skip).
@@ -252,11 +252,11 @@ contract RouterWorstCaseGas is DeployProtocol {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
             // Fulfill any in-flight request FIRST (before advancing) — a stamping advance can leave the game
-            // rngLocked with an unfilled word, and advanceGame() would revert RngNotReady if called while the
+            // rngLocked with an unfilled word, and mineFlip() would revert RngNotReady if called while the
             // word is 0. Fulfilling at the loop top clears the lock so the next advance can proceed.
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }
@@ -268,7 +268,7 @@ contract RouterWorstCaseGas is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }

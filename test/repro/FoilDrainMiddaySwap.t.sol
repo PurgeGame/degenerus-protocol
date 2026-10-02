@@ -104,7 +104,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         simTime += 1 days + 1;
         vm.warp(simTime);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("advanceGame()")
+            abi.encodeWithSignature("mineFlip()")
         );
         ok; // the first advance of a day may partial-drain; either way we probe the lock
 
@@ -198,7 +198,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -385,7 +385,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         _fulfillPending();
         for (uint256 i = 0; i < 100; i++) {
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -398,7 +398,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }

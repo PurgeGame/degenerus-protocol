@@ -19,7 +19,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///
 /// @notice The v55 router (`game.mineFlip()`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
 ///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
-///         There are exactly TWO router categories — advance (the buy folded into advanceGame's required-path
+///         There are exactly TWO router categories — advance (the buy folded into mineFlip's required-path
 ///         STAGE, so it rides the advance bounty) and the box open (afking boxes first, then human boxes with
 ///         the leftover budget — one combined open bounty). The else-if XOR is the mitigation
 ///         for bounty-stacking; the single CEI-last `creditFlip(msg.sender, total)`
@@ -61,7 +61,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///
 /// @dev The five call-site deltas applied (D-351-01):
 ///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineFlip()` (all sites).
-///   Δ4 autoBuy: the per-sub buy folded into `advanceGame()`'s STAGE — driven via a new-day advanceGame()
+///   Δ4 autoBuy: the per-sub buy folded into `mineFlip()`'s STAGE — driven via a new-day mineFlip()
 ///      + the `_settleGame` VRF drain; the standalone `autoBuy(count)` has NO successor.
 ///   Δ5 views: `afKing.subscriberCount()`/`autoBuyProgress()` -> read `_subscribers.length`/`_subCursor` via
 ///      vm.load (RE-DERIVED slots).
@@ -133,12 +133,12 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.deal(address(game), 1_000_000 ether);
     }
 
-    /// @dev Settle the game to a clean state: drive advanceGame + deliver the mock VRF word until
+    /// @dev Settle the game to a clean state: drive mineFlip + deliver the mock VRF word until
     ///      `advanceDue()` is false and we are not locked. (PATTERNS §"Settle-to-clean-state VRF drain".)
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -175,7 +175,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     /// @notice ADVANCE branch: with `advanceDue()` true, `mineFlip()` takes the advance leg (the
     ///         structural early-return's `if (advanceDue)` arm); a multiplier > 0 credits EXACTLY ONCE.
-    ///         The buy folded into advanceGame's STAGE rides this single advance bounty.
+    ///         The buy folded into mineFlip's STAGE rides this single advance bounty.
     function testAdvanceBranchCreditsExactlyOnce() public {
         // Settle the deploy-day advance so we start from a clean, not-due, not-locked state.
         _settleGame(0xADADADAD0001);
@@ -196,7 +196,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         // The advance leg credited exactly once (mult > 0 on a normal day-advance).
         assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ADVANCE branch: exactly one mineFlip creditFlip to the keeper");
 
-        // Non-vacuity: the advance leg actually ran — mineFlip's advanceGame() either cleared the
+        // Non-vacuity: the advance leg actually ran — mineFlip's mineFlip() either cleared the
         // advance-due predicate or engaged rngLock for the day it just advanced (the multi-stage
         // day-advance locks RNG mid-flight). Either is observable state progress only the advance leg produces.
         bool progressed = (dueBefore && !game.advanceDue()) || (!lockedBefore && game.rngLocked());

@@ -140,7 +140,7 @@ contract RecoveredStallIntegrationTest is DeployProtocol {
         vm.etch(address(game), realCode);
 
         uint24 d = game.currentDayView();
-        for (uint256 i; i < 40 && !game.rngLocked(); ++i) game.advanceGame();
+        for (uint256 i; i < 40 && !game.rngLocked(); ++i) game.mineFlip();
         assertTrue(game.rngLocked(), "day D requested; VRF stalls");
         (uint24 psd0,) = _clock();
 
@@ -154,7 +154,7 @@ contract RecoveredStallIntegrationTest is DeployProtocol {
         // The late word lands; the advance finishes the stalled day on it (RNGREUSE clamp).
         _answer();
         for (uint256 i; i < 200 && game.rngLocked(); ++i) {
-            game.advanceGame();
+            game.mineFlip();
             _answer();
         }
         assertFalse(game.rngLocked(), "the stalled day finished");
@@ -173,7 +173,7 @@ contract RecoveredStallIntegrationTest is DeployProtocol {
         for (uint256 i; i < 200; ++i) {
             assertFalse(game.gameOver(), "the level must not end");
             _answer();
-            game.advanceGame();
+            game.mineFlip();
             _answer();
             if (!game.rngLocked() && game.rngWordForDay(w) != 0) break;
         }
@@ -232,7 +232,11 @@ contract ReviewClaimSeeder is DegenerusGame {
         for (uint160 i = 2; i <= 8; ++i) decBattleEntries[(uint256(lvl) << 64) | i] = i;
         uint256 word;
         while (!_allTails(word, lvl, 8)) ++word;
-        round.rngWord = word;
+        rngWordCurrent = word;
+        _setRngSessionPublished(true);
+        _setRngRequestActive(false);
+        _setRngComplete(false);
+        humanReadComplete = true;
     }
 
     function _allTails(uint256 word, uint24 lvl, uint64 n) private pure returns (bool) {
@@ -327,7 +331,7 @@ contract DecimatorLegEndingIdleTest is DeployProtocol {
 
     function test_SweepDoesNotWaitForPendingBattle() public {
         _over();
-        game.advanceGame(); // Terminal deadline passed; the queued battle does not hold the sweep.
+        game.mineFlip(); // Terminal deadline passed; the queued battle does not hold the sweep.
         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
         assertTrue(ReviewClaimSeeder(payable(address(game))).swept(), "sweep ran with a battle queued");
         vm.etch(address(game), realCode);

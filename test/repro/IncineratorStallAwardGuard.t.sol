@@ -150,7 +150,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
     }
 
     function _advance() internal returns (bool ok) {
-        (ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
     }
 
     function testStalledCenturyIncineratorStaysCoupledToTheArmedDay() public {
@@ -225,14 +225,17 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         }
         assertTrue(game.rngLocked(), "the armed day's request is outstanding");
 
-        // Wall clock runs past the armed day; the vault owner's 12h retry re-sends the same
-        // request, which keeps the armed day as its day.
+        // Wall clock runs past the armed day; the vault owner's 20h transport retry
+        // replaces the request ID while keeping the armed day as its logical day.
+        uint256 originalReqId = mockVRF.lastRequestId();
         simTime += STALL_DAYS * (1 days + 1);
         vm.warp(simTime);
-        _advance();
+        vm.prank(ContractAddresses.CREATOR);
+        admin.retryGameRng();
 
         uint256 word = _grindWord(armedDay);
         uint256 reqId = mockVRF.lastRequestId();
+        assertGt(reqId, originalReqId, "the transport retry issued a new request");
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         assertFalse(fulfilled, "a fresh request is outstanding after the retry");
         mockVRF.fulfillRandomWords(reqId, word);

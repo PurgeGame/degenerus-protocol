@@ -14,10 +14,10 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///           (1) buy      — a real ETH purchase; msg.value enters the campaign and is split toward the
 ///                          next/future pools (and partly out to affiliate/jackpot/vault). Tracks the cumulative
 ///                          msg.value actually sent as ghost_realInflow.
-///           (2) advance  — satisfies the daily purchase gate then drives advanceGame x3 + fulfills any pending
-///                          VRF. advanceGame is what triggers _consolidatePoolsAndRewardJackpots: the future->next,
+///           (2) advance  — satisfies the daily purchase gate then drives mineFlip x3 + fulfills any pending
+///                          VRF. mineFlip is what triggers _consolidatePoolsAndRewardJackpots: the future->next,
 ///                          next->current consolidation, the time-based future-take skim, and the jackpot
-///                          settlement that credits claimable. Each successful advanceGame bumps ghost_advances —
+///                          settlement that credits claimable. Each successful mineFlip bumps ghost_advances —
 ///                          this is the non-vacuity witness that pool-to-pool transfers actually ran.
 ///           (3) claim    — claimWinnings, a real ETH OUTFLOW (the claimable pool is debited and ETH leaves the
 ///                          game to the actor). Tracks the realized payout delta as ghost_realOutflow.
@@ -42,7 +42,7 @@ contract PoolFlowHandler is Test {
     uint256 public ghost_realOutflow;
 
     // --- Non-vacuity witness: pool-to-pool transfers actually occurred -------------------------------------
-    // Each successful advanceGame runs the consolidation/skim/jackpot transfer machinery. If this stays 0 the
+    // Each successful mineFlip runs the consolidation/skim/jackpot transfer machinery. If this stays 0 the
     // conservation property is vacuously true (nothing ever moved) and the plan FAILS acceptance.
     uint256 public ghost_advances;
 
@@ -112,10 +112,10 @@ contract PoolFlowHandler is Test {
     // =========================================================================
 
     /// @notice Satisfy the daily purchase gate with one whole ticket, then advance the state machine x3 and
-    ///         fulfill any pending VRF. advanceGame is the production entry to _consolidatePoolsAndRewardJackpots,
+    ///         fulfill any pending VRF. mineFlip is the production entry to _consolidatePoolsAndRewardJackpots,
     ///         which performs the future->next, next->current consolidation, the time-based future-take skim, and
     ///         the jackpot settlement that credits the claimable pool — i.e. the very pool-to-pool transfers the
-    ///         conservation oracle watches. Each successful advanceGame bumps ghost_advances (the non-vacuity
+    ///         conservation oracle watches. Each successful mineFlip bumps ghost_advances (the non-vacuity
     ///         witness). The gate buy's msg.value is also real inflow and is tracked.
     function advance(uint256 actorSeed, uint256 wordSeed) external useActor(actorSeed) {
         calls_advance++;
@@ -132,7 +132,7 @@ contract PoolFlowHandler is Test {
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.advanceGame() {
+            try game.mineFlip() {
                 ghost_advances++; // a consolidation/skim/jackpot transfer pass ran — non-vacuity witness
             } catch {}
             uint256 reqId = vrf.lastRequestId();

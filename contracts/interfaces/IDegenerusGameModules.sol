@@ -25,19 +25,46 @@ pragma solidity 0.8.34;
  */
 
 import {MintPaymentKind} from "./IDegenerusGame.sol";
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+
+interface IDegenerusGameTicketModule {
+    function runTicketWork(uint24 anchor, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
+    function processTicketBatch(uint24 anchor) external returns (bool finished, bool didWork);
+    function processTicketBatchBudgeted(uint24 anchor, uint256 allowance)
+        external returns (bool finished, bool worked, uint256 charged);
+    function generateTraitRun(uint256 stream, uint32 offset, uint32 count, uint256 entropy, uint256 ownerIdx)
+        external returns (uint256 writes);
+    function drainRounds(uint24 rk, uint24 lvl, uint32 room, uint256 idx, uint256 total, uint256 entropy, uint8 shift)
+        external returns (uint256 nextIdx, uint32 used);
+}
+
+interface IDegenerusGameMinerModule {
+    function mineFlip() external;
+    function minerAction() external view returns (uint8);
+}
+
+interface IDegenerusGameRngModule {
+    error PreResetWindow();
+    error InsufficientLink();
+    error NoPendingLootbox();
+    error BelowThreshold();
+    error GasTooHigh();
+    function publishRng() external;
+    function requestDailyRng(uint24 day) external;
+    function requestLootboxRng() external;
+    function requestMinerRng() external;
+    function retryRng() external;
+}
 
 /// @title IDegenerusGameAdvanceModule
 /// @notice Interface for the game advancement module handling VRF and game progression
 interface IDegenerusGameAdvanceModule {
-    function advanceGameBudgeted(uint256 allowance) external returns (uint8 mult, uint256 charged);
+    function prepareRequestBoundary(uint24 day) external;
+    function applyDailyWord() external;
+    function applyDailyGap() external;
+    function runDailyPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runTerminalPhase(uint256 allowance) external;
 
-    /// @notice Advances the game state by processing pending operations.
-    /// @return mult Day-epoch stall multiplier (new-day stall ladder 1/2/4/6; 1 mid-day;
-    ///         0 on the gameover path = no bounty). The router pays 2x * mult when mult > 0.
-    function advanceGame() external returns (uint8 mult);
-
-    /// @notice Requests mid-day lootbox RNG when threshold conditions are met.
-    function requestLootboxRng() external;
 }
 
 /// @title IDegenerusGameGameOverModule
@@ -45,6 +72,8 @@ interface IDegenerusGameAdvanceModule {
 ///         plus the cold VRF admin surface (deploy wiring + emergency rotation)
 ///         hosted here for the advance module's EIP-170 headroom.
 interface IDegenerusGameGameOverModule {
+    function runGameOverAdvance(uint24 day, uint24 level, uint256 allowance)
+        external returns (bool shouldReturn, uint8 stage, bool unlock);
     /// @notice Best-effort terminal request, independent of normal read completion.
     function requestTerminalRng() external returns (bool);
 
@@ -94,7 +123,21 @@ interface IDegenerusGameGameOverModule {
 
 /// @title IDegenerusGameJackpotModule
 /// @notice Interface for managing various jackpot distributions
+interface IDegenerusGameJackpotDrawModule {
+    function awardDailyFlipJackpot(uint24 minLevel, uint24 maxLevel, uint32 traits, uint256 budget, uint256 word) external;
+    function runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance)
+        external returns (MineFlipGas.Result memory);
+}
+
 interface IDegenerusGameJackpotModule {
+    function runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance)
+        external returns (MineFlipGas.Result memory);
+    function runDailyJackpot(bool inJackpot, uint24 lvl, uint256 word, uint256 allowance)
+        external returns (MineFlipGas.Result memory);
+    function runPurchaseDailyTickets(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runEarlyBirdTickets(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runDailyJackpotTickets(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
+
     /// @notice Pays out the daily jackpot to winners
     /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
     /// @param lvl The current game level
@@ -177,6 +220,7 @@ interface IDegenerusGameJackpotModule {
 /// @title IDegenerusGameDecimatorModule
 /// @notice Interface for decimator jackpot tracking and resolution
 interface IDegenerusGameDecimatorModule {
+    function runDecimatorWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.
     /// @param lvl Resolution level (current game level + 1).
@@ -382,6 +426,9 @@ interface IDegenerusGameMintModule {
 /// @title IDegenerusGameLootboxModule
 /// @notice Interface for opening lootboxes and managing boons
 interface IDegenerusGameLootboxModule {
+    function resolveHumanBoxOrder(address player, uint48 idx, uint256 word, uint256 stored,
+        uint256 indexWord, uint24 currentLevel) external;
+    function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     /// @notice Price a packed box order without touching state
     /// @param buyer Player the order is for
     /// @param boxOrder Packed order: [small:8][med:8][large:8][customCount:8][customSize:48]
@@ -592,6 +639,7 @@ interface IDegenerusGameBoonModule {
 /// @title IDegenerusGameDegeneretteModule
 /// @notice Interface for Degenerette betting mechanics (single-symbol selection)
 interface IDegenerusGameDegeneretteModule {
+    function runDegeneretteWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     /// @notice Places single-symbol bets
     /// @param player The player address (use zero address for msg.sender)
     /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported)
@@ -605,24 +653,6 @@ interface IDegenerusGameDegeneretteModule {
         uint8 spinCount,
         uint8 symbol
     ) external payable;
-
-    /// @notice Human-box sweep leg: resolves the bet queue at `index` from `pos` within `budget`
-    /// @param index The swept RNG index
-    /// @param pos Queue position to resume from
-    /// @param budget Walk units left in the crank call
-    /// @param mustRunFirst True when the crank has opened nothing yet (the first bet always runs)
-    /// @param rngWord The index's committed word
-    /// @return resolved Bets resolved
-    /// @return newPos Position to resume from
-    /// @return unitsSpent Walk units charged against the budget (worst-case prices)
-    /// @return workUnits Walk units of work actually done (the keeper bounty's basis)
-    function sweepDegeneretteBets(
-        uint48 index,
-        uint256 pos,
-        uint256 budget,
-        bool mustRunFirst,
-        uint256 rngWord
-    ) external returns (uint256 resolved, uint256 newPos, uint256 unitsSpent, uint256 workUnits);
 
     /// @notice Resolve a lootbox WWXRP roll as a single WWXRP Degenerette spin.
     /// @param player The reward recipient.
@@ -706,10 +736,10 @@ interface IDegenerusGameBingoModule {
 ///      (delegatecall), so msg.sender is preserved end-to-end (the consent gates and
 ///      the bounty payee read the original caller).
 interface IGameAfkingModule {
+    function runSubscriberWork(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
+    function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
+    function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function processSubscriberStageBudgeted(uint24 processDay, uint256 allowance) external returns (uint256 processed, uint256 charged);
-
-    /// @notice Dispatch advancement or its prerequisite read drain without a keeper bounty.
-    function advanceGame() external returns (uint8 mult);
 
     /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)
     ///         or cancel (dailyQuantity == 0, tombstone) for `player`
@@ -726,11 +756,6 @@ interface IGameAfkingModule {
         uint8 dailyQuantity,
         address fundingSource
     ) external payable;
-
-    /// @notice Unified permissionless router: do ONE category of pending work this call
-    ///         (advance, else box open — afking ring first, human sweep only when it opened
-    ///         nothing — else scheduled craps upkeep) and pay ONE bounty.
-    function mineFlip() external;
 
     /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor under a weighted
     ///         budget of count × open-weight units); returns the number opened AND the walk
@@ -788,6 +813,7 @@ interface IGameAfkingModule {
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
+    function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory);
     function recordPresaleBox(address buyer, uint48 index, uint256 word) external payable;
     /// @notice Prepare a ticket level, returning false while takeover is unsafe.
     function prepareTicketLevel(uint24 lvl) external payable returns (bool);

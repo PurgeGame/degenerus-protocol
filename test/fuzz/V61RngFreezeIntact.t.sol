@@ -10,7 +10,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 /// @title V61RngFreezeIntact — SEC-01 proof: the v61 surfaces (AFPAY / PACK / CURSE / SMITE) read NO
 ///        VRF-derived or block entropy in a player-manipulable window, proven EMPIRICALLY by a two-block
 ///        determinism replay (the master RNG-freeze property: every variable interacting with a VRF word
-///        must be frozen across [rng request -> unlock] vs players; advanceGame exempt).
+///        must be frozen across [rng request -> unlock] vs players; mineFlip exempt).
 ///
 /// @notice The v45 freeze north-star says a surface that consumes block.* / VRF entropy at call time would
 ///   produce a DIFFERENT observable result when replayed at a different block. So for each v61 surface we run

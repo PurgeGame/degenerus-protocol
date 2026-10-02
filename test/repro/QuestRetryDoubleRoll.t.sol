@@ -81,7 +81,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         vm.roll(block.number + 100);
         vm.warp(block.timestamp + 1 days + 1);
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         assertEq(game.level(), oldLevel + 1, "fresh request advances the level");
         assertTrue(game.rngLocked(), "request returns with word still pending");
         // The level-promoting RNG request (_finalizeRngRequest) no longer writes this
@@ -96,7 +96,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         }
         vm.roll(block.number + 17);
         vm.warp(block.timestamp + 21 hours);
-        game.advanceGame();
+        admin.retryGameRng();
         assertEq(game.level(), oldLevel + 1, "retry did not advance level");
         assertEq(_generationStart(target), sealBlock, "retry preserves the sealed bound (never re-stamps)");
         assertEq(_generationStart(1), bootstrapStart, "old levels retain their bounds");
@@ -125,11 +125,11 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         assertTrue(game.rngLocked(), "final-jackpot request should leave the daily lock held");
 
         // Cross midnight AND the 20h retry timeout with the word still unfulfilled, then let
-        // anyone fire the retry. The daily request is still pending, so this is the retry
+        // the vault owner fire the retry through Admin. The daily request is still pending, so this is the retry
         // branch (rngRequestTime LSB still 0).
         vm.warp(block.timestamp + 1 days + 1 hours);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        assertTrue(ok, "retry advance reverted");
+        (bool ok, ) = address(admin).call(abi.encodeWithSignature("retryGameRng()"));
+        assertTrue(ok, "authorized Admin retry reverted");
 
         QuestInfo[2] memory after_ = quests.getActiveQuests();
         assertEq(
@@ -166,7 +166,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
                 _fulfillVrfIfPending();
                 (, , bool lpd2, bool rngL2, ) = game.purchaseInfo();
                 if (game.level() >= 1 && lpd2 && !rngL2) return game.level();
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (!ok) break;
             }
         }
@@ -190,7 +190,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
             for (uint256 j = 0; j < 30; j++) {
                 QuestInfo[2] memory pre = quests.getActiveQuests();
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (!ok) break;
 
                 QuestInfo[2] memory post = quests.getActiveQuests();

@@ -100,9 +100,9 @@ contract RngWindowFreeze is DeployProtocol {
     // =========================================================================
 
     /// @notice THE PROPERTY. No player-controllable action taken inside the VRF window mutated, in
-    ///         isolation (no advanceGame between snapshot and re-check), any enumerated consumed slot. The
+    ///         isolation (no mineFlip between snapshot and re-check), any enumerated consumed slot. The
     ///         handler increments ghost_frozenSlotMutations only for player-attributable changes — the
-    ///         advanceGame heartbeat (the v45-exempt mutator) is never measured against the property.
+    ///         mineFlip heartbeat (the v45-exempt mutator) is never measured against the property.
     function invariant_inWindowSloadsFrozen() public view {
         assertEq(
             handler.ghost_frozenSlotMutations(),
@@ -253,7 +253,7 @@ contract RngWindowFreeze is DeployProtocol {
             "real mid-day in-window actions froze every enumerated mid-day slot"
         );
 
-        // Close: the mid-day fulfillment finalizes directly (no advanceGame needed).
+        // Close: the mid-day fulfillment finalizes directly (no mineFlip needed).
         handler.closeMidDayWindow(7);
     }
 

@@ -67,12 +67,12 @@ describe("Multi-category boon coexistence", function () {
 
   async function settleRngDay(game, deployer, mockVRF, word) {
     await advanceToNextDay();
-    await game.connect(deployer).advanceGame();
+    await game.connect(deployer).mineFlip();
     const requestId = await getLastVRFRequestId(mockVRF);
     await mockVRF.fulfillRandomWords(requestId, word);
     for (let i = 0; i < 40; i++) {
       if (!(await game.rngLocked())) break;
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
     }
     expect(await game.rngLocked()).to.equal(false);
   }

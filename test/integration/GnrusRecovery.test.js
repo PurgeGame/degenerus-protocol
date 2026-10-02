@@ -28,8 +28,8 @@ import {
  *   3. sweepResidualToVault()  — vault-owner-only, post-sweep + 3-year delay;
  *                                moves ALL GNRUS ETH+stETH to ContractAddresses.VAULT.
  *
- * The final sweep is reached through advanceGame: once gameOver is latched and
- * 30 days have elapsed, advanceGame's post-gameover path delegatecalls
+ * The final sweep is reached through mineFlip: once gameOver is latched and
+ * 30 days have elapsed, mineFlip's post-gameover path delegatecalls
  * handleFinalSweep, which sets GO_SWEPT and calls gnrus.onFinalSweep().
  */
 describe("GnrusRecovery", function () {
@@ -49,14 +49,14 @@ describe("GnrusRecovery", function () {
   /**
    * Trigger game over at level 0 via the 912-day inactivity timeout.
    * Mirrors CharityGameHooks.triggerGameOver: advance past 912 days, then loop
-   * advanceGame (fulfilling any VRF request) until gameOver() latches.
+   * mineFlip (fulfilling any VRF request) until gameOver() latches.
    */
   async function triggerGameOver(game, deployer, mockVRF) {
     await advanceTime(SECONDS_912_DAYS + 86400);
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {
         /* multi-tx drain may revert mid-sequence; keep driving */
       }
@@ -72,8 +72,8 @@ describe("GnrusRecovery", function () {
 
   /**
    * Drive the final sweep: after gameOver has latched, advance 30 days past the
-   * gameover timestamp, then call advanceGame until GO_SWEPT flips and
-   * gnrus.onFinalSweep() stamps sweptAt. The post-gameover advanceGame path
+   * gameover timestamp, then call mineFlip until GO_SWEPT flips and
+   * gnrus.onFinalSweep() stamps sweptAt. The post-gameover mineFlip path
    * requests no VRF, but we fulfill any stray request defensively.
    */
   async function triggerFinalSweep(game, gnrus, deployer, mockVRF) {
@@ -82,7 +82,7 @@ describe("GnrusRecovery", function () {
       if ((await gnrus.sweptAt()) !== 0n) return;
       const reqBefore = await getLastVRFRequestId(mockVRF);
       try {
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip();
       } catch {}
       const reqAfter = await getLastVRFRequestId(mockVRF);
       if (reqAfter > reqBefore) {

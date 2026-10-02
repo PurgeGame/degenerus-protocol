@@ -28,7 +28,7 @@ contract FinalSweepPayoutLegs is DeployProtocol {
         vm.warp(block.timestamp + 370 days);
         for (uint256 i; i < 40 && !game.gameOver(); i++) {
             vm.prank(keeper);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
                 (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -45,7 +45,7 @@ contract FinalSweepPayoutLegs is DeployProtocol {
     function _sweep() internal {
         vm.warp(block.timestamp + 30 days + 1);
         vm.prank(keeper);
-        game.advanceGame();
+        game.mineFlip();
     }
 
     struct Ledger {

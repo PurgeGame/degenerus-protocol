@@ -75,7 +75,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         assertTrue(!fulfilled, "lootbox VRF request should be pending (stalled)");
 
         // Drive the transition, fulfilling every NEW (daily) request but leaving the
-        // lootbox request stalled. The transition fires via the 12h timeout branch.
+        // lootbox request stalled. Admin retries the original midday session after20h, then a fresh daily request transitions.
         uint24 after_ = _driveThroughTransition(lootboxReqId, L);
         emit log_named_uint("[bug] level after transition (lootbox stalled)", after_);
 
@@ -114,7 +114,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
                 _fulfillVrfIfPending();
                 (, , bool lpd2, bool rngL2, ) = game.purchaseInfo();
                 if (game.level() >= 1 && lpd2 && !rngL2) return game.level();
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (!ok) break;
             }
         }
@@ -123,10 +123,16 @@ contract RngRetryLootboxStallTest is DeployProtocol {
 
     /// @notice Advance through the pending transition, fulfilling every VRF request except
     ///         `skipReqId` (use 0 to fulfill all). Returns the level once it changes (or after
-    ///         the loop budget). Warps forward so any stalled request crosses the 12h timeout.
+    ///         the loop budget). Warps forward so any stalled request crosses the20h timeout.
     function _driveThroughTransition(uint256 skipReqId, uint24 L0) internal returns (uint24) {
-        uint256 simTime = block.timestamp + 1 days + 1; // new day; stalled req now > 12h old
+        uint256 simTime = block.timestamp + 1 days + 1; // new day; stalled request now past20h
         vm.warp(simTime);
+        if (skipReqId != 0) {
+            admin.retryGameRng();
+            assertGt(mockVRF.lastRequestId(), skipReqId, "Admin replaced the withheld midday request");
+            assertFalse(game.rngLocked(), "transport retry preserves midday mode before fresh daily work");
+            assertEq(game.level(), L0, "retry alone does not promote the level");
+        }
 
         for (uint256 j = 0; j < 200; j++) {
             uint256 rid = mockVRF.lastRequestId();
@@ -140,7 +146,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
 
             if (game.level() != L0) return game.level();
 
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) {
                 // Need a fresh wall-clock day (e.g. NotTimeYet / death-clock pacing).
                 simTime += 1 days + 1;

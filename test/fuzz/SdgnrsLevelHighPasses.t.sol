@@ -148,10 +148,10 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
             _buyTickets(buyer1, 400);
             for (uint256 j = 0; j < 40; ++j) {
                 _fulfillVrfIfPending();
-                (bool ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (!ok) {
                     _fulfillVrfIfPending();
-                    (ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                    (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                     if (!ok) break;
                 }
             }
@@ -191,7 +191,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         uint256 simTime = block.timestamp;
         for (uint256 w = 0; w < 30; w++) {
             _fulfillVrfIfPending();
-            (bool ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
         for (uint256 day = 0; day < 500; day++) {
@@ -203,10 +203,10 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
             _buyTickets(buyer2, 2000);
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
-                (bool ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (!ok) {
                     _fulfillVrfIfPending();
-                    (ok,) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+                    (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                     if (!ok) break;
                 }
             }

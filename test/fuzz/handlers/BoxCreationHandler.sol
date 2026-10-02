@@ -22,7 +22,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///         vm.store of a box record — the box is created by the contract so the enqueue site actually fires),
 ///         records every successfully-created (index, owner) pair into a tracked list the BoxEnqueue invariant
 ///         iterates, and bumps a per-path ghost counter so the invariant can prove non-vacuity (boxes were
-///         actually created across multiple paths). It also drives openBoxes()/advanceGame()+VRF-fulfill so
+///         actually created across multiple paths). It also drives openBoxes()/mineFlip()+VRF-fulfill so
 ///         boxes drain to base==0 over the campaign — exercising BOTH the still-enqueued and the resolved
 ///         transitions the invariant distinguishes.
 ///
@@ -283,7 +283,7 @@ contract BoxCreationHandler is Test {
 
         if (game.gameOver()) return;
 
-        // Satisfy the daily purchase gate with one whole ticket so advanceGame can progress.
+        // Satisfy the daily purchase gate with one whole ticket so mineFlip can progress.
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= currentActor.balance) {
             vm.prank(currentActor);
@@ -292,7 +292,7 @@ contract BoxCreationHandler is Test {
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.advanceGame() {} catch {}
+            try game.mineFlip() {} catch {}
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -26,7 +28,7 @@ pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {Craps} from "../Craps.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -50,39 +52,24 @@ interface IDecimatorCrapsEngine {
 ///      the next request can replace it. No transaction walks the unbounded entrant population.
 contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     uint256 private constant SCALE = 3000 ether;
-    uint256 private constant MAX_RUN_UNITS = 108;
     bytes32 private constant DICE_TAG = keccak256("decimator.battle.dice.v1");
     bytes32 private constant BOARD_TAG = keccak256("decimator.battle.board.v1");
     bytes32 private constant COIN_TAG = keccak256("decimator.battle.final-coin.v1");
     bytes32 private constant TIE_TAG = keccak256("decimator.battle.tie.v1");
 
-    // Keeper work units (4.7k gas each), charged after each piece of work from its outcome and
-    // sized on worst cases: the call frame with a first cursor write (~37k inside mineFlip's
-    // delegatecall), a tails coin (~0.8k), a heads run's fixed cost with its one entry read plus
-    // its dice (<= 723 gas a roll on any board), a filling insert into a fresh or reused node
-    // slot, a heap level, a root reject, a scanned leaf, an ETH credit to an empty balance
-    // (~30.5k), and a half-pass award with its share of the pool move (~23k fresh, plus ~10k once
-    // a call). DecimatorPricing.t.sol pins every call, real dice and worst heap shapes alike, at
-    // or under 90% of its charge with each call's storage cold, as a keeper transaction finds it.
-    uint256 private constant CALL_UNITS = 14;
-    uint256 private constant TAILS_UNITS = 1;
-    uint256 private constant RUN_UNITS = 4;
-    uint256 private constant ROLLS_PER_UNIT = 6;
-    uint256 private constant INSERT_UNITS = 2;
-    uint256 private constant INSERT_FRESH_UNITS = 6;
-    uint256 private constant MOVE_UNITS = 2;
-    uint256 private constant REJECT_UNITS = 1;
-    uint256 private constant RANK_UNITS = 8;
-    uint256 private constant RANK_NODE_UNITS = 1;
-    uint256 private constant CREDIT_UNITS = 8;
-    uint256 private constant PASS_UNITS = 6;
+    // Admission bounds cover one indivisible run/rank/payment, not a debited currency.
+    // Actual elapsed gas determines how much allowance remains after each operation.
+    uint256 private constant RUN_GAS_MAX = GasBounds.DECIMATOR_RUN_GAS_MAX;
+    uint256 private constant TAILS_GAS_MAX = GasBounds.DECIMATOR_TAILS_GAS_MAX;
+    uint256 private constant RANK_GAS_MAX = GasBounds.DECIMATOR_RANK_GAS_MAX;
+    uint256 private constant PAYMENT_GAS_MAX = GasBounds.DECIMATOR_PAYMENT_GAS_MAX;
+    uint256 private constant WORK_TAIL_GAS = GasBounds.DECIMATOR_WORK_TAIL_GAS;
 
     // A run stops at bust, after 48 shooters, or at exactly 511 rolls, the longest cut the engine
     // makes exactly (a roll budget of 512 or more is judged between shooters). A safety bound for
     // the budget, not a rule of play: none of 200,000 simulated shared-dice runs over every board
     // size came near it (the longest ran 430 rolls and 36 shooters), and 70 of 286 million engine
-    // runs across every strategy reached 511 rolls. The pair bounds a heads run at 108 units,
-    // per-shooter cost included.
+    // runs across every strategy reached 511 rolls. The complete run remains atomic across keeper checkpoints.
     uint256 private constant RUN_BOUNDS = (511 << 16) | 48;
 
     // An entry word: owner in bits 0..159, the chosen board's thirty chip bits at 160, and the
@@ -195,92 +182,99 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         emit DecimatorResolved(lvl, rngWord, poolWei, round.count);
     }
 
-    /// @notice Permissionless, deterministic progress. Budget affects batch size, never outcomes.
-    ///         Idles once the game is over: a round still queued then keeps its reservation in
-    ///         claimablePool, which the final sweep releases.
-    /// @return settled Work items (runs, finalization or ETH credits), including losing runs.
-    /// @return unitsUsed Conservative keeper work units, never above the supplied allowance.
-    /// @return moved Whether the FIFO or a round's cursor advanced.
-    function settleDecimatorWinners(uint256 budgetUnits)
-        external
-        returns (uint256 settled, uint256 unitsUsed, bool moved)
+    /// @notice Resolve the next Decimator obligation within its available gas.
+    function runDecimatorWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
+        return _runDecimatorWork(gasAllowance);
+    }
+
+    /// @notice Compatibility entrypoint; caller budgets do not select the execution prefix.
+    /// @return settled Number of completed runs, rankings and winner payments.
+    /// @return gasUsed Actual execution gas used by the compatibility worker call.
+    /// @return moved Whether an obligation or cursor changed.
+    function settleDecimatorWinners(uint256)
+        external returns (uint256 settled, uint256 gasUsed, bool moved)
     {
+        uint256 beforeGas = gasleft();
+        MineFlipGas.Result memory result = _runDecimatorWork(MineFlipGas.available());
+        return (result.rewardBasis, beforeGas - gasleft(), result.progressed);
+    }
+
+    function _runDecimatorWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         uint24 lvl = uint24(decBattleQueue);
-        budgetUnits = MineFlipBudget.clamp(budgetUnits);
-        if (lvl == 0 || budgetUnits <= CALL_UNITS || _rngConsumerStage() != 4) return (0, 0, false);
+        if (lvl == 0) { result.done = true; return result; }
+        if (_rngConsumerStage() != 5) return result;
         DecBattleRound storage round = decBattleRounds[lvl];
         uint256 word = _lootboxWord(_rngReadBuffer());
-        if (word == 0) return (0, 0, false);
-        unitsUsed = CALL_UNITS;
+        if (word == 0) return result;
         if (round.phase == 1) {
             uint64 cursor = round.cursor;
             uint64 count = round.count;
             if (cursor == count) {
-                uint256 rankCost = RANK_UNITS + (uint256(round.winners) - round.winners / 2) * RANK_NODE_UNITS;
-                if (rankCost > budgetUnits - unitsUsed) return (0, unitsUsed, false);
-                return (1, unitsUsed + _rank(lvl, round, word), true);
+                if (!MineFlipGas.canRun(meter, RANK_GAS_MAX, WORK_TAIL_GAS)) return result;
+                _rank(lvl, round, word);
+                result.progressed = true;
+                result.rewardBasis = 1;
+                result.done = decBattleQueue == 0;
+                MineFlipGas.finish(meter);
+                return result;
             }
-            // The only external call is the pinned pure engine, which cannot touch Game storage, so
-            // the batch keeps its progress on the stack and persists it once.
             uint256 capacity = round.capacity;
             uint256 winners = round.winners;
             uint256 winnersBefore = winners;
             bytes32 seed = keccak256(abi.encode(DICE_TAG, word, lvl));
             uint256 free;
             assembly ("memory-safe") { free := mload(0x40) }
-            while (cursor < count && unitsUsed < budgetUnits && settled < 256) {
+            while (cursor < count) {
                 uint64 next = cursor + 1;
                 bool heads = uint256(keccak256(abi.encode(COIN_TAG, word, lvl, next))) & 1 != 0;
-                uint256 reserved = heads ? MAX_RUN_UNITS : TAILS_UNITS;
-                if (reserved > budgetUnits - unitsUsed) break;
-                uint256 units;
-                (units, winners) = _run(lvl, next, word, seed, capacity, winners);
-                if (units > reserved) revert Invariant();
+                if (!MineFlipGas.canRun(meter, heads ? RUN_GAS_MAX : TAILS_GAS_MAX, WORK_TAIL_GAS)) break;
+                winners = _run(lvl, next, word, seed, capacity, winners);
                 cursor = next;
-                unitsUsed += units;
-                ++settled;
-                // Every engine result is dead before the next iteration.
+                ++result.rewardBasis;
                 assembly ("memory-safe") { mstore(0x40, free) }
             }
-            round.cursor = cursor;
+            if (cursor != round.cursor) {
+                round.cursor = cursor;
+                result.progressed = true;
+            }
             if (winners != winnersBefore) round.winners = uint8(winners);
         } else if (round.phase == 2) {
             uint256 winners = round.winners;
             uint256 paid = round.paid;
             (uint256 base, uint256 champ, uint256 champPasses, uint256 perEth,, bool passMode) = _payTerms(round);
             mapping(uint256 => uint256) storage heap = decBattleHeap;
-            while (paid < winners && unitsUsed < budgetUnits) {
-                uint256 cost = CREDIT_UNITS
-                    + ((paid == 0 ? champPasses != 0 : passMode && paid & 1 == 0) ? PASS_UNITS : 0);
-                if (cost > budgetUnits - unitsUsed) break;
+            while (paid < winners) {
+                if (!MineFlipGas.canRun(meter, PAYMENT_GAS_MAX, WORK_TAIL_GAS)) break;
                 uint64 id = uint64(heap[paid]);
                 address owner = address(uint160(decBattleEntries[_entryKey(lvl, id)]));
-                // Position 0 is the champion (moved there at ranking): half passes, the rest ETH.
                 if (paid == 0) {
-                    if (champPasses != 0) {
-                        whalePassClaims[owner] += champPasses;
-                        unitsUsed += PASS_UNITS;
-                    }
+                    if (champPasses != 0) whalePassClaims[owner] += champPasses;
                     uint256 eth = champ - champPasses * HALF_WHALE_PASS_PRICE;
                     _creditClaimable(owner, eth);
                     emit DecimatorClaimed(owner, lvl, id, eth, champPasses);
                 } else if (passMode && paid & 1 == 0) {
                     uint256 halfPasses = base / HALF_WHALE_PASS_PRICE;
                     whalePassClaims[owner] += halfPasses;
-                    unitsUsed += PASS_UNITS;
                     emit DecimatorClaimed(owner, lvl, id, 0, halfPasses);
                 } else {
                     _creditClaimable(owner, base + perEth);
                     emit DecimatorClaimed(owner, lvl, id, base + perEth, 0);
                 }
                 ++paid;
-                unitsUsed += CREDIT_UNITS;
-                ++settled;
+                ++result.rewardBasis;
             }
-            round.paid = uint8(paid);
-            if (paid == winners) _finish(round);
+            if (paid != round.paid) {
+                round.paid = uint8(paid);
+                result.progressed = true;
+            }
+            if (paid == winners && MineFlipGas.canRun(meter, 30_000, WORK_TAIL_GAS)) {
+                _finish(round);
+                result.progressed = true;
+            }
         }
-        moved = settled != 0;
+        result.done = decBattleQueue == 0;
+        MineFlipGas.finish(meter);
     }
 
     /// @dev The payout's constant terms. The champion's amount is the 5% bonus plus its equal share
@@ -312,11 +306,11 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
 
     function _run(uint24 lvl, uint64 id, uint256 word, bytes32 seed, uint256 capacity, uint256 winners)
         private
-        returns (uint256 units, uint256)
+        returns (uint256)
     {
         // The final coin is independent of the run, so tails skips the engine: the run cannot place
         // and anyone can replay it from the sealed word with a free call to the pure engine.
-        if (uint256(keccak256(abi.encode(COIN_TAG, word, lvl, id))) & 1 == 0) return (TAILS_UNITS, winners);
+        if (uint256(keccak256(abi.encode(COIN_TAG, word, lvl, id))) & 1 == 0) return winners;
         uint256 entry = decBattleEntries[_entryKey(lvl, id)];
         address owner = address(uint160(entry));
         // The board was checked at burn, so settlement only counts its named chips.
@@ -340,8 +334,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         emit DecimatorRun(lvl, id, result.peakBankroll);
         (uint256 high, uint256 score) = Math.mul512(entry >> STACK_SHIFT, result.peakBankroll);
         if (high != 0 || score > MAX_SCORE) score = MAX_SCORE;
-        (units, winners) = _insert(lvl, word, capacity, winners, (score << 64) | id);
-        return (units + RUN_UNITS + (result.totalRolls + ROLLS_PER_UNIT - 1) / ROLLS_PER_UNIT, winners);
+        return _insert(lvl, word, capacity, winners, (score << 64) | id);
     }
 
     /// @dev Min heap: the weakest retained eligible entry is at the root. At most 100 nodes. A
@@ -349,14 +342,12 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     ///      fresh slots, every later round reuses them.
     function _insert(uint24 lvl, uint256 word, uint256 capacity, uint256 size, uint256 node)
         private
-        returns (uint256 units, uint256)
+        returns (uint256)
     {
         mapping(uint256 => uint256) storage heap = decBattleHeap;
         uint256 pos;
-        uint256 base = INSERT_UNITS;
         if (size < capacity) {
             pos = size;
-            if (heap[pos] == 0) base = INSERT_FRESH_UNITS;
             ++size;
             while (pos != 0) {
                 uint256 parent = (pos - 1) / 2;
@@ -364,10 +355,9 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                 if (!_less(word, lvl, node, p)) break;
                 heap[pos] = p;
                 pos = parent;
-                units += MOVE_UNITS;
             }
         } else {
-            if (!_less(word, lvl, heap[0], node)) return (REJECT_UNITS, size);
+            if (!_less(word, lvl, heap[0], node)) return size;
             while (true) {
                 uint256 child = pos * 2 + 1;
                 if (child >= size) break;
@@ -382,11 +372,10 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                 if (!_less(word, lvl, c, node)) break;
                 heap[pos] = c;
                 pos = child;
-                units += MOVE_UNITS;
             }
         }
         heap[pos] = node;
-        return (units + base, size);
+        return size;
     }
 
     /// @dev Score order (the bits above the id), then the random tiebreak, then the entry id.
@@ -399,14 +388,13 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         return (uint256(keccak256(abi.encode(TIE_TAG, word, lvl, id))) & ~uint256(type(uint64).max)) | id;
     }
 
-    function _rank(uint24 lvl, DecBattleRound storage round, uint256 word) private returns (uint256 units) {
+    function _rank(uint24 lvl, DecBattleRound storage round, uint256 word) private {
         uint256 winners = round.winners;
-        units = RANK_UNITS;
         if (winners == 0) {
             _releaseToFuture(round.poolWei);
             _finish(round);
             emit DecimatorRanked(lvl, 0, 0);
-            return units;
+            return;
         }
         mapping(uint256 => uint256) storage heap = decBattleHeap;
         // Every internal node of the min-heap is below a child, so the maximum is a leaf.
@@ -430,7 +418,6 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         (,,,, uint256 recycled,) = _payTerms(round);
         if (recycled != 0) _releaseToFuture(recycled);
         emit DecimatorRanked(lvl, uint64(bestNode), uint8(winners));
-        return units + (winners - winners / 2) * RANK_NODE_UNITS;
     }
 
     /// @dev Move part of a sealed round's reservation back to future prizes (pending while frozen).

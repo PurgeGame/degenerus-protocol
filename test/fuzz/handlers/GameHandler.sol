@@ -8,7 +8,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title GameHandler -- Handler for core game operations in invariant tests
-/// @notice Wraps purchase/advanceGame/claimWinnings with bounded inputs,
+/// @notice Wraps purchase/mineFlip/claimWinnings with bounded inputs,
 ///         multi-actor support, and ghost variable ETH tracking.
 contract GameHandler is Test {
     DegenerusGame public game;
@@ -82,15 +82,15 @@ contract GameHandler is Test {
         } catch {}
     }
 
-    /// @notice Call advanceGame to progress the state machine
+    /// @notice Call mineFlip to progress the state machine
     /// @param actorSeed Seed for actor selection
-    function advanceGame(uint256 actorSeed) external useActor(actorSeed) {
+    function mineFlip(uint256 actorSeed) external useActor(actorSeed) {
         calls_advanceGame++;
 
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.advanceGame() {
+        try game.mineFlip() {
             ghost_successfulAdvances++;
             uint256 currentLevel = game.level();
             if (currentLevel > ghost_maxLevelReached) {

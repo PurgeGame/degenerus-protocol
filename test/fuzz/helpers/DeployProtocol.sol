@@ -7,6 +7,10 @@ import "forge-std/Test.sol";
 // Production contracts
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {Icons32Data} from "../../../contracts/Icons32Data.sol";
+import {DegenerusGameJackpotDrawModule} from "../../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
+import {DegenerusGameTicketModule} from "../../../contracts/modules/DegenerusGameTicketModule.sol";
+import {DegenerusGameMinerModule} from "../../../contracts/modules/DegenerusGameMinerModule.sol";
+import {DegenerusGameRngModule} from "../../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameMintModule} from "../../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameAdvanceModule} from "../../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameWhaleModule} from "../../../contracts/modules/DegenerusGameWhaleModule.sol";
@@ -46,67 +50,32 @@ import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
 import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 
-/// @dev Fixture entrypoint for the actual indexed worker. Inherits Game so its
-/// external calls keep the production dispatch while the fixture is etched.
-contract IndexedReadFixtureDriver is DegenerusGame {
-    function finishIndexedRead() external {
-        require(!rngLockedFlag, "fixture daily still locked");
-        for (uint256 i; i < 100 && !humanReadComplete; ++i) {
-            (bool ok, bytes memory ret) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector, 10_000)
-            );
-            if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
-        }
-        require(humanReadComplete, "fixture indexed read did not complete");
-    }
-}
-
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 4 mocks + 30 protocol contracts in setUp().
+/// @notice Deploys all 4 mocks + 36 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build (there is no pretest hook —
 ///      run `node scripts/...patchForFoundry...` before `forge build` to align
 ///      the predicted CREATE addresses with the ContractAddresses.sol constants).
 abstract contract DeployProtocol is Test {
-    /// @dev Complete indexed boxes/bets without opening independent stamped AFKING
-    /// boxes that a gas fixture deliberately leaves pending for its measured call.
-    function _finishIndexedReadConsumers() internal {
-        if (!game.rngLocked() && game.isRngFulfilled()) game.advanceGame();
-        uint48 read = RecyclingState.readBuffer(address(game));
-        if (RecyclingState.word(address(game), read) == 0) return;
-        bytes memory original = address(game).code;
-        vm.etch(address(game), type(IndexedReadFixtureDriver).runtimeCode);
-        IndexedReadFixtureDriver(payable(address(game))).finishIndexedRead();
-        vm.etch(address(game), original);
-        _finishReadCraps(read);
-    }
-    /// @dev Finish the delivered read queue through the production sweep, including empty headers.
-    /// Never forge the completion cursor: binding/lifecycle tests must run every owed effect.
-    function _finishReadBoxes() internal {
-        if (!game.rngLocked() && game.isRngFulfilled()) game.advanceGame();
-        uint48 read = RecyclingState.readBuffer(address(game));
-        if (RecyclingState.word(address(game), read) == 0) return;
-        for (uint256 i; i < 10_000 && !game.boxIndexComplete(read); ++i) game.openBoxes(80);
-        assertTrue(game.boxIndexComplete(read), "fixture read cohort did not drain");
-    }
+    /// @dev Compatibility fixture names all drive the same production state engine.
+    /// Earlier redemption/AFK work cannot be skipped to reach human boxes or Craps.
+    function _finishIndexedReadConsumers() internal { _finishReadConsumers(); }
+    function _finishReadBoxes() internal { _finishReadConsumers(); }
 
-    /// @dev Finish only the already-delivered read consumers before a fresh request.
-    /// No arms, new request, ticket swap, clock jump or completion-state poke.
+    /// @dev Finish the delivered session in canonical order. A composed call can close
+    /// it and issue the next request; this helper never fabricates fulfillment for that request.
     function _finishReadConsumers() internal {
-        _finishReadBoxes();
-        uint48 read = RecyclingState.readBuffer(address(game));
-        if (RecyclingState.word(address(game), read) == 0) return;
-        _finishReadCraps(read);
-    }
-
-    function _finishReadCraps(uint48 read) private {
-        uint256 flag = uint256(1) << (250 + read);
-        for (uint256 i; i < 512; ++i) {
-            if (uint256(vm.load(address(game), bytes32(uint256(33)))) & flag == 0) return;
-            JackpotBattle(address(crapsBattle)).keepRngCohort(read, 1_888);
+        if (!game.isRngFulfilled()) return;
+        uint256 initialWord = RecyclingState.currentWord(address(game));
+        uint48 initialRead = RecyclingState.readBuffer(address(game));
+        for (uint256 i; i < 10_000; ++i) {
+            if (game.rngComplete() || !game.isRngFulfilled()
+                || RecyclingState.currentWord(address(game)) != initialWord
+                || RecyclingState.readBuffer(address(game)) != initialRead) return;
+            game.mineFlip();
         }
-        fail("fixture delivered Craps cohort did not drain");
+        fail("fixture committed session did not drain through state engine");
     }
 
     // Mocks
@@ -118,6 +87,10 @@ abstract contract DeployProtocol is Test {
     // Protocol contracts
     Icons32Data public icons32;
     DegenerusGameMintModule public mintModule;
+    DegenerusGameTicketModule public ticketModule;
+    DegenerusGameMinerModule public minerModule;
+    DegenerusGameRngModule public rngModule;
+    DegenerusGameJackpotDrawModule public jackpotDrawModule;
     DegenerusGameAdvanceModule public advanceModule;
     DegenerusGameWhaleModule public whaleModule;
     DegenerusGameJackpotModule public jackpotModule;
@@ -178,7 +151,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(86400);
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 31 protocol contracts (nonces 5-35) ---
+        // Then 36 protocol contracts (nonces 5-40) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -284,6 +257,10 @@ abstract contract DeployProtocol is Test {
         // Jackpot battle craps battle — appended, so it shifts no earlier nonce. No storage, no
         // ctor args; the jackpot module calls ContractAddresses.JACKPOT_BATTLE bare.
         jackpotBattle = new JackpotBattle();                              // N+31 = nonce 36
+        ticketModule = new DegenerusGameTicketModule();                    // N+32 = nonce 37
+        minerModule = new DegenerusGameMinerModule();                      // N+33 = nonce 38
+        rngModule = new DegenerusGameRngModule();                          // N+34 = nonce 39
+        jackpotDrawModule = new DegenerusGameJackpotDrawModule();          // N+35 = nonce 40
         if (initializeDeities) game.initProtocolDeity();
     }
 

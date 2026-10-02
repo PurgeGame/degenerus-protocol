@@ -20,7 +20,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @notice D-351-02 REMOVED-SURFACE DROP (logged BY NAME for the 351-09 REGRESSION-BASELINE-v55 ledger):
 ///   the v49 keeper batch-purchase per-slice try/catch isolation leg is GONE — the standalone AfKing
 ///   batch-buy entrypoint (and its BatchBuy event) was v55 P5 dead-code (349.1) and has NO game-resident
-///   successor. The per-buy work folded into `advanceGame()`'s required-path `processSubscriberStage` STAGE,
+///   successor. The per-buy work folded into `mineFlip()`'s required-path `processSubscriberStage` STAGE,
 ///   which is revert-free by construction (no valve to isolate a poisoned slice — a FUNDED, well-formed
 ///   slice can never poison the batch; an underfunded NORMAL sub is auto-paused/swap-popped, never
 ///   reverted). The six dropped tests (no behavioral successor — recorded for the ledger):
@@ -34,7 +34,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///   the game-resident withdraw/cancel + the STAGE (D-351-01 renamed/relocated, NOT a removed surface).
 ///
 /// @dev Builds on the DeployProtocol fixture (GameAfkingModule at GAME_AFKING_MODULE). Drives REAL
-///      lootbox purchases through the public mint API; the per-sub buy is `advanceGame()`'s pre-RNG STAGE
+///      lootbox purchases through the public mint API; the per-sub buy is `mineFlip()`'s pre-RNG STAGE
 ///      (`processSubscriberStage`); cancel is `subscribe(_, dailyQuantity=0)` (the in-place tombstone); the
 ///      pool ETH lives in the game-resident `afkingFunding` ledger (deposited via `depositAfkingFunding`,
 ///      withdrawn via `withdrawAfkingFunding` under CEI). RE-DERIVED every pinned slot via
@@ -170,19 +170,19 @@ contract KeeperNonBrick is DeployProtocol {
         _settleGame(vrfWord);
     }
 
-    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `advanceGame()` (no full settle) — the
+    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `mineFlip()` (no full settle) — the
     ///      STAGE runs strictly PRE-RNG (AdvanceModule:305-326), so the eviction/buy completes before
     ///      rngGate and the stage is measured on its own. Subscribers must already be registered
     ///      (subscribe blocks during rngLock). The 351-02 _runStageOnce pattern.
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.advanceGame();
+        game.mineFlip();
     }
 
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -199,7 +199,7 @@ contract KeeperNonBrick is DeployProtocol {
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

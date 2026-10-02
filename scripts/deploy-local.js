@@ -208,7 +208,7 @@ async function main() {
       console.log(`  Bob (${bob.address}) purchased tickets.`);
     }
 
-    // Advance one game-day. advanceGame() reverts NotTimeYet() until the wall
+    // Advance one game-day. daily preparation is eligible once the wall
     // clock crosses the JACKPOT_RESET_TIME day boundary, so warp +1 day first
     // (one on-chain game-day is hard-coded to 86400s). The whole advance/VRF
     // dance is best-effort: a hiccup here must NOT block the artifact export,
@@ -218,8 +218,8 @@ async function main() {
       await hre.network.provider.send("evm_increaseTime", [86400]);
       await hre.network.provider.send("evm_mine", []);
 
-      await game.connect(deployer).advanceGame();
-      console.log("  VRF request issued (advanceGame).");
+      await game.connect(deployer).mineFlip({ gasLimit: 12_000_000 });
+      console.log("  VRF request issued (mineFlip).");
 
       // Fulfill VRF with the mock (honest seed word).
       const requestId = await mockVRF.lastRequestId();
@@ -230,7 +230,7 @@ async function main() {
       let drainCount = 0;
       for (let i = 0; i < 30; i++) {
         if (!(await game.rngLocked())) break;
-        await game.connect(deployer).advanceGame();
+        await game.connect(deployer).mineFlip({ gasLimit: 12_000_000 });
         drainCount++;
       }
       console.log(`  Ticket processing drained (${drainCount} advance calls).`);

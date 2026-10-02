@@ -5,6 +5,7 @@ import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -181,8 +182,8 @@ contract ChunkHarness is MintBucketSeed {
 }
 
 /// @title RoundDrainChunkGas — gas of one full-budget ticket-batch chunk on each drain path
-/// @notice Informational + bound: every shape of a WRITES_BUDGET_SAFE chunk stays under the
-///         10M soft target and the 16.7M EIP-7825 cap.
+/// @notice Informational + bound: every shape of a measured-gas checkpoint stays under the
+///         10M ceiling and the 16.7M EIP-7825 cap.
 contract RoundDrainChunkGas is Test {
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     uint256 internal constant GAS_TARGET = 10_000_000;
@@ -191,6 +192,7 @@ contract RoundDrainChunkGas is Test {
 
     function setUp() public {
         h = new ChunkHarness();
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
         vm.etch(
             ContractAddresses.GAME_FOILPACK_MODULE,
             address(new DegenerusGameFoilPackModule()).code
@@ -208,7 +210,7 @@ contract RoundDrainChunkGas is Test {
         emit log_named_uint(tag, g);
         // Non-vacuity: the chunk must drain the seeded queue, not walk an empty window.
         assertTrue(worked, string.concat(tag, ": chunk did no work (seeded level outside the window)"));
-        assertLt(g, GAS_TARGET, string.concat(tag, ": chunk over the 10M soft target"));
+        assertLt(g, GAS_TARGET, string.concat(tag, ": chunk over the 10M ceiling"));
         assertLt(g, EIP7825_TX_GAS_CAP, string.concat(tag, ": chunk over the EIP-7825 cap"));
     }
 

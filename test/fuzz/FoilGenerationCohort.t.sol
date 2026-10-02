@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract FoilCohortCreditStub {
     mapping(address => uint256) public credited;
@@ -109,9 +110,9 @@ contract FoilGenerationCohortTest is Test {
         h.enqueue(B);
         h.commit(0xA11CE);
         uint24 day = GameTimeLib.currentDayIndex();
-        (bool done, bool worked) = h.processFoilDrain(84);
-        assertFalse(done);
-        assertTrue(worked);
+        MineFlipGas.Result memory first = h.runFoilWork(1_600_000);
+        assertFalse(first.done);
+        assertTrue(first.progressed);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         h.live();
         h.processFoilDrain(900);

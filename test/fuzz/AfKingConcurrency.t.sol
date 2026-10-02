@@ -9,7 +9,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title AfKingConcurrency -- Proves the v55.0 game-resident afking subscriber-set mutation
-///        correctness: the per-sub buy now runs INSIDE `advanceGame()`'s required-path process
+///        correctness: the per-sub buy now runs INSIDE `mineFlip()`'s required-path process
 ///        STAGE (`processSubscriberStage(SUB_STAGE_BATCH=50)`, GameAfkingModule.sol:539), strictly
 ///        PRE-RNG. The standalone `autoBuy(maxCount)` keeper entrypoint and its mid-block cursor are
 ///        GONE (D-351-01 successor remap, PATTERNS §3); the STAGE is the single per-day buy driver.
@@ -18,7 +18,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///        advances NO cursor) that TST-04 regresses ([[afking-cancel-tombstone-streak-finding]]).
 ///
 /// @notice The v55 set-mutation floor (reframed onto the game-resident STAGE):
-///   - Exactly-once / no double-buy: a full STAGE cycle (advanceGame over a new day) buys every
+///   - Exactly-once / no double-buy: a full STAGE cycle (mineFlip over a new day) buys every
 ///     active funded sub EXACTLY ONCE; the per-entry `lastAutoBoughtDay >= processDay` idempotency
 ///     skip (GameAfkingModule.sol:598) prevents a second buy if the STAGE re-visits an index already
 ///     stamped this cycle (the chunked-same-day case across partial-drain advance calls).
@@ -39,8 +39,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   Δ1: dropped the deleted standalone-contract source dependency -- the receiver is the game path.
 ///   Δ2 subscribe: `afKing.subscribe(...)` -> `game.subscribe(...)` (identical 6-arg sig, dispatch stub
 ///      DegenerusGame.sol:363 -> GameAfkingModule.sol:234).
-///   Δ4 autoBuy: `afKing.autoBuy(N)` has NO successor -- the per-sub buy folded into `advanceGame()`'s
-///      required-path STAGE; driven here via a new-day `advanceGame()` + the `_settleGame` VRF drain.
+///   Δ4 autoBuy: `afKing.autoBuy(N)` has NO successor -- the per-sub buy folded into `mineFlip()`'s
+///      required-path STAGE; driven here via a new-day `mineFlip()` + the `_settleGame` VRF drain.
 ///   Δ5 views/cancel: `afKing.subscriberCount()`/`subscriberAt()`/`subscriptionOf()`/`autoBuyProgress()`
 ///      have NO game-exposed external view -> read `_subscribers`/`_subOf`/`_subCursor` via `vm.load`
 ///      RE-DERIVED slots (the AfKing-standalone-layout constants were WRONG); `setDailyQuantity(0)` ->
@@ -182,7 +182,7 @@ contract AfKingConcurrency is DeployProtocol {
     // Internal helpers
     // =========================================================================
 
-    /// @dev Drive the per-sub buy STAGE for a NEW day: warp a day forward, then run advanceGame +
+    /// @dev Drive the per-sub buy STAGE for a NEW day: warp a day forward, then run mineFlip +
     ///      the mock-VRF drain so `processSubscriberStage(SUB_STAGE_BATCH)` stamps the funded set.
     ///      This is the Δ4 successor to the deleted `afKing.autoBuy(N)` (the buy folded into advance).
     function _runStageNewDay(uint256 vrfWord) internal {
@@ -191,22 +191,22 @@ contract AfKingConcurrency is DeployProtocol {
         _settleGame(vrfWord);
     }
 
-    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `advanceGame()` (no full settle),
+    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `mineFlip()` (no full settle),
     ///      used by the pass-eviction tests. The STAGE runs strictly PRE-RNG (AdvanceModule:305-326),
     ///      so the eviction / buy completes before rngGate and the stage is measured on its own.
     ///      Subscribers must already be registered (subscribe blocks during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.advanceGame();
+        game.mineFlip();
     }
 
-    /// @dev Settle the game to a clean state: drive advanceGame + deliver the mock VRF word until
+    /// @dev Settle the game to a clean state: drive mineFlip + deliver the mock VRF word until
     ///      advanceDue() is false and we are not rng-locked. Ported from
     ///      KeeperRewardRoutingSameResults._settleGame (PATTERNS §"Settle-to-clean-state VRF drain").
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.advanceGame();
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

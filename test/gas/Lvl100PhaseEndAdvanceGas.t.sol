@@ -19,7 +19,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///
 ///         The day's jackpot battle runs from its own stage before the phase-ending day's legs;
 ///         JackpotMergeAdvance pins its transactions. Both measured txs drive the REAL production
-///         advanceGame() bytecode: the overlay below writes the pre-state (its word recorded
+///         mineFlip() bytecode: the overlay below writes the pre-state (its word recorded
 ///         directly, so no battle is locked), then the real code is etched back before the call.
 /// @dev TEST-INFRA ONLY. No contracts/*.sol is mutated. Seeding happens in setUp() — a SEPARATE
 ///      transaction from the measured body — so the measured call starts on a cold EIP-2929 access
@@ -116,9 +116,9 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
 }
 
 /// @dev Shared measurement seam: warp to a day whose century-seed lanes are all virgin, etch-seed-
-///      restore, then drive the live advanceGame and classify the winner events it emitted.
+///      restore, then drive the live mineFlip and classify the winner events it emitted.
 abstract contract BoundaryGasFixture is DeployProtocol {
-    /// @dev EIP-7825 per-transaction gas cap. A single advanceGame tx above this is a permanent DoS.
+    /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this is a permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
     bytes32 internal constant TICKET_WIN_SIG =
@@ -171,7 +171,7 @@ abstract contract BoundaryGasFixture is DeployProtocol {
     {
         vm.recordLogs();
         uint256 g0 = gasleft();
-        game.advanceGame();
+        game.mineFlip();
         used = g0 - gasleft();
 
         Vm.Log[] memory logs = vm.getRecordedLogs();

@@ -192,7 +192,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
 
     /// @notice Buy tickets during purchase phase, verify they route to purchaseLevel (level+1)
-    ///         and are processed to zero after advanceGame cycles.
+    ///         and are processed to zero after mineFlip cycles.
     /// @dev SRC-01: Purchase-phase tickets route to level+1 write key and drain to zero after transition
     function test_MultiwordPurchasesDrainAndSamePlayersBuyAgain() public {
         uint24 key = _writeKeyForLevel(1);
@@ -371,7 +371,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint24 wk = _writeKeyForLevel(1);
         assertGt(_queueLength(wk), 0, "Write key for level 1 should have entries after purchase");
 
-        // Drive game forward -- advanceGame triggers swapAndFreeze then processes
+        // Drive game forward -- mineFlip triggers swapAndFreeze then processes
         _driveToLevel(2);
 
         // After full processing, both read and write queues for level 1 should be empty
@@ -403,7 +403,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Check levels 1-3 (well below current level).
         // The read-slot queue for these levels should be zero.
-        // advanceGame processes the read slot (via _runProcessTicketBatch) and
+        // mineFlip processes the read slot (via _runProcessTicketBatch) and
         // the read queue must be fully drained before jackpot/phase logic runs
         // (enforced by ticketsFullyProcessed gate).
         //
@@ -413,7 +413,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // for levels well below current.
         for (uint24 lvl = 1; lvl <= 3; lvl++) {
             // Each level was the "processing" level during its purchase and jackpot phases.
-            // The read slot gets drained during daily advanceGame, then swapped.
+            // The read slot gets drained during daily mineFlip, then swapped.
             // After processing a level and moving past it, there should be zero entries
             // at the read slot that was active during processing.
             uint24 rk = _readKeyForLevel(lvl);
@@ -429,7 +429,7 @@ contract TicketLifecycleTest is DeployProtocol {
                 string.concat("Level ", _uint2str(lvl), " FF queue should be empty"));
         }
 
-        // For the concrete EDGE-08 check, verify the advanceGame read-processing gate:
+        // For the concrete EDGE-08 check, verify the mineFlip read-processing gate:
         // at the CURRENT level, ticketsFullyProcessed should be true (gate passed).
         // We also verify that testFiveLevelIntegration (more comprehensive) covers the
         // broader stranding check.
@@ -441,7 +441,7 @@ contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
 
     /// @notice Verify that near-future tickets at levels purchaseLevel+1..+4 are processed
-    ///         by _prepareFutureTickets during daily advanceGame cycles. Also verify that
+    ///         by _prepareFutureTickets during daily mineFlip cycles. Also verify that
     ///         FF queue lengths for levels outside the +1..+4 range are NOT modified by
     ///         _prepareFutureTickets (they are only drained by phase transition).
     /// @dev EDGE-07: _prepareFutureTickets processes only read queues in +1..+4 range, not FF keys
@@ -596,7 +596,7 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
             }
@@ -1150,7 +1150,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGt(ffBefore, 0,
             "FF queue at L+2 should have constructor entries before any last-purchase-day latch");
 
-        // Run multiple daily advanceGame cycles WITHOUT triggering a level transition.
+        // Run multiple daily mineFlip cycles WITHOUT triggering a level transition.
         // Keep prize pool LOW so the target isn't reached and _endPhase doesn't fire.
         uint256 simTime = block.timestamp;
         for (uint256 day = 0; day < 3; day++) {
@@ -1165,7 +1165,7 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 50; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
             }
@@ -1248,7 +1248,7 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) break;
             }
@@ -1258,7 +1258,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Now drive well past the jackpot level to complete the transition and
         // ensure full ticket processing. _runProcessTicketBatch processes in
-        // batches, so multiple advanceGame calls may be needed across multiple days.
+        // batches, so multiple mineFlip calls may be needed across multiple days.
         _driveToLevel(jackpotLevel + 3);
         _flushAdvance();
         assertGt(game.level(), jackpotLevel, "Must advance past jackpot level");
@@ -1727,10 +1727,10 @@ contract TicketLifecycleTest is DeployProtocol {
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 4000);
 
-        // Drive advanceGame to complete daily cycle
+        // Drive mineFlip to complete daily cycle
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -1755,7 +1755,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.warp(simTime);
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
     }
@@ -1781,10 +1781,10 @@ contract TicketLifecycleTest is DeployProtocol {
         // Purchase lootbox to create mid-day RNG demand
         _purchaseWithLootbox(buyer3, 0, 0.5 ether);
 
-        // Drive advanceGame through daily + potentially mid-day cycle
+        // Drive mineFlip through daily + potentially mid-day cycle
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -1816,7 +1816,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -1858,7 +1858,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Complete daily cycle (swap happens, tickets process)
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -1869,10 +1869,10 @@ contract TicketLifecycleTest is DeployProtocol {
         // Purchase lootbox to trigger potential mid-day swap
         _purchaseWithLootbox(buyer2, 0, 0.5 ether);
 
-        // Drive mid-day advanceGame
+        // Drive mid-day mineFlip
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -1907,7 +1907,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -1928,10 +1928,10 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer2, 8000);
         _buyTickets(buyer3, 8000);
 
-        // Drive mid-day advanceGame to process anything pending
+        // Drive mid-day mineFlip to process anything pending
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -1960,7 +1960,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -1979,7 +1979,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mid-day processing — may take multiple calls due to large queue
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -2006,9 +2006,9 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 16000);
         _buyTickets(buyer2, 16000);
 
-        // Run ONE advanceGame call — this swaps and starts processing but may not finish
+        // Run ONE mineFlip call — this swaps and starts processing but may not finish
         _fulfillVrfIfPending();
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         // Don't drain fully — the read slot should still have entries
 
         // Record write slot
@@ -2029,7 +2029,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive everything to completion via daily path
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok2, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok2) break;
         }
 
@@ -2058,7 +2058,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 4000);
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -2068,7 +2068,7 @@ contract TicketLifecycleTest is DeployProtocol {
         try game.requestLootboxRng() {} catch {}
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
@@ -2080,7 +2080,7 @@ contract TicketLifecycleTest is DeployProtocol {
         try game.requestLootboxRng() {} catch {}
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
@@ -2091,7 +2091,7 @@ contract TicketLifecycleTest is DeployProtocol {
         try game.requestLootboxRng() {} catch {}
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
@@ -2105,8 +2105,8 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @notice Verify that daily RNG request is blocked while the read queue still has entries.
-    ///         advanceGame must drain the read slot (ticketsFullyProcessed = true) before
-    ///         reaching rngGate. This test buys a large batch, then verifies advanceGame
+    ///         mineFlip must drain the read slot (ticketsFullyProcessed = true) before
+    ///         reaching rngGate. This test buys a large batch, then verifies mineFlip
     ///         processes tickets (STAGE_TICKETS_WORKING) instead of requesting RNG.
     function testDailyRngBlockedByReadQueue() public {
         _driveToLevel(2);
@@ -2120,28 +2120,28 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 16000);
         _buyTickets(buyer2, 16000);
 
-        // First advanceGame should swap and start processing, NOT request RNG.
+        // First mineFlip should swap and start processing, NOT request RNG.
         // We can verify by checking that rngLockedFlag is still false after the call.
         // If RNG was requested, rngLockedFlag would be set to true.
         _fulfillVrfIfPending();
 
-        // Read rngLockedFlag before advanceGame (slot 0, offset 19 = bit 152)
+        // Read rngLockedFlag before mineFlip (slot 0, offset 19 = bit 152)
         // The daily drain gate (AM:204-219) should process tickets and return
         // before ever reaching rngGate.
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-        assertTrue(ok, "advanceGame should succeed (STAGE_TICKETS_WORKING)");
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        assertTrue(ok, "mineFlip should succeed (STAGE_TICKETS_WORKING)");
 
         // Check that read queue still has entries (not fully drained in one call)
         // The large batch should take multiple processing calls
         uint24 rk = _readKeyForLevel(uint24(reached) + 1);
-        // Note: after the first advanceGame, there may or may not be remaining entries
+        // Note: after the first mineFlip, there may or may not be remaining entries
         // depending on batch size. The key property is that the game processed tickets
         // rather than requesting RNG.
 
         // Drive all remaining processing calls
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok2, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok2) break;
         }
 
@@ -2166,10 +2166,10 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 16000);
         _buyTickets(buyer2, 16000);
 
-        // Run advanceGame a few times — enough to swap but NOT fully drain
+        // Run mineFlip a few times — enough to swap but NOT fully drain
         for (uint256 i = 0; i < 5; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -2196,7 +2196,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Regardless of mid-day outcome, continue daily processing
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
 
@@ -2243,14 +2243,14 @@ contract TicketLifecycleTest is DeployProtocol {
         }
     }
 
-    /// @notice Run extra advanceGame + VRF cycles on the current day to flush any
+    /// @notice Run extra mineFlip + VRF cycles on the current day to flush any
     ///         in-flight phase transition work (FF drain, ticket processing, etc.)
     ///         that the _driveToLevel loop left unfinished.
     function _flushAdvance() internal {
         for (uint256 j = 0; j < 80; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -2274,7 +2274,7 @@ contract TicketLifecycleTest is DeployProtocol {
         if (game.gameOver()) return 0;
 
         // Record the lootbox RNG index BEFORE purchase (it may increment during purchase
-        // via _maybeRequestLootboxRng -> advanceGame path, but the index for our lootbox
+        // via _maybeRequestLootboxRng -> mineFlip path, but the index for our lootbox
         // is the current value at purchase time).
         lootboxIndex = _lootboxRngIndex();
 
@@ -2335,7 +2335,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(33)), bytes32((packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(index) + 1)));
     }
 
-    /// @notice Drive one advanceGame + VRF cycle to finalize pending lootbox RNG.
+    /// @notice Drive one mineFlip + VRF cycle to finalize pending lootbox RNG.
     ///         Warps forward 1 day, seeds prize pool, buys tickets, and runs advance loop.
     function _driveAdvanceCycle() internal {
         uint256 t = block.timestamp + 1 days + 1;
@@ -2344,7 +2344,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 400);
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
     }
@@ -2491,7 +2491,7 @@ contract TicketLifecycleTest is DeployProtocol {
         for (uint256 w = 0; w < 30; w++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("advanceGame()")
+                abi.encodeWithSignature("mineFlip()")
             );
             if (!ok) break;
         }
@@ -2510,20 +2510,20 @@ contract TicketLifecycleTest is DeployProtocol {
             _buyTickets(buyer1, 4000);
             _buyTickets(buyer2, 2000);
 
-            // Drive advanceGame + VRF until nothing more to do today
+            // Drive mineFlip + VRF until nothing more to do today
             for (uint256 j = 0; j < 80; j++) {
-                // Fulfill any pending VRF BEFORE calling advanceGame
+                // Fulfill any pending VRF BEFORE calling mineFlip
                 _fulfillVrfIfPending();
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("advanceGame()")
+                    abi.encodeWithSignature("mineFlip()")
                 );
                 if (!ok) {
                     // Fulfill VRF one more time in case the failed call generated a request
                     _fulfillVrfIfPending();
                     // Retry once — the fulfillment may have unblocked progress
                     (ok, ) = address(game).call(
-                        abi.encodeWithSignature("advanceGame()")
+                        abi.encodeWithSignature("mineFlip()")
                     );
                     if (!ok) break;
                 }

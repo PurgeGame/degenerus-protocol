@@ -293,7 +293,7 @@ contract GoldenTicketFoilPack is Test {
     ///      queue it can take the whole WRITES_BUDGET_SAFE (900). Each unregistered pack
     ///      is sixteen single-lane appends plus a registry slot; the per-pack charge must
     ///      keep a full budget of packs under the 10M soft target.
-    function test_gas_FoilChunk_FullBudget() public {
+    function test_gas_FoilChunk_LowGasCheckpointsPreserveOrderedEntries() public {
         for (uint256 i; i < 60; ++i) {
             address b = address(uint160(0xF01100 + i));
             h.setFoilRecord(LVL, b, MAX_MULT, RESOLVE_DAY, 0);
@@ -301,13 +301,31 @@ contract GoldenTicketFoilPack is Test {
         }
         h.setRngWord(RESOLVE_DAY, uint256(keccak256("foil-chunk-word")) | 1);
         h.setDrainWindow(RESOLVE_DAY, RESOLVE_DAY);
+        uint256 snapshot = vm.snapshotState();
         uint256 g0 = gasleft();
-        (bool done, bool drained) = h.processFoilDrain(900);
+        (bool done, bool drained) = h.processFoilDrain{gas: 4_000_000}(900);
         uint256 g = g0 - gasleft();
-        emit log_named_uint("foil_chunk_full_budget_gas", g);
+        emit log_named_uint("foil_small_call_checkpoint_gas", g);
         assertTrue(drained, "drained at least one pack");
-        assertFalse(done, "sixty packs exceed one budget");
-        assertLt(g, 10_000_000, "foil chunk over the 10M soft target");
+        assertFalse(done, "small call must preserve a real continuation");
+        assertLt(g, 4_000_000, "small call must return before exhausting supplied gas");
+        (done, drained) = h.processFoilDrain{gas: 15_000_000}(900);
+        assertTrue(done && drained, "remaining packs complete with more available gas");
+        bytes32 split = _foilBucketDigest();
+        vm.revertToState(snapshot);
+        (done, drained) = h.processFoilDrain{gas: 15_000_000}(900);
+        assertTrue(done && drained, "large call may complete the entire cohort");
+        assertEq(_foilBucketDigest(), split, "checkpoint partitions preserve exact ordered entries");
+    }
+
+    function _foilBucketDigest() private view returns (bytes32 digest) {
+        for (uint256 trait; trait < 256; ++trait) {
+            uint256 len = h.traitEntryLen(LVL, uint8(trait));
+            digest = keccak256(abi.encode(digest, trait, len));
+            for (uint256 i; i < len; ++i) {
+                digest = keccak256(abi.encode(digest, h.traitEntryAt(LVL, uint8(trait), i)));
+            }
+        }
     }
 
     // -- the searched pair really is an all-gold ticket -----------------------
@@ -594,7 +612,7 @@ contract GoldenTicketFoilPack is Test {
         assertEq(h.claimableOf(BUYER), uint256(400 ether) / 4, "grand ETH leg");
     }
 
-    /// @dev The grand pushes from the DRAIN, which runs inside advanceGame — a
+    /// @dev The grand pushes from the DRAIN, which runs inside mineFlip — a
     ///      deterministic protocol function with no player discretion — and strictly
     ///      before the draw it feeds, since the readiness gate holds rngGate until the
     ///      foil drain catches up. So the futurePrizePool debit always lands ahead of

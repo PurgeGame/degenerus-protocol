@@ -107,7 +107,7 @@ contract BafDrawArming is DeployProtocol {
     function _settleToday() internal {
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
     }
@@ -155,7 +155,7 @@ contract BafDrawArming is DeployProtocol {
         vm.warp(simTime);
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
     }

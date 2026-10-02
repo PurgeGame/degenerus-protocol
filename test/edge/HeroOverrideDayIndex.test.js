@@ -463,7 +463,7 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
       expect(call1DailyIdx).to.equal(D);
       expect(call1WallDay).to.equal(D);
 
-      // Time-warp 24h to simulate the catastrophic `advanceGame` stall
+      // Time-warp 24h to simulate the catastrophic `mineFlip` stall
       // between CALL 1 and CALL 2 of the 2-call ETH split. In production
       // this is the exact scenario that would have triggered F-41-03 in
       // pre-Phase-288 code (CALL 2 would re-evaluate `_simulatedDayIndex()`
@@ -558,11 +558,11 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
 
   // -------------------------------------------------------------------------
   // TST-JPSURF-04 — F-41-03 anchor-replay regression (the catastrophy
-  //                 scenario: 24h advanceGame silence between CALL 1 and
+  //                 scenario: 24h mineFlip silence between CALL 1 and
   //                 CALL 2; disjoint-bucket-subset invariant via dailyIdx
   //                 anchor)
   // -------------------------------------------------------------------------
-  describe("TST-JPSURF-04 — F-41-03 anchor-replay regression (24h advanceGame silence between CALL 1 and CALL 2; disjoint-bucket-subset invariant from Phase 283 SWEEP-04 holds via dailyIdx anchor)", function () {
+  describe("TST-JPSURF-04 — F-41-03 anchor-replay regression (24h mineFlip silence between CALL 1 and CALL 2; disjoint-bucket-subset invariant from Phase 283 SWEEP-04 holds via dailyIdx anchor)", function () {
     it("simulates the F-41-03 catastrophy: bet populates the operational slot; CALL 1 reads; 24h elapses with an inter-window bet on the new wall-clock day; CALL 2 reads SAME operational slot — disjoint-bucket-subset invariant preserved because the hero-override input is byte-identical across the split", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
@@ -584,7 +584,7 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
         MIN_BET_ETH_VALUE / 100_000_000_000_000n
       );
 
-      // Catastrophy event: `advanceGame` is silent for 24h. The physical
+      // Catastrophy event: `mineFlip` is silent for 24h. The physical
       // day rolls over between CALL 1 and CALL 2 of the 2-call ETH split.
       // Pre-Phase-288, this is the EXACT condition that would cause
       // `_simulatedDayIndex()` to advance and the two calls to read

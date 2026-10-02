@@ -33,6 +33,7 @@ contract CohortRecyclingHarness is DegenerusGameStorage {
     function order(uint48 buffer, address player) external view returns(uint256) { return _boxOrder(buffer, player); }
     function counts(uint48 buffer) external view returns(uint256, uint256) { return(boxPlayers[buffer].length, degeneretteQueue[buffer].length); }
     function frontier(bool done) external { humanReadComplete = done; if (!done) _setRngComplete(false); _tryCompleteRng(); }
+    function settleBets() external { degeneretteCursor = uint32(degeneretteQueue[_rngReadBuffer()].length); _tryCompleteRng(); }
     function tickets(bool done) external { ticketsFullyProcessed = done; if (!done) _setRngComplete(false); _tryCompleteRng(); }
     function mid(uint8 flag) external { _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, flag); if (flag != 0) _setRngComplete(false); _tryCompleteRng(); }
     function locked(bool on) external { rngLockedFlag = on; if (on) _setRngComplete(false); _tryCompleteRng(); }
@@ -42,10 +43,17 @@ contract CohortRecyclingHarness is DegenerusGameStorage {
     function decimator() external view returns(bool, bool) { return (_decWindowOpen(), _decDayOneActive()); }
 }
 
+contract NoPendingCohortRedemptions {
+    function redemptionSettlementPending() external pure returns (bool) { return false; }
+}
+
 contract RngCohortRecyclingTest is Test {
     CohortRecyclingHarness h;
-    function setUp() public { h = new CohortRecyclingHarness(); }
-    function _finish() private { h.ready(42); h.tickets(true); h.frontier(true); }
+    function setUp() public {
+        h = new CohortRecyclingHarness();
+        vm.etch(ContractAddresses.SDGNRS, address(new NoPendingCohortRedemptions()).code);
+    }
+    function _finish() private { h.ready(42); h.tickets(true); h.frontier(true); h.settleBets(); }
     function test_CompleteAtDeploymentAndClearOnReservation() public {
         assertTrue(h.complete()); assertEq(h.writeBuffer(), 0);
         h.seal(); assertFalse(h.complete()); assertEq(h.readBuffer(), 0); assertEq(h.writeBuffer(), 1);
@@ -93,7 +101,9 @@ contract RngCohortRecyclingTest is Test {
             vm.expectRevert(DegenerusGameStorage.E.selector); h.seal();
             h.ready(i + 42); assertEq(h.word(write), i + 42); assertEq(h.word(write ^ 1), 0);
             h.processed(player); assertEq(h.order(write, player), 0);
-            h.tickets(true); h.frontier(true); assertTrue(h.complete());
+            h.tickets(true); h.frontier(true);
+            assertFalse(h.complete(), "human completion does not skip committed Degenerette bets");
+            h.settleBets(); assertTrue(h.complete());
         }
     }
     function test_InvalidPhysicalTagsNeverAliasARealBuffer() public {

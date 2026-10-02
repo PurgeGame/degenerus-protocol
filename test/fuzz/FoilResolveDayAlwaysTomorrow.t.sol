@@ -34,7 +34,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
 
         _t += 1 days;
         vm.warp(_t);
-        game.advanceGame();
+        game.mineFlip();
         uint24 R = game.currentDayView();
         uint256 reqR = mockVRF.lastRequestId();
 
@@ -47,9 +47,9 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         assertEq(_dailyIdx(), R, "sealed R");
 
         _finishReadConsumers();
-        game.advanceGame();
+        game.mineFlip();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngWordForDay(W) != 0, "W's word recorded by the fulfil crank");
         assertEq(_dailyIdx(), W - 1, "gap days skipped");
         assertTrue(game.rngLocked(), "W's jackpot still owed under the lock");
@@ -69,7 +69,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         assertEq(game.rngWordForDay(W + 1), 0, "W+1 unrequested before its own day");
-        game.advanceGame();
+        game.mineFlip();
         assertTrue(game.rngLocked(), "W+1 requested on its own day");
     }
 
@@ -116,7 +116,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
             _fulfillPending(vrfWord);
         }
     }
@@ -135,7 +135,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
     function _advanceUntilUnlocked() internal {
         for (uint256 i; i < 64; i++) {
             if (!game.rngLocked()) return;
-            game.advanceGame();
+            game.mineFlip();
         }
         revert("harness: lock never released");
     }

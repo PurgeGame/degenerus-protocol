@@ -68,7 +68,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         _assertNextRequestBlocked(id);
         mockVRF.fulfillRandomWords(id, 42);
         _assertNextRequestBlocked(id);
-        game.advanceGame(); // Publication leaves the actual box/bet consumers outstanding.
+        game.mineFlip(); // Publication leaves the actual box/bet consumers outstanding.
         assertFalse(game.rngComplete());
         _assertNextRequestBlocked(id);
         for (uint256 i; i < 1024 && !game.rngComplete(); ++i) game.mineFlip();

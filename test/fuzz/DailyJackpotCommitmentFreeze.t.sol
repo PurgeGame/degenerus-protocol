@@ -60,7 +60,7 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
 }
 
 /// @notice Outcome-level commitment proof for the ordinary first jackpot day's ETH,
-/// early-bird tickets and main tickets. Uses public advanceGame, the real VRF callback,
+/// early-bird tickets and main tickets. Uses public mineFlip, the real VRF callback,
 /// and separate bounded stages; it never calls a privileged jackpot payout directly.
 ///
 /// Independent word-2 oracle: raw traits [12,98,134,215], sealed hero -> [12,101,134,215],
@@ -132,7 +132,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
     function _advance() private returns (uint8 stage) {
         assertTrue(game.advanceDue(), "a bounded stage must remain publicly reachable");
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 found;
         for (uint256 i; i < logs.length; ++i) {

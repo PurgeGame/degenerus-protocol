@@ -150,7 +150,7 @@ contract CrapsRngSeal is DeployProtocol {
         uint256 reqId = mockVRF.lastRequestId();
         assertGt(reqId, reqBefore, "the ordinary request asked for the word");
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256("seal-pin")) | 1);
-        game.advanceGame();
+        game.mineFlip();
         assertGt(crapsBattle.wordAt(index), 0, "the sealing request lands on the armed leaf");
         assertEq(crapsBattle.wordAt(index ^ 1), 0, "the leaf above stays unworded for the next arm");
     }

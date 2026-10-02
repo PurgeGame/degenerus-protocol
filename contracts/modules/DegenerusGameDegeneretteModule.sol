@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -31,7 +33,7 @@ import {
     IDegenerusGameBoonModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {MineFlipBudget} from "../libraries/MineFlipBudget.sol";
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
@@ -317,33 +319,14 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant ETH_STAKE_UNIT = 1 gwei;
     uint256 private constant FLIP_STAKE_UNIT = 1 ether;
 
-    /// @dev Sweep BUDGET price of one bet in the shared walk unit (~4.7k gas, see
-    ///      OPEN_HUMAN_ENTRY_WEIGHT): an entry floor plus a per-spin weight, read off the bet
-    ///      word before it runs, so the crank's work stays a pure function of state. Sized for
-    ///      the worst case so a call stays bounded: the ETH floor carries the one win box an ETH
-    ///      bet can open, and an armed record adds its three-spin FLIP chain. A zeroed (already
-    ///      resolved) word costs one unit to skip. Measured sweep cost per bet (warm): ~6.5k base,
-    ///      ~2.5k per spin, ~57k for a win box, and up to ~169k for a cold 1-spin ETH bet whose
-    ///      spin scores 7+ (win box plus the sDGNRS award). Outcomes key on
-    ///      (word, index, symbol, spin), not the owner, so every bet on one symbol at one index
-    ///      hits together; the ETH floor prices that case, never an average.
-    uint256 private constant BET_CALL_UNITS = 6;
-    uint256 private constant BET_ENTRY_WEIGHT_ETH = 36;
-    uint256 private constant BET_ENTRY_WEIGHT_FLIP = 4;
-    // Every ETH spin may also transfer sDGNRS. Charge the cold award tail per
-    // spin, since many same-symbol bets can share the same high-score outcomes.
-    uint256 private constant BET_SPIN_WEIGHT_ETH = 8;
-    uint256 private constant BET_SPIN_WEIGHT_FLIP = 1;
-    uint256 private constant BET_RECORD_WEIGHT = 6;
-
-    /// @dev Keeper-bounty CREDIT per resolved bet, in gas: one small flat amount (~0.3 walk unit)
-    ///      whatever the bet's spins or win box, and nothing for a zeroed slot, so settled bets add
-    ///      only a sliver to the bounty. Placing a bet costs ~100k gas, so placing bets to crank
-    ///      them yourself only pays below ~0.05 gwei, and then only dust (house edge ignored;
-    ///      pinned by KeeperFaucetResistance GAS-06). Summed per sweep call and floored to walk
-    ///      units; the budget still charges each bet its worst-case weight.
-    uint256 private constant BET_WORK_CREDIT_GAS = 1_500;
-    uint256 private constant BET_WORK_UNIT_GAS = 4_700;
+    // Whole bets remain atomic; only admission bounds depend on spin count.
+    uint256 private constant BET_ETH_BASE_GAS = GasBounds.DEGENERETTE_ETH_BASE_GAS;
+    uint256 private constant BET_ETH_SPIN_GAS = GasBounds.DEGENERETTE_ETH_SPIN_GAS;
+    uint256 private constant BET_FLIP_BASE_GAS = GasBounds.DEGENERETTE_FLIP_BASE_GAS;
+    uint256 private constant BET_FLIP_SPIN_GAS = GasBounds.DEGENERETTE_FLIP_SPIN_GAS;
+    uint256 private constant BET_RECORD_GAS = GasBounds.DEGENERETTE_RECORD_GAS;
+    uint256 private constant BET_SKIP_GAS = GasBounds.DEGENERETTE_SKIP_GAS;
+    uint256 private constant BET_TAIL_GAS = GasBounds.DEGENERETTE_TAIL_GAS;
 
     // Common masks
     uint256 private constant MASK_5 = 0x1F;
@@ -428,76 +411,49 @@ contract DegenerusGameDegeneretteModule is
         uint32 firstResultTraits;
     }
 
-    /// @notice Human-box sweep leg for bets: resolves the queue at `index` from `pos`.
-    /// @dev Delegatecall target of the lootbox module's openHumanBoxes, which reaches a bet
-    ///      queue only after that index's box entries and only once its word has landed.
-    ///      Each bet is priced in walk units from its own word (see BET_ENTRY_WEIGHT_*) and
-    ///      a zeroed word costs one unit to skip. Even the first bet must fit the remaining
-    ///      allowance; a fresh full allowance can fit the largest supported bet.
-    /// @param index The swept RNG index.
-    /// @param pos Queue position to resume from.
-    /// @param budget Walk units left in the crank call.
-    /// @param mustRunFirst Retained for ABI compatibility; first items obey the same budget.
-    /// @param rngWord The index's committed word (already loaded by the sweep).
-    /// @return resolved Bets resolved.
-    /// @return newPos Position to resume from (the queue length once drained).
-    /// @return unitsSpent Walk units charged against the budget (worst-case prices).
-    /// @return workUnits Walk units credited toward the keeper bounty: BET_WORK_CREDIT_GAS per
-    ///         resolved bet, floored; zeroed slots credit nothing.
-    function sweepDegeneretteBets(
-        uint48 index,
-        uint256 pos,
-        uint256 budget,
-        bool mustRunFirst,
-        uint256 rngWord
-    ) external returns (uint256 resolved, uint256 newPos, uint256 unitsSpent, uint256 workUnits) {
+    /// @notice Consume the active session's FIFO bet queue after human boxes finish.
+    function runDegeneretteWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
+        return _runDegeneretteWork(gasAllowance);
+    }
+
+    function _runDegeneretteWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        // The frozen-pool ETH path reverts Insolvent when the pending buffer runs short, and a
-        // revert here would stall the whole box frontier behind this queue. The freeze only
-        // runs inside the RNG lock the sweep already waits out; hold the queue while it is up.
-        mustRunFirst; // Compatibility input; every item now reserves its full cost.
-        budget = MineFlipBudget.clamp(budget);
-        if (prizePoolFrozen || budget <= BET_CALL_UNITS || _rngConsumerStage() != 3
-            || index != _rngReadBuffer() || rngWord == 0 || rngWord != _lootboxWord(index)) return (0, pos, 0, 0);
-        // Reserve the delegate frame and final accumulated owner/pool writes.
-        unitsSpent = BET_CALL_UNITS;
+        MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
+        uint48 index = _rngReadBuffer();
         uint256[] storage queue = degeneretteQueue[index & 1];
+        uint256 pos = degeneretteCursor;
         uint256 qlen = queue.length;
+        if (pos == qlen) { result.done = true; return result; }
+        if (prizePoolFrozen || _rngConsumerStage() != 4) return result;
+        uint256 rngWord = _lootboxWord(index);
+        if (rngWord == 0) return result;
         ResolveAcc memory acc;
-        while (pos < qlen && unitsSpent < budget) {
+        uint256 startPos = pos;
+        while (pos < qlen) {
             uint256 bet = queue[pos];
-            if (bet == 0 || bet & BET_PROCESSED != 0) {
-                unchecked {
-                    ++pos;
-                    ++unitsSpent;
-                }
-                continue;
-            }
-            uint256 cost = _betWeight(bet);
-            // BREAK, never skip: the cursor is monotonic, so a bet that does not fit stays
-            // at the cursor for the next call's fresh budget.
-            if (cost > budget - unitsSpent) break;
+            bool skip = bet == 0 || bet & BET_PROCESSED != 0;
+            if (!MineFlipGas.canRun(meter, skip ? BET_SKIP_GAS : _betGasMaximum(bet), BET_TAIL_GAS)) break;
+            if (skip) { ++pos; continue; }
             queue[pos] = bet | BET_PROCESSED;
-            unchecked {
-                ++pos;
-                unitsSpent += cost;
-                ++resolved;
-            }
+            ++pos;
+            ++result.rewardBasis;
             _resolveBet(bet, uint32(index), uint64(pos), rngWord, acc);
         }
         _flushOwner(acc);
         _flushPool(acc);
-        newPos = pos;
-        workUnits = (resolved * BET_WORK_CREDIT_GAS) / BET_WORK_UNIT_GAS;
+        result.progressed = pos != startPos;
+        if (result.progressed) degeneretteCursor = uint48(pos);
+        result.done = pos == qlen;
+        if (result.done) _tryCompleteRng();
+        MineFlipGas.finish(meter);
     }
 
-    /// @dev Worst-case walk-unit budget price of one queued bet.
-    function _betWeight(uint256 bet) private pure returns (uint256 weight) {
+    function _betGasMaximum(uint256 bet) private pure returns (uint256 maximum) {
         uint256 spins = (bet >> BET_COUNT_SHIFT) & MASK_5;
-        weight = (bet >> BET_CURRENCY_SHIFT) & 1 == CURRENCY_ETH
-            ? BET_ENTRY_WEIGHT_ETH + spins * BET_SPIN_WEIGHT_ETH
-            : BET_ENTRY_WEIGHT_FLIP + spins * BET_SPIN_WEIGHT_FLIP;
-        if (bet & BET_RECORD_FLAG != 0) weight += BET_RECORD_WEIGHT;
+        maximum = (bet >> BET_CURRENCY_SHIFT) & 1 == CURRENCY_ETH
+            ? BET_ETH_BASE_GAS + spins * BET_ETH_SPIN_GAS
+            : BET_FLIP_BASE_GAS + spins * BET_FLIP_SPIN_GAS;
+        if (bet & BET_RECORD_FLAG != 0) maximum += BET_RECORD_GAS;
     }
 
     /// @dev Pay the current owner's accumulated FLIP and ETH, then clear them.

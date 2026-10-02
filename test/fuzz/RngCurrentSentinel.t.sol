@@ -21,7 +21,7 @@ contract RngCurrentSentinelTest is DeployProtocol {
 
     function _request() private returns (uint256 id) {
         assertEq(uint256(game.extsload(bytes32(uint256(3)))), 1, "initialized waiting payload");
-        game.advanceGame();
+        game.mineFlip();
         id = mockVRF.lastRequestId();
         assertGt(id, 0, "real request sent");
         assertTrue(game.rngLocked());
@@ -76,7 +76,7 @@ contract RngCurrentSentinelTest is DeployProtocol {
         assertFalse(game.isRngFulfilled());
         vm.warp(vm.getBlockTimestamp() + 20 hours);
         vm.prank(ContractAddresses.CREATOR);
-        game.advanceGame();
+        admin.retryGameRng();
         uint256 retry = mockVRF.lastRequestId();
         assertGt(retry, id, "existing owner retry replaces the reserved result");
         mockVRF.fulfillRandomWordsRaw(id, address(game), 42);
@@ -104,13 +104,13 @@ contract RngCurrentSentinelTest is DeployProtocol {
     function test_ConsumedDailyLockRetainsWordUntilTheNextRequest() public {
         uint256 id = _request();
         mockVRF.fulfillRandomWords(id, 42);
-        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.advanceGame();
+        for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineFlip();
         assertFalse(game.rngLocked(), "day completed");
         assertEq(uint256(game.extsload(bytes32(uint256(3)))), 42, "read consumers retain the final word after daily unlock");
         assertFalse(game.isRngFulfilled());
         assertEq(game.rngWordForDay(game.currentDayView()), 42, "session word recorded unchanged");
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        for (uint256 i; i < 100 && mockVRF.lastRequestId() == id; ++i) game.advanceGame();
+        for (uint256 i; i < 100 && mockVRF.lastRequestId() == id; ++i) game.mineFlip();
         assertGt(mockVRF.lastRequestId(), id, "next real request remains live");
         assertFalse(game.isRngFulfilled());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 2);

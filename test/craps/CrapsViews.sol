@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {Craps} from "../../contracts/Craps.sol";
 
@@ -610,7 +611,7 @@ contract CrapsViews is CrapsBattle {
     ///      it is a statement about the budget rule rather than a way around it.
     function resolveSeats(uint64 slot, uint64 n) external {
         for (uint64 i = 0; i < n; ++i) {
-            _resolveSlot(slot, 1);
+            _resolveSlotRange(slot, MineFlipGas.available(), 1);
         }
     }
 
@@ -618,6 +619,10 @@ contract CrapsViews is CrapsBattle {
     ///      only through `keepScheduled`'s in-order cursor; a custom battle still has its own
     ///      external `resolveSlot`. Fixtures that need one specific window settled without
     ///      walking the whole cursor call this instead.
+    function settleGas(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory) {
+        return _resolveSlotWork(slot, allowance);
+    }
+
     function settleSlot(uint64 slot, uint64 budget) external {
         _resolveSlot(slot, budget);
     }

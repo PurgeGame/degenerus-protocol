@@ -170,8 +170,8 @@ contract DayOneUnrecordedSeeder is DayOneSeeder {
 /// @dev The rngGate word-apply leg, driven for real: book the craps table's 7-day action window (so
 ///      openBonusDay draws a high budget and posts stakes), settle Coinflip through day-1 (so the
 ///      measured sDGNRS settle walks exactly one day, the steady-state shape, not the day-400 jump),
-///      fire the day's VRF request from the real advanceGame (which locks the day's jackpot battle),
-///      and fulfil it on the mock coordinator. The NEXT advanceGame applies the word alone, stage 18
+///      fire the day's VRF request from the real mineFlip (which locks the day's jackpot battle),
+///      and fulfil it on the mock coordinator. The NEXT mineFlip applies the word alone, stage 18
 ///      (_applyDailyRng, coinflip.processCoinflipPayouts, quests.rollDailyQuest, craps openBonusDay,
 ///      _finalizeLootboxRng); the battle's steps follow, then the day's own stages.
 abstract contract FreshWordLeg is DeployProtocol {
@@ -193,7 +193,7 @@ abstract contract FreshWordLeg is DeployProtocol {
 
         uint256 before = mockVRF.lastRequestId();
         vm.recordLogs();
-        game.advanceGame();
+        game.mineFlip();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint8 st = 255;
         for (uint256 i; i < logs.length; ++i) {
@@ -237,7 +237,7 @@ abstract contract FreshWordLeg is DeployProtocol {
     function _advanceTx(bool router) internal returns (uint8 stage, uint256 used, Vm.Log[] memory logs) {
         vm.recordLogs();
         if (router) game.mineFlip{gas: 16_777_216 - 21_064}();
-        else game.advanceGame{gas: 16_777_216 - 21_064}();
+        else game.mineFlip{gas: 16_777_216 - 21_064}();
         // With isolation, Foundry includes calldata intrinsic in the top-level CALL cost.
         used = vm.lastCallGas().gasTotalUsed;
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
@@ -292,13 +292,13 @@ abstract contract FreshWordLeg is DeployProtocol {
     }
 }
 
-/// @dev Shared measurement seam: warp, etch-seed-restore, drive the live advanceGame, classify winners.
+/// @dev Shared measurement seam: warp, etch-seed-restore, drive the live mineFlip, classify winners.
 abstract contract PurchaseDailyFixture is DeployProtocol {
-    /// @dev EIP-7825 per-transaction gas cap. A single advanceGame tx above this is a permanent DoS.
+    /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this is a permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     /// @dev The 10M soft design target the drains are sized to (USER dual bound).
     uint256 internal constant GAS_TARGET = 10_000_000;
-    /// @dev Intrinsic cost of a zero-arg advanceGame() tx: 21,000 base + 4 non-zero calldata bytes.
+    /// @dev Intrinsic cost of a zero-arg mineFlip() tx: 21,000 base + 4 non-zero calldata bytes.
     uint256 internal constant INTRINSIC = 21_064;
 
     bytes32 internal constant ETH_WIN_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
@@ -423,11 +423,11 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
         s.traitHolders = L1_TRAIT_HOLDERS;
     }
 
-    /// @dev One advanceGame tx, called with the EIP-7825 limit less intrinsic (so an over-cap
+    /// @dev One mineFlip tx, called with the EIP-7825 limit less intrinsic (so an over-cap
     ///      composition reverts out of gas rather than passing). `used` INCLUDES the 21,064 intrinsic.
     function _measure() internal returns (uint256 used, Tally memory t) {
         vm.recordLogs();
-        game.advanceGame{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
+        game.mineFlip{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
         used = _transactionGas();
 
         Vm.Log[] memory logs = vm.getRecordedLogs();

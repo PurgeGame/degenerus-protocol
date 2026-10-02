@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {CrapsViews} from "./CrapsViews.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -67,6 +68,21 @@ contract CrapsScheduledCursorTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 2 days);
         _setDailyWord(day + 2, word ^ 0xBEEF);
         for (uint256 p; p < 6; ++p) assertEq(craps.termsDigest(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1), expected[p]);
+    }
+
+    function test_MinerMaintenancePendingTracksOnlyActionableHead() public {
+        assertFalse(craps.minerMaintenancePending(), "current unopened separator waits for daily hook");
+        _openDay();
+        assertTrue(craps.minerMaintenancePending(), "opened separator is maintenance work");
+        craps.keepScheduled(0);
+        uint64 head = craps.keeperSlot();
+        assertGt(craps.slotIndexOf(head), 0, "closed scheduled head registered");
+        assertFalse(craps.minerMaintenancePending(), "committed read field owns the earlier settlement stage");
+        _setWord(craps.slotIndexOf(head) - 1, 0xC105ED);
+        craps.keepScheduled(0);
+        assertTrue(craps.minerMaintenancePending(), "finished head owes bounded cursor cleanup");
+        craps.keepScheduled(0);
+        assertGt(craps.keeperSlot(), head);
     }
 
     function test_theCursorIsBornAtGenesisPlusOne() public {
@@ -138,6 +154,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         (progressed,) = craps.keepScheduled(type(uint64).max);
         assertTrue(progressed, "settling the field was not progress");
         assertTrue(craps.battleOf(craps.keyOfSlot(winSlot)).finalized, "the field did not finalize");
+        craps.keepScheduled(0); // Maintenance follows the completed read settlement category.
         assertGt(craps.keeperSlot(), winSlot, "a finalized field did not release the cursor");
     }
 
@@ -156,8 +173,8 @@ contract CrapsScheduledCursorTest is CrapsPins {
         _setWord(index, uint256(keccak256("midnight")));
 
         // A small budget settles part of the field.
-        (bool progressed,) = craps.keepScheduled(160);
-        assertTrue(progressed, "the partial batch was not progress");
+        craps.resolveSeats(winSlot, 1);
+        bool progressed;
         uint64 walked = craps.bonusCursorOf(winSlot);
         assertGt(walked, 0, "no seats settled");
         assertLt(walked, craps.battleOf(craps.keyOfSlot(winSlot)).entrants, "the fixture field settled whole");
@@ -263,33 +280,35 @@ contract CrapsScheduledCursorTest is CrapsPins {
         _openDay();
         uint24 dayA = craps.currentDayIndex();
         _settleWholeDay(dayA);
-        vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 1, 0);
-        vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(bob, 1, 0);
-        vm.prank(alice);
-        craps.applyCrapsPasses(dayA + 1, 1, false);
-        vm.prank(bob);
-        craps.applyCrapsPasses(dayA + 1, 1, false);
-
+        address[] memory owners = new address[](100);
+        for (uint256 i; i < owners.length; ++i) {
+            owners[i] = address(uint160(0xC1000 + i));
+            vm.prank(ContractAddresses.GAME);
+            craps.creditPasses(owners[i], 1, 0);
+            vm.prank(owners[i]);
+            craps.applyCrapsPasses(dayA + 1, 1, false);
+        }
         vm.warp(block.timestamp + 2 days);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
-
-        // A budget worth exactly one refund: the sweep stops mid-day and MUST report progress.
-        (bool progressed,) = craps.keepScheduled(8);
-        assertTrue(progressed, "a partial sweep denied its own refunds");
-        (uint256 aN,) = craps.passCreditsOf(alice);
-        (uint256 bN,) = craps.passCreditsOf(bob);
-        assertEq(aN + bN, 1, "the one-seat budget did not refund exactly one seat");
-
-        // And the next call finishes the day from where the sweep stopped.
-        (progressed,) = craps.keepScheduled(type(uint64).max);
-        assertTrue(progressed, "finishing the sweep was not progress");
-        (aN,) = craps.passCreditsOf(alice);
-        (bN,) = craps.passCreditsOf(bob);
-        assertEq(aN + bN, 2, "the finished sweep did not refund the rest");
+        vm.prank(ContractAddresses.GAME);
+        MineFlipGas.Result memory result = craps.runCrapsMaintenance(450_000);
+        assertTrue(result.progressed, "partial refunds must report progress");
+        uint256 refunded;
+        for (uint256 i; i < owners.length; ++i) {
+            (uint256 n,) = craps.passCreditsOf(owners[i]);
+            refunded += n;
+        }
+        assertGt(refunded, 0);
+        assertLt(refunded, owners.length, "protocol allowance must checkpoint this fixture");
+        assertEq(craps.keeperSlot(), uint256(dayA + 1) * craps.BONUS_SLOTS_PER_DAY());
+        (bool progressed,) = craps.keepScheduled(0);
+        assertTrue(progressed);
+        for (uint256 i; i < owners.length; ++i) {
+            (uint256 n,) = craps.passCreditsOf(owners[i]);
+            assertEq(n, 1, "every refund paid exactly once across checkpoint");
+        }
     }
 
     /// @dev TODAY IS NEVER SWEPT. An un-opened current day is the advance's to open, and the
@@ -383,6 +402,10 @@ contract CrapsScheduledCursorTest is CrapsPins {
             if (craps.keeperSlot() >= pastAll) return;
             uint64 at = craps.keeperSlot();
             uint48 pending = craps.slotIndexOf(at);
+            if (pending == type(uint48).max) {
+                vm.prank(ContractAddresses.GAME);
+                craps.advanceJackpotBattle(0);
+            }
             if (pending != 0 && pending <= 2 && craps.wordAt(pending - 1) == 0) {
                 _setWord(pending - 1, uint256(keccak256(abi.encode("whole", day, i))));
             }

@@ -26,6 +26,10 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage {
 
     function prepareCenturyRequest(uint8 compression) external {
         uint24 day = _simulatedDayIndex();
+        // The level-99 last-purchase state already materialized the constructor's
+        // far-future allocations through purchase level 100. Retire those stale genesis
+        // queues before a real whale award can reuse their physical roots.
+        TQ.retireCompleted(address(this), 100);
         level = 99;
         phaseTransitionActive = false;
         jackpotPhaseFlag = false;
@@ -80,7 +84,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), uint256(12)));
         assertEq(uint256(vm.load(address(game), ffLenSlot)), 150, "fixture: unminted queue seeded");
 
-        game.advanceGame();
+        game.mineFlip();
         assertEq(sdgnrs.lastRecycledCentury(), 1, "transition closes and refills in one advance");
         assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1 ether);
         assertEq(sdgnrs.centurySupplyCheckpoint(), beforeSupply + REFILL_PERCENT * 1 ether);
@@ -93,14 +97,14 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         }
         // The close cannot re-run: the same day's next advance has nothing to do.
         vm.expectRevert(bytes4(keccak256("NotTimeYet()")));
-        game.advanceGame();
+        game.mineFlip();
         assertEq(sdgnrs.lastRecycledCentury(), 1);
         assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1 ether, "exactly one refill");
     }
 
     function testRecordedTransitionCanCloseAfterCalendarGapWithoutExtraRefill() public {
         vm.warp(block.timestamp + 3 days);
-        game.advanceGame();
+        game.mineFlip();
         assertEq(sdgnrs.lastRecycledCentury(), 1);
         assertEq(sdgnrs.totalSupply(), 1e30 - 100 ether + REFILL_PERCENT * 1 ether);
         vm.prank(address(game));
@@ -125,7 +129,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
     function _driveToClose() private {
         for (uint256 i; i < 1000 && sdgnrs.lastRecycledCentury() == 0; ++i) {
             _fulfillPending();
-            if (game.advanceDue() || game.rngLocked()) game.advanceGame();
+            if (game.advanceDue() || game.rngLocked()) game.mineFlip();
             else if (game.boxesPending()) _finishReadConsumers();
             else vm.warp(block.timestamp + 1 days + 1);
         }
@@ -136,14 +140,17 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
     }
 
     function testRequestAndRetryDoNotRecycleBeforeCompletion() public {
+        // Completion also drains scheduled table cohorts, whose midday requests need LINK.
+        mockVRF.fundSubscription(1, 1_000 ether);
         _prepareRequest(0);
-        game.advanceGame();
+        // The day-400 fixture must catch up scheduled table maintenance before requesting.
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip();
         assertEq(game.level(), 100, "fresh request promoted level");
         assertTrue(game.rngLocked());
         assertEq(sdgnrs.lastRecycledCentury(), 0, "request is too early to refill");
         uint256 req = mockVRF.lastRequestId();
         vm.warp(block.timestamp + 20 hours + 2);
-        game.advanceGame(); // the vault owner's retry (this test contract holds the DGVE majority)
+        admin.retryGameRng(); // the vault owner's retry (this test contract holds the DGVE majority)
         assertGt(mockVRF.lastRequestId(), req, "real VRF retry fired");
         assertEq(game.level(), 100);
         assertEq(sdgnrs.lastRecycledCentury(), 0, "retry cannot mint");
@@ -152,14 +159,14 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
 
     function testThreeDayCenturyRefillsOnlyOnCompletion() public {
         _prepareRequest(0);
-        game.advanceGame();
+        game.mineFlip();
         assertEq(sdgnrs.lastRecycledCentury(), 0);
         _driveToClose();
     }
 
     function testTurboCenturyRefillsOnlyOnCompletion() public {
         _prepareRequest(1);
-        game.advanceGame();
+        game.mineFlip();
         assertEq(sdgnrs.lastRecycledCentury(), 0);
         _driveToClose();
     }
@@ -168,7 +175,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         vm.warp(block.timestamp + 400 days);
         for (uint256 i; i < 240 && !game.gameOver(); ++i) {
             _fulfillPending();
-            game.advanceGame();
+            game.mineFlip();
         }
         assertTrue(game.gameOver());
         assertTrue(sdgnrs.recyclingClosed());

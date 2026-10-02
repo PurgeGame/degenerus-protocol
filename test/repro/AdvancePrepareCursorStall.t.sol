@@ -5,14 +5,14 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title AdvancePrepareCursorStall — regression for the jackpot-phase advanceGame ticket-drain
+/// @title AdvancePrepareCursorStall — regression for the jackpot-phase mineFlip ticket-drain
 ///        liveness stall (prepare-future-tickets shared-cursor clobber).
 ///
 /// @notice TEST-ONLY. No contracts are touched by the test itself. It drives a real jackpot-phase
 ///         day with a large permissionless buyer cohort and asserts the current-level ticket drain
 ///         RESUMES correctly across transactions and finishes the day.
 ///
-///         BUG (pre-fix): `advanceGame` runs `_prepareFutureTickets(lvl)` before the current-level
+///         BUG (pre-fix): `mineFlip` runs `_prepareFutureTickets(lvl)` before the current-level
 ///         drain `_runProcessTicketBatch(lvl)` on every call. The two share ONE resume cursor
 ///         (`ticketCursor`/`ticketLevel`). When the current drain spans multiple transactions (a
 ///         cohort larger than one write budget), each next call's `_prepareFutureTickets` probes the
@@ -22,7 +22,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         rescans from index 0, re-skipping the already-minted prefix at 1 budget unit each. New
 ///         progress per call decays 32, 29, 27, ... to zero once the skip prefix saturates the
 ///         358-unit cold budget: the mint cursor plateaus below the cohort size, the tail never
-///         mints, `advanceGame` loops STAGE_TICKETS_WORKING, and the day never unlocks (only the
+///         mints, `mineFlip` loops STAGE_TICKETS_WORKING, and the day never unlocks (only the
 ///         120-day liveness game-over escapes). Purchase phase is unaffected — the pre-RNG gate
 ///         (AdvanceModule:302) drains that level's queue before `_prepareFutureTickets` runs.
 ///
@@ -37,7 +37,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         through `processTicketBatch`) is structurally unreachable until the near-window loop
 ///         has returned (idx >= total for every windowed level), so the shared cursor can never
 ///         be clobbered mid-drain by construction. This test still exercises that invariant end
-///         to end via real `game.purchase`/`advanceGame` calls, so it needed no changes here.
+///         to end via real `game.purchase`/`mineFlip` calls, so it needed no changes here.
 ///
 ///         The cohort is fed only by real permissionless `game.purchase` calls (no per-day buyer
 ///         cap; per-address dedup at Storage:688). Jackpot-phase buys route to `level`
@@ -112,7 +112,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         // 3) Cross the wall-day. Advances first finish the previous word's consumers,
         //    then request the daily word and swap write->read (_swapAndFreeze).
         vm.warp(block.timestamp + 1 days + 1);
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.advanceGame();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip();
         require(game.rngLocked(), "daily VRF request is in flight (word swapped in)");
 
         uint24 rk = _readKey(lvl);
@@ -121,7 +121,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         // Fulfill the daily word so the next advance begins draining the read cohort.
         _fulfillVrf();
 
-        // 4) Drive advanceGame with NO further time warp (the 120-day liveness game-over can never
+        // 4) Drive mineFlip with NO further time warp (the 120-day liveness game-over can never
         //    fire, so completion must come from real drain progress). A correct resume drains the
         //    whole cohort in a bounded number of calls; the pre-fix clobber wedges it forever.
         bool drained = false;
@@ -130,8 +130,8 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         for (uint256 i = 0; i < 200; i++) {
             iters++;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
-            require(ok, "advanceGame must not revert");
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            require(ok, "mineFlip must not revert");
             require(!game.gameOver(), "must not escape via game-over");
 
             uint32 cur = _cursor();
@@ -171,7 +171,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
             if (game.jackpotPhase()) return;
 
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) {
                 vm.warp(block.timestamp + 1 days + 1);
                 _seedNextPrizePool(49.9 ether);
@@ -185,7 +185,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         for (uint256 i = 0; i < 120; i++) {
             if (!game.rngLocked()) return;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) return;
         }
     }

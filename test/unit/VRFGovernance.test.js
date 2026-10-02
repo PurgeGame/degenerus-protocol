@@ -46,14 +46,14 @@ describe("VRF Governance", function () {
   // so it clears the mint gate.
   // =========================================================================
   async function recoverVrf(game, caller, mockVRF) {
-    await game.connect(caller).advanceGame();
+    await game.connect(caller).mineFlip();
     const reqId = await getLastVRFRequestId(mockVRF);
     if (reqId > 0n) {
       await fulfillVRF(mockVRF, reqId, 123456789n);
     }
     for (let i = 0; i < 30; i++) {
       if (!(await game.rngLocked())) break;
-      await game.connect(caller).advanceGame();
+      await game.connect(caller).mineFlip();
     }
   }
 
@@ -431,10 +431,10 @@ describe("VRF Governance", function () {
       const { dgnrs, game, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = eth("100");
 
-      // Advance to next day and call advanceGame to trigger VRF request,
+      // Advance to next day and call mineFlip to trigger VRF request,
       // which sets rngLockedFlag = true
       await advanceToNextDay();
-      await game.connect(deployer).advanceGame();
+      await game.connect(deployer).mineFlip();
 
       await expect(
         dgnrs.connect(deployer).unwrapTo(alice.address, amount)

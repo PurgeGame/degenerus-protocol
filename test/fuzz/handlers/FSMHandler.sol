@@ -8,7 +8,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title FSMHandler -- Handler that snapshots game FSM state for invariant testing
-/// @notice Wraps purchase/advanceGame/VRF operations while tracking FSM ghost state.
+/// @notice Wraps purchase/mineFlip/VRF operations while tracking FSM ghost state.
 ///         The invariant test checks that level only increases, gameOver is terminal, level is
 ///         frozen after gameOver, the VRF-progress clock never rewinds, and that a well-formed,
 ///         unblocked advance never hard-stalls (bounded no-brick liveness).
@@ -106,14 +106,14 @@ contract FSMHandler is Test {
     /// @notice Advance game while tracking FSM state
     /// @dev Runs even after gameOver so the post-gameover final-sweep path is exercised and the
     ///      terminal-freeze ghost can catch any illegal post-gameover level mutation.
-    function advanceGame(uint256 actorSeed) external useActor(actorSeed) {
+    function mineFlip(uint256 actorSeed) external useActor(actorSeed) {
         calls_advanceGame++;
 
         uint256 levelBefore = game.level();
         bool gameOverBefore = game.gameOver();
 
         vm.prank(currentActor);
-        try game.advanceGame() {} catch {}
+        try game.mineFlip() {} catch {}
 
         _postAction(levelBefore, gameOverBefore);
     }
@@ -138,8 +138,8 @@ contract FSMHandler is Test {
 
     /// @notice VRF-recovery crank -- a coverage DRIVER (no assertion of its own).
     /// @dev Repeatedly (up to RECOVER_CRANK_CAP) supplies a VRF word for any pending request and
-    ///      cranks advanceGame, WITHOUT warping time, until the game is caught up (no owed work and
-    ///      not VRF-gated), reaches gameOver, or advanceGame reverts. This drives the game deep
+    ///      cranks mineFlip, WITHOUT warping time, until the game is caught up (no owed work and
+    ///      not VRF-gated), reaches gameOver, or mineFlip reverts. This drives the game deep
     ///      through the VRF request/fulfill/unlock cycle and into gameOver, which is what exercises
     ///      the level-monotonic, gameOver-terminal, terminal-freeze, and VRF-clock invariants.
     ///
@@ -177,7 +177,7 @@ contract FSMHandler is Test {
             if (!game.advanceDue() && !game.rngLocked()) break;
 
             vm.prank(cranker);
-            try game.advanceGame() {} catch {
+            try game.mineFlip() {} catch {
                 break;
             }
         }

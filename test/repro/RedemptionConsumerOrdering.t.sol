@@ -19,7 +19,7 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         _request();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         _complete();
-        mockStETH.mint(address(sdgnrs), 2000 ether);
+        mockStETH.mint(address(sdgnrs), 160_000 ether);
         address[3] memory owners = [ALICE, BOB, CAROL];
         for (uint256 i; i < owners.length; ++i) {
             dgnrs.unwrapTo(owners[i], 2_000_000_000 ether);
@@ -53,7 +53,7 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
 
     function _ready() private {
         _publish();
-        for (uint256 i; i < 100 && game.rngConsumerStage() != 1; ++i) game.mineFlip();
+        for (uint256 i; i < 100 && game.rngConsumerStage() != 1; ++i) game.mineFlip{gas: 3_100_000}();
         assertEq(game.rngConsumerStage(), 1, "redemption is next after daily work");
     }
 
@@ -79,7 +79,7 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         sdgnrs.claimRedemptionMany(prefix, burnDay);
         vm.expectRevert(sDGNRS.RedemptionStageBlocked.selector);
         vm.prank(address(game));
-        sdgnrs.processRedemptionSettlement(1920);
+        sdgnrs.runRedemptionWork(9_000_000);
         assertEq(_claimsHash(), beforeClaims, "all rejected paths preserve entitlements");
         _complete();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -121,8 +121,8 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         game.requestLootboxRng();
         vm.prank(address(game));
-        (bool done, uint256 charged, uint256 bounty) = sdgnrs.processRedemptionSettlement(11);
-        assertFalse(done); assertEq(charged, 0); assertEq(bounty, 0);
+        bool done = sdgnrs.runRedemptionWork(11_000).done;
+        assertFalse(done);
         assertTrue(sdgnrs.redemptionSettlementPending(), "tiny budget cannot erase cleanup work");
         _complete();
         assertFalse(sdgnrs.redemptionSettlementPending());
