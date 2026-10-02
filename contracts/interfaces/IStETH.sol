@@ -56,4 +56,14 @@ interface IStETH {
     /// @param amount The amount of stETH to transfer
     /// @return True if the transfer succeeded
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
+
+    /// @notice Shares corresponding to a pooled-ETH amount, rounded down.
+    function getSharesByPooledEth(uint256 amount) external view returns (uint256);
+
+    /// @notice Pooled-ETH value of shares, rounded down.
+    function getPooledEthByShares(uint256 shares) external view returns (uint256);
+
+    /// @notice Transfer shares using an allowance denominated in their pooled-ETH value.
+    /// @return amount Pooled-ETH value of the transferred shares.
+    function transferSharesFrom(address from, address to, uint256 shares) external returns (uint256 amount);
 }

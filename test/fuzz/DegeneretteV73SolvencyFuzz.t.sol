@@ -62,7 +62,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     /// forge-config: default.fuzz.runs = 400
     function testFuzz_v73_manualFlipSolvency(uint8 symbol, uint256 word) public {
         word = bound(word, 2, type(uint256).max);
-        symbol %= 32;
+        symbol %= 24;
         uint128 perTicket = 100 ether;
         vm.prank(address(game));
         coin.mintForGame(player, uint256(perTicket) + 1 ether);
@@ -89,7 +89,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     /// @notice WWXRP keeps its rig through the production automatic-spin resolver.
     /// forge-config: default.fuzz.runs = 400
     function testFuzz_v73_automaticWwxrpRig(uint8 symbol, uint256 word) public {
-        symbol %= 32;
+        symbol %= 24;
         bytes memory facade = address(game).code;
         vm.etch(address(game), ContractAddresses.GAME_DEGENERETTE_MODULE.code);
         vm.recordLogs();

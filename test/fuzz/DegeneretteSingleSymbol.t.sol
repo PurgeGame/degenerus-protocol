@@ -35,6 +35,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     DegeneretteMathHarness private math;
     address private alice;
     address private bob;
+    Vm.Log[] private resolvedLogs;
 
     function setUp() public {
         _deployProtocol();
@@ -62,27 +63,19 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
 
     function _land(uint256 word) private {
         RecyclingState.seedWord(address(game), 1, bytes32(word));
+        RecyclingState.seedDailyWord(address(game), game.currentDayView(), word);
+        vm.recordLogs();
+        game.mineFlip{gas: 15_000_000}();
+        resolvedLogs = vm.getRecordedLogs();
     }
 
-    /// @dev Resolve exactly one queued bet at index 1 through the sweep and read back its own
-    ///      event. Advances the active index past 1 so the sweep's finalized-index frontier
-    ///      reaches it (idempotent to repeat across the sequential per-bet calls below), then
-    ///      hands `openBoxes` a minimal budget: 2, since the fixture's fixed 2-member afking
-    ///      ring (VAULT + sDGNRS, both perpetually skip-only here) always burns exactly 1 of it
-    ///      before the human-box leg sees any. What's left is the smallest nonzero budget the
-    ///      bet queue reaches; the first bet at the cursor always runs whatever it costs, and
-    ///      that cost alone exhausts the tiny remainder, so the walk stops before touching a
-    ///      second bet. Filtered by `id` so a call that still swept more than one bet cannot be
-    ///      mistaken for a different bet's result.
+    /// @dev Read this bet's event from the complete engine settlement captured by _land.
+    ///      Filtering by id keeps shared-ticket and prefix assertions tied to each bet.
     function _resolve(address who, uint64 id, uint8 symbol, uint256 word)
         private
         returns (uint32[] memory tickets, uint32 firstHouse)
     {
-        uint256 lr = uint256(vm.load(address(game), bytes32(uint256(33))));
-        vm.store(address(game), bytes32(uint256(33)), bytes32((lr & ~uint256(0xFFFFFFFFFFFF)) | 2));
-        vm.recordLogs();
-        game.openBoxes(2);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        Vm.Log[] memory logs = resolvedLogs;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != DQ.RESOLVED_SIG) continue;
             if (uint256(logs[i].topics[3]) != id) continue;
@@ -102,6 +95,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 assertEq(score, natural, "independent color score mismatch");
             }
         }
+        assertGt(tickets.length, 0, "bet resolution event missing");
     }
 
     function testSharedHeroTicketsAndPrefixAcrossPlayersBetsStakesAndEthFlip() public {
@@ -190,6 +184,34 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         assertEq(DQ.lastBetId(vm, address(game), 1), 0, "no bet joined the revealed cohort");
         assertEq(RecyclingState.word(address(game), 1), 2, "read entropy survives the new commitment");
         assertEq(RecyclingState.word(address(game), 0), 0, "the new bet's word is still hidden");
+    }
+
+    function testDiceBetsRejectAtomicallyForEveryCurrencyAndFundingRoute() public {
+        address gifter = makeAddr("dice_gifter");
+        vm.deal(gifter, 100 ether);
+        vm.prank(alice);
+        game.setOperatorApproval(bob, true);
+        vm.prank(address(game));
+        coin.mintForGame(alice, 1000 ether);
+        vm.prank(address(game));
+        coin.mintForGame(gifter, 1000 ether);
+        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(alice, uint256(50)))) + 1);
+        address[3] memory callers = [alice, bob, gifter];
+        for (uint256 route; route < callers.length; ++route) {
+            for (uint8 currency; currency < 2; ++currency) {
+                bytes32 beforeState = _rejectionState(callers[route], boonSlot);
+                uint256 beforeFlip = coin.balanceOf(callers[route]);
+                uint128 stake = currency == 0 ? uint128(0.005 ether) : uint128(100 ether);
+                for (uint8 symbol = 24; symbol < 32; ++symbol) {
+                    vm.expectRevert(bytes4(keccak256("InvalidBet()")));
+                    vm.prank(callers[route]);
+                    game.placeDegeneretteBet{value: currency == 0 ? stake : 0}(alice, currency, stake, 1, symbol);
+                    assertEq(_rejectionState(callers[route], boonSlot), beforeState);
+                    assertEq(coin.balanceOf(callers[route]), beforeFlip);
+                    assertEq(game.getDailyHeroWager(game.currentDayView(), 3, symbol & 7), 0);
+                }
+            }
+        }
     }
 
     function testIndependentColorsHeroWeightAndMatchedGold() public view {
@@ -286,7 +308,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
 
     function testAutomaticFlipReelsExposeHeroAndUseIndependentColorsAndSharedMath() public {
         for (uint8 chosen; chosen < 3; ++chosen) {
-            uint8 symbol = chosen == 2 ? 32 : chosen * 31; // symbol 0, symbol 31, random sentinel
+            uint8 symbol = chosen == 2 ? 32 : chosen * 23; // symbol 0, symbol 23, random sentinel
             uint256 seed = uint256(keccak256(abi.encode("automatic flip", chosen)));
             (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
                 abi.encodeCall(
@@ -299,9 +321,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             uint256 expectedTotal;
             for (uint8 i; i < 3; ++i) {
                 uint256 ss = uint256(keccak256(abi.encode(seed, uint256(i))));
-                uint8 hero = symbol == 32
-                    ? uint8(uint256(keccak256(abi.encode(ss, uint256(0x446567656e4865726f)))) & 31)
-                    : symbol;
+                uint8 hero = symbol == 32 ? Ref.randomHero(ss) : symbol;
                 uint32 p = uint32(packed >> (i * 72));
                 uint32 r = uint32(packed >> (i * 72 + 32));
                 assertEq((packed >> (225 + i * 2)) & 3, hero >> 3);
@@ -328,6 +348,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     function testAutomaticWwxrpHashesItsSeedAndScoresTheRiggedReel() public {
         for (uint256 seed = 1; seed <= 32; ++seed) {
             uint8 chosen = seed == 32 ? 32 : uint8(seed - 1);
+            if (chosen >= 24 && chosen != 32) continue;
             (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
                 abi.encodeCall(
                     IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox, (alice, 1 ether, uint16(305), seed, chosen)
@@ -428,13 +449,13 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     }
 
     function testHeroIsStoredOnlyInTheSelectedSymbol() public {
-        uint64 id = _place(alice, 0, 1, 31, 0.005 ether);
+        uint64 id = _place(alice, 0, 1, 23, 0.005 ether);
         uint256 packed = game.degeneretteBetInfo(1, id);
-        assertEq((packed >> 160) & 0x1F, 31, "symbol field holds the chosen hero");
+        assertEq((packed >> 160) & 0x1F, 23, "symbol field holds the chosen hero");
         assertEq(packed >> 252, 0, "no separate hero field: the reserved tail stays zero");
         uint256 word = uint256(keccak256("last hero quadrant"));
         _land(word);
-        _resolve(alice, id, 31, word);
+        _resolve(alice, id, 23, word);
     }
 
     function testAutomaticFlipRejectsOversizedPerSpinStakeWithoutTruncation() public {

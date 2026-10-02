@@ -112,7 +112,7 @@ export function rollHeroSymbolRef({ day, entropy, dailyHeroWagers, excludeIdx = 
     for (let s = 0; s < 8; ++s) {
       const idx = (q << 3) | s;
       const amount =
-        idx === exclude ? 0 : Number((packed >> BigInt(s * 32)) & U32_MASK);
+        idx === exclude || q === 3 ? 0 : Number((packed >> BigInt(s * 32)) & U32_MASK);
       weights[idx] = amount;
       total = (total + BigInt(amount)) & U64_MASK;
       if (amount > maxAmount) {

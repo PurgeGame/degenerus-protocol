@@ -9,7 +9,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 import {CrapsPriceLib} from "./libraries/CrapsPriceLib.sol";
 import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
-import {IReadCohortLifecycle} from "./CrapsBattle.sol";
+import {IReadCohortLifecycle, IVaultOwnership} from "./CrapsBattle.sol";
 import {JackpotBattleFieldLib} from "./libraries/JackpotBattleFieldLib.sol";
 
 interface IGameCrapsPending {
@@ -39,6 +39,50 @@ contract JackpotBattle is CrapsBattleStorage {
     uint256 private constant _HIGH_LOSS_BPS = 1200;
     uint256 private constant _HIGH_COMP_SHARE_BPS = 8000;
     event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, address indexed player, uint256 units, uint32 chips);
+
+    function setBattleCreator(address account, bool allowed) external {
+        if (!IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
+        _battleCreator[account] = allowed;
+        emit BattleCreatorSet(account, allowed);
+    }
+
+    /// @notice Self-only finalization: split the scheduled main pot 90/10 between the
+    ///         battle winner and the longest shared hand's named shooter. Their own run
+    ///         may have stopped; the table's shared dice decide the hand length.
+    function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word)
+        public
+    {
+        if (msg.sender != address(this)) revert OnlyTableSelf();
+        address winner = address(uint160(_bets[winnerId]));
+        if (slot < _CUSTOM_SLOT_BASE) {
+            uint256 heat = (_highField[key] >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK;
+            if (heat != 0 && pot != 0) {
+                uint256 seed = uint256(keccak256(abi.encode(keccak256("degenerus.lootbox.craps.v1"), word, uint256(slot))));
+                uint256 n = uint32(_battles[key]);
+                uint256 start = uint256(keccak256(abi.encode(uint256(0x526f746174696e6753686f6f746572), seed))) % n;
+                uint256 seat = 1 + (start + 511 - (heat & 511)) % n;
+                uint256 daySlot = uint256(slot) / _BONUS_SLOTS_PER_DAY * _BONUS_SLOTS_PER_DAY;
+                uint256 dayN = slot % _BONUS_SLOTS_PER_DAY == 7 ? 0 : uint32(_dayTickets[daySlot]);
+                uint256 ownN = n - dayN - _jackpotRounds[slot].drawnCount;
+                uint256 hotId = seat <= ownN ? (uint256(slot) << 64) | seat
+                    : seat <= ownN + dayN ? (daySlot << 64) | (seat - ownN)
+                    : (uint256(slot) << 64) | (seat - dayN);
+                address shooter = address(uint160(_bets[hotId]));
+                uint256 share = pot / 10;
+                pot -= share;
+                uint256 protocolShare = boost / 10;
+                boost -= protocolShare;
+                share -= _splitAward(key, shooter, _SPLIT_SRC_HOTTEST | protocolShare);
+                if (share != 0) IHighReserveCredit(ContractAddresses.COINFLIP).creditFlip(shooter, share);
+                emit CrapsHottestShooterPaid(hotId, key, shooter, uint16(heat >> 9), share);
+            }
+            pot -= _splitAward(key, winner, _SPLIT_SRC_MAIN | boost);
+        }
+        if (pot != 0) {
+            IHighReserveCredit(ContractAddresses.COINFLIP).creditFlip(winner, pot);
+            emit CrapsBattlePaid(winnerId, key, winner, pot);
+        }
+    }
 
     /// @dev Scheduled fields use the slot itself; custom fields commit to their exact terms.
     function _rngBattleKey(uint64 slot) private view returns (bytes32) {
@@ -131,6 +175,10 @@ contract JackpotBattle is CrapsBattleStorage {
 
     function completeRngSlot(uint64 slot, uint48 index) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
+        _completeRngSlot(slot, index);
+    }
+
+    function _completeRngSlot(uint64 slot, uint48 index) private {
         if (index > 1) revert BadJackpotField();
         uint64 pos = _rngSlotCursor[index];
         if (pos < _rngSlots[index].length && _rngSlots[index][pos] == slot) _rngSlotCursor[index] = pos + 1;
@@ -462,6 +510,13 @@ contract JackpotBattle is CrapsBattleStorage {
     function finalizeBattle(Window calldata w, uint256 board, uint256 word) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
         _payout(w, board, word);
+        // Preserve payout-before-completion ordering in the same cold-module call.
+        // Dedicated daily jackpot fields do not belong to the normal read cohort.
+        if (!_isJackpotSlot(w.bound)) {
+            uint48 index;
+            unchecked { index = _slotIndex[w.bound] - 1; }
+            _completeRngSlot(w.bound, index);
+        }
     }
 
     function payProgressive(Window calldata w, uint256 peak, uint256 score, uint256 winnerId, uint256 winnerWord, address winner) external {
@@ -652,7 +707,7 @@ contract JackpotBattle is CrapsBattleStorage {
             // the payment below want them, and a battle word is one warm slot either way.
             // The pot this field pays out, seed and boost included. Every finished field carries
             // the whole pot: a window nobody else wanted is still a race, and what is on it is what
-            // its winner takes.
+            // its main-pool prize recipients share.
             emit CrapsBattleFinalized(
                 w.key,
                 stop,
@@ -698,14 +753,9 @@ contract JackpotBattle is CrapsBattleStorage {
             // deleted where it busted.
             uint256 pot = (w.stakeUnits * (entrants + w.extraUnits) + boost + donated) * _BATTLE_STAKE_UNIT + w.extraPot;
             address winner = address(uint160(winnerWord));
-            // Only protocol bonus value can pay in passes; funded bounties stay liquid.
-            if (scheduled) {
-                pot -= _splitAward(w.key, winner, _SPLIT_SRC_MAIN | (boost * _BATTLE_STAKE_UNIT));
-            }
-            if (pot != 0) {
-                _creditFlip(winner, pot);
-                emit CrapsBattlePaid(winnerId, w.key, winner, pot);
-            }
+            payBattlePot(
+                uint64(slot), w.key, winnerId, pot, boost * _BATTLE_STAKE_UNIT, word
+            );
             // THE LANE. Only a contested one pays here — a field of one settled its lane on that
             // seat's own run, and a field of none never had one.
             uint256 heads = uint32(f);

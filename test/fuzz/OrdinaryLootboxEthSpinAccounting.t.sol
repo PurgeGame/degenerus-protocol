@@ -132,7 +132,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         budget = budget * (_target(seed) >= 6 ? 15_000 : 8750) / 10_000;
         e.stake = budget * _variance(seed) / 10_000;
         e.spinSeed = _hash(seed, 0x4574685370696e);
-        uint256 hero = _hash(e.spinSeed, 0x446567656e4865726f) & 31;
+        uint256 hero = _hash(e.spinSeed, 0x446567656e4865726f) % 24;
         uint256 heroQuadrant = hero / 8;
         uint32 playerTraits = _traits(_hash(e.spinSeed, 0x446567656e506c61796572));
         playerTraits = (playerTraits & ~(uint32(7) << (8 * heroQuadrant))) | (uint32(hero & 7) << (8 * heroQuadrant));

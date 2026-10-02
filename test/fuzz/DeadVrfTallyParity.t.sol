@@ -42,6 +42,11 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
         _setEntryOwed(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT), bits | (packed & ((uint80(1) << 41) - 1)));
     }
 
+    function tallyDigest() external view returns (bytes32) {
+        return keccak256(abi.encode(deadTallyStage, deadTallyPos, deadTallyFoilDay,
+            deadTallyFoilIdx, deadUncreated, deadCreated, deadTraitCount));
+    }
+
     function legacyTally(uint24 lvl) external returns (bool finished) {
         uint256 stage = deadTallyStage;
         if (stage == 3) return true;
@@ -180,6 +185,27 @@ contract DeadVrfTallyParityTest is Test {
         assertEq(writes, oldWrites, "identical ordered storage writes and values");
     }
 
+    /// @dev The reference's 2,800-unit pauses are historical. Compare completed
+    ///      accounting while the production implementation stops on actual gas.
+    function _compareCompleted(uint256 callGas) private {
+        uint256 snapshot = vm.snapshotState();
+        bool done;
+        for (uint256 i; i < 8 && !done; ++i) done = h.legacyTally(5);
+        assertTrue(done, "reference completes");
+        bytes32 expected = h.tallyDigest();
+        assertTrue(vm.revertToStateAndDelete(snapshot));
+        done = false;
+        uint256 calls;
+        while (!done && calls < 64) {
+            vm.cool(address(h));
+            done = h.tallyDeadVrf{gas: callGas}(5);
+            ++calls;
+        }
+        assertTrue(done, "gas-checkpointed tally completes");
+        assertGt(calls, 1, "cold tally spans actual gas checkpoints");
+        assertEq(h.tallyDigest(), expected, "same completed counters and ticket weight");
+    }
+
     function testFuzz_WeightMatchesSnapPacking(uint80 packed, uint8 shift) public {
         h.seedOne(packed, shift);
         _compare();
@@ -192,19 +218,16 @@ contract DeadVrfTallyParityTest is Test {
 
     function test_ResumeAfterFullRegistryBatch() public {
         h.seed(3001, 777, 3, 0);
-        _compare();
-        _compare();
+        _compareCompleted(2_000_000);
     }
 
     function test_ExactRegistryBudgetThenFoilContinuation() public {
         h.seed(2800, 888, 1, 0);
-        _compare();
-        _compare();
+        _compareCompleted(2_000_000);
     }
 
     function test_TraitScanDefersAtBudgetBoundary() public {
         h.seed(2800, 999, 4, 0);
-        _compare();
-        _compare();
+        _compareCompleted(1_100_000);
     }
 }

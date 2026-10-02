@@ -285,11 +285,13 @@ export function checkpointIdentity({ level, queueIndex, player, domain = CHECKPO
 }
 
 export function decodeCheckpointKey(baseKey) {
-  const key = BigInt(baseKey);
+  const goldSixTaken = (BigInt(baseKey) >> 255n) !== 0n;
+  const key = BigInt(baseKey) & ~(1n << 255n);
   const domain = Number(key >> 248n);
   if (!Object.values(CHECKPOINT_DOMAINS).includes(domain)) throw new RangeError("unknown ticket generator version/domain");
   return {
     domain,
+    goldSixTaken,
     level: Number((key >> 224n) & 0xffffffn),
     queueIndex: Number((key >> 192n) & U32_MASK),
     player: `0x${((key >> 32n) & ((1n << 160n) - 1n)).toString(16).padStart(40, "0")}`,
@@ -309,6 +311,7 @@ export function ticketCheckpointTraits({ baseKey, entropyWord, count }) {
   }
   const out = new Uint8Array(Number(n));
   let written = 0;
+  let goldSixTaken = decoded.goldSixTaken;
   for (let i = start; i < end;) {
     const seed = BigInt(keccak256(abiCoder.encode(
       ["uint256", "uint256", "uint256"], [decoded.identity, BigInt(entropyWord), i / 16n]
@@ -316,7 +319,15 @@ export function ticketCheckpointTraits({ baseKey, entropyWord, count }) {
     let s = ((seed & U64_MASK) | 1n) * TICKET_LCG_MULT & U64_MASK;
     for (let j = 0; j < 16 && i < end; ++j, ++i) {
       s = (s * TICKET_LCG_MULT + 1n) & U64_MASK;
-      out[written++] = traitFromWord(s) | (Number(i & 3n) << 6);
+      let trait = traitFromWord(s) | (Number(i & 3n) << 6);
+      if (trait === 253) {
+        if (goldSixTaken) {
+          const tag = keccak256(new TextEncoder().encode("GOLD_SIX_REPLACEMENT_V1"));
+          const pick = Number(BigInt(keccak256(abiCoder.encode(["uint256", "bytes32"], [s, tag]))) % 7n);
+          trait = 248 + pick + (pick >= 5 ? 1 : 0);
+        } else goldSixTaken = true;
+      }
+      out[written++] = trait;
     }
   }
   return out;

@@ -1,7 +1,7 @@
 // Analysis only. Build: g++ -O3 -std=c++20 scripts/craps-hot-shooter-sim.cpp -o /tmp/craps-hot
 // Reuses the economic replica's dice, scatter, legal boards and legacy settlement for validation.
-// Hot bonus pays ONLY profit on rolls X+1 onward, after surviving X rolls. Rotation remains +5%
-// of whole-hand eligible profit. No extra eligibility coin; no boost on principal or refunds.
+// Hot bonus pays ONLY profit on rolls X+1 onward, after surviving X rolls.
+// Historical evaluate keeps +5% whole-hand rotation; evaluate-current uses +30% hot profit. No extra eligibility coin; no boost on principal or refunds.
 // Uses production's current bust ranking, which differs from the older system simulator.
 #define main existing_system_sim_main
 #include "craps-high-water-system-sim.cpp"
@@ -12,6 +12,7 @@
 #include <set>
 
 namespace hot {
+bool ownHot = false;
 bool jitter = false; // Sensitivity only: equal chance of 1% or (2*mean-1)%, always a bonus.
 struct Hand {
     BoardMoney returned{}, profit{}, suffix{};
@@ -112,7 +113,7 @@ Run settle(const ChipCounts& selected, Cache& cache, u64 seed, u64 owner,
         } else {
             int pct=pcts[placed];
             if(jitter && pct) pct=(keyed(seed,owner,r.hands,0xb0059ULL)&1)?1:2*pct-1;
-            returned+=(suffix*pct+profit*rotate)/100;
+            returned+=ownHot ? suffix*(pct+(r.hands==rotation?kOwnHotUpliftPct:0))/100 : (suffix*pct+profit*rotate)/100;
         }
         bankroll+=q*returned-need;
         ++r.hands;r.rolls+=h.rolls;r.units+=q;
@@ -151,9 +152,17 @@ void validate(int n,u64 seed) {
         }
         auto b=boards[keyed(s,2)%boards.size()];
         Terms t;t.bankroll=3000;t.round=600;t.goal=15000;
+        gShooterBoostMode=ShooterBoostMode::Rotating; // explicit pre-duration rules
         Run old=settleBoardChoice(t,b,cache.dice,s,owner,0,40);
         Run now=settle(b,cache,s,owner,0,40,{},true);
         assert(old.rawMoney==now.rawMoney && old.peakMoney==now.peakMoney && old.hands==now.hands && old.rolls==now.rolls && old.paid==now.paid && old.stop==now.stop);
+        gShooterBoostMode=ShooterBoostMode::Duration;
+        Cache current(s,kHotAfterRolls);
+        Run integrated=settleBoardChoice(t,b,current.dice,s,owner,0,40);
+        ownHot=true;
+        Run profiled=settle(b,current,s,owner,0,40,{30,25,20,18,14,10,7,5});
+        ownHot=false;
+        assert(integrated.rawMoney==profiled.rawMoney && integrated.peakMoney==profiled.peakMoney && integrated.hands==profiled.hands && integrated.rolls==profiled.rolls && integrated.paid==profiled.paid && integrated.stop==profiled.stop);
     }
     // Boundary: roll 1 establishes 6, roll 2 wins place 6, roll 3 sevens out.
     Shooter script{{{3,3},{3,3},{3,4}},true};
@@ -234,7 +243,7 @@ void evaluate(int n,u64 seed,int threshold,const std::array<int,8>&pcts,const st
             if(fields)for(int f=0;f<6;++f)stats[j].wins[f]+=betterRun(r,best[f],tie,ties[f]);
         }
     }
-    header();for(std::size_t j=0;j<ids.size();++j)emit(baseline?"baseline":"hot"+std::to_string(threshold)+(jitter?"_jitter":""),ids[j],boards[ids[j]],stats[j],n);
+    header();for(std::size_t j=0;j<ids.size();++j)emit(baseline?"baseline":"hot"+std::to_string(threshold)+(ownHot?"_own30":"")+(jitter?"_jitter":""),ids[j],boards[ids[j]],stats[j],n);
 }
 }
 int main(int argc,char**argv) {
@@ -242,11 +251,12 @@ int main(int argc,char**argv) {
         if(argc<4)throw std::runtime_error("validate|profiles|evaluate SAMPLES SEED [threshold pcts ids|all|probes baseline fields heads]");
         std::cout<<std::fixed<<std::setprecision(6);
         std::string command=argv[1];int n=std::stoi(argv[2]);u64 seed=std::stoull(argv[3]);
+        hot::ownHot = command == "evaluate-current";
         if(n<2)throw std::runtime_error("samples must be >=2");
         if(argc==11)hot::jitter=std::stoi(argv[10]);
         if(command=="validate")hot::validate(n,seed);
         else if(command=="profiles")hot::profiles(n,seed);
-        else if(command=="evaluate"&&(argc==10||argc==11))hot::evaluate(n,seed,std::stoi(argv[4]),hot::parsePcts(argv[5]),argv[6],std::stoi(argv[7]),std::stoi(argv[8]),std::stoi(argv[9]));
+        else if((command=="evaluate"||command=="evaluate-current")&&(argc==10||argc==11))hot::evaluate(n,seed,std::stoi(argv[4]),hot::parsePcts(argv[5]),argv[6],std::stoi(argv[7]),std::stoi(argv[8]),std::stoi(argv[9]));
         else throw std::runtime_error("bad command");
     }catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 1;}
 }

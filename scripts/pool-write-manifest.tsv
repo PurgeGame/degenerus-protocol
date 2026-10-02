@@ -94,7 +94,7 @@ DECL	claimablePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-te
 PAIRED-CREDIT	claimablePool	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	WRITE	aggregate + per-player in tandem; funded by the running pool debit in _distributePayout
 VALUE-OUT	claimablePool	_claimWinningsInternal	DegenerusGame.sol	WRITE	player withdrawal: aggregate falls as ETH leaves (CEI); per-player claimable zeroed in tandem
 POOL-TO-POOL	claimablePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	BAF + decimator claimableDelta: future -> claimable; rounds thereby PRE-COUNTED for later per-player claims
-VALUE-IN	claimablePool	_creditAfkingValue	storage/DegenerusGameStorage.sol	WRITE	overpay/bare-send absorbed as prepaid afking liability, and the funded-subscribe deposit (msg.value); per-player afking half in tandem (SOLVENCY-01 identity)
+VALUE-IN	claimablePool	_creditAfkingValue	storage/DegenerusGameStorage.sol	WRITE	overpay/bare-send and funded-subscribe ETH deposits, plus an atomic stETH fallback receipt verified by pullAfkingSteth before credit; per-player afking half in tandem (SOLVENCY-01 identity), with fallback uint128 bounds checked before the mutator
 VALUE-IN	claimablePool	_creditBoxProceeds	modules/DegenerusGamePayoutUtils.sol	WRITE	coin-presale-box proceeds: aggregate += full boxEth
 POOL-TO-POOL	claimablePool	_deliverAfkingBuy	modules/GameAfkingModule.sol	WRITE	afking/claimable funding spent on the daily buy (two sites); pools credited via _routeAfkingPoolEth
 POOL-TO-POOL	claimablePool	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	two sites: refund total and terminal affiliate share - both move distributable ETH into claimable

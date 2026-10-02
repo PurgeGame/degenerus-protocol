@@ -2,12 +2,14 @@
 pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DecimatorBattleHarness} from "./helpers/DecimatorBattleHarness.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Makes ranking tests cheap while asserting the exact engine inputs. The real engine
 ///      is separately exercised by shared-dice replay, batching and gas tests.
@@ -27,7 +29,7 @@ contract DecimatorEngineProbe {
         for (uint256 i; i < 30; i += 3) named += (chips >> i) & 7;
         require(chip == 60 && count == 10 - named && bankroll == 3000 ether && bounds == (511 << 16 | 48));
         // The normal battles' shooter-boost row (Craps._shooterBoostTerms).
-        require(boost == (0x1205170618081D091D0B1D0C1D0E200F >> (named << 4)) & 0xFFFF);
+        require(boost == (0x050c070c0a0c0e0c120c140c190c1e0c >> (named << 4)) & 0xFFFF);
         r.peakBankroll = bankroll + board % (1_000_000 ether);
         r.totalRolls = 30;
     }
@@ -104,6 +106,20 @@ contract DecimatorBattleTest is Test {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorEngineProbe).runtimeCode);
     }
 
+    function _assertLockedSettlementIsIdle(DecimatorBattleHarness target) internal {
+        DegenerusGameStorage.DecBattleRound memory beforeRound = target.roundOf(LVL);
+        uint256 beforeGas = gasleft();
+        (uint256 work, uint256 gasUsed, bool moved) = target.settleDecimatorWinners(1500);
+        uint256 callGas = beforeGas - gasleft();
+        assertEq(work, 0);
+        assertFalse(moved);
+        assertLe(gasUsed, callGas, "blocked work still reports actual check gas");
+        DegenerusGameStorage.DecBattleRound memory afterRound = target.roundOf(LVL);
+        assertEq(afterRound.cursor, beforeRound.cursor, "daily lock preserves the run cursor");
+        assertEq(afterRound.phase, beforeRound.phase, "daily lock preserves the phase");
+        assertEq(afterRound.paid, beforeRound.paid, "daily lock preserves the payment cursor");
+    }
+
     function test_DegenAnchorsAndCap() public pure {
         assertEq(ActivityCurveLib.decBattleMultBps(0), 10_000);
         assertEq(ActivityCurveLib.decBattleMultBps(235), 17_049);
@@ -177,12 +193,16 @@ contract DecimatorBattleTest is Test {
         while (!_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 13 ether + 17, word);
         h.freeze(true);
+        _assertLockedSettlementIsIdle(h);
+        assertEq(h.reserved(), 13 ether + 17, "daily lock retains the full reservation");
+        h.freeze(false);
         _drain(h, 122);
         // The champion: half in whole half passes (6.5 ETH buys two), the rest ETH.
         assertEq(h.passesOf(address(1)), 2);
         assertEq(h.balanceOf(address(1)), 13 ether + 17 - 2 * 2.25 ether);
         assertEq(h.reserved(), 13 ether + 17 - 2 * 2.25 ether);
-        assertEq(h.pendingFuture(), 2 * 2.25 ether, "pass money recycles, pending while frozen");
+        assertEq(h.future(), 2 * 2.25 ether, "pass money recycles after daily work unlocks");
+        assertEq(h.pendingFuture(), 0);
         (uint256 worked,, bool moved) = h.settleDecimatorWinners(1500);
         assertEq(worked, 0);
         assertFalse(moved);
@@ -194,8 +214,7 @@ contract DecimatorBattleTest is Test {
         while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 7 ether, word);
         h.freeze(true);
-        (uint256 work, uint256 charged, bool moved) = h.settleDecimatorWinners(1500);
-        assertEq(work, 0); assertEq(charged, 0); assertFalse(moved);
+        _assertLockedSettlementIsIdle(h);
         assertEq(h.reserved(), 7 ether, "locked stage retains the reservation");
         h.freeze(false);
         _drain(h, 1500);
@@ -213,9 +232,12 @@ contract DecimatorBattleTest is Test {
         uint256 word = 2;
         while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 5 ether, word);
-        (uint256 worked, uint256 units,) = h.settleDecimatorWinners(1500);
+        uint256 beforeGas = gasleft();
+        (uint256 worked, uint256 gasUsed,) = h.settleDecimatorWinners(1500);
+        uint256 callGas = beforeGas - gasleft();
         assertEq(worked, 1);
-        assertEq(units, 15, "call base plus the flat tails charge");
+        assertGt(gasUsed, 0, "compatibility return reports measured execution gas");
+        assertLe(gasUsed, callGas, "worker gas excludes the caller's call overhead");
         _drain(h, 1500);
         assertEq(h.roundOf(LVL).winners, 0);
         assertEq(h.future(), 5 ether, "all-tails pool returns to future");
@@ -227,9 +249,11 @@ contract DecimatorBattleTest is Test {
         _populate(h, LVL, 4);
         h.seal(LVL, 3 ether, 11);
         h.terminal();
-        (uint256 worked, uint256 units, bool moved) = h.settleDecimatorWinners(1500);
+        uint256 beforeGas = gasleft();
+        (uint256 worked, uint256 gasUsed, bool moved) = h.settleDecimatorWinners(1500);
+        uint256 callGas = beforeGas - gasleft();
         assertEq(worked, 0);
-        assertEq(units, 0);
+        assertLe(gasUsed, callGas, "even an idle worker reports actual check gas");
         assertFalse(moved);
         assertEq(uint24(h.queue()), LVL);
         assertEq(h.roundOf(LVL).cursor, 0);
@@ -276,6 +300,48 @@ contract DecimatorBattleTest is Test {
         }
     }
 
+    function _drainWithGas(DecimatorBattleHarness target, uint256 callGas)
+        internal returns (uint256 calls, bytes32 transcript)
+    {
+        vm.recordLogs();
+        while (target.queue() != 0 && calls < 200) {
+            vm.cool(address(target));
+            vm.cool(ContractAddresses.CRAPS_ENGINE);
+            MineFlipGas.Result memory result = target.runDecimatorWork{gas: callGas}(callGas);
+            assertTrue(result.progressed, "funded call advances an atomic obligation");
+            ++calls;
+        }
+        assertEq(target.queue(), 0, "native worker completes");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(target)) {
+                transcript = keccak256(abi.encode(transcript, logs[i].topics, logs[i].data));
+            }
+        }
+    }
+
+    function test_SuppliedGasPartitionsPreserveRealDiceTranscriptAndPayouts() public {
+        _populate(h, LVL, 31);
+        h.seal(LVL, 13 ether + 77, type(uint256).max - 77);
+        uint256 snapshot = vm.snapshotState();
+        (uint256 fullCalls, bytes32 fullTranscript) = _drainWithGas(h, 15_000_000);
+        bytes32 fullState = _settledState(h);
+        assertTrue(vm.revertToState(snapshot));
+        (uint256 splitCalls, bytes32 splitTranscript) = _drainWithGas(h, 1_000_000);
+        assertGt(splitCalls, fullCalls, "actual supplied gas creates additional checkpoints");
+        assertEq(splitTranscript, fullTranscript, "ordered runs, ranking and payouts are unchanged");
+        assertEq(_settledState(h), fullState, "all winners, balances and reservations are unchanged");
+    }
+
+    function _settledState(DecimatorBattleHarness target) internal view returns (bytes32 digest) {
+        DegenerusGameStorage.DecBattleRound memory round = target.roundOf(LVL);
+        digest = keccak256(abi.encode(round, target.future(), target.reserved()));
+        for (uint8 i; i < round.winners; ++i) digest = keccak256(abi.encode(digest, target.nodeOf(LVL, i)));
+        for (uint160 i = 1; i <= 31; ++i) {
+            digest = keccak256(abi.encode(digest, target.balanceOf(address(i)), target.passesOf(address(i))));
+        }
+    }
+
     function test_RealEngineReplayUsesSharedDiceAndAbsolutePeak() public {
         _populate(h, LVL, 16);
         uint256 word = uint256(keccak256("decimator replay"));
@@ -296,7 +362,7 @@ contract DecimatorBattleTest is Test {
                     seed,
                     3000 ether,
                     address(uint160(id)),
-                    (32 << 8) | 15,
+                    (30 << 8) | 12,
                     (511 << 16) | 48
                 );
             assertEq(node.score, h.entryOf(LVL, id).stack / 1 ether * run.peakBankroll);
@@ -486,35 +552,33 @@ contract DecimatorBattleTest is Test {
         assertLt(reusedUnits, freshUnits, "reused slots are charged less than fresh ones");
     }
 
-    /// @dev The longest run of the 200,000-run simulation: entry 200 of round 404 (a fully random
-    ///      board) ran 430 rolls and 35 shooters unbounded, inside the Decimator's own bounds. Any
-    ///      roll bound under 512 cuts exactly, as the Decimator's 511 does: 400 stops this run at
-    ///      exactly 400 rolls; a smaller shooter cap stops it at that shooter; oversized bounds
-    ///      clamp to the engine's.
+    /// @dev Fund the fixture beyond affordability so the bounds themselves decide the stop.
+    ///      The old 3000-FLIP fixture's duration depended on the replaced random bonus.
     function test_RunBoundsCapRollsAndShooters() public {
         CrapsEngine engine = CrapsEngine(ContractAddresses.CRAPS_ENGINE);
         uint256 word = uint256(keccak256(abi.encode("round200k", uint256(404))));
         bytes32 seed = keccak256(abi.encode(DICE, word, LVL));
         uint256 board = uint256(keccak256(abi.encode(BOARD, word, LVL, uint64(200))));
         address owner = address(uint160(200) + 0x1000);
-        uint256 boost = 0x1205170618081D091D0B1D0C1D0E200F & 0xFFFF;
-        Craps.SlipResult memory free = engine.settleSlip(0, 60, board, 10, seed, 3000 ether, 0, owner, boost);
-        assertEq(free.totalRolls, 430);
-        assertEq(free.handsPlayed, 35);
-        Craps.SlipResult memory run = engine.settleSlipBounded(0, 60, board, 10, seed, 3000 ether, owner, boost, (400 << 16) | 40);
+        uint256 boost = 0x050c070c0a0c0e0c120c140c190c1e0c & 0xFFFF;
+        Craps.SlipResult memory free = engine.settleSlip(0, 60, board, 10, seed, 1e40, 0, owner, boost);
+        assertGe(free.totalRolls, 600, "funded fixture must reach the roll budget");
+        Craps.SlipResult memory run = engine.settleSlipBounded(0, 60, board, 10, seed, 1e40, owner, boost, (400 << 16) | 512);
         assertEq(run.totalRolls, 400, "exact roll cap");
-        assertLe(run.handsPlayed, 40);
-        assertGe(run.peakBankroll, 3000 ether);
-        Craps.SlipResult memory short = engine.settleSlipBounded(0, 60, board, 10, seed, 3000 ether, owner, boost, (400 << 16) | 20);
+        assertLe(run.handsPlayed, 512);
+        assertGe(run.peakBankroll, 1e40);
+        Craps.SlipResult memory exact = engine.settleSlipBounded(0, 60, board, 10, seed, 1e40, owner, boost, (511 << 16) | 512);
+        assertEq(exact.totalRolls, 511, "exact 511-roll cut");
+        Craps.SlipResult memory short = engine.settleSlipBounded(0, 60, board, 10, seed, 1e40, owner, boost, (400 << 16) | 20);
         assertEq(short.handsPlayed, 20, "shooter cap");
         Craps.SlipResult memory clamped =
-            engine.settleSlipBounded(0, 60, board, 10, seed, 3000 ether, owner, boost, type(uint256).max);
+            engine.settleSlipBounded(0, 60, board, 10, seed, 1e40, owner, boost, type(uint256).max);
         assertEq(abi.encode(clamped), abi.encode(free), "oversized bounds clamp to the engine limits");
     }
 
     /// @dev Big shares: the champion (position 0) takes half its amount in whole half passes and the
     ///      rest in ETH; the other places alternate ETH (odd) and whole half passes (even). Only pass
-    ///      money leaves for the future pool (pending while frozen); the other pass winners'
+    ///      money leaves for the future pool after the daily lock clears; the other pass winners'
     ///      leftovers top up the other ETH winners, and that split's dust follows the passes.
     function test_BigSharesAlternateEthAndHalfPasses() public {
         for (uint256 frozen; frozen < 2; ++frozen) {
@@ -524,40 +588,51 @@ contract DecimatorBattleTest is Test {
             _populate(t, LVL, 60); // up to six places
             uint256 pool = 60 ether + 7;
             t.seal(LVL, uint128(pool), 5);
-            if (frozen == 1) t.freeze(true);
-            _drain(t, 1500);
-            DegenerusGameStorage.DecBattleRound memory round = t.roundOf(LVL);
-            uint256 w = round.winners;
-            assertGt(w, 1, "fixture has several winners");
-            uint256 base = (pool - pool / 20) / w;
-            uint256 champ = pool - base * (w - 1);
-            uint256 passWinners = (w - 1) / 2;
-            uint256 ethWinners = w - 1 - passWinners;
-            uint256 champPasses = champ / 2 / 2.25 ether;
-            uint256 leftover = passWinners * (base % 2.25 ether);
-            uint256 perEth = leftover / ethWinners;
-            uint256 passMoney = champPasses * 2.25 ether + passWinners * (base / 2.25 ether) * 2.25 ether;
-            assertEq(uint64(t.nodeOf(LVL, 0).key), round.champion);
-            address champion = address(uint160(round.champion));
-            assertEq(t.passesOf(champion), champPasses, "champion: half in whole half passes");
-            assertEq(t.balanceOf(champion), champ - champPasses * 2.25 ether, "champion: the rest ETH");
-            uint256 eth = champ - champPasses * 2.25 ether;
-            for (uint8 i = 1; i < w; ++i) {
-                address owner = address(uint160(uint64(t.nodeOf(LVL, i).key)));
-                if (i % 2 == 0) {
-                    assertEq(t.passesOf(owner), base / 2.25 ether, "whole half passes");
-                    assertEq(t.balanceOf(owner), 0);
-                } else {
-                    assertEq(t.balanceOf(owner), base + perEth, "ETH share plus the leftovers");
-                    assertEq(t.passesOf(owner), 0);
-                    eth += base + perEth;
-                }
+            if (frozen == 1) {
+                t.freeze(true);
+                _assertLockedSettlementIsIdle(t);
+                assertEq(t.reserved(), pool, "locked round keeps its full reservation");
+                t.freeze(false);
             }
-            uint256 recycled = passMoney + (leftover - perEth * ethWinners);
-            assertEq(eth + recycled, pool, "every wei accounted");
-            assertEq(t.reserved(), eth, "the reservation keeps exactly the ETH credits");
-            assertEq(frozen == 1 ? t.pendingFuture() : t.future(), recycled, "only pass money (and dust) recycles");
+            _drain(t, 1500);
+            this.assertBigSharePayouts(t, pool);
         }
+    }
+
+    // Separate test call frame keeps the via-IR fixture within its stack limit.
+    function assertBigSharePayouts(DecimatorBattleHarness t, uint256 pool) external {
+        DegenerusGameStorage.DecBattleRound memory round = t.roundOf(LVL);
+        uint256 w = round.winners;
+        assertGt(w, 1, "fixture has several winners");
+        assertEq(uint64(t.nodeOf(LVL, 0).key), round.champion);
+        uint256 base = (pool - pool / 20) / w;
+        uint256 champ = pool - base * (w - 1);
+        uint256 passWinners = (w - 1) / 2;
+        uint256 ethWinners = w - 1 - passWinners;
+        uint256 champPasses = champ / 2 / 2.25 ether;
+        uint256 leftover = passWinners * (base % 2.25 ether);
+        uint256 perEth = leftover / ethWinners;
+        uint256 passMoney = champPasses * 2.25 ether + passWinners * (base / 2.25 ether) * 2.25 ether;
+        address champion = address(uint160(round.champion));
+        assertEq(t.passesOf(champion), champPasses, "champion: half in whole half passes");
+        assertEq(t.balanceOf(champion), champ - champPasses * 2.25 ether, "champion: the rest ETH");
+        uint256 eth = champ - champPasses * 2.25 ether;
+        for (uint8 i = 1; i < w; ++i) {
+            address owner = address(uint160(uint64(t.nodeOf(LVL, i).key)));
+            if (i % 2 == 0) {
+                assertEq(t.passesOf(owner), base / 2.25 ether, "whole half passes");
+                assertEq(t.balanceOf(owner), 0);
+            } else {
+                assertEq(t.balanceOf(owner), base + perEth, "ETH share plus the leftovers");
+                assertEq(t.passesOf(owner), 0);
+                eth += base + perEth;
+            }
+        }
+        uint256 recycled = passMoney + (leftover - perEth * ethWinners);
+        assertEq(eth + recycled, pool, "every wei accounted");
+        assertEq(t.reserved(), eth, "the reservation keeps exactly the ETH credits");
+        assertEq(t.future(), recycled, "only pass money (and dust) recycles");
+        assertEq(t.pendingFuture(), 0, "settlement runs only after the daily lock clears");
     }
 
     function test_SmallSharesAreAllEth() public {

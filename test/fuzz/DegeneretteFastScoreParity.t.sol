@@ -179,7 +179,7 @@ contract DegeneretteFastScoreParityTest is Test {
     }
 
     function testFuzzTicketMatchesReference(uint256 seed, uint8 symbol) public view {
-        symbol = uint8(bound(symbol, 0, 31));
+        symbol = uint8(bound(symbol, 0, 23));
         assertEq(h.ticket(seed, symbol), _refTicket(seed, symbol));
     }
 
@@ -191,7 +191,8 @@ contract DegeneretteFastScoreParityTest is Test {
         public
         view
     {
-        symbol = uint8(bound(symbol, 0, 32));
+        symbol = uint8(bound(symbol, 0, 24));
+        if (symbol == 24) symbol = 32;
         uint8[3] memory currencies = [uint8(0), 1, CURRENCY_WWXRP];
         currency = currencies[bound(currency, 0, 2)];
         (uint32 pt, uint32 rt, uint8 hq, uint8 s, uint8 g) = h.spin(seed, houseSeed, symbol, currency);

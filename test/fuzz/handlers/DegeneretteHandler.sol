@@ -74,7 +74,7 @@ contract DegeneretteHandler is Test {
     /// @param actorSeed Seed for actor selection
     /// @param amountPerSpin Raw bet amount, bounded to [0.005 ether, 1 ether]
     /// @param ticketCount Raw ticket count, bounded to [1, 10]
-    /// @param symbol Raw hero symbol, bounded to [0, 31]
+    /// @param symbol Raw hero symbol, bounded to [0, 23] (no Dice)
     function placeEthBet(
         uint256 actorSeed,
         uint128 amountPerSpin,
@@ -88,7 +88,7 @@ contract DegeneretteHandler is Test {
         // Bound inputs
         amountPerSpin = uint128(bound(uint256(amountPerSpin), 0.005 ether, 1 ether) / 1 gwei * 1 gwei);
         ticketCount = uint8(bound(uint256(ticketCount), 1, 10));
-        symbol = uint8(bound(uint256(symbol), 0, 31));
+        symbol = uint8(bound(uint256(symbol), 0, 23));
 
         uint256 totalBet = uint256(amountPerSpin) * uint256(ticketCount);
         if (totalBet > currentActor.balance) return;

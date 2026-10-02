@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GoldSixLib} from "../libraries/GoldSixLib.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
@@ -862,12 +864,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             uint8 trait = traitIds[i];
             uint256 len = _bucketLength(lvl, trait);
             lens[i] = len;
-            uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
-            address deity;
-            if (fullSymId < 32) {
-                deity = deityBySymbol[fullSymId];
-                deities[i] = deity;
-            }
+            address deity = _traitDeity(trait);
+            deities[i] = deity;
             if (len != 0 || deity != address(0)) {
                 activeMask |= uint8(1 << i);
                 unchecked {
@@ -927,7 +925,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     // =========================================================================
 
     /// @dev Picks the solo bucket quadrant for ETH-distribution rotation.
-    ///      When any winning trait has color==7 (gold tier), returns a uniformly-random
+    ///      A surviving gold six always assigns the solo pool to Dice. Otherwise,
+    ///      when any winning trait has color==7 (gold tier), returns a uniformly-random
     ///      gold quadrant via bits 4+ of `entropy` (disjoint from the bucket-rotation
     ///      low 2 bits at `entropy & 3`). Otherwise returns the existing rotation index
     ///      `uint8((3 - (entropy & 3)) & 3)` matching `JackpotBucketLib.soloBucketIndex`.
@@ -937,6 +936,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///        gold tie-break (bits 2-3 unused by either path).
     /// @return Quadrant index 0-3 to receive the solo bucket assignment.
     function _pickSoloQuadrant(uint8[4] memory traits, uint256 entropy) internal pure returns (uint8) {
+        if (traits[3] == GoldSixLib.TRAIT) return 3;
         // Pack gold quadrant indices into a uint256 (4 slots × 8 bits each).
         // Each slot holds a quadrant index 0-3. Pure-stack representation —
         // no memory allocation per call.
@@ -1289,12 +1289,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      read the same on every roll of a day, the resolve-day ban fields holding the ban
     ///      after the resolve clears the armed ones.
     function _rollMainTraits(uint256 randWord) private view returns (uint32) {
-        return _rollBoard(randWord, _goldenTicketBanQuadrant(goldenTicket, dailyIdx));
+        uint32 board = _rollBoard(randWord, _goldenTicketBanQuadrant(goldenTicket, dailyIdx));
+        uint8 dice = GoldSixLib.daily(uint8(board >> 24), randWord);
+        return (board & 0x00ffffff) | (uint32(dice) << 24);
     }
 
     /// @dev Samples the day's hero `(quadrant, symbol)` via a weighted random roll across
-    ///      the 32 packed slots of `dailyHeroWagers[day]`. Pass 1 SLOADs the 4 packed
-    ///      quadrants once, decodes 32 uint32 amounts, accumulates the total, and tracks
+    ///      the 24 eligible slots of `dailyHeroWagers[day]`; Dice never receive a boost.
+    ///      Pass 1 SLOADs the 3 eligible packed quadrants once, decodes their uint32
+    ///      amounts, accumulates the total, and tracks
     ///      the largest-amount slot (first-seen on ties to match the scan order).
     ///      Pass 2 walks the cached weights with a cumulative cursor against
     ///      `pick = uint64(uint256(keccak256(abi.encode(entropy, HERO_SYMBOL_TAG, day))) % effectiveTotal)`
@@ -1317,12 +1320,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         view
         returns (bool hasWinner, uint8 winQuadrant, uint8 winSymbol)
     {
-        uint32[32] memory weights;
+        uint32[24] memory weights;
         uint64 total;
         uint32 maxAmount;
         uint8 leaderIdx;
 
-        for (uint8 q; q < 4; ) {
+        for (uint8 q; q < DEGENERETTE_HERO_COUNT / 8; ) {
             if (q == banQuadrant) {
                 unchecked {
                     ++q;
@@ -1362,7 +1365,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         );
 
         uint64 cumulative;
-        for (uint8 idx; idx < 32; ) {
+        for (uint8 idx; idx < DEGENERETTE_HERO_COUNT; ) {
             cumulative += uint64(weights[idx]);
             if (idx == leaderIdx) {
                 cumulative += leaderBonus;
@@ -1398,11 +1401,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
 
         // traitId layout: (quadrant << 6) | (color << 3) | symIdx
         // fullSymId = quadrant * 8 + symIdx
-        uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
-        address deity;
-        if (fullSymId < 32) {
-            deity = deityBySymbol[fullSymId];
-        }
+        address deity = _traitDeity(trait);
 
         return
             _randTraitTicket(

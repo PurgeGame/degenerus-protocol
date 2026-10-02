@@ -97,7 +97,8 @@ follow the advance path's skip/saturate policy rather than reverting.
 |---|---|
 | 0–4 | `max(2, floor(bucketLength / 50))` |
 | 5–6 | `max(1, floor(bucketLength / 100))` |
-| Gold (7) | 1 |
+| Gold (7), except gold Dice 6 | 1 |
+| Gold Dice 6 | 0 |
 | No deity owns the symbol | 0 |
 
 ## ETH hero wagers

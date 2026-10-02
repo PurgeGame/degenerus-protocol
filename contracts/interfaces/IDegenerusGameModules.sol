@@ -645,7 +645,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported)
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP). Each spin resolves independently.
-    /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
+    /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
@@ -659,7 +659,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @param stake The WWXRP bet amount staked for the one spin.
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param symbol Hero symbol 0..31, or 32 to generate a random hero.
+    /// @param symbol Hero symbol 0..23 (no Dice), or 32 for a random eligible hero.
     /// @return wwxrpOut The spin's WWXRP payout, returned for the box entry's WWXRP lane (the
     ///         caller mints once).
     function resolveWwxrpSpinFromBox(
@@ -678,7 +678,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @param totalStake The total FLIP budget split across the three spins.
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param symbol Hero symbol 0..31, or 32 to generate a random hero.
+    /// @param symbol Hero symbol 0..23 (no Dice), or 32 for a random eligible hero.
     /// @return flipOut The summed payout after its survival flip, returned for the box entry's
     ///         FLIP lane (credited by the caller at flush).
     function resolveFlipSpinsFromBox(
@@ -697,7 +697,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @param stake The ETH bet amount for the one spin (the ticket budget it replaces).
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
-    /// @param symbol Hero symbol 0..31, or 32 to generate a random hero.
+    /// @param symbol Hero symbol 0..23 (no Dice), or 32 for a random eligible hero.
     function resolveEthSpinFromBox(
         address player,
         uint256 stake,
@@ -736,6 +736,9 @@ interface IDegenerusGameBingoModule {
 ///      (delegatecall), so msg.sender is preserved end-to-end (the consent gates and
 ///      the bounty payee read the original caller).
 interface IGameAfkingModule {
+    /// @notice GAME-only atomic stETH fallback funding operation.
+    function pullAfkingSteth(address subscriber, address source, uint256 shortfall) external returns (uint256);
+
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);

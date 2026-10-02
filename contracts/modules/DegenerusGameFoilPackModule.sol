@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GoldSixLib} from "../libraries/GoldSixLib.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 /*
@@ -143,15 +145,15 @@ contract DegenerusGameFoilPackModule is
 
     // Per-score face counts for the graded match (see _tryClaimFoilMatch).
     // One face stakes 1,000 FLIP or priceForLevel(L) ETH — one ticket of value either
-    // way (WWXRP, the third currency, is worthless). E[faces/comparison] = 0.087774.
+    // way (WWXRP, the third currency, is worthless). The schedule was calibrated to
+    // E[faces/comparison] = 0.087774 on an independent, uniform winning board. That is
+    // a reference baseline: hero selection and gold-six survival/redistribution mean
+    // actual match probabilities depend on the stored line and the day's board policy.
     // A pack compares its four lines against the day's one board every day, purchase and
     // jackpot days alike, so its match value grows with how long its level runs: FOIL IS A
-    // BET ON THE LEVEL SLOWING DOWN. Valued at ~0.8 tickets a face (the ETH and FLIP lanes,
-    // 40% each), a pack bought on the first purchase day of a level with a three-day
-    // jackpot phase returns ~8% of its ten-ticket cost on a one-day purchase phase, ~20% at
-    // five days, ~34% at ten and ~90% at the full thirty; a fast level pays mostly to
-    // high-score buyers through the gold ladder. Score T (0..8) pays from T=4; T=8 (all four
-    // full doubles) also grants a half whale pass.
+    // BET ON THE LEVEL SLOWING DOWN. The ETH and FLIP lanes each occur 40% of the time;
+    // their faces fund reward spins rather than guaranteed face-value payouts.
+    // Score T (0..8) pays from T=4; T=8 (all four full doubles) also grants a half whale pass.
     uint256 private constant FOIL_FACES_T4 = 16;
     uint256 private constant FOIL_FACES_T5 = 48;
     uint256 private constant FOIL_FACES_T6 = 280;
@@ -630,9 +632,10 @@ contract DegenerusGameFoilPackModule is
 
         // The pack's first eligible draw and buy-time activity score (spin RTP).
         // Pending packs have no generated lines and cannot claim.
-        (bool present, , uint24 resolveDay, uint16 activityScore) =
-            _foilRecordFor(player, L);
-        if (!present || _foilRecordWord(player, L) & _FOIL_READY == 0) return false;
+        uint256 record = _foilRecordWord(player, L);
+        if (record & _FOIL_READY == 0) return false;
+        uint24 resolveDay = uint24(record);
+        uint16 activityScore = uint16(record >> _FOIL_SCORE_SHIFT);
 
         // The first eligible draw is pinned when the cohort materializes.
         // A draw already sealed that day cannot be claimed retroactively.
@@ -641,14 +644,14 @@ contract DegenerusGameFoilPackModule is
         // A sealed day has one level. Exact-day bitmap lanes separate all four tickets.
         if (_foilMatchAlreadyClaimed(player, uint24(day), ticketIndex)) return false;
 
-        uint32 sel = _foilStoredLines(player, L)[ticketIndex];
+        uint32 sel = uint32(record >> (_FOIL_LINES_SHIFT + ticketIndex * 32));
 
         // Graded score vs the day's winning set: per quadrant a symbol
         // match scores +1, and if the color of that same quadrant also matches it
         // scores +2; a symbol miss scores 0 (color only counts once the symbol is hit).
-        // Score T in {0..8}. Color (bits 5-3) is boosted on the foil line but the
-        // winning set is uniform, so P(symbol) = P(color) = 1/8 — both boost-invariant,
-        // so the faces calibration holds at any multBps.
+        // Score T in {0..8}. The foil's boosted colors, daily hero and gold-six
+        // survival/redistribution affect match probabilities; the face schedule is
+        // fixed and does not compensate for those differences.
         uint256 score;
         for (uint256 q; q < 4; ++q) {
             uint8 selByte = uint8(sel >> (8 * q));
@@ -690,8 +693,9 @@ contract DegenerusGameFoilPackModule is
         address buyer,
         uint24 lvl,
         uint256 entropy,
-        uint16 multBps
-    ) private pure returns (uint32[4] memory lines) {
+        uint16 multBps,
+        bool goldSixTaken
+    ) private view returns (uint32[4] memory lines) {
         uint256[7] memory cut = DegenerusTraitUtils.foilCuts(multBps);
         for (uint256 i; i < 4; ++i) {
             uint256 seed = uint256(
@@ -701,6 +705,12 @@ contract DegenerusGameFoilPackModule is
             uint8 tB = DegenerusTraitUtils.foilTrait(uint64(seed >> 64), cut) | 64;
             uint8 tC = DegenerusTraitUtils.foilTrait(uint64(seed >> 128), cut) | 128;
             uint8 tD = DegenerusTraitUtils.foilTrait(uint64(seed >> 192), cut) | 192;
+            if (tD == GoldSixLib.TRAIT) {
+                // Read live cap state at most once, and only when this pack needs it.
+                // Retired levels enter with goldSixTaken=true and never read a stale bucket.
+                if (goldSixTaken || _goldSixTaken(lvl)) tD = GoldSixLib.replacement(seed);
+                goldSixTaken = true;
+            }
             lines[i] =
                 uint32(tA) |
                 (uint32(tB) << 8) |
@@ -756,7 +766,7 @@ contract DegenerusGameFoilPackModule is
         // Only a symbol carries into the award spin; all colors are rerolled,
         // so the foil's boosted color mix cannot change the spin EV.
 
-        uint8 quadrant = uint8(seed) & 3;
+        uint8 quadrant = uint8(seed % (DEGENERETTE_HERO_COUNT / 8));
         uint8 symbol = uint8((sel >> (quadrant * 8)) & 7) | (quadrant << 3);
         if (c < 40) {
             // ETH (40%): one pool-capped spin; over-cap recircs to the lootbox.
@@ -904,7 +914,8 @@ contract DegenerusGameFoilPackModule is
         bool terminal = gameOver || _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
             || _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint32[256] memory counts;
-        uint8[256] memory touchedTraits;
+        // Four lines contribute at most sixteen distinct trait bytes per pack.
+        uint8[16] memory touchedTraits;
         // Includes a cold pack, all bucket flushes, and the possible grand push.
         while (entropy != 0 && cursor < total && MineFlipGas.canRun(meter, GasBounds.FOIL_PACK, 100_000)) {
             uint24 packLevel = uint24(packs[cursor] >> 160);
@@ -956,18 +967,22 @@ contract DegenerusGameFoilPackModule is
         uint256 entropy,
         bool terminal,
         uint32[256] memory counts,
-        uint8[256] memory touchedTraits
+        uint8[16] memory touchedTraits
     ) private returns (bool grandPaid, uint32 units) {
         address buyer = address(uint160(packedLvlBuyer));
         uint24 lvl = uint24(packedLvlBuyer >> 160);
         // Only the terminal payout level needs generated traits after the ending latches.
         // Consuming unrelated packs must not reassign the frozen terminal payout buffer.
         if (terminal && lvl != _gameOverTicketLevel(level)) return (false, 3);
+        // Retired levels have no live inventory to authenticate an unclaimed slot.
+        // Their delayed claim records redirect every gold six, preserving uniqueness.
+        bool retired = _ticketLevelRetired(lvl);
         uint32[4] memory lines = _deriveFoilLines(
             buyer,
             lvl,
             entropy,
-            _foilMultFor(buyer, lvl)
+            _foilMultFor(buyer, lvl),
+            retired
         );
 
         uint256 record = _foilRecordWord(buyer, lvl);
@@ -978,7 +993,7 @@ contract DegenerusGameFoilPackModule is
         // Tomorrow's word can land after a turbo transition retired this pack's
         // inventory. Claims still use its retained record and daily word; never
         // reassign a newer buffer or let this old generation queue block progress.
-        if (!_ticketLevelRetired(lvl)) {
+        if (!retired) {
             uint16 touchedLen;
             for (uint256 i; i < 4; ++i) {
                 uint32 line = lines[i];

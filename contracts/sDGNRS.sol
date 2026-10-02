@@ -1003,7 +1003,7 @@ contract sDGNRS {
             _takeRedemptionHead(player, day);
         }
         // Single live claims use the same pinned session word as the forced miner drain.
-        if (!_claimRedemptionFor(player, day, roll, isTerminal, 0)) revert NoClaim();
+        if (!_claimRedemptionFor(player, day, roll, isTerminal, isTerminal ? 0 : _redemptionWord)) revert NoClaim();
     }
 
     /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
@@ -1139,9 +1139,9 @@ contract sDGNRS {
             uint16 actScore = claimActivityScore > 0 ? claimActivityScore - 1 : 0;
             // Burns commit before their settlement session's word is known. The forced
             // cohort pins that word, including a session delivered after a multi-day stall.
-            // Manual claims must use the same pinned entropy as the miner drain.
+            // Every live caller authenticates the queue day and passes its pinned
+            // word before nested payout calls; manual and forced settlement agree.
             uint256 rngWord = rngWordNext;
-            if (_redemptionQueueDay == day) rngWord = _redemptionWord;
             if (rngWord <= 1) revert NotResolved();
             uint256 entropy = EntropyLib.hash2(rngWord, uint256(uint160(player)));
             uint256 bal = address(this).balance;
@@ -1264,12 +1264,9 @@ contract sDGNRS {
 
         DayPending storage pool = pendingAggregate;
 
-        // 50% supply cap per day — lazy-init the snapshot on the first burn of the day.
+        // The first burn initialized the day's snapshot above; later top-ups retain it.
         // supplySnapshot stored in whole tokens (1e18 raw divisor): INITIAL_SUPPLY = 1e30 → 1e12
         // whole tokens, comfortably under uint64.max (~1.84e19).
-        if (pool.supplySnapshot == 0 && pool.burned == 0) {
-            pool.supplySnapshot = uint64(_totalSupply / 1e18);
-        }
         // Ceiling-divide amount→whole tokens so cap accounting is conservative even when amount
         // isn't an exact multiple of 1e18. The per-day supply cap holds: pool.burned * 1e18
         // is always ≥ actual cumulative burns for the day.

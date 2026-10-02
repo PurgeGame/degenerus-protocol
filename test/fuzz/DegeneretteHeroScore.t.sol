@@ -12,6 +12,46 @@ contract DegeneretteHeroScoreTest is Test {
         h = new DegeneretteMathHarness();
     }
 
+    function testDiceCannotBeChosenAsHeroes() public {
+        for (uint8 symbol = 24; symbol < 32; ++symbol) {
+            vm.expectRevert(bytes4(keccak256("InvalidBet()")));
+            h.hero(123, symbol);
+            vm.expectRevert(bytes4(keccak256("InvalidBet()")));
+            h.ticket(123, symbol);
+            vm.expectRevert(bytes4(keccak256("InvalidBet()")));
+            h.spin(123, 456, symbol, 0);
+        }
+    }
+
+    function testEveryOtherHeroRemainsSelectable() public view {
+        for (uint8 symbol; symbol < 24; ++symbol) {
+            assertEq(h.hero(123, symbol), symbol);
+            assertEq((h.ticket(123, symbol) >> ((symbol >> 3) * 8)) & 7, symbol & 7);
+        }
+    }
+
+    function testFuzzRandomHeroNeverSelectsDice(uint256 seed) public view {
+        uint8 hero = h.hero(seed, 32);
+        assertLt(hero, 24);
+    }
+
+    function testRandomHeroStillReachesAllOtherSymbols() public view {
+        uint256 seen;
+        for (uint256 seed; seed < 1024; ++seed) seen |= uint256(1) << h.hero(seed, 32);
+        assertEq(seen, uint256(type(uint24).max));
+    }
+
+    function testAllDiceStillRollNaturallyInEveryColor() public view {
+        for (uint256 color; color < 8; ++color) {
+            for (uint256 die; die < 8; ++die) {
+                uint256 houseSeed = (color << 192) | (die << 224);
+                (uint32 player, uint32 house,,,) = h.spin(123, houseSeed, 0, 0);
+                assertEq(uint8(house >> 24), 192 | (color << 3) | die);
+                assertEq(player, h.ticket(123, 0));
+            }
+        }
+    }
+
     function testHeroTwoPointsAndIndependentColorOnePoint() public view {
         for (uint8 hero; hero < 4; ++hero) {
             uint32 allMiss = 0x09090909;

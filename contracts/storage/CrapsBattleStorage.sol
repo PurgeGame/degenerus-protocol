@@ -379,18 +379,21 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      another at settlement keys a different battle instead of mispaying this one.
     uint256 internal constant _TERM_HIGH_SHIFT = 44;
 
-    /// @dev The high-roller sideboard, ONE word per battle that actually takes a high seat:
+    /// @dev Shared sideboard, ONE word per battle:
     ///        bits   0.. 31  how many high seats the field holds
     ///        bits  32..136  the best composite among them, the SAME 105-bit score the main
     ///                       scoreboard ranks on, so neither lane can rank on money it scaled
     ///        bits 137..168  the seat holding that lead
     ///        bit  169       done: the sole rider settled, or the competitive award was paid
-    ///      Nothing else is needed. Main finalization proves every high score has been folded,
+    ///        bits 170..188  longest shared hand, including its ordinal (Craps.SlipResult)
+    ///      Main finalization proves every high score and hand record has been folded,
     ///      the head count is known from entry, and the principal follows from `H`, the bounty
     ///      and that count.
     uint256 internal constant _HF_SCORE_SHIFT = 32;
     uint256 internal constant _HF_WINNER_SHIFT = 137;
     uint256 internal constant _HF_DONE_BIT = 1 << 169;
+    uint256 internal constant _HF_HOTTEST_SHIFT = 170;
+    uint256 internal constant _HF_HOTTEST_MASK = (1 << 19) - 1;
 
     /// @dev A day's ticket word holds EIGHT counts in ONE slot: the total in the low 32 bits and
     ///      one high-roller count PER PERIOD above it, 32 bits each — period `p`'s at bits
@@ -581,6 +584,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         ///      progressive reads the high point now — and survives only as telemetry.
         uint256 totalRolls;
         Craps.SlipStop stop;
+        uint256 hottestHand;
     }
 
     /// @dev A bet is ONE word — `player | chips | flags`, and nothing else. It does not carry
@@ -797,6 +801,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _SPLIT_SRC_HIGH_CONTESTED = uint256(2) << 248;
     uint256 internal constant _SPLIT_SRC_HIGH_SOLE = uint256(3) << 248;
     uint256 internal constant _SPLIT_SRC_PROGRESSIVE = uint256(4) << 248;
+    uint256 internal constant _SPLIT_SRC_HOTTEST = uint256(5) << 248;
     uint256 internal constant _SPLIT_GROSS_MASK = (uint256(1) << 248) - 1;
 
     /// @notice A bet slip took a seat at a slot.
@@ -970,6 +975,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         pot and only the pot: the LIQUID figure, after any slice of a scheduled boost
     ///         banked as pass credit under `CrapsProtocolAwardSplit`.
     event CrapsBattlePaid(uint256 indexed betId, bytes32 indexed battleKey, address indexed player, uint256 amount);
+
+    /// @notice The longest shared hand won 10% of the scheduled main pot. High-lane funds
+    ///         are excluded. `amount` is liquid FLIP; protocol pass credit is logged separately.
+    event CrapsHottestShooterPaid(
+        uint256 indexed betId, bytes32 indexed battleKey, address indexed player, uint16 rolls, uint256 amount
+    );
 
     /// @notice A protocol day banked its half of the main allocation in the progressive.
     /// @dev ONCE PER DAY, inside the same guarded block that fixes the ladder half — so repeated

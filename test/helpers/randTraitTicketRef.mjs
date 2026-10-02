@@ -108,7 +108,7 @@ export function goldTierVirtualCount(trait, len, deityPresent) {
   const traitNum = Number(trait) & 0xff;
   const fullSymId = ((traitNum >> 6) & 0x03) * 8 + (traitNum & 0x07);
   if (fullSymId >= 32) return 0n;
-  if (!deityPresent) return 0n;
+  if (!deityPresent || traitNum === 253) return 0n;
   // Gold tier: color = (trait >> 3) & 7 == 7
   if (((traitNum >> 3) & 7) === 7) {
     return 1n;

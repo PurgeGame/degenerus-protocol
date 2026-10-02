@@ -38,7 +38,8 @@ import {
     IDegenerusGameWhaleModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {IStETH} from "../interfaces/IStETH.sol";
 
 /// @title IQuestCompletionView
 /// @notice Minimal quest-view surface for the day-0 grounding check: the per-slot
@@ -81,8 +82,9 @@ interface ISeatToken {
  *      consumption uses the active published session word. The Keeper module
  *      owns global ordering, fixed gas accounting, and miner compensation.
  *
- * @custom:invariant No reentrancy guard — strict CEI everywhere; the module is
- *                   never a payee. The two-tier funding-skip exemption keys on
+ * @custom:invariant stETH fallback pulls use an atomic self-call to pinned Lido
+ *                   stETH; funded delivery retains strict CEI. The
+ *                   two-tier funding-skip exemption keys on
  *                   the un-spoofable pinned `ContractAddresses.VAULT` / `SDGNRS`
  *                   identity (on `player`, never `src`) — no settable exemption.
  * @custom:invariant No error-swallowing valve on the funded delivery path: the funded
@@ -169,6 +171,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///        1 = AutoPause (funding-skip kill of a NORMAL sub)
     ///        2 = CancelReclaim (in-pass reclaim of an externally-cancelled tombstone)
     event SubscriptionExpired(address indexed player, uint8 reason);
+
+    /// @notice A consented funding wallet paid the residual subscription cost in stETH.
+    /// @dev Any share-rounding excess remains in the source's prepaid balance.
+    event AfkingStethFunded(
+        address indexed subscriber,
+        address indexed source,
+        uint256 shortfall,
+        uint256 received
+    );
 
     /// @notice Emitted for an afking subscribe-time cover-buy box. Same signature/topic as the
     ///         mint + whale `LootBoxBuy` — one box-buy event across every path.
@@ -310,17 +321,19 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      resolved funding bucket (the funder for an operator-funded sub, else the
     ///      subscriber).
     /// @dev Funding-source 4-protection:
-    ///        (1) consent-gate-at-subscribe — auth + fundingSource gate checked HERE only;
+    ///        (1) prepaid consent at subscribe — auth + fundingSource gate checked here;
     ///        (2) default-self — `fundingSource == 0` resolves to `subscriber`, no gate;
     ///        (3) no-escalation — the source is fixed at subscribe, not changeable per-draw to escalate;
-    ///        (4) trust-the-sub — a later approval revoke does NOT stop an active sub (re-pointing the source = re-subscribe, which re-checks).
+    ///        (4) later approval revoke does not stop prepaid draws; stETH wallet pulls
+    ///            require live operator approval for nonself sources on every attempt.
     /// @param player Subscriber to act for (0 or msg.sender = self).
     /// @param drainGameCreditFirst When true, the buy spends claimable credit first.
     /// @param useTickets Mint mode — true = tickets, false = lootboxes.
     /// @param dailyQuantity Daily buy units, 1..255 (upsert); 0 cancels (tombstone).
     /// @param fundingSource Wallet whose `afkingFunding` funds this sub; address(0) = self.
     ///        A non-zero, non-self source is honored ONLY when it has
-    ///        operator-approved the subscriber (checked at subscribe ONLY).
+    ///        operator-approved the subscriber. Prepaid consent is checked at subscribe;
+    ///        each stETH wallet pull also requires that approval to remain live.
     function subscribe(
         address player,
         bool drainGameCreditFirst,
@@ -357,7 +370,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         // A non-zero, non-self fundingSource must have operator-approved
         // the subscriber on the game. address(0) (self) short-circuits the read;
-        // checked HERE only — the renewal and per-draw paths never re-check.
+        // prepaid draws retain this consent; stETH wallet pulls re-check it live.
         if (
             fundingSource != address(0) &&
             fundingSource != subscriber &&
@@ -526,6 +539,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
                             srcFunding
                         );
+                    srcFunding = _tryFundAfkingSteth(subscriber, src, ethValue, srcFunding);
                     if (srcFunding >= ethValue) {
                         _deliverAfkingBuy(
                             subscriber,
@@ -595,6 +609,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
                             srcFunding
                         );
+                    srcFunding = _tryFundAfkingSteth(subscriber, src, ethValue, srcFunding);
                     if (srcFunding >= ethValue) {
                         _setStreakBase(s, snap); // funded day-0 — keep the snapshot
                         _deliverAfkingBuy(
@@ -633,6 +648,90 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             useTickets,
             fundingSource
         );
+    }
+
+    /// @dev Keep the original claimable/prepaid split: top up its residual only,
+    ///      without resolving the purchase again against the new prepaid balance.
+    ///      A fully admitted pull may fail for any reason, including exhausting
+    ///      its stipend. Ordinary insufficient-funding handling owns the outcome.
+    function _tryFundAfkingSteth(
+        address subscriber,
+        address source,
+        uint256 ethValue,
+        uint256 srcFunding
+    ) private returns (uint256) {
+        // Protocol custody is not a wallet funding allowance: sDGNRS preapproves
+        // GAME for redemptions whose stETH backing must remain segregated. Keep
+        // both protocol sinks on their existing internal-ledger funding path.
+        if (
+            srcFunding >= ethValue || source == ContractAddresses.SDGNRS || source == ContractAddresses.VAULT ||
+            (source != subscriber && !operatorApprovals[source][subscriber])
+        ) {
+            return srcFunding;
+        }
+        try IDegenerusGame(address(this)).pullAfkingSteth{gas: GasBounds.AFKING_STETH_PULL_GAS}(
+            subscriber, source, ethValue - srcFunding
+        ) returns (uint256 received) {
+            return srcFunding + received;
+        } catch {
+            return srcFunding;
+        }
+    }
+
+    /// @notice Atomic, gas-capped stETH funding operation, callable only by GAME itself.
+    /// @dev Each token operation is caught, and the caller catches this whole frame:
+    ///      malformed return data or bad receipts therefore
+    ///      roll back the token transfer and its allowance consumption as well.
+    function pullAfkingSteth(address subscriber, address source, uint256 shortfall)
+        external returns (uint256 received)
+    {
+        if (address(this) != ContractAddresses.GAME || msg.sender != address(this)) revert E();
+        Sub storage sub = _subOf[subscriber];
+        if (
+            shortfall == 0 || sub.dailyQuantity == 0 ||
+            source == ContractAddresses.SDGNRS || source == ContractAddresses.VAULT ||
+            (source != subscriber && !operatorApprovals[source][subscriber]) ||
+            source != ((sub.flags & FLAG_EXTERNAL_FUNDING) != 0 ? _fundingSourceOf[subscriber] : subscriber)
+        ) revert AfkingStethPullFailed();
+
+        IStETH token = IStETH(ContractAddresses.STETH_TOKEN);
+        uint256 balanceBefore;
+        try token.balanceOf(address(this)) returns (uint256 value) {
+            balanceBefore = value;
+        } catch { revert AfkingStethPullFailed(); }
+
+        uint256 shares;
+        try token.getSharesByPooledEth(shortfall) returns (uint256 value) {
+            shares = value;
+        } catch { revert AfkingStethPullFailed(); }
+        try token.getPooledEthByShares(shares) returns (uint256 value) {
+            // Lido floors both conversions. One additional share is the minimum
+            // sufficient amount whenever the round-trip quote falls short.
+            if (value < shortfall) ++shares;
+        } catch { revert AfkingStethPullFailed(); }
+
+        uint256 transferred;
+        try token.transferSharesFrom(source, address(this), shares) returns (uint256 value) {
+            transferred = value;
+        } catch { revert AfkingStethPullFailed(); }
+        try token.balanceOf(address(this)) returns (uint256 value) {
+            if (value < balanceBefore) revert AfkingStethPullFailed();
+            received = value - balanceBefore;
+        } catch { revert AfkingStethPullFailed(); }
+
+        // The recipient's pre-existing fractional share value can contribute
+        // one extra wei to its balance delta. Subtraction avoids return+1 overflow.
+        if (
+            transferred < shortfall || received < transferred || received - transferred > 1
+        ) revert AfkingStethPullFailed();
+
+        if (
+            received > type(uint128).max - _afkingOf(source) ||
+            received > type(uint128).max - claimablePool
+        ) revert AfkingStethPullFailed();
+
+        _creditAfkingValue(source, received);
+        emit AfkingStethFunded(subscriber, source, shortfall, received);
     }
 
     /*------------------------------------------------------------------
@@ -1169,8 +1268,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint24 currentLevel = level;
         // Chunk-invariant global reads, hoisted once: the GO_SWEPT flag (written only by
         // the one-time game-over sweep, unreachable from this loop) and the ticket target
-        // level (jackpotPhaseFlag is fixed across the pre-RNG stage; the loop's sole
-        // external call, quests.finalizeAfking, writes quests-side storage only).
+        // level (jackpotPhaseFlag is fixed across the pre-RNG stage). Quest finalization
+        // writes only quests-side storage; the pinned Lido stETH funding path has no
+        // sender or recipient callbacks that could change these game-phase inputs.
         bool swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
         uint24 ticketTargetLevel = jackpotPhaseFlag
             ? currentLevel
@@ -1316,6 +1416,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 bool isTicket,
                 uint256 claimableUse
             ) = _resolveBuy(sub, player, mp, swept, srcFunding);
+
+            srcFunding = _tryFundAfkingSteth(player, src, ethValue, srcFunding);
 
             // Funding skip → two-tier skip-kill. A normal underfunded sub is cancelled via
             // swap-pop (auto-pause WITHOUT advancing the cursor — the mover into this slot is

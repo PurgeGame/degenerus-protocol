@@ -299,7 +299,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
       // Inter-call interleaving: bob places a bet on wallDayNow. Under
       // D-288-FIX-SHAPE-01 the write goes to slot[wallDayNow] — NOT
       // slot[dailyIdx] which CALL 2 of the jackpot would re-read.
-      await placeEthBet(game, bob, 3, 7);
+      await placeEthBet(game, bob, 2, 7);
 
       // Snapshot2: what CALL 2 of payDailyJackpot would consume after the
       // interleaved bet.
@@ -319,7 +319,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
       // Sanity: bob's bet landed at slot[wallDayNow] (canonical).
       const wallDayWinner = await readWinner(game, wallDayNow);
       expect(wallDayWinner.winQuadrant).to.equal(
-        3,
+        2,
         `bob's interleaved bet must land at slot[wallDayNow=${wallDayNow}] (canonical: slot[D] = bets placed on day D)`
       );
       expect(wallDayWinner.winSymbol).to.equal(7);
@@ -517,7 +517,7 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
       const cp3 = await readDailyIdx(gameAddr);
 
       // Checkpoint 4: after second bet.
-      await placeEthBet(game, bob, 3, 5);
+      await placeEthBet(game, bob, 2, 5);
       const cp4 = await readDailyIdx(gameAddr);
 
       // Checkpoint 5: after second 24h warp.
@@ -597,7 +597,7 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
       // the cross-day CALL 2 read. Under Phase 288, the bet lands in
       // slot[D+1] (canonical) — which CALL 2 does NOT read because CALL 2
       // still reads slot[dailyIdx=D].
-      await placeEthBet(game, bob, 3, 5);
+      await placeEthBet(game, bob, 1, 5);
 
       // CALL 2: re-capture the hero-override input. Under Phase 288 this
       // MUST equal CALL 1's input because:

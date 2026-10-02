@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {JackpotBoardFixtures} from "./helpers/JackpotBoardFixtures.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
@@ -300,6 +301,40 @@ contract GoldenTicketArmResolve is Test {
                 day = uint24(uint256(logs[i].topics[1]));
                 found = true;
             }
+        }
+    }
+
+    function testDiceWagersCannotBoostAnyJackpotDie() public {
+        for (uint8 symbol; symbol < 8; ++symbol) h.setHeroWager(ARM_IDX, 3, symbol, type(uint32).max);
+        uint256 state = vm.snapshotState();
+        for (uint256 word = 1; word <= 64; ++word) {
+            vm.recordLogs();
+            vm.prank(ContractAddresses.GAME);
+            h.emitDailyWinningTraits(word);
+            uint32 actual = officialMainBoard(vm.getRecordedLogs());
+            uint8[4] memory expected = JackpotBucketLib.getRandomTraits(word);
+            expected[3] = GoldSixLib.daily(expected[3], word);
+            assertEq(actual, JackpotBucketLib.packWinningTraits(expected),
+                "dice-only wagers cannot change the adjusted daily board");
+            assertTrue(vm.revertToState(state));
+        }
+    }
+
+    function testNonDiceHeroStillWinsAgainstMaxDiceWagers() public {
+        for (uint8 symbol; symbol < 8; ++symbol) h.setHeroWager(ARM_IDX, 3, symbol, type(uint32).max);
+        h.setHeroWager(ARM_IDX, 1, 2, 1);
+        uint256 state = vm.snapshotState();
+        for (uint256 word = 1; word <= 64; ++word) {
+            vm.recordLogs();
+            vm.prank(ContractAddresses.GAME);
+            h.emitDailyWinningTraits(word);
+            uint32 actual = officialMainBoard(vm.getRecordedLogs());
+            uint8[4] memory expected = JackpotBucketLib.getRandomTraits(word);
+            expected[3] = GoldSixLib.daily(expected[3], word);
+            uint32 natural = JackpotBucketLib.packWinningTraits(expected);
+            assertEq(actual, (natural & ~(uint32(7) << 8)) | (uint32(2) << 8),
+                "only the eligible Zodiac hero may override the board");
+            assertTrue(vm.revertToState(state));
         }
     }
 
@@ -648,6 +683,28 @@ contract GoldenTicketArmResolve is Test {
 
     /// @dev DailyWinningTraits carries the day's one board: `day` indexed, one uint32
     ///      data field equal to the set the foil claim reads back from dailyFoilDraw.
+    function testDailyGoldSixRedirectsAndFoilUsesTheSameBoard() public {
+        uint256 kept;
+        uint256 redirected;
+        for (uint256 word = 2; word < 4096; ++word) {
+            uint8[4] memory raw = JackpotBucketLib.getRandomTraits(word);
+            if (raw[3] != 253) continue;
+            uint32 expected = JackpotBucketLib.packWinningTraits(raw);
+            uint8 dice = GoldSixLib.daily(253, word);
+            expected = (expected & 0x00ffffff) | (uint32(dice) << 24);
+            if (dice == 253) ++kept;
+            else ++redirected;
+            h.setDailyIdx(uint24(word));
+            vm.prank(ContractAddresses.GAME);
+            h.emitDailyWinningTraits(word);
+            (bool present, uint32 board,) = h.foilDrawFor(word + 1);
+            assertTrue(present);
+            assertEq(board, expected, "daily published and foil boards share the adjustment");
+        }
+        assertGt(kept, 0);
+        assertGt(redirected, kept);
+    }
+
     function testDailyWinningTraitsCarriesOneBoardMatchingTheFoilRecord() public {
         uint256 word = wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D);
         seedBoardBuckets(word, 0x1000);

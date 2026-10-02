@@ -8,6 +8,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 /// @title V56AfkingGasMarginal -- the v56 everyday-afking gas-MARGINAL harness (Phase 355) on the
 ///        compute-on-read applied tree (baseline 453f8073). Measures every marginal the GAS phase needs:
@@ -200,6 +202,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
+    uint256 private constant NATIVE_EVICTION_CALL_GAS = 2_000_000;
+    mapping(address => bool) private _nativeEvictionExpected;
+    mapping(address => bool) private _nativeEvictionSeen;
 
     function setUp() public {
         _deployProtocol();
@@ -594,13 +599,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (g) D-06 residual R1 — STAGE weight-model fidelity (level-cross / gap-resume per-iter <= weight)
     // =========================================================================
 
-    /// @notice Residual R1 (the proof's residual list): the all-evict SATURATED STAGE chunk, projected from the
-    ///         live cold per-evict marginal as a cross-check on the direct LIVE measurement
-    ///         (test_AllEvictSaturatedChunk_LIVE_Measured). The in-stage finalize (a DegenerusQuests read +
-    ///         finalizeAfking write + _removeFromSet swap-pop) is weighted SUB_STAGE_EVICT_WEIGHT=8, so the budget
-    ///         admits BUDGET/EVICT_WEIGHT = 312 evicts/chunk. This measures the per-evict marginal COLD (vm.cool
-    ///         first-touch — the realistic regime, ~29k) and asserts the saturated all-evict chunk stays
-    ///         on the <10M soft target. Measuring cold (not the warm same-tx ~5M) proves the REAL binding chunk.
+    /// @notice Retained test name; the production worker now admits complete items from
+    ///         caller-supplied gas, rather than a fixed weight count. Calibrate actual
+    ///         cold eviction/buy work against its named item reservation. An unfunded
+    ///         self-sub may attempt stETH and fail before the ordinary eviction.
     function testResidualR1StageWeightModelFidelity() public {
         uint256 snap = vm.snapshotState();
 
@@ -624,25 +626,28 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
         emit log_named_uint("r1_cold_per_evict_marginal_gas", coldPerEvict);
         emit log_named_uint("r1_per_buy_marginal_gas", perBuy);
-        emit log_named_uint("r1_evict_weight_budget_units", SUB_STAGE_EVICT_WEIGHT);
+        emit log_named_uint("r1_native_item_reservation_gas", GasBounds.SUBSCRIBER_ITEM_GAS);
 
-        // R1: the all-evict SATURATED STAGE chunk, analytically projected from the live cold per-evict marginal.
-        // With evict weight 8 the budget admits BUDGET/EVICT_WEIGHT = 312 evicts; at the realistic COLD per-evict
-        // (~29k, the cross-contract finalize + _removeFromSet swap-pop) the chunk stays on the <10M soft
-        // target with deep headroom to the 16.7M ceiling. Asserting the COLD projection cross-checks the
-        // direct LIVE measurement in test_AllEvictSaturatedChunk_LIVE_Measured (~9.7M; the two agree). Chunk =
-        // cold advance overhead + (BUDGET/EVICT_WEIGHT)×coldPerEvict.
-        uint256 evictsPerChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT; // 312 evicts fill the budget
+        // The measured marginal is an independent check of the safety floor used
+        // by MineFlipGas.canRun. The full-stipend hostile-failure cases are covered
+        // separately in AfkingStethGas.t.sol; this is ordinary no-allowance expiry.
+        assertLe(coldPerEvict, GasBounds.SUBSCRIBER_ITEM_GAS, "R1: cold eviction fits its native item reservation");
+        assertLe(perBuy, GasBounds.SUBSCRIBER_ITEM_GAS, "R1: funded buy fits its native item reservation");
+        assertLe(GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS + MineFlipGas.CHECK_RESERVE,
+            MineFlipGas.MAX_STEP_GAS, "R1: item and checkpoint are admissible as one complete operation");
+
+        // Derive conservative throughput from reservations, not the retired
+        // 2500/8 weight quotient. Actual cheap expirations can admit more items;
+        // the LIVE test independently checks progress and correct resumption.
         uint256 fixedEvictOverhead = coldEvN > coldPerEvict * N_HI ? coldEvN - coldPerEvict * N_HI : 0;
-        uint256 allEvictChunk = fixedEvictOverhead + evictsPerChunk * coldPerEvict;
-        emit log_named_uint("r1_evicts_per_budget_chunk", evictsPerChunk);
-        emit log_named_uint("r1_cold_all_evict_saturated_chunk_gas", allEvictChunk);
-        assertLt(allEvictChunk, 10_500_000, "R1: the COLD all-evict saturated chunk (~9.8M, post-reweight) stays on the <10M target");
-        // R1: the per-evict finalize is a bounded O(1) cross-contract op (no scaling with player magnitude), so
-        // the chunk bound holds at any reachable per-iter state.
-        assertLt(coldPerEvict, 400_000, "R1: the per-evict finalize is a bounded O(1) op");
-        // R1: a funded buy (incl. a gap-resumed streak-rebase buy) is bounded by one weight unit (1 buy = wt 1).
-        assertLt(perBuy, EFFECTIVE_GAS_CEILING, "R1: the per-buy iter (gap-resume streak rebase rides it) is bounded");
+        uint256 fixedReservation = fixedEvictOverhead + GasBounds.SUBSCRIBER_TAIL_GAS + MineFlipGas.CHECK_RESERVE;
+        assertLt(fixedReservation, NATIVE_EVICTION_CALL_GAS, "R1: caller budget leaves room for subscriber work");
+        uint256 conservativelyFundedItems = (NATIVE_EVICTION_CALL_GAS - fixedReservation) / GasBounds.SUBSCRIBER_ITEM_GAS;
+        assertGt(conservativelyFundedItems, 0, "R1: bounded caller budget admits whole items");
+        uint256 modeledGas = fixedReservation + conservativelyFundedItems * coldPerEvict;
+        emit log_named_uint("r1_conservatively_funded_items", conservativelyFundedItems);
+        emit log_named_uint("r1_native_cold_eviction_model_gas", modeledGas);
+        assertLt(modeledGas, NATIVE_EVICTION_CALL_GAS, "R1: measured item costs leave the modeled checkpoint reserve");
     }
 
     // =========================================================================
@@ -1638,18 +1643,121 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(_subscriberCount() < preCount, "cold evict non-vacuity: the stage funding-killed subs");
     }
 
-    /// @dev LIVE binding-stage worst case: a saturated all-evict crank measured cold through the REAL mineFlip
-    ///      STAGE loop (not the analytic projection). Builds more evicting subs than one chunk admits, so the
-    ///      contract's weight budget caps the chunk at SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT finalizes;
-    ///      the measured single-tx gas is the true binding worst case. Asserts the <10M target and the EIP-7825 cap.
+    /// @dev Exercise native admission through the real router. A deliberately small
+    ///      call must defer, then bounded calls must evict every unpaid subscriber
+    ///      exactly once while preserving the untouched records behind each checkpoint.
+    ///      The caller chooses the gas envelope; there is no fixed 312-item batch.
     function test_AllEvictSaturatedChunk_LIVE_Measured() public {
-        uint256 capEvicts = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_EVICT_WEIGHT;
-        uint256 chunkGas = _measureEvictStageGasCold(capEvicts + 5, "liveAllEv_");
-        emit log_named_uint("live_all_evict_saturated_chunk_gas", chunkGas);
-        emit log_named_uint("live_all_evict_evicts_per_chunk_cap", capEvicts);
-        emit log_named_uint("live_all_evict_headroom_to_16p7M_gas", EIP7825_TX_GAS_CAP - chunkGas);
-        assertLt(chunkGas, EIP7825_TX_GAS_CAP, "LIVE: the saturated all-evict chunk is strictly < the 16.7M EIP-7825 cap");
-        assertLt(chunkGas, 10_500_000, "LIVE: the saturated all-evict chunk lands on the <10M target");
+        uint256 count = 320;
+        address[] memory players = _prepareNativeEvictionCohort(count, "liveAllEv_");
+        uint256 protocolMembers = _subscriberCount() - count;
+        bytes32[] memory originalSubs = new bytes32[](count);
+        for (uint256 i; i < count; ++i) {
+            _nativeEvictionExpected[players[i]] = true;
+            originalSubs[i] = _nativeSubWord(players[i]);
+            assertTrue(originalSubs[i] != bytes32(0), "fixture: every ordinary subscriber has a live record");
+            assertEq(_lastOpenedDayOf(players[i]), _lastBoughtDayOf(players[i]), "fixture: no pending paid box");
+        }
+
+        // Even before retaining the router's own boundary/return gas this is
+        // below a complete worker item. It must not let a caller buy an eviction
+        // by starving an otherwise admitted optional token pull.
+        uint256 insufficient = GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS
+            + MineFlipGas.CHECK_RESERVE - 1;
+        vm.recordLogs();
+        vm.cool(address(game));
+        game.mineFlip{gas: insufficient}();
+        assertEq(_recordNativeEvictions(vm.getRecordedLogs()), 0, "LIVE: no eviction before complete-item admission");
+        assertEq(_subscriberCount(), count + protocolMembers);
+        _assertNativeEvictionCheckpoint(players, originalSubs);
+
+        uint256 totalEvicted;
+        uint256 calls;
+        uint256 peak;
+        // Reserve two outer boundary/return envelopes conservatively as well as
+        // the worker tail; the remaining named item reservations must do useful
+        // work, not merely return successfully under the caller's gas limit.
+        uint256 guaranteedItems = (NATIVE_EVICTION_CALL_GAS
+            - 2 * (GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN)
+            - GasBounds.SUBSCRIBER_TAIL_GAS - MineFlipGas.CHECK_RESERVE)
+            / GasBounds.SUBSCRIBER_ITEM_GAS;
+        assertGt(guaranteedItems, 0);
+        while (totalEvicted < count && calls < count) {
+            uint256 membersBefore = _subscriberCount();
+            uint256 cursorBefore = _subCursor();
+            vm.recordLogs();
+            vm.cool(address(game));
+            uint256 gasBefore = gasleft();
+            game.mineFlip{gas: NATIVE_EVICTION_CALL_GAS}();
+            uint256 callGas = gasBefore - gasleft();
+            uint256 evicted = _recordNativeEvictions(vm.getRecordedLogs());
+            uint256 remaining = count - totalEvicted;
+            assertGe(evicted, remaining < guaranteedItems ? remaining : guaranteedItems,
+                "LIVE: each funded call commits the work its conservative reservations admit");
+            assertEq(membersBefore - _subscriberCount(), evicted, "LIVE: each expiry removes exactly one member");
+            assertGe(_subCursor(), cursorBefore, "LIVE: swap-pop checkpoint never moves behind completed work");
+            assertLe(_subCursor(), _subscriberCount(), "LIVE: checkpoint remains within the live set");
+            _assertNativeEvictionCheckpoint(players, originalSubs);
+            totalEvicted += evicted;
+            ++calls;
+            if (callGas > peak) peak = callGas;
+            if (totalEvicted < count) {
+                assertFalse(_subsFullyProcessed(), "LIVE: partial chunk keeps subscription work pending");
+                assertTrue(game.advanceDue(), "LIVE: unfinished cohort remains reachable by the next miner");
+                assertFalse(game.rngLocked(), "LIVE: RNG cannot start before every subscription is processed");
+            }
+        }
+        assertGt(calls, 1, "LIVE: the fixture really crosses admission checkpoints");
+        assertEq(totalEvicted, count, "LIVE: repeated bounded calls finish every unpaid subscriber");
+        assertEq(_subscriberCount(), protocolMembers, "LIVE: only the exempt protocol subscriptions remain");
+        assertTrue(_subsFullyProcessed(), "LIVE: completed cohort is committed");
+        for (uint256 i; i < count; ++i) assertTrue(_nativeEvictionSeen[players[i]], "LIVE: no subscriber omitted");
+        emit log_named_uint("live_native_eviction_call_budget_gas", NATIVE_EVICTION_CALL_GAS);
+        emit log_named_uint("live_native_eviction_call_count", calls);
+        emit log_named_uint("live_native_eviction_peak_call_gas", peak);
+        emit log_named_uint("live_native_eviction_total_unique_expirations", totalEvicted);
+    }
+
+    function _prepareNativeEvictionCohort(uint256 count, string memory prefix)
+        private returns (address[] memory players)
+    {
+        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
+        players = _setupFundedSubs(count, prefix, 5 ether, false);
+        vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
+        game.openBoxes(400);
+        for (uint256 i; i < count; ++i) {
+            uint256 funding = game.afkingFundingOf(players[i]);
+            if (funding != 0) {
+                vm.prank(players[i]);
+                game.withdrawAfkingFunding(funding);
+            }
+        }
+        _warpToBoundary(false);
+        require(game.advanceDue(), "fixture: the new subscription day is due");
+    }
+
+    function _nativeSubWord(address player) private view returns (bytes32) {
+        return vm.load(address(game), keccak256(abi.encode(player, uint256(SUBOF_SLOT))));
+    }
+
+    function _assertNativeEvictionCheckpoint(address[] memory players, bytes32[] memory originalSubs) private view {
+        for (uint256 i; i < players.length; ++i) {
+            assertEq(_nativeSubWord(players[i]), _nativeEvictionSeen[players[i]] ? bytes32(0) : originalSubs[i],
+                "LIVE: each record is either fully evicted or unchanged for a later call");
+        }
+    }
+
+    function _recordNativeEvictions(Vm.Log[] memory logs) private returns (uint256 evicted) {
+        bytes32 expired = keccak256("SubscriptionExpired(address,uint8)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length != 2 || logs[i].topics[0] != expired) continue;
+            address player = address(uint160(uint256(logs[i].topics[1])));
+            assertTrue(_nativeEvictionExpected[player], "LIVE: no unrelated subscriber is evicted");
+            assertFalse(_nativeEvictionSeen[player], "LIVE: no duplicate expiry across resumed calls");
+            assertEq(abi.decode(logs[i].data, (uint8)), 1, "LIVE: ordinary insufficient-funding expiry");
+            _nativeEvictionSeen[player] = true;
+            ++evicted;
+        }
     }
 
     // =========================================================================

@@ -21,8 +21,9 @@ contract MockStETH {
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
+    event TransferShares(address indexed from, address indexed to, uint256 shares);
 
-    function balanceOf(address account) external view returns (uint256) {
+    function balanceOf(address account) public view virtual returns (uint256) {
         if (totalShares == 0) return 0;
         return (sharesOf[account] * totalPooledEther) / totalShares;
     }
@@ -63,6 +64,29 @@ contract MockStETH {
         sharesOf[to] += shares;
         emit Transfer(from, to, amount);
         return true;
+    }
+
+    function getSharesByPooledEth(uint256 amount) public view virtual returns (uint256) {
+        return _ethToShares(amount);
+    }
+
+    function getPooledEthByShares(uint256 shares) public view virtual returns (uint256) {
+        if (totalShares == 0) return 0;
+        return shares * totalPooledEther / totalShares;
+    }
+
+    function transferSharesFrom(address from, address to, uint256 shares) public virtual returns (uint256 amount) {
+        require(from != address(0) && to != address(0) && to != address(this));
+        amount = getPooledEthByShares(shares);
+        uint256 approved = allowance[from][msg.sender];
+        if (approved != type(uint256).max) {
+            allowance[from][msg.sender] = approved - amount;
+            emit Approval(from, msg.sender, approved - amount);
+        }
+        sharesOf[from] -= shares;
+        sharesOf[to] += shares;
+        emit Transfer(from, to, amount);
+        emit TransferShares(from, to, shares);
     }
 
     /// @dev Simulate daily Lido rebase — increases totalPooledEther by one day

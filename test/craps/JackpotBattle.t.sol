@@ -27,7 +27,7 @@ contract BattleRef is Craps {
     uint256 internal constant SCATTER_TAG = 0x436f696e4472617753636174746572; // "CoinDrawScatter"
 
     /// @dev The scheduled row for a board the dice threw whole: 15% of shooters, +32% profit.
-    uint256 internal constant BOOST_ROW = 15 | (32 << 8);
+    uint256 internal constant BOOST_ROW = 12 | (30 << 8);
 
     /// @dev One run at 0-based seat `j` of an `n`-wallet field, its turn in CrapsBattle's form.
     function run(uint256 word, address p, uint256 chipFlip, uint256 j, uint256 n)

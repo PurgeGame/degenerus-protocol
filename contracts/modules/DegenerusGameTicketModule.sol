@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GoldSixLib} from "../libraries/GoldSixLib.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
@@ -160,10 +162,11 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
                 return (progressed, false, emitted);
             }
         }
+        uint256 start = TicketEntropy.queueStart(rk, total, entropy);
         uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
         while (ticketSeats != 0 || idx < total) {
             uint256 seats = ticketSeats;
-            uint256 qi = seats != 0 ? (seats & 0xffffffff) - 1 : idx;
+            uint256 qi = TicketEntropy.queueIndex(seats != 0 ? (seats & 0xffffffff) - 1 : idx, start, total);
             (bool moved, bool complete, uint256 count) = _solo(
                 _tqPositionAt(queue, qi), rk, lvl, qi, entropy, shift, meter
             );
@@ -225,8 +228,10 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         if (finalTail && rem != 0 && TicketEntropy.remainder(stream, entropy, rem)) ++emitted;
         uint32 offset = ticketSoloOffset;
         if (emitted != 0) {
-            _generateTraitRun(stream, offset, uint32(emitted), entropy, uint256(ownerPos) - 1);
-            emit TraitsGenerated(player, stream | uint256(offset), uint32(emitted));
+            bool goldSixTaken = _goldSixTaken(lvl);
+            uint256 replayFlag = goldSixTaken ? TicketEntropy.GOLD_SIX_TAKEN : 0;
+            _generateTraitRun(stream, offset, uint32(emitted), entropy, uint256(ownerPos) - 1, goldSixTaken);
+            emit TraitsGenerated(player, stream | uint256(offset) | replayFlag, uint32(emitted));
         }
         complete = finalTail;
         if (complete) {
@@ -261,6 +266,8 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         uint256 queueBase;
         uint256 queueWordIndex;
         uint256 queueWord;
+        uint256 queueStart;
+        uint256 queueTotal;
     }
 
     /// @notice Per-entry trait generation in the Game's storage context, called by Mint.
@@ -272,7 +279,8 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
     function generateTraitRun(uint256 stream, uint32 offset, uint32 count, uint256 entropy, uint256 ownerIdx)
         external returns (uint256 writes)
     {
-        return _generateTraitRun(stream, offset, count, entropy, ownerIdx);
+        return _generateTraitRun(stream, offset, count, entropy, ownerIdx,
+            _goldSixTaken(uint24(stream >> 224)));
     }
 
     function _generateTraitRun(
@@ -280,7 +288,8 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         uint32 startIndex,
         uint32 count,
         uint256 entropyWord,
-        uint256 ownerIdx
+        uint256 ownerIdx,
+        bool goldSixTaken
     ) private returns (uint256 writes) {
         uint32[256] memory counts;
         uint8[256] memory touchedTraits;
@@ -290,6 +299,7 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         uint256 endIndex = uint256(startIndex) + count;
         if (endIndex > uint256(type(uint32).max) + 1) revert E();
         uint256 i = startIndex;
+        uint24 lvl = uint24(baseKey >> 224);
 
         // Generate traits in groups of 16, using LCG for deterministic randomness.
         while (i < endIndex) {
@@ -316,6 +326,11 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
                     uint8 traitId = DegenerusTraitUtils.traitFromWord(s) +
                         (uint8(i & 3) << 6);
 
+                    if (traitId == GoldSixLib.TRAIT) {
+                        if (goldSixTaken) traitId = GoldSixLib.replacement(s);
+                        else goldSixTaken = true;
+                    }
+
                     // Track first occurrence of each trait for batch writing.
                     if (counts[traitId]++ == 0) {
                         touchedTraits[touchedLen++] = traitId;
@@ -325,9 +340,6 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
                 }
             }
         }
-
-        // Extract level from baseKey for storage slot calculation.
-        uint24 lvl = uint24(baseKey >> 224);
 
         // Calculate the storage slot for this level's trait buckets.
         // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
@@ -340,8 +352,6 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         for (uint16 u; u < touchedLen; ) {
             uint8 traitId = touchedTraits[u];
             uint32 occurrences = counts[traitId];
-            // Restore the all-zero invariant on the shared scratch buffer.
-            counts[traitId] = 0;
             (uint256 f, uint256 d) = _bucketAppendRun(levelSlot, traitId, ownerIdx, occurrences, lvl);
             unchecked {
                 writes += f * 3 + d;
@@ -370,6 +380,8 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         st.lvl = lvl;
         st.rk = rk;
         st.cur = idx;
+        st.queueStart = TicketEntropy.queueStart(rk, total, entropy);
+        st.queueTotal = total;
         uint256 queueBase;
         assembly ("memory-safe") {
             mstore(0, queue.slot)
@@ -425,7 +437,8 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         uint80 snapDone,
         uint8 shift
     ) private {
-        uint256 wordIndex = qi >> 3;
+        uint256 physical = TicketEntropy.queueIndex(qi, st.queueStart, st.queueTotal);
+        uint256 wordIndex = physical >> 3;
         if (wordIndex != st.queueWordIndex) {
             uint256 queueBase = st.queueBase;
             uint256 lanes;
@@ -433,7 +446,7 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
             st.queueWord = lanes;
             st.queueWordIndex = wordIndex;
         }
-        uint32 ownerPos = uint32(st.queueWord >> ((qi & 7) << 5));
+        uint32 ownerPos = uint32(st.queueWord >> ((physical & 7) << 5));
         uint256 record = _entryRecord(st.rk, ownerPos);
         address p = address(uint160(record));
         uint80 packed = uint80(record >> 160);
@@ -444,7 +457,7 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         uint8 rem = uint8(packed);
         if (owed == 0) {
             bool win = rem != 0 && TicketEntropy.remainder(
-                TicketEntropy.identity(st.rk, lvl, qi, p), entropy, rem
+                TicketEntropy.identity(st.rk, lvl, physical, p), entropy, rem
             );
             if (!win) {
                 if (packed != 0) _setEntryOwed(st.rk, ownerPos, 0);
@@ -486,6 +499,11 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
                 uint8 trait = base;
                 if (split) {
                     trait = (base & 0xF8) | uint8((n + rot) & 7);
+                    // Seated entries flush immediately: query the cap only for an
+                    // actual gold-six candidate, with no eager read on common rounds.
+                    if (trait == GoldSixLib.TRAIT && _goldSixTaken(st.lvl)) {
+                        trait = GoldSixLib.replacement(seed);
+                    }
                     _bucketAppendRun(levelSlot, trait, st.ownerIdx[j], 1, st.lvl);
                 } else {
                     lanes |= st.ownerIdx[j] << (32 * n);
@@ -540,7 +558,7 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
             }
             if (owed == 0) {
                 if (rem != 0) {
-                    uint256 stream = TicketEntropy.identity(st.rk, lvl, st.queueIdx[j], st.player[j]);
+                    uint256 stream = TicketEntropy.identity(st.rk, lvl, TicketEntropy.queueIndex(st.queueIdx[j], st.queueStart, st.queueTotal), st.player[j]);
                     if (TicketEntropy.remainder(stream, entropy, rem)) owed = 1;
                     rem = 0;
                 }

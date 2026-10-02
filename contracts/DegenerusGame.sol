@@ -342,10 +342,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
+    /// @notice Atomic stETH funding operation, callable only by GAME itself.
+    /// @dev The AFKing caller catches this whole frame, including token return-data
+    ///      decoding and post-transfer checks, so failure rolls back the token move.
+    function pullAfkingSteth(address, address, uint256) external returns (uint256) {
+        if (msg.sender != address(this)) revert OnlySelf();
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        return abi.decode(data, (uint256));
+    }
+
     /// @notice Run the next ordered game actions through safe gas checkpoints.
     /// @dev Only this entry pays miners, after sufficient measured execution and actual progress.
     function mineFlip() external {
-        if (msg.data.length != 4) revert E();
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameMinerModule.mineFlip.selector)
         );
@@ -1060,7 +1069,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Place single-symbol Degenerette bets.
     /// @dev The bet belongs to `player`; the player or an approved operator spends the player's
     ///      funds, any other caller funds the bet itself (a permissionless gift).
-    ///      Player-funded bets accept ETH and FLIP only.
+    ///      Player-funded bets accept ETH and FLIP only. Heroes are symbols 0..23 (no Dice).
     ///      The module resolves the player/funder split, so `player` forwards raw. Signature:
     ///      placeDegeneretteBet(address player, uint8 currency, uint128 amountPerSpin,
     ///      uint8 spinCount, uint8 symbol). The signature matches the
@@ -2749,7 +2758,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         view
         returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount)
     {
-        for (uint8 q = 0; q < 4; ++q) {
+        for (uint8 q = 0; q < DEGENERETTE_HERO_COUNT / 8; ++q) {
             uint256 packed = dailyHeroWagers[day][q];
             for (uint8 s = 0; s < 8; ++s) {
                 uint256 amount = (packed >> (uint256(s) * 32)) & 0xFFFFFFFF;

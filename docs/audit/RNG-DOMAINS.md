@@ -62,16 +62,56 @@ Round and solo engines use that same immutable fractional identity. Round traits
 retain `keccak256(abi.encode(level, globalRound, committedWord))`. A round must
 first fill eight live seats or reach the actual frozen frontier; incomplete
 selection cannot roll or send waiting entries through the solo engine. Surviving
-seats preserve queue order. No other work may change the global round counter.
+seats preserve rotated queue order. No other work may change the global round counter.
+
+Each frozen ordinary or future queue starts at
+`H(H("DEGENERUS_TICKET_ROTATION_V1"), queueKey, frozenLength, committedWord) % frozenLength`
+and wraps once. The start is recomputed, not stored. Checkpoint cursors and seats
+use logical positions in that rotation; fractional and solo stream identities
+continue to use the original physical queue index. Changing gas cannot select a
+new start. This removes permanent front-of-queue priority without shuffling or
+promising equal per-ticket odds. Producer priority and the foil FIFO remain as
+specified below.
 
 `TraitsGenerated(address,uint256,uint32)` retains its ABI. The emitted key is
-`identity | absoluteStartOffset`, so a decoder clears its low32 bits before group
-hashing. The event’s count includes any final fractional bonus; no prior event in
+`identity | absoluteStartOffset | goldSixTakenFlag`. Bit 255 is an event-only flag
+indicating that gold Dice 6 was already present before this solo run. A decoder
+clears both that bit and the low32 offset before group hashing; the base domain
+is still `0x20`–`0x22`. It applies the cap while replaying this run, using the flag
+as its initial state. The event’s count includes any final fractional bonus; no prior event in
 the transaction is required to recover the offset. Widened local arithmetic
 allows the final group to end at `2^32` without wrapping. Foil events use domain
 `0x23` and offset zero; they retain their existing four-line, buy-time-boosted
 `FOIL_SEED_TAG` algorithm. Seated `EntryTraitsRevealed` events directly reveal the
 credited entries and their ordered owners.
+
+Gold Dice 6 (trait 253) keeps only its first natural occurrence at each full
+level, shared by solo, round and foil producers. The existing live-bucket bit,
+authenticated against the full buffer level, is the claim marker: production
+appends always add nonzero entries and never remove them from an active level.
+Solo runs read this once and share the result with event replay; round and foil
+producers read it only on a gold-six candidate. A local flag covers unflushed
+solo and foil entries. A level may have no
+gold six. Later occurrences become one of traits 248–252, 254 or 255, selected by
+`H(seed, H("GOLD_SIX_REPLACEMENT_V1")) % 7`. The seed is the candidate's LCG state
+for solo entries, the full round seed for seated entries (at most one candidate
+per round), and the full foil-line seed for packs. All replacements retain gold
+color. Retired foil levels redirect every candidate because their old unique
+slot can no longer be authenticated from the recycled buffer. Stored foil lines
+and bucket entries agree. Gold six receives zero virtual deity entries in every
+jackpot and pass sampler; a deity wallet's actual entry remains eligible.
+
+A natural daily jackpot gold-six roll survives when
+`H(word, H("GOLD_SIX_DAILY_V1")) % 6 == 0`; the other five outcomes select from
+that same seven-die replacement pool using the separate replacement domain.
+The final daily board is shared by ETH, coin, ticket and foil-match paths.
+When that final board contains gold six, Dice receives the solo pool ahead of
+every other gold trait. Without gold six, the existing gold tie-break and
+no-gold rotation apply. The shared selector also gives natural terminal gold six
+this priority; the one-in-six survival gate remains specific to daily boards.
+Terminal boards retain their existing distribution. All Dice are excluded from
+Degenerette hero selection and jackpot hero boosts, while natural Degenerette
+spin boards retain their dice and original match odds.
 
 Producer order is also part of the invariant. Normally ordinary queues precede
 the committed future pool and foil FIFO. If a parity dependency starts foil early,
@@ -226,7 +266,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Presale box | packed `H(word, PRESALE_BOX_TAG, player, uint48(index))` | One record per owner/index; amount excluded |
 | Redemption box | `H(chunkWord, player, REDEMPTION_BOX_TAG)` | Chunk word advances by `H(word)`; upstream redemption word fixed |
 | AFKing box | `H(word, player, AFKING_BOX_TAG, stampedDay)` | Day recorded before fulfillment; amount excluded |
-| Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.final-coin.v1`, `.tie.v1`; dice omit entry id, others include it; engine survival/boost uses frozen owner |
+| Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.final-coin.v1`, `.tie.v1`; dice omit entry id, others include it; engine survival uses frozen owner; hot activation follows shared dice duration |
 | Direct reward box | `H(callerDerivedWord, player)` | ETH bet caller binds the relevant bet; this is not an independent raw-word consumer |
 | Box secondary draws | `BOX_*_SPIN_TAG`, `BOX_PASS_ROUND_TAG`, `FLIP_ROUND_TAG` | Derive from that box's root; stake only sizes payout |
 | Degenerette result board | packed `H(word, uint32(index), QUICK_PLAY_SALT)` for spin 0; add `uint8(spin)` for later spins | **Shared by all ETH/FLIP players and bets in an RNG period**, including different stakes, hero symbols and currencies. Only ETH/FLIP bets use it; WWXRP is not a bet currency |
@@ -238,7 +278,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Craps bounty boost | `H(word, bound, BOOST_TAG)` | Window identity; battle financial key excluded |
 | Craps schedule | `H(word, SCHEDULE_TAG, period)` | Fixed scheduled period |
 | Craps ties / rounding | `H(word, TIE_TAG, bound<<64 | seat)` / `H(word, CRAPS_ROUND_TAG, betId)` | Fixed window and entry; separate domains |
-| Daily trait board | `H(word, TRAIT_BOARD_TAG)` | Four disjoint six-bit slices of a tagged word; one board per day, re-rolled identically by the day's later legs |
+| Daily trait board | `H(word, TRAIT_BOARD_TAG)`; `GOLD_SIX_DAILY_V1` and `GOLD_SIX_REPLACEMENT_V1` | Four disjoint six-bit slices, then gold-six keep/redirect; one board per day, re-rolled identically by later legs |
 | Hero symbol | `H(heroEntropy, HERO_SYMBOL_TAG, day)` | Committed day and effective distribution |
 | Jackpot recipient sampling | bucket root + trait + source salt + pull | Source salts distinguish ETH/current/early-bird/purchase draws; prize size excluded |
 | Jackpot battle field | `H(word', level, FAR_FUTURE_FLIP_TAG)`, then `H(battleWord, visitOrdinal)` | `word'` is the day word, or on level 1's purchase days `H(word, LEVEL_ONE_FILL_SALT)`; each visit chooses an eligible level and circular start, then walks that level once; continuation preserves the visit across chunks |
@@ -264,10 +304,10 @@ named constants in the consumer; full string hashes are constant expressions.
   must not be described as consuming independent raw bit slices.
 - The packed ticket sampler intentionally groups eight draws from one sampled
   storage word. Equal marginal probabilities do not imply independent winners.
-- Ticket materialization includes `owed` in its packed base key. It is the
-  emission/resume cursor as well as a remaining quantity; removing it would
-  repeat batch streams. Queue position, group index and fixed work budgets remain
-  part of deterministic materialization.
+- Ticket materialization binds the original physical queue index and an absolute
+  solo offset. Remaining debt and gas budgets do not enter the seed. The event-only
+  gold-six flag supplies cap state for independent replay and is stripped before
+  hashing the immutable identity.
 - Weighted populations, effective symbol totals and probability denominators
   remain inputs to selection arithmetic. Removing financial values from hash
   preimages does not remove economic weighting or eligibility conditions.
@@ -293,3 +333,45 @@ checks shared boards across owners, currencies, stakes and bet ids;
 final-coin exclusion, payout conservation and settlement invariance across batch sizes.
 See [Verification](../VERIFICATION.md) to run these tests and understand their
 limits. This inventory does not establish statistical independence.
+
+Gold-six and queue-rotation verification: `GoldSixRules.t.sol`,
+`TicketCheckpointDeterminism.t.sol`, `FoilGenerationCohort.t.sol`,
+`GoldenTicketArmResolve.t.sol`, `GoldSixGas.t.sol`, and
+`TicketDrainWorstCaseBound.t.sol` passed 67 tests on 2026-10-02, including 1,000
+checkpoint-fuzz runs. Both Hardhat `MintBatchDeterminism.test.js` checks also
+passed, reconstructing live entry buckets from the flagged solo events and
+direct seated reveals. In fixed, cold-account drain fixtures, round generation
+rose from 2,609,018 to 2,612,643 gas (+0.14%) and solo generation from 2,233,247 to
+2,243,071 gas (+0.44%). These are representative batch comparisons, not universal
+upper bounds. The older `RoundDrainChunkGas.t.sol` transaction-wide-cap failures
+also reproduce before this change; the current engine limits each indivisible
+step and may execute several steps per transaction.
+
+The subsequent gas review reuses the live-bucket bit directly, shares each solo
+cap read with its replay event, defers round/foil cap reads until an actual
+candidate, and hashes queue rotation without allocating ABI memory. The common
+round path no longer computes its rotation twice. Outcomes and hash preimages
+are unchanged. The same cold-storage `GoldSixGas.t.sol` fixtures measured:
+
+| Fixture | Initial gold-six implementation | After cleanup | Saved |
+| --- | ---: | ---: | ---: |
+| 128 solo entries | 2,243,168 | 2,242,682 | 486 |
+| 320 seated entries | 2,612,734 | 2,612,081 | 653 |
+| 128 solo entries, gold six already taken | 2,207,072 | 2,204,342 | 2,730 |
+| Eight foil packs, gold six already taken | 2,541,830 | 2,533,070 | 8,760 |
+
+The cleanup passed 47 focused Foundry tests, including 1,000 randomized hash
+parity cases and 1,000 checkpoint-fuzz cases, plus both Hardhat ticket-replay
+checks (49 passing checks total). The gas-read and RNG-taint registry checks
+also passed. The extra bitmap lookup adds no storage field or write. It
+is valid because all production bucket appends have positive counts and an
+active level's entries are append-only; the full level stamp prevents parity
+reuse from carrying an old cap forward.
+
+## Duration-based craps hot bonus
+
+The natural `ShooterBoost` random draw is removed. All eligible seats share hot
+activation after the twelfth surviving roll; only profit on roll 13 onward gets
+the seat's picked-chip percentage. Dice, scatter, survival, and rotation domains
+are unchanged. Rotation adds 30 percentage points to the picked-chip bonus on
+the same eligible profit from roll 13 onward; it does not boost earlier profit.

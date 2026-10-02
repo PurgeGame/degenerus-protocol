@@ -25,8 +25,7 @@ CLASS	kind	subject	function	file	rationale
 PURE-DERIVE	PARAM	rngWord	_coinflipReward	Coinflip.sol	exact existing pure reward derivation
 EXEMPT-ADVANCE	PARAM	rngWord	bafDrawWinner	Coinflip.sol	view drawn by DegenerusJackpots.runBafJackpot inside the transition advance; book bafDrawEntry[bafDrawDay] closes at the day boundary, before that word's request
 EXEMPT-ADVANCE	PARAM	rngWord	processCoinflipPayouts	Coinflip.sol	onlyDegenerusGameContract; rngWord is the applied daily/terminal word; gaps use processCoinflipGap separately; win bit + reward% stored once per epoch
-PURE-DERIVE	PARAM	seed	_boostedShooter	Craps.sol	internal pure shooter-boost draw keccak(tag, seed, shooter, owner) % 100 < chance; chance from the stored chip count, fixed before the word
-PURE-DERIVE	PARAM	seed	_playerDraw	Craps.sol	private pure four-word keccak shared by _survived/_boostedShooter; no storage, no actor input
+PURE-DERIVE	PARAM	seed	_playerDraw	Craps.sol	private pure four-word keccak used by _survived; no storage, no actor input
 PURE-DERIVE	PARAM	seed	_runSettlement	Craps.sol	private pure hand machine over the committed seed; the board is the frozen, scattered slip
 PURE-DERIVE	PARAM	seed	_runSideSettlement	Craps.sol	private pure place/hardway specialization of _runSettlement over the same committed seed
 PURE-DERIVE	PARAM	word	_scatterInto	Craps.sol	internal pure: throws the unplaced chips at legs keccak(word, i) % 10; word is hash2(settling word, owner), passed to CrapsEngine.settleRanked by the table
@@ -314,3 +313,17 @@ EXEMPT-ADVANCE	PARAM	entropy	_resolveZeroOwedRemainder	storage/DegenerusGameStor
 PURE-DERIVE	ARG	EntropyLib.hash2	_rollRemainder	storage/DegenerusGameStorage.sol	hash2(entropy, rollSalt): fractional-ticket roll; pure
 PURE-DERIVE	PARAM	entropy	_rollRemainder	storage/DegenerusGameStorage.sol	private pure hash2(entropy, rollSalt) % 100 < rem
 CONSUMER-SEALED	ARG	ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall	_runHumanBoxWork	modules/GameAfkingModule.sol	FIFO-admitted committed order and published active word pass atomically to Lootbox settlement; no live owner/index choice enters the seed.
+CONSUMER-SEALED	PARAM	word	payBattlePot	JackpotBattle.sol	Self-only table finalization; fixed settlement word and frozen field select the named shooter for the stored longest shared hand; no reseed or entrant mutation.
+
+# Gold-six uniqueness, daily redistribution, and frozen ticket-queue rotation.
+PURE-DERIVE	ARG	EntropyLib.hash2	daily	libraries/GoldSixLib.sol	Pure GOLD_SIX_DAILY_V1 domain hash of the committed daily word; keeps natural gold six at 1/6, with a separate replacement domain.
+PURE-DERIVE	ARG	EntropyLib.hash2	replacement	libraries/GoldSixLib.sol	Pure GOLD_SIX_REPLACEMENT_V1 domain hash of the immutable candidate seed; selects one of seven other gold dice.
+PURE-DERIVE	ARG	EntropyLib.hash4	queueStart	libraries/TicketEntropy.sol	Byte-identical scratch-memory hash of rotation domain, committed queue key, frozen length and sealed word; no timing or gas inputs.
+PURE-DERIVE	ARG	GoldSixLib.daily	_rollMainTraits	modules/DegenerusGameJackpotModule.sol	Daily board adjustment from the same sealed word for every daily leg; terminal board remains separate.
+PURE-DERIVE	ARG	GoldSixLib.replacement	_deriveFoilLines	modules/DegenerusGameFoilPackModule.sol	Replacement uses this foil line's frozen buyer/level/ordinal seed; cap affects only duplicate gold-six eligibility, never the seed.
+PURE-DERIVE	ARG	GoldSixLib.replacement	_runQuadrant	modules/DegenerusGameTicketModule.sol	Replacement uses immutable full round seed; each rare split contains at most one gold-six candidate.
+PURE-DERIVE	ARG	TicketEntropy.queueStart	_drainQueue	modules/DegenerusGameTicketModule.sol	Frozen queue rotation from the committed cohort word; physical queue indexes remain the solo and remainder identity.
+PURE-DERIVE	ARG	TicketEntropy.queueStart	_roundPhase	modules/DegenerusGameTicketModule.sol	Canonical seated rotation derives from the same frozen queue and word on every checkpoint; budgets cannot reroll the starting wallet.
+PURE-DERIVE	PARAM	entropy	queueStart	libraries/TicketEntropy.sol	Committed cohort word; domain-separated rotation depends only on the sealed key, frozen length and word.
+PURE-DERIVE	PARAM	seed	replacement	libraries/GoldSixLib.sol	Immutable candidate LCG state, full round seed, foil-line seed or daily root; separate replacement domain and no mutable financial input.
+PURE-DERIVE	PARAM	word	daily	libraries/GoldSixLib.sol	Committed daily word supplies the independent 1/6 keep gate and seven-way replacement hash.

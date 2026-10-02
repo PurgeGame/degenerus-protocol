@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev The DeadVrfEnding seeder plus the post-swap probes this repro needs. Etched only to
@@ -19,34 +18,20 @@ contract PostSwapSeeder is DeadVrfSeeder {
         return _goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK);
     }
 
-    /// @dev Empty the read queue at `lvl` (length word only, as the drain's own release does).
-    ///      Prices the payout-only fall-through on otherwise identical state.
-    function releaseReadQueue(uint24 lvl) external {
-        _releaseTicketQueue(_tqReadKey(lvl));
-    }
-}
-
-/// @dev Keep the real terminal orchestration and replace only its payout body.
-///      Replacing the whole module fallback would probe its entry, before any drain.
-contract PayoutGasProbe is DegenerusGameGameOverModule {
-    function handleGameOverDrain(uint24) public override {
-        assembly {
-            mstore(0, gas())
-            revert(0, 32)
+    function inventoryDigest(uint24 lvl) external view returns (bytes32 digest) {
+        for (uint256 t; t < 256; ++t) {
+            uint256 n = _bucketLength(lvl, t);
+            digest = keccak256(abi.encode(digest, t, n));
+            for (uint256 i; i < n; ++i) {
+                digest = keccak256(abi.encode(digest, _bucketOwnerAtUnchecked(lvl, uint8(t), i)));
+            }
         }
     }
+
 }
 
-/// @notice After the ending's one ticket-slot swap, a starved drain batch must not be reported as
-///         "no batch": the same transaction would fall through to handleGameOverDrain +
-///         _unlockRng, latch gameOver with the cohort still queued, and leave its share for the
-///         final sweep — a caller-chosen gas limit forfeiting the whole post-swap cohort.
-///         `_terminalDrainBatch` re-raises an empty or EmptyRevert failure in both phases, so a
-///         starved batch reverts. Without that, only a margin protected the cohort: with every
-///         trait bucket at drainLevel empty the payout pays nobody and is cheap (~228k cold),
-///         and the most a starved batch was measured to leave it was ~188k. The sweep drives
-///         every starved depth (the worker, or the nested round drain) and asserts no limit
-///         forfeits the cohort.
+/// @notice Low supplied gas may pause or revert a post-swap drain, but must never
+///         advance terminal payouts past unpaid tickets or change the eventual awards.
 contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
     uint24 private constant LVL = 5000; // purchase phase: the terminal ticket level is LVL + 1
     uint24 private constant TLVL = LVL + 1;
@@ -111,13 +96,9 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         return held > owed ? held - owed : 0;
     }
 
-    function _isStarved(bytes memory err) private pure returns (bool) {
-        return err.length == 0 || (err.length == 4 && bytes4(err) == DegenerusGameStorage.EmptyRevert.selector);
-    }
-
     /// @dev Real flow from a deadline-past, caught-up, VRF-alive purchase phase with the whole
     ///      terminal cohort on the WRITE side: call 1 performs the ending's one swap and sends
-    ///      the terminal request, `word` lands, call 2 applies it. Then `preBatches` full-gas
+    ///      the terminal request, `word` lands, call 2 applies it. Then `preBatches` gas-limited
     ///      drain batches. Ends one call before the batch under test.
     function _toPostSwapWorded(uint256 owners, uint32 entries, uint256 word, uint256 preBatches) private {
         PostSwapSeeder s = _seeder();
@@ -149,232 +130,112 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         assertGt(_unallocated(), 0, "distributable funds exist");
 
         for (uint256 i; i < preBatches; ++i) {
-            game.mineFlip();
+            _coolEngine();
+            game.mineFlip{gas: 3_500_000}();
             assertFalse(game.gameOver(), "pre-batch returned before the payout");
         }
         (rl,,) = _queues();
         assertGt(rl, 0, "cohort still queued at the batch under test");
     }
 
-    // ---------------------------------------------------------------- the sweep
-
-    struct Sweep {
-        uint256 batchGas; // full-gas cost of the batch under test
-        uint256 minBatchOkGas; // smallest limit at which that batch ran
-        uint256 payoutGas; // payout-only fall-through (queue released), full gas
-        uint256 payoutMinGas; // smallest limit completing the payout-only call
-        uint256 payoutNeed; // gas the payout frame receives at payoutMinGas (it needs at most this)
-        uint256 payoutCohortPaid; // what the payout-only call credits the cohort (0: winning buckets empty)
-        uint256 payoutDeityPaid; // ...and the protocol deities (0: no deity symbol among the winners)
-        uint256 maxFallthrough; // most gas a starved batch leaves the payout frame (probe)
-        uint256 maxFallthroughAt; // the limit at which that peak occurred
-        uint256 nestedOogCount; // starved limits whose leftover shows the nested frame OOG'd
-        uint256 workerOogCount; // starved limits whose leftover shows the worker frame OOG'd
-        uint256 leakGas; // largest leaking limit
-        uint256 leakLow; // smallest leaking limit
-        uint256 leakCount;
-        uint256 witnessGas; // largest limit that reverted EmptyRevert / empty data
-        uint256 witnessCount;
+    function _coolEngine() private {
+        vm.cool(address(game));
+        vm.cool(ContractAddresses.GAME_MINER_MODULE);
+        vm.cool(ContractAddresses.GAME_ADVANCE_MODULE);
+        vm.cool(ContractAddresses.GAME_GAMEOVER_MODULE);
+        vm.cool(ContractAddresses.GAME_TICKET_MODULE);
+        vm.cool(ContractAddresses.GAME_MINT_MODULE);
+        vm.cool(ContractAddresses.GAME_JACKPOT_MODULE);
+        vm.cool(ContractAddresses.GAME_JACKPOT_DRAW_MODULE);
     }
 
-    function _sweep(uint256 owners, uint32 entries, uint256 word, uint256 preBatches, uint256 divisor)
-        private
-        returns (Sweep memory r)
-    {
+    function _assertNoPrematurePayout() private {
+        (uint256 queued,,) = _queues();
+        (uint256 owed,) = _owedTotal();
+        if (queued != 0 || owed != 0) {
+            assertFalse(game.gameOver(), "unpaid cohort must precede terminal setup");
+            assertEq(_jackpotPaid(), 0, "unpaid cohort must precede payout completion");
+        }
+    }
+
+    function _finish() private {
+        for (uint256 i; i < 100 && _jackpotPaid() == 0; ++i) {
+            _coolEngine();
+            game.mineFlip{gas: 12_000_000}();
+            _assertNoPrematurePayout();
+        }
+        assertTrue(game.gameOver(), "ending completes");
+        assertEq(_jackpotPaid(), 1, "all payout quadrants complete");
+        (uint256 queued,,) = _queues();
+        (uint256 owed,) = _owedTotal();
+        assertEq(queued, 0, "read queue released");
+        assertEq(owed, 0, "entire paid cohort materialized");
+    }
+
+    function _payoutTranscript() private returns (bytes32 digest) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0
+                && logs[i].topics[0] == keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)")) {
+                digest = keccak256(abi.encode(digest, logs[i].topics, logs[i].data));
+            }
+        }
+    }
+
+    function _settledState() private returns (bytes32 digest) {
+        digest = _seeder().inventoryDigest(TLVL);
+        _restore();
+        digest = keccak256(abi.encode(digest, game.claimablePoolView(), _unallocated(),
+            game.claimableWinningsOf(ContractAddresses.VAULT), game.claimableWinningsOf(ContractAddresses.SDGNRS)));
+        for (uint256 i; i < cohort.length; ++i) {
+            digest = keccak256(abi.encode(digest, game.claimableWinningsOf(cohort[i])));
+        }
+    }
+
+    function _sweep(uint256 owners, uint32 entries, uint256 preBatches, bool expectAwards) private {
+        uint256 word = uint256(keccak256(abi.encode("w", uint256(0))));
         _toPostSwapWorded(owners, entries, word, preBatches);
         uint256 base = vm.snapshotState();
-        bytes memory goCode = ContractAddresses.GAME_GAMEOVER_MODULE.code;
-
-        _measurePayout(r);
-        vm.revertToState(base);
-
-        // Full-gas batch: runs, returns before the payout, leaves the cohort partly queued.
-        uint256 before = _bucketTotal();
-        uint256 g0 = gasleft();
-        game.mineFlip();
-        r.batchGas = g0 - gasleft();
-        assertFalse(game.gameOver(), "a batch call returns before the payout");
-        assertGt(_bucketTotal(), before, "the batch drained tickets into the buckets");
-        vm.revertToState(base);
-
-        uint256 step = r.batchGas / divisor;
-        uint256 top = r.batchGas + r.batchGas / 10;
-        uint256 bottom = r.batchGas / 8;
-
-        // Probe pass: the inherited production terminal worker replaces only the payout
-        // body, so a swallowed starved batch reports the actual payout budget.
-        vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, type(PayoutGasProbe).runtimeCode);
-        uint256 probed = vm.snapshotState();
-        r.minBatchOkGas = type(uint256).max;
-        for (uint256 g = top; g > bottom; g -= step) {
-            vm.revertToState(probed);
-            try game.mineFlip{gas: g}() {
-                if (g < r.minBatchOkGas) r.minBatchOkGas = g;
-            } catch (bytes memory err) {
-                if (err.length == 32) {
-                    uint256 e = abi.decode(err, (uint256));
-                    if (e > r.maxFallthrough) {
-                        r.maxFallthrough = e;
-                        r.maxFallthroughAt = g;
-                    }
-                    // Nested (round-drain) OOG: the payout gets the Advance AND worker reserves,
-                    // ~3% of the limit; worker OOG: only the Advance reserve, ~1.5%.
-                    if (e * 1000 > g * 22) ++r.nestedOogCount;
-                    else ++r.workerOogCount;
-                }
-            }
+        vm.recordLogs();
+        _finish();
+        bytes32 expectedTranscript = _payoutTranscript();
+        bytes32 expectedState = _settledState();
+        // Retain the adversarial empty-board case, and separately prove that the
+        // populated case exercises the event filter and actual recipient credits.
+        if (expectAwards) {
+            assertTrue(expectedTranscript != bytes32(0), "baseline records actual terminal awards");
+            assertGt(_cohortClaimable(), 0, "baseline awards reach the paid cohort");
+        } else {
+            assertEq(expectedTranscript, bytes32(0), "empty winning board has no draw awards");
+            assertEq(_cohortClaimable(), 0, "empty winning board has no cohort credit");
         }
-        vm.revertToState(base);
-        assertEq(keccak256(ContractAddresses.GAME_GAMEOVER_MODULE.code), keccak256(goCode), "real module restored");
-
-        // Real pass.
-        uint256 leakRl;
-        uint256 leakOwed;
-        uint256 leakOwing;
-        uint256 leakUnalloc;
-        uint256 leakCohortPaid;
-        uint256 leakDeityPaid;
-        for (uint256 g = top; g > bottom; g -= step) {
-            vm.revertToState(base);
-            try game.mineFlip{gas: g}() {
-                if (game.gameOver() || _jackpotPaid() != 0) {
-                    (uint256 rl,,) = _queues();
-                    (uint256 owed, uint256 owing) = _owedTotal();
-                    if (rl != 0 || owed != 0) {
-                        if (r.leakGas == 0) {
-                            r.leakGas = g;
-                            leakRl = rl;
-                            leakOwed = owed;
-                            leakOwing = owing;
-                            leakUnalloc = _unallocated();
-                            leakCohortPaid = _cohortClaimable();
-                            leakDeityPaid = game.claimableWinningsOf(ContractAddresses.VAULT)
-                                + game.claimableWinningsOf(ContractAddresses.SDGNRS);
-                        }
-                        r.leakLow = g;
-                        ++r.leakCount;
-                    }
-                }
-            } catch (bytes memory err) {
-                if (_isStarved(err)) {
-                    if (r.witnessGas == 0) r.witnessGas = g;
-                    ++r.witnessCount;
-                } else {
-                    emit log_named_bytes("unexpected revert", err);
-                    emit log_named_uint("  at gas", g);
-                }
-            }
+        uint256[11] memory limits = [uint256(100_000), 400_000, 700_000, 1_000_000,
+            1_500_000, 2_000_000, 2_500_000, 3_000_000, 4_000_000, 6_000_000, 9_500_000];
+        uint256 pauses;
+        uint256 partialDrains;
+        for (uint256 i; i < limits.length; ++i) {
+            assertTrue(vm.revertToState(base));
+            uint256 createdBefore = _bucketTotal();
+            _coolEngine();
+            vm.recordLogs();
+            (bool ok,) = address(game).call{gas: limits[i]}(abi.encodeCall(game.mineFlip, ()));
+            _assertNoPrematurePayout();
+            if (!game.gameOver()) ++pauses;
+            (uint256 queued,,) = _queues();
+            if (ok && queued != 0 && _bucketTotal() > createdBefore) ++partialDrains;
+            _finish();
+            assertEq(_payoutTranscript(), expectedTranscript, "supplied gas cannot change ordered awards");
+            assertEq(_settledState(), expectedState, "supplied gas cannot forfeit or reorder any cohort entry");
         }
-        vm.revertToState(base);
-
-        emit log_named_uint("owners", owners);
-        emit log_named_uint("entries each", entries);
-        emit log_named_uint("terminal word", word);
-        emit log_named_uint("pre-batches", preBatches);
-        emit log_named_uint("sweep step", step);
-        emit log_named_uint("batchGas (full-gas batch under test)", r.batchGas);
-        emit log_named_uint("minBatchOkGas (smallest limit the batch ran at)", r.minBatchOkGas);
-        emit log_named_uint("payoutGas (payout-only fall-through, full gas)", r.payoutGas);
-        emit log_named_uint("payoutMinGas (smallest limit completing it)", r.payoutMinGas);
-        emit log_named_uint("payoutNeed (payout frame's gas at payoutMinGas)", r.payoutNeed);
-        emit log_named_uint("payout-only: cohort credited (wei)", r.payoutCohortPaid);
-        emit log_named_uint("payout-only: protocol deities credited (wei)", r.payoutDeityPaid);
-        emit log_named_uint("maxFallthrough (most gas a starved batch leaves the payout frame)", r.maxFallthrough);
-        emit log_named_uint("  at limit", r.maxFallthroughAt);
-        emit log_named_uint("starved limits, nested round-drain OOG", r.nestedOogCount);
-        emit log_named_uint("starved limits, worker-frame OOG", r.workerOogCount);
-        emit log_named_uint("witnessGas (largest EmptyRevert/empty revert)", r.witnessGas);
-        emit log_named_uint("witnessCount", r.witnessCount);
-        emit log_named_uint("leakGas (largest leaking limit)", r.leakGas);
-        emit log_named_uint("leakLow (smallest leaking limit)", r.leakLow);
-        emit log_named_uint("leakCount", r.leakCount);
-
-        // Honest completion from the same state, for the forfeiture comparison.
-        uint256 unallocBefore = _unallocated();
-        for (uint256 i; i < 100 && !game.gameOver(); ++i) game.mineFlip();
-        assertTrue(game.gameOver(), "honest ending completes");
-        (uint256 hrl,,) = _queues();
-        (uint256 hOwed,) = _owedTotal();
-        emit log_named_uint("unallocated before the ending (wei)", unallocBefore);
-        emit log_named_uint("honest: cohort credited (wei)", _cohortClaimable());
-        emit log_named_uint(
-            "honest: protocol deities credited (wei)",
-            game.claimableWinningsOf(ContractAddresses.VAULT) + game.claimableWinningsOf(ContractAddresses.SDGNRS)
-        );
-        emit log_named_uint("honest: left for the final sweep (wei)", _unallocated());
-        emit log_named_uint("honest: read queue left", hrl);
-        emit log_named_uint("honest: entries owed left", hOwed);
-        if (r.leakGas != 0) {
-            emit log_named_uint("leak: read queue left", leakRl);
-            emit log_named_uint("leak: entries owed left", leakOwed);
-            emit log_named_uint("leak: owners still owed", leakOwing);
-            emit log_named_uint("leak: cohort credited (wei)", leakCohortPaid);
-            emit log_named_uint("leak: protocol deities credited (wei)", leakDeityPaid);
-            emit log_named_uint("leak: left for the final sweep (wei)", leakUnalloc);
-        }
-        vm.revertToState(base);
+        assertGt(pauses, 0, "sweep exercises starved checkpoints");
+        assertGt(partialDrains, 0, "sweep exercises successful partial drains");
     }
 
-    /// @dev The payout-only fall-through on the state under test: read queue released, buckets
-    ///      as they are. Full-gas cost, the smallest limit completing it, and what the payout
-    ///      frame receives at that limit.
-    function _measurePayout(Sweep memory r) private {
-        _seeder().releaseReadQueue(TLVL);
-        _restore();
-        uint256 post = vm.snapshotState();
-        uint256 g0 = gasleft();
-        game.mineFlip();
-        r.payoutGas = g0 - gasleft();
-        assertTrue(game.gameOver(), "payout-only call ends the game");
-        r.payoutCohortPaid = _cohortClaimable();
-        r.payoutDeityPaid =
-            game.claimableWinningsOf(ContractAddresses.VAULT) + game.claimableWinningsOf(ContractAddresses.SDGNRS);
-        uint256 lo;
-        uint256 hi = r.payoutGas * 2;
-        while (hi - lo > 16) {
-            uint256 mid = (lo + hi) / 2;
-            vm.revertToState(post);
-            bool done;
-            try game.mineFlip{gas: mid}() {
-                done = game.gameOver();
-            } catch {}
-            if (done) hi = mid;
-            else lo = mid;
-        }
-        r.payoutMinGas = hi;
-        vm.revertToState(post);
-        vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, type(PayoutGasProbe).runtimeCode);
-        try game.mineFlip{gas: r.payoutMinGas}() {
-            revert("probe must revert");
-        } catch (bytes memory err) {
-            assertEq(err.length, 32, "probe reading");
-            r.payoutNeed = abi.decode(err, (uint256));
-        }
-    }
-
-    /// @dev A terminal word whose four winning traits hold no entry at the states below and
-    ///      name no protocol-deity symbol, so the payout pays nobody: its cheapest form.
-    function _emptyBoardWord() private pure returns (uint256) {
-        return uint256(keccak256(abi.encode("w", uint256(0))));
-    }
-
-    function _assertNoForfeit(Sweep memory r) private pure {
-        assertEq(r.payoutCohortPaid + r.payoutDeityPaid, 0, "harness: the payout under test pays nobody");
-        assertGt(r.witnessCount, 0, "the scan reached starved calls");
-        assertLt(r.maxFallthrough, r.payoutNeed, "a starved batch leaves the payout less than it needs");
-        assertEq(r.leakGas, 0, "a starved post-swap batch forfeited the terminal cohort");
-    }
-
-    /// @dev The pre-swap test's cohort shape (24 owners x 60 entries), now post-swap: the first
-    ///      post-swap batch (cold-level derated budget), every trait bucket at drainLevel empty.
     function test_starvedPostSwapBatchCannotForfeitTheCohort() public {
-        _assertNoForfeit(_sweep(24, 60, _emptyBoardWord(), 0, 1024));
+        _sweep(24, 60, 0, false);
     }
 
-    /// @dev The closest shape found: few owners with large balances, so nearly the whole batch
-    ///      is the nested round drain, on the second post-swap batch (the full budget, no cold-level derate).
-    ///      The first batch left the four winning buckets empty, so the payout is still free.
     function test_starvedLaterPostSwapBatchCannotForfeitTheCohort() public {
-        _assertNoForfeit(_sweep(8, 2000, _emptyBoardWord(), 1, 1024));
+        _sweep(8, 2000, 1, true);
     }
 }

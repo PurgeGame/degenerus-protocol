@@ -150,7 +150,6 @@ CURSOR	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	REA
 PRODUCER	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	WRITE
 CURSOR	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	READ
 PRODUCER	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	WRITE
-GATE	_lootboxWord	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	READ
 CONSUMER-SEALED	_recordedDailyWord	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 GATE	rngWordCurrent	_rngRetryDue	modules/DegenerusGameRngModule.sol	READ	Retry only an active unanswered request; retained delivered payload cannot be discarded.
 EXEMPT-ADVANCE	lootboxRngPacked	_sealRngWriteBuffer	modules/DegenerusGameRngModule.sol	WRITE	Successful normal request clears pending purchase values once before the binary seal; retry preserves both buffers.

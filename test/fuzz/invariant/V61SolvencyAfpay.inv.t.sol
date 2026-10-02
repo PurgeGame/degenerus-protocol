@@ -33,6 +33,7 @@ import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
 ///   SolvencyActionHandler (FUZZ-01, 381-01) is a SECOND target that WIDENS the same identity to the buyer
 ///   surfaces that mutate claimablePool but were NOT under the afking-only handler: the whale pass, the lazy
 ///   pass, the deity pass, the coin-presale box (and a lootbox-bearing fallback buy), prepaid-afking funding,
+///   approved stETH subscription inflows,
 ///   and the claim cashout. Both handlers' tracked sets are summed over their UNION (the three protocol
 ///   addresses de-duplicated to a single count), so the Σ identity and the backing bound assert across the
 ///   afking spends AND the wider buyer set in a single campaign — this is case (b) PROMOTE/EXTEND, not a new
@@ -68,6 +69,10 @@ contract V61SolvencyAfpay is DeployProtocol {
         // (0x5A000) so the two handlers' actor sets never collide. Both are targeted in the same campaign; the
         // invariants below sum the halves over the UNION of the two tracked sets.
         solvencyHandler = new SolvencyActionHandler(game, deityPass, mockVRF, 5);
+        // Seats enable real subscription calls without seeding either half of balancesPacked.
+        for (uint256 i; i < solvencyHandler.actorCount(); ++i) {
+            _grantSeat(solvencyHandler.actors(i));
+        }
 
         targetContract(address(handler));
         targetContract(address(solvencyHandler));
@@ -141,6 +146,35 @@ contract V61SolvencyAfpay is DeployProtocol {
             0,
             "NON-VACUITY: SolvencyActionHandler pass/presale/claim surfaces must succeed > 0 times (else the widened identity is vacuous)"
         );
+    }
+
+    /// @notice Pin non-vacuity for the new action: actor ETH becomes stETH, then funds a real cover buy.
+    function testScenarioStethFallbackPreservesIdentity() public {
+        address actor = solvencyHandler.actors(0);
+        uint256 priceWei = _oneTicketCost();
+        uint256 actorEthBefore = actor.balance;
+        uint256 gameStethBefore = mockStETH.balanceOf(address(game));
+        uint256 poolBefore = game.claimablePoolView();
+
+        solvencyHandler.subscribeSteth(0);
+
+        assertEq(solvencyHandler.ghost_stethBuys(), 1, "a real stETH-funded cover buy must land");
+        assertEq(solvencyHandler.ghost_stethFunded(), priceWei, "only the subscription cost enters GAME");
+        assertEq(mockStETH.balanceOf(address(game)) - gameStethBefore, priceWei, "receipt backs the purchase");
+        assertEq(actorEthBefore - actor.balance, priceWei + 1, "stETH was purchased with the actor's ETH");
+        assertEq(mockStETH.balanceOf(actor), 1, "unspent stETH stays in the actor wallet");
+        assertEq(game.afkingFundingOf(actor), 0, "exact daily funding is fully consumed");
+        assertEq(game.claimablePoolView(), poolBefore, "paired funding credit and purchase debit cancel");
+        invariant_v61PoolEqualsSumOfHalves();
+        invariant_v61PoolNeverExceedsBacking();
+        invariant_queueViewsMatchPositionAccounting();
+
+        // Exercise a later paired credit/debit against the same tracked account.
+        solvencyHandler.fundAfking(0, 1 ether);
+        solvencyHandler.buyFoil(0, 0);
+        invariant_v61PoolEqualsSumOfHalves();
+        invariant_v61PoolNeverExceedsBacking();
+        invariant_queueViewsMatchPositionAccounting();
     }
 
     // =========================================================================

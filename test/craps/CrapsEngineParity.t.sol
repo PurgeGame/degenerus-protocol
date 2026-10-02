@@ -17,17 +17,14 @@ contract InlineCrapsReference is Craps {
     }
 }
 
-/// @dev The engine moved out of the table without changing a roll. The digest below was taken
-///      from the inline engine at `e013043d9` — `_boardFrom`, `_scatterInto`, `_settleSlip`
-///      compiled into CrapsBattle — over exactly this generator: four hundred slips across every
-///      board shape, chip size, scatter count, bankroll, goal, owner and boost row, under its
-///      original limit. It was re-pinned once, when every shooter began doubling from shooter 30:
-///      the prior digest (0x2385...45e9) is reproduced exactly by setting `_ESC_FAST_FROM` out of
-///      reach and the budget back to 1,000. Today's engine is compared to the inline reference with
-///      the shared 600-roll budget. Runs ending before that budget stay identical.
+/// @dev Current duration-rule engine versus the inline reference under shared and historical
+///      roll limits. The deterministic 400-slip digest was regenerated for the duration rule;
+///      payouts are also checked against the independent per-roll oracle in separate suites.
 contract CrapsEngineParity is Test {
+    // Generated from the duration-rule Solidity engine; independent oracle parity is
+    // covered by CrapsHotDuration and CrapsShooterBoost, including bounded runs.
     bytes32 internal constant INLINE_ENGINE_DIGEST =
-        0xd4365dfc05d13cb831ae67b9f226d2c30829d927dfcc8946d84f0914bbba09a7;
+        0x9f1d8924e3c2482c6be7f34b7ce0dd9ae2497ddb2feaaddcce01730ad777aff2;
 
     /// forge-config: default.fuzz.runs = 64
     function testFuzz_directAndRankedRunsUseSharedRollCeiling(bytes32 seed, bool latched) public {
@@ -85,6 +82,6 @@ contract CrapsEngineParity is Test {
                 )
             );
         }
-        assertEq(bytes32(acc), INLINE_ENGINE_DIGEST, "historical engine changed beyond its roll limit");
+        assertEq(bytes32(acc), INLINE_ENGINE_DIGEST, "duration engine regression digest changed");
     }
 }

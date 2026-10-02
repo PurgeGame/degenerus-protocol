@@ -804,12 +804,20 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         }
         uint256 created;
         uint256 traits;
+        // No calls or bucket mutations occur during this scan. Authenticate the
+        // retained level once, then reuse its live bitmap and bucket base.
+        _assertReadableTicketLevel(lvl);
+        uint256 live = _ticketBufferLevel(lvl) == lvl ? traitBucketLive[lvl & 1] : 0;
+        uint256 base = _traitBufferBase(lvl);
         for (uint256 t; t < 256; ) {
-            uint256 n = _bucketLength(lvl, t);
-            if (n != 0) {
-                created += n;
-                unchecked {
-                    ++traits;
+            if (live & (uint256(1) << t) != 0) {
+                uint256 n;
+                assembly ("memory-safe") { n := and(sload(add(base, t)), 0xffffffff) }
+                if (n != 0) {
+                    created += n;
+                    unchecked {
+                        ++traits;
+                    }
                 }
             }
             unchecked {

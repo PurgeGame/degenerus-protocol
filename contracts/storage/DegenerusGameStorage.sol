@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GoldSixLib} from "../libraries/GoldSixLib.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -198,6 +200,9 @@ abstract contract DegenerusGameStorage {
     /// @dev Scale factor for fractional ticket calculations (2 decimal places).
     ///      100 means 1 ticket = 100 scaled units.
     uint256 internal constant QTY_SCALE = 100;
+
+    /// @dev Only Crypto, Zodiac and Cards can be Degenerette heroes; Dice still roll naturally.
+    uint8 internal constant DEGENERETTE_HERO_COUNT = 24;
 
     /// @dev Marker bit on entry owed values: set by the drain once a player's
     ///      owed balance has been divided by 2^snapShift, so a budget-split resume
@@ -796,6 +801,8 @@ abstract contract DegenerusGameStorage {
 
     /// @notice Emitted when traits are generated for a player's ticket batch.
     ///         Records the encoded key + count needed to replay trait generation off-chain.
+    ///         Solo baseKey bit 255 records whether gold six was already taken before
+    ///         this run. Strip that event-only bit before deriving the stream's entropy.
     event TraitsGenerated(
         address indexed player,
         uint256 baseKey,
@@ -1717,9 +1724,14 @@ abstract contract DegenerusGameStorage {
         }
     }
 
+    /// @dev Gold six has no virtual deity entry; actual purchased entries remain eligible.
+    function _traitDeity(uint8 trait) internal view returns (address) {
+        return trait == GoldSixLib.TRAIT ? address(0) : deityBySymbol[(trait >> 6) * 8 + (trait & 7)];
+    }
+
     /// @dev Virtual deity entry count for a trait bucket of size `len` (zero
     ///      when no deity holds the trait's symbol):
-    ///        Gold tier (color == 7): flat 1 virtual entry.
+    ///        Gold tier (color == 7): flat 1 virtual entry, except gold Dice 6 (zero).
     ///        Colors 5/6: floor(1% of bucket), minimum 1.
     ///        Colors 0..4: floor(2% of bucket), minimum 2.
     function _deityVirtualCount(
@@ -1727,7 +1739,7 @@ abstract contract DegenerusGameStorage {
         uint256 len,
         address deity
     ) internal pure returns (uint256 virtualCount) {
-        if (deity != address(0)) {
+        if (deity != address(0) && trait != GoldSixLib.TRAIT) {
             uint8 color = (trait >> 3) & 7;
             if (color == 7) {
                 virtualCount = 1;
@@ -2444,11 +2456,11 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Degenerette bets per lootbox RNG index, one word per bet in placement order.
     ///      A bet's id is its position + 1. Placement appends only while the index word is
-    ///      unset; the human-box sweep resolves the queue after that index's box entries, and
-    ///      any caller may resolve a bet early once the word lands. A resolved bet is zeroed.
+    ///      unset; the ordered miner chain resolves the queue after that index's box entries.
+    ///      Direct worker calls enforce the same consumer stage. A resolved bet is zeroed.
     ///      Word layout (LSB → MSB):
     ///      - [0..159]   owner
-    ///      - [160..164] chosen hero symbol (0..31; hero quadrant = symbol >> 3)
+    ///      - [160..164] chosen hero symbol (0..23; hero quadrant = symbol >> 3; Dice excluded)
     ///      - [165..169] spin count (1..25)
     ///      - [170]      currency (0 = ETH, 1 = FLIP)
     ///      - [171]      record flag: a biggest-spin record bounty waits in degeneretteRecordBounty
@@ -4392,6 +4404,16 @@ abstract contract DegenerusGameStorage {
         }
     }
 
+    /// @dev Every production append adds at least one entry, and entries are never
+    ///      removed from an active level. Its live bit therefore proves gold six was
+    ///      taken without reading the bucket header. Authenticate the full level so
+    ///      recycled parity buffers cannot carry the cap into a later level.
+    function _goldSixTaken(uint24 lvl) internal view returns (bool) {
+        uint24 storedLevel = _ticketBufferLevel(lvl);
+        if (storedLevel > lvl) revert E();
+        return storedLevel == lvl && traitBucketLive[lvl & 1] & (uint256(1) << GoldSixLib.TRAIT) != 0;
+    }
+
     function _bucketLength(uint24 lvl, uint256 trait) internal view returns (uint256) {
         _assertReadableTicketLevel(lvl);
         return _bucketLengthUnchecked(lvl, trait);
@@ -4482,4 +4504,6 @@ abstract contract DegenerusGameStorage {
         bool finalDay;
     }
     JackpotWork internal jackpotWork;
+
+    error AfkingStethPullFailed();
 }

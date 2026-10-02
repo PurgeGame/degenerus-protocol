@@ -4,9 +4,11 @@ pragma solidity ^0.8.26;
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
+import {AFKingSubscriptionToken} from "../../../contracts/AFKingSubscriptionToken.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {IStETH} from "../../../contracts/interfaces/IStETH.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
@@ -15,9 +17,10 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 /// @notice Drives, in a randomized sequence, the buyer surfaces that mutate claimablePool but were NOT under
 ///         the afking-spend identity: the whale pass, the lazy pass, the deity pass, the coin-presale box
 ///         (and a lootbox-bearing buy that persists a box + paired pool move when the presale index is not yet
-///         live), prepaid-afking funding, and the claim cashout. Every ETH balance is created ONLY through a
+///         live), prepaid-afking funding, stETH-funded subscriptions, and the claim cashout. Every ETH balance is created ONLY through a
 ///         real paired contract entrypoint:
 ///           depositAfkingFunding pairs `claimablePool += value` (the afking high half);
+///           subscribe pulls approved stETH backed by the actor's own submitted ETH, then pays the daily buy;
 ///           buyPresaleBox routes 80/20 to VAULT/SDGNRS claimable and bumps `claimablePool += boxEth`;
 ///           a ticket/lootbox purchase shortfall pairs `claimablePool -=`; a jackpot win pairs the pool credit;
 ///           claimWinnings pairs `claimablePool -=` the payout.
@@ -49,6 +52,8 @@ contract SolvencyActionHandler is Test {
     uint256 public ghost_claims; // successful claimWinnings cashouts
     uint256 public ghost_afkingDeposited; // ETH credited via depositAfkingFunding
     uint256 public ghost_foilBuys; // successful foil packs (short fresh leg -> claimable + afking tiers)
+    uint256 public ghost_stethBuys; // cover buys that actually pulled stETH into GAME
+    uint256 public ghost_stethFunded; // confirmed stETH receipts from those cover buys
 
     // --- Call counters (coverage visibility) ---
     uint256 public ghost_ticketViewViolations;
@@ -60,6 +65,7 @@ contract SolvencyActionHandler is Test {
     uint256 public calls_foil;
     uint256 public calls_claim;
     uint256 public calls_advance;
+    uint256 public calls_subscribeSteth;
 
     address[] public actors;
     address internal currentActor;
@@ -214,8 +220,8 @@ contract SolvencyActionHandler is Test {
     // =========================================================================
 
     /// @notice Credit the actor's prepaid afking bucket via depositAfkingFunding (pairs `claimablePool +=`).
-    ///         The only way the handler creates afking — a genuine paired credit, so the Σ identity is
-    ///         exercised end-to-end across the wider buyer set, not vm.stored into existence.
+    ///         A genuine paired credit, so the Σ identity is exercised end-to-end across the wider buyer
+    ///         set, not vm.stored into existence. The stETH subscription action exercises its other inflow.
     function fundAfking(uint256 actorSeed, uint256 amtSeed) external useActor(actorSeed) {
         calls_fundAfking++;
         uint256 amt = bound(amtSeed, 0.01 ether, 100 ether);
@@ -223,6 +229,39 @@ contract SolvencyActionHandler is Test {
         vm.prank(currentActor);
         try game.depositAfkingFunding{value: amt}(currentActor) {
             ghost_afkingDeposited += amt;
+        } catch {}
+    }
+
+    /// @notice Exercise stETH fallback using only assets bought with the actor's existing ETH.
+    /// @dev A seat comes from the fixture or an actual pass purchase. Internally funded or already-paid
+    ///      subscriptions may skip the pull; count only measured GAME receipts as stETH successes.
+    function subscribeSteth(uint256 actorSeed) external useActor(actorSeed) {
+        calls_subscribeSteth++;
+        if (game.gameOver() || game.rngLocked()) return;
+        if (AFKingSubscriptionToken(ContractAddresses.AFKING_SUB_TOKEN).balanceOf(currentActor) == 0) return;
+
+        (, , , , uint256 priceWei) = game.purchaseInfo();
+        if (priceWei == 0) return;
+        IStETH token = IStETH(ContractAddresses.STETH_TOKEN);
+        uint256 inventory = token.balanceOf(currentActor);
+        uint256 desired = priceWei + 1;
+        if (inventory < desired) {
+            uint256 topUp = desired - inventory;
+            if (topUp > currentActor.balance) return;
+            vm.prank(currentActor);
+            token.submit{value: topUp}(address(0));
+        }
+        vm.prank(currentActor);
+        token.approve(address(game), type(uint256).max);
+
+        uint256 beforeBalance = token.balanceOf(address(game));
+        vm.prank(currentActor);
+        try game.subscribe(currentActor, false, true, 1, address(0)) {
+            uint256 afterBalance = token.balanceOf(address(game));
+            if (afterBalance > beforeBalance) {
+                ghost_stethBuys++;
+                ghost_stethFunded += afterBalance - beforeBalance;
+            }
         } catch {}
     }
 

@@ -1,438 +1,205 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
-import {RecyclingState} from "../helpers/RecyclingState.sol";
 
+import {Vm} from "forge-std/Vm.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
-/// @title PresaleBoxDrain -- F-47-01 closing-box DGNRS over-distribution fix proofs
-/// @notice Proves the PFIX fix (divisor 1_000 -> 400, base poolStart/100 -> poolStart/40)
-///         against the APPLIED Phase-326 diff in
-///         contracts/modules/DegenerusGameLootboxModule.sol:
-///
-///   PFIX-03 (Task 1, deterministic):
-///     - tier-1 buyer earns EXACTLY 3x the DGNRS-per-ETH of a tier-5 buyer (scale-only move).
-///     - an early run of DGNRS-branch opens empties Pool.PresaleBox BEFORE the closing box, so
-///       the closing transferFromPool sweep is ~0, never reverts, and never over-draws (clamp).
-///   PFIX-02 (Task 2, realistic seeded run):
-///     - over a ~50-ETH presale with a realized ~40% DGNRS branch rate, the closing-box sweep
-///       is variance DUST (<= poolStart/100), NOT the ~60% windfall the v47 /1_000 curve left,
-///       the residual pool ends ~empty, and the cumulative per-box DGNRS draw is the dominant
-///       share of poolStart (>= 90%) -- proving the FIXED curve is genuinely exercised.
-///
-/// All assertions run the REAL contract path: game.buyPresaleBox (queue) -> game.openPresaleBox
-/// (the private _resolvePresaleBox -> _presaleBoxDgnrsReward + closing-sweep transferFromPool).
-/// Credit, the per-index VRF word, and (where a SMALL-pool clamp scenario is needed) the pool
-/// balance are seeded via vm.store -- test scaffolding only; ZERO contracts/*.sol modifications.
+/// @notice Presale payout regression: real buys and FIFO manual opens, with one immutable
+///         word per session. Only earned credit, completed ticket prerequisites and entropy
+///         are seeded. Tests preserve the tier ratio, live-pool clamp and closing-dust bounds.
 contract PresaleBoxDrain is DeployProtocol {
-    // ── Storage slots (RE-DERIVED via `solc --storage-layout`, working tree, post Stage B Game-storage packing.
-    //    presaleBoxEth* / credit / sold are BEFORE the first removed mapping → unchanged; the rng pack/
-    //    word + presaleBoxDgnrsPoolStart shifted down by the deity/VRF/boon packing.) ──
-    uint256 constant SLOT_PACKED_0 = 0;                 // presaleOver @ byte 28
-    uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = 16;    // uint96
-    uint256 constant SLOT_PRESALE_BOX_CREDIT = 17;      // mapping(address => uint256)
-    uint256 constant SLOT_PRESALE_BOX_ETH = 18;         // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_PRESALE_BOX_DGNRS_POOL_START = 29; // uint256
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 33;      // LR_INDEX = low 48 bits
-    uint256 constant SLOT_LOOTBOX_RNG_WORD = 34;        // mapping(uint48 => uint256)
-
-    // ── Contract constants mirrored from DegenerusGameLootboxModule (the FIXED curve) ──
-    // base = poolStart / 40 DGNRS-per-ETH; tier multiplier in tenths; reward divisor 400.
-    uint256 constant REWARD_DIVISOR = 400;              // (was 1_000 pre-fix)
-    uint256 constant TIER1_TENTHS = 30;                 // 3.0x
-    uint256 constant TIER5_TENTHS = 10;                 // 1.0x
-    uint256 constant TIER_WIDTH = 10 ether;             // PRESALE_BOX_DGNRS_TIER_WIDTH
+    uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = 16;
+    uint256 constant SLOT_PRESALE_BOX_CREDIT = 17;
+    uint256 constant SLOT_PRESALE_BOX_ETH = 18;
     uint256 constant PRESALE_BOX_ETH_CAP = 50 ether;
-    uint256 constant PRESALE_BOX_MIN = 0.01 ether;
-
-    // Outcome bands off the seed: outcome = uint16(keccak(rngWord,PRESALE_BOX_TAG,player,index)) % 100.
-    // FLIP < 50, DGNRS in [50,90), WWXRP >= 90.
+    bytes32 constant OPENED = keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
+    bytes32 constant SWEPT = keccak256("PresaleBoxRemainderSwept(address,uint256)");
 
     function setUp() public {
         _deployProtocol();
-        // Stay well inside the 365-day deploy-idle liveness window (psd == deploy day).
         vm.warp(block.timestamp + 1 days);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //                              Harness helpers
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @dev The live presale-box DGNRS pool balance.
-    function _poolBal() internal view returns (uint256) {
+    function _poolBal() private view returns (uint256) {
         return sdgnrs.poolBalance(sDGNRS.Pool.PresaleBox);
     }
 
-    /// @dev Current LR_INDEX (the index every same-day box queues at).
-    function _lrIndex() internal view returns (uint48) {
-        return RecyclingState.writeBuffer(address(game));
+    function _boxRecord(uint48 index, address player) private view returns (uint256) {
+        bytes32 inner = keccak256(abi.encode(uint256(index), SLOT_PRESALE_BOX_ETH));
+        return uint256(vm.load(address(game), keccak256(abi.encode(player, inner))));
     }
 
-    /// @dev Slot for presaleBoxEth[index & 1][player] (nested mapping at slot 18).
-    function _boxRecord(uint48 index, address player) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_PRESALE_BOX_ETH)));
-        bytes32 slot = keccak256(abi.encode(player, inner));
-        return uint256(vm.load(address(game), slot));
-    }
-
-    /// @dev Grant presale-box credit to a buyer (test scaffolding -- normally earned 25% on buys).
-    function _grantCredit(address buyer, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(buyer, uint256(SLOT_PRESALE_BOX_CREDIT)));
-        vm.store(address(game), slot, bytes32(amount));
-    }
-
-    /// @dev Set the committed VRF word for an index so opens resolve (RNG-word seeding).
-    function _setRngWord(uint48 index, uint256 word) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_RNG_WORD)));
-        RecyclingState.seedWord(address(game), uint48(index), bytes32(word));
-    }
-
-    /// @dev Advance LR_INDEX (the packed slot's low 48 bits) past `index` so the permissionless
-    ///      openBoxes() sweep treats it as finalized (idx <= finalized) -- mirrors what a real
-    ///      VRF fulfillment does to LR_INDEX, without running an actual VRF round; only bits
-    ///      [0:47] are touched, every other packed field (pendingEth, threshold, ...) survives.
-    function _finalizeIndex(uint48 index) internal {
-        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
-    }
-
-    /// @dev Open exactly the NEXT pending queue entry at the (already-finalized) frontier index
-    ///      via the permissionless sweep, and no further. openBoxes(2): the afking leg's ring
-    ///      scan (the deploy's standing subscribers, none with a pending box) rounds up to one
-    ///      step of maxCount, leaving the human sweep one entry-weight of budget. openHumanBoxes
-    ///      always runs the first entry of a call regardless of its cost, then stops before a
-    ///      second (`opened != 0` guard), so this can never spill into the next buyer's entry
-    ///      even though the RNG word is about to change before the next call.
-    function _openOneQueuedEntry() internal {
-        game.openBoxes(2);
-    }
-
-    /// @dev Force the presale-box DGNRS pool to a chosen balance (drives the SMALL-pool clamp
-    ///      scenario). Drains via the game-only transferFromPool to a sink, mirroring the live
-    ///      draw path -- no direct array poke, so poolBalance() stays internally consistent.
-    function _setPoolBalanceTo(uint256 target) internal {
-        uint256 cur = _poolBal();
-        if (cur <= target) return;
-        vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.PresaleBox, address(0xDEAD), cur - target);
-        assertEq(_poolBal(), target, "pool seeded to target");
-    }
-
-    /// @dev The on-chain outcome for (rngWord, player, index): mirrors _resolvePresaleBox EXACTLY.
-    function _outcome(uint256 rngWord, address player, uint48 index) internal pure returns (uint256) {
-        uint256 seed = uint256(
-            keccak256(abi.encodePacked(rngWord, keccak256("PRESALE_BOX"), player, index))
-        );
-        return uint16(seed) % 100;
-    }
-
-    /// @dev Brute-force a rngWord (>0) so (player, index) lands the DGNRS branch [50,90).
-    function _wordForDgnrs(address player, uint48 index) internal pure returns (uint256 w) {
-        for (w = 2; w < 5000; ++w) {
-            uint256 o = _outcome(w, player, index);
-            if (o >= 50 && o < 90) return w;
-        }
-        revert("no DGNRS word found");
-    }
-
-    /// @dev Expected DGNRS reward for a box, recomputed from the contract's FIXED formula.
-    function _expectedReward(uint256 poolStart, uint256 tierTenths, uint256 amount)
-        internal
-        pure
-        returns (uint256)
-    {
-        return (poolStart * tierTenths * amount) / (REWARD_DIVISOR * 1 ether);
-    }
-
-    /// @dev Buy ONE presale box for `buyer` at the current index with `amount` ETH (fully
-    ///      ETH-funded so no claimable is needed), seeding credit first. Returns the index.
-    function _buyBox(address buyer, uint256 amount) internal returns (uint48 index) {
-        _grantCredit(buyer, amount);
+    function _buyBox(address buyer, uint256 amount) private {
+        vm.store(address(game), keccak256(abi.encode(buyer, SLOT_PRESALE_BOX_CREDIT)), bytes32(amount));
         vm.deal(buyer, amount);
-        index = _lrIndex();
         vm.prank(buyer);
         game.buyPresaleBox{value: amount}(buyer, amount);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //  Task 1(a) -- PFIX-03 tier-shape parity: tier-1 == 3x tier-5 DGNRS-per-ETH
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @notice A tier-1 buyer earns EXACTLY 3x the DGNRS-per-ETH of a tier-5 buyer at the
-    ///         same `amount` and same frozen `poolStart` -- the tier ladder ratio survived the
-    ///         divisor move (3.0 vs 1.0 tenths). Asserted on the REAL on-chain reward, captured
-    ///         as the live pool-balance delta across each DGNRS-branch open.
-    function test_PFIX03_TierShapePreserved() public {
-        uint48 index = _lrIndex();
-        uint256 amount = 1 ether;
-
-        // Tier-1 band: soldBefore in [0,10). Buy this box first (sold == 0 before it).
-        address tier1Buyer = makeAddr("tier1Buyer");
-        _buyBox(tier1Buyer, amount);
-
-        // Tier-5 band: soldBefore >= 40 ETH. Bump cumulative sold to 40 ETH so the next box
-        // freezes the tier-5 multiplier (the buy packs the CURRENT sold as its soldBefore).
-        vm.store(address(game), bytes32(SLOT_PRESALE_BOX_ETH_SOLD), bytes32(uint256(40 ether)));
-        address tier5Buyer = makeAddr("tier5Buyer");
-        _buyBox(tier5Buyer, amount);
-
-        // Sanity: the frozen soldBefore in each record selects the intended tier band.
-        uint256 sold1 = (_boxRecord(index, tier1Buyer) >> 96) & 0xFFFFFFFFFFFFFFFFFFFFFFFF;
-        uint256 sold5 = (_boxRecord(index, tier5Buyer) >> 96) & 0xFFFFFFFFFFFFFFFFFFFFFFFF;
-        assertLt(sold1, TIER_WIDTH, "tier1 soldBefore < 10 ETH");
-        assertGe(sold5, 4 * TIER_WIDTH, "tier5 soldBefore >= 40 ETH");
-
-        // poolStart snapshots on the FIRST resolution; both boxes share that same frozen value,
-        // so the ratio isolates the tier multiplier alone.
-        uint256 poolStart = _poolBal();
-
-        // Both boxes are already queued at `index` (LR_INDEX, still active/un-finalized); the
-        // permissionless sweep only walks finalized indices (idx <= LR_INDEX-1), so finalize it
-        // now -- after both buys, so neither buy's index shifted -- mirroring a landed VRF word.
-        _finalizeIndex(index);
-
-        // Force the DGNRS branch for each (control the per-index word + per-player seed).
-        uint256 word1 = _wordForDgnrs(tier1Buyer, index);
-        assertGe(_outcome(word1, tier1Buyer, index), 50, "tier1 outcome >= 50");
-        assertLt(_outcome(word1, tier1Buyer, index), 90, "tier1 outcome < 90");
-
-        // Resolve tier-1 box; the pool delta is the on-chain DGNRS reward. tier1Buyer is the
-        // OLDEST (first-bought) queue entry at this index, so the sweep's in-order walk opening
-        // "the next pending entry" opens exactly this one, matching the direct-open original.
-        _setRngWord(index, word1);
-        uint256 before1 = _poolBal();
-        _openOneQueuedEntry();
-        uint256 reward1 = before1 - _poolBal();
-        assertGt(reward1, 0, "tier1 drew DGNRS");
-
-        // Resolve tier-5 box (re-seed the word for the tier-5 player so it also hits DGNRS).
-        // tier5Buyer is now the sweep's next (and only remaining) queued entry at this index.
-        uint256 word5 = _wordForDgnrs(tier5Buyer, index);
-        _setRngWord(index, word5);
-        uint256 before5 = _poolBal();
-        _openOneQueuedEntry();
-        uint256 reward5 = before5 - _poolBal();
-        assertGt(reward5, 0, "tier5 drew DGNRS");
-
-        // Equal amount -> per-ETH ratio reduces to the reward ratio. EXACTLY 3x.
-        assertEq(reward1, reward5 * 3, "tier-1 DGNRS-per-ETH == 3 * tier-5 DGNRS-per-ETH");
-
-        // Cross-check each absolute reward against the FIXED formula (poolStart frozen common).
-        assertEq(reward1, _expectedReward(poolStart, TIER1_TENTHS, amount), "tier1 == fixed-curve formula");
-        assertEq(reward5, _expectedReward(poolStart, TIER5_TENTHS, amount), "tier5 == fixed-curve formula");
+    function _outcome(uint256 word, address buyer, uint48 index) private pure returns (uint256) {
+        return uint16(uint256(keccak256(abi.encodePacked(word, keccak256("PRESALE_BOX"), buyer, index)))) % 100;
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //  Task 1(b) -- PFIX-03 clamp: early DGNRS run empties pool before close
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @notice A run of early DGNRS-branch opens drains Pool.PresaleBox to ~0 BEFORE the closing
-    ///         box. The closing open then: (i) does not revert, (ii) sweeps <= 1 wei dust,
-    ///         (iii) never over-draws -- transferFromPool returns the clamped amount, so no
-    ///         per-box draw exceeds the live pool balance.
-    function test_PFIX03_EarlyDgnrsRunEmptiesPoolBeforeClose_ClampHolds() public {
-        uint48 index = _lrIndex();
-        // 5-ETH boxes: tier-1 per-box draw = poolStart * 30 * 5 / 400 = 0.375 * poolStart, so a
-        // handful of DGNRS opens overshoot a small pool and the clamp engages before the closer.
-        uint256 amount = 5 ether;
-
-        // Buyers: several non-closing + one closing (the 50-ETH crossing box).
-        uint256 nNonClosing = 6;
-        address[] memory buyers = new address[](nNonClosing + 1);
-        for (uint256 i = 0; i < buyers.length; ++i) {
-            buyers[i] = makeAddr(string(abi.encodePacked("clampBuyer", vm.toString(i))));
-        }
-
-        // Queue the non-closing boxes (each at index, distinct buyer, tier-1 band since we
-        // hold sold small below the cap -- the absolute tier is irrelevant to the clamp proof).
-        for (uint256 i = 0; i < nNonClosing; ++i) {
-            _buyBox(buyers[i], amount);
-        }
-
-        // Force the crossing box closing: set cumulative sold to (cap - amount) so this buy
-        // lands exactly at the 50-ETH cap and latches closing == true.
-        vm.store(
-            address(game),
-            bytes32(SLOT_PRESALE_BOX_ETH_SOLD),
-            bytes32(uint256(PRESALE_BOX_ETH_CAP - amount))
-        );
-        address closer = buyers[nNonClosing];
-        _buyBox(closer, amount);
-        // Confirm the closing flag (bit 255) is set on the closer's record.
-        assertTrue((_boxRecord(index, closer) >> 255) & 1 == 1, "closer box is the closing box");
-
-        // All 7 boxes are queued; finalize `index` now (after every buy, so none of them shifted
-        // index) so the permissionless sweep can reach it.
-        _finalizeIndex(index);
-
-        // Seed a SMALL pool relative to the per-box reward so the early DGNRS opens empty it
-        // before the closer. Snapshot poolStart first by forcing it, then size it tiny: pick a
-        // pool that 2 DGNRS-branch opens fully drain. With poolStart small, base = poolStart/40
-        // per ETH and tier-1 (3.0x) -> per-box reward = poolStart*30*1e18/(400*1e18) = poolStart*3/40.
-        // Set the live pool to a small absolute value; presaleBoxDgnrsPoolStart snapshots it on
-        // the first open.
-        uint256 smallPool = 100_000 ether; // arbitrary small DGNRS amount (vs 100B default pool)
-        _setPoolBalanceTo(smallPool);
-
-        // Per-box tier-1 reward off the small frozen poolStart.
-        uint256 perBoxReward = _expectedReward(smallPool, TIER1_TENTHS, amount);
-        assertGt(perBoxReward, 0, "per-box reward nonzero");
-
-        // Drain the pool through early DGNRS-branch opens. Track that NO per-box draw ever
-        // exceeds the live pool balance (the clamp invariant).
-        //
-        // The original loop stopped as soon as the pool hit 0 (a gas-only optimization: opening
-        // a drained-pool entry always draws 0, still passing the <= clamp check below), then
-        // jumped straight to the closer -- cherry-picking it ahead of the still-unopened
-        // non-closing entries. The permissionless sweep is a strict in-order, oldest-first walk
-        // (see class-rule caveat 2): it cannot open the closer while an earlier entry is still
-        // pending. Every non-closing entry is opened here unconditionally instead (a 0-draw once
-        // the pool is empty still satisfies every assertion below, so this is not a weaker
-        // check), which keeps the closer the genuinely NEXT queued entry when its turn comes.
-        uint256 opened;
-        for (uint256 i = 0; i < nNonClosing; ++i) {
-            uint256 word = _wordForDgnrs(buyers[i], index);
-            _setRngWord(index, word);
-            uint256 poolBefore = _poolBal();
-            // buyers[i] is the sweep's next queued entry (opened oldest-first, matching the buy
-            // order above), so budget-1 opens exactly this one and stops.
-            _openOneQueuedEntry();
-            uint256 drew = poolBefore - _poolBal();
-            assertLe(drew, poolBefore, "no per-box draw exceeds live pool (clamp)");
-            opened++;
-        }
-        assertGt(opened, 0, "at least one DGNRS-branch open ran");
-
-        // The pool must be empty (or dust) BEFORE the closing box.
-        assertLe(_poolBal(), 1, "pool ~0 before the closing box");
-
-        // Open the CLOSING box. Force its own roll to the DGNRS branch too (worst case: the
-        // closer also tries to draw a per-box reward AND sweep). It must not revert.
-        uint256 closerWord = _wordForDgnrs(closer, index);
-        _setRngWord(index, closerWord);
-        uint256 poolBeforeClose = _poolBal();
-        _openOneQueuedEntry(); // no revert == clamp held end-to-end
-        uint256 poolAfterClose = _poolBal();
-
-        // The closing sweep (transferFromPool of the remainder) drew at most the dust that was
-        // present, and the pool ends empty.
-        uint256 closingDraw = poolBeforeClose - poolAfterClose;
-        assertLe(closingDraw, 1, "closing draw (roll + sweep) <= 1 wei dust");
-        assertLe(poolAfterClose, 1, "pool ~0 after the closing box");
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    //  Task 2 -- PFIX-02 realistic 50-ETH run: closing sweep is variance DUST
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @dev Brute-force a rngWord (>0) so (player, index) lands a chosen outcome BAND.
-    ///      band: 0 = FLIP [0,50), 1 = DGNRS [50,90), 2 = WWXRP [90,100).
-    function _wordForBand(address player, uint48 index, uint8 band) internal pure returns (uint256 w) {
-        for (w = 2; w < 20000; ++w) {
-            uint256 o = _outcome(w, player, index);
-            if (band == 0 && o < 50) return w;
-            if (band == 1 && o >= 50 && o < 90) return w;
-            if (band == 2 && o >= 90) return w;
-        }
-        revert("no word for band");
-    }
-
-    /// @notice Realistic ~50-ETH presale run across MANY boxes with a realized ~50/40/10
-    ///         FLIP/DGNRS/WWXRP branch mix (PRNG-driven, asserted ~40% DGNRS within a
-    ///         tolerance band so a degenerate all-FLIP run FAILS, never silently passes).
-    ///         Proves the closing-box sweep is variance DUST (<= poolStart/100), the residual
-    ///         pool ends ~empty, and the cumulative per-box DGNRS draw is the dominant share of
-    ///         poolStart (>= 90%) -- the curve-exercised guard that the OLD /1_000 curve fails.
-    function test_PFIX02_RealisticRun_ClosingSweepIsDust() public {
-        uint48 index = _lrIndex();
-
-        // ~50 ETH run: 250 boxes x 0.2 ETH = exactly the 50-ETH cap. The crossing (final) box
-        // latches closing == true. Many boxes -> the tier ladder walks 3.0x..1.0x naturally as
-        // cumulative soldBefore advances 0 -> 50 ETH, exercising the full FIXED curve.
-        uint256 boxAmount = 0.2 ether;
-        uint256 nBoxes = uint256(PRESALE_BOX_ETH_CAP) / boxAmount; // 250
-        assertEq(nBoxes * boxAmount, PRESALE_BOX_ETH_CAP, "run sums to exactly the 50-ETH cap");
-
-        // Deterministic seeded PRNG so the realized branch mix is ~50/40/10. Each box's band is
-        // drawn from keccak(seed, i) % 100, mirroring the contract's 50/40/10 split exactly.
-        uint256 prngSeed = uint256(keccak256("PFIX02_REALISTIC_RUN"));
-
-        // Snapshot the pool start (frozen on the first open). Read the live default pool here.
-        uint256 poolStart = _poolBal();
-        assertGt(poolStart, 0, "presale-box pool funded at deploy");
-
-        address[] memory buyers = new address[](nBoxes);
-        uint8[] memory bands = new uint8[](nBoxes);
-        uint256 dgnrsBranchCount;
-
-        // --- Buy all boxes (queue at the shared index), assigning each a target band. ---
-        for (uint256 i = 0; i < nBoxes; ++i) {
-            address buyer = makeAddr(string(abi.encodePacked("runBuyer", vm.toString(i))));
-            buyers[i] = buyer;
-
-            uint256 draw = uint256(keccak256(abi.encodePacked(prngSeed, i))) % 100;
-            uint8 band = draw < 50 ? 0 : (draw < 90 ? 1 : 2); // 50% FLIP / 40% DGNRS / 10% WWXRP
-            bands[i] = band;
-            if (band == 1) dgnrsBranchCount++;
-
-            _buyBox(buyer, boxAmount);
-        }
-
-        // The final box (i == nBoxes-1) crossed the cap -> closing latched.
-        address closer = buyers[nBoxes - 1];
-        assertTrue((_boxRecord(index, closer) >> 255) & 1 == 1, "final box is the closing box");
-
-        // All 250 boxes are queued at `index` (still active/un-finalized); finalize it now, once,
-        // after every buy, so the permissionless sweep can walk it.
-        _finalizeIndex(index);
-
-        // --- Resolve every box, forcing each to its assigned branch via the per-index word. ---
-        // Track the cumulative per-box DGNRS draw (pool delta on the non-closing opens) so the
-        // closing sweep can be isolated from the closer's own roll. Every non-closing buyer is
-        // opened here unconditionally, in queue (== buy) order, so the closer is always the
-        // sweep's genuinely next entry when its own turn comes below.
-        uint256 cumulativeBoxDraw;
-        for (uint256 i = 0; i < nBoxes - 1; ++i) {
-            if (_poolBal() == 0) {
-                // Pool already empty: remaining DGNRS-branch opens draw 0 (clamp). Still open
-                // them so the run is complete and the closer is reached.
-                _setRngWord(index, _wordForBand(buyers[i], index, bands[i]));
-                _openOneQueuedEntry();
-                continue;
+    function _allDgnrsWord(address[] memory buyers, uint48 index) private pure returns (uint256 word) {
+        for (word = 2; word < 100_000; ++word) {
+            bool all = true;
+            for (uint256 i; i < buyers.length; ++i) {
+                uint256 roll = _outcome(word, buyers[i], index);
+                if (roll < 50 || roll >= 90) { all = false; break; }
             }
-            _setRngWord(index, _wordForBand(buyers[i], index, bands[i]));
-            uint256 poolBefore = _poolBal();
-            _openOneQueuedEntry();
-            cumulativeBoxDraw += poolBefore - _poolBal();
+            if (all) return word;
         }
+        revert("no common DGNRS word found");
+    }
 
-        // Realized-mix guard (T-327-01-FC1): the run must genuinely be the ~40% DGNRS
-        // distribution that exposed F-47-01. A degenerate all-FLIP run FAILS here.
-        // Tolerance band: 30%..50% of boxes hit the DGNRS branch.
-        assertGe(dgnrsBranchCount * 100, nBoxes * 30, "realized DGNRS branch rate >= 30%");
-        assertLe(dgnrsBranchCount * 100, nBoxes * 50, "realized DGNRS branch rate <= 50%");
+    /// @dev Independent expression of the documented curve and three-significant-figure floor.
+    function _expectedReward(uint256 start, uint256 tier, uint256 amount) private pure returns (uint256) {
+        uint256 raw = start * tier * amount / (400 * 1 ether);
+        uint256 scale = 1;
+        while (raw / scale >= 1000) scale *= 10;
+        return raw / scale * scale;
+    }
 
-        // --- The closing box: its sweep mops up only the residual remainder. ---
-        // Force the closer's own roll to WWXRP (1-token dud, draws NOTHING from the pool) so the
-        // measured pool delta across the closing open is the closing SWEEP alone.
-        _setRngWord(index, _wordForBand(closer, index, 2));
-        uint256 poolBeforeClose = _poolBal();
-        _openOneQueuedEntry();
-        uint256 swept = poolBeforeClose - _poolBal();
+    function _tier(uint256 sold) private pure returns (uint256) {
+        return sold < 10 ether ? 30 : sold < 20 ether ? 25 : sold < 30 ether ? 20 : sold < 40 ether ? 15 : 10;
+    }
 
-        // Dust bound (T-327-01-FC2): <= poolStart/100 (1%). The v47 /1_000 curve left the
-        // per-box draw ~2.5x smaller, so ~60% of poolStart survived to the closer -- which would
-        // blow past this 1% bound by ~60x. Choosing 1% makes the OLD behavior fail by a wide
-        // margin while comfortably covering the FIXED curve's integer-division variance dust.
-        uint256 POOL_DUST_BOUND = poolStart / 100;
-        assertLe(swept, POOL_DUST_BOUND, "closing sweep <= poolStart/100 (NOT the ~60% windfall)");
+    /// @dev The worker owns the checkpoint. Its old count argument no longer selects work.
+    ///      Bound each call's gas and verify the emitted FIFO transcript across all checkpoints.
+    function _openAll(uint48 index, uint256 word, address[] memory buyers, uint256 amount)
+        private returns (uint256[] memory paid, uint256 swept)
+    {
+        RecyclingState.seedWord(address(game), index, bytes32(word));
+        // These payout fixtures buy presale boxes only: there is no ticket producer to drain.
+        // Explicitly model the completed producer prerequisite before entering the human stage.
+        uint256 flags = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0), bytes32(flags | (uint256(1) << 192)));
+        vm.recordLogs();
+        uint256 opened;
+        for (uint256 calls; opened < buyers.length && calls < 100; ++calls) {
+            uint256 count = game.openBoxes{gas: 8_000_000}(2);
+            assertGt(count, 0, "ready FIFO sweep advances");
+            opened += count;
+        }
+        assertEq(opened, buyers.length, "every queued buyer opened exactly once");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        paid = new uint256[](buyers.length);
+        uint256 cursor;
+        bool sawSweep;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == OPENED) {
+                assertLt(cursor, buyers.length, "no duplicate resolution");
+                assertEq(address(uint160(uint256(logs[i].topics[1]))), buyers[cursor], "FIFO recipient");
+                assertEq(uint256(logs[i].topics[2]), index, "one immutable session identity");
+                (uint256 resolved,, uint256 dgnrsPaid,, bool closing,,) = abi.decode(
+                    logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32)
+                );
+                assertEq(resolved, amount, "buy amount preserved");
+                if (closing) assertEq(cursor, buyers.length - 1, "closing buyer is last");
+                paid[cursor++] = dgnrsPaid;
+            } else if (logs[i].topics[0] == SWEPT) {
+                assertEq(cursor, buyers.length, "sweep follows every resolution");
+                assertFalse(sawSweep, "remainder swept once");
+                assertEq(address(uint160(uint256(logs[i].topics[1]))), buyers[buyers.length - 1]);
+                swept = abi.decode(logs[i].data, (uint256));
+                sawSweep = true;
+            }
+        }
+        assertEq(cursor, buyers.length, "one result per queued buyer");
+        for (uint256 i; i < buyers.length; ++i) {
+            assertEq(_boxRecord(index, buyers[i]), 0, "record consumed");
+            assertEq(sdgnrs.balanceOf(buyers[i]), paid[i] + (i == buyers.length - 1 ? swept : 0), "credits match result");
+        }
+        assertEq(game.openBoxes(2), 0, "completed records cannot pay twice");
+    }
 
-        // Residual pool ends ~empty (same dust bound).
-        assertLe(_poolBal(), POOL_DUST_BOUND, "residual pool <= poolStart/100 after the close");
+    function test_PFIX03_TierShapePreserved() public {
+        uint48 index = RecyclingState.writeBuffer(address(game));
+        address[] memory buyers = new address[](2);
+        buyers[0] = makeAddr("tier1Buyer");
+        buyers[1] = makeAddr("tier5Buyer");
+        _buyBox(buyers[0], 1 ether);
+        vm.store(address(game), bytes32(SLOT_PRESALE_BOX_ETH_SOLD), bytes32(uint256(40 ether)));
+        _buyBox(buyers[1], 1 ether);
+        assertLt(uint96(_boxRecord(index, buyers[0]) >> 96), 10 ether);
+        assertGe(uint96(_boxRecord(index, buyers[1]) >> 96), 40 ether);
+        uint256 start = _poolBal();
+        (uint256[] memory paid, uint256 swept) = _openAll(index, _allDgnrsWord(buyers, index), buyers, 1 ether);
+        assertGt(paid[0], 0, "tier1 drew DGNRS");
+        assertGt(paid[1], 0, "tier5 drew DGNRS");
+        assertEq(paid[0], paid[1] * 3, "tier-1 DGNRS-per-ETH == 3 * tier-5 DGNRS-per-ETH");
+        assertEq(paid[0], _expectedReward(start, 30, 1 ether), "tier1 fixed curve");
+        assertEq(paid[1], _expectedReward(start, 10, 1 ether), "tier5 fixed curve");
+        assertEq(swept, 0, "sale remains open");
+        assertEq(start - _poolBal(), paid[0] + paid[1], "pool conservation");
+    }
 
-        // Curve-exercised guard (T-327-01-FC2, regression direction): the per-box rewards are
-        // the dominant share of poolStart -- the pool is drained THROUGH the boxes, not parked
-        // for the closer. The OLD /1_000 curve (per-box draw ~2.5x smaller) FAILS this >= 90%
-        // bound, proving the test exercises the FIXED curve and not a false-confidence stub.
-        assertGe(cumulativeBoxDraw * 100, poolStart * 90, "per-box cumulative DGNRS draw >= 90% of poolStart");
+    function test_PFIX03_EarlyDgnrsRunEmptiesPoolBeforeClose_ClampHolds() public {
+        uint48 index = RecyclingState.writeBuffer(address(game));
+        address[] memory buyers = new address[](7);
+        for (uint256 i; i < buyers.length; ++i) {
+            buyers[i] = makeAddr(string(abi.encodePacked("clampBuyer", vm.toString(i))));
+            if (i == 6) vm.store(address(game), bytes32(SLOT_PRESALE_BOX_ETH_SOLD), bytes32(uint256(45 ether)));
+            _buyBox(buyers[i], 5 ether);
+        }
+        assertEq(_boxRecord(index, buyers[6]) >> 255, 1, "final box closes sale");
+        uint256 start = 100_000 ether;
+        uint256 excess = _poolBal() - start;
+        vm.prank(address(game));
+        sdgnrs.transferFromPool(sDGNRS.Pool.PresaleBox, address(0xDEAD), excess);
+        (uint256[] memory paid, uint256 swept) = _openAll(index, _allDgnrsWord(buyers, index), buyers, 5 ether);
+        uint256 remaining = start;
+        for (uint256 i; i < buyers.length; ++i) {
+            if (i == 6) assertLe(remaining, 1, "pool ~0 before the closing box");
+            uint256 expected = _expectedReward(start, _tier(i == 6 ? 45 ether : i * 5 ether), 5 ether);
+            if (expected > remaining) expected = remaining;
+            assertEq(paid[i], expected, "exact payout after live-pool clamp");
+            assertLe(paid[i], remaining, "no per-box draw exceeds live pool");
+            remaining -= paid[i];
+        }
+        assertGt(paid[0], 0, "early DGNRS branch paid");
+        assertLe(paid[6] + swept, 1, "closing roll plus sweep <= 1 wei dust");
+        assertLe(_poolBal(), 1, "pool ~0 after closing box");
+        assertEq(remaining - swept, _poolBal(), "pool conservation");
+    }
+
+    function test_PFIX02_RealisticRun_ClosingSweepIsDust() public {
+        uint48 index = RecyclingState.writeBuffer(address(game));
+        address[] memory buyers = new address[](250);
+        assertEq(buyers.length * 0.2 ether, PRESALE_BOX_ETH_CAP);
+        for (uint256 i; i < buyers.length; ++i) {
+            buyers[i] = makeAddr(string(abi.encodePacked("runBuyer", vm.toString(i))));
+            _buyBox(buyers[i], 0.2 ether);
+        }
+        assertEq(_boxRecord(index, buyers[249]) >> 255, 1, "final box closes sale");
+        uint256 start = _poolBal();
+        // Fixed words produce the full 50/40/10 distribution naturally; never choose a
+        // fresh word per player or search using the reward assertions under test.
+        uint256 word = index == 0 ? 4 : 6;
+        uint256 branches;
+        (uint256[] memory paid, uint256 swept) = _openAll(index, word, buyers, 0.2 ether);
+        uint256 remaining = start;
+        uint256 cumulative;
+        for (uint256 i; i < buyers.length; ++i) {
+            uint256 roll = _outcome(word, buyers[i], index);
+            bool dgnrsBranch = roll >= 50 && roll < 90;
+            if (dgnrsBranch) ++branches;
+            uint256 expected = dgnrsBranch ? _expectedReward(start, _tier(i * 0.2 ether), 0.2 ether) : 0;
+            if (expected > remaining) expected = remaining;
+            assertEq(paid[i], expected, "realized branch and frozen tier determine payout");
+            remaining -= paid[i];
+            cumulative += paid[i];
+        }
+        assertGe(branches * 100, buyers.length * 30, "realized DGNRS branch rate >= 30%");
+        assertLe(branches * 100, buyers.length * 50, "realized DGNRS branch rate <= 50%");
+        assertGe(_outcome(word, buyers[249], index), 90, "closer is the WWXRP branch");
+        assertEq(paid[249], 0, "closing WWXRP branch draws no DGNRS");
+        assertLe(swept, start / 100, "closing sweep <= poolStart/100");
+        assertLe(_poolBal(), start / 100, "residual pool <= poolStart/100 after close");
+        assertGe(cumulative * 100, start * 90, "per-box cumulative DGNRS draw >= 90% of poolStart");
+        assertEq(remaining - swept, _poolBal(), "pool conservation");
     }
 }

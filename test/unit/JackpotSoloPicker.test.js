@@ -11,9 +11,8 @@ import { jackpotSoloFixture as deployTester } from "../helpers/jackpotSoloFixtur
 
 // ---------------------------------------------------------------------------
 // Trait byte helpers — [QQ][CCC][SSS] format (quadrant 2 bits, color 3 bits,
-// symbol 3 bits). The helper inspects only `(traits[i] >> 3) & 7` for the
-// color tier; the quadrant bits at positions 6-7 are NOT inspected and the
-// symbol bits at positions 0-2 are not inspected either (only color matters).
+// symbol 3 bits). Surviving gold six (Dice trait 253) takes priority; all
+// other boards use the color tier for gold ties and the rotation fallback.
 // ---------------------------------------------------------------------------
 
 function trait(quadrant, color, symbol) {

@@ -1263,7 +1263,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      times eight plus its symbol (bits 2..0) — derived from the trait alone, the same form
     ///      the jackpot's deity lookups use, never from where the trait sits on a board.
     function _deityOfTrait(uint8 trait) private view returns (address) {
-        return deityBySymbol[(trait >> 6) * 8 + (trait & 7)];
+        return _traitDeity(trait);
     }
 
     /// @dev Fresh recipient from frozen GAME inventory. Early bird supplies the day's

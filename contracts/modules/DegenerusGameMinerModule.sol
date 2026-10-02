@@ -51,7 +51,9 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
 
         // There are fewer than 32 category transitions. Workers own all unbounded queues.
         for (uint256 transitions; transitions < 32; ++transitions) {
-            MinerAction action = _nextMinerAction();
+            // Only reads separate the initial selection from the first dispatch.
+            // Every later iteration must reselect after the preceding worker's changes.
+            MinerAction action = transitions == 0 ? first : _nextMinerAction();
             if (action == MinerAction.Idle || action == MinerAction.Wait) break;
             if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
 
@@ -154,21 +156,23 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             }
 
             if (basicResult) {
-                MineFlipGas.Result memory work = abi.decode(result, (MineFlipGas.Result));
-                moved = moved || work.progressed;
-                if (action == MinerAction.Tickets && work.done) {
+                // Preserve the full Result ABI and bool validation without allocating a struct.
+                (bool progressed, bool done,) = abi.decode(result, (bool, bool, uint256));
+                moved = moved || progressed;
+                if (action == MinerAction.Tickets && done) {
                     ticketsFullyProcessed = true;
                     _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                     moved = true;
                 }
-                if (!work.done) break;
+                if (!done) break;
             } else moved = true;
             // A request commits the next cohort; terminal stages own their continuation.
             if (action == MinerAction.Terminal || request) break;
         }
 
         if (!moved) return;
-        MineFlipGas.finish(meter);
+        // This top-level meter starts with all available gas; worker allowance checks
+        // retain the actual bounds. No successful call can overspend this initial amount.
         uint256 used = rewardStart - gasleft() - unpaidAttemptGas;
         uint256 reward;
         if (rewardEligible && !gameOver && used >= MineFlipGas.MIN_REWARDED_GAS) {

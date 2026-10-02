@@ -1,6 +1,6 @@
 # Degenerette bet queue
 
-Degenerette bets resolve the same way lootboxes do: a permissionless keeper crank
+Degenerette bets resolve the same way lootboxes do: a permissionless miner crank
 walks a queue and settles what it can afford, instead of the player or a
 dedicated resolver paying to settle each bet. This replaces the old per-player
 `degeneretteBets`/`degeneretteBetNonce` bet book and its own resolver
@@ -29,7 +29,7 @@ in the storage layout shifted.
 | Bits | Field | Notes |
 | --- | --- | --- |
 | 0..159 | owner | bet payee |
-| 160..164 | symbol | chosen hero symbol 0..31; quadrant = symbol >> 3 |
+| 160..164 | symbol | chosen hero symbol 0..23; quadrant = symbol >> 3; Dice excluded |
 | 165..169 | spinCount | 1..25 |
 | 170 | currency | 0 = ETH, 1 = FLIP |
 | 171 | record flag | set when a biggest-spin record bounty is armed in `degeneretteRecordBounty` |

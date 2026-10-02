@@ -201,15 +201,17 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
                 || (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags));
             if (!lastSwapAhead) {
                 bool queuedWork = foilQueue[_foilWriteKey()].length != 0;
-                uint24 t = level;
-                uint24 end = _mintCeiling();
-                for (; t <= end;) {
-                    if (_ticketQueueLength(_tqWriteKey(t)) > 0) {
-                        queuedWork = true;
-                        break;
-                    }
-                    unchecked {
-                        ++t;
+                if (!queuedWork) {
+                    uint24 t = level;
+                    uint24 end = _mintCeiling();
+                    for (; t <= end;) {
+                        if (_ticketQueueLength(_tqWriteKey(t)) > 0) {
+                            queuedWork = true;
+                            break;
+                        }
+                        unchecked {
+                            ++t;
+                        }
                     }
                 }
                 if (queuedWork && ticketsFullyProcessed) {
@@ -258,10 +260,11 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     }
 
     function _activateNextTickets() private returns (bool activated) {
+        // The sole caller checked liveness before any relevant state could change.
         uint24 nextLvl = level + 2;
         if (
             !jackpotPhaseFlag && ticketsFullyProcessed && earlyTicketLevel < nextLvl
-                && _getNextPrizePool() > _prizePoolTarget(level + 1) && !_livenessTriggered()
+                && _getNextPrizePool() > _prizePoolTarget(level + 1)
         ) {
             earlyTicketLevel = nextLvl;
             _markTicketGenerationStart(nextLvl);

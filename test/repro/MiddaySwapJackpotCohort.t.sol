@@ -370,6 +370,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
 
         _buyTickets(); // pre-request cohort
         require(_middayRequest(), "harness: the mid-day flip must fire");
+        uint24 committedKey = _readKeyOf(L);
 
         // Post-request buy: must land on the (fresh) write side of the routed level.
         uint24 frozenKey = _writeKeyOf(L);
@@ -384,7 +385,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             lenAfter,
             "the mid-day drain must never consume the write side: the post-request buy is frozen out of the word"
         );
-        assertEq(_queueLen(_readKeyOf(L)), 0, "while the committed read side fully drains");
+        // Completing this cohort may request its successor and swap parity again.
+        assertEq(_queueLen(committedKey), 0, "while the committed read side fully drains");
 
         // Run the phase out: the frozen cohort must still materialize (no strand).
         for (uint256 d = 0; d < 12 && game.jackpotPhase(); d++) {
@@ -994,15 +996,9 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         return _ticketWriteSlot() ? lvl | TICKET_SLOT_BIT : lvl;
     }
 
-    /// @dev _ticketQueueLength(key) — the mapping sits at slot 12.
+    /// @dev Authenticate the absolute level before reading its reusable physical root.
     function _queueLen(uint24 key) internal view returns (uint256) {
-        return
-            uint256(
-                vm.load(
-                    address(game),
-                    keccak256(abi.encode(uint256(key), uint256(12)))
-                )
-            );
+        return TicketQueueStorage.length(address(game), key);
     }
 
     /// @dev _entriesOwed(key, player) >> 8 — the mapping sits at slot 13.

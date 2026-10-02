@@ -1247,7 +1247,6 @@ contract DegenerusGameMintModule is
         // The word for the current index is uncommitted until the index advances, so
         // the box is always queued pre-entropy (RNG freeze).
         uint48 index = _rngWriteBuffer();
-        if (_lootboxWord(index) != 0) revert E();
         // One box per (index, player): the buy-time cumulative position (sold) is
         // frozen into the record for the DGNRS-tier roll, so accumulation would make
         // that snapshot ambiguous. Open this box (or wait for the next index) first.

@@ -501,6 +501,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.prank(address(game)); coin.mintForGame(bettor, 1000 ether);
         vm.prank(address(game)); wwxrp.mintPrize(bettor, 10 ether);
         for (uint8 symbol; symbol < 32; ++symbol) {
+            if (symbol >= 24) vm.expectRevert(bytes4(keccak256("InvalidBet()")));
             vm.prank(bettor); _bet(symbol, 0.005 ether);
         }
         for (uint8 i; i < 2; ++i) {

@@ -39,7 +39,10 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_CALL_OVERHEAD = 35_000;
 
     // AFK
-    uint256 internal constant SUBSCRIBER_ITEM_GAS = 200_000;
+    // Includes a failed full-stipend stETH attempt followed by normal eviction,
+    // or a successful pull followed by the most expensive subscriber delivery.
+    uint256 internal constant SUBSCRIBER_ITEM_GAS = 400_000;
+    uint256 internal constant AFKING_STETH_PULL_GAS = 160_000;
     uint256 internal constant SUBSCRIBER_WHALE_GAS = 3_400_000;
     uint256 internal constant SUBSCRIBER_TAIL_GAS = 150_000;
     uint256 internal constant AFKING_OPEN_GAS = 500_000;

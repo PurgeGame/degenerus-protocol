@@ -3,6 +3,11 @@ pragma solidity 0.8.34;
 
 /// @dev Independent reference for the public ticket-stream contract and score.
 library DegeneretteReference {
+    function randomHero(uint256 seed) internal pure returns (uint8 symbol) {
+        uint256 roll = uint256(keccak256(abi.encode(seed, uint256(0x446567656e4865726f))));
+        symbol = uint8(roll % 24);
+    }
+
     function traits(uint256 seed) internal pure returns (uint32 t) {
         for (uint8 q; q < 4; ++q) {
             uint256 lane = seed >> (64 * q);

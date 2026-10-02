@@ -349,7 +349,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported).
     /// @param amountPerSpin Bet amount per ticket.
     /// @param spinCount Number of spins (per-currency cap: ETH 25 / FLIP 15).
-    /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
+    /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
@@ -547,7 +547,7 @@ contract DegenerusGameDegeneretteModule is
         }
         if (spinCount == 0 || spinCount > maxSpins) revert InvalidBet();
         if (uint256(amountPerSpin) < minBet || uint256(amountPerSpin) % unit != 0) revert InvalidBet();
-        if (symbol >= 32) revert InvalidBet();
+        if (symbol >= DEGENERETTE_HERO_COUNT) revert InvalidBet();
         uint8 heroQuadrant = symbol >> 3;
 
         uint48 index = _rngWriteBuffer();
@@ -589,7 +589,7 @@ contract DegenerusGameDegeneretteModule is
                 recordBounty = whole;
             }
 
-            // Daily hero symbol tracking (heroQuadrant validated to {0..3} above)
+            // Daily hero symbol tracking (heroQuadrant validated to {0..2} above)
             uint8 heroSymbol = symbol & 7;
             uint256 wagerUnit = totalBet / 1e14;
             if (wagerUnit > 0) {
@@ -1154,19 +1154,21 @@ contract DegenerusGameDegeneretteModule is
         (spin.score, spin.goldMatches) = _score(spin.playerTraits, spin.resultTraits, spin.heroQuadrant);
     }
 
-    /// @dev The only fixed ticket component is the selected symbol (0..31).
+    /// @dev The only fixed ticket component is the selected symbol (0..23; no Dice heroes).
     ///      Separate domains keep all colors independent of hero selection/results.
     function _playerTicket(uint256 seed, uint8 symbol) internal pure returns (uint32 traits) {
-        if (symbol >= 32) revert InvalidBet();
+        if (symbol >= DEGENERETTE_HERO_COUNT) revert InvalidBet();
         traits = DegenerusTraitUtils.packedTraitsDegenerette(EntropyLib.hash2(seed, PLAYER_TICKET_TAG));
         uint32 shift = uint32(symbol >> 3) * 8;
         traits = (traits & ~(uint32(7) << shift)) | (uint32(symbol & 7) << shift);
     }
 
     /// @dev Award spins may request a random hero with the internal sentinel 32.
+    ///      All 24 Crypto, Zodiac and Cards symbols are equally eligible.
     function _spinSymbol(uint256 seed, uint8 symbol) internal pure returns (uint8) {
-        if (symbol > RANDOM_HERO) revert InvalidBet();
-        return symbol == RANDOM_HERO ? uint8(EntropyLib.hash2(seed, HERO_PICK_TAG)) & 31 : symbol;
+        if (symbol == RANDOM_HERO) return uint8(EntropyLib.hash2(seed, HERO_PICK_TAG) % DEGENERETTE_HERO_COUNT);
+        if (symbol >= DEGENERETTE_HERO_COUNT) revert InvalidBet();
+        return symbol;
     }
 
     /// @dev Score and matched gold in one pass: hero symbol +2, other symbols +1,

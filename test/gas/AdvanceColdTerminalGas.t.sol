@@ -9,6 +9,10 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
+    function terminalPaidSlot() external pure returns (bytes32 slot) {
+        assembly ("memory-safe") { slot := gameOverStatePacked.slot }
+    }
+
     /// @dev Past the purchase deadline with nothing in flight. `sealedAge` 1 is the start of a
     ///      caught-up day (the deadline ending); a longer stretch has also fired the deadman.
     function seed(uint256 word, uint24 sealedAge) external {
@@ -33,17 +37,18 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
 
 /// @dev The normal ending runs in separate transactions: the first latches the terminal level and
 ///      affiliate and sends the ending's own terminal request; once answered, the next applies the
-///      word (deriving every skipped day); the one after pays out. setUp runs everything before
-///      the measured step, so storage the test body touches is still cold.
+///      word and settles capped coinflip backfill; later calls finish the payout checkpoints.
+///      setUp runs everything before the measured step, so the test body starts cold.
 abstract contract ColdTerminalFixture is DeployProtocol {
     uint256 internal constant WORD = uint256(keccak256("cold-terminal-full-payout")) | 1;
+    bytes32 private terminalStateSlot;
 
     /// @dev True: the test body applies the delivered terminal word, then pays out. False: setUp
     ///      also applies it, so the payout is the test body's first (cold) transaction.
     function _fresh() internal pure virtual returns (bool);
 
     /// @dev Days since the last sealed day. 1 = caught up; a longer stretch is the deadman's
-    ///      ending, whose terminal word also derives every skipped day (at most 31).
+    ///      ending, whose terminal word also settles at most 31 skipped coinflip days.
     function _sealedAge() internal pure virtual returns (uint24) {
         return 1;
     }
@@ -51,10 +56,12 @@ abstract contract ColdTerminalFixture is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp((399 + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 3 hours);
+        uint24 lastSealedDay = game.currentDayView() - _sealedAge();
         vm.prank(address(game));
-        coinflip.processCoinflipPayouts(0, WORD, 399);
+        coinflip.processCoinflipPayouts(0, WORD, lastSealedDay);
         bytes memory original = address(game).code;
         vm.etch(address(game), type(ColdTerminalSeeder).runtimeCode);
+        terminalStateSlot = ColdTerminalSeeder(payable(address(game))).terminalPaidSlot();
         ColdTerminalSeeder(payable(address(game))).seed(WORD, _sealedAge());
         vm.etch(address(game), original);
         vm.prank(address(0xAFF1));
@@ -67,29 +74,62 @@ abstract contract ColdTerminalFixture is DeployProtocol {
     }
 
     function _check() internal {
+        assertGt(ContractAddresses.GAME_MINER_MODULE.code.length, 0, "miner deployment survives setup");
         if (_fresh()) _applyTerminalWord();
-        vm.recordLogs();
-        uint256 before = gasleft();
-        game.mineFlip{gas: 11_500_000 - 21_064}();
-        uint256 used = before - gasleft() + 21_064;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 winners;
         uint256 refunds;
         uint256 rngApplied;
-        for (uint256 i; i < logs.length; ++i) {
-            bytes32 topic = logs[i].topics[0];
-            if (topic == keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)")) ++winners;
-            if (topic == keccak256("DeityPassRefundsSettled(uint256)")) refunds = abi.decode(logs[i].data, (uint256));
-            if (topic == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++rngApplied;
+        uint256 largestCall;
+        uint256 totalGas;
+        uint256 calls;
+        while (!_terminalPaid() && calls < 8) {
+            _coolTerminal();
+            vm.recordLogs();
+            uint256 before = gasleft();
+            game.mineFlip{gas: 11_500_000 - 21_064}();
+            uint256 used = before - gasleft() + 21_064;
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].topics.length == 0) continue;
+                bytes32 topic = logs[i].topics[0];
+                if (topic == keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)")) ++winners;
+                if (topic == keccak256("DeityPassRefundsSettled(uint256)")) refunds += abi.decode(logs[i].data, (uint256));
+                if (topic == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++rngApplied;
+            }
+            if (used > largestCall) largestCall = used;
+            totalGas += used;
+            ++calls;
+            // This fixture chooses an 11.5M transaction envelope; the protocol caps steps, not transactions.
+            assertLt(used, 11_500_000, "terminal checkpoint transaction exceeds review target");
         }
-        emit log_named_uint("full_cold_terminal_including_intrinsic", used);
+        emit log_named_uint("largest_cold_terminal_call_including_intrinsic", largestCall);
+        emit log_named_uint("full_cold_terminal_including_intrinsic", totalGas);
+        emit log_named_uint("terminal_payout_calls", calls);
         emit log_named_uint("terminal_ETH_awards", winners);
-        assertTrue(game.gameOver(), "terminal payout must complete");
+        assertTrue(game.gameOver(), "terminal ending must be latched");
+        assertTrue(_terminalPaid(), "all terminal payout checkpoints must complete");
         assertEq(winners, 305, "all terminal draw slots must execute");
         assertEq(refunds, 600 ether, "30 paid refunds; genesis has no refund basis");
         assertEq(rngApplied, 0, "the payout runs on the recorded terminal word");
         assertEq(game.claimableWinningsOf(address(0xAFF1)), 88 ether, "affiliate gets 2% after refunds");
-        assertLt(used, 11_500_000, "terminal transaction exceeds review target");
+    }
+
+    function _terminalPaid() private view returns (bool) {
+        return (uint256(vm.load(address(game), terminalStateSlot)) >> 48) & 0xff != 0;
+    }
+
+    function _coolTerminal() private {
+        vm.cool(address(game));
+        vm.cool(ContractAddresses.GAME_MINER_MODULE);
+        vm.cool(ContractAddresses.GAME_ADVANCE_MODULE);
+        vm.cool(ContractAddresses.GAME_GAMEOVER_MODULE);
+        vm.cool(ContractAddresses.GAME_JACKPOT_MODULE);
+        vm.cool(address(mockStETH));
+        vm.cool(address(coin));
+        vm.cool(address(coinflip));
+        vm.cool(address(sdgnrs));
+        vm.cool(address(gnrus));
+        vm.cool(address(affiliate));
     }
 
     /// @dev The ending's first transaction sends its own terminal request; the coordinator
@@ -104,34 +144,49 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         mockVRF.fulfillRandomWords(id, WORD);
     }
 
-    /// @dev A delivered terminal word is applied in its own transaction: the word itself, the
-    ///      derived words of every skipped day and the reserved lootbox index. Terminal
-    ///      application records the ETH-bound words without settling optional FLIP work.
+    /// @dev Applying the terminal word records its day and reserved lootbox index, and settles
+    ///      the capped skipped coinflip days using the original win bits and 100% win rewards.
     function _applyTerminalWord() private {
         uint24 day = game.currentDayView();
+        // Cooling newly created accounts during setUp can discard their deployment in Foundry's
+        // persisted setup state. The recorded fixture starts its measured work in the test body;
+        // only fresh-word fixtures need explicit cooling before this application measurement.
+        if (_fresh()) _coolTerminal();
         vm.recordLogs();
         uint256 before = gasleft();
         game.mineFlip{gas: 11_500_000 - 21_064}();
         uint256 used = before - gasleft() + 21_064;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 applied;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++applied;
-        }
+        uint256 gapResults;
         uint24 gap = _sealedAge() - 1;
         if (gap > 31) gap = 31;
+        uint24 firstGap = day - _sealedAge() + 1;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++applied;
+            if (logs[i].emitter == address(coinflip)
+                && logs[i].topics[0] == keccak256("CoinflipDayResolved(uint24,bool,uint16,uint128)")) {
+                uint24 resolvedDay = uint24(uint256(logs[i].topics[1]));
+                if (resolvedDay >= firstGap && resolvedDay < firstGap + gap) {
+                    (bool win, uint16 reward,) = abi.decode(logs[i].data, (bool, uint16, uint128));
+                    assertEq(reward, 100, "every backfilled flip uses double-or-nothing rewards");
+                    assertEq(win, (WORD >> (1 + resolvedDay - firstGap)) & 1 != 0, "gap win bits stay pinned");
+                    ++gapResults;
+                }
+            }
+        }
         emit log_named_uint("terminal_word_apply_including_intrinsic", used);
-        emit log_named_uint("terminal_word_derived_days", gap);
+        emit log_named_uint("terminal_coinflip_backfill_days", gap);
         assertFalse(game.gameOver(), "the payout takes its own transaction");
         assertEq(game.rngWordForDay(day), WORD, "terminal word recorded");
-        assertEq(applied, uint256(gap) + 1, "every skipped day derived, then the terminal day");
-        if (gap != 0) {
-            uint24 firstGap = day - _sealedAge() + 1;
-            assertEq(
-                game.rngWordForDay(firstGap),
-                uint256(keccak256(abi.encodePacked(WORD, firstGap))),
-                "skipped days derive from the terminal word"
-            );
+        assertEq(applied, 1, "only the terminal day emits DailyRngApplied");
+        assertEq(gapResults, gap, "every capped gap day must settle exactly once");
+        for (uint24 i; i < gap; ++i) {
+            bool expectedWin = (WORD >> (1 + i)) & 1 != 0;
+            (uint16 reward, bool win) = coinflip.getCoinflipDayResult(firstGap + i);
+            assertEq(win, expectedWin, "stored gap outcomes keep the original word bits");
+            assertEq(reward, expectedWin ? 100 : 1, "stored gap payout or loss sentinel");
         }
         assertLt(used, 11_500_000, "terminal word application exceeds review target");
     }
@@ -160,7 +215,7 @@ contract AdvanceColdTerminalFresh is ColdTerminalFixture {
 }
 
 /// @dev The widest terminal-word application: the deadman's ending reached long after it fired,
-///      so the terminal word derives the capped 31 skipped days in the same transaction.
+///      so the terminal word settles the capped 31 skipped coinflip days in the same transaction.
 contract AdvanceColdTerminalFreshLongGap is ColdTerminalFixture {
     function _fresh() internal pure override returns (bool) {
         return true;

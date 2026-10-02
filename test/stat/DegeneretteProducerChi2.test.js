@@ -18,12 +18,16 @@ describe('Degenerette uniform producer exhaustive color/symbol support', functio
     for (const row of counts) expect(row).to.deep.equal(Array(8).fill(8));
   });
   it('choosing a hero fixes only its symbol, with zero a real pick and 32 internal random sentinel', async function () {
-    for (let symbol=0;symbol<32;symbol++) {
+    for (let symbol=0;symbol<24;symbol++) {
       const t = await h.ticket(123456n,symbol);
       expect(Number((t>>BigInt((symbol>>3)*8))&7n)).to.equal(symbol&7);
       expect(await h.hero(123456n,symbol)).to.equal(symbol);
     }
-    expect(await h.hero(123456n,32)).to.be.lessThan(32n);
+    expect(await h.hero(123456n,32)).to.be.lessThan(24n);
+    for (let symbol=24;symbol<32;symbol++) {
+      await expect(h.hero(123456n,symbol)).to.be.revertedWithCustomError(h,'InvalidBet');
+      await expect(h.ticket(123456n,symbol)).to.be.revertedWithCustomError(h,'InvalidBet');
+    }
     await expect(h.ticket(123456n,32)).to.be.revertedWithCustomError(h,'InvalidBet');
   });
 });

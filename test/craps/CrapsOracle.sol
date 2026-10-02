@@ -109,10 +109,6 @@ contract CrapsOracle {
     ///         production engine, at the same value, so the differential proves the two agree.
     uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
 
-    /// @notice Domain tag for the scheduled shooter profit boost. Held independently from the
-    ///         production engine, at the same value, so the differential proves the two agree.
-    uint256 internal constant SHOOTER_BOOST_TAG = 0x53686f6f746572426f6f7374; // "ShooterBoost"
-
     /// @dev The six totals that can be a point, for grading `Outcome.pointsMade`.
     uint256 internal constant _POINT_TOTALS_MASK = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 8) | (1 << 9) | (1 << 10);
 
@@ -157,6 +153,10 @@ contract CrapsOracle {
         uint256 staked;
         uint256 returned;
         uint256 profit;
+        uint256 hotProfit;
+        uint256 hotAfterRolls;
+        uint256 rollLimit;
+        bool payingHot;
         int256 net;
         uint32 rolls;
         uint8 pointsMade;
@@ -238,6 +238,7 @@ contract CrapsOracle {
         uint256 unitsPlayed;
         uint256 totalRolls;
         SlipStop stop;
+        uint256 hottestHand;
         HandRecord[] ledger;
         bytes rollLog;
     }
@@ -277,6 +278,8 @@ contract CrapsOracle {
     /// @return o    The settlement.
     function resolveHand(Craps.Bets calldata b, bytes32 seed) external pure returns (Outcome memory o) {
         o.staked = stakeFor(b);
+        o.hotAfterRolls = 12;
+        o.rollLimit = MAX_ROLLS;
         uint8[] memory noScript;
         _run(b, seed, noScript, true, new bytes(0), 0, o);
     }
@@ -299,6 +302,8 @@ contract CrapsOracle {
             if (dice[i] < 1 || dice[i] > 6) revert BadDie();
         }
         o.staked = stakeFor(b);
+        o.hotAfterRolls = 12;
+        o.rollLimit = MAX_ROLLS;
         _run(b, seed, dice, true, new bytes(0), 0, o);
     }
 
@@ -345,6 +350,8 @@ contract CrapsOracle {
         uint8[] memory noScript;
         Outcome memory o;
         o.staked = stakeFor(b);
+        o.hotAfterRolls = 12;
+        o.rollLimit = MAX_ROLLS;
         uint256 mark;
         assembly ("memory-safe") {
             mark := mload(0x40)
@@ -419,9 +426,9 @@ contract CrapsOracle {
     }
 
     /// @dev The same run under a SCHEDULED SHOOTER PROFIT BOOST. `boost` packs the schedule the
-    ///      production engine reads — the eligible-shooter percentage in the low byte, the percent
-    ///      added to an eligible shooter's PROFIT above it — and zero is the bare engine. The
-    ///      eligibility draw and the profit base are both held here independently: this oracle
+    ///      production engine reads — the hot roll threshold in the low byte, the percent
+    ///      added to subsequent-roll PROFIT above it — and zero is the bare engine. The
+    ///      duration accounting and the profit base are held here independently: this oracle
     ///      accumulates winnings as it pays them, where production subtracts principal out of a
     ///      total at the end, so the differential grades two different derivations of one figure.
     function resolveSlipBoosted(
@@ -495,6 +502,8 @@ contract CrapsOracle {
         uint8[] memory noScript;
         Outcome memory o;
         o.staked = stake;
+        o.hotAfterRolls = 12;
+        o.rollLimit = MAX_ROLLS;
         uint256 mark;
         assembly ("memory-safe") {
             mark := mload(0x40)
@@ -553,17 +562,18 @@ contract CrapsOracle {
                 // affordability check above already proved covered.
                 bankroll -= q * stake;
 
+                o.hotAfterRolls = boost & 0xFF;
+                if (o.hotAfterRolls == 0) o.hotAfterRolls = 12;
+                o.rollLimit = rollBudget < MAX_ROLLS ? rollBudget - (logPos - hands) : MAX_ROLLS;
                 uint256 end = _run(b, handSeed(seed, hands), noScript, false, log, logPos, o);
+                uint256 heat = (o.rolls << 9) | (511 - hands);
+                if (heat > r.hottestHand) r.hottestHand = heat;
                 // THE SHOOTER PROFIT BOOST, folded into the base hand before the round's multiple
                 // scales it and before the ledger records it, so a boosted hand's line still says
                 // what that hand was worth. Floored once, on winnings alone.
                 if (boost != 0) {
-                    uint256 pct = _boostedShooter(seed, hands, player, boost & 0xFF) ? (boost >> 8) & 0xFF : 0;
-                    // The rotation turn, held here as a one-based ordinal above the schedule and
-                    // compared against this oracle's own zero-based hand count.
-                    uint256 turn = boost >> 16;
-                    if (turn != 0 && turn - 1 == hands) pct += 5;
-                    uint256 add = (o.profit * pct) / 100;
+                    uint256 rotation = boost >> 16 == hands + 1 ? 30 : 0;
+                    uint256 add = o.hotProfit * (((boost >> 8) & 0xFF) + rotation) / 100;
                     o.returned += add;
                     o.net += int256(add);
                 }
@@ -616,6 +626,8 @@ contract CrapsOracle {
         Outcome memory o;
         uint256 handStake = stakeFor(b);
         o.staked = handStake;
+        o.hotAfterRolls = 12;
+        o.rollLimit = MAX_ROLLS;
         s.staked = handStake * hands;
 
         uint256 mark;
@@ -783,6 +795,7 @@ contract CrapsOracle {
         // accumulate — every other field is assigned below — so this reset is all reuse requires.
         o.returned = 0;
         o.profit = 0;
+        o.hotProfit = 0;
         if (withLegs) {
             _stakeBooks(b, o);
             for (uint256 k = 0; k < _LEGS; ++k) {
@@ -825,7 +838,8 @@ contract CrapsOracle {
                 if script { scripted := shr(1, mload(script)) }
             }
             uint256 i;
-            for (; i < MAX_ROLLS; ++i) {
+            for (; i < o.rollLimit; ++i) {
+                o.payingHot = i >= o.hotAfterRolls;
                 uint256 d1;
                 uint256 d2;
                 if (i < scripted) {
@@ -997,17 +1011,6 @@ contract CrapsOracle {
         return uint256(keccak256(abi.encode(SURVIVAL_TAG, seed, n, player))) & 1 == 1;
     }
 
-    /// @dev Whether shooter `n` carries THIS player's profit boost. Its own domain, so it moves
-    ///      neither the dice nor the survival coin — held independently at the production
-    ///      engine's tag and shape so the differential proves the two draws agree.
-    function _boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance)
-        private
-        pure
-        returns (bool)
-    {
-        return uint256(keccak256(abi.encode(SHOOTER_BOOST_TAG, seed, n, player))) % 100 < chance;
-    }
-
     /// @dev Copy one hand's summary into a ledger slot. Split out of the session loops so their
     ///      frames hold fewer live memory pointers — inlined, the extra pointers push the
     ///      production compiler profile (via-IR at higher optimizer runs) past stack depth.
@@ -1036,6 +1039,7 @@ contract CrapsOracle {
         _pay(o, withLegs, leg, amount);
         unchecked {
             o.profit += amount;
+            if (o.payingHot) o.hotProfit += amount;
         }
     }
 
@@ -1048,6 +1052,7 @@ contract CrapsOracle {
         _pay(o, withLegs, leg, amount);
         unchecked {
             o.profit += amount - principal;
+            if (o.payingHot) o.hotProfit += amount - principal;
         }
     }
 

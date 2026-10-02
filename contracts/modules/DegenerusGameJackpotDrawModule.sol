@@ -81,10 +81,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         address[4] memory deityCache;
         for (uint8 t; t < 4; ) {
             uint8 trait = traitIds[t];
-            uint8 fullSymId = (trait >> 6) * 8 + (trait & 0x07);
-            if (fullSymId < 32) {
-                deityCache[t] = deityBySymbol[fullSymId];
-            }
+            deityCache[t] = _traitDeity(trait);
             unchecked { ++t; }
         }
 

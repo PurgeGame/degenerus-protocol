@@ -332,7 +332,7 @@ interface IDegenerusGame {
     /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported).
     /// @param amountPerSpin Bet amount per ticket.
     /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP). Each spin resolves independently.
-    /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
+    /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
     function placeDegeneretteBet(
         address player,
         uint8 currency,
@@ -495,6 +495,9 @@ interface IDegenerusGame {
         uint8 dailyQuantity,
         address fundingSource
     ) external payable;
+
+    /// @notice GAME-only atomic stETH pull; caller catches any failed funding attempt.
+    function pullAfkingSteth(address subscriber, address source, uint256 shortfall) external returns (uint256);
 
     /// @notice Permissionless FLIP claim — pays each sub its accrued pendingFlip in one
     ///         creditFlip and zeroes it; always credits the sub, never the caller.

@@ -22,10 +22,13 @@ return below 100% through activity **169**.
 
 ## Ticket generation and shared draws
 
-The only ticket input is a hero symbol `0..31`: `quadrant = symbol >> 3`,
+The only ticket input is a hero symbol `0..23` (Crypto, Zodiac or Cards): `quadrant = symbol >> 3`,
 `icon = symbol & 7`. Generate the other three symbols and all four colors afresh.
 Each random symbol and color is uniform among eight possibilities, including gold.
 There is no full-ticket selection or separate hero-quadrant parameter.
+All eight dice remain natural spin results in every color, but cannot be chosen or
+automatic heroes and are excluded from the daily jackpot hero boost. Match odds
+and payout tables are unchanged.
 
 For ordinary ETH and FLIP bets:
 
@@ -285,10 +288,12 @@ the same reels at every activity score.
   expected Reward-pool outflow per one-ETH spin to 0.0000027126073837280272 of
   the pool, approximately **1.883×** the historical N0 rate. Those reward rates
   are unchanged; their EV is outside the requested base-return target.
-- Box spins request a random hero using internal sentinel `32`; all symbols
-  `0..31`, including zero, are real hero selections. Record awards retain the
+- Box spins request a random hero using internal sentinel `32`; symbols
+  `0..23`, including zero, are real hero selections. Random heroes are drawn
+  uniformly from those 24 symbols. Record awards retain the
   selected hero. Foil awards select one hero from the matched line using the
-  sealed seed, then regenerate the rest, including every color. Full foil
+  sealed seed and only its Crypto, Zodiac or Cards quadrant, then regenerate
+  the rest, including every color. Full foil
   tickets cannot carry their unusual gold distribution into Degenerette payouts.
 - Automatic player, hero, result and rig draws use separate tagged domains.
   `BoxSpin.packedSpins` now includes each spin's 2-bit hero quadrant at bits

@@ -480,7 +480,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
 
     }
     function _handleGameOverPath(uint24 day, uint24 lvl, uint256 allowance) private returns (bool shouldReturn, uint8 stage) {
-        if (!gameOver && !_livenessTriggered()) return (false, 0);
+        // The sole caller, runTerminalPhase, already authenticated terminal liveness.
         (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameGameOverModule.runGameOverAdvance.selector, day, lvl, allowance)
         );

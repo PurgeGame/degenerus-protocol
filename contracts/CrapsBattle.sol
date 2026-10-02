@@ -125,6 +125,7 @@ interface IReadCohortLifecycle {
     function payProgressive(CrapsBattleStorage.Window calldata w, uint256 peak, uint256 score, uint256 winnerId, uint256 winnerWord, address winner) external;
     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory);
     function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory);
+    function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word) external;
 }
 
 contract CrapsBattle is CrapsBattleStorage {
@@ -932,9 +933,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      granted creator pays one warm SLOAD instead of a cross-contract call.
     /// @custom:reverts NotVaultOwner If the caller does not hold the vault's DGVE majority.
     function setBattleCreator(address account, bool allowed) external {
-        if (!IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
-        _battleCreator[account] = allowed;
-        emit BattleCreatorSet(account, allowed);
+        _delegateJackpot();
     }
 
     /// @dev Whether `header` takes the high lane in the window at `windowSlot`. A window-local or
@@ -962,6 +961,13 @@ contract CrapsBattle is CrapsBattleStorage {
         // High for THIS window: a day ticket may be high in some of its seven and ordinary in the
         // rest, and the window being settled names which flag applies.
         bool hi = _highOn(header, betId, uint256(w.bound));
+        if (w.bound < _CUSTOM_SLOT_BASE) {
+            uint256 f = _highField[w.key];
+            if (s.hottestHand > ((f >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK)) {
+                _highField[w.key] = (f & ~(_HF_HOTTEST_MASK << _HF_HOTTEST_SHIFT))
+                    | (s.hottestHand << _HF_HOTTEST_SHIFT);
+            }
+        }
 
         // NOTHING is written back to the bet. The verdict folds into the battle's own word as a
         // single composite score, and the scoreboard remembers which bet is holding the lead — so
@@ -2194,9 +2200,6 @@ contract CrapsBattle is CrapsBattleStorage {
                 // the table's word — so a separate claim would only re-derive all of it and cost
                 // the player a second transaction to collect what is already decided.
                 IReadCohortLifecycle(address(this)).finalizeBattle(w, g, word);
-                if (!_isJackpotSlot(w.bound)) {
-                    IReadCohortLifecycle(address(this)).completeRngSlot(w.bound, _slotIndex[w.bound] - 1);
-                }
                 finalized = true;
             }
         }

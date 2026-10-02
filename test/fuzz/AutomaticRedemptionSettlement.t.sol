@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract RedemptionTerminalSeeder is DegenerusGame {
     function end() external { gameOver = true; }
@@ -105,6 +106,51 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         vm.prank(address(game));
         assertTrue(_process(9_000_000));
+    }
+
+    function _claimTranscript() internal returns (bytes32 digest) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            // Batch callers receive a separate Coinflip bounty; player awards and
+            // every Game/sDGNRS event must remain identical across all three routes.
+            if (logs[i].emitter == address(game) || logs[i].emitter == address(sdgnrs)) {
+                digest = keccak256(abi.encode(digest, logs[i].emitter, logs[i].topics, logs[i].data));
+            }
+        }
+        return keccak256(abi.encode(digest, game.claimableWinningsOf(alice), game.claimableWinningsOf(bob),
+            coinflip.coinflipAmount(alice), coinflip.coinflipAmount(bob), sdgnrs.pendingRedemptionEthValue()));
+    }
+
+    function test_FrozenWordProducesSameTranscriptAcrossAllClaimRoutes() public {
+        uint24 day = game.currentDayView();
+        uint256 amount = sdgnrs.totalSupply() / 1000;
+        _burn(alice, amount);
+        _burn(bob, amount);
+        _resolve(day, 100, 99);
+        uint256 snapshot = vm.snapshotState();
+
+        vm.recordLogs();
+        vm.prank(address(game));
+        assertTrue(_process(9_000_000));
+        bytes32 automatic = _claimTranscript();
+        assertTrue(vm.revertToState(snapshot));
+
+        vm.recordLogs();
+        sdgnrs.claimRedemption(alice, day);
+        sdgnrs.claimRedemption(bob, day);
+        vm.prank(address(game));
+        assertTrue(_process(9_000_000)); // Clear only the already-drained cohort metadata.
+        assertEq(_claimTranscript(), automatic, "single claims use the frozen cohort word");
+        assertTrue(vm.revertToState(snapshot));
+
+        address[] memory players = new address[](2);
+        players[0] = alice;
+        players[1] = bob;
+        vm.recordLogs();
+        sdgnrs.claimRedemptionMany(players, day);
+        vm.prank(address(game));
+        assertTrue(_process(9_000_000));
+        assertEq(_claimTranscript(), automatic, "batch claims use the frozen cohort word");
     }
 
     function test_LiveSettlementDoesNotPushEthToRecipient() public {

@@ -229,7 +229,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                 uint64 next = cursor + 1;
                 bool heads = uint256(keccak256(abi.encode(COIN_TAG, word, lvl, next))) & 1 != 0;
                 if (!MineFlipGas.canRun(meter, heads ? RUN_GAS_MAX : TAILS_GAS_MAX, WORK_TAIL_GAS)) break;
-                winners = _run(lvl, next, word, seed, capacity, winners);
+                if (heads) winners = _run(lvl, next, word, seed, capacity, winners);
                 cursor = next;
                 ++result.rewardBasis;
                 assembly ("memory-safe") { mstore(0x40, free) }
@@ -308,9 +308,8 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         private
         returns (uint256)
     {
-        // The final coin is independent of the run, so tails skips the engine: the run cannot place
-        // and anyone can replay it from the sealed word with a free call to the pure engine.
-        if (uint256(keccak256(abi.encode(COIN_TAG, word, lvl, id))) & 1 == 0) return winners;
+        // The caller already tested the independent final coin for admission. Only heads
+        // reaches the engine; tails cannot place and remains freely replayable from the word.
         uint256 entry = decBattleEntries[_entryKey(lvl, id)];
         address owner = address(uint160(entry));
         // The board was checked at burn, so settlement only counts its named chips.
@@ -328,7 +327,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             seed,
             SCALE,
             owner,
-            (0x1205170618081D091D0B1D0C1D0E200F >> (named << 4)) & 0xFFFF,
+            (0x050c070c0a0c0e0c120c140c190c1e0c >> (named << 4)) & 0xFFFF,
             RUN_BOUNDS
         );
         emit DecimatorRun(lvl, id, result.peakBankroll);

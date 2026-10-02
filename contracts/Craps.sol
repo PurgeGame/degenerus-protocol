@@ -143,17 +143,13 @@ contract Craps {
     /// @notice Domain tag for the mid-run second-chance coin, separated from the dice stream.
     uint256 internal constant SURVIVAL_TAG = 0x537572766976616c; // "Survival"
 
-    /// @notice Domain tag for the scheduled shooter profit boost, separated from the dice stream,
-    ///         from the survival coin and from every draw the wrapper takes off the same word.
-    uint256 internal constant SHOOTER_BOOST_TAG = 0x53686f6f746572426f6f7374; // "ShooterBoost"
-
     /// @notice Domain tag for the field's rotating-shooter start, separated from every other
     ///         draw the same seed answers. One draw per FIELD: the seat offset does the rest.
     uint256 internal constant ROTATING_SHOOTER_TAG = 0x526f746174696e6753686f6f746572; // "RotatingShooter"
 
-    /// @dev The percent the house adds to a seat's eligible profit on the one shooter its turn in
-    ///      the field's rotation names. Stacks ADDITIVELY with the natural schedule.
-    uint256 internal constant _ROTATION_UPLIFT = 5;
+    /// @dev Extra percentage points on HOT profit when this seat is the shooter. Both bonuses
+    ///      apply only after the threshold, add before one floor, and never boost early profit.
+    uint256 internal constant _ROTATION_UPLIFT = 30;
     /// @dev Where `boost` carries the rotation turn: `offset + 1` above the two schedule bytes,
     ///      zero for no turn within the run's bound.
     uint256 internal constant _BOOST_TURN_SHIFT = 16;
@@ -191,9 +187,10 @@ contract Craps {
     ///                       stake refund and never the principal a winning dark wager hands back
     ///      Both money fields are bounded by the same argument: 512 rolls of the whole board at
     ///      the uint24 leg maximum comes to under 2^98, and the profit is a part of that amount.
-    ///      `_settleSlip` adds the boost straight onto the packed word, which is safe on the same
-    ///      figure — a boost is at most a fraction of the profit, so the sum stays under 2^99,
-    ///      thirteen bits clear of the cursor. The cursor itself is the roll budget plus one
+    ///      The resolver adds the bonus before packing. Even arbitrary uint8 hot percentages
+    ///      (at most 255) plus the fixed rotation 30 keep the boosted return below 2^100;
+    ///      the numerator is below 2^107 and uint32 escalation stays below 2^132.
+    ///      No monetary carry can reach the cursor. The cursor is the roll budget plus one
     ///      terminator per shooter, far inside its 32 bits.
     uint256 private constant _HR_LOG_SHIFT = 112;
     uint256 private constant _HR_PROFIT_SHIFT = 144;
@@ -270,6 +267,9 @@ contract Craps {
         uint256 unitsPlayed;
         uint256 totalRolls;
         SlipStop stop;
+        /// @dev Longest shared hand: rolls in bits 9..18, (511 - hand ordinal) below.
+        ///      Larger wins; equal lengths favor the earlier hand. Zero means no hand played.
+        uint256 hottestHand;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -309,14 +309,9 @@ contract Craps {
     ///      base hand: the engine rolls the base board once and scales, which is what keeps the
     ///      dice log that of the base board however far the escalator has climbed.
     ///
-    ///      THE SHOOTER PROFIT BOOST rides here and nowhere else. `boost` names a schedule the
-    ///      wrapper fixed before the seed existed — how often a shooter is eligible, and what the
-    ///      house adds to that shooter's PROFIT when one is — and zero turns the whole thing off,
-    ///      which is what a custom table passes. Eligibility is drawn per SHOOTER and per PLAYER
-    ///      off the same committed seed the dice come from, so one field shares its shooters and
-    ///      no two seats share a schedule. The boost lands in the base hand, so it is inside the
-    ///      bankroll before the next goal, bound and affordability check — it may cross a goal a
-    ///      shooter early, or buy a round the run could not otherwise afford, on purpose.
+    ///      Hot profit begins after the schedule's roll threshold, shared by the table.
+    ///      Rotation adds 30 percentage points on the same hot profit. Both are floored together
+    ///      in the base hand before escalation and the next affordability/goal check.
     ///
     ///      Loop state note: `cur` packs the hand counter, the round's mandatory multiplier, the
     ///      roll cursor and the goal latch into one stack slot (see `_CUR_HANDS_MASK`) — via-IR
@@ -329,8 +324,8 @@ contract Craps {
     /// @param rollBudget Roll cap on the run, judged between shooters; one under `_MAX_ROLLS` is
     ///                   exact, cutting the last hand where it runs out.
     /// @param player     The slip's owner, who seasons the survival coin.
-    /// @param boost Packed schedule: the eligible-shooter percentage in bits 0..7, the percent
-    ///              added to an eligible shooter's profit in bits 8..15, and above them the
+    /// @param boost Packed schedule: the hot roll threshold in bits 0..7, the percent
+    ///              added to subsequent-roll profit in bits 8..15, and above them the
     ///              ONE-BASED hand ordinal of this seat's rotation turn, or zero for none. Zero
     ///              is no schedule.
     /// @return r The run: bankroll in and out, its peak, hands, units, rolls and the stop.
@@ -344,19 +339,21 @@ contract Craps {
         address player,
         uint256 boost
     ) internal pure returns (SlipResult memory r) {
-        uint256 stake = _stakeFor(b);
 
         r.bankrollIn = bankroll;
         r.peakBankroll = bankroll;
-        uint256 initialState = _settlementState(b);
         // Cache place winnings by dice total, plus the whole figure a winning Don't Pass returns
         // at index zero. Sized to the highest total the dice can throw, so the resolvers' indexed
         // read is in bounds for every roll rather than only for the totals a live place bit can
         // name. Keeping the board pointer in the resolver is deliberate: via-IR otherwise inlines
         // the whole hand machine through the battle wrapper and exhausts its stack.
         uint256[13] memory wins;
+        // Non-place slots also hold constant stake/state and hand-local bonus scratch.
+        wins[7] = boost;
+        wins[3] = _settlementState(b);
+        wins[12] = _stakeFor(b);
         unchecked {
-            if (initialState & ST_PLACE_ANY != 0) {
+            if (wins[3] & ST_PLACE_ANY != 0) {
                 wins[4] = uint256(b.place4) * (2 * FLIP);
                 wins[5] = (uint256(b.place5) * (3 * FLIP)) / 2;
                 wins[6] = (uint256(b.place6) * (7 * FLIP)) / 6;
@@ -364,7 +361,7 @@ contract Craps {
                 wins[9] = (uint256(b.place9) * (3 * FLIP)) / 2;
                 wins[10] = uint256(b.place10) * (2 * FLIP);
             }
-            if (initialState & ST_DONT_LIVE != 0) {
+            if (wins[3] & ST_DONT_LIVE != 0) {
                 wins[0] = uint256(b.dontPass) * FLIP + (uint256(b.dontPass) * (3 * FLIP)) / 4;
             }
         }
@@ -390,7 +387,7 @@ contract Craps {
 
                 {
                     uint256 q = _escOf(cur & _CUR_HANDS_MASK);
-                    uint256 need = stake * q;
+                    uint256 need = wins[12] * q;
                     if (cur & _CUR_QUALIFIED != 0) {
                         // THE PROTECTED RESERVE. Past the goal the run wagers only what it holds
                         // ABOVE it, so the bounded-loss invariant makes the win unlosable: the
@@ -418,26 +415,28 @@ contract Craps {
                     cur = (cur & ~(_CUR_MULT_MASK << _CUR_MULT_SHIFT)) | (q << _CUR_MULT_SHIFT);
                 }
 
-                bankroll -= ((cur >> _CUR_MULT_SHIFT) & _CUR_MULT_MASK) * stake;
+                bankroll -= ((cur >> _CUR_MULT_SHIFT) & _CUR_MULT_MASK) * wins[12];
 
                 // A roll budget shorter than one hand is EXACT: the hand is cut where the budget
                 // runs out and refunds whatever is still live, the rule `_MAX_ROLLS` already
                 // applies. A budget of a hand or more keeps its between-shooters meaning.
+                // Slot 1 is unused by the total-indexed place payout table. Carry the
+                // per-hand bonus control here to keep the via-IR resolver frame bounded.
+                wins[1] = (wins[7] & 0xFFFF) | (((wins[7] >> _BOOST_TURN_SHIFT) == (cur & _CUR_HANDS_MASK) + 1
+                    ? _ROTATION_UPLIFT : 0) << 16);
+                // Rotation-only callers still wait twelve rolls; a missing hot schedule
+                // must not turn the personal bonus into a whole-hand bonus.
+                if ((wins[1] & 0xFF) == 0) wins[1] |= 12;
                 uint256 handOut = _runSettlement(
                     b,
-                    handSeed(seed, cur & _CUR_HANDS_MASK), _handCursor(cur, rollBudget), initialState, wins
+                    handSeed(seed, cur & _CUR_HANDS_MASK), _handCursor(cur, rollBudget), wins[3], wins
                 );
-                // THE SHOOTER PROFIT BOOST. House money on the base hand's ELIGIBLE PROFIT and on
-                // nothing else, floored ONCE here so the round's escalating multiple below scales
-                // one boosted base figure rather than drawing a schedule per copy. Two sources add
-                // into ONE percentage before the floor: the natural schedule's draw and the seat's
-                // single rotation turn, the hand whose one-based ordinal rides above the schedule.
-                if (boost != 0) {
-                    uint256 pct = _boostedShooter(seed, cur & _CUR_HANDS_MASK, player, boost & 0xFF)
-                        ? (boost >> 8) & 0xFF
-                        : 0;
-                    if ((boost >> _BOOST_TURN_SHIFT) == (cur & _CUR_HANDS_MASK) + 1) pct += _ROTATION_UPLIFT;
-                    handOut += ((handOut >> _HR_PROFIT_SHIFT) * pct) / 100;
+                // Keep hand telemetry off the resolver's live Solidity stack. The eighth
+                // receipt word is hottestHand; money and cursor lanes stay unchanged.
+                assembly ("memory-safe") {
+                    let heat := or(shl(9, sub(and(shr(112, handOut), 0xffffffff), shr(48, cur))), sub(511, and(cur, 0x7fff)))
+                    let target := add(r, 0xe0)
+                    if gt(heat, mload(target)) { mstore(target, heat) }
                 }
                 bankroll += ((cur >> _CUR_MULT_SHIFT) & _CUR_MULT_MASK) * (handOut & _HR_AMOUNT_MASK);
                 // ACCUMULATED IN MEMORY, not on the stack. The loop's live set is what decides
@@ -541,6 +540,7 @@ contract Craps {
         returns (uint256 packed)
     {
         uint256 returned;
+        wins[2] = 0;
 
         unchecked {
             // A board with no line bet runs the no-pass-line specialization — the same point
@@ -556,6 +556,9 @@ contract Craps {
             logPos = uint32(logPos);
             uint256 i;
             for (; i < maxRolls; ++i) {
+                if (i == (wins[1] & 0xFF)) {
+                    wins[2] = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
+                }
                 uint256 w;
                 assembly ("memory-safe") {
                     mstore(0x00, seed)
@@ -627,6 +630,10 @@ contract Craps {
             // stake is taken back out. The roll-cap refunds are principal to the last wei and are
             // added after, so a truncated hand can never have its stake boosted.
             uint256 elig = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
+            // The loop index on seven-out is zero-based; on a cap it is the count.
+            // Requiring maxRolls > threshold excludes a cap exactly at the threshold.
+            uint256 hot = maxRolls > (wins[1] & 0xFF) && i >= (wins[1] & 0xFF) ? elig - wins[2] : 0;
+            returned += hot * (((wins[1] >> 8) & 0xFF) + (wins[1] >> 16)) / 100;
 
             if (st & ST_SEVEN_OUT == 0) {
                 if (st & ST_PASS_LIVE != 0) returned += uint256(b.passLine) * FLIP;
@@ -669,12 +676,16 @@ contract Craps {
         returns (uint256 packed)
     {
         uint256 returned;
+        wins[2] = 0;
 
         unchecked {
             uint256 maxRolls = logPos >> _HC_BOUND_SHIFT;
             logPos = uint32(logPos);
             uint256 i;
             for (; i < maxRolls; ++i) {
+                if (i == (wins[1] & 0xFF)) {
+                    wins[2] = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
+                }
                 uint256 w;
                 assembly ("memory-safe") {
                     mstore(0x00, seed)
@@ -730,6 +741,10 @@ contract Craps {
             logPos += st & ST_SEVEN_OUT == 0 ? maxRolls : i + 1;
 
             uint256 elig = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
+            // The loop index on seven-out is zero-based; on a cap it is the count.
+            // Requiring maxRolls > threshold excludes a cap exactly at the threshold.
+            uint256 hot = maxRolls > (wins[1] & 0xFF) && i >= (wins[1] & 0xFF) ? elig - wins[2] : 0;
+            returned += hot * (((wins[1] >> 8) & 0xFF) + (wins[1] >> 16)) / 100;
 
             if (st & ST_SEVEN_OUT == 0) {
                 if (st & (1 << 4) != 0) returned += uint256(b.place4) * FLIP;
@@ -774,20 +789,8 @@ contract Craps {
         return _playerDraw(SURVIVAL_TAG, seed, n, player) & 1 == 1;
     }
 
-    /// @dev Whether shooter `n` carries THIS player's profit boost — `chance` shooters in a
-    ///      hundred do. Its
-    ///      own domain, so it moves neither the dice nor the survival coin and cannot be read off
-    ///      either: the tag separates it from every other draw the same seed answers, and the
-    ///      player separates one seat's schedule from the next's over the shared shooters. Both
-    ///      inputs were fixed before the seed existed — the word is the table's and the player is
-    ///      who placed the slip — so nobody could know the schedule while entry was still open,
-    ///      and settlement order cannot change it afterwards.
-    function _boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance) internal pure returns (bool) {
-        return _playerDraw(SHOOTER_BOOST_TAG, seed, n, player) % 100 < chance;
-    }
-
     /// @dev Exact `abi.encode(tag, seed, n, player)` digest without allocating or advancing the
-    ///      free-memory pointer. Both caller domains use the same four-word preimage layout.
+    ///      free-memory pointer. The survival draw uses this four-word preimage layout.
     function _playerDraw(uint256 tag, bytes32 seed, uint256 n, address player) private pure returns (uint256 draw) {
         assembly ("memory-safe") {
             let ptr := mload(0x40)
@@ -873,22 +876,11 @@ contract Craps {
         }
     }
 
-    /// @dev THE SCHEDULED SHOOTER-PROFIT TERMS, indexed by how many of the ten chips the ticket
-    ///      placed itself. The low byte is the eligible-shooter percentage and the byte above is
-    ///      the percent added to an eligible shooter's PROFIT:
-    ///
-    ///        placed       0       1       2       3       4       5       6       7
-    ///        chance      15%     14%     12%     11%      9%      8%      6%      5%
-    ///        uplift     +32%    +29%    +29%    +29%    +29%    +24%    +23%    +18%
-    ///
-    ///      The uplifts sit one to two points under what a field with no rotation would carry:
-    ///      the difference funds the rotating shooter's +5% at forty seats.
-    ///
-    ///      Packed into one constant so the continuum costs one indexed shift instead of eight
-    ///      branches. Scheduled windows and the jackpot battle use this row: custom battles always pass
-    ///      zero and play the bare engine, while still accepting every placed-chip count.
+    /// @dev Duration schedule by picked chips 0..7: after 12 rolls, add respectively
+    ///      30/25/20/18/14/10/7/5 percent of subsequent eligible profit. The low byte
+    ///      is the threshold; the next byte is the hot percentage. Custom battles use zero.
     function _shooterBoostTerms(uint256 placed) internal pure returns (uint256) {
-        return (0x1205170618081D091D0B1D0C1D0E200F >> (placed << 4)) & 0xFFFF;
+        return (0x050c070c0a0c0e0c120c140c190c1e0c >> (placed << 4)) & 0xFFFF;
     }
 
     /// @dev Where the dark side sits in a packed board: ten three-bit legs, the don't-pass leg

@@ -751,17 +751,9 @@ contract CrapsViews is CrapsBattle {
     }
 
     /// @dev The engine's own shooter-boost primitives, restated so the suite can grade the
-    ///      schedule and the eligibility draw without a second implementation of either.
+    ///      schedule without duplicating the production table.
     function shooterBoostTerms(uint256 placed) external pure returns (uint256) {
         return _shooterBoostTerms(placed);
-    }
-
-    function boostedShooter(bytes32 seed, uint256 n, address player, uint256 chance)
-        external
-        pure
-        returns (bool)
-    {
-        return _boostedShooter(seed, n, player, chance);
     }
 
     function survived(bytes32 seed, uint256 n, address player) external pure returns (bool) {

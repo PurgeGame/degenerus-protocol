@@ -694,7 +694,7 @@ contract DegenerusVault {
     /// @param currency Bet currency (0 = ETH, 1 = FLIP; other values unsupported)
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of tickets (must satisfy game rules)
-    /// @param symbol Chosen hero symbol (0..31); quadrant = symbol >> 3.
+    /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
     /// @param ethValue Additional ETH from vault balance to use (on top of msg.value); ETH bets only
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If msg.value + ethValue exceeds vault balance
