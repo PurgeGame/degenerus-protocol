@@ -112,14 +112,8 @@ contract FoilPackEV is DeployProtocol {
                 r.jackpotReached = true;
             }
             _completeDay(_seed(nPurchaseDays, d));
-            vm.warp(block.timestamp + 1 days);
-        }
-
-        uint24 endDay = game.currentDayView();
-        r.endLevel = game.level();
-
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {
-            for (uint24 day = buyDay + 1; day <= endDay; day++) {
+            for (uint24 day = game.currentDayView() > 1 ? game.currentDayView() - 1 : 1; day <= game.currentDayView(); day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint256 ti = 0; ti < 4; ti++) {
                     vm.prank(fb[i]);
@@ -129,6 +123,12 @@ contract FoilPackEV is DeployProtocol {
                 }
             }
         }
+
+            vm.warp(vm.getBlockTimestamp() + 1 days);
+        }
+
+        uint24 endDay = game.currentDayView();
+        r.endLevel = game.level();
 
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {
             r.foilValue += _realizedValue(fb[i]);

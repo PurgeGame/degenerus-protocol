@@ -21,8 +21,8 @@ contract ProtocolDrawGasSeeder is DegenerusGameStorage {
         _setRngComplete(false);
         rngRequestTime = uint48(block.timestamp);
         rngWordCurrent = 987654321;
-        rngWordByDay[day] = 0;
-        rngWordByDay[day - 1] = 12345;
+        _recordDailyRng(day, 0);
+        _recordDailyRng(day - 1, 12345);
 
     }
 }

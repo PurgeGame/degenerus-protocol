@@ -28,7 +28,12 @@ async function advanceStage(game, advanceModule) {
   const events = receipt.logs
     .filter((log) => log.address.toLowerCase() === gameAddress && log.topics[0] === topic)
     .map((log) => advanceModule.interface.parseLog(log));
-  expect(events, "each successful advance reports its completed stage").to.have.length(1);
+  expect(events.length, "at most one advance stage per transaction").to.be.at.most(1);
+  if (events.length === 0) {
+    // The public work router can finish unlocked read consumers before a fresh request.
+    expect(await game.rngLocked(), "consumer-only work does not hold the daily lock").to.equal(false);
+    return 0n;
+  }
   return events[0].args.stage;
 }
 
@@ -63,8 +68,8 @@ describe("BackfillIdempotency", function () {
     restoreAddresses();
   });
 
-  it("credits a delayed VRF gap exactly once and preserves its words across midnight", async function () {
-    const { game, advanceModule, mockVRF, alice } = await loadFixture(deployFullProtocol);
+  it("credits a delayed VRF gap exactly once and preserves packed outcomes across midnight", async function () {
+    const { game, advanceModule, mockVRF, coinflip, alice } = await loadFixture(deployFullProtocol);
     const initial = await readClocks(game);
     expect(initial).to.deep.equal({ purchaseStartDay: 1n, dailyIdx: 1n });
 
@@ -91,7 +96,8 @@ describe("BackfillIdempotency", function () {
     expect(await readClocks(game)).to.deep.equal({
       purchaseStartDay: initial.purchaseStartDay, dailyIdx: requestDayR,
     });
-    expect(await game.rngWordForDay(requestDayR)).to.equal(REQUEST_WORD);
+    expect(await game.rngWordForDay(requestDayR), "calendar-expired full word is hidden").to.equal(0n);
+    expect((await coinflip.getCoinflipDayResult(requestDayR))[0], "sealed outcome survives expiry").to.be.gt(0n);
 
     const resumeId = await requestDay(game, advanceModule, mockVRF);
     expect(resumeId).to.be.gt(stalledId);
@@ -118,11 +124,29 @@ describe("BackfillIdempotency", function () {
       const derived = BigInt(hre.ethers.solidityPackedKeccak256(["uint256", "uint24"], [RESUME_WORD, day]));
       expectedWords.set(day, derived === 0n ? 1n : derived);
     }
+    const expectedResults = new Map();
+    const rewardTag = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("degenerus.coinflip.reward-percent"));
+    for (let day = requestDayR + 1n; day < resumeDayW; ++day) {
+      const word = expectedWords.get(day);
+      const seed = BigInt(hre.ethers.solidityPackedKeccak256(["bytes32", "uint256", "uint24"], [rewardTag, word, day]));
+      const win = (word & 1n) !== 0n;
+      const roll = seed % 20n;
+      const reward = roll === 0n ? 50n : roll === 1n ? 150n : seed % 38n + 78n;
+      expectedResults.set(day, [win ? reward : 1n, win]);
+    }
+    async function assertRetainedWordsAndGapResults() {
+      const today = await game.currentDayView();
+      for (const [day, word] of expectedWords) {
+        const retained = day <= today && today - day <= 1n;
+        expect(await game.rngWordForDay(day), `retained word for day ${day}`).to.equal(retained ? word : 0n);
+      }
+      for (const [day, result] of expectedResults) {
+        expect(Array.from(await coinflip.getCoinflipDayResult(day)), `immutable outcome ${day}`).to.deep.equal(result);
+      }
+    }
     async function assertFrozenGap() {
       expect((await readClocks(game)).purchaseStartDay, "exactly one gap credit").to.equal(creditedStart);
-      for (const [day, word] of expectedWords) {
-        expect(await game.rngWordForDay(day), `committed word for day ${day}`).to.equal(word);
-      }
+      await assertRetainedWordsAndGapResults();
       expect(await game.rngWordForDay(resumeDayW + 1n), "next day has no borrowed word").to.equal(0n);
       expect(await mockVRF.lastRequestId(), "drain keeps the same request").to.equal(resumeId);
     }
@@ -130,7 +154,7 @@ describe("BackfillIdempotency", function () {
 
     // Stage 12 deliberately leaves the lock held. Cross midnight at that exact
     // boundary, then require every remaining advance to preserve the credit and
-    // all stored words while finishing W rather than the new wall day W+1.
+    // packed gap outcomes while finishing W rather than the new wall day W+1.
     await advanceToNextDay();
     expect(await game.currentDayView()).to.equal(resumeDayW + 1n);
     await drainDay(game, advanceModule, assertFrozenGap);
@@ -143,9 +167,7 @@ describe("BackfillIdempotency", function () {
     await mockVRF.fulfillRandomWords(laterId, LATER_WORD);
     await drainDay(game, advanceModule, async () => {
       expect((await readClocks(game)).purchaseStartDay).to.equal(creditedStart);
-      for (const [day, word] of expectedWords) {
-        expect(await game.rngWordForDay(day)).to.equal(word);
-      }
+      await assertRetainedWordsAndGapResults();
     });
     expect(await readClocks(game)).to.deep.equal({
       purchaseStartDay: creditedStart, dailyIdx: resumeDayW + 1n,

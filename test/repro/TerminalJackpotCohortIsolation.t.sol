@@ -65,8 +65,8 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
 
         ticketCursor = 0;
         ticketLevel = 0;
-        foilDrainDay = 0;
-        foilLastResolveDay = 0;
+        foilGenerationDay = 0;
+        foilFirstDrawDay = 0;
         foilCursor = 0;
 
         if (readPlayer != address(0) && entriesEach != 0) {
@@ -100,7 +100,7 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         prizePoolFrozen = true;
 
         rngWordCurrent = RNG_WORD_WAITING;
-        rngWordByDay[day] = 0;
+        _recordDailyRng(day, 0);
         vrfRequestId = 777;
         _setRngRequestActive(true);
         _setRngSessionPublished(false);
@@ -113,6 +113,34 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         ticketCursor = 0;
         ticketLevel = 0;
         _seedQueue(_tqReadKey(lvl + 1), readPlayer, entries);
+    }
+
+    function seedFoilWrite(uint24 lvl, address player) external {
+        uint80 ownerBits = _registerEntryOwner(player, lvl);
+        uint256 id = uint32(ownerBits >> OWNER_IDX_SHIFT);
+        foilQueue[_foilWriteKey()].push((id << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
+        foilRecord[lvl][player] = (uint256(20000) << _FOIL_MULT_SHIFT) | (uint256(100) << _FOIL_SCORE_SHIFT);
+    }
+
+    function setFoilParity(bool writeSlot) external { ticketWriteSlot = writeSlot; }
+
+    function seedFoilRead(uint24 lvl, address player, bool processed) external {
+        uint80 ownerBits = _registerEntryOwner(player, lvl);
+        foilQueue[_foilReadKey()].push((uint256(uint32(ownerBits >> OWNER_IDX_SHIFT)) << 192)
+            | (uint256(lvl) << 160) | uint256(uint160(player)));
+        uint256 record = (uint256(20000) << _FOIL_MULT_SHIFT) | (uint256(100) << _FOIL_SCORE_SHIFT);
+        if (processed) {
+            _seedBucket(lvl, 0, player, 16);
+            record |= _FOIL_READY;
+            foilCursor = 1;
+        }
+        foilRecord[lvl][player] = record;
+    }
+
+    function foilCursorState() external view returns (uint256) { return foilCursor; }
+
+    function foilState(uint24 lvl, address player) external view returns (uint256 writeLength, uint256 readLength, bool ready) {
+        return (foilQueue[_foilWriteKey()].length, foilQueue[_foilReadKey()].length, foilRecord[lvl][player] & _FOIL_READY != 0);
     }
 
     function seedEveryTrait(uint24 lvl, address player) external {
@@ -300,6 +328,117 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         game.advanceGame();
         assertTrue(game.gameOver(), "purchase-phase terminal settlement completes");
         assertEq(_totalQueuedOwed(LEVEL + 1, committedBuyer), 0, "committed purchase queue drained");
+    }
+
+    function testFoilOnlyWriteCohortEntersTerminalJackpot() public {
+        _assertFoilWriteCohortEntersTerminalJackpot(false);
+    }
+
+    function testFoilAndOrdinaryWriteCohortEnterTerminalJackpot() public {
+        _assertFoilWriteCohortEntersTerminalJackpot(true);
+    }
+
+    function _assertFoilWriteCohortEntersTerminalJackpot(bool withOrdinary) private {
+        address foilBuyer = makeAddr("terminalFoilBuyer");
+        TerminalCohortSeeder seeder = _installSeeder();
+        seeder.seedTerminalState(
+            LEVEL, false, false, false, true, 0, LEVEL + 1,
+            address(0), withOrdinary ? committedBuyer : address(0), withOrdinary ? ENTRIES : 0
+        );
+        seeder.seedFoilWrite(LEVEL + 1, foilBuyer);
+        _restoreGame();
+        vm.deal(address(game), 100 ether);
+
+        game.advanceGame();
+        assertTrue(game.rngLocked(), "terminal request opened");
+        seeder = _installSeeder();
+        (uint256 writeLength, uint256 readLength, bool ready) = seeder.foilState(LEVEL + 1, foilBuyer);
+        assertEq(writeLength, 0, "paid foil frozen before terminal request");
+        assertEq(readLength, 1, "foil committed to terminal read cohort");
+        assertFalse(ready, "foil waits for its committed word");
+        // A foil appended after the request must remain outside this draw.
+        seeder.seedFoilWrite(LEVEL + 1, lateBuyer);
+        _restoreGame();
+
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), TERMINAL_WORD);
+        game.advanceGame();
+        assertEq(_holderEntryCount(LEVEL + 1, foilBuyer), 0, "application does not generate entries");
+        for (uint256 i; i < 8 && _holderEntryCount(LEVEL + 1, foilBuyer) == 0; ++i) {
+            game.advanceGame();
+            assertFalse(game.gameOver(), "foil generation completes before terminal payout");
+        }
+        assertEq(_holderEntryCount(LEVEL + 1, foilBuyer), 16, "all paid foil entries enter final inventory");
+        seeder = _installSeeder();
+        (writeLength, readLength, ready) = seeder.foilState(LEVEL + 1, foilBuyer);
+        assertTrue(ready, "paid foil was processed");
+        (, , bool lateReady) = seeder.foilState(LEVEL + 1, lateBuyer);
+        assertFalse(lateReady, "post-request foil remains unprocessed");
+        _restoreGame();
+
+        for (uint256 i; i < 8 && !game.gameOver(); ++i) game.advanceGame();
+        assertTrue(game.gameOver(), "terminal payout completes");
+        assertEq(_holderEntryCount(LEVEL + 1, foilBuyer), 16, "foil entries retained after payout");
+        assertEq(_holderEntryCount(LEVEL + 1, lateBuyer), 0, "post-request foil never enters draw");
+        if (withOrdinary) assertGt(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "ordinary entries also generated");
+    }
+
+    function testPartialReadFoilThenWriteFoilAtEvenParity() public {
+        _assertPartialReadAndWriteFoils(false);
+    }
+
+    function testPartialReadFoilThenWriteFoilAtOddParity() public {
+        _assertPartialReadAndWriteFoils(true);
+    }
+
+    function _assertPartialReadAndWriteFoils(bool writeSlot) private {
+        address processedBuyer = makeAddr("processedTerminalFoil");
+        address readBuyer = makeAddr("readTerminalFoil");
+        address writeBuyer = makeAddr("writeTerminalFoil");
+        address irrelevantBuyer = makeAddr("irrelevantTerminalFoil");
+        TerminalCohortSeeder seeder = _installSeeder();
+        seeder.seedTerminalState(LEVEL, false, false, true, false, PRE_FREEZE_WORD,
+            LEVEL + 1, address(0), address(0), 0);
+        seeder.setFoilParity(writeSlot);
+        seeder.seedFoilRead(LEVEL + 1, processedBuyer, true);
+        seeder.seedFoilRead(LEVEL + 1, readBuyer, false);
+        seeder.seedFoilWrite(LEVEL + 1, writeBuyer);
+        seeder.seedFoilWrite(LEVEL + 2, irrelevantBuyer);
+        _restoreGame();
+        vm.deal(address(game), 100 ether);
+
+        game.advanceGame(); // Release the earlier request; retain its delivered word.
+        seeder = _installSeeder();
+        assertEq(seeder.foilCursorState(), 1, "earlier partial foil cursor preserved");
+        _restoreGame();
+        for (uint256 i; i < 12 && mockVRF.lastRequestId() == 0; ++i) game.advanceGame();
+        assertGt(mockVRF.lastRequestId(), 0, "terminal request follows old read completion");
+        assertTrue(game.rngLocked(), "terminal word still pending");
+        assertEq(_holderEntryCount(LEVEL + 1, processedBuyer), 16, "processed prefix not duplicated");
+        assertEq(_holderEntryCount(LEVEL + 1, readBuyer), 16, "old read generated before next request");
+        assertEq(_holderEntryCount(LEVEL + 1, writeBuyer), 0, "new read awaits terminal word");
+        seeder = _installSeeder();
+        (uint256 writeLength, uint256 readLength,) = seeder.foilState(LEVEL + 1, writeBuyer);
+        assertEq(writeLength, 0, "terminal swap consumed write cohort exactly once");
+        assertEq(readLength, 2, "both write records committed before terminal word");
+        _restoreGame();
+
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), TERMINAL_WORD);
+        game.advanceGame();
+        assertFalse(game.gameOver(), "application cannot pay terminal jackpot");
+        for (uint256 i; i < 8 && _holderEntryCount(LEVEL + 1, writeBuyer) == 0; ++i) {
+            game.advanceGame();
+            assertFalse(game.gameOver(), "finishing foil drain returns before payout");
+        }
+        assertEq(_holderEntryCount(LEVEL + 1, writeBuyer), 16, "terminal write generated exactly once");
+        for (uint256 i; i < 8 && !game.gameOver(); ++i) game.advanceGame();
+        assertTrue(game.gameOver(), "terminal payout completes");
+        assertEq(_holderEntryCount(LEVEL + 1, processedBuyer), 16, "prefix still exactly sixteen");
+        assertEq(_holderEntryCount(LEVEL + 1, readBuyer), 16, "old read still exactly sixteen");
+        assertEq(_holderEntryCount(LEVEL + 1, writeBuyer), 16, "write still exactly sixteen");
+        seeder = _installSeeder();
+        (, , bool irrelevantReady) = seeder.foilState(LEVEL + 2, irrelevantBuyer);
+        assertFalse(irrelevantReady, "irrelevant level never generated for terminal draw");
+        _restoreGame();
     }
 
     function testLockedLastPurchaseUsesPromotedReadCohort() public {

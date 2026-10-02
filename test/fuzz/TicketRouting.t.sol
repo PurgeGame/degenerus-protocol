@@ -37,11 +37,11 @@ contract TicketRoutingHarness is DegenerusGameStorage {
     }
 
     function getQueueLength(uint24 wk) external view returns (uint256) {
-        return ticketQueue[wk].length;
+        return _ticketQueueLength(wk);
     }
 
     function getQueueEntry(uint24 wk, uint256 idx) external view returns (address) {
-        return _tqOwnerAt(ticketQueue[wk], wk & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
+        return _tqOwnerAt(ticketQueue[_ticketQueueStorageKey(wk)], wk & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
     }
 
     function tqWriteKey(uint24 lvl) external view returns (uint24) {

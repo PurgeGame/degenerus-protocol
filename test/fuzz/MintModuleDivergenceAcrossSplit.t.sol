@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "./helpers/TicketQueueStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // =============================================================================
@@ -169,7 +170,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
 
     /// @dev Compute the storage slot of `ticketQueue[rk]` (the `address[]` length slot).
     function _slotTicketQueueLen(uint24 rk) private pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(rk), SLOT_TICKET_QUEUE));
+        return keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(rk))), SLOT_TICKET_QUEUE));
     }
 
     /// @dev Compute the data root slot of `ticketQueue[rk]` (the first element slot).
@@ -203,7 +204,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         bytes32 dataRoot = _slotTraitBurnData(lvl, traitId);
         uint256 word = uint256(vm.load(host, bytes32(uint256(dataRoot) + (i >> 3))));
         uint256 lane = (word >> (32 * (i & 7))) & 0xffffffff;
-        bytes32 ownersLen = keccak256(abi.encode(uint256(lvl), SLOT_LVL_ENTRY_OWNER));
+        bytes32 ownersLen = keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), SLOT_LVL_ENTRY_OWNER));
         bytes32 ownersData = keccak256(abi.encode(ownersLen));
         return address(uint160(uint256(vm.load(host, bytes32(uint256(ownersData) + lane)))));
     }
@@ -226,7 +227,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         vm.store(host, _slotTicketQueueData(rk), bytes32(uint256(1)));
 
         // One combined owner/owed record; the queue-key locator stores position plus one.
-        bytes32 ownersLen = keccak256(abi.encode(uint256(lvl), SLOT_LVL_ENTRY_OWNER));
+        bytes32 ownersLen = keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), SLOT_LVL_ENTRY_OWNER));
         vm.store(host, ownersLen, bytes32(uint256(1)));
         vm.store(host, bytes32(uint256(keccak256(abi.encode(ownersLen)))), bytes32(uint256(uint160(player)) | (((uint256(1) << 48) | (uint256(owed) << 8)) << 160)));
         vm.store(host, _slotOwed(rk, player), bytes32(uint256(1)));
@@ -247,7 +248,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
             vm.store(host, _slotTraitBurnLen(lvl, uint8(traitId)), bytes32(0));
         }
         // The owner registry behind the lanes resets with them.
-        vm.store(host, keccak256(abi.encode(uint256(lvl), SLOT_LVL_ENTRY_OWNER)), bytes32(0));
+        vm.store(host, keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), SLOT_LVL_ENTRY_OWNER)), bytes32(0));
     }
 
     /// @dev Pre-seed `_lootboxWord(0)` with `entropy` and pin `lootboxRngPacked` so its

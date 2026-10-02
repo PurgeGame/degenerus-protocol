@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
@@ -24,7 +25,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///           (1) the per-sub STAGE 50-chunk marginal (one `advanceGame()` processes up to
 ///               `SUB_STAGE_BATCH = 50` funded lootbox subs PRE-RNG, partial-drains past that), AND
 ///           (2) the per-open marginal (`game.autoOpen(N)` over N ready stamped boxes after their
-///               frozen-stamp-day word `rngWordByDay[stampDay]` lands).
+///               frozen-stamp-day word `_recordedDailyWord(stampDay)` lands).
 ///
 ///         The 16.7M HARD per-tx ceiling (350-TST06-MEASUREMENT-SPEC §5): `SUB_STAGE_BATCH = 50`
 ///         (DegenerusGameAdvanceModule.sol:149) chunks the STAGE so a 50-chunk
@@ -310,9 +311,9 @@ contract RouterWorstCaseGas is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) & 0xFFFF;
     }
 
-    /// @dev Read the DAY-keyed afking word `rngWordByDay[day]` (the open leg's seed + readiness gate).
+    /// @dev Read the DAY-keyed afking word `_recordedDailyWord(day)` (the open leg's seed + readiness gate).
     function rngWordByDay(uint32 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT)))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     function _simDay() internal view returns (uint32) {

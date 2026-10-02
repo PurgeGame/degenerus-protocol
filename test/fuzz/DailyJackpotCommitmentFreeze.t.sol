@@ -36,7 +36,7 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
         currentPrizePool = 80 ether;
         claimablePool = 0;
         yieldAccumulator = 0;
-        rngWordByDay[day - 1] = 123_456;
+        _recordDailyRng(day - 1, 123_456);
         // One settled hero: quadrant 1, symbol 5. A wager placed during the request
         // window belongs to `day`, never to this sealed ledger.
         dailyHeroWagers[day - 1][1] = uint256(1000) << (5 * 32);

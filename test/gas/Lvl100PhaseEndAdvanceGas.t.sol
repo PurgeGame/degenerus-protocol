@@ -44,7 +44,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         subsFullyProcessed = true;
         _afkingResetDay = day;
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
-        rngWordByDay[day] = word;
+        _recordDailyRng(day, word);
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
         // dailyEntries = 4000 (bits 8..71): 1000 whole tickets, so the ticket leg saturates the
@@ -81,7 +81,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         subsFullyProcessed = true;
         _afkingResetDay = day;
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
-        rngWordByDay[day] = word;
+        _recordDailyRng(day, word);
         vrfRequestId = 1;
         ticketLevel = 0; // not resuming FF -> _processPhaseTransition runs this tx
         ticketCursor = 0;

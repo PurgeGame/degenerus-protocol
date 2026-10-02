@@ -18,10 +18,10 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         foilRecord[201][foilOwner] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT);
         uint256 pos = lvlEntryOwner[201].length;
         lvlEntryOwner[201].push(EntryOwner(foilOwner, 0));
-        foilBuyers[day].push(((pos + 1) << 192) | (uint256(201) << 160) | uint160(foilOwner));
-        foilDrainDay = day;
-        foilLastResolveDay = day;
-        rngWordByDay[day] = uint256(keccak256("old foil word")) | 1;
+        foilQueue[_foilReadKey()].push(((pos + 1) << 192) | (uint256(201) << 160) | uint160(foilOwner));
+        foilGenerationDay = 0;
+        foilFirstDrawDay = 0;
+        _recordDailyRng(day, uint256(keccak256("old foil word")) | 1);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((2) & 1) << 12);
         rngWordCurrent = uint256(keccak256("new ticket word")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         _seedQueued(_tqReadKey(203), 203, ticketOwner, uint80(100) << 8);
@@ -42,9 +42,9 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         foilRecord[lvl][owner] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT);
         uint256 pos = lvlEntryOwner[lvl].length;
         lvlEntryOwner[lvl].push(EntryOwner(owner, 0));
-        foilBuyers[day].push(((pos + 1) << 192) | (uint256(lvl) << 160) | uint160(owner));
-        foilDrainDay = day;
-        foilLastResolveDay = day;
+        foilQueue[_foilReadKey()].push(((pos + 1) << 192) | (uint256(lvl) << 160) | uint160(owner));
+        foilGenerationDay = 0;
+        foilFirstDrawDay = 0;
     }
     function foilRecordWord(uint24 lvl, address owner) external view returns (uint256) { return foilRecord[lvl][owner]; }
     function retireBeforeFoilWord() external { _setTicketBufferLevel(203); }
@@ -106,13 +106,16 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         RecyclingProgressSeeder s = _overlay();
         s.seedDeferredFoil(foilOwner, buyer);
         uint256 record = s.foilRecordWord(201, foilOwner);
-        // The pack was queued before takeover; its future daily word arrived afterwards.
+        // The pack was queued before takeover; its committed cohort resolves afterwards.
         s.retireBeforeFoilWord();
         (bool done, bool worked) = s.runProductionMint(203);
         assertTrue(worked, "a retired foil record must not wedge the generation frontier");
         assertEq(s.foilCount(201), 0, "late foil queue consumed");
         assertEq(s.stamped(201), 203, "never restore retired inventory");
-        assertEq(s.foilRecordWord(201, foilOwner), record, "match/gold claim inputs retained");
+        uint256 generated = s.foilRecordWord(201, foilOwner);
+        assertEq(uint32(generated >> 24), uint32(record >> 24), "frozen boost and activity retained");
+        assertTrue(generated >> 255 != 0, "late pack still stores its generated lines");
+        assertGt(uint128(generated >> 56), 0, "four lines retained for claims");
         if (!done) (done, worked) = s.runProductionMint(203);
         assertTrue(done);
         assertEq(s.bucketTotal(203), 100, "late old foil contributes no stale lanes to new tickets");
@@ -128,9 +131,11 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         uint256 paidRecord = s.foilRecordWord(4, oldFoil);
         uint48 priorIndex = RecyclingState.readBuffer(address(game));
         vm.etch(address(game), realCode);
-        game.advanceGame();
+        // The already committed old foil cohort drains first, on its own word.
+        // Each keeper call completes one bounded step before the ending requests RNG.
+        for (uint256 i; i < 4 && mockVRF.lastRequestId() == 0; ++i) game.advanceGame();
         uint256 request = mockVRF.lastRequestId();
-        assertGt(request, 0, "ending requested its own entropy without a read-completion gate");
+        assertGt(request, 0, "ending requests its own entropy after committed foil work");
         mockVRF.fulfillRandomWords(request, uint256(keccak256("terminal recycling word")) | 1);
         for (uint256 i; i < 100 && !game.gameOver(); ++i) game.advanceGame();
         assertTrue(game.gameOver(), "terminal preparation must not stall ending");

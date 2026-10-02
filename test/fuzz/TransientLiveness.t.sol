@@ -36,7 +36,7 @@ contract TransientLivenessHarness is DegenerusGameStorage {
     }
 
     function wordToday() external {
-        rngWordByDay[_simulatedDayIndex()] = 1;
+        _recordDailyRng(_simulatedDayIndex(), 1);
     }
 
     function latchEnding() external {
@@ -54,6 +54,13 @@ contract TransientLivenessUnitTest is Test {
     function setUp() public {
         vm.warp(1000 days + 12 hours);
         h = new TransientLivenessHarness();
+    }
+
+    function test_LevelZeroHas250DayIdleWindow() public {
+        h.seed(0, 250, 0, 1);
+        assertFalse(h.liveness());
+        h.seed(0, 251, 0, 1);
+        assertTrue(h.liveness());
     }
 
     function test_targetMetDayAfterDeadlineIsNotTriggered() public {

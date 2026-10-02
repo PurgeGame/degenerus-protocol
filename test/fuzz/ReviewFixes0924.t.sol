@@ -403,13 +403,13 @@ contract ReviewFoilHarness is DegenerusGameFoilPackModule {
         EntryOwner[] storage owners = lvlEntryOwner[lvl];
         uint256 ownerIdx = owners.length;
         owners.push(EntryOwner(buyer, 0));
-        foilBuyers[day].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer)));
+        foilQueue[day].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer)));
     }
 
     function setWordAndWindow(uint24 day, uint256 word) external {
-        rngWordByDay[day] = word;
-        foilDrainDay = day;
-        foilLastResolveDay = day;
+        _recordDailyRng(day, word);
+        foilGenerationDay = day;
+        foilFirstDrawDay = day;
         foilCursor = 0;
     }
 

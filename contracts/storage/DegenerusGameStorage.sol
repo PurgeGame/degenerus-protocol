@@ -202,7 +202,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Owner-registry position of a queued entry, stored plus one in the owed word's
     ///      bits 48..79; every sink stamps it on the first push, so an owed word with a
-    ///      balance always carries one. A foil pack carries its position in the foilBuyers
+    ///      balance always carries one. A foil pack carries its position in the foilQueue
     ///      word the same way.
     uint256 internal constant OWNER_IDX_SHIFT = 48;
     uint80 internal constant OWNER_IDX_MASK = uint80(type(uint32).max) << 48;
@@ -264,7 +264,7 @@ abstract contract DegenerusGameStorage {
     uint24 internal constant TICKET_FAR_FUTURE_BIT = 1 << 22;
 
     /// @dev Deploy idle timeout in days (mirrors DegenerusGame / AdvanceModule).
-    uint32 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 365;
+    uint32 internal constant _DEPLOY_IDLE_TIMEOUT_DAYS = 250;
 
     /// @dev Final purchase/rescue day after level 0; game-over is eligible the following day.
     uint24 internal constant _PURCHASE_TIMEOUT_DAYS = 30;
@@ -282,7 +282,7 @@ abstract contract DegenerusGameStorage {
     ///      reaches _vrfDead first, so with VRF alive this is a game nobody advances (or a ticket
     ///      backlog longer than the window) and it ends on the normal VRF payout. It also bounds
     ///      every gap the backfill can meet (GAP_BACKFILL_MAX_DAYS). Applied at every level,
-    ///      including level 0, whose 365-day deploy window therefore needs a sealed day at
+    ///      including level 0, whose 250-day deploy window therefore needs a sealed day at
     ///      least every 30 days. It clears only after game-over latches.
     uint24 internal constant _VRF_DEADMAN_DAYS = 30;
 
@@ -671,12 +671,30 @@ abstract contract DegenerusGameStorage {
     // RNG History
     // =========================================================================
 
-    /// @dev VRF random words keyed by dailyIdx.
-    ///      0 means "not yet recorded" (no request fulfilled for that day).
-    ///      Historical words enable verifiable replay of past randomness.
-    ///
-    ///      SECURITY: Immutable once written; provides audit trail for RNG.
+    /// @dev Two reusable word slots, indexed by day parity and authenticated
+    ///      by rngDayTags. Events provide historical replay; live views expose
+    ///      today/yesterday only.
     mapping(uint24 => uint256) internal rngWordByDay;
+
+    /// @dev Exact tag authentication also serves pinned processing days older than
+    ///      yesterday. A committed word cannot be overwritten before consumers finish.
+    function _recordedDailyWord(uint24 day) internal view returns (uint256) {
+        uint256 shift = uint256(day & 1) * 24;
+        if (day == 0 || uint24(uint256(rngDayTags) >> shift) != day) return 0;
+        return rngWordByDay[day & 1];
+    }
+
+    function _recordDailyRng(uint24 day, uint256 word) internal {
+        uint256 shift = uint256(day & 1) * 24;
+        rngDayTags = uint48((uint256(rngDayTags) & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift));
+        rngWordByDay[day & 1] = word;
+    }
+
+    function _retainedDailyWord(uint24 day) internal view returns (uint256) {
+        uint24 today = _simulatedDayIndex();
+        if (day > today || uint256(today) - day > 1) return 0;
+        return _recordedDailyWord(day);
+    }
 
     // =========================================================================
     // Future Mint Awards
@@ -710,7 +728,9 @@ abstract contract DegenerusGameStorage {
     ///      - ticketQueue[4..5] read cohorts → swept every advance
     ///      - ticketQueue[6+] → far-future space; 6 can mint once level 5 meets its goal
     ///
-    ///      Keys are encoded: ticketQueue is indexed by (lvl | slotBit) — bit 23 selects the
+    ///      Physical level slots 1..100 repeat every century; absolute logical keys must
+    ///      pass through _ticketQueueStorageKey. ticketQueueLevels authenticates the target.
+    ///      Keys retain their domain flags: bit 23 selects the
     ///      double-buffer write/read half (ticketWriteSlot); tickets targeting > level+1 use the
     ///      disjoint far-future key space (bit 22). Raw-level indices above hold only when
     ///      ticketWriteSlot is false.
@@ -1019,12 +1039,12 @@ abstract contract DegenerusGameStorage {
             uint24 t = purchaseLevel == 0 ? 0 : purchaseLevel - 1;
             uint24 end = _mintCeiling();
             for (; t <= end; ) {
-                if (ticketQueue[_tqReadKey(t)].length > 0) return true;
+                if (_ticketQueueLength(_tqReadKey(t)) > 0) return true;
                 unchecked {
                     ++t;
                 }
             }
-            if (_frozenPoolDue() && ticketQueue[_tqFarFutureKey(end)].length > 0) return true;
+            if (_frozenPoolDue() && _ticketQueueLength(_tqFarFutureKey(end)) > 0) return true;
             if (_foilDrainPending()) return true;
         }
         return false;
@@ -1450,6 +1470,52 @@ abstract contract DegenerusGameStorage {
     // Owed Balance Helpers (shared by the mint and foil drains)
     // =========================================================================
 
+    /// @dev Preserve logical absolute levels while recycling physical queue storage.
+    function _ticketQueueStorageKey(uint24 key) internal pure returns (uint24 physical) {
+        assembly ("memory-safe") {
+            let lvl := and(key, 0x3fffff)
+            physical := and(key, 0xc00000)
+            if lvl { physical := or(physical, add(mod(sub(lvl, 1), 100), 1)) }
+        }
+    }
+
+    /// @dev A reused root cannot make an old level appear to have a pending queue.
+    function _ticketQueueLength(uint24 key) internal view returns (uint256 length) {
+        uint24 physical = _ticketQueueStorageKey(key);
+        assembly ("memory-safe") {
+            mstore(0, physical)
+            mstore(32, ticketQueueLevels.slot)
+            let occupying := sload(keccak256(0, 64))
+            if iszero(occupying) { occupying := and(physical, 0x7f) }
+            if eq(occupying, and(key, 0x3fffff)) {
+                mstore(32, ticketQueue.slot)
+                length := sload(keccak256(0, 64))
+            }
+        }
+    }
+
+    /// @dev Bind only an empty queue. A collision must preserve every paid obligation.
+    function _bindTicketQueue(uint24 key) internal returns (uint256[] storage q) {
+        uint24 physical = _ticketQueueStorageKey(key);
+        assembly ("memory-safe") {
+            mstore(0, physical)
+            mstore(32, ticketQueue.slot)
+            q.slot := keccak256(0, 64)
+            mstore(32, ticketQueueLevels.slot)
+            let tag := keccak256(0, 64)
+            let lvl := and(key, 0x3fffff)
+            let occupying := sload(tag)
+            if iszero(occupying) { occupying := and(physical, 0x7f) }
+            if iszero(eq(occupying, lvl)) {
+                if sload(q.slot) {
+                    mstore(0, 0x92bbf6e8)
+                    revert(28, 4)
+                }
+                sstore(tag, lvl)
+            }
+        }
+    }
+
     /// @dev Address-facing lookup. Queue drains already hold the registry position.
     function _entriesOwed(uint24 key, address player) internal view returns (uint80) {
         uint32 pos = entryOwnerPosition[key][player];
@@ -1711,7 +1777,7 @@ abstract contract DegenerusGameStorage {
     ///      starts a whole word so the fresh tail has no inherited upper lanes.
     function _tqAppend(uint24 key, uint32 ownerPos) internal {
         if (ownerPos == 0) revert E();
-        uint256[] storage q = ticketQueue[key];
+        uint256[] storage q = _bindTicketQueue(key);
         assembly ("memory-safe") {
             let len := sload(q.slot)
             mstore(0x00, q.slot)
@@ -1730,7 +1796,12 @@ abstract contract DegenerusGameStorage {
     ///      stale tail lanes after queue reuse; preserve only the live prefix. Used by
     ///      deity renewal to update the queue length once per packed group.
     function _tqAppendLanes(uint24 key, uint256 lanes, uint256 count) internal {
-        uint256[] storage q = ticketQueue[key];
+        uint256[] storage q = _bindTicketQueue(key);
+        _tqAppendLanesBound(q, lanes, count);
+    }
+
+    /// @dev Caller must authenticate the queue, or prove it is an unreused genesis root.
+    function _tqAppendLanesBound(uint256[] storage q, uint256 lanes, uint256 count) internal {
         assembly ("memory-safe") {
             let len := sload(q.slot)
             mstore(0, q.slot)
@@ -1818,7 +1889,11 @@ abstract contract DegenerusGameStorage {
     ///      behind; they are unreachable because all reads are length-gated and a
     ///      push overwrites slots from index 0 upward.
     function _releaseTicketQueue(uint24 rk) internal {
-        uint256[] storage q = ticketQueue[rk];
+        uint24 physical = _ticketQueueStorageKey(rk);
+        uint24 occupying = ticketQueueLevels[physical];
+        if (occupying == 0) occupying = physical & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
+        if (occupying != rk & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) return;
+        uint256[] storage q = ticketQueue[physical];
         assembly ("memory-safe") {
             sstore(q.slot, 0)
         }
@@ -2657,7 +2732,7 @@ abstract contract DegenerusGameStorage {
     ///      the first cause long before this, so here VRF is alive and the ending is the
     ///      normal VRF payout.
     ///
-    ///      Purchase deadline, purchase phase only: purchaseStartDay + 365 days at level 0
+    ///      Purchase deadline, purchase phase only: purchaseStartDay + 250 days at level 0
     ///      (deploy idle) or + 30 days after. Past it the trigger reads exactly what the
     ///      advance's game-over path will decide: it fires once the ending has started (the
     ///      drain-level latch, which keeps it firing across the multi-tx drain), never while the
@@ -2709,7 +2784,7 @@ abstract contract DegenerusGameStorage {
         uint24 lvl = level;
         if (lvl != 0 && _getNextPrizePool() > _prizePoolTarget(lvl + 1)) return false;
         // A day that holds its word is finished on it.
-        if (rngWordByDay[today] != 0) return false;
+        if (_recordedDailyWord(today) != 0) return false;
         // Only a caught-up day fires. A gap behind dailyIdx is a stall of that length and waits for
         // the backfill the next daily word runs to credit it.
         return today == idx + 1;
@@ -2737,7 +2812,7 @@ abstract contract DegenerusGameStorage {
             if (_lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) return false;
         }
         return rngWordCurrent == RNG_WORD_WAITING
-            && (!rngLockedFlag || rngWordByDay[_simulatedDayIndexAt(t)] == 0);
+            && (!rngLockedFlag || _recordedDailyWord(_simulatedDayIndexAt(t)) == 0);
     }
 
     /// @dev Returns the day index for a specific timestamp.
@@ -2974,7 +3049,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev RNG words keyed by lootbox RNG index.
-    uint256 private __rngWordLayoutGap; // Word now uses rngWordCurrent; preserve downstream slot offsets.
+    uint256 internal rngDayTags; // Absolute-day tags for the two reusable daily RNG slots.
 
     // =========================================================================
     // Deity Boon Tracking
@@ -3502,7 +3577,7 @@ abstract contract DegenerusGameStorage {
     ///        accumulator (72b): affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)
     ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
     ///      stored roll floor) and sources its RNG word from
-    ///      `rngWordByDay[lastAutoBoughtDay]`, so the only frozen-at-stamp inputs are the
+    ///      `_recordedDailyWord(lastAutoBoughtDay)`, so the only frozen-at-stamp inputs are the
     ///      two genuinely-per-sub fields — `score` (activity score) and `amount`
     ///      (mp×qty spend). `fundingSource` lives in the sparse `_fundingSourceOf` map
     ///      (absent ⇒ self, the common case stores nothing). `lastAutoBoughtDay`
@@ -3561,7 +3636,7 @@ abstract contract DegenerusGameStorage {
         /// @dev Success-marker AND the frozen seed `day` (the same process day):
         ///      day index of the last successful buy, written only after a successful
         ///      afkingFunding debit. The open sources the box word from
-        ///      `rngWordByDay[lastAutoBoughtDay]` and freezes this `day` in the seed.
+        ///      `_recordedDailyWord(lastAutoBoughtDay)` and freezes this `day` in the seed.
         ///      uint24 day index ~ 45,000 years of headroom.
         uint24 lastAutoBoughtDay;
         /// @dev Day-keyed no-double-open marker: the open leg materializes a box only
@@ -3640,7 +3715,7 @@ abstract contract DegenerusGameStorage {
             if (
                 uint32(currentDay) <= uint32(sealedDay) + 1 ||
                 covered < sealedDay ||
-                rngWordByDay[sealedDay + 1] != 0
+                _recordedDailyWord(sealedDay + 1) != 0
             ) return 0;
         }
         return uint32(_streakBaseOf(sub)) + uint32(covered - sub.afkingStartDay);
@@ -3709,7 +3784,7 @@ abstract contract DegenerusGameStorage {
     uint16 internal _subOpenCursor;
 
     /// @dev The day the process STAGE was last reset for. When the advance first enters
-    ///      a new `day` with the lock down and `rngWordByDay[day]` still uncommitted
+    ///      a new `day` with the lock down and `_recordedDailyWord(day)` still uncommitted
     ///      (`_afkingResetDay != day`), it resets `subsFullyProcessed` + the
     ///      `_subCursor` ONCE, before that day's STAGE drains — a forward-looking reset
     ///      (at the start of the new day, not trailing after the prior day completes),
@@ -3780,72 +3855,26 @@ abstract contract DegenerusGameStorage {
     // Foil Pack
     // =========================================================================
 
-    /// @dev One packed record per (cycle level, player) — the surviving foil buy
-    ///      for the cycle. The outer key is the active ticket level (the cycle the
-    ///      buy bets into), the inner key the player, so distinct cycles are
-    ///      independent records: a re-buy at the next cycle writes a different
-    ///      outer key and never clobbers the prior cycle's record.
-    ///      The buy writes all three fields at once: resolveDay (>= 1), multBps
-    ///      (>= 20000), and the activity score frozen at buy. Presence (slot != 0) IS
-    ///      the one-per-cycle cap. No match signatures are stored — the four match
-    ///      lines are re-derived on claim from rngWordByDay[resolveDay] + multBps (the
-    ///      SAME derivation the drain filed into the jackpot buckets), so the stored
-    ///      record is just the derivation inputs plus the cap/no-look-back day.
-    ///      Packed uint256 layout (LSB→MSB):
-    ///        [0-23]    resolveDay    — the day whose sealed daily word
-    ///                                (rngWordByDay[resolveDay]) both the drain and the
-    ///                                claim derive the four match lines from, and the
-    ///                                no-look-back floor (`day >= resolveDay`). Always
-    ///                                >= 1, so every use site is additive (no underflow).
-    ///        [24-39]   multBps       — the frozen foilBoostBps output (20000..60000)
-    ///        [40-55]   activityScore — the buyer's activity score frozen at buy (the
-    ///                                same value foilBoostBps was computed from), reused
-    ///                                as the claim spin's RTP input. Freezing it makes
-    ///                                the payout fully determined at buy (no claim-timing
-    ///                                lever, consistent with the frozen multBps) and
-    ///                                drops the live activity read from every claim.
-    ///        [56-255]  reserved 0
+    /// @dev One pack per level/player. Purchase freezes boost and activity, but no day.
+    ///      Materialization writes four uint32 lines at bits 56..183, the first
+    ///      eligible draw at bits 0..23, generation day at bits 184..207, and ready
+    ///      at bit 255. No historical reveal word is needed after generation.
     mapping(uint24 => mapping(address => uint256)) internal foilRecord;
 
-    /// @dev Sparse double-claim marker, keyed by
-    ///      keccak256(abi.encode(player, level, day, ticketIndex)).
-    ///      Set BEFORE any payout effect (CEI); a realized winning tuple is
-    ///      claimable at most once per draw.
+    /// @dev Per-pack gold and per-draw match dedup, set before payout.
     mapping(bytes32 => bool) internal foilMatchClaimed;
 
-    /// @dev The daily winning trait set the jackpot sealed for a day, plus the
-    ///      cycle level active that day. Written once per day at the daily seal;
-    ///      the foil claim reads it (never re-derives), so the foil winning numbers
-    ///      equal the jackpot's. Presence (slot != 0) gates a claim; the level
-    ///      field is the implicit eligibility upper bound (a day maps to one cycle).
-    ///      Packed uint256 layout (LSB→MSB):
-    ///        [0-31]   mainSet — the day's winning set (uint32)
-    ///        [32-63]  reserved 0
-    ///        [64-87]  level   — the active ticket level of that day (uint24)
-    ///        [88-255] reserved 0
+    /// @dev Sealed winning traits at bits 0..31 and level at bits 64..87.
     mapping(uint24 => uint256) internal dailyFoilDraw;
 
-    /// @dev Per-buy-day foil queue, keyed by resolveDay (= buyDay + 1), the
-    ///      coinflip-by-day / degenerette-bucket analog. A foil buy pushes a packed
-    ///      ((ownerIdx + 1) << 192 | cycle level << 160 | buyer) entry into the bucket
-    ///      for its resolveDay;
-    ///      the drain processes a bucket only once rngWordByDay[resolveDay] is sealed,
-    ///      so every entry's match lines derive from a word that was provably future
-    ///      at buy. The packed level is the cycle the pack bet into (the foilRecord
-    ///      and jackpot key), carried in the entry because the bucket is day-keyed and
-    ///      one wall day can straddle a cycle transition.
-    mapping(uint24 => uint256[]) internal foilBuyers;
+    /// @dev Normal-ticket read/write cohorts (keys 0/1), frozen before their RNG
+    ///      request. New buys always append to the write half.
+    mapping(uint24 => uint256[]) internal foilQueue;
 
-    /// @dev Resumable foil drain cursors. foilDrainDay is the next resolveDay bucket
-    ///      to drain (the low-water mark); foilCursor is the within-bucket index for a
-    ///      budget-short deferral. The drain walks foilDrainDay forward over sealed
-    ///      buckets up to foilLastResolveDay (the high-water mark = the latest
-    ///      resolveDay any pack was bought into). foilLastResolveDay == 0 means no
-    ///      foil was ever bought, so the readiness gate and drain short-circuit with a
-    ///      single SLOAD and the common advance carries no foil cost.
+    /// @dev Resumable read cursor and cohort-wide generation/eligibility stamps.
     uint32 internal foilCursor;
-    uint24 internal foilDrainDay;
-    uint24 internal foilLastResolveDay;
+    uint24 internal foilGenerationDay;
+    uint24 internal foilFirstDrawDay;
 
     /// @dev Lifetime count of deity boons issued from a given deity to a given
     ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP
@@ -3871,6 +3900,10 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant _FOIL_SCORE_SHIFT = 40;
     uint256 private constant _FOIL_SCORE_MASK = (uint256(1) << 16) - 1;
 
+    uint256 internal constant _FOIL_LINES_SHIFT = 56;
+    uint256 internal constant _FOIL_GENERATED_DAY_SHIFT = 184;
+    uint256 internal constant _FOIL_READY = uint256(1) << 255;
+
     uint256 private constant _FOIL_DRAW_MAIN_MASK = (uint256(1) << 32) - 1;
     uint256 private constant _FOIL_DRAW_LEVEL_SHIFT = 64;
     uint256 private constant _FOIL_DRAW_LEVEL_MASK = (uint256(1) << 24) - 1;
@@ -3887,11 +3920,11 @@ abstract contract DegenerusGameStorage {
     bytes32 internal constant FOIL_CCY_TAG = keccak256("foil-currency");
     bytes32 internal constant FOIL_SPIN_TAG = keccak256("foil-spin");
 
+    /// @dev A player's foil record; resolveDay now means first eligible draw day.
+    ///      Pending records have day zero; generated lines are stored, never re-derived.
     /// @dev A player's foil record for a cycle level (one SLOAD): the frozen boost
-    ///      and the resolveDay both the drain and the claim derive the match lines
-    ///      from. present = (slot != 0); resolveDay >= 1 on any bought pack, so the
-    ///      claim feeds it directly as the no-look-back floor (`day >= resolveDay`)
-    ///      and the derivation key (rngWordByDay[resolveDay]).
+    ///      and the first eligible draw day pinned at materialization. The boost/activity
+    ///      fields make a pending purchase present even while its day is zero.
     function _foilRecordFor(address player, uint256 lvl)
         internal
         view
@@ -3913,22 +3946,27 @@ abstract contract DegenerusGameStorage {
         );
     }
 
-    /// @dev True iff a sealed, un-drained foil bucket is waiting. The jackpot
-    ///      readiness gate blocks on this so a day's boosted foil entries are filed
-    ///      into the trait buckets before that day's jackpot samples winners. Cheap by
-    ///      construction: no foil ever bought (foilLastResolveDay == 0) short-circuits
-    ///      on one SLOAD; otherwise it is pending only while the low-water bucket is
-    ///      at/below the high-water mark AND its daily word has sealed (a future-dated
-    ///      bucket whose word is not yet sealed does not gate the current jackpot).
-    ///      The normal game-over ending words every bucket it pays from: it derives the days
-    ///      between the last sealed day and its own request from the terminal word, as
-    ///      rngGate does for a gap. The deterministic ending runs no drain.
+    function _foilWriteKey() internal view returns (uint24) {
+        return ticketWriteSlot ? 1 : 0;
+    }
+
+    function _foilReadKey() internal view returns (uint24) {
+        return ticketWriteSlot ? 0 : 1;
+    }
+
+    /// @dev Paid read-side work must finish before its committed word is released.
     function _foilDrainPending() internal view returns (bool) {
-        uint24 last = foilLastResolveDay;
-        if (last == 0) return false;
-        uint24 dd = foilDrainDay;
-        if (dd > last) return false;
-        return rngWordByDay[dd] != 0;
+        return foilCursor < foilQueue[_foilReadKey()].length;
+    }
+
+    function _foilStoredLines(address player, uint24 lvl) internal view returns (uint32[4] memory lines) {
+        uint256 packed = foilRecord[lvl][player] >> _FOIL_LINES_SHIFT;
+        for (uint256 i; i < 4; ++i) lines[i] = uint32(packed >> (i * 32));
+    }
+
+    function _foilClaimOpen(uint256 day) internal view returns (bool) {
+        uint256 today = _simulatedDayIndex();
+        return day != 0 && day <= today && today - day <= 1;
     }
 
     /// @dev The per-cycle one-pack cap: true iff the player already bought a foil
@@ -4098,6 +4136,10 @@ abstract contract DegenerusGameStorage {
     ///      Cleared only on successful buffer takeover; owner index zero remains valid.
     uint256[2] internal traitBucketLive;
 
+    /// @dev Absolute levels occupying the 100 reusable roots in each queue domain.
+    ///      Zero means the first century: its level is already the physical slot number.
+    mapping(uint24 => uint24) internal ticketQueueLevels;
+
     /// @dev Resolved payload markers, masked before every live decode.
     uint256 internal constant BOX_PROCESSED = uint256(1) << 255;
     uint256 internal constant BET_PROCESSED = uint256(1) << 255;
@@ -4134,6 +4176,7 @@ abstract contract DegenerusGameStorage {
         uint256 packed = lootboxRngPacked;
         if (!_rngSessionPublished() || _currentRngWord() == 0 || !ticketsFullyProcessed
             || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 || !humanReadComplete) return false;
+        if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return false;
         return packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) == 0;
     }
 
@@ -4218,8 +4261,8 @@ abstract contract DegenerusGameStorage {
         if (old != 0 && !terminal) {
             // level is completed during purchase phase, live during jackpot phase.
             if (old > level || (old == level && jackpotPhaseFlag)) return false;
-            if (ticketQueue[_tqReadKey(old)].length != 0 || ticketQueue[_tqWriteKey(old)].length != 0
-                || ticketQueue[_tqFarFutureKey(old)].length != 0) return false;
+            if (_ticketQueueLength(old) != 0 || _ticketQueueLength(old | TICKET_SLOT_BIT) != 0
+                || _ticketQueueLength(_tqFarFutureKey(old)) != 0) return false;
             if ((ticketLevel & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) == old
                 && ticketSeats != 0) return false;
         }

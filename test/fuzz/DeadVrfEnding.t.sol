@@ -11,6 +11,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {DeadVrfSeeder} from "./helpers/DeadVrfSeeder.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -36,7 +37,7 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
     }
 
     function applyWordFor(uint48 t, uint256 word) external {
-        rngWordByDay[_simulatedDayIndexAt(t)] = word;
+        _recordDailyRng(_simulatedDayIndexAt(t), word);
     }
 
     function startEnding() external {
@@ -49,7 +50,7 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
         _setRngSessionPublished(false);
         vrfRequestId = 777;
         rngLockedFlag = false;
-        rngWordByDay[_simulatedDayIndexAt(t)] = 123;
+        _recordDailyRng(_simulatedDayIndexAt(t), 123);
     }
 
     function latchDeadMidday() external {
@@ -277,7 +278,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         game.claimDeadVrf(erin, one);
         assertEq(game.claimableWinningsOf(erin), (pot * 200) / total, "erin: the average for 2 entries");
 
-        one[0] = _ref(2, foilDay, foilIdx);
+        one[0] = _ref(2, foilDay & 1, foilIdx);
         game.claimDeadVrf(frank, one);
         assertEq(game.claimableWinningsOf(frank), (pot * 1600) / total, "frank: the average for a foil pack");
         vm.expectRevert();
@@ -352,8 +353,10 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertTrue(game.livenessTriggered(), "VRF dead after 14 days with nothing delivered");
         mockVRF.fulfillRandomWords(req, 0xDEAD); // lands late, before anyone advanced
         assertFalse(game.livenessTriggered(), "a delivered word means VRF works");
-        for (uint256 i; i < 10 && game.rngWordForDay(r) == 0; ++i) game.advanceGame();
-        assertEq(game.rngWordForDay(r), 0xDEAD, "the stalled day finishes on its own word");
+        for (uint256 i; i < 64 && uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24) < r; ++i) game.advanceGame();
+        assertEq(uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24), r, "stalled day completed");
+        assertEq(game.rngWordForDay(r), 0, "old processing word is not claim history");
+        _assertCoinflipResult(r, 0xDEAD);
         assertFalse(game.gameOver(), "the game carries on");
     }
 
@@ -383,16 +386,19 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint24 today = game.currentDayView();
         assertTrue(game.rngWordForDay(today) != 0, "applied to the ending's own day");
         uint256 derived = uint256(keccak256(abi.encodePacked(uint256(0xF00D), s)));
-        if (applied) {
-            assertEq(game.rngWordForDay(s), 0x57AC, "an applied stuck day keeps its word");
-            assertEq(
-                game.rngWordForDay(s + 1),
-                uint256(keccak256(abi.encodePacked(uint256(0xF00D), s + 1))),
-                "later days derive from the terminal word"
-            );
-        } else {
-            assertEq(game.rngWordForDay(s), derived, "an unapplied stuck day derives from the terminal word");
-        }
+        assertEq(game.rngWordForDay(s), 0, "old processing words are retired");
+        assertEq(game.rngWordForDay(s + 1), 0, "gap words have no archive");
+        _assertCoinflipResult(s, applied ? 0x57AC : derived);
+        _assertCoinflipResult(s + 1, uint256(keccak256(abi.encodePacked(uint256(0xF00D), s + 1))));
+    }
+
+    function _assertCoinflipResult(uint24 day, uint256 word) private view {
+        (uint16 actual, bool win) = coinflip.getCoinflipDayResult(day);
+        bool expectedWin = word & 1 != 0;
+        uint256 hash = uint256(keccak256(abi.encodePacked(keccak256("degenerus.coinflip.reward-percent"), word, day)));
+        uint16 expected = !expectedWin ? 1 : hash % 20 == 0 ? 50 : hash % 20 == 1 ? 150 : uint16(hash % 38 + 78);
+        assertEq(actual, expected);
+        assertEq(win, expectedWin);
     }
 
     function test_stuckDayWithAppliedWordEndsOnAFreshWord() public {
@@ -755,6 +761,9 @@ contract DeadVrfEndingTest is DeployProtocol {
 /// @dev Level-1 purchase-phase state `age` days into its purchase window, sealed yesterday.
 contract DeadlineSeeder is DegenerusGame {
     function seed(uint24 age) external {
+        // Entering this purchase phase means the prior level's queues, including
+        // its frozen level-2 pool, have already materialized.
+        TQ.retireCompleted(address(this), 2);
         uint24 day = _simulatedDayIndex();
         level = 1;
         purchaseStartDay = day - age;

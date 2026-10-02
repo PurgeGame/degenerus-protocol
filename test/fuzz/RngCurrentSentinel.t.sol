@@ -52,10 +52,10 @@ contract RngCurrentSentinelTest is DeployProtocol {
         mockVRF.fulfillRandomWordsRaw(id + 1, address(game), 888888);
         assertEq(uint256(game.extsload(bytes32(uint256(3)))), stored, "wrong identity must not replace word");
 
+        uint24 day = game.currentDayView();
         bytes memory gameCode = address(game).code;
         CurrentWordApplyHarness recorder = new CurrentWordApplyHarness();
         vm.etch(address(game), address(recorder).code);
-        uint24 day = 999;
         assertEq(CurrentWordApplyHarness(address(game)).applyCurrent(day), expected);
         vm.etch(address(game), gameCode);
         assertEq(game.rngWordForDay(day), expected, "entropy unchanged by encoding");

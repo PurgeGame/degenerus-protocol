@@ -30,7 +30,7 @@ contract LockRemovalHarness is DegenerusGameStorage {
     }
 
     function setRngWordByDay(uint256 day, uint256 word) external {
-        rngWordByDay[uint24(uint32(day))] = word;
+        _recordDailyRng(uint24(uint32(day)), word);
     }
 
     // --- LOCK-01: _callTicketPurchase guard (MintModule:838-840 post-removal) ---
@@ -63,7 +63,7 @@ contract LockRemovalHarness is DegenerusGameStorage {
 
     // --- LOCK-06: requestLootboxRng guard (AdvanceModule:641-644 post-removal, line 643 deleted) ---
     function requestLootboxRngGuard(uint256 currentDay) external view {
-        if (rngWordByDay[uint24(uint32(currentDay))] == 0) revert E();
+        if (_recordedDailyWord(uint24(uint32(currentDay))) == 0) revert E();
         // rngLockedFlag check REMOVED (was line 643)
         if (rngRequestTime != 0) revert E();
     }
@@ -167,7 +167,7 @@ contract LockRemovalTest is Test {
     function test_LOCK06_lootboxRngRequestGate() public {
         harness.setRngLockedFlag(true);
         harness.setRngRequestTime(0);
-        harness.setRngWordByDay(1, 12345); // rngWordByDay[1] != 0
+        harness.setRngWordByDay(1, 12345); // _recordedDailyWord(1) != 0
         // Must NOT revert -- rngLockedFlag is true but guard is removed
         harness.requestLootboxRngGuard(1);
     }

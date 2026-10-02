@@ -71,3 +71,16 @@ export function eth(n) {
 export function formatEth(wei) {
   return hre.ethers.formatEther(wei);
 }
+
+// Fixture-only daily RNG seed: authenticate the parity payload with its exact uint24 tag.
+export async function seedDailyWord(game, day, word) {
+  const address = await game.getAddress();
+  day = BigInt(day);
+  const parity = day & 1n;
+  const shift = parity * 24n;
+  const tags = BigInt(await hre.ethers.provider.getStorage(address, 34));
+  const nextTags = (tags & ~(0xffffffn << shift)) | (day << shift);
+  await hre.network.provider.send("hardhat_setStorageAt", [address, "0x22", hre.ethers.toBeHex(nextTags, 32)]);
+  const slot = hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [parity, 10n]));
+  await hre.network.provider.send("hardhat_setStorageAt", [address, slot, hre.ethers.toBeHex(word, 32)]);
+}

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
@@ -34,7 +35,7 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///
 /// @dev Far-future entries for the seller are seeded via vm.store into entriesOwedPacked + ticketQueue at
 ///      the far-future key (the constructor already pre-queues sDGNRS + VAULT). The daily jitter seed is
-///      keccak256(player, rngWordByDay[currentDayView()-1]); the test sets rngWordByDay[day-1] via vm.store
+///      keccak256(player, _recordedDailyWord(currentDayView()-1)); the test sets _recordedDailyWord(day-1) via vm.store
 ///      and searches for the word that drives the jitter multiplier to its 110% ceiling. ZERO contracts/*.sol
 ///      (mainnet) edits -- subject FROZEN at the Phase-326 diff.
 contract FarFutureSalvageSwapTest is DeployProtocol {
@@ -80,10 +81,10 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         return keccak256(abi.encode(uint256(key), TICKET_QUEUE_SLOT));
     }
 
-    /// @dev Set rngWordByDay[currentDayView()-1] = word (the prior-day settled word the jitter reads).
+    /// @dev Set _recordedDailyWord(currentDayView()-1) = word (the prior-day settled word the jitter reads).
     function _setPriorDayRngWord(uint256 word) internal {
         uint32 day = game.currentDayView();
-        vm.store(address(game), _rngWordSlot(day - 1), bytes32(word));
+        RecyclingState.seedDailyWord(address(game), uint24(day - 1), word);
     }
 
     /// @dev Seed `whole` far-future tickets for `who` at level L (packed: owed=whole*4 entries << 8 | rem).

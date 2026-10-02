@@ -56,7 +56,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
     }
 
     function getQueueLength(uint24 key) external view returns (uint256) {
-        return ticketQueue[key].length;
+        return _ticketQueueLength(key);
     }
 
     function getTicketsOwedPacked(uint24 key, address player) external view returns (uint80) {
@@ -86,14 +86,14 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
         // Phase detection: are we resuming FF processing?
         bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
         uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
-        uint256[] storage queue = ticketQueue[rk];
+        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
         uint256 total = queue.length;
 
         // Exit point 1: current queue empty
         if (total == 0) {
             if (!inFarFuture) {
                 uint24 ffk = _tqFarFutureKey(lvl);
-                if (ticketQueue[ffk].length > 0) {
+                if (_ticketQueueLength(ffk) > 0) {
                     ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
                     ticketCursor = 0;
                     return (false, false); // FF queue pending
@@ -117,7 +117,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
             _releaseTicketQueue(rk);
             if (!inFarFuture) {
                 uint24 ffk = _tqFarFutureKey(lvl);
-                if (ticketQueue[ffk].length > 0) {
+                if (_ticketQueueLength(ffk) > 0) {
                     ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
                     ticketCursor = 0;
                     return (false, false);
@@ -146,7 +146,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
             _releaseTicketQueue(rk);
             if (!inFarFuture) {
                 uint24 ffk = _tqFarFutureKey(lvl);
-                if (ticketQueue[ffk].length > 0) {
+                if (_ticketQueueLength(ffk) > 0) {
                     ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
                     ticketCursor = 0;
                     finished = false;

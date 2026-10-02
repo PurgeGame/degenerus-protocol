@@ -331,7 +331,7 @@ contract RedemptionHandler is Test {
 
         // Satisfy the gambling-burn admission gate: _submitGamblingClaimFrom reverts
         // BurnsBlockedBeforeDailyRng unless the current view day's VRF word is recorded. Land a
-        // non-zero rngWordByDay[today] so the burn is admitted and reaches the reservation logic
+        // non-zero _recordedDailyWord(today) so the burn is admitted and reaches the reservation logic
         // (the fail-closed branch still fires downstream when neither ETH nor stETH leg covers).
         _primeCurrentDayRng(today);
 
@@ -420,11 +420,7 @@ contract RedemptionHandler is Test {
     function _primeCurrentDayRng(uint32 day) internal {
         uint24 d = uint24(day);
         if (game.rngWordForDay(d) == 0) {
-            vm.store(
-                address(game),
-                keccak256(abi.encode(uint256(d), uint256(10))),
-                bytes32(uint256(keccak256(abi.encode("primeRng", d))))
-            );
+            RecyclingState.seedDailyWord(address(game), d, uint256(keccak256(abi.encode("primeRng", d))));
         }
         require(game.rngWordForDay(d) != 0, "primeRng: rngWordByDay slot mismatch");
     }
@@ -441,7 +437,7 @@ contract RedemptionHandler is Test {
 
         vm.warp(block.timestamp + 1 days);
 
-        try game.advanceGame() {} catch {}
+        _advanceAndRecordClaims();
 
         uint256 reqId = vrf.lastRequestId();
         if (reqId != 0) {
@@ -451,7 +447,7 @@ contract RedemptionHandler is Test {
             }
         }
 
-        try game.advanceGame() {} catch {}
+        _advanceAndRecordClaims();
 
         _trackSupplyDelta(supplyBefore);
 
@@ -564,7 +560,7 @@ contract RedemptionHandler is Test {
         // Only the terminal-entropy request is answered, once liveness has triggered.
         vm.warp(block.timestamp + 130 days);
 
-        try game.advanceGame() {} catch {}
+        _advanceAndRecordClaims();
 
         if (game.livenessTriggered()) {
             uint256 reqId = vrf.lastRequestId();
@@ -574,7 +570,7 @@ contract RedemptionHandler is Test {
                     try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp)))) {} catch {}
                 }
             }
-            try game.advanceGame() {} catch {}
+            _advanceAndRecordClaims();
         }
 
         _trackSupplyDelta(supplyBefore);
@@ -594,7 +590,7 @@ contract RedemptionHandler is Test {
                     try vrf.fulfillRandomWords(reqId, randomWord | 1) {} catch {}
                 }
             }
-            try game.advanceGame() {} catch {}
+            _advanceAndRecordClaims();
         }
         _trackSupplyDelta(supplyBefore);
         _checkResolvedPeriods();
@@ -648,6 +644,36 @@ contract RedemptionHandler is Test {
     ///      first-write roll into the per-day ghost. Defensive bounds check on
     ///      roll ∈ [25, 175] increments `ghost_rollOutOfBounds` if violated.
     ///      v47: RedemptionPeriod.flipDay was removed; only the roll is latched now.
+    /// @dev Automatic settlement is a claim too. Require its canonical event AND a cleared
+    ///      pending record before exempting that record from the immutability invariant.
+    function _advanceAndRecordClaims() private {
+        vm.recordLogs();
+        try game.advanceGame() {} catch {}
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("RedemptionClaimed(address,uint16,uint256,uint256,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            Vm.Log memory entry = logs[i];
+            if (entry.emitter != address(sdgnrs) || entry.topics.length != 2 || entry.topics[0] != sig) continue;
+            address player = address(uint160(uint256(entry.topics[1])));
+            (uint16 roll, uint256 direct, uint256 lootbox, uint256 flipPaid) =
+                abi.decode(entry.data, (uint16, uint256, uint256, uint256));
+            for (uint256 j; j < ghost_daysWritten.length; ++j) {
+                uint32 day = ghost_daysWritten[j];
+                if (ghost_claimDone[day][player] || ghost_perPlayer_locked_ethValueOwed[day][player] == 0) continue;
+                (uint96 base, uint16 score, uint96 escrow) = sdgnrs.pendingRedemptions(player, uint24(day));
+                if (base != 0 || escrow != 0 || score != 0 || sdgnrs.redemptionPeriods(uint24(day)) != roll) continue;
+                ghost_claimDone[day][player] = true;
+                ++ghost_claimCount;
+                ghost_totalEthDirect += direct;
+                ghost_totalLootboxEth += lootbox;
+                ghost_totalRolledEth += direct + lootbox;
+                ghost_totalEthClaimed += direct;
+                ghost_totalFlipClaimed += flipPaid;
+                break;
+            }
+        }
+    }
+
     function _checkResolvedPeriods() private {
         uint256 len = ghost_daysWritten.length;
         // Scan-bound at 100 to avoid OOG in deep invariant runs.

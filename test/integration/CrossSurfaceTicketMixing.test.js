@@ -329,9 +329,10 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     async function reachOpenableLootbox(fixture) {
       const { game, deployer, mockVRF, alice } = fixture;
       const layout = JSON.parse(fs.readFileSync("scripts/layout/golden/DegenerusGame.json", "utf8"));
-      const root = layout.find((entry) => entry.label === "lootboxRngPacked");
-      expect(root, "current RNG cursor storage root").to.not.be.undefined;
-      const index = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), root.slot)) & ((1n << 48n) - 1n);
+      const root = layout.find((entry) => entry.label === "rngFlagsAndNudges");
+      expect(root, "current RNG buffer storage root").to.not.be.undefined;
+      const flags = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), root.slot)) >> (BigInt(root.offset) * 8n);
+      const index = (flags >> 12n) & 1n;
       await game.connect(alice).purchase(alice.address, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
       await game.connect(deployer).requestLootboxRng();
       const request = await getLastVRFRequestId(mockVRF);
@@ -339,9 +340,11 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       const iface = new hre.ethers.Interface(artifact.abi);
       // Choose a ticket-paying outcome, reverting each trial. The regression must
       // exercise a nonzero award, not pass because this box rolled another reward.
-      for (let word = 1n; word <= 64n; word++) {
+      for (let word = 2n; word <= 64n; word++) {
         const snapshot = await hre.ethers.provider.send("evm_snapshot", []);
         await mockVRF.fulfillRandomWords(request, word);
+        // Publication is a keeper step; the callback only stores the final word.
+        await game.connect(deployer).advanceGame();
         const receipt = await (await game.openBoxes(hre.ethers.MaxUint256)).wait();
         const ticketAward = receipt.logs.some((log) => {
           try {
@@ -352,6 +355,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         await hre.ethers.provider.send("evm_revert", [snapshot]);
         if (ticketAward) {
           await mockVRF.fulfillRandomWords(request, word);
+          await game.connect(deployer).advanceGame();
           return index;
         }
       }

@@ -16,15 +16,12 @@ contract EmptyFoilTailSeeder is DegenerusGame {
         // processing ran past midnight, so the RNGREUSE clamp holds the advance on `first`.
         rngRequestTime = uint48(block.timestamp - uint256(emptyDays) * 1 days) & ~uint48(1);
         ticketsFullyProcessed = false;
-        foilDrainDay = first;
-        foilLastResolveDay = wallDay;
-        // A future/unsealed bucket terminates the empty walk without resolving a buyer.
-        foilBuyers[wallDay].push(uint256(uint160(address(0xF011))) | (uint256(level + 1) << 160));
-        for (uint24 d = first; d < wallDay; ++d) {
-            rngWordByDay[d] = uint256(keccak256(abi.encode(d))) | 1;
-        }
-        rngWordByDay[first] = payoutWord;
-        rngWordByDay[wallDay] = 0;
+        foilGenerationDay = 0;
+        foilFirstDrawDay = 0;
+        // A write-cohort pack cannot block the empty committed read cohort.
+        foilQueue[_foilWriteKey()].push(uint256(uint160(address(0xF011))) | (uint256(level + 1) << 160));
+        _recordDailyRng(first, payoutWord);
+        _recordDailyRng(wallDay, 0);
     }
 }
 
@@ -65,8 +62,8 @@ abstract contract EmptyFoilTailFixture is PurchaseDailyFixture {
         assertEq(tickets, 0, "the ticket leg waits for its own stage");
         assertEq(
             uint24(uint256(vm.load(address(game), bytes32(uint256(62)))) >> 32),
-            1000,
-            "entire empty foil tail must advance"
+            0,
+            "empty read cohort needs no historical calendar walk"
         );
         assertLt(used, EIP7825_TX_GAS_CAP, "composed empty scan and payout exceed cap");
 

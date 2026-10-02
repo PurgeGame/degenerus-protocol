@@ -25,7 +25,7 @@ contract EntryRevealHarness is DegenerusGameStorage {
     function run(uint32 room, uint256 entropy) external returns (uint256 frontier, uint32 used) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
             abi.encodeWithSelector(DegenerusGameFoilPackModule.drainRounds.selector,
-                uint24(7), uint24(7), room, uint256(0), ticketQueue[7].length, entropy, uint8(0))
+                uint24(7), uint24(7), room, uint256(0), _ticketQueueLength(7), entropy, uint8(0))
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (uint256, uint32));

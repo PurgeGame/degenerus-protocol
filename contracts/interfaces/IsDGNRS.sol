@@ -125,4 +125,8 @@ interface IsDGNRS {
     /// @param roll The random roll (25-175).
     /// @param dayToResolve Wall-clock day whose pool this call resolves.
     function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external;
+    function redemptionSettlementPending() external view returns (bool);
+    function beginRedemptionSettlement(uint24 day, uint256 word) external;
+    function processRedemptionSettlement(uint256 budget)
+        external returns (bool done, uint256 chargedUnits, uint256 rewardQuote);
 }

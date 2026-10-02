@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
@@ -1000,7 +1001,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             uint256(
                 vm.load(
                     address(game),
-                    keccak256(abi.encode(uint256(key), uint256(12)))
+                    keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)))
                 )
             );
     }

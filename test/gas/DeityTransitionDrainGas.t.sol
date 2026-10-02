@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {BoundaryGasFixture, PhaseEndSeeder} from "./Lvl100PhaseEndAdvanceGas.t.sol";
@@ -36,6 +37,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
 
     function setUp() public {
         _deployProtocol();
+        TQ.retireCompleted(address(game), LVL);
         bytes memory original = address(game).code;
         PhaseEndSeeder seeder = _etchSeedRestore();
         seeder.seedTransitionDone(LVL, uint256(keccak256("deity-transition-full-drain")) | 1);
@@ -47,7 +49,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
 
     function testColdThirtyTwoPerpetualGrantsFitAndCloseWithoutDrainingUnmintedQueue() public {
         uint24 ffKey = (uint24(1) << 22) | (LVL + 2);
-        bytes32 ffLenSlot = keccak256(abi.encode(uint256(ffKey), uint256(12)));
+        bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), uint256(12)));
 
         uint256 beforeGas = gasleft();
         game.advanceGame{gas: 16_777_216 - 21_064}();

@@ -453,7 +453,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
     /// @dev Land a day's committed word in the Game slot the table reads it out of.
     function _landDayWord(uint24 day, uint256 word) internal {
-        vm.store(address(game), keccak256(abi.encode(uint256(day), uint256(10))), bytes32(word));
+        RecyclingState.seedDailyWord(address(game), uint24(day), word);
         assertEq(crapsBattle.dailyWordAt(day), word, "the day word did not land where the table reads it");
     }
 

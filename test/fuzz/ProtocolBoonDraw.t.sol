@@ -15,7 +15,7 @@ contract RejectingBoonRecipient {
 }
 
 contract ProtocolBoonFixture is DegenerusGameStorage {
-    function word(uint24 day, uint256 value) external { rngWordByDay[day] = value; }
+    function word(uint24 day, uint256 value) external { _recordDailyRng(day, value); }
     function genesisDay(uint24 day) external { dailyIdx = day; purchaseStartDay = day; }
     function resolve(address module, uint24 awardDay) external {
         (bool ok, bytes memory data) = module.delegatecall(

@@ -12,7 +12,7 @@ import {Vm} from "forge-std/Vm.sol";
 ///         (no keeper cranks). The word lands on day W = R+3. The advance:
 ///           #1  clamps to R (Buffered arm), resolves R with the late word, seals R.
 ///           #2  wall-day W: STAGE(W) runs on an uncommitted word, then a FRESH request fires.
-///           #3  fresh word lands; rngGate backfills rngWordByDay[R+1], [R+2] = keccak(word, g)
+///           #3  fresh word lands; rngGate backfills _recordedDailyWord(R+1), [R+2] = keccak(word, g)
 ///               and records W's word in the SAME tx, then breaks (STAGE_GAP_BACKFILLED).
 ///           #4  re-walks G1 = R+1 with the lock held (STAGE skipped), seals R+1 (lock off).
 ///           #5  re-walks G2 = R+2 with the lock DOWN and G2's word public: STAGE off, no drawing.

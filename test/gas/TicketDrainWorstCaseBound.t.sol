@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.33;
+import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -7,7 +8,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 /// @dev Exposes the drain's pricing constants.
 contract DrainPrices is DegenerusGameStorage {
     function recordAtQueueIndex(uint24 lvl, uint256 index) external view returns (uint256) {
-        return _entryRecord(lvl, _tqPositionAt(ticketQueue[lvl], index));
+        return _entryRecord(lvl, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(lvl)], index));
     }
     function unit() external pure returns (uint256) { return UNIT_GAS_BOUND; }
     function budget() external pure returns (uint256) { return WRITES_BUDGET_SAFE; }
@@ -67,8 +68,8 @@ contract TicketDrainWorstCaseBound is Test {
 
     function test_PositionLookupReadsOnlyLaneAndCombinedRecord() public {
         uint24 lvl = 7;
-        uint256 queueBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(lvl), uint256(12))))));
-        uint256 ownerBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(lvl), uint256(67))))));
+        uint256 queueBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(lvl))), uint256(12))))));
+        uint256 ownerBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), uint256(67))))));
         uint32 pos = 0x01000002;
         bytes32 queueSlot = bytes32(queueBase + 1);
         bytes32 recordSlot = bytes32(ownerBase + pos - 1);

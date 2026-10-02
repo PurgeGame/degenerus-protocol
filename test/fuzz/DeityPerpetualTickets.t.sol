@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "./helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
@@ -8,7 +9,24 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {IDegenerusGameFoilPackModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
 contract PerpetualFixture is DegenerusGameStorage {
-    function setLevel(uint24 lvl) external { level = lvl; }
+    function setLevel(uint24 lvl) external {
+        // This fixture jumps over completed levels. Consume their pending queues
+        // before reusing those roots for the new future-ticket horizon.
+        for (uint24 past = 1; past <= lvl; ++past) {
+            _consume(past);
+            _consume(past | TICKET_SLOT_BIT);
+            _consume(_tqFarFutureKey(past));
+        }
+        level = lvl;
+    }
+    function _consume(uint24 key) private {
+        uint256[] storage q = ticketQueue[_ticketQueueStorageKey(key)];
+        uint256 n = _ticketQueueLength(key);
+        for (uint256 i; i < n; ++i) {
+            _setEntryOwed(key & 0x3fffff, _tqPositionAt(q, i), 0);
+        }
+        _releaseTicketQueue(key);
+    }
     function setJackpotPhase(bool on) external { jackpotPhaseFlag = on; }
     function renew(address module, uint24 target) external {
         (bool ok, bytes memory data) = module.delegatecall(
@@ -44,7 +62,7 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
     }
     function _assertOnce(uint24 lvl, address who, uint24 atLevel) private view {
         uint24 key = _key(lvl, atLevel);
-        bytes32 root = keccak256(abi.encode(uint256(key), uint256(12)));
+        bytes32 root = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)));
         uint256 n = uint256(vm.load(address(game), root));
         uint256 seen;
         for (uint256 i; i < n; ++i) if (TQ.ownerAt(address(game), key, lvl, i) == who) ++seen;

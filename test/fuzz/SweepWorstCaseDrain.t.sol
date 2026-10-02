@@ -171,7 +171,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
     // Box-creation helpers (REAL entrypoints — solvent resolution)
     // =========================================================================
 
-    /// @dev Drive a genesis daily cycle so rngWordByDay[today] != 0 and the lock clears
+    /// @dev Drive a genesis daily cycle so _recordedDailyWord(today) != 0 and the lock clears
     ///      (requestLootboxRng requires today's daily word recorded + rngLocked == false).
     function _driveDailyCycleOnce() internal {
         (, , , , uint256 priceWei) = game.purchaseInfo();

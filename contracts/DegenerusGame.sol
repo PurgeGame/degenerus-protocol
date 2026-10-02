@@ -1190,7 +1190,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // The issuance day's menu is fixed by the preceding day's finalized word.
         // Manual gifts need this predecessor. Automatic protocol draws fall back
         // to the award-day word when no predecessor exists.
-        dailySeed = rngWordByDay[day - 1];
+        dailySeed = _recordedDailyWord(day - 1);
     }
 
     /// @notice Issue a deity boon to a recipient.
@@ -2181,12 +2181,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24 lvl,
         address player
     ) external view returns (uint32) {
-        unchecked {
-            return
-                uint32(_entriesOwed(_tqReadKey(lvl), player) >> 8) +
-                uint32(_entriesOwed(_tqWriteKey(lvl), player) >> 8) +
-                uint32(_entriesOwed(_tqFarFutureKey(lvl), player) >> 8);
-        }
+        return _totalEntriesOwed(lvl, player);
     }
 
 
@@ -2268,7 +2263,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Whether the game-over trigger is currently active.
     /// @dev In every phase: a VRF request unanswered for 14 days (VRF dead: the deterministic
     ///      ending), or no day sealed for 30 days (the deadman). In the purchase phase also the
-    ///      purchase deadline (365 days at level 0, 30 after), read at the start of a caught-up
+    ///      purchase deadline (250 days at level 0, 30 after), read at the start of a caught-up
     ///      day, or an ending already under way. For the deadline cause, a gap behind the last
     ///      sealed day (a stall across the deadline, however its word comes back) reads false
     ///      until the next daily word's backfill credits it, so a coordinator rotation can still
@@ -2320,7 +2315,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param day The day index to query.
     /// @return The random word (0 if no word recorded for that day).
     function rngWordForDay(uint24 day) external view returns (uint256) {
-        return rngWordByDay[day];
+        return _retainedDailyWord(day);
     }
 
     /// @notice Check if RNG is currently locked (daily jackpot resolution).
@@ -2726,9 +2721,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 packs;
         for (uint256 attempt; packs < 4 && attempt < 12; ) {
             entropy = EntropyLib.hash2(entropy, attempt);
-            uint24 target = fromLevel + uint24(entropy % span);
-            uint256[] storage queue = ticketQueue[_tqFarFutureKey(target)];
-            uint256 len = queue.length;
+            uint24 target;
+            // span is derived from checked uint24 bounds, so this remains within toLevel.
+            assembly ("memory-safe") { target := add(fromLevel, mod(entropy, span)) }
+            uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(target))];
+            uint256 len = _ticketQueueLength(_tqFarFutureKey(target));
             if (len != 0) {
                 // Lane a is uniform over the whole queue; lane b is one of the next
                 // min(8, len) - 1 lanes after it, wrapping at the end. Every lane is a with
@@ -2736,11 +2733,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 // append order) carries no edge — a word-first pick would over-weight a
                 // partial tail word.
                 uint256 a = (entropy >> 64) % len;
-                tickets[packs] = _tqOwnerAt(queue, target, a);
+                address first = _tqOwnerAt(queue, target, a);
+                // packs < 4 and the result array has eight slots.
+                assembly ("memory-safe") { mstore(add(add(tickets, 32), shl(5, packs)), first) }
                 uint256 window = len < 8 ? len : 8;
                 if (window > 1) {
-                    uint256 b = (a + 1 + (entropy >> 128) % (window - 1)) % len;
-                    tickets[packs + 4] = _tqOwnerAt(queue, target, b);
+                    uint256 b;
+                    // Registry-backed lengths fit uint32 and window is at most eight.
+                    assembly ("memory-safe") { b := mod(add(add(a, 1), mod(shr(128, entropy), sub(window, 1))), len) }
+                    address second = _tqOwnerAt(queue, target, b);
+                    assembly ("memory-safe") { mstore(add(add(tickets, 160), shl(5, packs)), second) }
                 }
                 unchecked { ++packs; }
             }
@@ -2797,12 +2799,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // it sit under what is now the read key. The far-future space is included for the case
         // where a level's far-future buys have not yet been drained across the transition.
         uint24 lvl = level;
-        unchecked {
-            tickets =
-                uint32(_entriesOwed(_tqReadKey(lvl), player) >> 8) +
-                uint32(_entriesOwed(_tqWriteKey(lvl), player) >> 8) +
-                uint32(_entriesOwed(_tqFarFutureKey(lvl), player) >> 8);
-        }
+        return _totalEntriesOwed(lvl, player);
+    }
+
+    function _totalEntriesOwed(uint24 lvl, address player) private view returns (uint32 total) {
+        uint32 a = uint32(_entriesOwed(lvl, player) >> 8);
+        uint32 b = uint32(_entriesOwed(lvl | TICKET_SLOT_BIT, player) >> 8);
+        uint32 c = uint32(_entriesOwed(lvl | TICKET_FAR_FUTURE_BIT, player) >> 8);
+        // Preserve the original uint32 wrapping sum, evaluated wide before truncation.
+        assembly ("memory-safe") { total := and(add(add(a, b), c), 0xffffffff) }
     }
 
     /*+======================================================================+

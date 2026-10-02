@@ -11,7 +11,7 @@ import {DeityBoonViewerTreeHarness} from "./BoonRollTreeParity.t.sol";
 
 contract PreviousDayBoonSeeder is DegenerusGameStorage {
     function seed(uint24 day, uint256 word, address deity, bool locked) external {
-        rngWordByDay[day] = word;
+        _recordDailyRng(day, word);
         mintPacked_[deity] |= uint256(1) << 184;
         rngLockedFlag = locked;
     }

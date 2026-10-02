@@ -99,14 +99,21 @@ describe("WhaleBoonDeityLapse", function () {
   }
 
   async function settleRngDay(game, deployer, mockVRF, word) {
+    const previous = await getLastVRFRequestId(mockVRF);
     await advanceToNextDay();
-    await game.connect(deployer).advanceGame();
-    const requestId = await getLastVRFRequestId(mockVRF);
-    await mockVRF.fulfillRandomWords(requestId, word);
-    for (let i = 0; i < 40; i++) {
-      if (!(await game.rngLocked())) break;
-      await game.connect(deployer).advanceGame();
+    let fulfilled = false;
+    for (let i = 0; i < 100; i++) {
+      const requestId = await getLastVRFRequestId(mockVRF);
+      if (requestId > previous) {
+        const pending = await mockVRF.pendingRequests(requestId);
+        if (!pending.fulfilled) await mockVRF.fulfillRandomWords(requestId, word);
+        fulfilled = true;
+      }
+      if (fulfilled && !(await game.rngLocked()) && !(await game.advanceDue())) break;
+      // The keeper also resolves prior read consumers and pre-request work.
+      await game.connect(deployer).mineFlip();
     }
+    expect(fulfilled, "the day requested and received a fresh word").to.equal(true);
     expect(await game.rngLocked()).to.equal(false);
   }
 

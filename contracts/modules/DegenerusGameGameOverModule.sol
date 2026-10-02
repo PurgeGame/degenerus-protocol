@@ -227,12 +227,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // Terminal scope: the payout samples only lvlTraitEntry[drainLevel], so every probe here
         // is drainLevel-only; every other windowed cohort is dead value and is never touched.
-        if (rngWordByDay[day] == 0) {
+        if (_recordedDailyWord(day) == 0) {
             if (!_rngRequestActive() || rngWordCurrent == RNG_WORD_WAITING) {
                 // No terminal word yet. Wait out a request in flight: a mid-day lootbox request,
                 // or this path's own terminal request.
                 if (_rngRequestActive()) return (true, STAGE_GAMEOVER, false);
-                if (ticketQueue[_tqReadKey(drainLevel)].length != 0) {
+                if (_ticketQueueLength(_tqReadKey(drainLevel)) != 0 || _foilDrainPending()) {
                     // Before the ending's own swap, the read side is a cohort an earlier request
                     // committed (a mid-day swap, or a dropped pre-freeze daily request) and its
                     // word has landed: drain it on that word first, so the write cohort can be
@@ -246,7 +246,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                             && _terminalDrainBatch(drainLevel)
                     ) return (true, STAGE_TICKETS_WORKING, false);
                 } else if (
-                    ticketQueue[_tqWriteKey(drainLevel)].length != 0 && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
+                    (_ticketQueueLength(_tqWriteKey(drainLevel)) != 0 || foilQueue[_foilWriteKey()].length != 0)
+                        && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
                 ) {
                     // ONE terminal swap, ever, and always before the terminal request: every
                     // entry at drainLevel then predates the terminal word. Without the bound a
@@ -267,7 +268,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // Terminal word recorded: drain the committed cohort and the foil tail on it, one batch
         // per transaction. A finishing batch still returns, so the payout runs in its own.
         if (
-            (ticketQueue[_tqReadKey(drainLevel)].length != 0 || _foilDrainPending())
+            (_ticketQueueLength(_tqReadKey(drainLevel)) != 0 || _foilDrainPending())
                 && _terminalDrainBatch(drainLevel)
         ) {
             return (true, STAGE_TICKETS_WORKING, false);
@@ -309,7 +310,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         uint256 currentWord = _currentRngWord();
         if (_rngRequestActive() && currentWord != 0) {
             uint24 first = dailyIdx + 1;
-            if (rngWordByDay[first] != 0) ++first;
+            (uint16 firstResult, ) = coinflip.getCoinflipDayResult(first);
+            if (firstResult != 0) ++first;
             if (day > first) _backfillGapDays(_rawDailyRngWord(currentWord), first, day);
             currentWord = _applyDailyRng(day, currentWord);
             if (lvl != 0) {
@@ -373,7 +375,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///        fixed as the pot every terminal-level ticket claims from (claimDeadVrf)
     ///      - Any uncredited remainder later swept by handleFinalSweep three-way to vault / sDGNRS / GNRUS
     ///
-    ///      The normal ending reads rngWordByDay[day] and reverts if funds exist but the word
+    ///      The normal ending reads _recordedDailyWord(day) and reverts if funds exist but the word
     ///      is not yet available. The deterministic ending reads no word.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
     /// @custom:reverts Invariant When distributable funds exist but the RNG word is unavailable (defense-in-depth).
@@ -397,10 +399,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // RNG gate: when distributable funds exist, require RNG word.
         // Defense-in-depth -- caller (_handleGameOverPath) already guarantees
-        // rngWordByDay[day] != 0 before calling, so this revert should never fire.
+        // _recordedDailyWord(day) != 0 before calling, so this revert should never fire.
         uint256 rngWord;
         if (preRefundAvailable != 0 && !dead) {
-            rngWord = rngWordByDay[day];
+            rngWord = _recordedDailyWord(day);
             if (rngWord == 0) revert Invariant();
         }
 
@@ -662,15 +664,15 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             }
             deadTallyPos = uint32(pos);
             stage = 1;
-            // The foil walk starts at the drain's own low-water mark.
-            dd = foilDrainDay;
-            idx = foilCursor;
+            // Both frozen read and accumulating write cohorts remain paid inventory.
+            // dd uses 1/2 as progress markers for physical queue keys 0/1.
+            dd = 1;
+            idx = _foilReadKey() == 0 ? foilCursor : 0;
         }
 
         if (stage == 1) {
-            uint24 last = foilLastResolveDay;
-            while (dd != 0 && dd <= last) {
-                uint256[] storage bucket = foilBuyers[dd];
+            while (dd != 0 && dd <= 2) {
+                uint256[] storage bucket = foilQueue[dd - 1];
                 uint256 n = bucket.length;
                 if (idx < n) {
                     uint256 packs;
@@ -706,7 +708,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     --units;
                     ++dd;
                 }
-                idx = 0;
+                idx = dd <= 2 && dd - 1 == _foilReadKey() ? foilCursor : 0;
             }
             stage = 2;
         }
@@ -764,8 +766,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///          the created pot, divided equally among that trait's tickets.
     ///        DEAD_REF_QUEUED (1) — uncreated queued entries: registry position plus one at
     ///          bits 0..31. Pays pot * weight / total for the position's whole owed balance.
-    ///        any other kind — an undrained foil pack: resolve day at bits 64..87, index into
-    ///          foilBuyers[day] at bits 0..63. Pays pot * FOIL_PACK_ENTRIES * QTY_SCALE / total.
+    ///        any other kind — an undrained foil pack: physical cohort (0/1) at bits 64..87, index into
+    ///          foilQueue[cohort] at bits 0..63. Pays pot * FOIL_PACK_ENTRIES * QTY_SCALE / total.
     ///      Each holding pays once: a created ticket sets its claimed bit, a queued position
     ///      has its owed balance zeroed, a foil pack has its bucket word zeroed. Uncreated
     ///      weight claimed is debited from the tallied total, so claims can never exceed it.
@@ -808,11 +810,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 weight += w;
                 amount += (pot * w) / total;
             } else {
-                uint24 day = uint24(ref >> 64);
+                uint24 cohort = uint24(ref >> 64);
                 uint256 idx = uint64(ref);
-                uint24 low = foilDrainDay;
-                if (day < low || day > foilLastResolveDay || (day == low && idx < foilCursor)) revert E();
-                uint256[] storage bucket = foilBuyers[day];
+                if (cohort > 1 || (cohort == _foilReadKey() && idx < foilCursor)) revert E();
+                uint256[] storage bucket = foilQueue[cohort];
                 if (idx >= bucket.length) revert E();
                 uint256 pack = bucket[idx];
                 if (address(uint160(pack)) != player || uint24(pack >> 160) != lvl) revert E();

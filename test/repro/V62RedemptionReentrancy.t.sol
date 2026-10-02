@@ -132,6 +132,8 @@ contract V62RedemptionReentrancy is DeployProtocol {
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
+        vm.prank(address(game));
+        sdgnrs.beginRedemptionSettlement(uint24(dayToResolve), 99);
     }
 
     /// @dev The reserve identity under audit (SOLVENCY-01): the contract's own backing (ETH + stETH)

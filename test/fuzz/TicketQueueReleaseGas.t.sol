@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "./helpers/TicketQueueStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // =============================================================================
@@ -76,7 +77,7 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
 
     function _queueLen(address host, uint24 key) private view returns (uint256) {
         return uint256(
-            vm.load(host, keccak256(abi.encode(uint256(key), SLOT_TICKET_QUEUE)))
+            vm.load(host, keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), SLOT_TICKET_QUEUE)))
         );
     }
 

@@ -64,6 +64,7 @@ contract FoilSnapPayout is DeployProtocol {
     }
 
     function _completeDay(uint256 vrfWord) internal {
+        _finishReadConsumers();
         _advance();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -141,6 +142,11 @@ contract FoilSnapPayout is DeployProtocol {
                 ) {} catch {}
             }
             _completeDay(_seed(PURCHASE_DAYS, d));
+            _endDay = game.currentDayView();
+            uint256 snapshot = vm.snapshotState();
+            (, uint256 paidFlip,, uint256 claims) = _claimAll();
+            vm.revertToStateAndDelete(snapshot);
+            if (claims != 0 && paidFlip != 0) break;
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }
         _endDay = game.currentDayView();

@@ -19,7 +19,7 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 ///         asserts the GENERAL property over the player-controllable in-window action space.
 ///
 ///         THE ENUMERATED IN-WINDOW SLOAD SET (the RngWindowFreezeHandler backward trace):
-///           (1) rngWordByDay[currentDay]     — slot 10 : the VRF-DERIVED day word.
+///           (1) _recordedDailyWord(currentDay)     — slot 10 : the VRF-DERIVED day word.
 ///           (2) _lootboxWord(index) — slot 34 : reusable VRF-DERIVED lootbox payload.
 ///           (3) lootboxRngPacked cursor      — slot 33 low 48 bits : the NON-VRF index read alongside
 ///                                                       the word.
@@ -79,6 +79,20 @@ contract RngWindowFreeze is DeployProtocol {
         excluded[0] = RngWindowFreezeHandler.debugSeedInWindowMutationAndCheck.selector;
         excluded[1] = RngWindowFreezeHandler.debugSeedMidDayMutationAndCheck.selector;
         excludeSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: excluded}));
+
+        // afterInvariant runs for each sequence. Random actions can legitimately end the
+        // game before opening both window types, so prime real, isolated cycles first.
+        // Counters come from actual production calls; no completion or coverage state is seeded.
+        handler.openWindow(0);
+        assertTrue(game.rngLocked());
+        handler.tryInWindowOpenBoxes(0, 1);
+        handler.closeWindow(7);
+        assertFalse(game.rngLocked());
+        handler.openMidDayWindow(0);
+        assertGt(handler.ghost_midDayWindowsOpened(), 0);
+        handler.tryMidDayOpenBoxes(0, 1);
+        handler.closeMidDayWindow(7);
+        assertEq(handler.ghost_frozenSlotMutations(), 0);
     }
 
     // =========================================================================
@@ -104,7 +118,7 @@ contract RngWindowFreeze is DeployProtocol {
     // NON-VACUITY GATE: the campaign actually opened the window and fired in-window actions
     // =========================================================================
 
-    /// @notice afterInvariant runs once at the END of the campaign. The freeze property is only meaningful
+    /// @notice afterInvariant runs at the END of each fuzzed sequence. The freeze property is only meaningful
     ///         if the fuzzer actually drove the window open AND attempted in-window player actions across
     ///         the 256/128 run — otherwise invariant_inWindowSloadsFrozen would hold vacuously (no window,
     ///         no action). Asserting both counters > 0 here makes a "passes because nothing happened" green
@@ -174,7 +188,7 @@ contract RngWindowFreeze is DeployProtocol {
     // =========================================================================
 
     /// @notice FALSIFIABILITY. Drives the handler open → seeds an in-window mutation of an enumerated
-    ///         consumed slot (rngWordByDay[currentDay]) between the handler's snapshot and its isolation
+    ///         consumed slot (_recordedDailyWord(currentDay)) between the handler's snapshot and its isolation
     ///         re-check, and asserts the detector FIRES (ghost_frozenSlotMutations increments). If the
     ///         detector did not register the seeded break, the freeze invariant would be unfalsifiable —
     ///         vacuously green. A passing assertion here proves the wired property genuinely catches a

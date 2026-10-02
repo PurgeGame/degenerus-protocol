@@ -48,7 +48,7 @@ contract HalfPassAwardHarness is DegenerusGameStorage {
 
     function queueLenAt(uint24 lvl) external view returns (uint256) {
         uint24 key = lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
-        return ticketQueue[key].length;
+        return _ticketQueueLength(key);
     }
 }
 

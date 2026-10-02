@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -160,13 +161,10 @@ contract FarFutureIntegrationTest is DeployProtocol {
     // ==================== Internal Helpers ====================
 
     /// @notice Read the length of the FF queue for a given level from game contract storage
-    /// @dev ticketQueue is a mapping(uint24 => uint256[]) at slot 15.
-    ///      For a dynamic array in a mapping, the length is stored at:
-    ///        keccak256(abi.encode(uint256(key), uint256(baseSlot)))
+    /// @dev Authenticate the absolute level before reading its recycled physical root.
     function _ffQueueLength(uint24 lvl) internal view returns (uint256) {
         uint24 ffKey = ffComputer.tqFarFutureKey(lvl);
-        bytes32 slot = keccak256(abi.encode(uint256(ffKey), uint256(TICKET_QUEUE_SLOT)));
-        return uint256(vm.load(address(game), slot));
+        return TQ.length(address(game), ffKey);
     }
 
     /// @notice Seed the next prize pool to accelerate level transitions

@@ -380,6 +380,26 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         wwxrp.claim(day, 0);
     }
 
+    function test_ClaimGraceEndsOnSecondDayWithoutRngOverwrite() public {
+        _bootstrap();
+        uint24 day = game.currentDayView();
+        vm.prank(alice);
+        wwxrp.enter(500 ether);
+        _warpNextDay();
+        _completeDay(_grindWord(day, 1, wwxrp.bucketOf(day, alice)));
+        (bool available,,,,,,) = wwxrp.previewOutcome(day);
+        assertTrue(available);
+        _warpNextDay();
+        (available,,,,,,) = wwxrp.previewOutcome(day);
+        assertTrue(available, "D+1 grace");
+        _warpNextDay();
+        (available,,,,,,) = wwxrp.previewOutcome(day);
+        assertFalse(available, "D+2 expires without overwrite");
+        vm.expectRevert(abi.encodeWithSignature("WordUnavailable()"));
+        wwxrp.claim(day, 0);
+        assertFalse(wwxrp.dayClaimed(day));
+    }
+
     function test_ClaimEmptyBucketDudNoReroll() public {
         _bootstrap();
         uint24 day = game.currentDayView();

@@ -65,10 +65,10 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     function resolveProtocolBoonDraws(uint24 awardDay) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (gameOver || awardDay <= 1 || awardDay != _simulatedDayIndex()) return;
-        uint256 menuWord = rngWordByDay[awardDay - 1];
+        uint256 menuWord = _recordedDailyWord(awardDay - 1);
         // Warm read: rngGate wrote this slot earlier in the same transaction, so passing the
         // word as calldata would cost more than reading it back.
-        uint256 winnerWord = rngWordByDay[awardDay];
+        uint256 winnerWord = _recordedDailyWord(awardDay);
         if (winnerWord == 0) return;
         // Deployment day has no daily word. Draw its menu from the finalized
         // award-day word instead; the wager pool closed before that request.
@@ -1484,7 +1484,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (mintPacked_[deity] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
 
         uint24 day = _simulatedDayIndex();
-        uint256 rngWord = rngWordByDay[day - 1];
+        uint256 rngWord = _recordedDailyWord(day - 1);
         if (rngWord == 0) revert RngNotReady();
         // Day + used-mask share one slot (deityBoonPacked). On a day rollover the mask
         // starts empty: a stale day's mask is never read (every reader gates on the day

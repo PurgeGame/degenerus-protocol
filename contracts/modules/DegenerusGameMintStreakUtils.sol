@@ -317,7 +317,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     function _farFutureSeed(address player) internal view returns (uint256) {
         return uint256(
             keccak256(
-                abi.encodePacked(player, rngWordByDay[_simulatedDayIndex() - 1])
+                abi.encodePacked(player, _recordedDailyWord(_simulatedDayIndex() - 1))
             )
         );
     }

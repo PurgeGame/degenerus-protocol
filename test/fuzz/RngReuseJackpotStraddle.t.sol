@@ -24,9 +24,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         advance calls `rngGate(D+1)` (AdvanceModule:330) BEFORE the :506
 ///         pending-completion. rngGate's fresh-word branch
 ///         (`currentWord != 0 && rngRequestTime != 0`, :1217) fires, the gap
-///         backfill is skipped (`rngWordByDay[dailyIdx+1] != 0`), and
+///         backfill is skipped (`_recordedDailyWord(dailyIdx+1) != 0`), and
 ///         `_applyDailyRng(D+1, currentWord)` writes
-///             rngWordByDay[D+1] = rngWordByDay[D]
+///             _recordedDailyWord(D+1) = _recordedDailyWord(D)
 ///         → day D+1's RNG == day D's RNG (already publicly revealed via the
 ///         day-D word/event) → predictable coinflip/jackpot entropy.
 ///

@@ -35,11 +35,11 @@ contract QueueHarness is DegenerusGameAdvanceModule {
 
     // --- Direct mapping inspection ---
     function getQueueLength(uint24 key) external view returns (uint256) {
-        return ticketQueue[key].length;
+        return _ticketQueueLength(key);
     }
 
     function getQueueEntry(uint24 key, uint256 idx) external view returns (address) {
-        return _tqOwnerAt(ticketQueue[key], key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
+        return _tqOwnerAt(ticketQueue[_ticketQueueStorageKey(key)], key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
     }
 
     function getTicketsOwedPacked(uint24 key, address buyer) external view returns (uint80) {
@@ -57,12 +57,12 @@ contract QueueHarness is DegenerusGameAdvanceModule {
     // old default (level == 0, LEVEL == 5 comfortably < level + 5).
     function setLevel(uint24 lvl) external { level = lvl; }
     function positionAt(uint24 key, uint256 i) external view returns (uint32) {
-        return _tqPositionAt(ticketQueue[key], i);
+        return _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], i);
     }
     function recordAt(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecord(lvl, pos); }
     function retire(uint24 key) external {
         uint24 lvl = key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
-        for (uint256 i; i < ticketQueue[key].length; ++i) _setEntryOwed(lvl, _tqPositionAt(ticketQueue[key], i), 0);
+        for (uint256 i; i < _ticketQueueLength(key); ++i) _setEntryOwed(lvl, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], i), 0);
         _releaseTicketQueue(key);
     }
     // --- State helpers ---

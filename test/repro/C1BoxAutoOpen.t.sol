@@ -103,7 +103,7 @@ contract C1BoxAutoOpen is DeployProtocol {
     ///      indices are already drained). No contract mutation — a field-isolated slot poke.
 
     // =========================================================================
-    // Drive a genesis daily cycle so rngWordByDay[currentDay] != 0 and the lock clears
+    // Drive a genesis daily cycle so _recordedDailyWord(currentDay) != 0 and the lock clears
     // (requestLootboxRng requires today's daily word recorded and rngLocked == false).
     // =========================================================================
 

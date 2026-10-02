@@ -29,7 +29,7 @@ describe("JackpotFarFutureCoinUnits — the daily jackpot battle's award draw", 
 
   it("reads the far-future queues without mutating them", function () {
     const draw = body("function _collectJackpotChunk(");
-    expect(draw).to.include("ticketQueue[_tqFarFutureKey(candidate)]");
+    expect(draw).to.include("ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(candidate))]");
     expect(draw).to.include("(entropy >> 128) % len");
     expect(draw).to.include("_tqWordAt(queue, walk.position)");
     expect(draw).to.include("if (len == 0)");

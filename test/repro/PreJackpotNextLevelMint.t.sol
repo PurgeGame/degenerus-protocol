@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Vm} from "forge-std/Vm.sol";
@@ -14,11 +15,12 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 contract PreJackpotMintSeeder is DegenerusGame {
     function seed(address currentBuyer, address nextBuyer, uint32 nextEntries, bool parity, bool turbo) external {
         uint24 day = _simulatedDayIndex();
+        TicketQueueStorage.retireCompleted(address(this), 129);
         level = 129; // Outside constructor allocations; next level is an x0 turbo latch.
         purchaseStartDay = day - (turbo ? 1 : 5);
         dailyIdx = day;
         lastVrfProcessedTimestamp = uint48(block.timestamp);
-        rngWordByDay[day] = 0xDA11;
+        _recordDailyRng(day, 0xDA11);
         rngWordCurrent = RNG_WORD_WAITING;
         rngRequestTime = 0;
         vrfRequestId = 0;
@@ -179,6 +181,8 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     function test_ffWorkDoesNotWaiveBasefeeGate() public {
         _seed(8, false, false, true);
         _buyBox(2 ether);
+        vm.prank(ContractAddresses.CREATOR);
+        game.setMiddayMaxBasefee(5);
         vm.fee(6 gwei);
         vm.expectRevert(bytes4(keccak256("GasTooHigh()")));
         game.requestLootboxRng();
@@ -577,7 +581,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     }
 
     function _queueLen(uint24 key) private view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(key), uint256(12)))));
+        return TicketQueueStorage.length(address(game), key);
     }
 
     function _boxWord(uint48 index) private view returns (uint256) {

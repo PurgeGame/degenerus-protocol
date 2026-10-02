@@ -167,6 +167,15 @@ contract StakedStonkRedemption is DeployProtocol {
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
+        // These unit fixtures bypass the daily request; model its pinned session word.
+        _pinSession(uint24(dayToResolve), 0xC0FFEE);
+    }
+
+    function _pinSession(uint24 day, uint256 word) internal {
+        // Appended fields: slot 10 packs cursor + queue day; slot 11 is session word.
+        uint256 packed = uint256(vm.load(address(sdgnrs), bytes32(uint256(10))));
+        vm.store(address(sdgnrs), bytes32(uint256(10)), bytes32((packed & ~(uint256(type(uint24).max) << 32)) | (uint256(day) << 32)));
+        vm.store(address(sdgnrs), bytes32(uint256(11)), bytes32(word));
     }
 
     /// @dev Write day `day`'s REAL coinflip result into Coinflip storage so the redemption
@@ -776,6 +785,9 @@ contract StakedStonkRedemption is DeployProtocol {
         // dayToResolve) pendingResolveDay = 0;` line at sStonk:665.
         _advanceWallDay();
         _resolveDay(dayD, 100);
+        vm.prank(address(game));
+        (bool done,,) = sdgnrs.processRedemptionSettlement(1856);
+        assertTrue(done, "previous cohort consumed before new burns");
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "sentinel: post-resolve must clear sentinel to 0");
 
         // First burn of a NEW day (dayD + 1, since we _advanceWallDay'd above) — sentinel
@@ -1397,12 +1409,12 @@ contract StakedStonkRedemption is DeployProtocol {
     //   MECH-01: un-mocked lootbox seed pins the day+1 RNG operand
     // =====================================================================
 
-    /// @dev Write `rngWordByDay[day] = word` on the GAME (mapping(uint32 => uint256) at slot 10,
+    /// @dev Write `_recordedDailyWord(day) = word` on the GAME (mapping(uint32 => uint256) at slot 10,
     ///      the same slot `_primeCurrentDayRng` writes). Lets the test give `day` and `day + 1`
     ///      DISTINCT non-zero words so the seed derivation's choice of operand is observable.
     function _setRngWordForDay(uint24 day, uint256 word) internal {
-        vm.store(address(game), keccak256(abi.encode(uint256(day), uint256(10))), bytes32(word));
-        require(game.rngWordForDay(day) == word, "setRngWordForDay: slot mismatch");
+        RecyclingState.seedDailyWord(address(game), uint24(day), word);
+        require(RecyclingState.dailyWord(address(game), day) == word, "setRngWordForDay: tag mismatch");
     }
 
     /// @notice MECH-01 — the live-game redemption claim derives the lootbox seed from the NEXT
@@ -1437,6 +1449,7 @@ contract StakedStonkRedemption is DeployProtocol {
         assertTrue(wordDay != wordDayPlus1, "MECH-01: day and day+1 words must differ to expose the operand");
         _setRngWordForDay(uint24(dayBurn), wordDay);
         _setRngWordForDay(uint24(dayBurn) + 1, wordDayPlus1);
+        _pinSession(uint24(dayBurn), wordDayPlus1);
 
         // Seed a single (player, day) claim with a LARGE gwei-aligned ethValueOwed so the rolled
         // ETH clears the 0.02-ETH lootbox-floor (lootboxEth >= 0.01 ETH) and the

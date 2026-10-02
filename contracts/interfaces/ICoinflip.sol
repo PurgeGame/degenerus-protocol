@@ -164,6 +164,9 @@ interface ICoinflip {
         uint24 epoch
     ) external;
 
+    /// @notice Backfill compact coinflip results over [start, end), at most 31 days.
+    function processCoinflipGap(uint256 root, uint24 start, uint24 end) external;
+
     /*+======================================================================+
       |                       CREDIT SYSTEM                                  |
       +======================================================================+*/

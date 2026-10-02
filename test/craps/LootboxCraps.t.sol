@@ -28,6 +28,7 @@ contract SlotProbe is DegenerusGameStorage {
         return (uint256(1) << 255, uint256(1) << 253);
     }
 
+    function rngDayTagsSlot() external pure returns (uint256 s) { assembly { s := rngDayTags.slot } }
     function rngWordByDaySlot() external pure returns (uint256 s) {
         assembly { s := rngWordByDay.slot }
     }
@@ -297,6 +298,7 @@ contract LootboxCrapsTest is CrapsPins {
             WORD_SLOT,
             "lootboxRngWordByIndex moved - update LOOTBOX_RNG_WORD_SLOT"
         );
+        assertEq(probe.rngDayTagsSlot(), 34, "absolute day tag slot changed");
         assertEq(probe.rngWordByDaySlot(), DAY_WORD_SLOT, "rngWordByDay moved - update RNG_WORD_BY_DAY_SLOT");
 
     }

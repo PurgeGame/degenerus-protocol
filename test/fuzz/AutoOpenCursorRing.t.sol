@@ -12,7 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   drainAfkingBoxes, and via Game.mineFlip's open category) walks `_subscribers` from `_subOpenCursor`,
 ///   opening up to `maxCount` materializable boxes. A box is OPENABLE when, under the entry-gate (not
 ///   rngLocked, not the terminal-liveness control), the sub has a pending box (`lastOpenedDay <
-///   lastAutoBoughtDay`) AND its frozen stamp-day word has landed (`rngWordByDay[lastAutoBoughtDay] != 0`).
+///   lastAutoBoughtDay`) AND its frozen stamp-day word has landed (`_recordedDailyWord(lastAutoBoughtDay) != 0`).
 ///
 /// @notice The wedge these tests reproduce: the cursor can come to rest at a mid-array index `< len`
 ///   whose sub is non-pending — e.g. a `subscribe` pushes a fresh (un-stamped, so non-openable) player to
@@ -74,7 +74,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     function test_StrandedSubsDrainAfterCursorWedge() public {
         // Five subs, each with a sealed (stamped-but-unopened) openable box. Stamping via the real STAGE
         // (a new-day buy with NO subsequent open) leaves each with lastOpenedDay < lastAutoBoughtDay and a
-        // landed rngWordByDay[lastAutoBoughtDay] — exactly the openable predicate.
+        // landed _recordedDailyWord(lastAutoBoughtDay) — exactly the openable predicate.
         address[] memory subs = _stampSealedOpenableSubs(5);
 
         // The "wedge" sub: a fresh, NOT-yet-stamped subscriber pushed to the tail of `_subscribers` AFTER
@@ -233,7 +233,7 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     /// @dev Create `n` seated, funded subs and stamp ONE sealed openable box on each: a new-day STAGE
     ///      buy that stamps the box + lands its stamp-day word, with NO subsequent open. Each sub ends up
-    ///      with lastOpenedDay < lastAutoBoughtDay and rngWordByDay[lastAutoBoughtDay] != 0 (openable).
+    ///      with lastOpenedDay < lastAutoBoughtDay and _recordedDailyWord(lastAutoBoughtDay) != 0 (openable).
     function _stampSealedOpenableSubs(uint256 n) internal returns (address[] memory subs) {
         subs = new address[](n);
         for (uint256 i; i < n; i++) {
@@ -385,7 +385,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     }
 
     /// @dev Openable under the entry-gate: pending box (lastOpenedDay < lastAutoBoughtDay) AND the frozen
-    ///      stamp-day word has landed (rngWordByDay[lastAutoBoughtDay] != 0). Mirrors the _autoOpen predicate.
+    ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0). Mirrors the _autoOpen predicate.
     function _isOpenable(address who) internal view returns (bool) {
         uint32 bought = _lastBoughtDayOf(who);
         if (_lastOpenedDayOf(who) >= bought) return false;

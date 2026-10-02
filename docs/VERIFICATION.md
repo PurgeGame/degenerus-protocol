@@ -139,3 +139,88 @@ the drain envelope is 10M even during startup and record-volume backing growth.
 Existing stricter measured fixture limits remain in place. See
 `test/gas/TicketDrainWorstCaseBound.t.sol`, `RoundDrainChunkGas.t.sol` and
 `KeeperGasProfile.t.sol`.
+
+## Daily RNG and foil implementation (2026-10-01)
+
+The two tagged daily RNG slots, normal foil generation cohorts with stored lines,
+D/D+1 foil and WWXRP claim windows, packed coinflip gap results, automatic live
+sDGNRS settlement, and 250-day startup deadline are implemented. Terminal sDGNRS
+redemptions have no expiry. Global level wrapping was superseded by ticket queue
+reuse with absolute gameplay levels, described below.
+
+The final focused Foundry campaign passed 133 tests with transaction isolation
+and 1,000-run fuzz properties, across 12 selected roots (imported suites can repeat).
+It includes all six frozen Craps window terms compared against the original RNG
+decoder before and after word retirement, calendar expiry without slot overwrite,
+stalled sessions, packed gap accounting, batch claims, maximum redemption work,
+terminal claims after 2,000 days, and the freeze detector's mutation checks.
+The RNG freeze invariant also passes all 256 runs at depth 128 (32,768 randomized
+actions), with real daily/midday primer cycles and four focused mutation/coverage
+checks. The six focused JavaScript files also pass (134 checks, with the gap fixture
+rerun after adapting its event expectation to unlocked consumer work). The
+maximum-size cold redemption settlement used 1,392,600 gas, including intrinsic
+gas. Source manifests and the 43 assurance-tool tests pass. Reviewed storage changes
+rename the reserved slot and foil fields in place, and append the sDGNRS queue;
+no existing field moves. Production size and interface/layout checks pass against
+restored production address pins. The narrowest runtime margin is 12 bytes
+(Whale module: 24,564 of 24,576 bytes).
+
+This focused work does not establish a full Foundry/Hardhat, deep invariant,
+Halmos, or remote CI pass for the working tree. Keep the existing verification
+limits above when reviewing or releasing this revision.
+
+## Ticket queue reuse (2026-10-01)
+
+Gameplay levels remain absolute. Ticket queue storage reuses slots 1–100 within
+each existing near/far-future domain; level zero remains reserved. Absolute-level
+tags authenticate reads, require an empty queue before reuse, and prevent stale
+release calls from clearing newer tickets. Generated L inventory can retire while
+L+100 remains queued. The Lens continues accepting absolute logical queue keys.
+Permanent wallet IDs belong to a separate workstream: the existing absolute owner
+registry and wallet-position cache retain their layouts. One queue-tag mapping is
+appended at shared slot 78, with no existing field moves.
+
+The latest focused results pass 216 Foundry checks across 31 suites, counting each
+suite's latest result once rather than repeated imported executions. Default fuzz
+properties use 1,000 runs, with source overrides retained. Coverage includes three
+centuries of reuse, near/far coexistence, collision protection, stale releases,
+packed-tail sampling, Lens authentication, purchases, mint drains, salvage,
+jackpots and terminal settlement. Cold gas checks use transaction isolation; the
+functional basefee-cheat fixture runs without isolation. The final five-file
+JavaScript campaign passes 47 checks, and the assurance-tool suite passes 43.
+
+Cold genesis initialization uses 16,338,028 gas including intrinsic gas, within
+its existing dedicated 16,777,216 startup cap. Genesis initialization now requires
+level zero and uses implicit first-century tags to avoid redundant cold accesses.
+A transition with 32 fresh deity renewals uses 2,523,387 gas including intrinsic
+gas; the frozen-pool chunk uses 5,125,018 gas excluding intrinsic gas. Existing
+limits and compiler settings were not raised.
+
+Production build, deployment-size, interface, source-manifest and storage-layout
+checks pass with restored production address pins. Whale and Foil runtime sizes
+are each 24,564 bytes (12 bytes below the limit); Game is 24,560 bytes. These narrow
+margins require rechecking after integration with the permanent-ID workstream.
+This is focused validation; it does not establish a full-suite, deep invariant,
+Halmos or remote CI pass.
+
+## Redemption batching integration (2026-10-01)
+
+The subsequent redemption workstream batches whole FIFO claims within the existing
+keeper work allowance, credits the keeper once per successful claim, and admits
+box work only within the remaining allowance. Manual claims retain their existing
+settlement behavior. The terminal foil-only cohort fix is also covered.
+
+Its final accepted grouped run passes 146 test executions across 17 selected roots
+(imported suites can repeat), including 1,000 whole-claim gas fuzz cases and the
+existing 10,000-case reserve fuzz. Eleven source gates pass. Exact production-pin
+and separate nonzero-pin compilations fit the deployment-size limit and match all
+28 golden layouts. These are additional scoped results, not a full audit battery.
+
+At the commit-readiness check, all 11 promoted files matched the workstream's
+recorded hashes, and all 83 local contract sources matched its final exact-pin
+compiler input, including the queue reuse changes. The only changes since the
+prior audit snapshot were those promoted files. Verification evidence remains in
+`.audit-test-logs/foil-redemption/change-b/`; the accepted run is
+`foil-redemption-accepted/20261001T192221.151074Z-f7d2e221`. The audit snapshot was
+refreshed after checking that correspondence. Deployment-size and whitespace
+checks also pass on the combined checkout.

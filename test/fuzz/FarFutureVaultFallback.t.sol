@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
@@ -83,7 +84,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
     function _setPriorDayRngWord(uint256 word) internal {
         uint32 day = game.currentDayView();
-        vm.store(address(game), _rngWordSlot(day - 1), bytes32(word));
+        RecyclingState.seedDailyWord(address(game), uint24(day - 1), word);
     }
 
     function _seedFarTickets(address who, uint24 L, uint32 whole) internal returns (uint256 idx) {

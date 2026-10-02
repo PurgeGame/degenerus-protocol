@@ -104,7 +104,6 @@ EXEMPT-ADVANCE	ARG	coinflip.processCoinflipPayouts	applyTerminalRng	modules/Dege
 PRODUCER	ARG	vrfCoordinator.requestRandomWords	requestTerminalRng	modules/DegenerusGameGameOverModule.sol	game-over-path VRF request (try/catch); the ending worker sets the lock and advances LR_INDEX without the normal completion gate
 PRODUCER	ARG	vrfCoordinator.requestRandomWords	_requestVrfWord	modules/DegenerusGameAdvanceModule.sol	the single-word VRF request behind _requestRng / requestLootboxRng; lock and index bookkeeping follow in _finalizeRngRequest
 PRODUCER	PARAM	vrfWord	_backfillGapDays	modules/DegenerusGameRngUtils.sol	derives keccak(vrfWord, gapDay) per stalled day into rngWordByDay[gapDay]; vrfWord is the first post-gap word, absent when the gap-day flips were placed; the deadman+1 bound (31 days) leaves later unused days unworded
-EXEMPT-ADVANCE	ARG	coinflip.processCoinflipPayouts	_backfillGapDays	modules/DegenerusGameRngUtils.sol	settles each gap day's flips on its derived word inside the backfill; bonus 0
 PRODUCER	PARAM	finalWord	_applyDailyRng	modules/DegenerusGameRngUtils.sol	Records callback-finalized entropy and clears its frozen nudge receipt without applying it a second time.
 CONSUMER-SEALED	PARAM	seed	rollBoxBoons	modules/DegenerusGameBoonModule.sol	delegatecall-only; seed = the box's player-mixed seed off the committed per-index/caller word; roll = hash2(seed, nonce)>>120; live level only sets the chance denominator (bounded)
 CONSUMER-SEALED	PARAM	seed	rollBoxBoonTiers	modules/DegenerusGameBoonModule.sol	delegatecall-only; boonSeed = hash4(rngWord, player, BOX_BOON_TAG, index) from _openLootBoxLegWith; per-tier cumulative nonces keep every draw distinct
@@ -292,3 +291,8 @@ PURE-DERIVE	PARAM	word	_tieKey	modules/DegenerusGameDecimatorModule.sol	private 
 NOT-RNG	PARAM	word	recordPresaleBox	modules/DegenerusGameFoilPackModule.sol	packed presale amount/cumulative-sold purchase record, not randomness; queue registration moved from Mint into its pinned cold delegate worker
 PURE-DERIVE	PARAM	finalWord	_rawDailyRngWord	storage/DegenerusGameStorage.sol	Undo the frozen callback nudge modulo2^256 for exact raw replay/gap input; never re-publish it as read entropy.
 PURE-DERIVE	ARG	ContractAddresses.GAME_FOILPACK_MODULE.delegatecall	_processOneTicketEntry	modules/DegenerusGameMintModule.sol	Same published cohort entropy passed to pinned per-entry generator; inputs and RNG sequence preserved across relocation.
+EXEMPT-ADVANCE	ARG	sdgnrs.beginRedemptionSettlement	_resolvePendingRedemption	modules/DegenerusGameRngUtils.sol	GAME-only pins the final committed session word; the forced beneficiary queue must drain before the next fresh normal request
+CONSUMER-SEALED	PARAM	word	beginRedemptionSettlement	sDGNRS.sol	GAME-only final session word greater than one; recipients and balances committed before its request, consumed before reuse with sentinel one retained
+EXEMPT-ADVANCE	ARG	coinflip.processCoinflipGap	_backfillGapDays	modules/DegenerusGameRngUtils.sol	packed outcomes from recovery word; ordered funding effects
+PURE-DERIVE	PARAM	rngWord	_coinflipReward	Coinflip.sol	exact existing pure reward derivation
+EXEMPT-ADVANCE	PARAM	word	_recordDailyRng	storage/DegenerusGameStorage.sol	advance-only tag-authenticated ring write

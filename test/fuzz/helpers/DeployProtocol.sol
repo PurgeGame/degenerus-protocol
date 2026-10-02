@@ -336,11 +336,7 @@ abstract contract DeployProtocol is Test {
     function _primeCurrentDayRng() internal {
         uint24 d = game.currentDayView();
         if (game.rngWordForDay(d) == 0) {
-            vm.store(
-                address(game),
-                keccak256(abi.encode(uint256(d), uint256(10))),
-                bytes32(uint256(keccak256(abi.encode("primeRng", d))))
-            );
+            RecyclingState.seedDailyWord(address(game), d, uint256(keccak256(abi.encode("primeRng", d))));
         }
         require(game.rngWordForDay(d) != 0, "primeRng: rngWordByDay slot mismatch");
     }

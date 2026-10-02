@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
@@ -523,10 +524,10 @@ contract OpenWalkCompositionGas is DeployProtocol {
         }
     }
 
-    /// @dev Read the DAY-keyed afking word `rngWordByDay[day]` (the open leg's seed + readiness
+    /// @dev Read the DAY-keyed afking word `_recordedDailyWord(day)` (the open leg's seed + readiness
     ///      gate).
     function rngWordByDay(uint32 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT)))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     /// @dev RMW a sub's packed `lastOpenedDay` (uint24 at byte OFF_LASTOPENED) — used to re-arm

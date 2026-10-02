@@ -27,7 +27,7 @@ contract PurchaseStartDaySeeder is DegenerusGame {
 ///             `purchaseStartDay` (`purchaseStartDay += gapCount`, ~L1263) while filling
 ///             `rngWordByDay` for every gap day, then defers (STAGE_GAP_BACKFILLED break ~L451)
 ///             WITHOUT sealing — so `dailyIdx` stays put but `purchaseStartDay` jumps ahead.
-///           - The RNGREUSE clamp (L190: `day > dIdx+1 && rngWordByDay[dIdx+1] != 0 → day = dIdx+1`)
+///           - The RNGREUSE clamp (L190: `day > dIdx+1 && _recordedDailyWord(dIdx+1) != 0 → day = dIdx+1`)
 ///             cannot tell a backfilled gap day from a live in-progress day, so it rewinds `day`
 ///             to `dailyIdx+1` and the walk seals one backfilled day per advance.
 ///           - As soon as a walk day seals and `_unlockRng` clears `rngLockedFlag`, the NEXT

@@ -53,7 +53,7 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
         subsFullyProcessed = true;
         _afkingResetDay = day;
         rngWordCurrent = s.word < 2 ? RNG_WORD_WAITING : s.word;
-        rngWordByDay[day] = s.word;
+        _recordDailyRng(day, s.word);
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
         // dailyEntries = 4000 (bits 8..71): 1000 whole tickets, so the 96-winner cap saturates.

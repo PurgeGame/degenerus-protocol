@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
@@ -147,7 +148,7 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
 
     function _setPriorDayRngWord(uint256 word) internal {
         uint32 day = game.currentDayView();
-        vm.store(address(game), keccak256(abi.encode(uint256(day - 1), RNG_WORD_BY_DAY_SLOT)), bytes32(word));
+        RecyclingState.seedDailyWord(address(game), uint24(day - 1), word);
     }
 
     function _jitterMult(address player, uint256 priorDayWord) internal pure returns (uint256) {

@@ -19,9 +19,9 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
 // Time constants (seconds)
 const DAY = 86400;
-const DEPLOY_IDLE_TIMEOUT_DAYS = 912;
+const DEPLOY_IDLE_TIMEOUT_DAYS = 250;
 const INACTIVITY_TIMEOUT_DAYS = 365;
-const COIN_PURCHASE_CUTOFF_LVL0 = 882; // 912 - 30 days
+const COIN_PURCHASE_CUTOFF_LVL0 = 220; // 250 - 30 days
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -88,7 +88,7 @@ describe("SecurityEconHardening", function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
 
-      // Advance time past 912-day deploy idle timeout
+      // Advance time past 250-day deploy idle timeout
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.equal(true);
@@ -392,7 +392,7 @@ describe("SecurityEconHardening", function () {
   // FIX-08: FLIP ticket purchases revert within 30 days of liveness timeout
   // =========================================================================
   describe("FIX-08: FLIP ticket purchase cutoff", function () {
-    it("redeemFlip reverts after 882 days at level 0 (within 30 days of timeout)", async function () {
+    it("redeemFlip reverts after 220 days at level 0 (within 30 days of timeout)", async function () {
       const { game, alice } =
         await loadFixture(deployFullProtocol);
 
@@ -406,7 +406,7 @@ describe("SecurityEconHardening", function () {
         { value: eth(0.01) }
       );
 
-      // Advance time past the cutoff (882 days = 912 - 30)
+      // Advance time past the cutoff (220 days = 250 - 30)
       await advanceTime(COIN_PURCHASE_CUTOFF_LVL0 * DAY + DAY);
 
       // Past the liveness cutoff, redeemFlip reverts (the liveness gate fires

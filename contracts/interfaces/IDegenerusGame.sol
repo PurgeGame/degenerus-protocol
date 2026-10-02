@@ -50,7 +50,7 @@ interface IDegenerusGame {
     function gameOver() external view returns (bool);
 
     /// @notice Whether the liveness-timeout game-over trigger is currently active.
-    /// @dev Purchase phase: true past the purchase deadline (365 days at level 0, 30
+    /// @dev Purchase phase: true past the purchase deadline (250 days at level 0, 30
     ///      after) unless a pre-deadline VRF request is still inside its 14-day grace.
     ///      Jackpot / last-purchase: true only once no day has sealed for 30 days.
     function livenessTriggered() external view returns (bool);

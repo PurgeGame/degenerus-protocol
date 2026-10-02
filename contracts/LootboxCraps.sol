@@ -8,6 +8,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 ///      (DegenerusGame.sol:509) because the RNG lifecycle and shared word payload are
 ///      `internal` storage with no typed getter — the same escape hatch `DegenerusGameLens` uses.
 interface IGameSlotReader {
+    function rngWordForDay(uint24 day) external view returns (uint256);
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
     function extsload(bytes32 slot) external view returns (bytes32 value);
 }
@@ -52,6 +53,7 @@ contract LootboxCraps is Craps {
     ///      protocol's recorded DAILY word, retained separately from the shared live payload. Pinned
     ///      against the frozen tree exactly like those two, and covered by the same drift gate.
     uint256 internal constant RNG_WORD_BY_DAY_SLOT = 10;
+    uint256 internal constant RNG_DAY_TAGS_SLOT = 34;
 
     /// @notice Domain tag mixed into every craps seed.
     bytes32 internal constant _CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
@@ -84,7 +86,9 @@ contract LootboxCraps is Craps {
     ///      opened window directly; a day reserved ahead is seated before its word exists, which
     ///      is the reservation's whole point.
     function _dailyWordAt(uint24 day) internal view returns (uint256) {
-        return uint256(_extsload(bytes32(_hash2(day, RNG_WORD_BY_DAY_SLOT))));
+        uint256 tags = uint256(_extsload(bytes32(RNG_DAY_TAGS_SLOT)));
+        if (day == 0 || uint24(tags >> ((day & 1) * 24)) != day) return 0;
+        return uint256(_extsload(bytes32(_hash2(day & 1, RNG_WORD_BY_DAY_SLOT))));
     }
 
     /// @notice The protocol's day index right now — `GameTimeLib.currentDayIndexAt`, restated

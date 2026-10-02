@@ -42,8 +42,8 @@ async function lootboxNominalOf(gameAddress, player) {
   return boNominal(BigInt(raw), 0n);
 }
 
-// 365 days in seconds (deploy idle timeout for level 0, per _DEPLOY_IDLE_TIMEOUT_DAYS)
-const DEPLOY_TIMEOUT_SECONDS = 365 * 86400;
+// 250 days in seconds (deploy idle timeout for level 0, per _DEPLOY_IDLE_TIMEOUT_DAYS)
+const DEPLOY_TIMEOUT_SECONDS = 250 * 86400;
 // Daily boundary: days roll over at 22:57 UTC (GameTimeLib.JACKPOT_RESET_TIME), not midnight.
 const DAY_RESET_SECONDS = 82620;
 
@@ -84,7 +84,7 @@ describe("Distress-Mode Lootboxes", function () {
 
   /**
    * Advance time to just before distress mode.
-   * At level 0, distress triggers when currentDay >= purchaseStartDay + 365.
+   * At level 0, distress triggers when currentDay >= purchaseStartDay + 250.
    * Since the contract uses day-based granularity (days reset at 22:57 UTC),
    * we need a full-day buffer to ensure we land on the day before distress.
    */
@@ -103,24 +103,24 @@ describe("Distress-Mode Lootboxes", function () {
   }
 
   async function advanceToPreDistress(game) {
-    // Advance to 2 days before the 365-day timeout to ensure day index is below threshold
+    // Advance to 2 days before the 250-day timeout to ensure day index is below threshold
     await advanceTime(DEPLOY_TIMEOUT_SECONDS - 2 * 86400);
     await syncDailyIdx(game);
   }
 
   /**
    * Advance deterministically into distress mode.
-   * Distress is DAY-granular: _isDistressMode() is true once currentDay >= purchaseStartDay + 365,
+   * Distress is DAY-granular: _isDistressMode() is true once currentDay >= purchaseStartDay + 250,
    * where days roll over at 22:57 UTC (GameTimeLib). A fixed second-offset before the "timeout"
-   * lands on day psd+364 or psd+365 depending on the wall-clock time the fixture deploys at, which
-   * made this suite flaky by time-of-day. Instead advance a whole 365 days and re-center to mid-day:
-   * this lands squarely on the single distress day (psd+365) — 12h from either daily boundary, and
-   * short of the day-366 (> 365) liveness/game-over trigger — regardless of deploy time.
+   * lands on day psd+249 or psd+250 depending on the wall-clock time the fixture deploys at, which
+   * made this suite flaky by time-of-day. Instead advance a whole 250 days and re-center to mid-day:
+   * this lands squarely on the single distress day (psd+250) — 12h from either daily boundary, and
+   * short of the day-251 (> 250) liveness/game-over trigger — regardless of deploy time.
    */
   async function advanceToDistress(game) {
     const ts = await getBlockTimestamp();
     const intoDay = (ts - DAY_RESET_SECONDS) % 86400;
-    await advanceTime(365 * 86400 - intoDay + 43200);
+    await advanceTime(250 * 86400 - intoDay + 43200);
     await syncDailyIdx(game);
   }
 
@@ -207,7 +207,7 @@ describe("Distress-Mode Lootboxes", function () {
     it("purchase the day before distress uses normal split", async function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
-      // Day psd+363 — comfortably before the psd+365 distress threshold.
+      // Day psd+248 — comfortably before the psd+250 distress threshold.
       await advanceToPreDistress(game);
 
       const futureBefore = await game.futurePrizePoolView();
@@ -226,7 +226,7 @@ describe("Distress-Mode Lootboxes", function () {
     it("purchase on the first distress day uses distress split", async function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
-      // Day psd+365 — the first (and only) distress day before the liveness trigger.
+      // Day psd+250 — the first (and only) distress day before the liveness trigger.
       await advanceToDistress(game);
 
       const futureBefore = await game.futurePrizePoolView();

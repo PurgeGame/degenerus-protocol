@@ -154,6 +154,8 @@ contract RedemptionStethFallback is DeployProtocol {
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.prank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
+        vm.prank(address(game));
+        sdgnrs.beginRedemptionSettlement(uint24(dayToResolve), 99);
     }
 
     /// @dev THE load-bearing v47 REDEEM-08 solvency invariant under the fallback: sDGNRS's own

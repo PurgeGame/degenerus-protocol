@@ -8,6 +8,12 @@ const TRAIT_SLOT = 8n;
 const OWNER_SLOT = 67n;
 const LANE_MASK = 0xffffffffn;
 const TRAIT_BITMAP_SLOT = 76n;
+const QUEUE_LEVEL_SLOT = 78n;
+const queueStorageKey = (key) => {
+  const lvl = BigInt(key) & 0x3fffffn;
+  return (BigInt(key) & 0xc00000n) | (lvl === 0n ? 0n : (lvl - 1n) % 100n + 1n);
+};
+const ownerStorageKey = (lvl) => BigInt(lvl);
 
 const pad32 = (v) => hre.ethers.toBeHex(BigInt(v), 32);
 
@@ -24,7 +30,7 @@ function bucketLengthSlot(lvl, trait, traitSlot = TRAIT_SLOT) {
 }
 
 function ownerLengthSlot(lvl, ownerSlot = OWNER_SLOT) {
-  return mapSlot(lvl, ownerSlot);
+  return mapSlot(ownerStorageKey(lvl), ownerSlot);
 }
 
 function dataBase(lengthSlot) {
@@ -93,7 +99,8 @@ async function seedTicketQueue(addr, key, holders) {
     lanes.push(ownerCount);
   }
   await setStorage(addr, ownersLen, ownerCount);
-  const lengthSlot = mapSlot(key, 12n);
+  const lengthSlot = mapSlot(queueStorageKey(key), 12n);
+  await setStorage(addr, mapSlot(queueStorageKey(key), QUEUE_LEVEL_SLOT), lvl);
   await setStorage(addr, lengthSlot, BigInt(holders.length));
   const base = dataBase(lengthSlot);
   for (let w = 0; w * 8 < lanes.length; ++w) {
@@ -147,6 +154,8 @@ async function readTraitBucket(addr, lvl, trait, opts = {}) {
 }
 
 export {
+  queueStorageKey,
+  ownerStorageKey,
   TRAIT_SLOT,
   OWNER_SLOT,
   TRAIT_BITMAP_SLOT,

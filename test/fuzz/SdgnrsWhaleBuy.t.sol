@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -308,7 +310,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     function test_DirectEntry_CommittedWord_ReturnsZeroAndTouchesNothing() public {
         uint24 day = game.currentDayView();
         _prepareDirectEntry(4, 1_000 ether);
-        vm.store(address(game), keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT)), bytes32(uint256(0xC0FFEE)));
+        RecyclingState.seedDailyWord(address(game), uint24(day), uint256(0xC0FFEE));
         _injectWhaleBoon(ContractAddresses.SDGNRS, day, 3);
         uint256 before = _claimableOf(ContractAddresses.SDGNRS);
         uint256 boon0 = uint256(vm.load(address(game), _boonSlot0(ContractAddresses.SDGNRS)));
@@ -414,6 +416,8 @@ contract SdgnrsWhaleBuy is DeployProtocol {
 
     function _setLevel(uint24 lvl) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        uint24 previous = uint24(s0 >> (LEVEL_OFFBYTES * 8));
+        if (lvl > previous) TQ.retireCompleted(address(game), lvl + 1);
         s0 &= ~(uint256(0xFFFFFF) << (LEVEL_OFFBYTES * 8));
         s0 |= (uint256(lvl) & 0xFFFFFF) << (LEVEL_OFFBYTES * 8);
         vm.store(address(game), bytes32(uint256(0)), bytes32(s0));

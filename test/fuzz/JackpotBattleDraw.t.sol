@@ -21,7 +21,7 @@ contract JackpotBattleDrawHarness is DegenerusGameJackpotModule {
     }
 
     function queued(uint24 target) external view returns (address[] memory owners) {
-        uint256[] storage queue = ticketQueue[_tqFarFutureKey(target)];
+        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(target))];
         owners = new address[](queue.length);
         for (uint256 i; i < owners.length; ++i) owners[i] = _tqOwnerAt(queue, target, i);
     }

@@ -31,7 +31,7 @@ contract SnapValveHarness is MintBucketSeed {
         rngWordCurrent = uint256(keccak256("snapvalve_entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
 
         uint24 rk = _tqReadKey(lvl);
-        uint256[] storage queue = ticketQueue[rk];
+        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
 
         if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
@@ -94,12 +94,12 @@ contract SnapValveHarness is MintBucketSeed {
     }
 
     function queueLen(uint24 lvl) external view returns (uint256) {
-        return ticketQueue[_tqReadKey(lvl)].length;
+        return _ticketQueueLength(_tqReadKey(lvl));
     }
 
     function seedFarFutureQueue(uint24 lvl, uint256 n, uint32 owedEach, uint160 base) external {
         uint24 ffk = _tqFarFutureKey(lvl);
-        uint256[] storage queue = ticketQueue[ffk];
+        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(ffk)];
 
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));

@@ -14,13 +14,12 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
             uint80 packed = uint80(uint256(keccak256(abi.encode(salt, i))));
             lvlEntryOwner[5].push(EntryOwner(address(uint160(i + 1)), packed));
         }
-        foilDrainDay = 11;
-        foilLastResolveDay = 14;
+        foilGenerationDay = 0;
+        foilFirstDrawDay = 0;
         foilCursor = 1;
-        for (uint24 day = 11; day <= 14; ++day) {
-            if (day == 13) continue; // Include an empty day between populated ones.
+        for (uint24 day; day < 2; ++day) {
             for (uint256 i; i < 7; ++i) {
-                foilBuyers[day].push((uint256(i % 2 == 0 ? 5 : 6) << 160) | uint160(i + 1));
+                foilQueue[day].push((uint256(i % 2 == 0 ? 5 : 6) << 160) | uint160(i + 1));
             }
         }
         _setTicketBufferLevel(5);
@@ -29,8 +28,8 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
         deadTallyStage = stage;
         if (stage != 0) {
             deadTallyPos = uint32(count);
-            deadTallyFoilDay = 11;
-            deadTallyFoilIdx = 1;
+            deadTallyFoilDay = 1;
+            deadTallyFoilIdx = _foilReadKey() == 0 ? foilCursor : 0;
         }
     }
 
@@ -67,14 +66,14 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
             deadTallyPos = uint32(pos);
             stage = 1;
             // The foil walk starts at the drain's own low-water mark.
-            dd = foilDrainDay;
-            idx = foilCursor;
+            dd = 1;
+            idx = _foilReadKey() == 0 ? foilCursor : 0;
         }
 
         if (stage == 1) {
-            uint24 last = foilLastResolveDay;
+            uint24 last = 2;
             while (dd != 0 && dd <= last) {
-                uint256[] storage bucket = foilBuyers[dd];
+                uint256[] storage bucket = foilQueue[dd - 1];
                 uint256 n = bucket.length;
                 while (idx < n) {
                     if (units == 0) {
@@ -100,7 +99,7 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
                     --units;
                     ++dd;
                 }
-                idx = 0;
+                idx = dd <= 2 && dd - 1 == _foilReadKey() ? foilCursor : 0;
             }
             stage = 2;
         }

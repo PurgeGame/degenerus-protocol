@@ -93,7 +93,7 @@ contract ChunkHarness is MintBucketSeed {
             _queueEntriesScaled(p, lvl, entriesScaled, false);
         }
         uint24 ffk = _tqFarFutureKey(lvl);
-        require(ticketQueue[ffk].length == n, "fixture: every buyer sits on the far-future key");
+        require(_ticketQueueLength(ffk) == n, "fixture: every buyer sits on the far-future key");
         // The last-purchase request: lock taken, level bumped.
         level = lvl - 1;
         lastPurchaseDay = true;
@@ -145,7 +145,7 @@ contract ChunkHarness is MintBucketSeed {
     }
 
     function queueLength(uint24 key) external view returns (uint256) {
-        return ticketQueue[key].length;
+        return _ticketQueueLength(key);
     }
 
     function ffOwedOf(uint24 lvl, address p) external view returns (uint80) {

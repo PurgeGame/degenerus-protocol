@@ -58,7 +58,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         dailyIdx = day - 1;
         // A reachable large pool keeps the target unmet (_getNextPrizePool() is zero).
         levelPrizePool[lvl] = 100_000 ether;
-        rngWordByDay[day] = rngWord; // the last sealed day's word; the ending requests its own
+        _recordDailyRng(day, rngWord); // the last sealed day's word; the ending requests its own
 
         // lootbox entropy word the ticket batch reads at _lootboxWord(LR_INDEX-1).
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);

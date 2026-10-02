@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {Vm} from "forge-std/Vm.sol";
+import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -13,6 +14,7 @@ import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol
 ///      production entry points after the Game's runtime is restored.
 contract JackpotCommitmentSeeder is DegenerusGame {
     function seed(address attacker) external returns (uint256 salvagePosition) {
+        TQ.retireCompleted(address(this), 7);
         uint24 day = _simulatedDayIndex();
         level = 6;
         purchaseStartDay = day - 2;
@@ -31,8 +33,8 @@ contract JackpotCommitmentSeeder is DegenerusGame {
         levelPrizePool[6] = 30_000 ether; // 500 awards, requiring four real draw calls.
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = 200 ether;
-        rngWordByDay[day - 1] = 123456;
-        salvagePosition = ticketQueue[_tqFarFutureKey(9)].length;
+        _recordDailyRng(day - 1, 123456);
+        salvagePosition = _ticketQueueLength(_tqFarFutureKey(9));
         for (uint24 target = 9; target <= 106; target += 97) {
             _queueEntries(attacker, target, 400, false);
             for (uint256 i; i < 180; ++i) {
@@ -219,7 +221,8 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
     }
 
     function _compare(bool reserveWin) private {
-        uint256 word = 1;
+        // Zero and one are reserved callback values, so use a publishable VRF word.
+        uint256 word = 2;
         while (true) {
             uint256 battleWord = uint256(keccak256(abi.encode(word, uint24(7), keccak256("far-future-coin"))));
             bool wins = uint256(keccak256(abi.encode(battleWord, keccak256("CrapsHighReserveDraw"), uint256(slot)))) % 10 == 0;

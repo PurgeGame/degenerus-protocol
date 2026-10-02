@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -262,11 +263,11 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     }
 
     /// @dev Stage an empty foil bucket for `day` as the next to drain: foilCursor = 0 and
-    ///      foilDrainDay = foilLastResolveDay = day (slot 62, bytes 0 / 4 / 7), with no buyers
-    ///      in foilBuyers[day]. `day`'s word is sealed, so _foilDrainPending reads true and the
+    ///      foilGenerationDay = foilFirstDrawDay = day (slot 62, bytes 0 / 4 / 7), with no buyers
+    ///      in foilQueue[day]. `day`'s word is sealed, so _foilDrainPending reads true and the
     ///      drain walks the bucket (resolving nobody) and moves past it.
     function _stagePendingFoilBucket(uint24 day) internal {
-        require(uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), uint256(10))))) != 0, "harness: the day word must be sealed");
+        require(RecyclingState.dailyWord(address(game), uint24(day)) != 0, "harness: the day word must be sealed");
         uint256 s62 = uint256(vm.load(address(game), bytes32(uint256(62))));
         require(uint24(s62 >> 56) == 0, "harness: no foil may have been bought");
         s62 &= ~((uint256(1) << 80) - 1);
@@ -298,7 +299,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     /// @dev ticketQueue[key].length — the mapping sits at slot 12.
     function _queueLen(uint24 key) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(key), uint256(12)))));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)))));
     }
 
     /// @dev ticketWriteSlot — slot 0, byte 25.
@@ -316,14 +317,14 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         return (uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224) & 0xFF;
     }
 
-    /// @dev _foilDrainPending mirror: foilDrainDay / foilLastResolveDay (slot 62, bytes 4 and 7)
+    /// @dev _foilDrainPending mirror: foilGenerationDay / foilFirstDrawDay (slot 62, bytes 4 and 7)
     ///      against rngWordByDay (slot 10).
     function _foilPending() internal view returns (bool) {
         uint256 s62 = uint256(vm.load(address(game), bytes32(uint256(62))));
         uint24 dd = uint24(s62 >> 32);
         uint24 last = uint24(s62 >> 56);
         if (last == 0 || dd > last) return false;
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(dd), uint256(10))))) != 0;
+        return RecyclingState.dailyWord(address(game), uint24(dd)) != 0;
     }
 
 }

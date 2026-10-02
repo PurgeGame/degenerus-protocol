@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
+import {TicketQueueStorage as TQ} from "./TicketQueueStorage.sol";
 import {BucketSeed} from "../../helpers/BucketSeed.sol";
 
 /// @dev Etch overlay to seed an exact dead-VRF terminal state; every measured call still runs
@@ -10,6 +11,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
     function seedEarlyBirdPasses(uint256 halves) external { earlyBirdWhalePasses = halves; }
     function pendingEarlyBirdPasses() external view returns (uint256) { return earlyBirdWhalePasses; }
     function seedDeadStall(uint24 lvl) external {
+        TQ.retireCompleted(address(this), lvl);
         uint24 day = _simulatedDayIndex();
         purchaseStartDay = day - 10;
         dailyIdx = day - 15;
@@ -44,10 +46,9 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         EntryOwner[] storage owners = lvlEntryOwner[lvl];
         uint256 ownerIdx = owners.length;
         owners.push(EntryOwner(player, 0));
-        foilBuyers[resolveDay].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
-        index = foilBuyers[resolveDay].length - 1;
-        if (resolveDay > foilLastResolveDay) foilLastResolveDay = resolveDay;
-        if (foilDrainDay == 0 || foilDrainDay > resolveDay) foilDrainDay = resolveDay;
+        foilQueue[resolveDay & 1].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
+        index = foilQueue[resolveDay & 1].length - 1;
+
     }
 
     function deadState()
@@ -79,7 +80,8 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         _setRngRequestActive(true);
         _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp - 30 days) & ~uint48(1);
-        rngWordByDay[s] = applied ? word : 0;
+        _recordDailyRng(s, applied ? word : 0);
+        if (applied) coinflip.processCoinflipPayouts(0, word, s);
         ticketsFullyProcessed = true;
         prizePoolFrozen = false;
         // The stuck request's reserved lootbox index, not yet worded.
@@ -94,6 +96,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
     /// @dev Past the purchase deadline at the start of a caught-up day with no word, VRF alive.
     ///      A mid-day request committed the read side and its lootbox word has landed.
     function seedDeadlineWithLandedCohort(uint24 lvl, uint256 boxWord) external {
+        TQ.retireCompleted(address(this), lvl);
         uint24 day = _simulatedDayIndex();
         purchaseStartDay = day - 31;
         dailyIdx = day - 1;
@@ -115,8 +118,8 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
 
     function terminalQueues(uint24 lvl) external view returns (uint256 readLen, uint256 writeLen, uint256 swapped) {
         return (
-            ticketQueue[_tqReadKey(lvl)].length,
-            ticketQueue[_tqWriteKey(lvl)].length,
+            _ticketQueueLength(_tqReadKey(lvl)),
+            _ticketQueueLength(_tqWriteKey(lvl)),
             _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK)
         );
     }

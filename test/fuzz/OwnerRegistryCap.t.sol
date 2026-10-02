@@ -19,7 +19,7 @@ contract RegistryCapHarness is DegenerusGameMintModule {
     // the double buffer these tests read via _tqWriteKey, not the far-future key space.
     function setLevel(uint24 lvl) external { level = lvl; }
     function ownerCount(uint24 lvl) external view returns (uint256) { return lvlEntryOwner[lvl].length; }
-    function queueLen(uint24 lvl) external view returns (uint256) { return ticketQueue[_tqWriteKey(lvl)].length; }
+    function queueLen(uint24 lvl) external view returns (uint256) { return _ticketQueueLength(_tqWriteKey(lvl)); }
     function owedOf(uint24 lvl, address p) external view returns (uint80) { return _entriesOwed(_tqWriteKey(lvl), p); }
     function entries(address p, uint24 lvl, uint32 n, bool crank) external { _queueEntries(p, lvl, n, crank); }
     function scaled(address p, uint24 lvl, uint32 n, bool crank) external { _queueEntriesScaled(p, lvl, n, crank); }

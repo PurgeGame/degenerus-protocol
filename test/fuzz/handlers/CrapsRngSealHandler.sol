@@ -1206,7 +1206,7 @@ contract CrapsRngSealHandler is Test {
     // --- authoritative slot reads ----------------------------------------------
 
     function _rngWordByDay(uint24 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {

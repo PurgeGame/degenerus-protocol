@@ -27,7 +27,7 @@ contract AdvanceHarness is DegenerusGameAdvanceModule {
     }
 
     function getQueueLength(uint24 key) external view returns (uint256) {
-        return ticketQueue[key].length;
+        return _ticketQueueLength(key);
     }
 
     // --- Key helpers ---
@@ -85,7 +85,7 @@ contract AdvanceHarness is DegenerusGameAdvanceModule {
     function simulateDrainGate(uint24 purchaseLevel) external returns (bool shouldBounce, bool proceeded) {
         if (!ticketsFullyProcessed) {
             uint24 rk = _tqReadKey(purchaseLevel);
-            if (ticketQueue[rk].length > 0) {
+            if (_ticketQueueLength(rk) > 0) {
                 // Read slot has entries -- would call _runProcessTicketBatch and bounce
                 return (true, false);
             }

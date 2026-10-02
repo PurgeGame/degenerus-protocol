@@ -6,6 +6,17 @@ import {Vm} from "forge-std/Vm.sol";
 /// Layout numbers are pinned by the storage-layout oracle, not inferred from old mappings.
 library RecyclingState {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    function seedDailyWord(address host, uint24 day, uint256 value) internal {
+        uint256 shift = (day & 1) * 24;
+        uint256 tags = uint256(vm.load(host, bytes32(uint256(34))));
+        vm.store(host, bytes32(uint256(34)), bytes32((tags & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift)));
+        vm.store(host, keccak256(abi.encode(uint256(day & 1), uint256(10))), bytes32(value));
+    }
+    function dailyWord(address host, uint24 day) internal view returns (uint256) {
+        uint256 tags = uint256(vm.load(host, bytes32(uint256(34))));
+        if (day == 0 || uint24(tags >> ((day & 1) * 24)) != day) return 0;
+        return uint256(vm.load(host, keccak256(abi.encode(uint256(day & 1), uint256(10)))));
+    }
     function writeBuffer(address host) internal view returns (uint48) { return uint48((uint256(vm.load(host, bytes32(0))) >> 252) & 1); }
     function readBuffer(address host) internal view returns (uint48) { return writeBuffer(host) ^ 1; }
     function seedWriteBuffer(address host, uint48 buffer) internal {

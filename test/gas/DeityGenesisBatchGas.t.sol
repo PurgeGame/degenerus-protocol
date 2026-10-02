@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 contract GenesisQueueSeeder is DegenerusGameStorage {
+    function setLevel(uint24 lvl) external { level = lvl; }
     function queue(address owner, uint24 lvl, uint32 entries) external {
         _queueEntries(owner, lvl, entries, false);
     }
@@ -36,9 +38,9 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
         (, bytes32[] memory writes) = vm.accesses(address(game));
         for (uint24 lvl = 1; lvl <= 100; ++lvl) {
             uint24 key = _genesisKey(lvl);
-            bytes32 lengthSlot = keccak256(abi.encode(uint256(key), uint256(12)));
+            bytes32 lengthSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)));
             bytes32 wordSlot = keccak256(abi.encode(lengthSlot));
-            bytes32 ownerLengthSlot = keccak256(abi.encode(uint256(lvl), uint256(67)));
+            bytes32 ownerLengthSlot = keccak256(abi.encode(uint256(RingStorage.ownerKey(uint24(lvl))), uint256(67)));
             bytes32 firstRecord = keccak256(abi.encode(ownerLengthSlot));
             bytes32 secondRecord = bytes32(uint256(firstRecord) + 1);
             uint256 lengthWrites;
@@ -88,13 +90,24 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
             assertEq(uint32(TQ.owed(address(game), key, address(vault)) >> 8),
                 lvl == 6 || lvl == 7 ? 16 : 4);
             assertEq(uint32(TQ.owed(address(game), key, address(sdgnrs)) >> 8), lvl == 6 ? 12 : 4);
-            bytes32 lengthSlot = keccak256(abi.encode(uint256(key), uint256(12)));
+            bytes32 lengthSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)));
             assertEq(uint256(vm.load(address(game), lengthSlot)), lvl == 1 ? 9 : 2);
         }
         for (uint160 i = 1; i <= 7; ++i) {
             assertEq(uint32(TQ.owed(address(game), 1, address(1000 + i)) >> 8), i * 4);
         }
         assertEq(uint8(TQ.owed(address(game), farSix, address(vault))), 37, "fractional entries survive");
+    }
+
+    function testGenesisCannotSeedExpiredLevelsAfterAdvancement() public {
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(GenesisQueueSeeder).runtimeCode);
+        GenesisQueueSeeder(address(game)).setLevel(1);
+        vm.etch(address(game), original);
+        vm.expectRevert(DegenerusGameStorage.E.selector);
+        game.initProtocolDeity();
+        assertEq(deityPass.balanceOf(address(vault)), 0);
+        assertEq(deityPass.balanceOf(address(sdgnrs)), 0);
     }
 
     function testOnlyCreatorCanInitializeAndRegistrationPreventsRepeats() public {

@@ -53,8 +53,6 @@ OWNER	deityBySymbol	modules/DegenerusGameWhaleModule.sol	_registerDeity records 
 OWNER	deityPassPricePaid	modules/DegenerusGameWhaleModule.sol	purchaseDeityPass records the price paid (caps the early-gameover refund); plain assignment, one pass per buyer
 OWNER	degeneretteRecordBounty	modules/DegenerusGameDegeneretteModule.sol	_placeDegeneretteBetCore writes the armed record bounty beside the queued bet; _resolveBet reads and deletes it once; sole writer
 OWNER	foilCursor	modules/DegenerusGameFoilPackModule.sol	_processFoilDrain persists the per-bucket resume position on budget deferral and zeroes when caught up; sole writer
-OWNER	foilDrainDay	modules/DegenerusGameFoilPackModule.sol	buyFoilPack skips the low-water cursor forward when the drain is caught up; _processFoilDrain advances it; both foil-module, monotone
-OWNER	foilLastResolveDay	modules/DegenerusGameFoilPackModule.sol	buyFoilPack raises the high-water mark; sole writer
 OWNER	foilMatchClaimed	modules/DegenerusGameFoilPackModule.sol	claim/_tryClaimFoilMatch/_pushFoilGrand set the one-shot per-pack marker before payout (CEI); sole writer
 OWNER	_fundingSourceOf	modules/GameAfkingModule.sol	subscribe upserts/deletes the sparse external-funder map with FLAG_EXTERNAL_FUNDING; sole writer
 OWNER	gameOver	modules/DegenerusGameGameOverModule.sol	handleGameOverDrain latches terminal state; sole writer, one-way
@@ -106,7 +104,6 @@ OWNER	purchaseStartDay	modules/DegenerusGameAdvanceModule.sol	advanceGame stamps
 OWNER	rngLockedFlag	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest/_gameOverEntropy take the lock, _unlockRng releases; sole writer
 OWNER	rngRequestTime	modules/DegenerusGameAdvanceModule.sol	requestLootboxRng/_finalizeRngRequest stamp fresh requests (LSB = daily retry-spent); unlock retains timestamp
 OWNER	rngRequestTime	modules/DegenerusGameGameOverModule.sol	updateVrfCoordinatorAndSub re-arms the timer when it re-issues an in-flight request on the new coordinator (governance rotation); clears the retry LSB deliberately
-OWNER	rngWordByDay	modules/DegenerusGameRngUtils.sol	_applyDailyRng records the sealed day's word; _backfillGapDays derives words for stall days; sole writer
 OWNER	rngWordCurrent	modules/DegenerusGameAdvanceModule.sol	Normal fresh request/retry sets the nonzero waiting sentinel; daily unlock retains the read payload.
 OWNER	_sdgnrsBonusLevel	modules/GameAfkingModule.sol	processSubscriberStage latches the level at which SDGNRS's bonus box fired; sole writer
 OWNER	snapLevel	DegenerusGame.sol	setThanosLevel declares the pending (level, shift) pair; the advance module consumes it at promotion
@@ -164,3 +161,10 @@ HELPER	boxCursor	storage/DegenerusGameStorage.sol	Fresh seal resets the cursor a
 HELPER	humanReadComplete	storage/DegenerusGameStorage.sol	Initial idle true, fresh seals false; only box/bet worker completes the read.
 OWNER	humanReadComplete	modules/DegenerusGameLootboxModule.sol	True only after every box, presale leg and bet in the current read completes.
 HELPER	traitBucketLive	storage/DegenerusGameStorage.sol	Parity takeover clears validity; append helpers set a trait bit when initializing its header tail.
+OWNER	foilCursor	modules/DegenerusGameRngUtils.sol	reset cursor when swapping frozen cohorts
+HELPER	rngWordByDay	storage/DegenerusGameStorage.sol	advance helpers record parity word and tag together
+HELPER	rngDayTags	storage/DegenerusGameStorage.sol	paired tag authenticates payload
+OWNER	foilGenerationDay	modules/DegenerusGameRngUtils.sol	cohort generation stamps reset on swap and pinned on materialization
+OWNER	foilGenerationDay	modules/DegenerusGameFoilPackModule.sol	cohort generation stamps reset on swap and pinned on materialization
+OWNER	foilFirstDrawDay	modules/DegenerusGameRngUtils.sol	cohort generation stamps reset on swap and pinned on materialization
+OWNER	foilFirstDrawDay	modules/DegenerusGameFoilPackModule.sol	cohort generation stamps reset on swap and pinned on materialization

@@ -417,7 +417,8 @@ interface IDegenerusGameLootboxModule {
 
     /// @notice Permissionless multi-index human-box auto-open sweep (the human leg of
     ///         openBoxes AND of mineFlip's open category). Runs in the Game's storage via delegatecall.
-    /// @param budget Walk budget in open-weight units (~4.7k gas each)
+    /// @param budget Walk budget in open-weight units (~4.7k gas each); internal bit 255
+    ///        requests strict admission and a packed charge/credit result (upper/lower 128 bits).
     /// @return opened Total boxes opened this call
     /// @return unitsSpent Walk units consumed — the crank's work-based bounty basis
     function openHumanBoxes(uint256 budget)
@@ -473,13 +474,13 @@ interface IDegenerusGameLootboxModule {
     ///         frozen-day word.
     /// @dev The LIVE-level twin of resolveLootboxDirect — the box rolls from the LIVE level
     ///      and the EV-cap RMW is the single draw at open, with two deviations:
-    ///      the word is a caller-passed param (rngWordByDay[stamp day]) and the seed
+    ///      the word is a caller-passed param (_recordedDailyWord(stamp day)) and the seed
     ///      `day` is the FROZEN stamped process day. Called by the GameAfkingModule
     ///      open-leg.
     /// @param player Box owner (resolved from the subscription)
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend)
     /// @param day The boundary-pinned process day stamped at process (frozen seed input)
-    /// @param rngWord The frozen stamp day's word rngWordByDay[day], passed by the caller
+    /// @param rngWord The frozen stamp day's word _recordedDailyWord(day), passed by the caller
     /// @param activityScore The stamped activity score in whole points (the frozen EV input)
     function resolveAfkingBox(
         address player,
@@ -873,13 +874,12 @@ interface IDegenerusGameFoilPackModule {
         uint8[] calldata ticketIndexes
     ) external;
 
-    /// @notice Drain the per-buy-day foil buckets on the leftover write budget.
-    /// @dev Delegatecall target invoked by the mint module's processTicketBatch once
-    ///      the normal queue is drained (and only when a sealed foil bucket is pending);
-    ///      walks foilDrainDay forward, deriving each buyer's boosted lines from the
-    ///      bucket's daily word and filing them into the jackpot trait buckets.
+    /// @notice Materialize the frozen foil read cohort on the leftover write budget.
+    /// @dev Invoked by processTicketBatch after the normal queue drains. The committed
+    ///      normal cohort word generates each pack's boosted lines, which are stored
+    ///      in its record and filed into the jackpot trait buckets.
     /// @param room The leftover write budget for this batch.
-    /// @return done True iff the foil drain has caught up (no sealed bucket remains).
+    /// @return done True iff the frozen foil read cohort is fully consumed.
     /// @return drained True if this call resolved at least one foil buyer.
     function processFoilDrain(uint32 room)
         external

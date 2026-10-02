@@ -18,28 +18,28 @@ contract TicketQueueCodecHarness is DegenerusGameStorage {
     function append(uint24 key, uint32 pos) external { _tqAppend(key, pos); }
     function appendLanes(uint24 key, uint256 lanes, uint256 count) external { _tqAppendLanes(key, lanes, count); }
     function position(uint24 key, uint256 k) external view returns (uint32) {
-        require(k < ticketQueue[key].length);
-        return _tqPositionAt(ticketQueue[key], k);
+        require(k < _ticketQueueLength(key));
+        return _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], k);
     }
     function owner(uint24 key, uint24 lvl, uint256 k) external view returns (address) {
-        require(k < ticketQueue[key].length);
-        return _tqOwnerAt(ticketQueue[key], lvl, k);
+        require(k < _ticketQueueLength(key));
+        return _tqOwnerAt(ticketQueue[_ticketQueueStorageKey(key)], lvl, k);
     }
-    function length(uint24 key) external view returns (uint256) { return ticketQueue[key].length; }
+    function length(uint24 key) external view returns (uint256) { return _ticketQueueLength(key); }
     function remove(uint24 key, uint256 k) external {
-        require(k < ticketQueue[key].length);
-        _tqSwapPop(ticketQueue[key], k);
+        require(k < _ticketQueueLength(key));
+        _tqSwapPop(ticketQueue[_ticketQueueStorageKey(key)], k);
     }
     function release(uint24 key) external { _releaseTicketQueue(key); }
     function word(uint24 key, uint256 w) external view returns (uint256 value) {
-        uint256[] storage q = ticketQueue[key];
+        uint256[] storage q = ticketQueue[_ticketQueueStorageKey(key)];
         assembly ("memory-safe") {
             mstore(0, q.slot)
             value := sload(add(keccak256(0, 32), w))
         }
     }
     function seedWord(uint24 key, uint256 value) external {
-        uint256[] storage q = ticketQueue[key];
+        uint256[] storage q = _bindTicketQueue(key);
         assembly ("memory-safe") {
             sstore(q.slot, 8)
             mstore(0, q.slot)

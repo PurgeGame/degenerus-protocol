@@ -370,7 +370,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         // draw. An isolated early pool (latch 2) was frozen before its own request and
         // leaves the ordinary read buffer free, so it can retain turbo and swap on retry.
         if (
-            !inJackpot && !lastPurchaseDay && !locked && day == wallDay && day >= psd && rngWordByDay[day] == 0
+            !inJackpot && !lastPurchaseDay && !locked && day == wallDay && day >= psd && _recordedDailyWord(day) == 0
                 && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 1
         ) {
             uint32 purchaseDays = day - psd;
@@ -436,7 +436,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                     // Commit unconditionally: the outer gate already proved there was
                     // work to attempt, and every outcome the worker can return carries
                     // progress worth keeping. A finished walk that resolved no buyers
-                    // still advanced foilDrainDay past a drained-empty bucket — reverting
+                    // still advanced foilGenerationDay past a drained-empty bucket — reverting
                     // that write would roll the cursor back onto the same bucket, leaving
                     // _foilDrainPending (and so _advanceDue) true and re-entering this
                     // branch on every call until the day boundary resets the latch.
@@ -559,7 +559,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // Otherwise _requestRng's refusal rolls this latch back and the router
             // keeps selecting advance instead of the consumers that release the gate.
             // Cached daily words and outstanding retries retain their existing path.
-            if (!locked && !_rngRequestActive() && rngWordByDay[day] == 0 && !_lootboxReadComplete()) {
+            if (!locked && !_rngRequestActive() && _recordedDailyWord(day) == 0 && !_lootboxReadComplete()) {
                 stage = STAGE_READ_WAIT;
                 break;
             }
@@ -575,9 +575,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // end; then fall through to rngGate.
             //
             // The STAGE runs strictly pre-RNG (before rngGate writes the day's word), so
-            // rngWordByDay[processDay] is uncommitted when a sub is stamped — the
+            // _recordedDailyWord(processDay) is uncommitted when a sub is stamped — the
             // load-bearing freeze property. The box reads the LIVE level +
-            // rngWordByDay[lastAutoBoughtDay] at open.
+            // _recordedDailyWord(lastAutoBoughtDay) at open.
             //
             // Forward-looking per-day reset: the first UNLOCKED advance entry of a new
             // `day` flips the drain gate + cursor BEFORE that day's STAGE runs (locked
@@ -599,13 +599,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // per-tx gas ceiling — at ANY subscriber cap. The stamp-before-request
             // ordering is untouched: an unlocked advance walks the stage to completion
             // and only then reaches rngGate to fire the day's request.
-            // Committed-word gate: the STAGE also never runs once rngWordByDay[day] holds
+            // Committed-word gate: the STAGE also never runs once _recordedDailyWord(day) holds
             // a word. After a VRF stall the fulfil crank backfills every gap day's word and
             // records the wall day's, and the RNGREUSE re-walk then enters those days with
             // the lock already down — unlocked, yet holding a public word. The stamp must
             // precede the word, so the block keys on both: lock down AND word uncommitted.
             // A normal day is untouched (its word is written by rngGate, after this block).
-            if (!locked && rngWordByDay[day] == 0) {
+            if (!locked && _recordedDailyWord(day) == 0) {
                 if (_afkingResetDay != day) {
                     _afkingResetDay = day;
                     subsFullyProcessed = false;
@@ -641,7 +641,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 || (!inJackpot && (jackpotFlags & TURBO_BONUS_PENDING) != 0);
             uint24 bonusLvl = (jackpotFlags == (JACKPOT_TURBO | TURBO_BONUS_PENDING) && locked) ? lvl - 1 : lvl;
             uint8 coinflipBonus = bonusDay ? (bonusLvl != 0 && bonusLvl % 10 == 0 ? 6 : 2) : 0;
-            bool freshDayWord = rngWordByDay[day] == 0;
+            bool freshDayWord = _recordedDailyWord(day) == 0;
             (uint256 rngWord, uint32 gapDays) = rngGate(ts, day, purchaseLevel, lastPurchase, coinflipBonus, dIdx);
             psd += uint24(gapDays);
             if (rngWord == 1) {
@@ -662,7 +662,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // if rngGate just backfilled a gap (gapDays != 0), defer everything downstream (the
             // phase transition + the up-to-305-winner daily jackpot) to the next advance so the
             // backfill and the jackpot never execute in one tx (each stays under the per-tx gas
-            // ceiling). rngGate is idempotent (rngWordByDay[day] is now set -> gapDays == 0 next
+            // ceiling). rngGate is idempotent (_recordedDailyWord(day) is now set -> gapDays == 0 next
             // call) and dailyIdx sits at the wall day minus one (no _unlockRng reached), so
             // advanceDue() stays true and the next advance pays the jackpot with the same frozen
             // word. The break
@@ -931,7 +931,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///      accumulated gas-weight reaches SUB_STAGE_WEIGHT_BUDGET; it persists _subCursor
     ///      itself. The STAGE caller decides drained-vs-partial by re-reading _subCursor against
     ///      _subscribers.length. No per-day epoch is written — the box reads the LIVE level +
-    ///      rngWordByDay[day] at open.
+    ///      _recordedDailyWord(day) at open.
     /// @param processDay The boundary-pinned process day (seeds the open).
     function _runSubscriberStage(uint24 processDay) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE
@@ -1288,7 +1288,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         // Block only in the final minute before reset to avoid competing with daily jackpot RNG flow.
         if ((nowTs - 82_620) % 1 days >= 1 days - 1 minutes) revert PreResetWindow();
         // Block until today's daily RNG has been consumed and recorded.
-        if (rngWordByDay[currentDay] == 0) revert RngNotReady();
+        if (_recordedDailyWord(currentDay) == 0) revert RngNotReady();
 
         // A closed craps window registered on the write buffer is pending work for this
         // request. Read once: it picks the LINK reserve here and waives the pending-value
@@ -1344,7 +1344,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         // its chain drains BEFORE the final draw. The word still serves the
         // pending lootboxes.
         bool activated = _activateNextTickets();
-        if (activated && ticketQueue[_tqFarFutureKey(earlyTicketLevel)].length != 0) {
+        if (activated && _ticketQueueLength(_tqFarFutureKey(earlyTicketLevel)) != 0) {
             ticketsFullyProcessed = false;
             _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, MID_DAY_FUTURE_POOL);
         } else {
@@ -1359,11 +1359,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             bool lastSwapAhead = (lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) != 0)
                 || (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags));
             if (!lastSwapAhead) {
-                bool queuedWork;
+                bool queuedWork = foilQueue[_foilWriteKey()].length != 0;
                 uint24 t = level;
                 uint24 end = _mintCeiling();
                 for (; t <= end;) {
-                    if (ticketQueue[_tqWriteKey(t)].length > 0) {
+                    if (_ticketQueueLength(_tqWriteKey(t)) > 0) {
                         queuedWork = true;
                         break;
                     }
@@ -1426,7 +1426,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         returns (uint256 word, uint32 gapDays)
     {
         // Already recorded for today
-        uint256 recordedWord = rngWordByDay[day];
+        uint256 recordedWord = _recordedDailyWord(day);
         if (recordedWord != 0) return (recordedWord, 0);
 
         uint256 currentWord = _currentRngWord();
@@ -1434,13 +1434,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         // Have a fresh VRF word ready
         if (currentWord != 0 && _rngRequestActive()) {
             // Backfill gap days from VRF stall before processing current day.
-            // Gated on rngWordByDay[idx + 1] == 0 so the backfill runs at most once per
+            // Gated on dailyIdx so compact gap settlement runs at most once per
             // lock window; the branch also moves dailyIdx past the gap, so a later
             // wall-clock day cannot re-enter it and re-process the same range.
             // dIdx == dailyIdx here (caller cached it; nothing writes it before this
             // branch), so reuse it instead of re-SLOADing the slot-0 field.
             uint24 idx = dIdx;
-            if (day > idx + 1 && rngWordByDay[idx + 1] == 0) {
+            if (day > idx + 1) {
                 uint24 gapCount = day - idx - 1;
                 _backfillGapDays(_rawDailyRngWord(currentWord), idx + 1, day);
 
@@ -1449,7 +1449,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 purchaseStartDay += gapCount;
                 gapDays = gapCount;
                 // The stalled days are over. Their coinflips settled above and anything
-                // bought for them resolves against the derived words; they get no daily
+                // bought during the stall joins the committed cohort; gap days get no daily
                 // draw and no seal. Processing resumes at the wall day, under the lock
                 // this request still holds.
                 dailyIdx = day - 1;
@@ -1791,12 +1791,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             uint24 t = purchaseLevel == 0 ? 0 : purchaseLevel - 1;
             uint24 end = _mintCeiling();
             for (; t <= end; ++t) {
-                if (ticketQueue[_tqReadKey(t)].length > 0) {
+                if (_ticketQueueLength(_tqReadKey(t)) > 0) {
                     return (t, true);
                 }
             }
             // A latched last purchase day's frozen next-level pool drains inside the sweep.
-            if (_frozenPoolDue() && ticketQueue[_tqFarFutureKey(end)].length > 0) {
+            if (_frozenPoolDue() && _ticketQueueLength(_tqFarFutureKey(end)) > 0) {
                 return (end, true);
             }
         }
@@ -2036,7 +2036,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///      re-walked).
     function _afKingSubDraw(uint24 day) private {
         uint256 len = _subscribers.length;
-        uint256 word = rngWordByDay[day];
+        uint256 word = _recordedDailyWord(day);
         if (len < 2 || word == 0) return;
         uint256 idx = 1 + (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1));
         address winner = _subscribers[idx];

@@ -85,7 +85,7 @@ contract TicketBatchStageHarness is MintBucketSeed {
         rngWordCurrent = uint256(keccak256("367_ticketbatch_entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
 
         uint24 rk = _tqReadKey(lvl);
-        uint256[] storage queue = ticketQueue[rk];
+        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
 
         if (lvlEntryOwner[lvl].length == 0) lvlEntryOwner[lvl].push(EntryOwner(address(1), 0));
         for (uint256 i; i < n; ++i) {
@@ -119,7 +119,7 @@ contract TicketBatchStageHarness is MintBucketSeed {
     }
 
     function queueLen(uint24 lvl) external view returns (uint256) {
-        return ticketQueue[_tqReadKey(lvl)].length;
+        return _ticketQueueLength(_tqReadKey(lvl));
     }
 
     function cursor() external view returns (uint256) {

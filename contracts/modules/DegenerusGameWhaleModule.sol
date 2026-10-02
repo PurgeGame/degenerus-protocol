@@ -50,10 +50,10 @@ interface ICrapsPassCredit {
  */
 contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @notice Register both protocol deities and batch their first 100 perpetual tickets.
-    /// @dev One creator transaction after deployment; registration rejects a repeated grant.
+    /// @dev One creator transaction at level zero after deployment; registration rejects a repeated grant.
     function initProtocolDeity() external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (msg.sender != ContractAddresses.CREATOR) revert E();
+        if (msg.sender != ContractAddresses.CREATOR || level != 0) revert E();
         _registerDeity(ContractAddresses.VAULT, VAULT_DEITY_SYMBOL);
         _registerDeity(ContractAddresses.SDGNRS, SDGNRS_DEITY_SYMBOL);
         _latchConstructionSeat(ContractAddresses.VAULT);
@@ -333,7 +333,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      */
     function purchaseWhalePassForSdgnrs(uint24 processDay) external returns (uint256 paidPasses) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (rngLockedFlag || rngWordByDay[processDay] != 0) return 0;
+        if (rngLockedFlag || _recordedDailyWord(processDay) != 0) return 0;
         if (_livenessTriggered()) return 0;
 
         uint24 passLevel = level + 1;
@@ -349,8 +349,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (groups == 0) return 0;
         if (_lootboxEntryRefusesPass(ContractAddresses.SDGNRS)) return 0;
 
-        paidPasses = groups * WHALE_BULK_BONUS_DIVISOR;
-        uint256 totalPrice = firstPrice + restPrice * (paidPasses - 1);
+        uint256 totalPrice;
+        // The group cap bounds paidPasses to 5..100 and both unit prices to at most 4 ETH.
+        unchecked {
+            paidPasses = groups * WHALE_BULK_BONUS_DIVISOR;
+            totalPrice = firstPrice + restPrice * (paidPasses - 1);
+        }
         _deliverWhalePass(
             ContractAddresses.SDGNRS, passLevel, paidPasses, totalPrice, 0, hasValidBoon, s0, bytes32(0)
         );
@@ -1040,8 +1044,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         uint256 lanes;
         uint256 count;
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < 2; ) {
             address buyer = i == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
+            // The loop condition bounds i below two; the body uses only buyer afterward.
+            unchecked { ++i; }
             uint80 packed = _entriesOwed(key, buyer);
             if (packed != 0) {
                 uint32 owed = uint32(packed >> 8) + DEITY_PERPETUAL_ENTRIES;
@@ -1050,20 +1056,42 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 continue;
             }
             if (ownerCount >= type(uint32).max - 1) revert E();
-            uint32 pos = uint32(ownerCount + 1);
-            uint256 record = uint256(uint160(buyer)) | (
-                ((uint256(pos) << OWNER_IDX_SHIFT) | (uint256(DEITY_PERPETUAL_ENTRIES) << 8)) << 160
-            );
-            assembly ("memory-safe") { sstore(add(records, ownerCount), record) }
+            uint32 pos;
+            // The capacity guard bounds the owner counter below uint32.max - 1.
+            unchecked { pos = uint32(ownerCount + 1); }
+            // Canonical fixed buyer and capacity-bounded pos fit their existing fields.
+            assembly ("memory-safe") {
+                let owed := or(shl(OWNER_IDX_SHIFT, pos), shl(8, DEITY_PERPETUAL_ENTRIES))
+                sstore(add(records, ownerCount), or(buyer, shl(160, owed)))
+            }
             emit EntryOwnerRegistered(lvl, uint32(ownerCount), buyer);
-            ++ownerCount;
-            entryOwnerPosition[key][buyer] = pos;
-            lanes |= uint256(pos) << (count * 32);
-            ++count;
+            unchecked { ++ownerCount; }
+            // Each mapping value has its own word. Both fixed buyer addresses and
+            // the capacity-bounded uint32 position are canonical; no packed neighbour exists.
+            assembly ("memory-safe") {
+                mstore(0, key)
+                mstore(32, entryOwnerPosition.slot)
+                mstore(32, keccak256(0, 64))
+                mstore(0, buyer)
+                sstore(keccak256(0, 64), pos)
+            }
+            // count is at most one here, so the lane shift is zero or 32.
+            assembly ("memory-safe") { lanes := or(lanes, shl(shl(5, count), pos)) }
+            // At most the two genesis wallets contribute lanes.
+            unchecked { ++count; }
         }
         if (count != 0) {
             assembly ("memory-safe") { sstore(owners.slot, ownerCount) }
-            _tqAppendLanes(key, lanes, count);
+            // Initialization is restricted to level zero. All reachable targets
+            // are in 1..100, so these first-century roots cannot have been reused.
+            uint256[] storage q;
+            // key is canonical: the genesis loop supplies 1..100 plus queue flags.
+            assembly ("memory-safe") {
+                mstore(0, key)
+                mstore(32, ticketQueue.slot)
+                q.slot := keccak256(0, 64)
+            }
+            _tqAppendLanesBound(q, lanes, count);
         }
     }
 
@@ -1073,7 +1101,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint24 startLevel
     ) private pure returns (uint256 total) {
         for (uint24 i = 0; i < LAZY_PASS_LEVELS; ) {
-            total += PriceLookupLib.priceForLevel(startLevel + i);
+            uint256 price = PriceLookupLib.priceForLevel(startLevel + i);
+            // Ten prices of at most 0.24 ETH sum to at most 2.4 ETH.
+            unchecked { total += price; }
             unchecked {
                 ++i;
             }
@@ -1307,8 +1337,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     goldOnly = true;
                 }
                 if (gold || !goldOnly) {
-                    candidates |= uint256(trait) << (count * 8);
-                    ++count;
+                    // At most four quadrant candidates: count < 4 and each trait is one byte.
+                    assembly ("memory-safe") {
+                        candidates := or(candidates, shl(shl(3, count), and(trait, 0xff)))
+                        count := add(count, 1)
+                    }
                 }
             }
             if (count != 0) {

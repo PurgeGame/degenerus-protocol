@@ -64,7 +64,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         subsFullyProcessed = true;
         _afkingResetDay = day;
         rngWordCurrent = s.word < 2 ? RNG_WORD_WAITING : s.word;
-        rngWordByDay[day] = s.word;
+        _recordDailyRng(day, s.word);
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = false;
         dailyTicketBudgetsPacked = 0;
@@ -83,8 +83,8 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         // ahead of the draws once a fresh word swaps the slots. Empty both slots so the word-apply
         // variant reaches the trait draw as soon as its battle completes.
         if (s.traitHolders != 0) {
-            uint256[] storage q0 = ticketQueue[pl];
-            uint256[] storage q1 = ticketQueue[pl | TICKET_SLOT_BIT];
+            uint256[] storage q0 = ticketQueue[_ticketQueueStorageKey(pl)];
+            uint256[] storage q1 = ticketQueue[_ticketQueueStorageKey(pl | TICKET_SLOT_BIT)];
             assembly ("memory-safe") {
                 sstore(q0.slot, 0)
                 sstore(q1.slot, 0)
@@ -92,7 +92,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         }
         // Empty every unminted queue the battle's award draw reads, then seed only fresh distinct wallets.
         for (uint24 c = pl + 1; c <= pl + 99; ++c) {
-            uint256[] storage emptyQueue = ticketQueue[_tqFarFutureKey(c)];
+            uint256[] storage emptyQueue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(c))];
             assembly ("memory-safe") { sstore(emptyQueue.slot, 0) }
         }
 
@@ -138,7 +138,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         rngLockedFlag = false;
         rngRequestTime = 0;
         rngWordCurrent = RNG_WORD_WAITING;
-        rngWordByDay[day] = 0;
+        _recordDailyRng(day, 0);
         vrfRequestId = 1;
         rngRequestTime = 1;
         _setRngRequestActive(false);
@@ -156,7 +156,7 @@ contract DayOneUnrecordedSeeder is DayOneSeeder {
         rngLockedFlag = false;
         rngRequestTime = 0;
         rngWordCurrent = RNG_WORD_WAITING;
-        rngWordByDay[day] = 0;
+        _recordDailyRng(day, 0);
         vrfRequestId = 1;
         rngRequestTime = 1;
         _setRngRequestActive(false);

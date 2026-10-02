@@ -36,7 +36,7 @@ interface IFreezeCohortKeeper {
 ///      from 380-01-LAYOUT-KEY (c4d48008; the v61 PACK shift is region-dependent — these are the
 ///      confirmed post-fold values, matching RngFreezeAndRemovalProofs 34/35 and V56FreezeSolvency
 ///      10/34/35; NOT the stale VRFPathHandler 37/38 literals):
-///        (1) rngWordByDay[currentDay]         — slot 10  : the VRF-DERIVED day word the daily
+///        (1) _recordedDailyWord(currentDay)         — slot 10  : the VRF-DERIVED day word the daily
 ///                                                          consumption resolves against.
 ///        (2) _lootboxWord(index)     — slot 34  : reusable VRF-DERIVED lootbox payload.
 ///        (3) lootboxRngPacked                 — slot 33  : the packed lootbox cursor — its low 48
@@ -542,7 +542,10 @@ contract RngWindowFreezeHandler is Test {
 
     // Snapshot storage of the enumerated consumed set, captured at request time / before each
     // isolated in-window action.
-    uint256 private _snapDayWord; // rngWordByDay[currentDay]
+    uint256 private _snapDayWord;
+    uint256 private _snapDayPayload0;
+    uint256 private _snapDayPayload1;
+    uint256 private _snapDayTags; // _recordedDailyWord(currentDay)
     uint256 private _snapLootboxReadiness;
     uint256 private _snapNudges; // _nudgeCount frozen by the daily lock; midday nudges remain writable.
     uint256 private _snapLootboxWord; // _lootboxWord(activeIndex)
@@ -559,6 +562,9 @@ contract RngWindowFreezeHandler is Test {
         _snapNudges = _nudgeCount();
         _snapIndex = _activeLootboxIndex() - 1;
         _snapDayWord = _rngWordByDay(_snapDay);
+        _snapDayTags = uint256(vm.load(address(game), bytes32(uint256(34)))); // rngDayTags
+        _snapDayPayload0 = uint256(vm.load(address(game), keccak256(abi.encode(uint256(0), RNG_WORD_BY_DAY_SLOT))));
+        _snapDayPayload1 = uint256(vm.load(address(game), keccak256(abi.encode(uint256(1), RNG_WORD_BY_DAY_SLOT))));
         _snapLootboxWord = _lootboxRngWord(_snapIndex);
         _snapLootboxReadiness = uint256(vm.load(address(game), bytes32(0))) & (uint256(7) << 253);
         _snapLootboxCursor = _lootboxRngIndexCursor();
@@ -571,7 +577,7 @@ contract RngWindowFreezeHandler is Test {
     ///      player action alone. Compares the SAME day/index leaf the snapshot used.
     function _checkFrozenAfterIsolatedAction() internal {
         if (_nudgeCount() != _snapNudges) { ghost_frozenSlotMutations++; ghost_lastMutatedSlotTag = 12; }
-        if (_rngWordByDay(_snapDay) != _snapDayWord) {
+        if (_dailyRingChanged()) {
             ghost_frozenSlotMutations++;
             ghost_lastMutatedSlotTag = 1;
         }
@@ -658,8 +664,14 @@ contract RngWindowFreezeHandler is Test {
     // Authoritative slot reads (vm.load against the 380-01-LAYOUT-KEY layout)
     // =========================================================================
 
+    function _dailyRingChanged() private view returns (bool) {
+        return uint256(vm.load(address(game), bytes32(uint256(34)))) != _snapDayTags
+            || uint256(vm.load(address(game), keccak256(abi.encode(uint256(0), RNG_WORD_BY_DAY_SLOT)))) != _snapDayPayload0
+            || uint256(vm.load(address(game), keccak256(abi.encode(uint256(1), RNG_WORD_BY_DAY_SLOT)))) != _snapDayPayload1;
+    }
+
     function _rngWordByDay(uint24 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     /// @dev Check the retained rngWordCurrent payload even while readiness makes it unusable.
@@ -719,7 +731,7 @@ contract RngWindowFreezeHandler is Test {
     ///         RngWindowFreeze.inv.t.sol::test_invariantCatchesSeededInWindowMutation to prove
     ///         _checkFrozenAfterIsolatedAction actually registers a delta on a snapshotted slot — i.e. the
     ///         freeze invariant genuinely catches a violation rather than being unfalsifiably green.
-    /// @dev Mutates rngWordByDay[_snapDay] (the VRF-derived day word the snapshot keyed at request time) by
+    /// @dev Mutates _recordedDailyWord(_snapDay) (the VRF-derived day word the snapshot keyed at request time) by
     ///      a non-zero delta — exactly the in-window seed-steering the freeze property forbids — then runs
     ///      the SAME isolation comparison the real in-window actions use, RETURNING whether a delta was
     ///      observed. It deliberately does NOT touch the campaign's ghost_frozenSlotMutations (that counter
@@ -728,7 +740,7 @@ contract RngWindowFreezeHandler is Test {
     ///      counter-neutral here as defence-in-depth). The contract slot is restored immediately. A `true`
     ///      return proves the detector registers a known in-window violation — the falsifiability guarantee.
     function debugSeedInWindowMutationAndCheck() external returns (bool detected) {
-        bytes32 dayWordSlot = keccak256(abi.encode(uint256(_snapDay), RNG_WORD_BY_DAY_SLOT));
+        bytes32 dayWordSlot = keccak256(abi.encode(uint256(_snapDay & 1), RNG_WORD_BY_DAY_SLOT));
         uint256 original = uint256(vm.load(address(game), dayWordSlot));
 
         // Seed the in-window mutation: flip the snapshotted day word to a different value.
@@ -736,7 +748,7 @@ contract RngWindowFreezeHandler is Test {
 
         // Run the identical isolation comparison the live in-window actions use, but score it locally so the
         // campaign's property counter is never moved by a deliberately-seeded break.
-        detected = (_rngWordByDay(_snapDay) != _snapDayWord);
+        detected = _dailyRingChanged();
 
         // Restore — the seeded break exists only for the duration of the detection.
         vm.store(address(game), dayWordSlot, bytes32(original));

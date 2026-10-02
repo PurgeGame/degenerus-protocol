@@ -498,7 +498,7 @@
   {
     "bytes": "32",
     "encoding": "inplace",
-    "label": "__rngWordLayoutGap",
+    "label": "rngDayTags",
     "offset": 0,
     "slot": 34,
     "typeLabel": "uint256"
@@ -786,7 +786,7 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "foilBuyers",
+    "label": "foilQueue",
     "offset": 0,
     "slot": 61,
     "typeLabel": "mapping(uint24 => uint256[])"
@@ -802,7 +802,7 @@
   {
     "bytes": "3",
     "encoding": "inplace",
-    "label": "foilDrainDay",
+    "label": "foilGenerationDay",
     "offset": 4,
     "slot": 62,
     "typeLabel": "uint24"
@@ -810,7 +810,7 @@
   {
     "bytes": "3",
     "encoding": "inplace",
-    "label": "foilLastResolveDay",
+    "label": "foilFirstDrawDay",
     "offset": 7,
     "slot": 62,
     "typeLabel": "uint24"
@@ -990,5 +990,13 @@
     "offset": 0,
     "slot": 76,
     "typeLabel": "uint256[2]"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "ticketQueueLevels",
+    "offset": 0,
+    "slot": 78,
+    "typeLabel": "mapping(uint24 => uint24)"
   }
 ]

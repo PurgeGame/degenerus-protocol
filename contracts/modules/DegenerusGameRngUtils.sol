@@ -20,11 +20,17 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         uint24 toResolve = sdgnrs.pendingResolveDay();
         if (toResolve != 0) {
             sdgnrs.resolveRedemptionPeriod(uint16(((word >> 8) % 151) + 25), toResolve);
+            // The committed cohort consumes this session's final word before another
+            // normal request is permitted, including recovery from a multi-day stall.
+            sdgnrs.beginRedemptionSettlement(toResolve, word);
         }
     }
 
     function _swapTicketSlot() internal {
         ticketWriteSlot = !ticketWriteSlot;
+        foilCursor = 0;
+        foilGenerationDay = 0;
+        foilFirstDrawDay = 0;
         ticketsFullyProcessed = false;
         _setRngComplete(false);
     }
@@ -36,7 +42,7 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         emit LootboxRngApplied(index, rngWord, vrfRequestId);
     }
 
-    /// @dev Backfill rngWordByDay and process coinflip payouts for gap days
+    /// @dev Fill packed coinflip results and settle funding for gap days
     ///      caused by VRF stall. Derives deterministic words from the first
     ///      post-gap VRF word via keccak256(vrfWord, gapDay).
     ///      NOTE: Gap days get zero nudges (totalFlipReversals not consumed).
@@ -50,17 +56,12 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         // Bounded for gas (~9M). A live gap never reaches the bound (the deadman ends the game
         // first); on the normal ending the days past it hold no ticket or foil entry.
         if (endDay - startDay > GAP_BACKFILL_MAX_DAYS) endDay = startDay + GAP_BACKFILL_MAX_DAYS;
-        for (uint24 gapDay = startDay; gapDay < endDay;) {
-            uint256 derivedWord = uint256(keccak256(abi.encodePacked(vrfWord, gapDay)));
-            if (derivedWord == 0) derivedWord = 1;
-            rngWordByDay[gapDay] = derivedWord;
-            // Gap days are calendar days that elapsed during the stall (no advance ran on
-            // them); every backfilled day is paid with bonus 0 regardless of phase or level.
-            coinflip.processCoinflipPayouts(0, derivedWord, gapDay);
-            emit DailyRngApplied(gapDay, derivedWord, 0, derivedWord);
-            unchecked {
-                ++gapDay;
-            }
+        coinflip.processCoinflipGap(vrfWord, startDay, endDay);
+        // Retain just the last derived word in the two-slot ring.
+        if (endDay > startDay) {
+            uint24 yesterday = endDay - 1;
+            uint256 word = uint256(keccak256(abi.encodePacked(vrfWord, yesterday)));
+            _recordDailyRng(yesterday, word == 0 ? 1 : word);
         }
     }
 
@@ -71,7 +72,7 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         uint256 nudges = _nudgeCount();
         uint256 rawWord = _rawDailyRngWord(finalWord);
         _clearAppliedNudges();
-        rngWordByDay[day] = finalWord;
+        _recordDailyRng(day, finalWord);
         lastVrfProcessedTimestamp = uint48(block.timestamp);
         emit DailyRngApplied(day, rawWord, nudges, finalWord);
         return finalWord;

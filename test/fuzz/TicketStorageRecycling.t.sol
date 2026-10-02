@@ -20,19 +20,19 @@ contract TicketRecyclingHarness is DegenerusGameStorage {
     }
     function retired(uint24 lvl) external view returns (bool) { return _ticketLevelRetired(lvl); }
     function pending(uint24 lvl, bool write, uint256 n) external {
-        uint256[] storage q = ticketQueue[write ? _tqWriteKey(lvl) : _tqReadKey(lvl)];
+        uint256[] storage q = _bindTicketQueue(write ? _tqWriteKey(lvl) : _tqReadKey(lvl));
         assembly ("memory-safe") { sstore(q.slot, n) }
     }
     function farPending(uint24 lvl, uint256 n) external {
-        uint256[] storage q=ticketQueue[_tqFarFutureKey(lvl)];
+        uint256[] storage q=_bindTicketQueue(_tqFarFutureKey(lvl));
         assembly ("memory-safe") { sstore(q.slot,n) }
     }
     function seated(uint24 lvl, uint32 n) external { ticketLevel=lvl; ticketSeats=n; }
     function livePhase(uint24 lvl) external { level=lvl; jackpotPhaseFlag=true; }
     function foilPending(uint24, uint256 n) external {
-        foilDrainDay = 1;
-        foilLastResolveDay = n == 0 ? 0 : 1;
-        rngWordByDay[1] = 11;
+        uint256[] storage q = foilQueue[_foilReadKey()];
+        assembly ("memory-safe") { sstore(q.slot, n) }
+        foilCursor = 0;
     }
     function latchTerminal(uint24 payoutLevel) external {
         level = payoutLevel - 1;

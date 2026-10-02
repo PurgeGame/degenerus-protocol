@@ -91,16 +91,20 @@ contract DegenerusGameFoilPackModule is
             if (packed == 0) {
                 // Same full-registry policy as other advance-chain ticket awards.
                 if (ownerCount >= type(uint32).max - 1) continue;
-                uint32 pos = uint32(ownerCount + 1);
+                uint32 pos;
+                // The capacity guard keeps the plus-one position within uint32.
+                unchecked { pos = uint32(ownerCount + 1); }
                 uint256 record = uint256(uint160(owner)) | (
                     ((uint256(pos) << OWNER_IDX_SHIFT) | (uint256(DEITY_PERPETUAL_ENTRIES) << 8)) << 160
                 );
                 assembly ("memory-safe") { sstore(add(records, ownerCount), record) }
                 emit EntryOwnerRegistered(targetLevel, uint32(ownerCount), owner);
-                ++ownerCount;
+                unchecked { ++ownerCount; }
                 entryOwnerPosition[key][owner] = pos;
                 lanes |= uint256(pos) << (count * 32);
-                if (++count == 8) {
+                // A group contains at most eight lanes; the previous count is below eight.
+                unchecked { ++count; }
+                if (count == 8) {
                     _tqAppendLanes(key, lanes, count);
                     lanes = 0;
                     count = 0;
@@ -299,18 +303,11 @@ contract DegenerusGameFoilPackModule is
         if (gameOver) revert GameOver();
         if (_livenessTriggered()) revert GameOver();
 
-        // The pack bets on its resolveDay daily draw, so it keys on the level that draw seals
-        // at — the same level a ticket bought now resolves into, which the claim reads back
-        // from dailyFoilDraw[day].level. _activeTicketLevel() is that level: the active ticket
-        // level, except on the final jackpot day once the daily RNG is requested (where
-        // _endPhase breaks before _unlockRng, so no further draw seals here and resolveDay =
-        // day + 1 is the next cycle's first day, level + 1). Shared with the ticket queue and
-        // the purchase quote so the cap, the record, the queue, and the charge all key alike.
+        // Use the same active level and frozen read/write cohort as normal tickets.
+        // Purchases after a request enter the next cohort and require fresh entropy.
         uint24 lvl = _activeTicketLevel();
         if (_foilBoughtThisLevel(buyer, lvl)) revert FoilAlreadyBought();
 
-        uint24 day = _simulatedDayIndex();
-        uint24 resolveDay = day + 1;
 
         // Price: ten ticket prices for the level. The fresh ETH the purchase path carved
         // for the foil leg covers it first (overpay ignored); any shortfall runs the
@@ -450,40 +447,19 @@ contract DegenerusGameFoilPackModule is
         uint256 score = _playerActivityScore(buyer, afkLive ? afkStreak : streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
-        // Resolve against tomorrow, like a coinflip deposit. Tomorrow's word cannot exist
-        // yet in any state: caught up, locked on a pending request, or re-walking a stall
-        // (a stall that outlasts tomorrow derives its word from a VRF word not yet delivered).
-        // Freeze the record: resolveDay (>= 1), multBps (>= 20000), and the buy-time
-        // activity score. The slot is non-zero, so its presence IS the one-per-cycle cap.
-        // No signatures are stored — the drain and the claim re-derive the four match
-        // lines from rngWordByDay[resolveDay] + multBps. The snap exponent is NOT
-        // recorded: no foil payout scales with it (see _payFoilTier).
+        // The normal ticket swap freezes this pack before the cohort's request.
+        // Lines and eligibility are stamped later, when that cohort materializes.
         foilRecord[lvl][buyer] =
-            uint256(resolveDay) |
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
             (uint256(uint16(score)) << _FOIL_SCORE_SHIFT);
 
-        // Bucket the buyer by resolveDay (the coinflip-by-day analog), carrying the
-        // cycle level so the day-keyed drain can file into the right trait buckets and
-        // re-derive with the right key. resolveDay is provably future at buy (the
-        // engine only requests RNG up to the current wall day), so the lines are
-        // unsteerable. Raise the high-water mark, and skip the low-water cursor to this
-        // bucket when the drain has caught up (or on the first ever buy) so a sparse
-        // buy never makes the drain walk a long empty day range.
-        // Register the buyer at the cycle level now, so the drain pays no registry slot;
-        // the position rides above the level in the bucketed word.
         EntryOwner[] storage owners = lvlEntryOwner[lvl];
         uint256 ownerIdx = owners.length;
         owners.push(EntryOwner(buyer, 0));
         emit EntryOwnerRegistered(lvl, uint32(ownerIdx), buyer);
-        foilBuyers[resolveDay].push(
+        foilQueue[_foilWriteKey()].push(
             ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
         );
-        uint24 prevLast = foilLastResolveDay;
-        if (resolveDay > prevLast) foilLastResolveDay = resolveDay;
-        if (foilDrainDay == 0 || foilDrainDay > prevLast) {
-            foilDrainDay = resolveDay;
-        }
 
         emit FoilPackBought(buyer, lvl, multBps, cost);
     }
@@ -523,13 +499,9 @@ contract DegenerusGameFoilPackModule is
     /// @notice Claim a foil pack's gold: the ladder on its total gold count, plus a
     ///         kicker when one whole ticket came out all gold.
     /// @dev Delegatecall-only (see buyFoilPack). The pack's four lines are the ones the
-    ///      drain filed into the jackpot buckets, re-derived here from the same
-    ///      (buyer, level, resolveDay word, frozen boost) — so how much gold a pack
-    ///      holds is a fact about a sealed word, decided before the pack drained and
-    ///      unchanged by anything the buyer does afterwards. Nothing about the gold is
-    ///      stored: this is a PULL, deliberately kept out of the drain, which is a
-    ///      gas-budgeted hot path that gates every jackpot. A revert here costs the
-    ///      claimant their own tx and nothing else.
+    ///      drain filed into the jackpot buckets and stored in the pack record. Gold
+    ///      claims use those lines without any daily RNG lookup. They remain available
+    ///      on the generation day and the following day; the grand still pays in the drain.
     ///
     ///      Claimable from three golds up to one all-gold ticket (see _settleGoldenTicket
     ///      for the rungs). TWO all-gold tickets are not claimable here at all: that pack
@@ -551,15 +523,16 @@ contract DegenerusGameFoilPackModule is
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (_livenessTriggered()) revert GameOver();
 
-        (bool present, uint16 multBps, uint24 resolveDay, ) = _foilRecordFor(
+        (bool present, , , ) = _foilRecordFor(
             player,
             lvl
         );
         if (!present) revert NoGoldenTicket();
 
-        // The pack's lines exist only once its resolveDay word has sealed.
-        uint256 entropy = rngWordByDay[resolveDay];
-        if (entropy == 0) revert NoGoldenTicket();
+        uint256 record = foilRecord[lvl][player];
+        if (record & _FOIL_READY == 0 || !_foilClaimOpen(uint24(record >> _FOIL_GENERATED_DAY_SHIFT))) {
+            revert NoGoldenTicket();
+        }
 
         // Already settled — including by the drain, which burns this exact marker when
         // it pushes a pack's grand.
@@ -567,7 +540,7 @@ contract DegenerusGameFoilPackModule is
         if (foilMatchClaimed[mk]) revert NoGoldenTicket();
 
         (uint8 golds, uint8 allGold) = _packGold(
-            _deriveFoilLines(player, lvl, entropy, multBps)
+            _foilStoredLines(player, lvl)
         );
         // Three golds anywhere in the sixteen is the floor, and it subsumes every
         // richer shape: an all-gold ticket is four golds by construction.
@@ -672,22 +645,20 @@ contract DegenerusGameFoilPackModule is
         // rngWordByDay). Without this the double-claim marker — which folds the full
         // uint256 `day` — would alias: day, day + 2^24, ... resolve to the SAME
         // draw/level/line/tier but mint DISTINCT markers, re-paying the win.
-        if (day > type(uint24).max) return false;
+        if (day > type(uint24).max || !_foilClaimOpen(day)) return false;
 
         // The day's sealed winning set and the cycle level active that day.
         (bool drawPresent, uint32 winSet, uint24 L) = _foilDrawFor(day);
         if (!drawPresent) return false;
 
-        // The player's frozen record for that cycle: the boost, the resolveDay the lines
-        // derive from, and the activity score frozen at buy (the spin's RTP). present is
-        // the cap/ownership check.
-        (bool present, uint16 multBps, uint24 resolveDay, uint16 activityScore) =
+        // The pack's first eligible draw and buy-time activity score (spin RTP).
+        // Pending packs have no generated lines and cannot claim.
+        (bool present, , uint24 resolveDay, uint16 activityScore) =
             _foilRecordFor(player, L);
-        if (!present) return false;
+        if (!present || foilRecord[L][player] & _FOIL_READY == 0) return false;
 
-        // No look-back: the first claimable draw is resolveDay (the day whose word the
-        // lines derive from). A domain-separated keccak makes the line and that day's
-        // winning-set draw independent, so claiming from resolveDay on is safe.
+        // The first eligible draw is pinned when the cohort materializes.
+        // A draw already sealed that day cannot be claimed retroactively.
         if (day < resolveDay) return false;
 
         // Double-claim marker. The level binding keeps a player's wins at different
@@ -695,15 +666,7 @@ contract DegenerusGameFoilPackModule is
         bytes32 mk = keccak256(abi.encode(player, uint256(L), day, ticketIndex));
         if (foilMatchClaimed[mk]) return false;
 
-        // Re-derive the selected ticket's four-quadrant line from the SAME word +
-        // boost the drain filed the jackpot entries with, so the foil match equals a
-        // real jackpot entry (the load-bearing mint == claim invariant).
-        uint32 sel = _deriveFoilLines(
-            player,
-            L,
-            rngWordByDay[resolveDay],
-            multBps
-        )[ticketIndex];
+        uint32 sel = _foilStoredLines(player, L)[ticketIndex];
 
         // Graded score vs the day's winning set: per quadrant a symbol
         // match scores +1, and if the color of that same quadrant also matches it
@@ -745,14 +708,9 @@ contract DegenerusGameFoilPackModule is
         return true;
     }
 
-    /// @dev Re-derive a pack's four four-quadrant match lines — the single shared
-    ///      producer called by BOTH the drain (to file the sixteen boosted entries
-    ///      into the jackpot trait buckets) and the claim (to compare against the
-    ///      day's winning set). Identical inputs (buyer, cycle level, the resolveDay
-    ///      word, the frozen boost) give identical lines, so the jackpot samples
-    ///      exactly what is claimable. Each line packs four 8-bit [QQ][CCC][SSS]
-    ///      quadrant traits (A|B|C|D in bytes 0..3); the boost color ladder depends
-    ///      only on multBps, so the cut table is built once and shared.
+    /// @dev Generate four lines from the committed normal pack cohort's entropy.
+    ///      The drain stores these same sixteen traits in the pack record and buckets;
+    ///      later claims read the stored lines. Each uint32 holds four quadrant bytes.
     function _deriveFoilLines(
         address buyer,
         uint24 lvl,
@@ -817,7 +775,7 @@ contract DegenerusGameFoilPackModule is
         // Two disjoint keccak lanes off the retained daily word: the currency split
         // and the spin entropy. A sealed draw always retained a non-zero word; the
         // guard fails closed if that invariant is ever violated.
-        uint256 rw = rngWordByDay[uint24(day)];
+        uint256 rw = _recordedDailyWord(uint24(day));
         if (rw == 0) revert Invariant();
         uint256 c = uint256(
             keccak256(abi.encode(rw, day, ticketIndex, FOIL_CCY_TAG))
@@ -1038,7 +996,7 @@ contract DegenerusGameFoilPackModule is
         uint256 entropy,
         uint8 shift
     ) external returns (uint256 nextIdx, uint32 used) {
-        uint256[] storage queue = ticketQueue[rk];
+        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
 
         RoundSeats memory st;
         st.lvl = lvl;
@@ -1376,14 +1334,14 @@ contract DegenerusGameFoilPackModule is
         return _prepareTicketLevel(lvl);
     }
 
-    /// @notice Drain the per-buy-day foil buckets on the leftover write budget.
+    /// @notice Drain the frozen foil read cohort on the leftover write budget.
     /// @dev Delegatecall-only entry, invoked by the mint module's processTicketBatch
     ///      once the normal queue is drained (and only when _foilDrainPending). Runs in
     ///      the Game's storage context, so it reads/writes the same
-    ///      foilBuyers/foilDrainDay/foilCursor/foilRecord and the lvlTraitEntry
+    ///      foilQueue/foilGenerationDay/foilCursor/foilRecord and the lvlTraitEntry
     ///      buckets the jackpot samples.
     /// @param room The leftover write budget for this batch.
-    /// @return done True iff the foil drain has caught up (no sealed bucket remains).
+    /// @return done True iff the committed foil read cohort is exhausted.
     /// @return drained True if this call resolved at least one foil buyer.
     function processFoilDrain(uint32 room)
         external
@@ -1393,141 +1351,50 @@ contract DegenerusGameFoilPackModule is
         return _processFoilDrain(room);
     }
 
-    /// @dev Walk the per-buy-day buckets forward from the low-water mark (foilDrainDay)
-    ///      up to the high-water mark (foilLastResolveDay), draining each whose daily
-    ///      word has sealed. Each buyer resolves a fixed FOIL_PACK_ENTRIES (16) boosted
-    ///      entries — four tickets x four quadrants — derived from rngWordByDay[bucket]
-    ///      + the buyer's frozen multBps, filed into the jackpot trait buckets (no
-    ///      stamp; the claim re-derives the same lines). foilCursor makes a
-    ///      budget-short deferral resumable; a whole buyer defers (never a partial pack)
-    ///      when the leftover budget can't cover a pack's 83-unit worst case
-    ///      (16 entries x 5 + 3); the pack is then charged what it actually wrote, and a
-    ///      grand adds GRAND_DRAIN_UNITS on top, saturating at zero. A bucket
-    ///      whose word is not yet sealed (a future day) stops the walk — it does not
-    ///      gate the current jackpot.
-    ///
-    ///      The one payout this path makes is the golden-ticket grand, on a pack whose
-    ///      four lines came out holding two or more all-gold tickets. Everything else
-    ///      the gold is worth stays a pull. See _pushFoilGrand for why the debit needs
-    ///      no RNG-lock guard here, and GRAND_DRAIN_UNITS for how it is metered.
-    function _processFoilDrain(uint32 room)
-        private
-        returns (bool done, bool drained)
-    {
-        uint24 dd = foilDrainDay;
-        uint24 last = foilLastResolveDay;
+    /// @dev Materialize the frozen normal-ticket cohort under its pinned word.
+    ///      The queue length is released in constant work after the final buyer.
+    function _processFoilDrain(uint32 room) private returns (bool done, bool drained) {
+        uint256[] storage packs = foilQueue[_foilReadKey()];
         uint256 cursor = foilCursor;
-
-        // The grand push is closed once the ending has latched (normal or dead): from then the
-        // terminal path is drawing down the same pools the grand debits. Keyed on the latch, not
-        // the liveness trigger, which can still read false again — a pack drained in terminal
-        // mode forfeits its grand for good. The drain runs only inside the advance, and an
-        // advance that finds the trigger on latches the ending before it drains. Read once for
-        // the whole walk — it cannot change mid-call.
+        uint256 total = packs.length;
+        if (cursor >= total) return (true, false);
+        uint256 entropy = _lootboxWord(_rngReadBuffer());
+        if (entropy == 0) return (false, false);
+        if (foilGenerationDay == 0) {
+            uint24 day = _simulatedDayIndex();
+            foilGenerationDay = day;
+            (bool drawn, , ) = _foilDrawFor(day);
+            foilFirstDrawDay = drawn ? day + 1 : day;
+        }
         bool terminal = gameOver || _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
             || _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
-
-        // Trait-batch scratch shared across every buyer this call (re-zeroed per buyer
-        // inside _resolveFoilBuyer), so memory does not grow per queue entry.
         uint32[256] memory counts;
         uint8[256] memory touchedTraits;
-
-        while (dd <= last) {
-            // A bucket whose own day has no word yet is future-dated: the drain stops here.
-            // The normal game-over ending words every bucket it pays from (it derives the
-            // days up to its own request from the terminal word), and the deterministic
-            // ending runs no drain.
-            uint256 entropy = rngWordByDay[dd];
-            if (entropy == 0) break;
-
-            // Meter the day-walk itself. A drained-past (empty) bucket between the low- and
-            // high-water marks advances dd without entering the per-buyer loop, so a long run
-            // of them — a whale/Sybil buy day keeps the drain behind while later calendar days
-            // seal with no foil buys — would otherwise burn unbounded gas in one finishing call.
-            // Charge one unit per day stepped and defer when the leftover budget is spent, the
-            // same resumable shape as the per-buyer guard below.
-            if (room == 0) {
-                foilDrainDay = dd;
-                foilCursor = uint32(cursor);
-                return (false, drained);
-            }
-            unchecked {
-                --room;
-            }
-
-            uint256[] storage bucket = foilBuyers[dd];
-            uint256 total = bucket.length;
-            while (cursor < total) {
-                // A foil pack resolves a fixed FOIL_PACK_ENTRIES (16) boosted entries at
-                // a fixed cost of 16 single-lane appends (~5 units each, a length write and a
-                // tail word that may be fresh) + baseOv(2) + 1 = 83 budget units.
-                // Defer the whole buyer when the leftover budget can't cover a full
-                // pack's worst-case gas; it resumes next tx (no partial-within-buyer,
-                // no brick). The charge below is the actual write count and saturates
-                // at the room left.
-                if (room < (FOIL_PACK_ENTRIES * 5) + 3) {
-                    foilDrainDay = dd;
-                    foilCursor = uint32(cursor);
-                    return (false, drained);
-                }
-                uint24 packLevel = uint24(bucket[cursor] >> 160);
-                if (!_ticketLevelRetired(packLevel) && !(terminal && packLevel != _gameOverTicketLevel(level))
-                    && !_prepareTicketLevelAfterFoil(packLevel)) {
-                    foilDrainDay = dd;
-                    foilCursor = uint32(cursor);
-                    return (false, drained);
-                }
-                (bool grand, uint32 packUnits) = _resolveFoilBuyer(
-                    bucket[cursor],
-                    entropy,
-                    terminal,
-                    counts,
-                    touchedTraits
-                );
-                drained = true;
-                // Reserved at 83 units above; charged at what the pack actually wrote.
-                room = packUnits >= room ? 0 : room - packUnits;
-                unchecked {
-                    ++cursor;
-                }
-                // The grand's own writes, charged only to the pack that fired it. This
-                // subtraction SATURATES where the fixed charge above wraps: the entry
-                // guard is sized for a plain pack, so a grand landing on the last pack
-                // a batch can afford would underflow an unchecked charge and hand the
-                // rest of the walk a budget of ~4 billion units — draining every
-                // remaining bucket in one transaction, which is the exact failure the
-                // guard-equals-charge rule above exists to prevent. Saturating instead
-                // overshoots this one batch's gas target by GRAND_DRAIN_UNITS (~140k
-                // against a sub-10M target) on a pack that arrives once in 7.1 billion.
-                if (grand) {
-                    room = room < GRAND_DRAIN_UNITS
-                        ? 0
-                        : room - GRAND_DRAIN_UNITS;
-                }
-            }
-
-            // Day-keyed foil payload is retained. Moving the low-water cursor releases
-            // access in constant work; never delete the dynamic array at scale.
-            unchecked {
-                ++dd;
-            }
-            cursor = 0;
+        while (cursor < total) {
+            // Adds one warm record write to the old 83-unit materialization bound.
+            if (room < FOIL_PACK_ENTRIES * 5 + 4) break;
+            uint24 packLevel = uint24(packs[cursor] >> 160);
+            if (!_ticketLevelRetired(packLevel) && !(terminal && packLevel != _gameOverTicketLevel(level))
+                && !_prepareTicketLevelAfterFoil(packLevel)) break;
+            (bool grand, uint32 units) = _resolveFoilBuyer(packs[cursor], entropy, terminal, counts, touchedTraits);
+            drained = true;
+            room = units >= room ? 0 : room - units;
+            ++cursor;
+            if (grand) room = room < GRAND_DRAIN_UNITS ? 0 : room - GRAND_DRAIN_UNITS;
         }
-
-        // Caught up: dd is past the high-water mark or at a not-yet-sealed bucket.
-        foilDrainDay = dd;
+        if (cursor < total) {
+            foilCursor = uint32(cursor);
+            return (false, drained);
+        }
+        assembly ("memory-safe") { sstore(packs.slot, 0) }
         foilCursor = 0;
         return (true, drained);
     }
 
-    /// @dev Resolve one queued buyer (the packed level<<160|buyer entry): re-derive
-    ///      the four boosted four-quadrant lines via the shared _deriveFoilLines, then
-    ///      file all sixteen traits into the cycle level's trait buckets when that level
-    ///      remains eligible for draws. An ending drains unrelated older generation queues
-    ///      without changing the frozen payout buffers. No claim-line stamp —
-    ///      the claim re-derives the SAME lines from rngWordByDay[resolveDay] + the
-    ///      frozen multBps, so the record stores only (resolveDay, multBps, the buy-time
-    ///      activity score) and no line data.
+    /// @dev Generate and store the four boosted lines from the committed read word,
+    ///      then file their sixteen traits into the pack's eligible level. The first
+    ///      eligible draw is pinned for the cohort; each pack's gold deadline starts
+    ///      on its actual materialization day. Terminal work only files the payout level.
     ///
     ///      Counts the pack's gold on the way past. The lines are already in memory and
     ///      already unpacked below, so reading how much gold they hold is opcode work on
@@ -1535,7 +1402,7 @@ contract DegenerusGameFoilPackModule is
     ///      entry writes it is here to do. Only the grand acts on it: the ladder and its
     ///      kicker stay a pull, off this budgeted path.
     /// @param packedLvlBuyer Packed queue entry: buyer address, cycle level, and registry position.
-    /// @param entropy Day's VRF word driving the four boosted lines.
+    /// @param entropy Committed normal cohort word driving the four boosted lines.
     /// @param terminal Whether liveness has triggered; suppresses the grand push, so the
     ///        terminal drain never carves a pool the terminal jackpot is settling from.
     /// @param counts Shared scratch: per-trait occurrence counter for this level, re-zeroed
@@ -1543,7 +1410,7 @@ contract DegenerusGameFoilPackModule is
     /// @param touchedTraits Shared scratch: trait IDs touched this call, for the batch write.
     /// @return grandPaid True when this pack pushed the grand, so the caller can charge
     ///         its writes against the batch budget.
-    /// @return units Three fixed bookkeeping units plus three per zero-valued slot write
+    /// @return units Four fixed bookkeeping units plus three per zero-valued slot write
     ///         and one per nonzero slot write. Includes bitmap initialization, the header
     ///         and completed data words; stale headers are priced before resetting their value.
     function _resolveFoilBuyer(
@@ -1556,8 +1423,7 @@ contract DegenerusGameFoilPackModule is
         address buyer = address(uint160(packedLvlBuyer));
         uint24 lvl = uint24(packedLvlBuyer >> 160);
         // Only the terminal payout level needs generated traits after the ending latches.
-        // Other packs retain their records and daily words for every match/gold pull claim;
-        // consuming their generation queue must not reassign the frozen payout buffer.
+        // Consuming unrelated packs must not reassign the frozen terminal payout buffer.
         if (terminal && lvl != _gameOverTicketLevel(level)) return (false, 3);
         uint32[4] memory lines = _deriveFoilLines(
             buyer,
@@ -1566,7 +1432,11 @@ contract DegenerusGameFoilPackModule is
             _foilMultFor(buyer, lvl)
         );
 
-        units = 3; // record and cursor bookkeeping
+        uint256 record = foilRecord[lvl][buyer];
+        record |= uint256(foilFirstDrawDay) | (uint256(_simulatedDayIndex()) << _FOIL_GENERATED_DAY_SHIFT) | _FOIL_READY;
+        for (uint256 i; i < 4; ++i) record |= uint256(lines[i]) << (_FOIL_LINES_SHIFT + i * 32);
+        foilRecord[lvl][buyer] = record;
+        units = 4; // record, cursor and stored lines
         // Tomorrow's word can land after a turbo transition retired this pack's
         // inventory. Claims still use its retained record and daily word; never
         // reassign a newer buffer or let this old generation queue block progress.

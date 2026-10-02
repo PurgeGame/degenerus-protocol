@@ -9,6 +9,12 @@ import {CrapsPins} from "./CrapsPins.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract CursorHarness is CrapsViews {
+    function termsDigest(uint256 slot) external view returns (bytes32) { return keccak256(abi.encode(_slotWindow(slot))); }
+    function rngTermsDigest(uint24 day, uint256 period, uint256 word) external view returns (bytes32) {
+        Window memory w = _windowTermsOn(day, period, word);
+        w.entrants = uint32(_battles[w.key]);
+        return keccak256(abi.encode(w));
+    }
     function _daySlotOfPub(uint24 day) public pure returns (uint256) {
         return uint256(day) * BONUS_SLOTS_PER_DAY;
     }
@@ -47,6 +53,22 @@ contract CrapsScheduledCursorTest is CrapsPins {
     /// @dev THE CURSOR IS BORN IN THE CONSTRUCTOR, pointing at genesis + 1: the deployment day is
     ///      a warm-up day with no windows, marked consumed at birth, so the first owed slot is
     ///      tomorrow's separator and nothing can fall behind initialization.
+    function testFuzz_OpenedTermsSurviveDailyWordRetirement(uint256 word) public {
+        word = bound(word, 2, type(uint256).max);
+        uint24 day = craps.currentDayIndex();
+        _setDailyWord(day, word);
+        vm.prank(ContractAddresses.GAME);
+        craps.openBonusDay();
+        bytes32[6] memory expected;
+        for (uint256 p; p < 6; ++p) {
+            expected[p] = craps.rngTermsDigest(day, p, word);
+            assertEq(craps.termsDigest(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1), expected[p]);
+        }
+        vm.warp(vm.getBlockTimestamp() + 2 days);
+        _setDailyWord(day + 2, word ^ 0xBEEF);
+        for (uint256 p; p < 6; ++p) assertEq(craps.termsDigest(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1), expected[p]);
+    }
+
     function test_theCursorIsBornAtGenesisPlusOne() public {
         CursorHarness fresh = new CursorHarness();
         uint24 genesis = fresh.currentDayIndex();

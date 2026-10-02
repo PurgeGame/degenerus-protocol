@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
@@ -47,7 +48,7 @@ contract AdvanceLivenessHandler is Test {
     uint256 private constant TICKET_QUEUE_SLOT = 12;
     uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant FOIL_CURSOR_SLOT = 62; // foilDrainDay @4 (3B), foilLastResolveDay @7 (3B)
+    uint256 private constant FOIL_CURSOR_SLOT = 62; // foilGenerationDay @4 (3B), foilFirstDrawDay @7 (3B)
     uint256 private constant LR_MID_DAY_SHIFT = 224;
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
     uint24 private constant TICKET_FAR_FUTURE_BIT = uint24(1) << 22;
@@ -665,7 +666,7 @@ contract AdvanceLivenessHandler is Test {
     }
 
     function _wordByDay(uint24 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), RNG_WORD_BY_DAY_SLOT))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     function _queueLen(uint24 key) internal view returns (uint256) {

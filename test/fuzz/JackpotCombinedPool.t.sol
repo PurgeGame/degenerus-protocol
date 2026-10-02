@@ -42,11 +42,11 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
     // -- Queue inspection --
 
     function getQueueLength(uint24 key) external view returns (uint256) {
-        return ticketQueue[key].length;
+        return _ticketQueueLength(key);
     }
 
     function getQueueEntry(uint24 key, uint256 idx) external view returns (address) {
-        return _tqOwnerAt(ticketQueue[key], key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
+        return _tqOwnerAt(ticketQueue[_ticketQueueStorageKey(key)], key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
     }
 
     // -- Combined pool selection (core under test) --
@@ -62,9 +62,9 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
     function _selectWinner(uint24 candidate, uint256 entropy)
         internal view returns (address winner, bool found)
     {
-        uint256[] storage readQueue = ticketQueue[_tqReadKey(candidate)];
+        uint256[] storage readQueue = ticketQueue[_ticketQueueStorageKey(_tqReadKey(candidate))];
         uint256 readLen = readQueue.length;
-        uint256[] storage ffQueue = ticketQueue[_tqFarFutureKey(candidate)];
+        uint256[] storage ffQueue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(candidate))];
         uint256 ffLen = ffQueue.length;
         uint256 combinedLen = readLen + ffLen;
 

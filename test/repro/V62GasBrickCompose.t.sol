@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -222,7 +223,7 @@ contract V62GasBrickCompose is DeployProtocol {
         uint32 idxBeforeStall = _dailyIdx();
 
         // The stall: warp STALL_DAYS whole days WITHOUT advancing so currentDayView() runs far ahead of
-        // dailyIdx -> `day > idx + 1 && rngWordByDay[idx + 1] == 0` (the backfill precondition).
+        // dailyIdx -> `day > idx + 1 && _recordedDailyWord(idx + 1) == 0` (the backfill precondition).
         vm.warp(block.timestamp + STALL_DAYS * 1 days);
         uint32 resumeDay = game.currentDayView();
         _setHeaderField(0, 3, resumeDay - 1);            // psd kept recent (game alive: resumeDay-psd=1)
@@ -283,12 +284,13 @@ contract V62GasBrickCompose is DeployProtocol {
         r.subsFullyProcessed = _subsFullyProcessed();
     }
 
-    /// @dev Count non-zero rngWordByDay entries in the gap range (idxBeforeStall+1 .. resumeDay-1).
+    /// @dev Count permanent packed coinflip outcomes in the gap range (idxBeforeStall+1 .. resumeDay-1).
     function _countBackfilled(uint32 idxBeforeStall, uint32 resumeDay) internal view returns (uint256 c) {
         for (uint256 d = 1; d <= STALL_DAYS + 1; ++d) {
             uint32 probe = uint32(uint256(idxBeforeStall) + d);
             if (probe >= resumeDay) break;
-            if (rngWordByDay(probe) != 0) c++;
+            (uint16 result, ) = coinflip.getCoinflipDayResult(uint24(probe));
+            if (result != 0) c++;
         }
     }
 
@@ -354,7 +356,7 @@ contract V62GasBrickCompose is DeployProtocol {
     }
 
     function rngWordByDay(uint32 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT)))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     // ---- VRF settle drain (ported from V56AfkingGasMarginal) ----

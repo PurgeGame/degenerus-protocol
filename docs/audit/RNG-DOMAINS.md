@@ -34,6 +34,49 @@ Burn amounts size the mint but do not enter the draw. The result is public once
 the word is known; permissionless settlement retains its existing live-pool timing.
 Repeated calls cannot reroll a completed century.
 
+## Daily retention and foil cohorts (2026-10-01)
+
+The game retains two full daily words under `day & 1`, authenticated by two
+absolute uint24 day tags in slot 34. `rngWordForDay` exposes only today and
+yesterday, returning zero for future, expired, or mismatched tags. Internal
+processing readers authenticate the same tags without a calendar cutoff: a
+committed AFKing/Craps cohort can finish after midnight before its word is reused.
+The ordinary read-completion gate also waits for live sDGNRS redemption settlement.
+Craps freezes its opened window tier, high multiplier, and existing stake echo in
+the scoreboard, so delayed scheduled cleanup reconstructs identical terms after
+the opening-day word retires without storing another word.
+
+Foil purchases freeze level, boost, and activity score and join the normal ticket
+write cohort. The next request freezes that cohort; purchases made after the
+request require a later word. Materialization stores four uint32 lines in the
+existing foil record, together with readiness, first eligible draw, and the pack's
+actual generation day. Claims never reconstruct pack lines from a daily word.
+A match claim still uses the draw day's retained word for its currency and spin.
+
+Foil matches and WWXRP payouts remain claimable on resolving day D and D+1 and
+expire on D+2, including when advancement stalls without overwriting a word.
+For WWXRP, D is participation day plus one. Golden foil claims use generation day
+and stored lines; the grand remains a push during materialization. The initial
+level-0 idle deadline is 250 days.
+
+Recovery takes Coinflip wins directly from bits 1 through 31 of the committed
+raw recovery word, leaving bit 0 for the recovery day's normal flip. Each gap
+bit is anchored to the originally requested start day, even when retrying an
+already-settled prefix. Gap reward percentages use the tagged reward draw from
+the raw root and the absolute day, with no daily nudge bonus. Ordered backing and
+record-pool settlement is unchanged. The eight-bit results are stored in batches
+of 32 days per storage word. Other daily consumers retain only the final gap
+day's derived word, `H(rawRoot, gapDay)`; its parity does not specify that day's
+Coinflip outcome. Coinflip result history continues independently of the two
+full-word slots; old gap words have no archive.
+
+Live sDGNRS redemptions pin the final settlement session word for both manual
+claims and the mandatory bounded keeper drain. Half the rolled ETH credits
+game claimable and half opens a redemption lootbox, subject to the existing dust
+rule; surviving escrow FLIP credits its owner. Terminal redemptions retain their
+roll, receipt, and global ETH reservation until an authorized withdrawal. They
+have no expiry and need no historical RNG for that withdrawal.
+
 ## Domain map
 
 Jackpot-phase quadrant conversion uses
@@ -93,8 +136,8 @@ named constants in the consumer; full string hashes are constant expressions.
 | Daily / level quests | `H(word, DAILY_QUEST_TAG)` / `H(word, LEVEL_QUEST_TAG)` | Global quests; forced-type policy unchanged |
 | Skim bps / variance | `H(word, SKIM_BPS_TAG)` / `H(word, SKIM_VARIANCE_TAG)` | Second variance draw hashes the first variance word |
 | sDGNRS century refill | `H(word, CENTURY_REFILL_TAG XOR completedLevel) % 51 + 25` | Tag = `H("sdgnrs.century.refill")`; fixed level and transition word; no caller, amount, timestamp or pool balance in seed |
-| Coinflip reward percent | packed `H(REWARD_PERCENT_TAG, word, uint24(epoch))` | Separate from gap-word and other ordinal derivations |
-| Foil packs | `FOIL_SEED_TAG`, `FOIL_SPIN_TAG`, per-draw tags | Buyer, committed level/day and ticket/draw ordinal |
+| Coinflip reward percent | packed `H(REWARD_PERCENT_TAG, word, uint24(epoch))` | Gap days use the raw recovery root as `word`; separate from win bits |
+| Foil packs | `FOIL_SEED_TAG` on frozen normal cohort word; `FOIL_CCY_TAG` / `FOIL_SPIN_TAG` on retained draw word | Stored lines bind buyer, level and ticket ordinal; payout binds draw day and ticket ordinal |
 | Protocol/deity boons | existing issuer/day/slot domains | Shared issuer menu intentional; winner cohort closed before request |
 | Incinerator / WWXRP draws | existing contract/day/draw domains | Weighted stake intervals choose probability, not hash input entropy |
 

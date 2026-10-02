@@ -7,6 +7,7 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  seedDailyWord,
   advanceTime,
   advanceToNextDay,
   getEvent,
@@ -67,17 +68,8 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   const gameSigner = await hre.ethers.getSigner(gameAddr);
   await sdgnrs.connect(gameSigner).transferFromPool(Pool.Reward, recipient, amount);
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
-  // Land the current day's VRF word so a subsequent gambling burn passes the admission gate
-  // (rngWordForDay(currentDay) != 0). rngWordByDay is mapping(uint32 => uint256) at game slot 10.
-  const currentDay = await game.currentDayView();
-  const rngSlot = hre.ethers.keccak256(
-    hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [BigInt(currentDay), 10n])
-  );
-  await hre.network.provider.send("hardhat_setStorageAt", [
-    gameAddr,
-    rngSlot,
-    "0x" + "de".repeat(32),
-  ]);
+  // Admit a gambling burn using the authenticated current-day parity word.
+  await seedDailyWord(game, await game.currentDayView(), BigInt("0x" + "de".repeat(32)));
 }
 
 // Helper: set game level via storage slot 0 (level is at offset 18, 3 bytes)

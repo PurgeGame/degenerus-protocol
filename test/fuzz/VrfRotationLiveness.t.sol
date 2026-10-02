@@ -439,7 +439,7 @@ contract VrfRotationLiveness is DeployProtocol {
 
         // --- Set up a fresh mid-day condition on the new coordinator. ---
         // Advance one more full day so today's daily RNG is recorded (requestLootboxRng's
-        // rngWordByDay[currentDay]!=0 gate at :1054), then create pending lootbox ETH + a
+        // _recordedDailyWord(currentDay)!=0 gate at :1054), then create pending lootbox ETH + a
         // ticket-queue entry and fund the new subscription above MIN_LINK_FOR_LOOTBOX_RNG.
         vm.warp(block.timestamp + 1 days);
         uint256 nextDayWord = vrfWord ^ 0xBEEF;

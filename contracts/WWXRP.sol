@@ -77,7 +77,7 @@ pragma solidity 0.8.34;
  *        the prize to the player recorded in the winning entry.
  *
  * @dev DRAW SECURITY — WHY day d SETTLES ON WORD d+1:
- *      rngWordByDay[X] is only ever written for days X <= the current wall
+ *      _recordedDailyWord(X) is only ever written for days X <= the current wall
  *      day (AdvanceModule _applyDailyRng / _backfillGapDays), and the
  *      RNGREUSE clamp guarantees a word requested on day R resolves only
  *      days <= R — so the value of word d+1 is unknowable until day d has
@@ -893,6 +893,7 @@ contract WWXRP {
             bool claimed
         )
     {
+        if (!_drawClaimOpen(day)) return (false, false, false, 0, 0, 0, dayClaimed[day]);
         uint256 word = game.rngWordForDay(day + 1);
         if (word == 0) return (false, false, false, 0, 0, 0, dayClaimed[day]);
         wordAvailable = true;
@@ -924,6 +925,7 @@ contract WWXRP {
     function findWinningEntry(
         uint24 day
     ) external view returns (bool found, uint32 entryIndex, address player) {
+        if (!_drawClaimOpen(day)) return (false, 0, address(0));
         uint256 word = game.rngWordForDay(day + 1);
         if (word == 0) return (false, 0, address(0));
         bool big = _drawHash(DOM_BIG, day, word) % BIG_GATE == 0;
@@ -1124,6 +1126,7 @@ contract WWXRP {
         view
         returns (bool big, uint8 bucket, uint256 roll, uint256 total)
     {
+        if (!_drawClaimOpen(day)) revert WordUnavailable();
         uint256 word = game.rngWordForDay(day + 1);
         if (word == 0) revert WordUnavailable();
         big = _drawHash(DOM_BIG, day, word) % BIG_GATE == 0;
@@ -1136,6 +1139,13 @@ contract WWXRP {
         if (total != 0) {
             roll = _drawHash(DOM_WINNER, day, word) % total;
         }
+    }
+
+    function _drawClaimOpen(uint24 participationDay) private view returns (bool) {
+        if (participationDay == type(uint24).max) return false;
+        uint256 today = GameTimeLib.currentDayIndex();
+        uint256 resolves = uint256(participationDay) + 1;
+        return resolves <= today && today - resolves <= 1;
     }
 
     /// @dev Domain-separated outcome hash over the immutable next-day word.

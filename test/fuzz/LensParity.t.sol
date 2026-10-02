@@ -96,7 +96,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
     }
 
     function setRngWordByDay(uint24 day, uint256 w) external {
-        rngWordByDay[day] = w;
+        _recordDailyRng(day, w);
     }
 
     function setLevelDgnrs(uint24 lvl, uint128 allocation, uint128 claimed) external {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
@@ -489,7 +490,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint32 psdBeforeResume;
 
         // The stall: warp STALL_DAYS whole days WITHOUT advancing, so currentDayView() runs far ahead of
-        // dailyIdx — `day > idx + 1 && rngWordByDay[idx + 1] == 0` (the gap-backfill precondition).
+        // dailyIdx — `day > idx + 1 && _recordedDailyWord(idx + 1) == 0` (the gap-backfill precondition).
         vm.warp(block.timestamp + STALL_DAYS * 1 days);
         uint32 resumeDay = game.currentDayView();
         // Death-clock excludes gap days -> purchaseStartDay kept recent (game alive: resumeDay - psd = 1 < 30).
@@ -539,7 +540,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertLt(advNp1Gas, EIP7825_TX_GAS_CAP, "D-06: the gap-backfill advance N+1 is strictly < 16,777,216 (a SEPARATE tx from the STAGE chunk)");
 
         // D-07 invariants on advance N+1 (the gap backfill, decoupled from BOTH the STAGE and the jackpot):
-        //  - the gap range is now backfilled (so rngGate is idempotent next call: rngWordByDay[idx+1] != 0).
+        //  - the gap range is now backfilled (so rngGate is idempotent next call: _recordedDailyWord(idx+1) != 0).
         assertTrue(rngWordByDay(idxBeforeStall + 1) != 0, "D-07: advance N+1 backfilled the gap (idempotent re-entry next call)");
         //  - dailyIdx parked at resumeDay - 1 (the gap is skipped, not walked) -> advanceDue stays true.
         assertEq(_dailyIdx(), resumeDay - 1, "D-07: advance N+1 parked dailyIdx at resumeDay - 1 (gap skipped, no _unlockRng)");
@@ -557,7 +558,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 resumeWordOnNp1 = rngWordByDay(resumeDay);
         require(resumeWordOnNp1 != 0, "fixture: the resumed-day word landed on advance N+1 (committed pre-defer)");
 
-        // ---- Advance N+2: the deferred-distribution advance (re-entry is idempotent: rngWordByDay[idx+1] != 0
+        // ---- Advance N+2: the deferred-distribution advance (re-entry is idempotent: _recordedDailyWord(idx+1) != 0
         // -> gapDays == 0; the daily jackpot distributes HERE, NOT on N+1). The D-06 per-tx ceiling for N+2 is
         // the pre-existing payDailyJackpot bound (<= DAILY_ETH_MAX_WINNERS = 305, the proof's ~6M measured row +
         // the dedicated jackpot suites) — the NEW fact the decouple establishes is that this distribution
@@ -962,7 +963,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     function testLive01IndividualOpenPathByteUnchanged() public {
         // Two identical funded subs stamped on the same day with the same word; open one via the valve, one via
         // mineFlip. Each opens to the SAME stamp-day marker (lastOpenedDay == lastAutoBoughtDay) — the open
-        // outcome is identical (same _autoOpen path, same rngWordByDay[stampDay] seed).
+        // outcome is identical (same _autoOpen path, same _recordedDailyWord(stampDay) seed).
         address viaValve = makeAddr("vbu_valve");
         address viaBounty = makeAddr("vbu_bounty");
         _grantSeat(viaValve);
@@ -1455,16 +1456,15 @@ contract V56AfkingGasMarginal is DeployProtocol {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 56) & 0xFFFFFFFFFFFF;
     }
 
-    /// @dev Read the DAY-keyed afking word `rngWordByDay[day]` (the open leg's seed + readiness gate).
+    /// @dev Read the DAY-keyed afking word `_recordedDailyWord(day)` (the open leg's seed + readiness gate).
     function rngWordByDay(uint32 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT)))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     /// @dev Land a word for a specific day directly (the open-readiness gate) when the natural drain did not
     ///      fulfill that exact day's word after a partial STAGE drain. The word is the box's frozen seed.
     function _injectRngWordByDay(uint32 day, uint256 word) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT)));
-        vm.store(address(game), slot, bytes32(word | 1));
+        RecyclingState.seedDailyWord(address(game), uint24(day), word | 1);
     }
 
     /// @dev The simulated day index the next advance stamps with — read in-context via the game's view

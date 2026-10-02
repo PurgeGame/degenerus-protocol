@@ -32,6 +32,7 @@ import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 /// @dev Read surface the lens needs from the game: the raw-slot escape hatch plus
 ///      the authoritative aggregate score.
 interface IDegenerusGameLensSource {
+    function rngWordForDay(uint24 day) external view returns (uint256);
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
     function extsload(bytes32 slot) external view returns (bytes32 value);
 
@@ -138,7 +139,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     {
         if (day == 0 || day == type(uint24).max) return (false, winners, indices, rolls);
         ProtocolBoonPool memory pool = protocolBoonPool(game, issuer, day);
-        uint256 word = _rngWordByDayOf(game, day + 1);
+        uint256 word = IDegenerusGameLensSource(game).rngWordForDay(day + 1);
         if (pool.totalWeight == 0 || word == 0) {
             return (false, winners, indices, rolls);
         }
@@ -216,9 +217,12 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     /// @notice A player's foil-pack record for a cycle level (foilRecord[lvl][player]).
     struct FoilRecordEntry {
         bool present;
-        uint24 resolveDay; // seed day + no-look-back floor
+        uint24 resolveDay; // first eligible draw; zero while pending
         uint16 multBps; // frozen foilBoostBps (20000..60000)
         uint16 activityScore; // frozen at buy (claim-spin RTP input)
+        bool resolved;
+        uint24 generatedDay;
+        uint32[4] lines;
     }
 
     /*+======================================================================+
@@ -304,15 +308,16 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return uint32(uint16(subWord >> 208)) + uint32(covered - uint24(subWord >> 128));
     }
 
-    /// @dev rngWordByDay[day] via extsload (read-only periphery mirror of the sealed
+    /// @dev _recordedDailyWord(day) via extsload (read-only periphery mirror of the sealed
     ///      daily word — consumed here only as the afking decay gate's presence test,
     ///      exactly the predicate _afkingStreak applies).
     function _rngWordByDayOf(address game, uint24 day) private view returns (uint256) {
-        uint256 base;
-        assembly {
-            base := rngWordByDay.slot
-        }
-        return _sload(game, _mapSlot(uint256(day), base));
+        uint256 root;
+        uint256 tagsSlot;
+        assembly { root := rngWordByDay.slot tagsSlot := rngDayTags.slot }
+        uint256 tags = _sload(game, bytes32(tagsSlot));
+        if (day == 0 || uint24(tags >> ((day & 1) * 24)) != day) return 0;
+        return _sload(game, _mapSlot(uint256(day & 1), root));
     }
 
     /*+======================================================================+
@@ -599,10 +604,15 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         address game, uint24 key, uint32 ownerPosition, uint32 offset, uint16 maxWords
     ) external view returns (bool found, uint32 position, uint32 nextOffset, uint32 total) {
         uint256 base;
+        uint24 physical = _ticketQueueStorageKey(key);
+        assembly { base := ticketQueueLevels.slot }
+        uint24 occupying = uint24(_sload(game, _mapSlot(uint256(physical), base)));
+        if (occupying == 0) occupying = physical & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
+        if (occupying != key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) return (false, 0, 0, 0);
         assembly { base := ticketQueue.slot }
         uint32[] memory targets = new uint32[](1);
         targets[0] = ownerPosition;
-        return _findPackedIndex(game, _mapSlot(uint256(key), base), targets, offset, maxWords, false);
+        return _findPackedIndex(game, _mapSlot(uint256(physical), base), targets, offset, maxWords, false);
     }
 
     function _findPackedIndex(
@@ -657,5 +667,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         f.resolveDay = uint24(w);
         f.multBps = uint16(w >> _FOIL_MULT_SHIFT);
         f.activityScore = uint16(w >> _FOIL_SCORE_SHIFT);
+        f.resolved = w & _FOIL_READY != 0;
+        f.generatedDay = uint24(w >> _FOIL_GENERATED_DAY_SHIFT);
+        for (uint256 i; i < 4; ++i) f.lines[i] = uint32(w >> (_FOIL_LINES_SHIFT + i * 32));
     }
 }

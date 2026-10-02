@@ -17,31 +17,31 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
         for (uint256 i; i < count; ++i) {
             address owner = address(uint160(0xF0110000 + i));
             lvlEntryOwner[lvl].push(EntryOwner(owner, 0));
-        foilBuyers[day].push((lvlEntryOwner[lvl].length << 192) | (uint256(lvl) << 160) | uint160(owner));
+        foilQueue[day & 1].push((lvlEntryOwner[lvl].length << 192) | (uint256(lvl) << 160) | uint160(owner));
         }
-        foilDrainDay = day;
-        foilLastResolveDay = day;
+        foilGenerationDay = day;
+        foilFirstDrawDay = day;
         // Reachable continuation after the registry (all zero owed) has been tallied.
         deadTallyPos = uint32(lvlEntryOwner[lvl].length);
         deadTallyStage = 1;
-        deadTallyFoilDay = day;
+        deadTallyFoilDay = (day & 1) + 1;
     }
 
     function seedEmptyDays(uint24 first, uint24 last) external {
-        foilDrainDay = first;
-        foilLastResolveDay = last;
+        foilGenerationDay = first;
+        foilFirstDrawDay = last;
         deadTallyStage = 1;
-        deadTallyFoilDay = first;
+        deadTallyFoilDay = 1;
     }
 
     function seedFinalBatch(uint24 lvl) external returns (uint256 expectedUncreated) {
         snapShift = 1;
-        // Populate every trait, then leave exactly 2,744 registry entries. The same cold
+        // Populate every trait, then leave exactly 2,742 registry entries. The same cold
         // transaction must tally those, read all 256 trait lengths, and fix the payout.
         for (uint256 t; t < 256; ++t) {
             _seedBucket(lvl, uint8(t), address(0xC4EA7ED), 1);
         }
-        while (lvlEntryOwner[lvl].length < 2744) {
+        while (lvlEntryOwner[lvl].length < 2742) {
             _seedQueued(_tqReadKey(lvl), lvl, address(uint160(0xDEAD0000 + lvlEntryOwner[lvl].length)), uint80(4) << 8);
         }
         for (uint256 i; i < lvlEntryOwner[lvl].length; ++i) {
@@ -98,17 +98,19 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
         assertLt(used, 11_500_000, "dead-VRF batch exceeds audit target");
 
         uint8 mode = shape();
-        assertEq(game.gameOver(), mode == 3, "only the finishing batch may pay out");
+        assertEq(game.gameOver(), mode >= 2, "empty queues and finishing batches may pay out");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool advanced;
         bool fixedPayout;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) {
                 (uint8 advanceStage,) = abi.decode(logs[i].data, (uint8, uint24));
-                assertEq(advanceStage, mode == 3 ? 0 : 5);
+                assertEq(advanceStage, mode >= 2 ? 0 : 5);
                 advanced = true;
             }
             if (logs[i].topics[0] == keccak256("DeadVrfPayoutFixed(uint24,uint256,uint256,uint256,uint256)")) {
+                fixedPayout = true;
+                if (mode != 3) continue;
                 (uint256 pot, uint256 created, uint256 uncreated, uint256 traits) =
                     abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
                 assertEq(pot, 4400 ether, "30 full deity refunds before fixing the pot");
@@ -119,7 +121,7 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
             }
         }
         assertTrue(advanced, "real advance path executed");
-        assertEq(fixedPayout, mode == 3);
+        assertEq(fixedPayout, mode >= 2);
 
         // Inspect after measurement, never warming the measured transaction's state.
         vm.etch(address(game), type(DeadVrfGasSeeder).runtimeCode);
@@ -129,13 +131,13 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
             assertEq(stage, 0);
         } else if (mode == 1) {
             assertEq(idx, 3000, "full foil budget consumed");
-            assertEq(day, FOIL_DAY);
+            assertEq(day, (FOIL_DAY & 1) + 1);
             assertEq(stage, 1);
         } else if (mode == 2) {
-            assertEq(day, FOIL_DAY + 3000, "empty days also consume the budget");
-            assertEq(stage, 1);
+            assertEq(day, 3, "only two physical foil queues are scanned");
+            assertEq(stage, 3);
         } else {
-            assertEq(pos, 2744);
+            assertEq(pos, 2742);
             assertEq(stage, 3);
         }
     }

@@ -102,7 +102,7 @@ contract VRFCore is DeployProtocol {
         // Warp to day 2 (next day boundary)
         vm.warp(block.timestamp + 1 days);
 
-        // Complete day 2 so rngWordByDay[day2] != 0
+        // Complete day 2 so _recordedDailyWord(day2) != 0
         _completeDay(0xDEAD0002);
 
         // Purchase with lootbox amount to create pending ETH

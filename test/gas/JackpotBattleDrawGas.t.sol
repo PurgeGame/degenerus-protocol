@@ -15,7 +15,7 @@ contract JackpotBattleDrawGasHarness is JackpotBattleDrawHarness {
         uint256 count;
         for (uint256 offset; offset < 99; ++offset) {
             uint24 candidate = lvl + 1 + uint24(offset);
-            bool live = cursor == 0 ? ticketQueue[_tqFarFutureKey(candidate)].length != 0
+            bool live = cursor == 0 ? _ticketQueueLength(_tqFarFutureKey(candidate)) != 0
                 : eligible & (uint256(1) << offset) != 0;
             if (live) {
                 eligible |= uint256(1) << offset;
@@ -29,7 +29,7 @@ contract JackpotBattleDrawGasHarness is JackpotBattleDrawHarness {
         for (uint256 i; i < wanted; ++i) {
             uint256 entropy = EntropyLib.hash2(word, ordinal + i);
             uint24 candidate = levels[entropy % count];
-            uint256[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
+            uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(candidate))];
             uint256 len = queue.length;
             if (len == 0) continue;
             uint256 idx = (entropy >> 128) % len;

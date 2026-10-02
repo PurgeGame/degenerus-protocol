@@ -25,7 +25,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///     human boxes all fully drained.
 ///
 /// @notice A box is openable iff the entry-gate is open (`!rngLockedFlag && !_livenessTriggered`) AND
-///   `sub.lastOpenedDay < sub.lastAutoBoughtDay` AND `rngWordByDay[sub.lastAutoBoughtDay] != 0`.
+///   `sub.lastOpenedDay < sub.lastAutoBoughtDay` AND `_recordedDailyWord(sub.lastAutoBoughtDay) != 0`.
 ///
 /// @dev N is chosen > OPEN_BATCH = 80 so the open leg MUST span multiple calls and the cursor resumes
 ///   mid-ring (the load-bearing condition for the open leg's resume property — proven explicitly in
@@ -504,7 +504,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     }
 
     /// @dev Openable under the entry-gate: pending box (lastOpenedDay < lastAutoBoughtDay) AND the frozen
-    ///      stamp-day word has landed (rngWordByDay[lastAutoBoughtDay] != 0). Mirrors the _autoOpen predicate.
+    ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0). Mirrors the _autoOpen predicate.
     function _isOpenable(address who) internal view returns (bool) {
         uint32 bought = _lastBoughtDayOf(who);
         if (_lastOpenedDayOf(who) >= bought) return false;

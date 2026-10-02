@@ -336,8 +336,8 @@ contract DegenerusGameMintModule is
     ) private returns (bool worked, bool finished, uint32 writesUsed) {
         uint24 rk = _tqFarFutureKey(lvl);
 
-        uint256[] storage queue = ticketQueue[rk];
-        uint256 total = queue.length;
+        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
+        uint256 total = _ticketQueueLength(rk);
         if (total == 0) {
             ticketCursor = 0;
             ticketLevel = 0;
@@ -471,8 +471,8 @@ contract DegenerusGameMintModule is
         uint24 windowEnd = terminal ? anchor : _mintCeiling();
         for (; t <= windowEnd; ) {
             uint24 rk = _tqReadKey(t);
-            uint256[] storage queue = ticketQueue[rk];
-            uint256 total = queue.length;
+            uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
+            uint256 total = _ticketQueueLength(rk);
             if (total == 0) {
                 unchecked {
                     ++t;
@@ -569,7 +569,7 @@ contract DegenerusGameMintModule is
         // keeps it unfinished; the next call drains foil on its own budget.
         if (!terminal && _frozenPoolDue()) {
             uint24 nextLvl = _mintCeiling();
-            if (ticketQueue[_tqFarFutureKey(nextLvl)].length != 0) {
+            if (_ticketQueueLength(_tqFarFutureKey(nextLvl)) != 0) {
                 if (didWork) return (false, true);
                 (bool ffWorked, bool ffFinished) = _drainFrozenPool(nextLvl);
                 return (ffFinished && !_foilDrainPending(), ffWorked);
@@ -579,7 +579,7 @@ contract DegenerusGameMintModule is
         // Window drained. Continue into the per-buy-day foil buckets on the leftover
         // write budget (one shared envelope, so the combined advance stays
         // gas-bounded). A foil buyer resolves a fixed FOIL_PACK_ENTRIES (16) boosted
-        // entries atomically; foilDrainDay/foilCursor make a budget-short deferral
+        // entries atomically; foilGenerationDay/foilCursor make a budget-short deferral
         // resumable. Only when BOTH the window and the foil drain are caught up is
         // the sweep finished, so the readiness gate cannot let the jackpot draw
         // early. Slot-value pricing covers cold backing even in a foil-only call.
@@ -622,7 +622,7 @@ contract DegenerusGameMintModule is
     ///      budget after the normal queue is exhausted. The drain itself lives in
     ///      DegenerusGameFoilPackModule (this near-full module would otherwise exceed
     ///      the EIP-170 runtime limit); the delegatecall runs there in the Game's
-    ///      storage context, so it walks foilDrainDay/foilCursor and writes the same
+    ///      storage context, so it walks foilGenerationDay/foilCursor and writes the same
     ///      lvlTraitEntry buckets this module would have. When no foil drain is
     ///      pending (none ever bought, or every sealed bucket already drained) the foil
     ///      module is not invoked at all — the common advance carries no foil-module
@@ -1125,8 +1125,8 @@ contract DegenerusGameMintModule is
         uint8 rem = uint8(packed);
         uint32 newOwed = owed - entries;
         if (newOwed == 0 && rem == 0) {
-            uint256[] storage q = ticketQueue[ffk];
-            if (idx >= q.length || _tqOwnerAt(q, L, idx) != player) revert E();
+            uint256[] storage q = ticketQueue[_ticketQueueStorageKey(ffk)];
+            if (idx >= _ticketQueueLength(ffk) || _tqOwnerAt(q, L, idx) != player) revert E();
             _tqSwapPop(q, idx);
             _setEntryOwed(L, ownerPos, 0);
         } else {

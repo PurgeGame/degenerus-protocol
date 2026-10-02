@@ -138,7 +138,7 @@ contract sDGNRS {
 
     /// @notice Thrown when a gambling burn is attempted before the current day's VRF word is recorded
     ///         (the pre-request window). Admitting it would stamp a not-yet-drawn day, leaving the
-    ///         lootbox leg's rngWordForDay(day + 1) zero and fully predictable at claim.
+    ///         redemption commitment predictable instead of binding it to a fresh session.
     error BurnsBlockedBeforeDailyRng();
 
     /// @notice Thrown when burns are attempted after liveness fires but before gameOver latches.
@@ -341,6 +341,69 @@ contract sDGNRS {
     mapping(uint24 => uint16) public redemptionPeriods;
 
     DayPending internal pendingAggregate;
+
+    /// @dev One live beneficiary cohort, consumed before another day can request RNG.
+    function redemptionSettlementPending() external view returns (bool) {
+        return _redemptionWord != 1 && _redemptionCursor < _redemptionPlayers.length;
+    }
+
+    function beginRedemptionSettlement(uint24 day, uint256 word) external {
+        if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
+        if (day != _redemptionQueueDay || _redemptionPlayers.length == 0) return;
+        if (word <= 1) revert NotResolved();
+        if (_redemptionWord == 1) _redemptionWord = word;
+    }
+
+    // Shared router walk units (~4.7k gas each). Reserve a whole beneficiary before
+    // settlement: first-claim costs plus each unchanged, at-most-5-ETH box chunk.
+    uint256 private constant REDEMPTION_BASE_UNITS = 40;
+    uint256 private constant REDEMPTION_CHUNK_UNITS = 28;
+    uint256 private constant REDEMPTION_FINISH_UNITS = 12;
+
+    /// @notice Settle a bounded FIFO batch; unspent claims keep their place for the next call.
+    /// @dev Game-only. Returns conservative execution charges separately from the existing
+    ///      per-successful-claim bounty quote. Never credits the Game a keeper bounty.
+    function processRedemptionSettlement(uint256 budget)
+        external returns (bool done, uint256 chargedUnits, uint256 rewardQuote)
+    {
+        if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
+        if (game.gameOver() || game.livenessTriggered()) return (true, 0, 0);
+        uint256 cursor = _redemptionCursor;
+        uint256 total = _redemptionPlayers.length;
+        if (_redemptionWord == 1 || cursor >= total) return (true, 0, 0);
+        uint24 day = _redemptionQueueDay;
+        uint16 roll = redemptionPeriods[day];
+        uint256 word = _redemptionWord;
+        uint256 start = cursor;
+        uint256 settled;
+        while (cursor < total) {
+            address player = _redemptionPlayers[cursor];
+            PendingRedemption memory claim = pendingRedemptions[player][day];
+            uint256 cost = 2; // Cold queue + pending-record reads, even when already claimed.
+            if (claim.ethValueOwed != 0 || claim.flipEscrow != 0) {
+                (, , uint256 lootbox,) = _redemptionAmounts(claim.ethValueOwed, roll, false);
+                uint256 chunks = lootbox == 0 ? 0 : (lootbox - 1) / 5 ether + 1;
+                cost = REDEMPTION_BASE_UNITS + chunks * REDEMPTION_CHUNK_UNITS;
+            }
+            if (chargedUnits + cost + REDEMPTION_FINISH_UNITS > budget) break;
+            chargedUnits += cost;
+            ++cursor;
+            if (_claimRedemptionFor(player, day, roll, false, word)) ++settled;
+        }
+        if (cursor == start) return (false, 0, 0);
+        chargedUnits += REDEMPTION_FINISH_UNITS;
+        done = cursor == total;
+        if (done) {
+            _redemptionWord = 1;
+            _redemptionCursor = 0;
+            _redemptionQueueDay = 0;
+            address[] storage players = _redemptionPlayers;
+            assembly ("memory-safe") { sstore(players.slot, 0) }
+        } else {
+            _redemptionCursor = uint32(cursor);
+        }
+        if (settled != 0) rewardQuote = _redemptionBounty(settled);
+    }
 
     /// @notice Supply immediately after the last century refill (initial supply before the first).
     /// @dev All intervening supply reductions are burns. Appended with the century/closure markers
@@ -693,7 +756,7 @@ contract sDGNRS {
 
     /// @notice Burn sDGNRS to claim proportional share of backing assets
     /// @dev Post-gameOver: deterministic payout. During game: gambling path with RNG roll.
-    ///      Returns (0,0,0) during game; player must call claimRedemption() after resolution.
+    ///      Returns (0,0,0) during game; the keeper settles the claim automatically after resolution.
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received (deterministic path only)
     /// @return stethOut stETH received (deterministic path only)
@@ -896,7 +959,7 @@ contract sDGNRS {
             !game.isOperatorApproved(player, msg.sender)
         ) revert Unauthorized();
 
-        // Single claim: pass 0 so the lootbox leg (live game only) fetches day+1's word lazily.
+        // Single live claims use the same pinned session word as the forced keeper drain.
         if (!_claimRedemptionFor(player, day, roll, isTerminal, 0)) revert NoClaim();
     }
 
@@ -916,9 +979,8 @@ contract sDGNRS {
         // against the already-public terminal word.
         if (game.gameOver() || game.livenessTriggered()) revert Unauthorized();
 
-        // day+1's redemption-lootbox word is identical for every player in this live-game batch;
-        // fetch it once up front and pass it into each claim (every lootbox leg reuses it).
-        uint256 rngWordNext = game.rngWordForDay(day + 1);
+        // The forced cohort's session word is identical for every player in this batch.
+        uint256 rngWordNext = _redemptionQueueDay == day ? _redemptionWord : 0;
         uint256 settled;
         for (uint256 i; i < players.length; ++i) {
             if (_claimRedemptionFor(players[i], day, roll, false, rngWordNext)) {
@@ -928,17 +990,35 @@ contract sDGNRS {
             }
         }
 
-        // Keeper bounty: a small FLIP flip-credit per box actually settled this call, paid to the
-        // caller. Counts only settled boxes — empty (player, day) slots are skipped and earn nothing.
-        // The ETH-value tracks the per-box settle gas at the 0.5-gwei reference (FLIP per ETH =
+        // Keeper bounty: a small FLIP flip-credit per successful claim this call, paid to the
+        // caller. Counts only successful claims — empty (player, day) slots are skipped and earn nothing.
+        // The ETH-value tracks the per-claim settle gas at the 0.5-gwei reference (FLIP per ETH =
         // PRICE_COIN_UNIT / mintPrice), so the credit holds its gas-reimbursement value across the
         // price curve. sDGNRS is an authorized flip creditor, so this credits AS sDGNRS.
         if (settled != 0) {
             coinflip.creditFlip(
                 msg.sender,
-                (settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice()
+                _redemptionBounty(settled)
             );
         }
+    }
+
+    /// @dev The estimator and execution use identical rounding and dust treatment.
+    function _redemptionAmounts(uint256 base, uint16 roll, bool terminal)
+        private pure returns (uint256 rolled, uint256 direct, uint256 lootbox, uint256 forfeited)
+    {
+        rolled = base * roll / 100;
+        if (terminal) return (rolled, rolled, 0, 0);
+        direct = rolled / 2;
+        lootbox = rolled - direct;
+        if (lootbox < MIN_REDEMPTION_LOOTBOX_ETH) {
+            forfeited = lootbox;
+            lootbox = 0;
+        }
+    }
+
+    function _redemptionBounty(uint256 settled) private view returns (uint256) {
+        return (settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
     }
 
     /// @dev Shared settle core for the single and batch claim entry points. Callers must have
@@ -955,32 +1035,8 @@ contract sDGNRS {
         if (claim.ethValueOwed == 0 && (isTerminal || claim.flipEscrow == 0)) return false;
         uint16 claimActivityScore = claim.activityScore;
 
-        // Total rolled ETH. `ethValueOwed` is gwei-snapped at submit and 1e9 / 100 is an exact
-        // integer, so this division truncates nothing: a day's per-claim releases sum to exactly
-        // the `rolledEth` that resolve left in pendingRedemptionEthValue — no residue, and the
-        // decrement below cannot underflow.
-        uint256 totalRolledEth = (claim.ethValueOwed * roll) / 100;
-
-        // 50/50 split (unless terminal → 100% direct)
-        uint256 ethDirect;
-        uint256 lootboxEth;
-        uint256 forfeitEth;
-        if (isTerminal) {
-            ethDirect = totalRolledEth;
-        } else {
-            ethDirect = totalRolledEth / 2;
-            lootboxEth = totalRolledEth - ethDirect;
-            // Drop dust-sized lootboxes: when the lootbox half lands below the 0.01 ETH floor (rolled
-            // value under ~0.02 ETH), the lootbox leg is dropped. Its value is NOT paid to the player
-            // and NOT turned into a lootbox — it is forfeited back to sDGNRS's own claimable on the
-            // Game (its canonical backing ledger), raising backing for remaining holders. The player
-            // keeps only the direct half (plus whatever the escrowed FLIP pays on the flip). The lootbox leg
-            // is then skipped by its `lootboxEth != 0` guard and the forfeit leg credits sDGNRS.
-            if (lootboxEth < MIN_REDEMPTION_LOOTBOX_ETH) {
-                forfeitEth = lootboxEth;
-                lootboxEth = 0;
-            }
-        }
+        (uint256 totalRolledEth, uint256 ethDirect, uint256 lootboxEth, uint256 forfeitEth) =
+            _redemptionAmounts(claim.ethValueOwed, roll, isTerminal);
 
         // Release the rolled ETH segregation (both direct and lootbox portions leave sDGNRS).
         // The MAX − rolled over-pull (segregated at submit) stays in this contract as free backing.
@@ -1036,13 +1092,12 @@ contract sDGNRS {
         // reservation guarantees ETH + stETH >= rolled, so the stETH remainder is always coverable.
         if (lootboxEth != 0) {
             uint16 actScore = claimActivityScore > 0 ? claimActivityScore - 1 : 0;
-            // Key the lootbox draw to the NEXT day's word (day+1) - unknown when the burn was
-            // submitted (day+1 isn't drawn yet), so a post-advance burn can't grind a known
-            // draw. Only reached when not terminal (lootboxEth != 0); in a live game day+1's word
-            // is always set by claim time (the daily advance, or gap-backfill after a stall).
-            // day+1's word is fixed for this settle day. The batch pre-fetches it once and passes
-            // it in (live game -> always nonzero); the single-claim path passes 0, so fetch lazily.
-            uint256 rngWord = rngWordNext == 0 ? game.rngWordForDay(day + 1) : rngWordNext;
+            // Burns commit before their settlement session's word is known. The forced
+            // cohort pins that word, including a session delivered after a multi-day stall.
+            // Manual claims must use the same pinned entropy as the keeper drain.
+            uint256 rngWord = rngWordNext;
+            if (_redemptionQueueDay == day) rngWord = _redemptionWord;
+            if (rngWord <= 1) revert NotResolved();
             uint256 entropy = EntropyLib.hash2(rngWord, uint256(uint160(player)));
             uint256 bal = address(this).balance;
             uint256 ethForLootbox = bal < lootboxEth ? bal : lootboxEth;
@@ -1148,9 +1203,8 @@ contract sDGNRS {
         // Admit gambling burns only once the current day's VRF word is recorded. The pre-request
         // window is blocked here; the request->fulfilment window is already blocked by the rngLocked
         // guard in burn()/burnWrapped(). This pins the stamp to a drawn day (currentPeriod ==
-        // dailyIdx), so the pool always resolves on the NEXT day's draw and the lootbox leg's
-        // rngWordForDay(currentPeriod + 1) reads that resolving word — never a not-yet-drawn (zero,
-        // fully predictable) future word.
+        // dailyIdx), so the pool binds to a subsequent fresh session. The mandatory
+        // settlement pins that session's final word even when delivery is delayed.
         if (game.rngWordForDay(currentPeriod) == 0) revert BurnsBlockedBeforeDailyRng();
 
         // Single-pool invariant: if any prior day still holds an unresolved pool,
@@ -1248,6 +1302,11 @@ contract sDGNRS {
         // Composite-keyed per-claim slot for (beneficiary, currentPeriod): records the ETH base
         // and the contingent whole-token FLIP escrow removed from sDGNRS's backing above.
         PendingRedemption storage claim = pendingRedemptions[beneficiary][currentPeriod];
+        if (claim.activityScore == 0) {
+            if (_redemptionPlayers.length == 0) _redemptionQueueDay = currentPeriod;
+            if (_redemptionQueueDay != currentPeriod) revert PriorDayUnresolved();
+            _redemptionPlayers.push(beneficiary);
+        }
 
         // Enforce 160 ETH per-(wallet, day) EV cap on the BASE (resets naturally on a new day under composite keying).
         if (claim.ethValueOwed + ethValueOwed > MAX_DAILY_REDEMPTION_EV) revert ExceedsDailyRedemptionCap();
@@ -1321,5 +1380,12 @@ contract sDGNRS {
         emit Transfer(address(0), to, amount);
     }
 
+
+    // Appended to preserve existing custody/accounting storage offsets.
+    address[] private _redemptionPlayers;
+    uint32 private _redemptionCursor;
+    uint24 private _redemptionQueueDay;
+    /// @dev Final session words are >1; retain 1 while waiting or consumed for cheaper reuse.
+    uint256 private _redemptionWord = 1;
 
 }

@@ -74,6 +74,9 @@ interface ICrapsPassDelivery {
  * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
+    // Internal router encoding; never used by the ordinary public box allowance.
+    uint256 private constant OPEN_STRICT_BUDGET_FLAG = uint256(1) << 255;
+
     // =========================================================================
     // Errors
     // =========================================================================
@@ -1249,7 +1252,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Permissionless, bounded settlement of the current read buffer's boxes and bets.
     /// @dev Delegatecall runs in Game storage. The queue is frozen at request time; producers
     ///      continue in the other buffer. Retry preserves both the selector and the cursor.
-    ///      A wide first entry always runs, and skips are charged, so bounded calls eventually
+    ///      A wide first entry runs on a fresh allowance; strict remainders defer it. Skips are charged, so calls eventually
     ///      finish every entry. Completion is committed only after boxes and bets are exhausted.
     /// @param budget Walk budget in the shared open-weight unit (~4.7k gas each) — the same
     ///        unit the afking leg spends. An entry costs OPEN_HUMAN_ENTRY_WEIGHT plus
@@ -1267,6 +1270,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///         Crediting the knee per BOX would let one five-small order saturate it at a
     ///         fraction of the work five distinct entries represent.
     function openHumanBoxes(uint256 budget) external returns (uint256 opened, uint256 unitsSpent) {
+        // Internal router encoding: bit 255 requests a strict remainder. In that mode the
+        // second result packs execution charge above bounty credit (128 bits each).
+        bool mustRunFirst = budget & OPEN_STRICT_BUDGET_FLAG == 0;
+        budget &= ~OPEN_STRICT_BUDGET_FLAG;
         // Entry-gate: the open path's state-gated reverts — rngLock and the terminal-jackpot
         // liveness control — are excluded pre-loop, so the loop body cannot fail on them. What
         // remains is retryable downstream failure (a Boon delegatecall or both Craps pass doors
@@ -1329,7 +1336,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // it for the next call. Paired with the `opened != 0` guard — the first entry of
                 // a call always runs, whatever its size — every entry is eventually attempted
                 // against a full fresh budget, so nothing can wedge behind a large one.
-                if (opened != 0 && steps + cost > budget) break;
+                if ((opened != 0 || !mustRunFirst) && steps + cost > budget) break;
                 unchecked {
                     ++cur;
                     steps += cost;
@@ -1367,7 +1374,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                         idx,
                         cur - qlen,
                         budget - steps,
-                        opened == 0,
+                        mustRunFirst && opened == 0,
                         indexWord
                     )
                 );
@@ -1393,6 +1400,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Credited work only matters when something opened (the bounty). A walk that opened
         // nothing reports what it consumed, so the router's craps leg sizes from the real spend.
         unitsSpent = opened == 0 ? steps : steps - uncredited;
+        if (!mustRunFirst) unitsSpent |= steps << 128;
         boxCursor = uint48(cur);
         // Presale is fully drained once the cursor has advanced PAST the close index (every box at
         // indices <= presaleCloseBuffer is now opened). One-way, sweep-only; gated on presaleOver so
@@ -1846,7 +1854,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      stamp-only afking box never writes. Deliberately omitted as a mega-niche
     ///      end-game feature (active only the final day before game-over, by which point
     ///      afking subscribers are gone). No `RngNotReady` guard here — the caller (the
-    ///      GameAfkingModule open leg `_autoOpen`) pre-gates on a landed `rngWordByDay[day] != 0`,
+    ///      GameAfkingModule open leg `_autoOpen`) pre-gates on a landed `_recordedDailyWord(day) != 0`,
     ///      so a zero word never reaches this function. Sole caller: the GameAfkingModule open-leg, via the
     ///      GAME_LOOTBOX_MODULE delegatecall (the box materialization is private to this
     ///      module — `resolveAfkingBox` is the one seam that binds a caller-passed day word;
@@ -1855,14 +1863,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param player Box owner (resolved by the GameAfkingModule open-leg from the sub).
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
     /// @param day The boundary-pinned PROCESS day stamped at process (frozen in the seed).
-    /// @param rngWord The frozen stamp day's word `rngWordByDay[day]`, passed by the caller.
+    /// @param rngWord The frozen stamp day's word `_recordedDailyWord(day)`, passed by the caller.
     /// @param activityScore The stamped activity score in whole points (the FROZEN EV input).
     function resolveAfkingBox(address player, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
         external
     {
         if (amount == 0) return;
 
-        // Seed = the CALLER-PASSED frozen-day word `rngWordByDay[day]` + player + the FROZEN
+        // Seed = the CALLER-PASSED frozen-day word `_recordedDailyWord(day)` + player + the FROZEN
         // stamped `day` (prevents seed-grinding by open-timing) + this route's domain.
         // The amount sizes the award and never selects the outcome.
         uint256 seed = EntropyLib.hash4(rngWord, uint256(uint160(player)), AFKING_BOX_TAG, day);

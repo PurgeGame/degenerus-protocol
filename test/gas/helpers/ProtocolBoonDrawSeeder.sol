@@ -7,7 +7,7 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 /// @dev Sparse but exact reference state for six maximum-depth cumulative-weight searches.
 contract ProtocolBoonDrawSeeder is DegenerusGameStorage {
     function seedPools(uint24 day, uint256 winnerWord) external {
-        rngWordByDay[day - 1] = 12345;
+        _recordDailyRng(day - 1, 12345);
         for (uint256 i; i < 2; ++i) {
             address issuer = i == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
             uint32 count = type(uint32).max;

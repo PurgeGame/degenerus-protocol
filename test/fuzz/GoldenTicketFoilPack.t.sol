@@ -32,7 +32,6 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         uint16 score
     ) external {
         foilRecord[lvl][buyer] =
-            uint256(resolveDay) |
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
             (uint256(score) << _FOIL_SCORE_SHIFT);
     }
@@ -43,18 +42,20 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         EntryOwner[] storage owners = lvlEntryOwner[lvl];
         uint256 ownerIdx = owners.length;
         owners.push(EntryOwner(buyer, 0));
-        foilBuyers[day].push(
+        foilQueue[_foilReadKey()].push(
             ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
         );
     }
 
     function setRngWord(uint24 day, uint256 word) external {
-        rngWordByDay[day] = word;
+        _recordDailyRng(day, word);
+        rngWordCurrent = word;
+        _setRngSessionPublished(word != 0);
     }
 
     function setDrainWindow(uint24 drainDay, uint24 lastResolveDay) external {
-        foilDrainDay = drainDay;
-        foilLastResolveDay = lastResolveDay;
+        foilGenerationDay = drainDay;
+        foilFirstDrawDay = drainDay;
         foilCursor = 0;
     }
 
@@ -176,7 +177,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
     }
 
     function drainCursors() external view returns (uint24 dd, uint24 last, uint32 cur) {
-        return (foilDrainDay, foilLastResolveDay, foilCursor);
+        return (foilGenerationDay, foilFirstDrawDay, foilCursor);
     }
 }
 
@@ -268,6 +269,7 @@ contract GoldenTicketFoilPack is Test {
     uint256 internal constant COIN_UNIT = 1000 ether;
 
     function setUp() public {
+        vm.warp(82_620 + (uint256(RESOLVE_DAY) - 1) * 1 days);
         GoldenTicketFoilHarness impl = new GoldenTicketFoilHarness();
         vm.etch(ContractAddresses.GAME, address(impl).code);
         h = GoldenTicketFoilHarness(payable(ContractAddresses.GAME));

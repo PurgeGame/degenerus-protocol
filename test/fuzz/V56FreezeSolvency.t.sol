@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -26,7 +27,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @notice Leg 3 (RNG-freeze determinism). The subscribe min-buy STAMPS a box for-later-open and NEVER
 ///   inline-resolves pre-RNG (no LootBoxOpened at subscribe time). The single-roll open seed is
-///   `keccak256(abi.encode(rngWordByDay[stampDay], player, AFKING_BOX_TAG, stampDay))` — it carries NO block.*
+///   `keccak256(abi.encode(_recordedDailyWord(stampDay), player, AFKING_BOX_TAG, stampDay))` — it carries NO block.*
 ///   entropy, so two opens of the SAME stamp at DIFFERENT blocks (vm.roll/warp + perturbed
 ///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached via mineFlip() (the
 ///   autoOpen selector was dropped — not re-exposed on the Game).
@@ -263,7 +264,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
     // =========================================================================
     // Leg 3 — RNG-freeze determinism: STAMP-not-resolve + single-roll open consumes
-    //         ONLY the frozen rngWordByDay[stampDay] (two blocks -> byte-identical box)
+    //         ONLY the frozen _recordedDailyWord(stampDay) (two blocks -> byte-identical box)
     // =========================================================================
 
     /// @notice STAMP-NOT-RESOLVE: the subscribe min-buy + the STAGE buy STAMP a box for-later-open and NEVER
@@ -297,7 +298,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
     /// @notice TWO-BLOCK DETERMINISM (the freeze observable): open the SAME stamp twice at DIFFERENT blocks
     ///         (vm.roll/warp + perturbed prevrandao/coinbase) and the materialized box is BYTE-IDENTICAL —
-    ///         the single-roll open seed `keccak256(abi.encode(rngWordByDay[stampDay], player, stampDay,
+    ///         the single-roll open seed `keccak256(abi.encode(_recordedDailyWord(stampDay), player, stampDay,
     ///         amount))` carries NO block.* entropy. The box resolves against the FROZEN stamp day (the live
     ///         day moved between stamp and open). Adapted from V55FreezeDeterminism:91+ to the v56 harness.
     function testStampedDayOpenAtTwoBlocksByteIdentical() public {
@@ -329,7 +330,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
         // FREEZE: byte-identical across the two block contexts (the seed froze on the stamped day; no block.*).
         _assertBoxByteIdentical(box1, box2, "RNG-freeze two-block determinism");
-        // The materialization bound to the FROZEN stamp day: the seed is rngWordByDay[stampDay] and the open
+        // The materialization bound to the FROZEN stamp day: the seed is _recordedDailyWord(stampDay) and the open
         // advanced lastOpenedDay to that same stampDay (the live day moved between stamp and open, yet the box
         // resolved against the frozen stamp day — no open-time entropy).
         assertEq(_lastOpenedDayOf(afk), stampDay, "the box materialized against the frozen stamp day (single-roll open, no open-time entropy)");
@@ -337,7 +338,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
     /// @notice TWO-BLOCK DETERMINISM fuzz: for RANDOM perturbed open-block contexts (prevrandao/coinbase/
     ///         number/timestamp), the SAME stamp opens to a byte-identical box — ANY two block contexts agree,
-    ///         so the single-roll open + pendingFlip credit consume ONLY the frozen rngWordByDay[stampDay].
+    ///         so the single-roll open + pendingFlip credit consume ONLY the frozen _recordedDailyWord(stampDay).
     function testFuzzTwoBlockOpenNoBlockEntropy(uint256 r1, uint256 r2, uint64 dt1, uint64 dt2) public {
         address afk = makeAddr("freeze_twoblock_fz");
         _grantSeat(afk);
@@ -442,9 +443,9 @@ contract V56FreezeSolvency is DeployProtocol {
         assertEq(a.roundedUp, b.roundedUp, string(abi.encodePacked(tag, ": roundedUp")));
     }
 
-    /// @dev Read the DAY-keyed afking word `rngWordByDay[day]` (the single-roll open's frozen seed input).
+    /// @dev Read the DAY-keyed afking word `_recordedDailyWord(day)` (the single-roll open's frozen seed input).
     function _rngWordByDay(uint32 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), uint256(RNG_WORD_BY_DAY_SLOT)))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     // =========================================================================

@@ -12,7 +12,7 @@ import { advanceTime } from "../helpers/testUtils.js";
  * _livenessTriggered (DegenerusGameStorage.sol).
  *
  * In-phase day clock: fires when currentDay - purchaseStartDay exceeds
- * 365 days (level 0) or 30 days (level 1+). purchaseStartDay only updates
+ * 250 days (level 0) or 30 days (level 1+). purchaseStartDay only updates
  * at AdvanceModule phase-transition close, so the multi-call window between
  * target-met and the next purchase phase carries the old psd.
  *
@@ -28,7 +28,7 @@ import { advanceTime } from "../helpers/testUtils.js";
  *   _livenessTriggered():
  *     deadman or VRF dead            → true
  *     lastPurchaseDay || jackpotPhase → false
- *     lvl 0  : currentDay - psd > 365 → true at the start of a caught-up day
+ *     lvl 0  : currentDay - psd > 250 → true at the start of a caught-up day
  *     lvl 1+ : currentDay - psd > 30  → true at the start of a caught-up day
  *     an ending already latched       → true
  *
@@ -95,13 +95,13 @@ describe("LivenessProductivePause", function () {
   it("baseline: livenessTriggered() returns true past the level-0 idle timeout", async function () {
     const { game } = await loadFixture(deployFullProtocol);
 
-    // Level 0 idle timeout is 365 days from purchaseStartDay (set at deploy).
+    // Level 0 idle timeout is 250 days from purchaseStartDay (set at deploy).
     // Warp past it. No productive flag set, so the in-phase clock governs.
-    await advanceTime(366 * 86400);
+    await advanceTime(251 * 86400);
 
     expect(await game.livenessTriggered()).to.equal(
       true,
-      "baseline: liveness must fire past the 365-day deploy idle timeout"
+      "baseline: liveness must fire past the 250-day deploy idle timeout"
     );
   });
 
@@ -109,7 +109,7 @@ describe("LivenessProductivePause", function () {
     const { game } = await loadFixture(deployFullProtocol);
     const addr = await game.getAddress();
 
-    await advanceTime(366 * 86400);
+    await advanceTime(251 * 86400);
     expect(await game.livenessTriggered()).to.equal(true);
 
     // Set jackpotPhaseFlag and a fresh dailyIdx (== currentDay) so the deadman
@@ -131,7 +131,7 @@ describe("LivenessProductivePause", function () {
     const { game } = await loadFixture(deployFullProtocol);
     const addr = await game.getAddress();
 
-    await advanceTime(366 * 86400);
+    await advanceTime(251 * 86400);
     expect(await game.livenessTriggered()).to.equal(true);
 
     const currentDay = Number(await game.currentDayView());
@@ -150,9 +150,9 @@ describe("LivenessProductivePause", function () {
     const { game } = await loadFixture(deployFullProtocol);
     const addr = await game.getAddress();
 
-    // dailyIdx is still 0 at deploy (no day sealed). Warping 366 days leaves
+    // dailyIdx is still 0 at deploy (no day sealed). Warping 251 days leaves
     // simulatedDayIndex - dailyIdx ~= 367 > 30, so the deadman has fired.
-    await advanceTime(366 * 86400);
+    await advanceTime(251 * 86400);
 
     const slot0 = await readSlot0(addr);
     await writeSlot0(addr, setByte(slot0, OFF_JACKPOT_PHASE, "01"));
@@ -167,7 +167,7 @@ describe("LivenessProductivePause", function () {
     const { game } = await loadFixture(deployFullProtocol);
     const addr = await game.getAddress();
 
-    await advanceTime(366 * 86400);
+    await advanceTime(251 * 86400);
     const currentDay = Number(await game.currentDayView());
 
     // Stall of exactly 30 days (currentDay - dailyIdx == 30): deadman is
@@ -195,7 +195,7 @@ describe("LivenessProductivePause", function () {
     const { game } = await loadFixture(deployFullProtocol);
     const addr = await game.getAddress();
 
-    await advanceTime(366 * 86400);
+    await advanceTime(251 * 86400);
     const currentDay = Number(await game.currentDayView());
 
     // Pause active (flag set, deadman not fired) → liveness false.
@@ -206,7 +206,7 @@ describe("LivenessProductivePause", function () {
     expect(await game.livenessTriggered()).to.equal(false);
 
     // Clear jackpotPhaseFlag — the in-phase level-0 clock (currentDay - psd >
-    // 365) is consulted again on the same expired window and fires.
+    // 250) is consulted again on the same expired window and fires.
     await writeSlot0(addr, baseline);
     expect(await game.livenessTriggered()).to.equal(
       true,

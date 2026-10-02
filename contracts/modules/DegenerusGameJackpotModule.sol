@@ -1963,7 +1963,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
         uint256 count;
         for (uint256 offset; offset < 99; ++offset) {
             uint24 candidate = lvl + 1 + uint24(offset);
-            bool live = cursor == 0 ? ticketQueue[_tqFarFutureKey(candidate)].length != 0
+            bool live = cursor == 0 ? _ticketQueueLength(_tqFarFutureKey(candidate)) != 0
                 : eligible & (uint256(1) << offset) != 0;
             if (live) {
                 eligible |= uint256(1) << offset;
@@ -1984,8 +1984,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils {
                 walk.offset = levels[entropy % count] - lvl - 1;
             }
             uint24 candidate = lvl + 1 + uint24(walk.offset);
-            uint256[] storage queue = ticketQueue[_tqFarFutureKey(candidate)];
-            uint256 len = queue.length;
+            uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(candidate))];
+            uint256 len = _ticketQueueLength(_tqFarFutureKey(candidate));
             // An unexpectedly emptied level forfeits one award and ends this visit. Charging a
             // position keeps even that fail-open path bounded when selection uses replacement.
             if (len == 0) {

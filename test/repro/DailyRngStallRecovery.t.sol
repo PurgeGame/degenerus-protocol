@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -64,6 +65,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         simTime += 1 days + 1;
         vm.warp(simTime);
         for (uint256 j = 0; j < 200; j++) {
+            if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
                 abi.encodeWithSignature("advanceGame()")
@@ -340,6 +342,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         for (uint256 i = 0; i < 4000; i++) {
             require(!game.gameOver(), "harness: gameOver before jackpot phase");
             if (game.jackpotPhase()) return;
+            if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
                 abi.encodeWithSignature("advanceGame()")
@@ -366,6 +369,7 @@ contract DailyRngStallRecovery is DeployProtocol {
     function _drainUntilUnlocked() internal {
         for (uint256 i = 0; i < 200; i++) {
             if (!game.rngLocked()) return;
+            if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
                 abi.encodeWithSignature("advanceGame()")
@@ -377,6 +381,7 @@ contract DailyRngStallRecovery is DeployProtocol {
     /// @dev Cross the day boundary and advance (never fulfilling) until the daily
     ///      request is in flight.
     function _stallNextDailyRequest() internal {
+        if (!game.rngLocked()) _finishReadConsumers();
         simTime += 1 days + 1;
         vm.warp(simTime);
         for (uint256 i = 0; i < 100; i++) {
@@ -412,7 +417,7 @@ contract DailyRngStallRecovery is DeployProtocol {
     function _clearQueue(uint24 key) internal {
         vm.store(
             address(game),
-            keccak256(abi.encode(uint256(key), uint256(12))),
+            keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12))),
             bytes32(0)
         );
     }
@@ -423,7 +428,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             uint256(
                 vm.load(
                     address(game),
-                    keccak256(abi.encode(uint256(key), uint256(12)))
+                    keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)))
                 )
             );
     }

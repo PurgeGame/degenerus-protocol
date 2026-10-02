@@ -414,7 +414,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     //   bits 169..200  the SEAT holding it
     //   bits 201..218  battle stake granules (echo, for views)
     //   bits 219..249  seed granules
-    //   bits 250..255  free
+    //   bits 250..251  scheduled tier; bit 252 high tail; bit 255 terms frozen
     //
     // No roll slice: nothing ranks or qualifies on rolls — the progressive reads the winner's
     // HIGH POINT, which the composite already carries — and the composite needs the width: a
@@ -424,6 +424,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BG_BEST_SHIFT = 64;
     uint256 internal constant _BG_WINNER_SHIFT = 169;
     uint256 internal constant _BG_STAKE_SHIFT = 201;
+    uint256 internal constant _BG_TERM_TIER_SHIFT = 250;
+    uint256 internal constant _BG_TERM_HIGH_TAIL = 4; // within the six-bit terms lane
+    uint256 internal constant _BG_TERMS_FROZEN = 32;
     uint256 internal constant _MASK32 = 0xFFFFFFFF;
 
     /// @dev The scoreboard's composite is `Craps._rankOf` (the layout and every field are

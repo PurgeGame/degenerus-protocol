@@ -33,7 +33,7 @@ contract JackpotMergeSeeder is DegenerusGame {
         levelPrizePool[6] = 1_000 ether;
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = uint128(200 ether);
-        rngWordByDay[day - 1] = 123456;
+        _recordDailyRng(day - 1, 123456);
         for (uint24 lv = 9; lv < 108; ++lv) {
             for (uint256 i; i < holders; ++i) {
                 address player = address(uint160(0x1000000 + uint256(lv) * 256 + i));

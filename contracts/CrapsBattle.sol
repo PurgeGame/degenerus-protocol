@@ -745,8 +745,6 @@ contract CrapsBattle is CrapsBattleStorage {
         uint64 cur = _keeperSlot;
         uint24 today = _currentDayIndex();
         (,, uint256 open) = _currentBonusSlot();
-        uint24 cachedDay = type(uint24).max;
-        uint256 cachedWord;
         unchecked {
             for (uint256 hops = 0; hops < _KEEP_MAX_HOPS; ++hops) {
                 uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
@@ -774,15 +772,8 @@ contract CrapsBattle is CrapsBattleStorage {
                     ++cur;
                     continue;
                 }
-                // Cheap hops commonly cross several spent windows from one day. They all derive
-                // from the same daily word, so fetch it once until the cursor reaches another day.
-                if (cachedDay != day) {
-                    cachedDay = day;
-                    cachedWord = _dailyWordAt(day);
-                }
-                if (cachedWord == 0) revert RngNotReady();
-                Window memory w =
-                    _windowTermsOn(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1, cachedWord);
+                // Opened windows carry their compact frozen terms in the scoreboard.
+                Window memory w = _windowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
                 uint256 g = _battles[w.key];
                 uint48 idx = _slotIndex[cur];
                 if (idx == 0) {
@@ -1266,34 +1257,50 @@ contract CrapsBattle is CrapsBattleStorage {
         }
     }
 
-    /// @dev Everything about the window at (day, period). Reverts if that day has no word yet,
-    ///      since the word is what draws the terms.
+    /// @dev Decode retained RNG or the compact terms saved when this window opened.
     function _windowTerms(uint24 day, uint256 period) private view returns (Window memory w) {
-        uint256 word = _dailyWordAt(day);
-        if (word == 0 && period != _BONUS_PERIODS_PER_DAY - 1) revert RngNotReady();
-        return _windowTermsOn(day, period, word);
+        uint256 slot = _slotOf(day, period);
+        uint256 state = _battles[bytes32(slot)];
+        uint256 frozen = state >> _BG_TERM_TIER_SHIFT;
+        if (frozen & _BG_TERMS_FROZEN == 0) {
+            uint256 word = _dailyWordAt(day);
+            if (word == 0 && period != _BONUS_PERIODS_PER_DAY - 1) revert RngNotReady();
+            return _windowTermsOn(day, period, word);
+        }
+        // Opened terms survive word retirement in the existing scoreboard. Settlement
+        // entropy still comes from the committed normal RNG cohort (or jackpot round).
+        w.tier = frozen & 3;
+        w.stakeUnits = (state >> _BG_STAKE_SHIFT) & _BSTAKE_MAX;
+        if (w.tier != 0) {
+            unchecked {
+                uint256 bank = (uint256(0x119407080258) >> ((w.tier - 1) * 16)) & 0xffff;
+                w.bankroll = uint128(bank * 1 ether);
+                w.goal = uint128(bank * _SCHED_GOAL * 1 ether);
+                w.played = bank * 1 ether / _SCHED_BANK_MULT;
+            }
+        }
+        return _finishWindowTerms(day, period, w,
+            frozen & _BG_TERM_HIGH_TAIL != 0 ? CrapsPriceLib.HIGH_TAIL : CrapsPriceLib.HIGH_BASE);
     }
 
-    /// @dev The same terms off a word the caller already holds. Anything that builds SEVERAL of a
-    ///      day's windows reads that word once and hands it down rather than fetching the same
-    ///      value seven times — and a caller holding it can decide for itself what a missing word
-    ///      means, instead of being reverted at.
-    function _windowTermsOn(uint24 day, uint256 period, uint256 word) private view returns (Window memory w) {
-        (w.bankroll, w.goal, w.played, w.stakeUnits, w.tier) = _bonusPreset(_bonusRoll(word, period), period);
+    /// @dev Populate the fixed schedule fields after either RNG decoding or snapshot decoding.
+    function _finishWindowTerms(uint24 day, uint256 period, Window memory w, uint256 highMult)
+        private pure returns (Window memory)
+    {
         unchecked {
-            // The maximum a player may place directly: seven of the window's ten chips. The key
-            // is built on the full round, so every placed/scattered split is the same race.
             w.postedStake = (w.played / _BONUS_CHIPS) * _MAX_PICKED_CHIPS;
             w.bound = uint48(_slotOf(day, period));
-            // Every window of a day runs the SAME high lane, because the draw is the day's and
-            // the slot names the day. A window armed or settled days later still reads its own.
-            w.highMult = _highMultOf(word);
-            w.terms = w.stakeUnits | (w.highMult << _TERM_HIGH_SHIFT);
+            w.highMult = highMult;
+            w.terms = w.stakeUnits | (highMult << _TERM_HIGH_SHIFT);
         }
-        // A scheduled window's key is its SLOT. Its terms are a pure function of the day's word,
-        // one set per slot, so hashing them in would add nothing but blindness before the word
-        // lands — and a seat reserved ahead of the word needs the field to exist already.
         w.key = bytes32(uint256(w.bound));
+        return w;
+    }
+
+    /// @dev Decode the day's word while it is retained; opened terms also have a compact snapshot.
+    function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+        (w.bankroll, w.goal, w.played, w.stakeUnits, w.tier) = _bonusPreset(_bonusRoll(word, period), period);
+        return _finishWindowTerms(day, period, w, _highMultOf(word));
     }
 
     /// @notice GAME or VAULT: deliver a day-pass award. Reserves ONE pass on tomorrow where
@@ -1861,7 +1868,8 @@ contract CrapsBattle is CrapsBattleStorage {
         // window creates nothing to reclaim, and why the seed field below belongs entirely to
         // donations. Seats reserved ahead of the word are already counted in this field — the key
         // is the slot, so they joined it as ordinary entrants — and the stake echo lands beside them.
-        _battles[w.key] |= w.stakeUnits << _BG_STAKE_SHIFT;
+        uint256 frozen = w.tier | (w.highMult == CrapsPriceLib.HIGH_TAIL ? _BG_TERM_HIGH_TAIL : 0) | _BG_TERMS_FROZEN;
+        _battles[w.key] |= (w.stakeUnits << _BG_STAKE_SHIFT) | (frozen << _BG_TERM_TIER_SHIFT);
 
         unchecked {
             cost = uint256(w.bankroll) + w.stakeUnits * _BATTLE_STAKE_UNIT;

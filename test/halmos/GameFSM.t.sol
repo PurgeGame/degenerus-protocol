@@ -123,7 +123,7 @@ contract FSMAdvanceHarness is DegenerusGameAdvanceModule {
     function requestActive() external view returns (bool) { return _rngRequestActive(); }
 
     function wordAt(uint24 day) external view returns (uint256) {
-        return rngWordByDay[day];
+        return _recordedDailyWord(day);
     }
 
     function battlePending() external view returns (bool) {

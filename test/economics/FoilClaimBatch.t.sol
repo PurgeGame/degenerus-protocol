@@ -53,7 +53,7 @@ contract FoilClaimBatch is DeployProtocol {
     }
 
     function _completeDay(uint256 vrfWord) internal {
-        _finishReadConsumers();
+        if (!game.rngLocked()) _finishReadConsumers();
         _advance();
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
@@ -73,14 +73,9 @@ contract FoilClaimBatch is DeployProtocol {
         if (w == 0) w = 1;
     }
 
-    /// @dev Replays FoilPackEV's N=30 scenario move for move — same cohorts in the same
-    ///      order, same whale cadence, same seeds — because RNG here is a function of the
-    ///      whole purchase history. Dropping the ticket cohort or changing the seed domain
-    ///      shifts every draw and the graded matches stop landing (P(score >= 4) ~ 0.0035
-    ///      per comparison, so wins only accumulate across the full sweep).
-    ///      Day advance goes through vm.getBlockTimestamp(): this whole scenario runs in
-    ///      one setUp frame, where via-IR CSEs a chained `block.timestamp + 1 days` into a
-    ///      single value and the clock never moves.
+    /// @dev Buy and generate real packs. Once a live board seals, plant that board in
+    ///      each pack's last line to guarantee batch wins without retaining old claims.
+    ///      The cohort tests separately verify generated-line/bucket conservation.
     function _runScenario() internal {
         uint256 nPurchaseDays = 30;
         uint24 lvl = game.level();
@@ -112,9 +107,23 @@ contract FoilClaimBatch is DeployProtocol {
                 try game.purchase{value: 50 * pw}(whale, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             }
             _completeDay(_seed(nPurchaseDays, d));
+            _endDay = game.currentDayView();
+            (uint32 board, uint24 drawLevel) = _foilDraw(_endDay);
+            bytes32 outer = keccak256(abi.encode(uint256(drawLevel), uint256(58)));
+            bytes32 firstSlot = keccak256(abi.encode(_fb[0], outer));
+            uint256 first = uint256(vm.load(address(game), firstSlot));
+            if (first >> 255 != 0 && uint24(first) <= _endDay && drawLevel != 0) {
+                for (uint256 i; i < FOIL_BUYERS; ++i) {
+                    bytes32 slot = keccak256(abi.encode(_fb[i], outer));
+                    uint256 record = uint256(vm.load(address(game), slot));
+                    assertTrue(record >> 255 != 0, "real pack materialized");
+                    vm.store(address(game), slot, bytes32((record & ~(uint256(type(uint32).max) << 152)) | (uint256(board) << 152)));
+                }
+                return;
+            }
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }
-        _endDay = game.currentDayView();
+        revert("batch fixture did not generate a live foil board");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -128,7 +137,7 @@ contract FoilClaimBatch is DeployProtocol {
         uint256 n;
         uint256 snap = vm.snapshotState();
         for (uint256 i = 0; i < FOIL_BUYERS && n < want; i++) {
-            for (uint24 day = _buyDay + 1; day <= _endDay && n < want; day++) {
+            for (uint24 day = _buyDay; day <= _endDay && n < want; day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint8 ti = 0; ti < 4 && n < want; ti++) {
                     try game.claimFoilMatch(_fb[i], day, ti) {
@@ -326,8 +335,13 @@ contract FoilClaimBatch is DeployProtocol {
         game.purchase{value: 10 * priceWei}(p, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         bytes32 inner = keccak256(abi.encode(uint256(lvl), FOIL_RECORD_SLOT));
         uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(p, inner))));
-        resolveDay = uint24(rec);
         multBps = uint16(rec >> 24);
+        for (uint256 i; i < 50 && rec >> 255 == 0; ++i) {
+            _tick();
+            rec = uint256(vm.load(address(game), keccak256(abi.encode(p, inner))));
+        }
+        assertTrue(rec >> 255 != 0, "new foil cohort generated");
+        resolveDay = uint24(rec);
     }
 
     /// @dev Seed the live next-pool half (slot 2, low 128 bits) up to targetNext, mirroring
@@ -362,7 +376,7 @@ contract FoilClaimBatch is DeployProtocol {
     ///      instead of the drain loop running straight through it.
     function _tick() internal {
         _fulfillPendingVrf();
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("advanceGame()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         if (!ok) vm.warp(vm.getBlockTimestamp() + 1 days);
     }
 
@@ -413,9 +427,14 @@ contract FoilClaimBatch is DeployProtocol {
         uint256 reserved = (uint256(vm.load(address(game), slot)) >> 32) & type(uint32).max;
         assertEq(reserved, 0, string.concat(tag, ": dailyFoilDraw bits 32..63 must read zero"));
 
-        uint32 sel = _deriveFoilLine(player, lvl, game.rngWordForDay(day), multBps, 0);
+        uint256 record = uint256(vm.load(address(game), keccak256(abi.encode(player, keccak256(abi.encode(uint256(lvl), FOIL_RECORD_SLOT))))));
+        uint32 sel = uint32(record >> 56);
+        multBps;
         _forceWinSetToLine(day, sel);
 
+        // Allow the daily draw to release its frozen pool before a forced ETH payout.
+        for (uint256 i; i < 100 && game.rngLocked(); ++i) _tick();
+        assertFalse(game.rngLocked(), "daily lock released before the face-table claim");
         uint256 passesBefore = game.whalePassClaimAmount(player);
         vm.recordLogs();
         game.claimFoilMatch(player, day, 0);

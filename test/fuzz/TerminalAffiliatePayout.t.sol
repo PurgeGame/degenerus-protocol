@@ -16,7 +16,7 @@ contract TerminalAffiliateSeeder is DegenerusGame, BucketSeed {
         jackpotPhaseFlag = phase == 1;
         lastPurchaseDay = phase >= 2;
         rngLockedFlag = phase == 3;
-        rngWordByDay[day] = word;
+        _recordDailyRng(day, word);
         ticketsFullyProcessed = true;
         levelPrizePool[lvl] = 1000 ether;
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
@@ -28,12 +28,12 @@ contract TerminalAffiliateSeeder is DegenerusGame, BucketSeed {
     }
 
     function clearDayWord() external {
-        rngWordByDay[_simulatedDayIndex()] = 0;
+        _recordDailyRng(_simulatedDayIndex(), 0);
     }
 
     /// @dev The locked daily request, sent today, has its word delivered but not yet applied.
     function deliverPreFreezeWord(uint256 word) external {
-        rngWordByDay[_simulatedDayIndex()] = 0;
+        _recordDailyRng(_simulatedDayIndex(), 0);
         rngRequestTime = uint48(block.timestamp) & ~uint48(1);
         vrfRequestId = 777;
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;

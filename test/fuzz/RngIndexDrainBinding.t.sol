@@ -169,7 +169,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     ///      purchase must remain unresolved when the earlier in-flight word arrives.
     function testBindingConsistencyMidDayCrossDay() public {
         // ── Mid-day prerequisite: today's daily RNG must already be consumed
-        //    (requestLootboxRng reverts while rngWordByDay[today] == 0). Complete a
+        //    (requestLootboxRng reverts while _recordedDailyWord(today) == 0). Complete a
         //    day, then sit on the new day so today's word is committed.
         _completeDayWithLogs(uint256(keccak256("midday-binding-setup-word")));
         vm.warp(block.timestamp + 1 days);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 
@@ -167,7 +168,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     }
 
     function _rngWordByDay(uint32 day) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(day), uint256(10)))));
+        return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
     function _pokeSubOpenedDay(address who, uint32 d) internal {
