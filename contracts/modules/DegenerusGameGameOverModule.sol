@@ -451,9 +451,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         );
         if (!ok) {
             MineFlipGas.rethrowGasFailure(data);
-            if (data.length == 4 && bytes4(data) == EmptyRevert.selector) {
-                assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-            }
             return false;
         }
         // A successful no-progress checkpoint still owns this transaction: low

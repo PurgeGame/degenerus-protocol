@@ -12,6 +12,8 @@ library MineFlipGas {
 
     error InsufficientExecutionGas();
     error WorkGasBound();
+    /// @dev Same signature as the Game's EmptyRevert(), raised for an empty module revert.
+    error EmptyRevert();
 
     struct Meter {
         uint256 start;
@@ -72,12 +74,14 @@ library MineFlipGas {
         if (spent(meter) > meter.allowance) revert WorkGasBound();
     }
 
-    /// @dev Metering failures must never be swallowed by a semantic fallback.
+    /// @dev Metering failures must never be swallowed by a semantic fallback. The Game
+    ///      re-raises an empty module revert (a module call out of gas) as EmptyRevert().
     function rethrowGasFailure(bytes memory reason) internal pure {
         if (reason.length == 0) revert InsufficientExecutionGas();
         bytes4 selector;
         assembly ("memory-safe") { selector := mload(add(reason, 32)) }
-        if (selector == InsufficientExecutionGas.selector || selector == WorkGasBound.selector) {
+        if (selector == InsufficientExecutionGas.selector || selector == WorkGasBound.selector
+            || selector == EmptyRevert.selector) {
             assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
         }
     }

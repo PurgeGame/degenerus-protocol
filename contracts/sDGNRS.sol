@@ -453,8 +453,9 @@ contract sDGNRS {
         return _claimRedemptionFor(player, day, roll, false, word);
     }
 
-    /// @notice Settle a parked claim on its own session word (fixed outcome). Player or approved operator only.
-    /// @dev Terminal claims take the usual direct terminal shape; the word is then unused.
+    /// @notice Settle a parked claim on its own session word. Player or approved operator only.
+    /// @dev The word is fixed, but the lootbox half resolves at the level live at claim time.
+    ///      Terminal claims take the usual direct terminal shape; the word is then unused.
     function claimParkedRedemption(address player, uint24 day) external {
         uint256 word = _parkedRedemptionWord[player][day];
         if (word == 0) revert NoClaim();

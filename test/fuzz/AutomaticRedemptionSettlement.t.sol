@@ -156,6 +156,19 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         sdgnrs.claimParkedRedemption(alice, day);
     }
 
+    /// @dev The Game re-raises an out-of-gas module call as EmptyRevert(). Settlement must treat
+    ///      it as caller-withheld gas and revert, never as a refusal that parks the claim.
+    function test_OutOfGasGameModuleCallRevertsInsteadOfParking() public {
+        uint24 day = game.currentDayView();
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        _resolve(day, 100, 99);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(DegenerusGame.resolveRedemptionLootbox.selector),
+            abi.encodeWithSignature("EmptyRevert()"));
+        vm.expectRevert(abi.encodeWithSignature("EmptyRevert()"));
+        vm.prank(address(game));
+        _process(9_000_000);
+    }
+
     function _claimTranscript() internal returns (bytes32 digest) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
