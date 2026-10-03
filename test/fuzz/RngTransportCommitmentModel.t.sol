@@ -39,6 +39,27 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
     function dead() external view returns (bool) { return _vrfDead(); }
     function markRetrySpent() external { rngRequestTime |= 1; }
     function deactivate() external { _setRngRequestActive(false); }
+
+    /// @dev Mirror of DegenerusGame.rawFulfillRandomWords (the callback lives in the facade,
+    ///      not the module, so the LINK-paid call carries no delegatecall overhead).
+    function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
+        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
+        uint16 flags;
+        bool daily;
+        assembly ("memory-safe") {
+            let state := sload(rngFlagsAndNudges.slot)
+            flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
+            daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
+        }
+        if (flags & (uint16(1) << 14) == 0 || requestId != vrfRequestId || rngWordCurrent != RNG_WORD_WAITING) return;
+        uint256 word = randomWords[0];
+        if (daily) {
+            unchecked { word += ((flags >> 1) & 127) | (((flags >> 9) & 3) << 7); }
+        }
+        if (word < 2) return;
+        rngWordCurrent = word;
+        _lrWrite(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK, uint48(block.timestamp));
+    }
 }
 
 contract RngTransportCommitmentModelTest is Test {

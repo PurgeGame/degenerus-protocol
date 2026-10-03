@@ -12,7 +12,7 @@
 # to AFKing/Lootbox; remaining read consumers to their native worker modules or
 # pinned sDGNRS/Craps contracts. Advance delegates Jackpot's resumable payout work,
 # including the extracted JackpotDraw module; GameOver uses terminal Ticket/Jackpot.
-# The facade callback delegates to Rng.rawFulfillRandomWords with original context.
+# The facade accepts the VRF callback inline; Rng handles publication, request and retry.
 # Manual compatibility doors retain the same readiness/order but never pay miners.
 #
 # Classes: CRANK-PINNED (bare, on the crank, pin required) · CRANK-TRY (wrapped at the site) ·
@@ -58,6 +58,8 @@ OFF-CRANK	lowlevel:call	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-onl
 OFF-CRANK	IStETH.balanceOf	_payoutWithStethFallback	DegenerusGame.sol	BARE		ETH-first claim payout, claimWinnings player path
 OFF-CRANK	lowlevel:call	_payoutWithStethFallback	DegenerusGame.sol	BARE		ETH-first claim payout, claimWinnings player path (untrusted recipient call runs last)
 OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseDeityPass	_purchaseDeityPassFor	DegenerusGame.sol	BARE		player deity pass purchase
+OFF-CRANK	lowlevel:delegatecall	setThanosLevel	DegenerusGame.sol	BARE		vault-owner thanos declaration stub into the advance module; player/configuration path, unreachable from required settlement work
+OFF-CRANK	IVaultOwnerCheck.isVaultOwner	setThanosLevel	modules/DegenerusGameAdvanceModule.sol	BARE		vault-owner access check on the thanos declaration; configuration-only path, unreachable from required settlement work
 OFF-CRANK	delegatecall:IDegenerusGameMintModule.purchase	_purchaseFor	DegenerusGame.sol	BARE		player ticket purchase entry (purchase / purchaseFor)
 OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseLazyPass	_purchaseLazyPassFor	DegenerusGame.sol	BARE		player lazy pass purchase
 OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseWhalePass	_purchaseWhalePassFor	DegenerusGame.sol	BARE		player whale pass purchase
@@ -102,7 +104,6 @@ CRANK-PINNED	IsDGNRS.transferFromPool	payRecordSdgnrs	DegenerusGame.sol	BARE	tes
 OFF-CRANK	lowlevel:delegatecall	placeDegeneretteBet	DegenerusGame.sol	BARE		player degenerette bet placement
 OFF-CRANK	lowlevel:delegatecall	previewSellFarFutureEntries	DegenerusGame.sol	BARE		view preview of a far-future sale delegated to Mint
 OFF-CRANK	lowlevel:delegatecall	pullRedemptionReserve	DegenerusGame.sol	BARE		sDGNRS._submitGamblingClaimFrom (player gambling-burn claim)
-CRANK-SELF	lowlevel:delegatecall	rawFulfillRandomWords	DegenerusGame.sol	BARE		Pinned game-storage worker dispatch; shared ordering and allowance select the worker, with nested failure bubbling atomically.
 CRANK-SELF	lowlevel:delegatecall	recordAfkingSecondary	DegenerusGame.sol	BARE		QUESTS callback on opening-day autoDecimatorBurn secondary completion; own-storage afking streak update
 CRANK-SELF	lowlevel:delegatecall	recordDecBurn	DegenerusGame.sol	BARE		FLIP decimator callback, including opening-day autoDecimatorBurn; own-storage entry accounting
 OFF-CRANK	delegatecall:IDegenerusGameMintModule.redeemFlip	redeemFlip	DegenerusGame.sol	BARE		player / VAULT redeemFlip entry

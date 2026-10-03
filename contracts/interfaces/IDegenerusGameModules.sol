@@ -66,7 +66,7 @@ interface IDegenerusGameAdvanceModule {
     function applyDailyGap() external;
     function runDailyPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
     function runTerminalPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
-
+    function setThanosLevel(uint24 targetLevel, uint8 shift) external;
 }
 
 /// @title IDegenerusGameGameOverModule

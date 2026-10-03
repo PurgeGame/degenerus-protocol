@@ -154,9 +154,9 @@ CONSUMER-SEALED	_recordedDailyWord	_farFutureSeed	modules/DegenerusGameMintStrea
 GATE	rngWordCurrent	_rngRetryDue	modules/DegenerusGameRngModule.sol	READ	Retry only an active unanswered request; retained delivered payload cannot be discarded.
 EXEMPT-ADVANCE	lootboxRngPacked	_sealRngWriteBuffer	modules/DegenerusGameRngModule.sol	WRITE	Successful normal request clears pending purchase values once before the binary seal; retry preserves both buffers.
 EXEMPT-ADVANCE	_currentRngWord	publishRng	modules/DegenerusGameRngModule.sol	READ
-PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	modules/DegenerusGameRngModule.sol	READ	One slot0 SLOAD authenticates activity, identifies daily lock and supplies frozen nudge; callback never writes it.
-EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	modules/DegenerusGameRngModule.sol	READ
-PRODUCER	rngWordCurrent	rawFulfillRandomWords	modules/DegenerusGameRngModule.sol	WRITE	Coordinator, active-bit, request-ID and waiting checks authenticate the final encoded payload.
+PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	DegenerusGame.sol	READ	One slot0 SLOAD authenticates activity, identifies daily lock and supplies frozen nudge; callback never writes it.
+EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	READ
+PRODUCER	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	WRITE	Coordinator, active-bit, request-ID and waiting checks authenticate the final encoded payload.
 PRODUCER	rngRequestDay	requestDailyRng	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 PRODUCER	rngWordCurrent	requestDailyRng	modules/DegenerusGameRngModule.sol	WRITE
 EXEMPT-ADVANCE	_recordedDailyWord	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age

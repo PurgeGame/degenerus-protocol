@@ -26,33 +26,6 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
     uint48 private constant RNG_RETRY_TIMEOUT = 20 hours;
 
-    /// @notice Accept exactly one matching coordinator response; publication is a later action.
-    function rawFulfillRandomWords(
-        uint256 requestId,
-        uint256[] calldata randomWords
-    ) external {
-        if (address(this) != ContractAddresses.GAME) revert E();
-        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
-        uint16 flags;
-        bool daily;
-        assembly ("memory-safe") {
-            let state := sload(rngFlagsAndNudges.slot)
-            flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
-            daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
-        }
-        if (flags & (uint16(1) << 14) == 0 || requestId != vrfRequestId || rngWordCurrent != RNG_WORD_WAITING) return;
-
-        uint256 word = randomWords[0];
-        // Addition preserves the uniform distribution. The two reserved final values
-        // leave this request waiting for its existing retry path (probability 2 / 2^256).
-        if (daily) {
-            // Decode the frozen nine-bit count from the same slot-0 snapshot: no extra SLOAD.
-            unchecked { word += ((flags >> 1) & 127) | (((flags >> 9) & 3) << 7); }
-        }
-        if (word < 2) return;
-        rngWordCurrent = word;
-        _lrWrite(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK, uint48(block.timestamp));
-    }
     /// @notice Publish accepted entropy before any read consumer, including tickets.
     function publishRng() external {
         if (address(this) != ContractAddresses.GAME || !_rngRequestActive() || _rngSessionPublished()

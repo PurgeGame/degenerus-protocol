@@ -932,4 +932,66 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         coinflip.creditFlip(winner, prize * 1 ether);
         emit SubDrawWon(winner, day, uint24(spanDays), prize);
     }
+
+    /// @dev Ceiling on any declared snap exponent: 2^8 = 256x is the deepest
+    ///      division a thanos level can apply.
+    uint8 private constant SNAP_SHIFT_MAX = 8;
+
+    /// @dev Floor on a thanos declaration: after division, the target level's
+    ///      projected entries (current purchase-target pool at the target level's
+    ///      price) must still reach 10M whole tickets (40M entries). Keeps any
+    ///      non-zero shift undeclarable until demand genuinely reaches runaway scale.
+    uint256 private constant SNAP_FLOOR_ENTRIES = 40_000_000;
+
+    /// @notice Declare a future level a thanos level: every entry drained for
+    ///         targetLevel onward divides by 2^shift. A pure prospective price
+    ///         increase — declarations land at least 3 levels ahead, strictly
+    ///         before the target's first materialization (its frozen pool and write
+    ///         buffer first mint after the last-purchase seal of target - 1, while
+    ///         level == target - 2), so no materialized ticket is touched and one
+    ///         level's entries always share one exponent. Already-queued
+    ///         raw entries for covered levels divide with everyone else's at
+    ///         drain; the uniform division cancels in the pot-share fraction, so
+    ///         a raw entry's replacement cost and expected pot share are both
+    ///         unchanged by any declaration.
+    /// @dev Runs in the Game's storage context via the facade stub. Access: vault owner
+    ///      only (DGVE majority holder). Bounds: 3-level notice; shift capped at
+    ///      SNAP_SHIFT_MAX (raising and lowering both allowed — fairness needs only that
+    ///      each level's exponent is fixed before its first ticket materializes); a
+    ///      non-zero shift must leave the target level's projected entries at or above
+    ///      SNAP_FLOOR_ENTRIES, so snapping is undeclarable below runaway scale; a pending
+    ///      declaration locks once its 3-level window opens and clears when its level commits.
+    /// @custom:reverts OnlyVault If caller is not the vault owner.
+    /// @custom:reverts ThanosBounds If any declaration bound is violated.
+    function setThanosLevel(uint24 targetLevel, uint8 shift) external {
+        if (address(this) != ContractAddresses.GAME) revert E();
+        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert OnlyVault();
+        uint24 lvl = level;
+        if (
+            targetLevel < lvl + 3 ||
+            shift > SNAP_SHIFT_MAX ||
+            // A pending declaration whose materialization window has opened is
+            // immutable until its level commits and folds it into snapShift.
+            (snapLevel != 0 && lvl + 3 > snapLevel)
+        ) revert ThanosBounds();
+        if (shift != 0) {
+            // Projected entries for the target at the PREVIOUS level's final pool
+            // target — settled history whose _endPhase (including the x00
+            // futurePool*0.4 rewrite) has already run, so the floor's basis can
+            // never decrease after the declaration. levelPrizePool[level] would
+            // be live: an x00's value shrinks to 40% of futurePool at its phase end,
+            // letting a jackpot-phase declaration overstate the floor.
+            uint256 projected = (levelPrizePool[lvl == 0 ? 0 : lvl - 1] << 2) /
+                PriceLookupLib.priceForLevel(targetLevel);
+            if ((projected >> shift) < SNAP_FLOOR_ENTRIES) revert ThanosBounds();
+        }
+        snapLevel = targetLevel;
+        snapPendingShift = shift;
+        emit ThanosLevelSet(targetLevel, shift);
+    }
+}
+
+/// @dev Vault interface for the DGVE majority-holder check behind setThanosLevel.
+interface IVaultOwnerCheck {
+    function isVaultOwner(address account) external view returns (bool);
 }

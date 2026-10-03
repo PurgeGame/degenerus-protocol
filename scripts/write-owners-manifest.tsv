@@ -127,10 +127,11 @@ OWNER	rngRequestTime	modules/DegenerusGameGameOverModule.sol	Terminal first atte
 OWNER	rngRequestTime	modules/DegenerusGameRngModule.sol	Fresh daily/midday request sets the even actual send timestamp; transport retry changes only the spent LSB. Logical day lives separately in rngRequestDay.
 HELPER	rngWordByDay	storage/DegenerusGameStorage.sol	advance helpers record parity word and tag together
 OWNER	rngWordCurrent	modules/DegenerusGameGameOverModule.sol	Successful terminal request invalidates buffered daily payload, as the previous Advance _tryRequestRng did.
-OWNER	rngWordCurrent	modules/DegenerusGameRngModule.sol	Fresh requests set WAIT sentinel1; authorized callback stores exactly one final word >=2. Retry preserves WAIT and published consumers retain the accepted word.
-OWNER	snapLevel	DegenerusGame.sol	setThanosLevel declares the pending (level, shift) pair; the advance module consumes it at promotion
+OWNER	rngWordCurrent	modules/DegenerusGameRngModule.sol	Fresh requests set WAIT sentinel1; retry preserves WAIT and published consumers retain the accepted word. The facade callback stores the final word.
+OWNER	rngWordCurrent	DegenerusGame.sol	rawFulfillRandomWords stores the accepted coordinator word inline in the facade (callback runs without a delegatecall)
+OWNER	snapLevel	modules/DegenerusGameAdvanceModule.sol	setThanosLevel declares the pending (level, shift) pair; the advance module consumes it at promotion
 OWNER	snapLevel	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest zeroes the declaration when lvl >= snapLevel after folding it into snapShift
-OWNER	snapPendingShift	DegenerusGame.sol	setThanosLevel stores the declared exponent; consumed by the advance module's fold
+OWNER	snapPendingShift	modules/DegenerusGameAdvanceModule.sol	setThanosLevel stores the declared exponent; consumed by the advance module's fold
 OWNER	snapShift	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest folds snapPendingShift in at the declared level; sole writer
 OWNER	subsFullyProcessed	modules/DegenerusGameMinerModule.sol	Miner clears completion when it pins a new preparation day; only AFKing worker sets completion after the FIFO drains.
 OWNER	terminalAffiliate	modules/DegenerusGameGameOverModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; handleGameOverDrain reads it

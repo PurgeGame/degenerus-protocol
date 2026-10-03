@@ -623,60 +623,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         emit MiddayMaxBasefeeUpdated(prev, newGwei);
     }
 
-    /// @dev Ceiling on any declared snap exponent: 2^8 = 256x is the deepest
-    ///      division a thanos level can apply.
-    uint8 private constant SNAP_SHIFT_MAX = 8;
-
-    /// @dev Floor on a thanos declaration: after division, the target level's
-    ///      projected entries (current purchase-target pool at the target level's
-    ///      price) must still reach 10M whole tickets (40M entries). Keeps any
-    ///      non-zero shift undeclarable until demand genuinely reaches runaway scale.
-    uint256 private constant SNAP_FLOOR_ENTRIES = 40_000_000;
-
     /// @notice Declare a future level a thanos level: every entry drained for
-    ///         targetLevel onward divides by 2^shift. A pure prospective price
-    ///         increase — declarations land at least 3 levels ahead, strictly
-    ///         before the target's first materialization (its frozen pool and write
-    ///         buffer first mint after the last-purchase seal of target - 1, while
-    ///         level == target - 2), so no materialized ticket is touched and one
-    ///         level's entries always share one exponent. Already-queued
-    ///         raw entries for covered levels divide with everyone else's at
-    ///         drain; the uniform division cancels in the pot-share fraction, so
-    ///         a raw entry's replacement cost and expected pot share are both
-    ///         unchanged by any declaration.
-    /// @dev Access: vault owner only (DGVE majority holder). Bounds: 3-level
-    ///      notice; shift capped at SNAP_SHIFT_MAX (raising and lowering both
-    ///      allowed — fairness needs only that each level's exponent is fixed
-    ///      before its first ticket materializes); a non-zero shift must leave the
-    ///      target level's projected entries at or above SNAP_FLOOR_ENTRIES, so
-    ///      snapping is undeclarable below runaway scale; a pending declaration
-    ///      locks once its 3-level window opens and clears when its level commits.
+    ///         targetLevel onward divides by 2^shift.
+    /// @dev Thin delegatecall dispatch stub into DegenerusGameAdvanceModule, which holds the
+    ///      bounds, the vault-owner check and the declaration body. Signature:
+    ///      setThanosLevel(uint24 targetLevel, uint8 shift); identical selector, calldata
+    ///      forwards as-is.
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ThanosBounds If any declaration bound is violated.
-    function setThanosLevel(uint24 targetLevel, uint8 shift) external {
-        _requireVaultOwner();
-        uint24 lvl = level;
-        if (
-            targetLevel < lvl + 3 ||
-            shift > SNAP_SHIFT_MAX ||
-            // A pending declaration whose materialization window has opened is
-            // immutable until its level commits and folds it into snapShift.
-            (snapLevel != 0 && lvl + 3 > snapLevel)
-        ) revert ThanosBounds();
-        if (shift != 0) {
-            // Projected entries for the target at the PREVIOUS level's final pool
-            // target — settled history whose _endPhase (including the x00
-            // futurePool*0.4 rewrite) has already run, so the floor's basis can
-            // never decrease after the declaration. levelPrizePool[level] would
-            // be live: an x00's value shrinks to 40% of futurePool at its phase end,
-            // letting a jackpot-phase declaration overstate the floor.
-            uint256 projected = (levelPrizePool[lvl == 0 ? 0 : lvl - 1] << 2) /
-                PriceLookupLib.priceForLevel(targetLevel);
-            if ((projected >> shift) < SNAP_FLOOR_ENTRIES) revert ThanosBounds();
-        }
-        snapLevel = targetLevel;
-        snapPendingShift = shift;
-        emit ThanosLevelSet(targetLevel, shift);
+    function setThanosLevel(uint24, uint8) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Purchase any combination of tickets and loot boxes with ETH or claimable.
@@ -1966,15 +1923,33 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Chainlink VRF callback for random word fulfillment.
-    /// @dev The RNG module checks coordinator identity and callback authority before storing
-    ///      the accepted word in game storage. Both paths store the final session word.
-    ///      A daily lock adds the frozen nudge count. Final values 0/1 leave the request
-    ///      pending for retry; every accepted word is stored unchanged. Advance publishes
-    ///      the session and retires request authority later. Stale/duplicate fulfillments (wrong requestId or word already
-    ///      stored) are ignored, not reverted, so a late coordinator retry never bricks.
-    function rawFulfillRandomWords(uint256, uint256[] calldata) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    /// @dev Accepts exactly one matching coordinator response and stores the final session
+    ///      word; publication is a later miner action. A daily lock adds the frozen nudge
+    ///      count. Final values 0/1 leave the request pending for retry. Stale/duplicate
+    ///      fulfillments (wrong requestId or word already stored) are ignored, not reverted,
+    ///      so a late coordinator retry never bricks. Runs in the base contract so the
+    ///      LINK-paid callback carries no delegatecall overhead.
+    function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
+        if (msg.sender != address(vrfCoordinator)) revert OnlyCoordinator();
+        uint16 flags;
+        bool daily;
+        assembly ("memory-safe") {
+            let state := sload(rngFlagsAndNudges.slot)
+            flags := shr(mul(rngFlagsAndNudges.offset, 8), state)
+            daily := and(shr(mul(rngLockedFlag.offset, 8), state), 1)
+        }
+        if (flags & (uint16(1) << 14) == 0 || requestId != vrfRequestId || rngWordCurrent != RNG_WORD_WAITING) return;
+
+        uint256 word = randomWords[0];
+        // Addition preserves the uniform distribution. The two reserved final values
+        // leave this request waiting for its existing retry path (probability 2 / 2^256).
+        if (daily) {
+            // Decode the frozen nine-bit count from the same slot-0 snapshot: no extra SLOAD.
+            unchecked { word += ((flags >> 1) & 127) | (((flags >> 9) & 3) << 7); }
+        }
+        if (word < 2) return;
+        rngWordCurrent = word;
+        _lrWrite(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK, uint48(block.timestamp));
     }
 
     /*+======================================================================+
