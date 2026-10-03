@@ -25,8 +25,6 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
     uint48 private constant RNG_RETRY_TIMEOUT = 20 hours;
-    uint96 private constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
-    uint96 private constant MIN_LINK_FOR_CRAPS_RNG = 10 ether;
 
     /// @notice Accept exactly one matching coordinator response; publication is a later action.
     function rawFulfillRandomWords(

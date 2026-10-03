@@ -55,6 +55,11 @@ contract MinerProgressHarness is DegenerusGameMinerModule {
     }
 
     function pendingMidday() external { _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 1); }
+    function wireCoordinator() external { vrfCoordinator = IVRFCoordinator(ContractAddresses.VRF_COORDINATOR); }
+    function setMiddayThreshold(uint64 milliEth) external { _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, milliEth); }
+    function pendingCrapsWrite() external {
+        lootboxRngPacked |= uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer());
+    }
     function uncertify() external { _setRngComplete(false); }
     function rngComplete() external view returns (bool) { return _rngComplete(); }
     function rngConsumerStage() external view returns (uint8) { return _rngConsumerStage(); }
@@ -138,7 +143,14 @@ contract MinerNoProgressTest is Test {
         if (action == DegenerusGameStorage.MinerAction.Maintenance) {
             vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(true));
         }
+        if (action == DegenerusGameStorage.MinerAction.RequestMidday) _fundCoordinator(100 ether);
         assertEq(game.minerAction(), uint8(action), "fixture action");
+    }
+
+    function _fundCoordinator(uint96 link) private {
+        game.wireCoordinator();
+        vm.mockCall(ContractAddresses.VRF_COORDINATOR, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
+            abi.encode(link, uint96(0), uint64(0), address(0), new address[](0)));
     }
 
     function _expectFailure(bytes4 reason, uint256 limit) private returns (uint256 used) {
@@ -242,6 +254,38 @@ contract MinerNoProgressTest is Test {
             assertTrue(game.rngComplete(), "real certification survives a later refusal");
             _assertWorkUnpaid();
         }
+    }
+
+    /// @dev A mid-day request its own gates would refuse is not selected: no attempt is made,
+    ///      earlier work commits, and with nothing else the call is NoWork. A pending
+    ///      write-side Craps window keeps waiving the pending-value gates.
+    function test_IneligibleOptionalRequestIsNeverAttempted() public {
+        _seed(DegenerusGameStorage.MinerAction.RequestMidday);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "fixture: eligible");
+        bytes memory request = abi.encodeWithSignature("requestMinerRng()");
+        game.setMiddayThreshold(500);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "below threshold is idle");
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, request, 0);
+        _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
+        game.setMiddayThreshold(0);
+        _fundCoordinator(1 ether);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "LINK floor is checked first");
+        game.pendingCrapsWrite();
+        _fundCoordinator(10 ether);
+        game.setMiddayThreshold(500);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday),
+            "pending Craps window waives the value gates at its own LINK floor");
+    }
+
+    function test_IneligibleOptionalRequestKeepsEarlierWorkWithoutAttempt() public {
+        _seed(DegenerusGameStorage.MinerAction.RequestMidday);
+        game.setMiddayThreshold(500);
+        game.uncertify();
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), 0);
+        vm.recordLogs();
+        game.mineFlip{gas: 16_700_000}();
+        assertTrue(game.rngComplete(), "earlier work commits without a request attempt");
+        _assertWorkUnpaid();
     }
 
     function test_UsefulCertificationCommitsWhenNextWorkerDeclines() public {

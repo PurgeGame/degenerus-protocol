@@ -1095,10 +1095,33 @@ abstract contract DegenerusGameStorage {
         if (dailyDue && (_afkingResetDay <= dailyIdx || !subsFullyProcessed)) return MinerAction.PrepareSubscriptions;
         if (_minerMaintenancePending()) return MinerAction.Maintenance;
         if (dailyDue) return MinerAction.RequestDaily;
-        if (_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK) != 0
-            || _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) != 0
-            || ((lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1) != 0) return MinerAction.RequestMidday;
-        return MinerAction.Idle;
+        return _minerMiddayEligible() ? MinerAction.RequestMidday : MinerAction.Idle;
+    }
+
+    uint96 internal constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
+    uint96 internal constant MIN_LINK_FOR_CRAPS_RNG = 10 ether;
+
+    /// @dev The creditless mid-day request's own refusal gates, read before selecting it:
+    ///      an optional request that would certainly be refused is not work. Daily, read,
+    ///      maintenance and liveness gates already hold on the path that reaches this check.
+    ///      A pending write-side Craps window waives both pending-value gates.
+    function _minerMiddayEligible() internal view returns (bool) {
+        bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
+        uint256 pendingEth = _unpackMilliEthToWei(uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK)));
+        if (!crapsWork) {
+            if (pendingEth == 0 && _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) == 0) return false;
+            uint256 threshold = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
+            if (threshold != 0 && pendingEth < threshold) return false;
+        }
+        if (_simulatedDayIndex() != dailyIdx) return false;
+        uint256 maxBasefee = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
+        if (maxBasefee != 0 && block.basefee > maxBasefee * 1 gwei) return false;
+        if ((block.timestamp - 82_620) % 1 days >= 1 days - 1 minutes) return false;
+        if (_recordedDailyWord(_simulatedDayIndex()) == 0) return false;
+        // No coordinator is wired before VRF setup, so nothing can be requested yet.
+        if (address(vrfCoordinator) == address(0)) return false;
+        (uint96 linkBal,,,,) = vrfCoordinator.getSubscription(vrfSubscriptionId);
+        return linkBal >= (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG);
     }
 
     /// @dev True while the early-bird ticket leg of a jackpot-phase day-1 daily waits for its
