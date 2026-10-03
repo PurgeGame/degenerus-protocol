@@ -26,8 +26,11 @@ pragma solidity 0.8.34;
 
 import {MintPaymentKind} from "./IDegenerusGame.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
 
 interface IDegenerusGameTicketModule {
+    function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
+        external returns (MineFlipGas.Result memory);
     function runTicketWork(uint24 anchor, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function processTicketBatch(uint24 anchor) external returns (bool finished, bool didWork);
     function processTicketBatchBudgeted(uint24 anchor, uint256 allowance)

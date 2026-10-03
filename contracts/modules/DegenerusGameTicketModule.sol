@@ -10,6 +10,11 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {TicketEntropy} from "../libraries/TicketEntropy.sol";
+import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
+import {PackedTicketShuffle} from "../libraries/PackedTicketShuffle.sol";
+import {PackedTicketSampleLib} from "../libraries/PackedTicketSampleLib.sol";
+import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol";
 
 import {IDegenerusGameFoilPackModule} from "../interfaces/IDegenerusGameModules.sol";
 
@@ -18,7 +23,7 @@ import {IDegenerusGameFoilPackModule} from "../interfaces/IDegenerusGameModules.
 ///      safe checkpoint. Owner streams and complete seated rounds are independent
 ///      of that partition. The miner dispatcher owns
 ///      admission/publication and must not replace the word before this work ends.
-contract DegenerusGameTicketModule is DegenerusGameStorage {
+contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     // Each bound includes cold writes. TAIL covers all cursor/seat persistence,
     // queue release, completion flags and the return after the last admitted item.
     uint256 internal constant TAIL = GasBounds.TICKET_TAIL;
@@ -31,6 +36,255 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
     uint256 internal constant SOLO_MAX_ENTRIES = GasBounds.TICKET_SOLO_MAX_ENTRIES;
     uint256 internal constant FOIL_CALL_MAX = GasBounds.TICKET_FOIL_CALL_MAX;
     uint256 internal constant CALL_OVERHEAD = GasBounds.TICKET_CALL_OVERHEAD;
+
+    uint256 private constant DIRECT_TICKET_DOMAIN = uint256(keccak256("DEGENERUS_DIRECT_JACKPOT_TICKETS_V1"));
+    // Eight packed draws (including padding redraws), cached deity ID, batch
+    // award event and loop work. Trait writes have their separate round bound.
+    uint256 private constant DIRECT_GROUP_GAS = 250_000;
+    // Bucket writes dominate a round: the worst quadrant mix is two rare groups
+    // (sixteen appends into distinct buckets) plus two common words, about 0.57M
+    // per quadrant and 2.3M per round with every slot cold; the shuffle and the
+    // packed reveal event add under 0.2M. A realistic round measures about 0.6M.
+    uint256 internal constant DIRECT_ROUND_GAS_MAX = 3_000_000;
+
+    event JackpotTicketWin(
+        address indexed winner, uint24 indexed lvl, uint16 indexed trait,
+        uint32 tickets, uint24 sourceLvl, uint256 entryIndex, bool roundedUp
+    );
+
+    /// @dev Packed IDs are permanent zero-based registry indices, eight per word.
+    ///      Source index uint32.max denotes a virtual deity occurrence.
+    event JackpotTicketBatchWin(
+        uint24 indexed sourceLvl, uint24 indexed targetLvl, uint16 indexed trait,
+        uint16 firstWinner, uint8 count, uint32 entriesEach,
+        uint256[4] owners, uint256[4] sourceIndices
+    );
+    /// @dev One whole-ticket reveal per valid lane. Each uint32 trait lane contains
+    ///      the four trait bytes, low quadrant first, matching the owner lane.
+    event JackpotTicketBatchTraits(uint24 indexed lvl, uint8 count, uint256[4] owners, uint256[4] traits);
+
+    struct DirectTicketGroup {
+        uint256[4] lanes;
+        uint256 count;
+        uint256[4] indices;
+    }
+
+    /// @dev Experimental L -> L+1 delivery. The jackpot worker owns pricing, passes
+    ///      and completion. Source buckets remain frozen; the target is already live.
+    ///      Each checkpoint completes all four quadrants, with one reveal per ticket.
+    function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
+        external returns (MineFlipGas.Result memory result)
+    {
+        JackpotWork storage work = jackpotWork;
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        if (!work.directTickets) {
+            _resumeQueuedJackpotTickets(work, plan, meter, result);
+            result.done = work.quadrant == 4;
+            MineFlipGas.finish(meter);
+            return result;
+        }
+        if (work.kind != 6 || plan.sourceLvl != work.lvl
+            || plan.queueLvl != work.lvl + 1 || _ticketBufferLevel(plan.queueLvl) != plan.queueLvl
+            || _snapShiftFor(plan.queueLvl) != 0) revert E();
+        uint8 q = work.quadrant;
+        uint256 i = work.winner;
+        uint32 round = work.directTicketRound;
+        uint256 rounds = plan.entriesEach / 4;
+        while (q < 4) {
+            uint256 count = plan.counts[q];
+            if (count == 0) {
+                if (!MineFlipGas.canRun(meter, 10_000, TAIL)) break;
+                ++q;
+                result.progressed = true;
+                continue;
+            }
+            while (i < count) {
+                uint256 n = count - i;
+                if (n > 32) n = 32;
+                // Four source words at a time. Preserve fixed batch geometry across
+                // checkpoints; caller gas never chooses how players are mixed.
+                uint256 roundBound = DIRECT_ROUND_GAS_MAX + ((n + 7) / 8) * DIRECT_GROUP_GAS;
+                if (!MineFlipGas.canRun(meter, roundBound, TAIL)) break;
+                _assertReadableTicketLevel(plan.sourceLvl);
+                DirectTicketGroup memory group = _directTicketGroup(plan, q, i, n);
+                // All randomness keys off the frozen word, source group and award round.
+                // In particular neither the global queue round nor caller gas is an input.
+                do {
+                    uint256 seed = EntropyLib.hash4(DIRECT_TICKET_DOMAIN, plan.entropy,
+                        (uint256(q) << 32) | i, round);
+                    _materializeJackpotRound(plan.queueLvl, group.lanes, group.count, seed);
+                    ++round;
+                    result.progressed = true;
+                } while (round < rounds && MineFlipGas.canRun(meter, roundBound, TAIL));
+                if (round < rounds) break;
+                emit JackpotTicketBatchWin(plan.sourceLvl, plan.queueLvl, plan.traits[q],
+                    uint16(i), uint8(group.count), uint32(plan.entriesEach), group.lanes, group.indices);
+                result.rewardBasis += n;
+                round = 0;
+                i += n;
+            }
+            if (i < count) break;
+            i = 0;
+            ++q;
+        }
+        if (q != work.quadrant) work.quadrant = q;
+        if (i != work.winner) work.winner = uint16(i);
+        if (round != work.directTicketRound) work.directTicketRound = round;
+        result.done = q == 4;
+        MineFlipGas.finish(meter);
+    }
+
+    /// @dev Winner `i` depends only on the frozen bucket, the quadrant seed and `i`, and each
+    ///      group of eight positions reads one packed word, so a call draws only the groups it
+    ///      awards and a resumed quadrant repeats no draw. Checkpoints sit on group starts.
+    ///      Awarded tickets only enter a queue; they never mutate these source buckets.
+    ///      Awards run in fixed groups: caller gas picks how many run, never their size.
+    function _resumeQueuedJackpotTickets(JackpotWork storage work, TicketWorkPlan calldata plan,
+        MineFlipGas.Meter memory meter, MineFlipGas.Result memory result) private
+    {
+        uint8 q = work.quadrant;
+        uint256 i = work.winner;
+        while (q < 4) {
+            uint256 count = plan.counts[q];
+            if (count == 0) {
+                if (!MineFlipGas.canRun(meter, 10_000, GasBounds.JACKPOT_TAIL_GAS)) break;
+                ++q;
+                result.progressed = true;
+                continue;
+            }
+            uint8 trait = plan.traits[q];
+            uint256 len = plan.lens[q];
+            address deity = plan.deities[q];
+            uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
+            uint256 seed = EntropyLib.hash2(plan.entropy, q);
+            uint8 salt = uint8(plan.salt + q);
+            PackedTicketSampleLib.Cursor memory cursor;
+            while (i < count) {
+                uint256 end = i + GasBounds.JACKPOT_TICKET_AWARD_CHUNK;
+                if (end > count) end = count;
+                if (!MineFlipGas.canRun(meter,
+                    (end - i) * (GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX + GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX), GasBounds.JACKPOT_TAIL_GAS)) break;
+                if (i == 0) _assertReadableTicketLevel(plan.sourceLvl);
+                result.progressed = true;
+                result.rewardBasis += end - i;
+                for (; i < end; ++i) {
+                    (address winner, uint256 index) = _drawBucketEntry(
+                        plan.sourceLvl, trait, len, effectiveLen, deity, seed, salt, i, cursor
+                    );
+                    if (winner != address(0)) {
+                        _queueEntries(winner, plan.queueLvl, uint32(plan.entriesEach), true);
+                        emit JackpotTicketWin(winner, plan.queueLvl, trait, uint32(plan.entriesEach),
+                            plan.sourceLvl, index, false);
+                    }
+                }
+            }
+            if (i < count) break;
+            i = 0;
+            ++q;
+        }
+        if (q != work.quadrant) work.quadrant = q;
+        if (i != work.winner) work.winner = uint16(i);
+    }
+
+    function _directTicketGroup(TicketWorkPlan calldata plan, uint8 q, uint256 start, uint256 n)
+        private view returns (DirectTicketGroup memory group)
+    {
+        uint8 trait = plan.traits[q];
+        uint256 len = plan.lens[q];
+        address deity = plan.deities[q];
+        uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
+        uint256 seed = EntropyLib.hash2(plan.entropy, q);
+        // Paid and genesis deities acquire permanent IDs with their initial ticket
+        // grants. Resolve once per batch; ordinary sampled lanes need no lookup.
+        uint256 deityIdx = deity == address(0) ? 0 : uint256(ticketOwnerId[deity]) - 1;
+        PackedTicketSampleLib.Cursor memory cursor;
+        for (uint256 j; j < n; ++j) {
+            if (cursor.used == 0) {
+                uint256 base = PackedTicketSampleLib.begin(cursor, effectiveLen,
+                    EntropyLib.hash4(seed, trait, uint8(plan.salt + q), start + j));
+                if (base < len) cursor.word = _bucketWordAtUnchecked(plan.sourceLvl, trait, base);
+            }
+            (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, effectiveLen);
+            uint256 ownerIdx;
+            if (index >= len) {
+                ownerIdx = deityIdx;
+                index = type(uint32).max;
+            } else {
+                uint256 word = redrawn ? _bucketWordAtUnchecked(plan.sourceLvl, trait, index) : cursor.word;
+                ownerIdx = uint32(word >> ((index & 7) << 5));
+            }
+            uint256 position = group.count++;
+            group.lanes[position >> 3] |= ownerIdx << (32 * (position & 7));
+            group.indices[position >> 3] |= index << (32 * (position & 7));
+        }
+    }
+
+    /// @dev Four packed writes per common quadrant, with cheap memory shuffles
+    ///      between quadrants. Accumulate traits in original-player order and
+    ///      emit each completed ticket once. No queue, per-quadrant owner lookup,
+    ///      or per-quadrant checkpoint/event overhead.
+    function _materializeJackpotRound(uint24 lvl, uint256[4] memory lanes, uint256 count, uint256 seed)
+        internal
+    {
+        if (count == 0) return;
+        uint256[4] memory mixed = [lanes[0], lanes[1], lanes[2], lanes[3]];
+        uint256 order;
+        for (uint256 j; j < count; ++j) order |= j << (8 * j);
+        uint256[4] memory reveals;
+        uint256 levelSlot = _traitBufferBase(lvl);
+        for (uint256 q; q < 4; ++q) {
+            if (q != 0) {
+                uint256 entropy = EntropyLib.hash2(seed, q + 4);
+                if (count == 32) order = PackedTicketShuffle.shuffle(mixed, order, entropy);
+                else {
+                    // Shuffle only valid positions in a smaller final batch.
+                    for (uint256 left = count; left > 1; --left) {
+                        entropy = EntropyLib.hash2(entropy, left);
+                        uint256 a = 8 * (left - 1);
+                        uint256 b = 8 * (entropy % left);
+                        uint256 diff = ((order >> a) ^ (order >> b)) & 0xff;
+                        order ^= (diff << a) | (diff << b);
+                    }
+                    for (uint256 g; g < 4; ++g) mixed[g] = 0;
+                    for (uint256 j; j < count; ++j) {
+                        uint256 pos = uint8(order >> (8 * j));
+                        mixed[j >> 3] |= uint256(uint32(lanes[pos >> 3] >> (32 * (pos & 7)))) << (32 * (j & 7));
+                    }
+                }
+            }
+            for (uint256 base; base < count; base += 8) {
+                uint256 n = count - base;
+                if (n > 8) n = 8;
+                uint256 traits = _directQuadrant(lvl, levelSlot, mixed[base >> 3], n,
+                    EntropyLib.hash2(seed, base / 8), q);
+                for (uint256 j; j < n; ++j) {
+                    uint256 pos = uint8(order >> (8 * (base + j)));
+                    reveals[pos >> 3] |= uint256(uint32(traits >> (32 * j))) << (32 * (pos & 7));
+                }
+            }
+        }
+        emit JackpotTicketBatchTraits(lvl, uint8(count), lanes, reveals);
+    }
+
+    function _directQuadrant(uint24 lvl, uint256 levelSlot, uint256 lanes, uint256 count, uint256 seed, uint256 q)
+        private returns (uint256 traits)
+    {
+        uint8 trait = DegenerusTraitUtils.traitFromWord(uint64(seed >> (64 * q))) | uint8(q << 6);
+        if (((trait >> 3) & 7) < ROUND_SPLIT_COLOR) {
+            _bucketAppendLanes(levelSlot, trait, lanes, count, lvl);
+            return (uint256(trait) << (8 * q)) *
+                0x0000000100000001000000010000000100000001000000010000000100000001;
+        }
+        // Rare colors retain the ordinary generator's symbol splitting and cap.
+        RoundSeats memory st;
+        st.lvl = lvl;
+        st.seated = count;
+        for (uint256 j; j < count; ++j) {
+            st.ownerIdx[j] = uint32(lanes >> (32 * j));
+            st.owed[j] = 4;
+        }
+        (traits,) = _runQuadrant(st, levelSlot, seed, q);
+    }
 
     function runTicketWork(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
         return _runTicketWork(anchor, allowance);

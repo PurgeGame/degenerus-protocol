@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {GoldSixLib} from "../libraries/GoldSixLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 
-import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
-import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
-import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol";
+import {DegenerusGameJackpotDrawUtils} from "../../contracts/modules/DegenerusGameJackpotDrawUtils.sol";
 
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
@@ -32,17 +32,16 @@ import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
-import {IStETH} from "../interfaces/IStETH.sol";
-import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
-import {ContractAddresses} from "../ContractAddresses.sol";
-import {EntropyLib} from "../libraries/EntropyLib.sol";
-import {PackedTicketSampleLib} from "../libraries/PackedTicketSampleLib.sol";
-import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
-import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
-import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
-import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGameTicketModule} from "../interfaces/IDegenerusGameModules.sol";
-import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
+import {IStETH} from "../../contracts/interfaces/IStETH.sol";
+import {DegenerusGamePayoutUtils} from "../../contracts/modules/DegenerusGamePayoutUtils.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {PackedTicketSampleLib} from "../../contracts/libraries/PackedTicketSampleLib.sol";
+import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
+import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {IDegenerusJackpots} from "../../contracts/interfaces/IDegenerusJackpots.sol";
 
 /// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
@@ -81,7 +80,7 @@ interface IWwxrpMintPrize {
  *      - EntropyLib.hash2 provides full-diffusion keccak derivation for sub-selections.
  *      - Winner selection intentionally allows duplicates (more tickets = more chances).
  */
-contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
+contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -106,7 +105,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
 
     /// @dev Ticket jackpot win. See JackpotEthWin for traitId sentinel semantics.
     ///      entryCount is an entries count on all 3 paths and matches the
-    ///      entries awarded through direct materialization or the ordinary queue. roundedUp is
+    ///      entries queued by the adjacent _queueEntries call. roundedUp is
     ///      true iff the BAF _jackpotTicketRoll (traitId = BAF_TRAIT_SENTINEL)
     ///      Bernoulli sub-roll incremented the whole-ticket count; it is false
     ///      on the two trait-matched paths, which have a zero fractional part
@@ -277,6 +276,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     uint256 private constant JACKPOT_FINAL_GAS = GasBounds.JACKPOT_FINAL_GAS;
     uint256 private constant JACKPOT_TAIL_GAS = GasBounds.JACKPOT_TAIL_GAS;
     uint256 private constant ETH_WINNER_GAS_MAX = GasBounds.JACKPOT_ETH_WINNER_GAS_MAX;
+    uint256 private constant TICKET_DRAW_GAS_MAX = GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX;
+    uint256 private constant TICKET_AWARD_GAS_MAX = GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX;
+    uint256 private constant TICKET_AWARD_CHUNK = GasBounds.JACKPOT_TICKET_AWARD_CHUNK;
     uint256 private constant ETH_AWARD_CHUNK = GasBounds.JACKPOT_ETH_AWARD_CHUNK;
 
     // =========================================================================
@@ -633,6 +635,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         return _runTicketWork(5, word, allowance);
     }
 
+    struct TicketWorkPlan {
+        uint24 sourceLvl;
+        uint24 queueLvl;
+        uint8 salt;
+        uint256 entropy;
+        uint256 entriesEach;
+        uint256 fullPasses;
+        uint8[4] traits;
+        uint16[4] counts;
+        uint256[4] lens;
+        address[4] deities;
+    }
+
     function _runTicketWork(uint8 kind, uint256 word, uint256 allowance)
         private returns (MineFlipGas.Result memory result)
     {
@@ -643,10 +658,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             if (!MineFlipGas.canRun(meter, JACKPOT_SETUP_GAS, JACKPOT_TAIL_GAS)) return result;
             work.kind = kind;
             work.lvl = kind == 6 ? level : level + 1;
-            // Keep same-level cohorts, unprepared buffers and Thanos scaling on the
-            // ordinary queue path. Latch once: caller gas cannot choose delivery mode.
-            work.directTickets = kind == 6 && _ticketBufferLevel(level + 1) == level + 1
-                && _snapShiftFor(level + 1) == 0;
             uint256 packed = dailyTicketBudgetsPacked;
             work.budget = kind == 4 ? uint128(packed >> 208)
                 : uint128(uint64(packed >> (kind == 5 ? 144 : 8)));
@@ -656,17 +667,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         } else if (work.kind != kind) revert JackpotWorkMismatch();
         if (MineFlipGas.canRun(meter, JACKPOT_PLAN_GAS, JACKPOT_TAIL_GAS)) {
             TicketWorkPlan memory plan = _ticketWorkPlan(work, word);
-            {
-                // delegatecall-alignment: justified — IDegenerusGameTicketModule selector forwarded to GAME_TICKET_MODULE by the gas-capped delegatecall below
-                (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall{
-                    gas: MineFlipGas.forwardable(MineFlipGas.remaining(meter), JACKPOT_TAIL_GAS)
-                }(abi.encodeWithSelector(IDegenerusGameTicketModule.runJackpotTicketAwards.selector,
-                    plan, MineFlipGas.remaining(meter) - JACKPOT_TAIL_GAS));
-                if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-                MineFlipGas.Result memory step = abi.decode(data, (MineFlipGas.Result));
-                result.progressed = result.progressed || step.progressed;
-                result.rewardBasis += step.rewardBasis;
-            }
+            _resumeTicketWork(work, plan, meter, result);
             uint256 finalGas = JACKPOT_FINAL_GAS + (plan.fullPasses == 0 ? 0 : 3 * PASS_AWARD_GAS);
             if (work.quadrant == 4 && MineFlipGas.canRun(meter, finalGas, JACKPOT_TAIL_GAS)) {
                 if (plan.fullPasses != 0) _awardTicketPasses(work.lvl, plan);
@@ -741,6 +742,58 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                 _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash2(plan.entropy, q), true);
             }
         }
+    }
+
+    /// @dev Winner `i` depends only on the frozen bucket, the quadrant seed and `i`, and each
+    ///      group of eight positions reads one packed word, so a call draws only the groups it
+    ///      awards and a resumed quadrant repeats no draw. Checkpoints sit on group starts.
+    ///      Awarded tickets only enter a queue; they never mutate these source buckets.
+    ///      Awards run in fixed groups: caller gas picks how many run, never their size.
+    function _resumeTicketWork(JackpotWork storage work, TicketWorkPlan memory plan,
+        MineFlipGas.Meter memory meter, MineFlipGas.Result memory result) private
+    {
+        uint8 q = work.quadrant;
+        uint256 i = work.winner;
+        while (q < 4) {
+            uint256 count = plan.counts[q];
+            if (count == 0) {
+                if (!MineFlipGas.canRun(meter, 10_000, JACKPOT_TAIL_GAS)) break;
+                ++q;
+                result.progressed = true;
+                continue;
+            }
+            uint8 trait = plan.traits[q];
+            uint256 len = plan.lens[q];
+            address deity = plan.deities[q];
+            uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
+            uint256 seed = EntropyLib.hash2(plan.entropy, q);
+            uint8 salt = uint8(plan.salt + q);
+            PackedTicketSampleLib.Cursor memory cursor;
+            while (i < count) {
+                uint256 end = i + TICKET_AWARD_CHUNK;
+                if (end > count) end = count;
+                if (!MineFlipGas.canRun(meter,
+                    (end - i) * (TICKET_DRAW_GAS_MAX + TICKET_AWARD_GAS_MAX), JACKPOT_TAIL_GAS)) break;
+                if (i == 0) _assertReadableTicketLevel(plan.sourceLvl);
+                result.progressed = true;
+                result.rewardBasis += end - i;
+                for (; i < end; ++i) {
+                    (address winner, uint256 index) = _drawBucketEntry(
+                        plan.sourceLvl, trait, len, effectiveLen, deity, seed, salt, i, cursor
+                    );
+                    if (winner != address(0)) {
+                        _queueEntries(winner, plan.queueLvl, uint32(plan.entriesEach), true);
+                        emit JackpotTicketWin(winner, plan.queueLvl, trait, uint32(plan.entriesEach),
+                            plan.sourceLvl, index, false);
+                    }
+                }
+            }
+            if (i < count) break;
+            i = 0;
+            ++q;
+        }
+        if (q != work.quadrant) work.quadrant = q;
+        if (i != work.winner) work.winner = uint16(i);
     }
 
     /// @dev Bounded sibling-module award to one recipient from the bucket of `trait`. A ticket

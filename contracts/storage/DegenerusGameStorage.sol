@@ -722,7 +722,8 @@ abstract contract DegenerusGameStorage {
     uint256 internal prizePoolPendingPacked;
 
     /// @dev Queue of players with tickets (purchase/burn sources) per level.
-    ///      All tickets (purchases, lootbox rewards, etc.) queue here.
+    ///      Purchases, lootbox rewards and deferred jackpot awards queue here.
+    ///      Main-daily awards can materialize directly in an already active next level.
     ///
     ///      PROCESSING SCHEDULE:
     ///      - Minted window [purchaseLevel-1 .. purchaseLevel]: the read cohort of each key
@@ -4550,6 +4551,10 @@ abstract contract DegenerusGameStorage {
         uint8 kind;
         uint8 quadrant;
         bool finalDay;
+        // Main daily only: completed whole-ticket rounds for the current batch.
+        // These fields fit in the existing second word of JackpotWork.
+        uint32 directTicketRound;
+        bool directTickets;
     }
     JackpotWork internal jackpotWork;
 

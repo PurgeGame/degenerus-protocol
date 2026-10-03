@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {JackpotCheckpointHarness} from "./JackpotCheckpoints.t.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
@@ -55,6 +56,7 @@ contract JackpotTicketAwardChunksTest is Test {
     }
 
     function setUp() public {
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
         h = new TicketChunkHarness();
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
         h.seed(LVL, WORD, true);
@@ -294,6 +296,7 @@ contract JackpotTicketChunkGasTest is Test {
     uint8 private trait;
 
     function setUp() public {
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
         h = new TicketGasHarness();
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
         h.seed(LVL, WORD, true);
@@ -449,6 +452,7 @@ contract JackpotEthQuadrantGasTest is Test {
     bytes32 private stream;
 
     function setUp() public {
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
         h = new TicketGasHarness();
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -45,6 +46,7 @@ contract DailyEthTicketLegEntries is Test {
         h.setDailyIdx(10);
         h.setCurrentPool(1000 ether);
         h.setPools(200 ether, FUT_POOL);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
     }
 
     /// @dev A mixed-colour board (no golden quadrant) with its four trait buckets seeded deep

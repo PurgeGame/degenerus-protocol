@@ -188,6 +188,7 @@ OWNER	humanReadComplete	modules/GameAfkingModule.sol	Human FIFO worker certifies
 OWNER	jackpotCounter	modules/DegenerusGameJackpotModule.sol	Increments once after the daily coin/ticket leg completes; Advance resets at phase end.
 OWNER	jackpotWork	modules/DegenerusGameGameOverModule.sol	Jackpot worker owns canonical plan/cursor and quadrant accounting; terminal cutover retires only unpaid normal work and seeds its own terminal plan.
 OWNER	jackpotWork	modules/DegenerusGameJackpotModule.sol	Jackpot worker owns canonical plan/cursor and quadrant accounting; terminal cutover retires only unpaid normal work and seeds its own terminal plan.
+OWNER	jackpotWork	modules/DegenerusGameTicketModule.sol	Ticket awards advance the jackpot worker's quadrant, winner and direct-round cursors on its behalf; the plan and budget stay the jackpot module's.
 OWNER	lootboxOrder	modules/DegenerusGameLootboxModule.sol	Records write-buffer order and freezes entry score before request; read worker sets processed marker atomically with settlement.
 OWNER	operatorApprovals	DegenerusGame.sol	Player-controlled operator permission mapping; cannot authorize mutation of committed RNG inputs.
 OWNER	presaleBoxEth	modules/DegenerusGameFoilPackModule.sol	Foil bridge records the write-buffer presale contribution; Lootbox settlement clears the authenticated read record once.

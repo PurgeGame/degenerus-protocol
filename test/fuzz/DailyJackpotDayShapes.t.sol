@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
@@ -83,6 +84,7 @@ contract DailyJackpotDayShapes is Test {
         h.setJackpotFlags(0);
         h.setCurrentPool(CUR_POOL);
         h.setPools(NEXT_POOL, FUT_POOL);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
     }
 
     /// @dev The ETH the jackpot-phase quadrants converted to full whale passes: it is booked
@@ -136,12 +138,16 @@ contract DailyJackpotDayShapes is Test {
         dailyTicketBudget = budget / 5;
     }
 
-    /// @dev Count JackpotTicketWin logs queued at `queueLvl`.
+    /// @dev Count queued individual awards and direct packed awards at `queueLvl`.
     function _ticketWins(Vm.Log[] memory logs, uint24 queueLvl) internal pure returns (uint256 n) {
         bytes32 topic = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
         for (uint256 i; i < logs.length; i++) {
-            if (logs[i].topics[0] != topic) continue;
-            if (uint24(uint256(logs[i].topics[2])) == queueLvl) ++n;
+            if (logs[i].topics.length < 3 || uint24(uint256(logs[i].topics[2])) != queueLvl) continue;
+            if (logs[i].topics[0] == topic) ++n;
+            else if (logs[i].topics[0] == keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])")) {
+                (,uint8 count,,,) = abi.decode(logs[i].data, (uint16,uint8,uint32,uint256[4],uint256[4]));
+                n += count;
+            }
         }
     }
 
