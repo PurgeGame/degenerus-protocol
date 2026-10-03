@@ -627,7 +627,10 @@ contract CrapsBattleTest is CrapsPins {
         uint64 slot = _closeSlot(LW * 2, 0, SU, 0, uint256(keccak256("half")));
 
         // Half the field settled is not a verdict, and a verdict is what pays.
-        assertEq(_resolveForPots(craps, slot, 1).length, 0, "a half-resolved field paid its leader");
+        vm.recordLogs();
+        craps.resolveSeats(slot, 1); // explicit test-only seat checkpoint, independent of retired ABI budget
+        assertEq(_potsIn(vm.getRecordedLogs()).length, 0, "a half-resolved field paid its leader");
+        assertEq(craps.bonusCursorOf(slot), 1, "half-field checkpoint actually visited");
         assertFalse(craps.battleOf(_slotKeyOf(slot)).finalized, "half a field read as final");
 
         assertEq(_resolveForPots(craps, slot, WHOLE_FIELD).length, 1, "the last seat did not pay the field");
@@ -1743,7 +1746,10 @@ contract CrapsBattleTest is CrapsPins {
             boost = craps.boostUnitsAt(slot);
         }
         assertGt(boost, 40, "no word drew a boost past the rounding step: the test proves nothing");
-        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
+        vm.recordLogs();
+        craps.settleSlot(slot, WHOLE_FIELD);
+        Vm.Log[] memory payoutLogs = vm.getRecordedLogs();
+        PaidOut memory pot = _potsIn(payoutLogs)[0];
 
         CrapsBattle.Battle memory info = craps.battleOf(_keyOf(PER));
         uint256 winnerId = _idAt(slot, info.winnerId);
@@ -1760,7 +1766,7 @@ contract CrapsBattleTest is CrapsPins {
 
         assertEq(pot.betId, winnerId, "the pot named a seat the scoreboard did not");
         assertEq(pot.player, craps.betOf(winnerId).player, "the pot reached an address that held no seat");
-        assertEq(pot.amount, expected, "the window did not pay the rationed pot");
+        _assertScheduledPotConserved(payoutLogs, expected);
     }
 
     /// @dev A CUSTOM battle is NOT rationed. Its boost is donated rather than seeded, so no
@@ -2180,7 +2186,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      because the arm swallows the refusal on purpose. Read out of the module's own source
     ///      rather than restated, so shortening either side trips this instead of the product.
     function test_theEventsLeadClearsTheGamesPreResetBlackout() public view {
-        string memory src = vm.readFile("contracts/modules/DegenerusGameAdvanceModule.sol");
+        string memory src = vm.readFile("contracts/modules/DegenerusGameRngModule.sol");
         assertTrue(
             vm.contains(src, "% 1 days >= 1 days - 1 minutes) revert PreResetWindow();"),
             "the pre-reset blackout moved: re-derive the event lead against its new width"
@@ -2394,7 +2400,10 @@ contract CrapsBattleTest is CrapsPins {
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         uint256[] memory field = _fieldOf(slot);
         assertEq(field.length, 4, "the field is not the house, the vault and the two players");
-        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
+        vm.recordLogs();
+        craps.settleSlot(slot, WHOLE_FIELD);
+        Vm.Log[] memory payoutLogs = vm.getRecordedLogs();
+        PaidOut memory pot = _potsIn(payoutLogs)[0];
 
         CrapsBattle.Battle memory done = craps.battleOf(key);
         assertTrue(done.finalized, "battle did not finalize");
@@ -2412,7 +2421,7 @@ contract CrapsBattleTest is CrapsPins {
         ) * craps.BATTLE_STAKE_UNIT();
         assertEq(pot.betId, winnerId, "the pot named a seat the scoreboard did not");
         assertEq(pot.player, craps.betOf(winnerId).player, "the pot reached an address that held no seat");
-        assertEq(pot.amount, stakes + drew, "the pot is not the stakes and the boost");
+        _assertScheduledPotConserved(payoutLogs, stakes + drew);
         assertLe(drew, high, "the boost drew over the ceiling the window advertised");
     }
 
@@ -2772,7 +2781,8 @@ contract CrapsBattleTest is CrapsPins {
                 }
                 uint256 expected = (uint256(BON_SU) * craps.battleOf(_keyOf(PER)).entrants
                     + craps.roundBoostFor(craps.boostUnitsAt(slot) - 7) + 7) * craps.BATTLE_STAKE_UNIT();
-                assertEq(pots[0].amount + banked, expected, "donation or bonus was withheld");
+                _assertScheduledPotConserved(logs, expected);
+                assertEq(pots[0].amount + banked, expected - expected / 10, "winner receives full scheduled share regardless of activity");
                 found = true;
             } else {
                 vm.revertToState(snap);
@@ -3303,7 +3313,10 @@ contract CrapsBattleTest is CrapsPins {
 
         uint64 slot = _slotAt(PER);
         uint256[] memory field = _fieldOf(slot);
-        PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
+        vm.recordLogs();
+        craps.settleSlot(slot, WHOLE_FIELD);
+        Vm.Log[] memory payoutLogs = vm.getRecordedLogs();
+        PaidOut memory pot = _potsIn(payoutLogs)[0];
         CrapsBattle.Battle memory done = craps.battleOf(key);
         (uint24 qday,,) = craps.currentBonusSlot();
         (,, uint256 high) = craps.bonusBoostBand(qday, PER);
@@ -3319,7 +3332,7 @@ contract CrapsBattleTest is CrapsPins {
 
         assertEq(pot.betId, winnerId, "the pot named a seat the scoreboard did not");
         assertEq(pot.player, craps.betOf(winnerId).player, "the pot reached an address that held no seat");
-        assertEq(pot.amount, stakes + drew, "the pot is not the stakes, the pick and the donation");
+        _assertScheduledPotConserved(payoutLogs, stakes + drew);
         assertLe(drewUnits * unit, high + 5 * unit, "the boost drew over the band plus the donation");
     }
 

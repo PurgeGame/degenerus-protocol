@@ -2,15 +2,15 @@
 pragma solidity ^0.8.33;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
-/// @dev Extends the production mint module so the live `processTicketBatch` drains into THIS
+/// @dev Extends the production ticket module so the live `processTicketBatch` drains into THIS
 ///      contract's packed buckets; adds lane-level seeders and decoders only.
-contract BucketLaneHarness is DegenerusGameMintModule {
-    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
+contract BucketLaneHarness is DegenerusGameTicketModule {
+    /// @dev The ticket module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
     function _pastDeadlineTriggered(uint24 today, uint24 idx)
         internal
@@ -165,12 +165,12 @@ contract BucketLanePacking is Test {
     function test_LiveDrain_SplitResume_OneRegistryEntry() public {
         uint24 lvl = 5;
         address p = address(0xD00D);
-        uint32 owed = 1200; // several WRITES_BUDGET_SAFE chunks
+        uint32 owed = 1200; // enough work for several physically gas-limited calls
         h.seedQueue(lvl, p, owed);
         uint256 calls;
         bool finished;
         while (!finished) {
-            (finished, ) = h.processTicketBatch(lvl + 1);
+            (finished, ) = h.processTicketBatch{gas: 2_000_000}(lvl + 1);
             ++calls;
             assertLt(calls, 64, "drain did not finish");
         }

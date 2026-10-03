@@ -34,6 +34,8 @@ class VerificationInputTests(unittest.TestCase):
         }
         for name in AUDITOR.SUPPORTING_SOLIDITY:
             contents.setdefault(name, "contract Supporting {}\n")
+        self.scoped = sorted(["contracts/Logic.sol", *AUDITOR.SUPPORTING_SOLIDITY])
+        contents["scope.txt"] = "\n".join(self.scoped) + "\n"
         for name, content in contents.items():
             (self.root / name).write_text(content)
         manifest = {"source_files": [], "source_file_count": 0,
@@ -56,14 +58,14 @@ class VerificationInputTests(unittest.TestCase):
 
     def test_reference_bytecode_mutation_invalidates_verification_without_expanding_scope(self):
         self.assertEqual(self.check(), 0)
-        self.assertEqual(AUDITOR.scope_files(), ["contracts/Logic.sol"])
+        self.assertEqual(AUDITOR.scope_files(), self.scoped)
         manifest = (self.root / "docs/audit/verification-sha256.txt").read_text()
         for path in ("contracts/mocks/Harness.sol", "contracts/test/Probe.sol", "contracts/mocks/Reference.hex"):
             self.assertIn(path, manifest)
         production_before = (self.root / "docs/audit/source-sha256.txt").read_bytes()
         (self.root / "contracts/mocks/Reference.hex").write_text("0x6001\n")
         self.assertEqual(self.check(), 1)
-        self.assertEqual(AUDITOR.scope_files(), ["contracts/Logic.sol"])
+        self.assertEqual(AUDITOR.scope_files(), self.scoped)
         self.assertEqual((self.root / "docs/audit/source-sha256.txt").read_bytes(), production_before)
 
     def test_mock_removal_and_new_test_dependency_invalidate_verification(self):
@@ -75,7 +77,21 @@ class VerificationInputTests(unittest.TestCase):
         self.assertEqual(self.check(), 0)
         (self.root / "contracts/test/NewProbe.sol").write_text("contract NewProbe {}\n")
         self.assertEqual(self.check(), 1)
-        self.assertEqual(AUDITOR.scope_files(), ["contracts/Logic.sol"])
+        self.assertEqual(AUDITOR.scope_files(), self.scoped)
+
+    def test_new_production_module_cannot_be_omitted_from_scope(self):
+        (self.root / "contracts/NewRngModule.sol").write_text("contract NewRngModule {}\n")
+        with self.assertRaisesRegex(ValueError, "scope drift"):
+            AUDITOR.scope_files()
+
+    def test_reviewed_untracked_tool_is_authenticated(self):
+        path = self.root / "scripts/layout/check_recursive_layout.py"
+        path.parent.mkdir()
+        path.write_text("# reviewed checker\n")
+        self.assertEqual(self.check(), 1)
+        self.assertEqual(self.check(write=True), 0)
+        path.write_text("# changed checker\n")
+        self.assertEqual(self.check(), 1)
 
 
 if __name__ == "__main__":

@@ -457,6 +457,40 @@ abstract contract CrapsPins is Test {
         }
     }
 
+    /// @dev Independent value census for the intended scheduled 90/10 split.
+    ///      Price every deferred pass receipt as gross minus liquid and require
+    ///      both named payouts. Run/side-lane/progressive logs cannot fill a shortfall.
+    function _assertScheduledPotConserved(Vm.Log[] memory logs, uint256 grossPot) internal pure {
+        PaidOut[] memory main = _potsIn(logs);
+        assertEq(main.length, 1, "exactly one main payout");
+        uint256 hotLiquid;
+        uint256 hotCount;
+        uint256 mainDeferred;
+        uint256 hotDeferred;
+        bytes32 hotSig = keccak256("CrapsHottestShooterPaid(uint256,bytes32,address,uint16,uint256)");
+        bytes32 splitSig = keccak256("CrapsProtocolAwardSplit(bytes32,address,uint8,uint256,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 4) continue;
+            if (logs[i].topics[0] == hotSig) {
+                (uint16 rolls, uint256 liquid) = abi.decode(logs[i].data, (uint16, uint256));
+                assertGt(rolls, 0, "longest-hand recipient has an actual hand");
+                assertTrue(address(uint160(uint256(logs[i].topics[3]))) != address(0), "no unassigned shooter");
+                hotLiquid += liquid;
+                ++hotCount;
+            } else if (logs[i].topics[0] == splitSig) {
+                uint256 source = uint256(logs[i].topics[3]);
+                (uint256 gross, uint256 liquid) = abi.decode(logs[i].data, (uint256, uint256));
+                assertLe(liquid, gross);
+                if (source == 1) mainDeferred += gross - liquid;
+                if (source == 5) hotDeferred += gross - liquid;
+            }
+        }
+        assertEq(hotCount, 1, "exactly one longest-hand payout");
+        assertEq(hotLiquid + hotDeferred, grossPot / 10, "full longest-hand tenth, including pass value");
+        assertEq(main[0].amount + mainDeferred, grossPot - grossPot / 10, "winner gets remainder, including rounding dust");
+        assertEq(main[0].amount + mainDeferred + hotLiquid + hotDeferred, grossPot, "main and longest-hand conserve entire pot");
+    }
+
     /// @dev Every LANE payment in a stream, of one kind. `rider` picks a sole high roller's
     ///      return, which rides home on that seat's own run; clearing it picks the one payment a
     ///      CONTESTED lane makes to the best of its seats.

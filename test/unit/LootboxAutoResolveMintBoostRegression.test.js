@@ -67,28 +67,28 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
       ).to.equal(true);
     });
 
-    it("[02b] every MintModule drain path still reaches `_rollRemainder` (via the shared per-entry engine)", function () {
-      const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      // The zero-owed roll lives in the storage base's _resolveZeroOwedRemainder; the
-      // end-of-take roll lives in MintModule's _processOneTicketEntry. Assert both roll sites
-      // AND that both drain entrypoints route through that engine.
-      expect(
-        (mint.match(/_rollRemainder\(/g) || []).length,
-        "expected the end-of-take `_rollRemainder(` site in MintModule"
-      ).to.be.gte(1);
-      const zeroOwed = storage.slice(storage.indexOf("function _resolveZeroOwedRemainder("));
-      expect(
-        zeroOwed.slice(0, zeroOwed.indexOf("\n    function ")).includes("_rollRemainder("),
-        "_resolveZeroOwedRemainder must roll the remainder"
-      ).to.equal(true);
-      for (const entrypoint of ["processTicketBatch", "_processFutureTicketBatch"]) {
-        const body = mint.slice(mint.indexOf(`function ${entrypoint}(`));
-        expect(
-          body.slice(0, body.indexOf("\n    function ")).includes("_processOneTicketEntry("),
-          `${entrypoint} must drain through _processOneTicketEntry (the only remainder-roll path)`
-        ).to.equal(true);
+    it("[02b] solo and seated ticket drains resolve the same frozen remainder identity", function () {
+      const ticket = fs.readFileSync("contracts/modules/DegenerusGameTicketModule.sol", "utf8");
+      const entropy = fs.readFileSync("contracts/libraries/TicketEntropy.sol", "utf8");
+      // The checkpoint engine replaced both MintModule drain wrappers. Retain
+      // coverage of final solo tails, zero-owed seats and exhausted seated entries.
+      function body(name) {
+        const start = ticket.indexOf(`function ${name}(`);
+        expect(start, `${name} must exist`).to.be.gte(0);
+        const next = ticket.indexOf("\n    function ", start + 1);
+        return ticket.slice(start, next < 0 ? ticket.length : next);
       }
+      for (const name of ["_solo", "_seatEntry", "_runRound"]) {
+        expect(body(name)).to.include("TicketEntropy.remainder(");
+        expect(body(name)).to.include("TicketEntropy.identity(");
+      }
+      expect(body("_solo")).to.include("finalTail && rem != 0 && TicketEntropy.remainder(stream, entropy, rem)");
+      expect(body("_runTicketWork")).to.include("_drainQueue(");
+      expect(body("_drainQueue")).to.include("_solo(");
+      expect(body("_drainQueue")).to.include("_roundPhase(");
+      expect(entropy).to.include("DEGENERUS_TICKET_REMAINDER_V2");
+      expect(entropy).to.include("abi.encode(REMAINDER_DOMAIN, stream, entropy)");
+      expect(entropy).to.include("% 100 < fraction");
     });
 
     it("[02c] cross-module negation: `_rollRemainder` is NOT defined in MintModule or DegenerusGameLootboxModule.sol — it's the storage base's", function () {

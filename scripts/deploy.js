@@ -140,13 +140,25 @@ async function main() {
 
     // 7b. Record the vault's constructor-deployed share tokens (DGVF/DGVE) so
     // downstream tooling (ens-register.js forward records) can reach them.
-    const vault = await hre.ethers.getContractAt(
-      "DegenerusVault",
-      deployed.get("VAULT"),
-      deployer
-    );
-    deployed.set("VAULT_FLIP_SHARE", await vault.flipShare());
-    deployed.set("VAULT_ETH_SHARE", await vault.ethShare());
+    // The share references are private immutables. The vault constructor
+    // creates DGVF first and DGVE second, so derive their CREATE identities
+    // and verify the deployed contracts before recording them.
+    for (const [key, nonce, symbol] of [
+      ["VAULT_FLIP_SHARE", 1, "DGVF"],
+      ["VAULT_ETH_SHARE", 2, "DGVE"],
+    ]) {
+      const address = hre.ethers.getCreateAddress({ from: deployed.get("VAULT"), nonce });
+      if (await hre.ethers.provider.getCode(address) === "0x") {
+        throw new Error(`Missing constructor-deployed ${symbol} at ${address}`);
+      }
+      const share = await hre.ethers.getContractAt("DegenerusVaultShare", address, deployer);
+      const supply = await share.totalSupply();
+      if (await share.symbol() !== symbol || supply === 0n
+          || await share.balanceOf(deployer.address) !== supply) {
+        throw new Error(`Unexpected constructor-deployed ${symbol} identity or initial supply`);
+      }
+      deployed.set(key, address);
+    }
     console.log(`  [VAULT_FLIP_SHARE] DGVF ${deployed.get("VAULT_FLIP_SHARE")}`);
     console.log(`  [VAULT_ETH_SHARE]  DGVE ${deployed.get("VAULT_ETH_SHARE")}\n`);
 

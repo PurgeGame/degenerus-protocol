@@ -174,8 +174,9 @@ contract BigRecordArmingTest is DeployProtocol {
         // BET_INDEX so the walk's frontier actually opens it, mirroring the word injection above.
         assertEq(_lootboxIndex(), BET_INDEX ^ 1, "the fulfilled cohort is sealed");
         vm.recordLogs();
-        vm.prank(rival);
-        game.openBoxes(type(uint256).max);
+        // The canonical engine honors tickets/redemptions/boxes before Degenerette.
+        // openBoxes is now only the AFK/human helper, not a bet resolver.
+        _finishReadConsumers();
 
         assertTrue(_sawRecordBoxSpin(), "the bounty spun as a type-3 BoxSpin");
         assertEq(_recordBounty(betId), 0, "resolution clears the side slot");
@@ -325,8 +326,13 @@ contract BigRecordArmingTest is DeployProtocol {
     function _advanceLootboxIndex() internal {
         uint48 buffer = RecyclingState.writeBuffer(address(game));
         RecyclingState.seedWord(address(game), buffer, bytes32(uint256(0xB16B00)));
-        for (uint256 i; i < 50 && !game.boxIndexComplete(buffer); ++i) game.openBoxes(512);
-        assertTrue(game.boxIndexComplete(buffer), "the earlier custom order must settle before reuse");
+        _finishReadConsumers();
+        // The engine may already request the next cohort, so the old physical
+        // index is no longer the current completion certificate. Check this
+        // owner's actual settled order instead of asking about a recycled index.
+        bytes32 inner = keccak256(abi.encode(buffer, LOOTBOX_ETH_SLOT));
+        uint256 oldOrder = uint256(vm.load(address(game), keccak256(abi.encode(player, inner))));
+        assertTrue(oldOrder & (uint256(1) << 255) != 0, "the earlier custom order must settle before reuse");
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {

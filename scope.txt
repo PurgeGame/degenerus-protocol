@@ -1,10 +1,11 @@
-# Audit source scope — working-tree snapshot in docs/audit/snapshot.json
-# Game-logic scope, including interfaces, libraries, lenses and inherited code.
-# Deploy set: scripts/lib/predictAddresses.js; counts below are files, not deployments.
-# 66 source files. Deployment constants and artwork data are supporting build inputs.
+# Complete production Solidity inventory, including deployment constants and supporting artwork.
+# 79 files; 37 deployable types (38 CREATE instances). DegenerusGameLens, DeityBoonViewer and
+# DeityPassCustomizationRenderer are outside the CREATE dependency closure (public readers/display code).
+# Tests/mocks and tools are reviewed as verification/deployment dependencies.
 
 contracts/AFKingSubscriptionToken.sol
 contracts/Coinflip.sol
+contracts/ContractAddresses.sol
 contracts/Craps.sol
 contracts/CrapsBattle.sol
 contracts/CrapsCustomTerms.sol
@@ -22,12 +23,13 @@ contracts/DegenerusRecordBounty.sol
 contracts/DegenerusTraitUtils.sol
 contracts/DegenerusVault.sol
 contracts/DeityBoonViewer.sol
+contracts/DeityPassCustomizationRenderer.sol
 contracts/FLIP.sol
 contracts/GNRUS.sol
+contracts/Icons32Data.sol
 contracts/JackpotBattle.sol
 contracts/LootboxCraps.sol
 contracts/WWXRP.sol
-contracts/sDGNRS.sol
 contracts/interfaces/ICoinflip.sol
 contracts/interfaces/IDegenerusAffiliate.sol
 contracts/interfaces/IDegenerusCoin.sol
@@ -48,11 +50,15 @@ contracts/libraries/CrapsPriceLib.sol
 contracts/libraries/EntropyLib.sol
 contracts/libraries/FlipRoundLib.sol
 contracts/libraries/GameTimeLib.sol
+contracts/libraries/GoldSixLib.sol
 contracts/libraries/JackpotBattleFieldLib.sol
 contracts/libraries/JackpotBucketLib.sol
+contracts/libraries/MineFlipGas.sol
+contracts/libraries/MineFlipGasBounds.sol
 contracts/libraries/PackedTicketSampleLib.sol
 contracts/libraries/PriceLookupLib.sol
 contracts/libraries/SigFigLib.sol
+contracts/libraries/TicketEntropy.sol
 contracts/modules/DegenerusGameAdvanceModule.sol
 contracts/modules/DegenerusGameBingoModule.sol
 contracts/modules/DegenerusGameBoonModule.sol
@@ -60,13 +66,19 @@ contracts/modules/DegenerusGameDecimatorModule.sol
 contracts/modules/DegenerusGameDegeneretteModule.sol
 contracts/modules/DegenerusGameFoilPackModule.sol
 contracts/modules/DegenerusGameGameOverModule.sol
+contracts/modules/DegenerusGameJackpotDrawModule.sol
+contracts/modules/DegenerusGameJackpotDrawUtils.sol
 contracts/modules/DegenerusGameJackpotModule.sol
 contracts/modules/DegenerusGameLootboxModule.sol
+contracts/modules/DegenerusGameMinerModule.sol
 contracts/modules/DegenerusGameMintModule.sol
 contracts/modules/DegenerusGameMintStreakUtils.sol
 contracts/modules/DegenerusGamePayoutUtils.sol
+contracts/modules/DegenerusGameRngModule.sol
 contracts/modules/DegenerusGameRngUtils.sol
+contracts/modules/DegenerusGameTicketModule.sol
 contracts/modules/DegenerusGameWhaleModule.sol
 contracts/modules/GameAfkingModule.sol
+contracts/sDGNRS.sol
 contracts/storage/CrapsBattleStorage.sol
 contracts/storage/DegenerusGameStorage.sol

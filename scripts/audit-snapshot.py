@@ -27,7 +27,10 @@ def scope_files():
         raise ValueError("scope.txt contains duplicate sources")
     production = {p.relative_to(ROOT).as_posix() for p in (ROOT / "contracts").rglob("*.sol")
                   if p.relative_to(ROOT).parts[1] not in {"mocks", "test"}}
-    expected = production - SUPPORTING_SOLIDITY
+    # Build constants and renderer/data dependencies are part of the complete
+    # production inventory too. The deployment graph determines their review role;
+    # excluding them here hid newly introduced engine dependencies in older scopes.
+    expected = production
     if set(entries) != expected:
         raise ValueError(f"scope drift: missing={sorted(expected - set(entries))}; "
                          f"unexpected={sorted(set(entries) - expected)}")
@@ -43,6 +46,14 @@ def verification_files(build_inputs):
     ).decode().split("\0")
     paths = {p for p in tracked if p and (ROOT / p).is_file()}
     paths.add("scripts/audit-snapshot.py")
+    # Reviewed audit additions must be authenticated before staging/committing too.
+    # Keep an explicit set of files the repository ships; gitignored local tools would
+    # make the manifest fail on a clean checkout.
+    paths.update(p for p in (
+        "scripts/audit/post_push_inventory.py", "scripts/layout/check_recursive_layout.py",
+        "scripts/lib/fork-probe-utils.js", "scripts/fork-hardhat.config.js",
+        "scripts/test-fork-probe-utils.js",
+    ) if (ROOT / p).is_file())
     paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / "test").rglob("*")
                  if p.is_file() and p.suffix in {".sol", ".js", ".py"})
     # Deployed test harnesses and vm.readFile bytecode are verification inputs,

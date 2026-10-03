@@ -741,7 +741,8 @@ contract CrapsProgressiveTest is CrapsPins {
                     (, uint256 gross, uint256 liquid) = _splitsIn(logs, 1);
                     uint256 principal = craps.battleOf(key).entrants * craps.battleOf(key).battleStake;
                     uint256 fullBonus = craps.roundBoostFor(boost) * craps.BATTLE_STAKE_UNIT();
-                    assertEq(pots[0].amount + gross - liquid, principal + fullBonus, "score reduced the award");
+                    _assertScheduledPotConserved(logs, principal + fullBonus);
+                    assertEq(pots[0].amount + gross - liquid, principal + fullBonus - (principal + fullBonus) / 10, "score reduced winner scheduled share");
                     assertEq(_rolledIn(logs, 1), 0, "score rolled a bonus into the pool");
                     found = true;
                 } else {
@@ -1659,7 +1660,7 @@ contract CrapsProgressiveTest is CrapsPins {
 
         (uint256 count, uint256 g, uint256 l) = _splitsIn(logs, 1);
         assertEq(count, 1, "the main ladder did not announce exactly one split");
-        assertEq(g, drew, "the split's gross is not the admitted boost");
+        assertEq(g, drew - drew / 10, "main protocol split excludes longest-hand tenth");
         uint256 banked = g - l;
         assertGt(banked, 0, "a converting boost banked nothing");
 
@@ -1668,7 +1669,8 @@ contract CrapsProgressiveTest is CrapsPins {
         uint256 stakes = done.battleStake * done.entrants;
         PaidOut[] memory pots = _potsIn(logs);
         assertEq(pots.length, 1, "the field paid other than one pot");
-        assertEq(pots[0].amount, stakes + drew - banked, "the pot is not bounties plus the liquid boost");
+        _assertScheduledPotConserved(logs, stakes + drew);
+        assertEq(pots[0].amount, stakes + drew - (stakes + drew) / 10 - banked, "main payout and deferred passes conserve scheduled remainder");
 
         // And the banked value is exactly the passes alice now holds.
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);

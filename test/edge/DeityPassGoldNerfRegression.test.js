@@ -737,41 +737,29 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
           );
           await seedDeityBySymbol(gameAddr, 0, deity, deityBaseSlot);
 
-          // Seed lvlTraitEntry[lvlPrime][GOLD_TRAIT] across lvlPrime ∈
-          // [1..10] to cover the per-pull keccak-derived level range that
-          // `_awardDailyCoinToTraitWinners` samples from at L1856-L1858.
+          // Production retains two adjacent absolute levels. Model ten completed
+          // level scenarios in order, rather than storing ten simultaneous buckets
+          // in two physical roots (which authenticated reads correctly reject).
+          // These remain storage-roundtrip + independent JS-oracle assertions;
+          // they do not execute the production coin-jackpot route.
           const holderBuckets = {};
-          for (let lvlPrime = 1; lvlPrime <= 10; ++lvlPrime) {
-            const holders = generateHolderAddresses(
-              BUCKET_SIZE,
-              "0xB011" + lvlPrime.toString(16).padStart(4, "0")
-            );
-            await seedTraitBucket(
-              gameAddr,
-              lvlPrime,
-              GOLD_TRAIT,
-              holders,
-              bucketBaseSlot
-            );
-            holderBuckets[lvlPrime] = holders;
-          }
-
-          // DAILY_COIN_MAX_WINNERS = 50 — see DegenerusGameJackpotModule.sol:230.
-          // Drive 50 pulls across rotated lvlPrime levels with distinct
-          // keccak inputs.
           const CAP = 50;
           let sentinelPulls = 0;
           let regularPulls = 0;
           for (let i = 0; i < CAP; ++i) {
-            // Rotate lvlPrime deterministically across [1..10].
-            const lvlPrime = 1 + (i % 10);
-            const readBack = await readTraitBucket(
-              gameAddr,
-              lvlPrime,
-              GOLD_TRAIT,
-              BUCKET_SIZE,
-              bucketBaseSlot
-            );
+            const lvlPrime = 1 + Math.floor(i / 5);
+            if (i % 5 === 0) {
+              const holders = generateHolderAddresses(BUCKET_SIZE, "0xB011" + lvlPrime.toString(16).padStart(4, "0"));
+              await seedTraitBucket(gameAddr, lvlPrime, GOLD_TRAIT, holders, bucketBaseSlot);
+              holderBuckets[lvlPrime] = holders;
+              if (lvlPrime > 2) {
+                expect(await readTraitBucket(gameAddr, lvlPrime - 2, GOLD_TRAIT, 0, bucketBaseSlot)).to.deep.equal([]);
+              }
+              if (lvlPrime > 1) {
+                expect(await readTraitBucket(gameAddr, lvlPrime - 1, GOLD_TRAIT, BUCKET_SIZE, bucketBaseSlot)).to.deep.equal(holderBuckets[lvlPrime - 1]);
+              }
+            }
+            const readBack = await readTraitBucket(gameAddr, lvlPrime, GOLD_TRAIT, BUCKET_SIZE, bucketBaseSlot);
 
             const out = awardDailyCoinPullRef({
               holders: readBack,

@@ -285,29 +285,37 @@ contract CrapsLapsedDayArmTest is CrapsPins {
     function test_lapsedWindowRefundsResumeAcrossCalls() public {
         uint24 dayG = craps.currentDayIndex() + 1;
         uint64 daySlotG = uint64(uint256(dayG) * craps.BONUS_SLOTS_PER_DAY());
-        address erin = makeAddr("erin");
+        // Enough real reservations to cross physical-gas checkpoints; the legacy
+        // keepScheduled argument intentionally no longer controls work quantity.
+        uint256 seatsPerWindow = 64;
         vm.startPrank(ContractAddresses.VAULT);
-        craps.vaultComp(_code(KIND_WINDOW_AHEAD, dave, false, dayG, 1) | (uint256(1) << 208));
-        craps.vaultComp(_code(KIND_WINDOW_AHEAD, erin, true, dayG, 1) | (uint256(5) << 208));
+        for (uint256 i; i < seatsPerWindow; ++i) {
+            craps.vaultComp(_code(KIND_WINDOW_AHEAD, address(uint160(0x11000 + i)), false, dayG, 1) | (uint256(1) << 208));
+            craps.vaultComp(_code(KIND_WINDOW_AHEAD, address(uint160(0x22000 + i)), true, dayG, 1) | (uint256(5) << 208));
+        }
         vm.stopPrank();
-
         _lapse(dayG);
-        // Cross the empty lapsed `today` first with an unmetered call.
         while (craps.keeperSlot() < daySlotG) craps.keepScheduled(type(uint64).max);
         uint256 laneBefore = flip.compLane();
+        uint256 expected = seatsPerWindow * (ROUTINE_WINDOW_PRICE + TAIL_WINDOW_PRICE * 21);
         uint256 calls;
+        uint256 priorRefunds;
         while (craps.keeperSlot() < daySlotG + 8) {
-            (bool progressed,) = craps.keepScheduled(8);
-            assertTrue(progressed, "a metered sweep call reported no progress");
-            ++calls;
-            require(calls < 10, "the sweep did not finish");
+            vm.cool(address(craps));
+            (bool progressed,) = craps.keepScheduled{gas: 400_000}(8);
+            assertTrue(progressed, "sufficient supplied gas must advance frozen refund frontier");
+            uint256 refunded = flip.compLane() - laneBefore;
+            assertGe(refunded, priorRefunds, "refund checkpoints cannot debit earlier credits");
+            assertLe(refunded, expected, "no checkpoint can double-refund");
+            priorRefunds = refunded;
+            require(++calls < 64, "frozen refund backlog must drain");
         }
-        assertEq(calls, 2, "two seats at one per call; the call that finishes the day crosses it");
-        assertEq(
-            flip.compLane() - laneBefore,
-            ROUTINE_WINDOW_PRICE + TAIL_WINDOW_PRICE * 21,
-            "each comp refunded exactly once at its own price"
-        );
+        assertGt(calls, 1, "physical-gas checkpoint was actually crossed");
+        assertEq(flip.compLane() - laneBefore, expected, "each comp refunded exactly once at its own price");
+        assertEq(craps.bonusCursorOf(daySlotG + 2), seatsPerWindow);
+        assertEq(craps.bonusCursorOf(daySlotG + 6), seatsPerWindow);
+        craps.keepScheduled(type(uint64).max);
+        assertEq(flip.compLane() - laneBefore, expected, "later maintenance cannot replay lapsed refunds");
     }
 
     /// @dev Make `day` (tomorrow) lapse: the clock lands on the day after, `day` gets a backfilled

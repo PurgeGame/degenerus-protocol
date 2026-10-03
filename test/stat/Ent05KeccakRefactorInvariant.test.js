@@ -52,7 +52,7 @@ const U256_MASK = (1n << 256n) - 1n;
 
 const MODULE_SOURCE_PATH = path.resolve(
   process.cwd(),
-  "contracts/modules/DegenerusGameJackpotModule.sol"
+  "contracts/modules/DegenerusGameJackpotDrawModule.sol"
 );
 
 // Phase 261/264/266/275 chi² infrastructure reuse (verbatim re-declaration).

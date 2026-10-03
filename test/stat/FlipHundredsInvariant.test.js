@@ -49,7 +49,8 @@ const UNIT = 100n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_UNIT
 const THRESHOLD = 1_000n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_THRESHOLD
 
 const SRC = (rel) => path.resolve(process.cwd(), rel);
-const JACKPOT = SRC("contracts/modules/DegenerusGameJackpotModule.sol");
+const JACKPOT = SRC("contracts/modules/DegenerusGameJackpotDrawModule.sol");
+const JACKPOT_CORE = SRC("contracts/modules/DegenerusGameJackpotModule.sol");
 const LOOTBOX = SRC("contracts/modules/DegenerusGameLootboxModule.sol");
 const DEGENERETTE = SRC("contracts/modules/DegenerusGameDegeneretteModule.sol");
 const MINT = SRC("contracts/modules/DegenerusGameMintModule.sol");
@@ -190,7 +191,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
     });
 
     it("[01b] `_playJackpotBattle` does no FLIP rounding of its own", function () {
-      const body = bodyOf(JACKPOT, "function _playJackpotBattle(");
+      const body = bodyOf(JACKPOT, "function _runPurchaseJackpotBattle(");
       expect(/_coinDrawPlan\s*\(/.test(body), "the jackpot battle must not re-grow the shared coin/Craps plan").to.equal(false);
       expect(/FlipRoundLib/.test(body), "the jackpot battle performs no local FLIP rounding of its own").to.equal(false);
       expect(/JackpotBattleFieldLib\.prepare\s*\(\s*winners\s*\)/.test(body), "the draw passes its winners to the field library").to.equal(true);
@@ -212,7 +213,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
   describe("§3a: the extra-unit tag is gone from the module entirely", function () {
     it("[01c] `FLIP_EXTRA_UNIT_TAG` is declared nowhere in the jackpot module", function () {
-      const source = fs.readFileSync(JACKPOT, "utf8");
+      const source = fs.readFileSync(JACKPOT, "utf8") + "\n" + fs.readFileSync(JACKPOT_CORE, "utf8");
       expect(
         /FLIP_EXTRA_UNIT_TAG/.test(stripLineComments(source)),
         "the extra-unit domain separator must be removed with the mechanism it served"
@@ -222,7 +223,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
   describe("§3b big-leg truncate carries no RNG", function () {
     it("[02a] site 3 `_payGoldenTicket` truncates `flipCredit` to a whole unit", function () {
-      const body = bodyOf(JACKPOT, "function _payGoldenTicket(");
+      const body = bodyOf(JACKPOT_CORE, "function _payGoldenTicket(");
       expect(
         /flipCredit\s*=\s*\(\s*flipCredit\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
           body
@@ -328,7 +329,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       // into a shared ResolveAcc and delegates the per-owner payout to `_flushOwner` (called
       // once per owner-run and once at the end of the call). The entry-point body itself
       // does not inline the mint — pin it to the shared flush instead, which it routes through.
-      const entry = bodyOf(DEGENERETTE, "function sweepDegeneretteBets(");
+      const entry = bodyOf(DEGENERETTE, "function _runDegeneretteWork(");
       expect(
         /_flushOwner\s*\(\s*acc\s*\)\s*;/.test(entry),
         "sweepDegeneretteBets must settle through the shared per-owner flush"

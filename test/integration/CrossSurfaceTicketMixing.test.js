@@ -91,6 +91,15 @@ const JACKPOT_SOURCE_PATH = path.resolve(
   process.cwd(),
   "contracts/modules/DegenerusGameJackpotModule.sol"
 );
+const JACKPOT_DRAW_SOURCE_PATH = path.resolve(
+  process.cwd(),
+  "contracts/modules/DegenerusGameJackpotDrawModule.sol"
+);
+// The same two award surfaces now live in separate pinned modules.
+function jackpotAwardSource() {
+  return fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8") + "\n" +
+    fs.readFileSync(JACKPOT_DRAW_SOURCE_PATH, "utf8");
+}
 const CONTRACTS_DIR = path.resolve(process.cwd(), "contracts");
 
 // Brace-match function-body extractor (mirrors test/unit/LootboxAutoResolveRemByte.test.js).
@@ -210,7 +219,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
 
   describe("TST-CLEAN-03 — `JackpotTicketWin` entries-basis emit regression", function () {
     it("[03a] there are exactly 2 `emit JackpotTicketWin` sites and none multiply the 4th (ticketCount) arg by QTY_SCALE", function () {
-      const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
+      const src = jackpotAwardSource();
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
       expect(
         emitMatches.length,
@@ -239,8 +248,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       }
     });
 
-    it("[03b] the 2 emit sites emit, in source order, the entries counts `uint32(entriesEach)`, `wholeTicketsToEntries(whole)`", function () {
-      const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
+    it("[03b] the 2 emit sites emit the resumed-plan and whole-ticket entries counts", function () {
+      const src = jackpotAwardSource();
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
       const fourthArgs = emitMatches.map((m) => {
         const argList = extractCallArgs(
@@ -256,13 +265,13 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       // canonical `wholeTicketsToEntries`. Each matches the entries value passed
       // to the adjacent `_queueEntries` call.
       expect(fourthArgs).to.deep.equal([
-        "uint32(entriesEach)",
+        "uint32(plan.entriesEach)",
         "wholeTicketsToEntries(whole)",
       ]);
     });
 
     it("[03c] each emit site's 4th arg matches the entries value passed to its adjacent `_queueEntries` call (emit value == storage-write value)", function () {
-      const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
+      const src = jackpotAwardSource();
       // For each emit site, the nearest preceding `_queueEntries(` call must
       // pass the SAME entries expression as the emit's 4th arg.
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
@@ -344,7 +353,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         const snapshot = await hre.ethers.provider.send("evm_snapshot", []);
         await mockVRF.fulfillRandomWords(request, word);
         // Publication is a keeper step; the callback only stores the final word.
-        await game.connect(deployer).mineFlip();
+        await game.connect(deployer).mineFlip({ gasLimit: 1_000_000 });
+        expect(await game.rngConsumerStage(), "publication checkpoint leaves human boxes ready").to.equal(3n);
         const receipt = await (await game.openBoxes(hre.ethers.MaxUint256)).wait();
         const ticketAward = receipt.logs.some((log) => {
           try {
@@ -355,7 +365,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         await hre.ethers.provider.send("evm_revert", [snapshot]);
         if (ticketAward) {
           await mockVRF.fulfillRandomWords(request, word);
-          await game.connect(deployer).mineFlip();
+          await game.connect(deployer).mineFlip({ gasLimit: 1_000_000 });
+          expect(await game.rngConsumerStage(), "selected trial remains unopened").to.equal(3n);
           return index;
         }
       }
@@ -580,7 +591,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       //     `wholeTicketsToEntries` and queues it through `_queueEntries`; it does
       //     NOT call `_queueEntriesScaled` and never invokes the (absent)
       //     `_queueLootboxTickets` wrapper.
-      const rollBody = extractBody(jackpotSrc, "function _jackpotTicketRoll(");
+      const rollBody = extractBody(jackpotAwardSource(), "function _jackpotTicketRoll(");
       expect(rollBody, "_jackpotTicketRoll body not found").to.not.equal(null);
       expect(
         rollBody.includes(

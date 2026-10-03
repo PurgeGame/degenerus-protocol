@@ -2,8 +2,26 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+
+/// @dev Chosen-roll accounting fixture: explicitly supplies the completed ticket
+///      prerequisites and the same published session lifecycle that live claims require.
+///      The production engine reachability is covered by AutomaticRedemptionSettlement.
+contract CenturyRedemptionSessionFixture is DegenerusGame {
+    function publishRedemptionSession(uint24 day, uint256 word) external {
+        dailyIdx = day;
+        rngWordCurrent = word;
+        rngLockedFlag = false;
+        ticketsFullyProcessed = true;
+        humanReadComplete = true;
+        _setRngRequestActive(false);
+        _setRngSessionPublished(true);
+        _setRngComplete(false);
+        _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
+    }
+}
 
 contract SdgnrsCenturyRecycleTest is DeployProtocol {
     uint256 private constant INITIAL = 1e30;
@@ -292,8 +310,15 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         _assertRefill(100, 3_000 ether + 2);
         assertEq(_pendingFingerprint(day), fingerprint, "unresolved claims and packed neighbors preserved");
 
-        vm.prank(address(game));
+        vm.startPrank(address(game));
         sdgnrs.resolveRedemptionPeriod(175, day);
+        sdgnrs.beginRedemptionSettlement(day, RNG_WORD);
+        vm.stopPrank();
+        bytes memory originalCode = address(game).code;
+        vm.etch(address(game), type(CenturyRedemptionSessionFixture).runtimeCode);
+        CenturyRedemptionSessionFixture(payable(address(game))).publishRedemptionSession(day, RNG_WORD);
+        vm.etch(address(game), originalCode);
+        assertEq(game.rngConsumerStage(), 1, "claims use published redemption cohort after predecessors");
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 7_000 ether);
         fingerprint = _pendingFingerprint(day);
@@ -320,8 +345,15 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertEq(sdgnrs.totalSupply(), supply, "settling a burn is not another supply reduction");
         _assertRefill(300, 0);
-        vm.expectRevert(sDGNRS.NoClaim.selector);
+        // The FIFO guard rejects a repeated beneficiary before payout. Empty
+        // metadata still owes its final automatic cleanup, even after manual claims.
+        assertTrue(sdgnrs.redemptionSettlementPending());
+        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
         sdgnrs.claimRedemption(ALICE, day);
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(1_000_000).done);
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
     function testExistingDailyCapIsNotResetByRefill() public {

@@ -66,11 +66,14 @@ abstract contract DeployProtocol is Test {
     /// @dev Finish the delivered session in canonical order. A composed call can close
     /// it and issue the next request; this helper never fabricates fulfillment for that request.
     function _finishReadConsumers() internal {
-        if (!game.isRngFulfilled()) return;
         uint256 initialWord = RecyclingState.currentWord(address(game));
         uint48 initialRead = RecyclingState.readBuffer(address(game));
+        // Publication clears the active-request bit while consumers remain pending.
+        // Accept either a delivered active request or its published read cohort.
+        if (initialWord == 0 || (!game.isRngFulfilled()
+            && RecyclingState.word(address(game), initialRead) == 0)) return;
         for (uint256 i; i < 10_000; ++i) {
-            if (game.rngComplete() || !game.isRngFulfilled()
+            if (game.rngComplete()
                 || RecyclingState.currentWord(address(game)) != initialWord
                 || RecyclingState.readBuffer(address(game)) != initialRead) return;
             game.mineFlip();

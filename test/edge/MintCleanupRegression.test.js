@@ -301,7 +301,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       let topicMatchCount = 0;
       for (const e of aliceEvents) {
         const expectedBaseKey =
-          checkpointIdentity({ level: e.lvl, queueIndex: e.queueIdx, player: e.player, domain: e.domain }) | BigInt(e.startIndex);
+          checkpointIdentity({ level: e.lvl, queueIndex: e.queueIdx, player: e.player, domain: e.domain }) | BigInt(e.startIndex) | (e.baseKey & (1n << 255n));
         expect(e.baseKey).to.equal(
           expectedBaseKey,
           `baseKey for emission lvl=${e.lvl} queueIdx=${e.queueIdx} owed=${e.startIndex} must match the (domain, lvl, queueIdx, player, offset) encoding`

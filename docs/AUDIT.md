@@ -75,10 +75,11 @@ Genesis-only self-disruption is excluded.
 Outcomes requiring valid sDGNRS governance approval are the governance mechanism, not
 audit findings. Bypassing its authorization, voting or execution rules remains in scope.
 
-Ticket drain pricing targets at least 99% of normal keeper calls at 10M gas or less.
-The drain budget is 900 units of 10k gas: a write to a zero-valued slot costs three
-units and a nonzero write one, with no first-chunk derate. With 1M fixed overhead the
-drain envelope is 10M, including startup and record-volume backing growth. Charges
-depend only on storage state at the start of the call. See
-`test/gas/TicketDrainWorstCaseBound.t.sol`, `RoundDrainChunkGas.t.sol` and
-`KeeperGasProfile.t.sol`.
+Ticket work now uses `MineFlipGas` admission bounds and deterministic checkpoints.
+The former fixed 900-unit ticket budget and 11.5M transaction ceiling are retired.
+The engine admits the next chunk only when its declared cost, including the call,
+return and checkpoint envelope, fits the remaining gas; otherwise it stops at a
+checkpoint instead of running out of gas. Chunks between checkpoints are sized to
+cost at most 10M gas in about 99% of realistic cases, and no chunk may exceed 13M in
+the absolute worst case. Review cold native execution, nested EIP-150 forwarding, and
+full return tails.

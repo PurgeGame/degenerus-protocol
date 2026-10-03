@@ -80,30 +80,28 @@ contract CrapsArithmeticSymbolicTest is Test {
     }
 
     // ------------------------------------------------------------------------------------
-    // _shooterBoostTerms: exact scheduled rows, including the rotation-funded 18% final uplift.
+    // _shooterBoostTerms: hot profit starts after roll12, with the approved duration rates.
     // ------------------------------------------------------------------------------------
 
     function check_shooterBoostTerms_table(uint256 placed) public view {
         vm.assume(placed < 16);
         uint256 t = craps.shooterBoostTerms(placed);
-        uint256 chance = t & 0xFF;
-        uint256 uplift = t >> 8;
+        uint256 threshold = t & 0xFF;
+        uint256 rate = t >> 8;
         if (placed >= 8) {
             assert(t == 0);
         } else {
             // Explicit branches keep the independent rows readable and avoid symbolic
             // memory indexing, which this Halmos version does not implement.
-            uint256 expectedChance = placed == 0 ? 15 : placed == 1 ? 14 : placed == 2 ? 12
-                : placed == 3 ? 11 : placed == 4 ? 9 : placed == 5 ? 8 : placed == 6 ? 6 : 5;
-            uint256 expectedUplift = placed == 0 ? 32 : placed <= 4 ? 29
-                : placed == 5 ? 24 : placed == 6 ? 23 : 18;
-            assert(chance == expectedChance);
-            assert(uplift == expectedUplift);
-            // Both terms fall (weakly) as more chips are placed.
+            uint256 expectedRate = placed == 0 ? 30 : placed == 1 ? 25 : placed == 2 ? 20
+                : placed == 3 ? 18 : placed == 4 ? 14 : placed == 5 ? 10 : placed == 6 ? 7 : 5;
+            assert(threshold == 12);
+            assert(rate == expectedRate);
+            // Threshold stays fixed; the hot-profit rate falls with placed chips.
             if (placed < 7) {
                 uint256 n = craps.shooterBoostTerms(placed + 1);
-                assert((n & 0xFF) <= chance);
-                assert((n >> 8) <= uplift);
+                assert((n & 0xFF) == threshold);
+                assert((n >> 8) <= rate);
             }
         }
     }
@@ -145,7 +143,7 @@ contract CrapsArithmeticSymbolicTest is Test {
 
     function test_shooterBoostAllRows() public view {
         for (uint256 placed; placed < 16; ++placed) check_shooterBoostTerms_table(placed);
-        assertEq(craps.shooterBoostTerms(7), (18 << 8) | 5);
+        assertEq(craps.shooterBoostTerms(7), (5 << 8) | 12);
     }
 
     // ------------------------------------------------------------------------------------

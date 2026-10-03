@@ -4,7 +4,7 @@
 import { expect } from "chai";
 import fs from "node:fs";
 
-const source = fs.readFileSync("contracts/modules/DegenerusGameJackpotModule.sol", "utf8");
+const source = fs.readFileSync("contracts/modules/DegenerusGameJackpotDrawModule.sol", "utf8");
 const UNIT = 100n * 10n ** 18n;
 const SHARES = 50n;
 

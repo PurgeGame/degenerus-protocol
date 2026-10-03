@@ -47,9 +47,14 @@ contract AfKingSeatToken is DeployProtocol {
 
     /// @dev Enter the RNG freeze window: fresh day + advance requests VRF.
     function _enterRngLock() internal {
+        _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        game.mineFlip();
-        assertTrue(game.rngLocked(), "advance should open a VRF request");
+        uint256 beforeRequest = mockVRF.lastRequestId();
+        // Subscription preparation and maintenance can consume an earlier
+        // call. Stop only when the engine has actually issued the request.
+        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip();
+        assertTrue(game.rngLocked(), "engine should open a VRF request");
+        assertGt(mockVRF.lastRequestId(), beforeRequest, "fresh request opened");
     }
 
     /// @dev Complete a full day: advance -> VRF fulfill -> drain to unlock.

@@ -4,6 +4,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimableShortfallTester.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
@@ -22,6 +23,19 @@ interface IFlipCoinflipPlayerMock {
 ///         state, while the Game-side body (the audited claimable-debit site) runs for real.
 interface IGameLootboxModuleRRL {
     function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore) external;
+}
+
+/// @dev Preserve the production layout and stage guard for directly resolved
+///      unit-test cohorts; payment still runs through the original Game code.
+contract StakedRedemptionSessionFixture is DegenerusGame {
+    function publishRedemptionSession(uint256 word) external {
+        rngWordCurrent = word;
+        rngLockedFlag = false;
+        ticketsFullyProcessed = true;
+        _setRngRequestActive(false);
+        _setRngSessionPublished(true);
+        _setRngComplete(false);
+    }
 }
 
 /// @title StakedStonkRedemption — Per-function fuzz suite for v44 sStonk gambling surface
@@ -172,10 +186,31 @@ contract StakedStonkRedemption is DeployProtocol {
     }
 
     function _pinSession(uint24 day, uint256 word) internal {
-        // Appended fields: slot 10 packs cursor + queue day; slot 11 is session word.
-        uint256 packed = uint256(vm.load(address(sdgnrs), bytes32(uint256(10))));
-        vm.store(address(sdgnrs), bytes32(uint256(10)), bytes32((packed & ~(uint256(type(uint24).max) << 32)) | (uint256(day) << 32)));
-        vm.store(address(sdgnrs), bytes32(uint256(11)), bytes32(word));
+        vm.prank(address(game));
+        sdgnrs.beginRedemptionSettlement(day, word);
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(StakedRedemptionSessionFixture).runtimeCode);
+        StakedRedemptionSessionFixture(payable(address(game))).publishRedemptionSession(word);
+        vm.etch(address(game), original);
+        assertTrue(sdgnrs.redemptionSettlementPending(), "fixture: real beneficiary cohort pending");
+        assertEq(game.rngConsumerStage(), 1, "fixture: redemption is the live FIFO stage");
+    }
+
+    /// @dev Create the claim, queue entry, aggregate and MAX reserve through burn.
+    ///      Only synthetic backing is adjusted; no redemption accounting is seeded.
+    function _burnForExactBase(address actor, uint256 amount, uint256 base) internal {
+        uint256 backing = (base * sdgnrs.totalSupply() + amount - 1) / amount;
+        uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
+        if (claimable != 0) --claimable; // The stored 1 wei sentinel is not backing.
+        uint256 existing = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs))
+            + claimable - sdgnrs.pendingRedemptionEthValue();
+        assertGe(backing, existing, "fixture: backing increase only");
+        mockStETH.mint(address(sdgnrs), backing - existing);
+        _primeCurrentDayRng();
+        vm.prank(actor);
+        sdgnrs.burn(amount);
+        (uint96 actual,,) = sdgnrs.pendingRedemptions(actor, game.currentDayView());
+        assertEq(uint256(actual), base, "fixture: real burn produced exact claim base");
     }
 
     /// @dev Write day `day`'s REAL coinflip result into Coinflip storage so the redemption
@@ -641,51 +676,26 @@ contract StakedStonkRedemption is DeployProtocol {
 
     /// @notice The 160 ETH per-(wallet, day) EV cap is enforced by `if (claim.ethValueOwed +
     ///         ethValueOwed > MAX_DAILY_REDEMPTION_EV) revert ExceedsDailyRedemptionCap();` at
-    ///         sStonk:883. Approach: pre-seed `pendingRedemptions[actor][D].ethValueOwed =
-    ///         MAX_DAILY_REDEMPTION_EV` exactly via vm.store, then any burn that adds positive
-    ///         ethValueOwed must revert. Strict `>` operator allows exact-equality (160 ETH
-    ///         exactly) to remain valid; the test asserts the FIRST burn whose ethValueOwed > 0
-    ///         post the cap-seed reverts.
+    ///         sStonk:883. A funded burn first reaches MAX_DAILY_REDEMPTION_EV exactly;
+    ///         a subsequent burn adding positive ethValueOwed must revert. This retains a
+    ///         coherent daily supply snapshot, beneficiary queue and MAX reservation.
     /// @dev Tests the EV-cap guard in isolation. Anchors: INV-11 (per-wallet per-day EV cap),
-    ///      SPEC-02 (composite-key claim slot). Same vm.store seed pattern as
-    ///      RedemptionEdgeCases.testFuzz_EDGE_15.
-    ///      The plan describes accumulating burns until the cap is approached, but at deploy-time
-    ///      state (totalMoney = 100 ETH, supply ~ 8e29), reaching 160 ETH of ethValueOwed via
-    ///      legitimate burns would require burning ~1.28e30 tokens which exceeds totalSupply.
-    ///      vm.store is the only tractable path to test the strict-`>` operator semantics; the
-    ///      cap-check logic itself is byte-identical regardless of how the claim slot reached
-    ///      the cap.
+    ///      SPEC-02 (composite-key claim slot). Synthetic stETH backing makes the exact-cap
+    ///      burn possible while leaving enough actor balance for the fuzzed top-up.
     /// forge-config: default.fuzz.runs = 10000
     function testFuzz_EvCapEnforced(uint256 actorSeed, uint256 amountSeed) public {
         address actor = _pickActor(actorSeed);
         uint32 dayD = game.currentDayView();
 
-        // Pack PendingRedemption: bits 0-95 = ethValueOwed, 96-191 = flipOwed, 192-207 =
-        // activityScore. Seed ethValueOwed = MAX_DAILY_REDEMPTION_EV (gwei-aligned since 160e18
-        // is a multiple of 1e9); activityScore = 1 (treat as set so the lazy-init branch in
-        // _submitGamblingClaimFrom does NOT overwrite it).
-        // v47 PendingRedemption packing: ethValueOwed (bits 0-95) | activityScore (bits 96-111).
-        // The former flipOwed field (old bits 96-191) was removed, so activityScore is at bit 96.
-        uint256 packed = uint256(MAX_DAILY_REDEMPTION_EV) | (uint256(1) << 96);
-        bytes32 outerSlot = keccak256(abi.encode(actor, uint256(SLOT_PENDING_REDEMPTIONS)));
-        bytes32 claimSlot = keccak256(abi.encode(uint256(dayD), outerSlot));
-        vm.store(address(sdgnrs), claimSlot, bytes32(packed));
+        _burnForExactBase(actor, ACTOR_FUNDING / 2, MAX_DAILY_REDEMPTION_EV);
 
         // Verify seed visible
         (uint96 evSeed, uint16 asSeed, ) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
         assertEq(uint256(evSeed), MAX_DAILY_REDEMPTION_EV, "evCap: pre-seed ethValueOwed mismatch");
         assertEq(uint256(asSeed), 1, "evCap: pre-seed activityScore mismatch");
 
-        // Pre-stamp sentinel so INV-13 guard does NOT trip
-        _storePendingResolveDay(uint24(dayD));
-
-        // Prime dayD's RNG so the burn passes the admission gate and reaches the EV-cap check
-        // (the burn must revert ExceedsDailyRedemptionCap, not BurnsBlockedBeforeDailyRng).
-        _primeCurrentDayRng();
-
-        // Any burn that produces ethValueOwed > 0 (post gwei-snap) must revert. FUZZ_MIN_AMOUNT
-        // (100 ether) yields ethValueOwed ~12.5 gwei post-snap > 0 → cap check trips. Fuzz the
-        // amount in [FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100] to assert the revert across a range.
+        // Every amount in this range adds positive post-gwei-snap base and fits
+        // the actor's remaining balance, so the EV cap must reject the top-up.
         uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
         vm.prank(actor);
         vm.expectRevert(sDGNRS.ExceedsDailyRedemptionCap.selector);
@@ -1449,37 +1459,15 @@ contract StakedStonkRedemption is DeployProtocol {
         assertTrue(wordDay != wordDayPlus1, "MECH-01: day and day+1 words must differ to expose the operand");
         _setRngWordForDay(uint24(dayBurn), wordDay);
         _setRngWordForDay(uint24(dayBurn) + 1, wordDayPlus1);
-        _pinSession(uint24(dayBurn), wordDayPlus1);
 
-        // Seed a single (player, day) claim with a LARGE gwei-aligned ethValueOwed so the rolled
-        // ETH clears the 0.02-ETH lootbox-floor (lootboxEth >= 0.01 ETH) and the
-        // resolveRedemptionLootbox leg actually fires. PendingRedemption packing:
-        // ethValueOwed (bits 0-95) | activityScore (bits 96-111) | flipEscrow (bits 112-207).
-        // activityScore = 1 (treated as set; snapshotted score is activityScore - 1 = 0);
-        // flipEscrow = 0 so the contingent-FLIP branch is skipped and only the lootbox-seed path
-        // is exercised.
+        // A real funded burn establishes the claim, FIFO membership and reserve.
+        // Its 1 ETH base clears the paid lootbox floor after a 100% resolution.
         uint256 ethValueOwed = 1 ether; // gwei-aligned; roll 100 -> totalRolledEth = 1 ether
-        uint256 packedClaim = ethValueOwed | (uint256(1) << 96);
-        bytes32 outerSlot = keccak256(abi.encode(playerA, uint256(SLOT_PENDING_REDEMPTIONS)));
-        bytes32 claimSlot = keccak256(abi.encode(uint256(dayBurn), outerSlot));
-        vm.store(address(sdgnrs), claimSlot, bytes32(packedClaim));
-
-        // Seed _pendingRedemptionEthValue (slot 0, bits [128:223]) to the MAX(175%) reservation so
-        // the release `_pendingRedemptionEthValue - totalRolledEth` at the end of the claim does
-        // not underflow. Preserve the packed _totalSupply (bits [0:127]) and _pendingResolveDay
-        // (bits [224:247]) lanes.
-        uint256 maxReserve = (ethValueOwed * 175) / 100; // MAX_ROLL = 175 -> 1.75 ether
-        uint256 slot0 = uint256(vm.load(address(sdgnrs), bytes32(uint256(0))));
-        slot0 = (slot0 & ~(uint256(type(uint96).max) << 128)) | (uint256(uint96(maxReserve)) << 128);
-        vm.store(address(sdgnrs), bytes32(uint256(0)), bytes32(slot0));
-
-        // Mark the period resolved: redemptionPeriods (mapping(uint24=>uint16)) at slot 6.
+        _burnForExactBase(playerA, ACTOR_FUNDING, ethValueOwed);
         uint16 roll = 100;
-        vm.store(
-            address(sdgnrs),
-            keccak256(abi.encode(uint256(dayBurn), uint256(6))),
-            bytes32(uint256(roll))
-        );
+        vm.prank(address(game));
+        sdgnrs.resolveRedemptionPeriod(roll, uint24(dayBurn));
+        _pinSession(uint24(dayBurn), wordDayPlus1);
         assertEq(uint256(sdgnrs.redemptionPeriods(uint24(dayBurn))), uint256(roll), "MECH-01: roll seed mismatch");
 
         // Fund sDGNRS with ETH so both legs forward real msg.value (no stETH remainder pull).
@@ -1535,7 +1523,7 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.prank(playerA);
         sdgnrs.claimRedemption(playerA, uint24(dayBurn));
 
-        // Claim consumed the seeded slot (full-claim delete), confirming the path ran end-to-end.
+        // Claim consumed the burn-created slot, confirming the path ran end-to-end.
         (uint96 evAfter, , uint96 escAfter) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertEq(uint256(evAfter), 0, "MECH-01: claim slot must clear after full claim");
         assertEq(uint256(escAfter), 0, "MECH-01: flipEscrow must remain zero");

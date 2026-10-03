@@ -174,7 +174,7 @@ describe("GameOver", function () {
       expect(await game.gameOver()).to.equal(true);
     });
 
-    it("mineFlip after gameOver takes handleFinalSweep path (returns silently if <30d)", async function () {
+    it("mineFlip reports NoWork after completed terminal payout while the sweep is not due", async function () {
       const { game, deployer, mockVRF } = await loadFixture(
         deployFullProtocol
       );
@@ -183,10 +183,10 @@ describe("GameOver", function () {
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.equal(true);
 
-      // Subsequent call hits the gameOver branch → handleFinalSweep → returns early
-      const tx = await game.connect(deployer).mineFlip();
-      const receipt = await tx.wait();
-      expect(receipt.status).to.equal(1);
+      expect(await game.nextMinerAction()).to.equal(0n);
+      const miner = await hre.ethers.getContractFactory("DegenerusGameMinerModule");
+      await expect(game.connect(deployer).mineFlip()).to.be.revertedWithCustomError(miner, "NoWork");
+      expect(await game.isFinalSwept()).to.equal(false);
     });
   });
 
@@ -380,7 +380,7 @@ describe("GameOver", function () {
   // =========================================================================
 
   describe("final sweep (30 days post-gameover)", function () {
-    it("mineFlip before 30 days returns silently (no sweep)", async function () {
+    it("mineFlip before 30 days reports NoWork and preserves the unexpired claim window", async function () {
       const { game, deployer, alice, mockVRF } = await loadFixture(
         deployFullProtocol
       );
@@ -394,8 +394,13 @@ describe("GameOver", function () {
       // 15 days post-gameover (< 30)
       await advanceTime(15 * 86400);
 
-      const tx = await game.connect(deployer).mineFlip();
-      expect((await tx.wait()).status).to.equal(1);
+      const timestamp = await game.gameOverTimestamp();
+      const reserved = await game.claimablePoolView();
+      const miner = await hre.ethers.getContractFactory("DegenerusGameMinerModule");
+      await expect(game.connect(deployer).mineFlip()).to.be.revertedWithCustomError(miner, "NoWork");
+      expect(await game.isFinalSwept()).to.equal(false);
+      expect(await game.gameOverTimestamp()).to.equal(timestamp);
+      expect(await game.claimablePoolView()).to.equal(reserved);
     });
 
     it("mineFlip after 30 days triggers final sweep path", async function () {

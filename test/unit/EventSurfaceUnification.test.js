@@ -53,6 +53,11 @@ const JACKPOT_SOURCE_PATH = path.resolve(
   process.cwd(),
   "contracts/modules/DegenerusGameJackpotModule.sol"
 );
+// Ticket awards span the checkpoint distributor and the extracted draw module.
+function jackpotSources() {
+  return fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8") + "\n" +
+    fs.readFileSync("contracts/modules/DegenerusGameJackpotDrawModule.sol", "utf8");
+}
 const INTERFACE_SOURCE_PATH = path.resolve(
   process.cwd(),
   "contracts/interfaces/IDegenerusGameModules.sol"
@@ -602,7 +607,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
     });
 
     it("[06b] _jackpotTicketRoll declares `bool roundedUp = false;` before the Bernoulli predicate and sets `roundedUp = true;` inside it", function () {
-      const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
+      const src = jackpotSources();
       const body = extractBody(src, "function _jackpotTicketRoll(");
       expect(body, "_jackpotTicketRoll body not found").to.not.equal(null);
       const declIdx = body.indexOf("bool roundedUp = false;");
@@ -626,7 +631,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
     });
 
     it("[06c] the JackpotTicketWin emit inside _jackpotTicketRoll threads the captured `roundedUp` local", function () {
-      const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
+      const src = jackpotSources();
       const body = extractBody(src, "function _jackpotTicketRoll(");
       expect(body, "_jackpotTicketRoll body not found").to.not.equal(null);
       const emitArgList = extractCallArgs(body, "emit JackpotTicketWin(");
@@ -644,7 +649,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
     });
 
     it("[06d] all JackpotTicketWin emit sites supply the 7th `roundedUp` arg; the trait-matched site passes literal `false`", function () {
-      const src = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
+      const src = jackpotSources();
       const emitMatches = [...src.matchAll(/emit JackpotTicketWin\(/g)];
       expect(
         emitMatches.length,
@@ -682,7 +687,7 @@ describe("EventSurfaceUnification — Phase 277 Wave 2 TST-EVT-UNI-01..06", func
     });
 
     it("[06e] the _jackpotTicketRoll Bernoulli predicate mirrors the LootboxModule capture pattern (byte-identical math, different entropy slice)", function () {
-      const jackpot = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
+      const jackpot = jackpotSources();
       const lootbox = fs.readFileSync(LOOTBOX_SOURCE_PATH, "utf8");
       // Lootbox path: bits[224..255]; Jackpot path: bits[96..127]. Both use the
       // same `frac != 0 && (uint32(...) % uint32(QTY_SCALE)) < frac` shape.

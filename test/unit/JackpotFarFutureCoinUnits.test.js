@@ -4,7 +4,7 @@
 import { expect } from "chai";
 import fs from "node:fs";
 
-const source = fs.readFileSync("contracts/modules/DegenerusGameJackpotModule.sol", "utf8");
+const source = fs.readFileSync("contracts/modules/DegenerusGameJackpotDrawModule.sol", "utf8");
 
 function body(signature) {
   const start = source.indexOf(signature);
@@ -36,13 +36,15 @@ describe("JackpotFarFutureCoinUnits — the daily jackpot battle's award draw", 
     expect(draw).not.to.match(/queue\s*\[[^\]]+\]\s*=|queue\.push|queue\.pop|delete\s+queue/);
   });
 
-  it("appends each chunk to the table, and the sealing chunk settles on the budget its draw left", function () {
-    const play = body("function _playJackpotBattle(");
+  it("appends the frozen field and reserves simulation for the next bounded phase", function () {
+    const play = body("function _runPurchaseJackpotBattle(");
     expect(play).to.include("IJackpotBattle battle = IJackpotBattle(ContractAddresses.CRAPS)");
     expect(play).to.include("JackpotBattleFieldLib.prepare(winners)");
     expect(play).to.include("battle.appendJackpotBattle(field, next, last)");
-    expect(play).to.include("battle.advanceJackpotBattle(JACKPOT_BATTLE_SETTLE_UNITS)");
-    expect(play).to.include("JACKPOT_DRAW_BASE_UNITS + winners.length * JACKPOT_DRAW_ENTRY_UNITS");
-    expect(play).to.include("battle.advanceJackpotBattle(uint64(JACKPOT_BATTLE_SETTLE_UNITS - drawUnits))");
+    expect(play).to.include("MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL)");
+    expect(play).to.include("runDailyBattleWork(childAllowance)");
+    const afterAppend = play.slice(play.indexOf("battle.appendJackpotBattle("));
+    expect(afterAppend).not.to.include("runDailyBattleWork(");
+    expect(afterAppend).to.include("MineFlipGas.finish(meter)");
   });
 });

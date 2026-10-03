@@ -492,11 +492,27 @@ contract JackpotSingleCallCorrectness is Test {
             0,
             "no resume stage constant survives in the AdvanceModule"
         );
-        // The single-call daily-ETH entry (payDailyJackpot) is still dispatched exactly once.
+        // Advance now dispatches the metered worker. This source check follows
+        // that route; component payout tests above retain their economic checks.
+        // The public engine may resume or compose workers across its gas boundary.
         assertGt(
-            _countOccurrences(adv, "payDailyJackpot("),
+            _countOccurrences(adv, "IDegenerusGameJackpotModule.runDailyJackpot.selector"),
             0,
-            "the single-call daily-ETH entry is still dispatched"
+            "the daily-ETH worker is still dispatched"
+        );
+        assertGt(
+            _countOccurrences(adv, "ContractAddresses.GAME_JACKPOT_MODULE.delegatecall"),
+            0,
+            "the worker reaches the jackpot module"
+        );
+        string memory jp = _stripComments(
+            vm.readFile("contracts/modules/DegenerusGameJackpotModule.sol")
+        );
+        assertGt(_countOccurrences(jp, "function runDailyJackpot("), 0, "the worker exists");
+        assertGt(
+            _countOccurrences(jp, "return _runDailyJackpot(isJackpotPhase, lvl, randWord, allowance);"),
+            0,
+            "the metered worker reaches the shared daily-ETH implementation"
         );
     }
 

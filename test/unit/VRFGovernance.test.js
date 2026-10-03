@@ -46,15 +46,22 @@ describe("VRF Governance", function () {
   // so it clears the mint gate.
   // =========================================================================
   async function recoverVrf(game, caller, mockVRF) {
-    await game.connect(caller).mineFlip();
-    const reqId = await getLastVRFRequestId(mockVRF);
-    if (reqId > 0n) {
-      await fulfillVRF(mockVRF, reqId, 123456789n);
+    const before = await game.lastVrfProcessed();
+    const previousRequest = await getLastVRFRequestId(mockVRF);
+    let delivered = false;
+    for (let i = 0; i < 128; i++) {
+      const reqId = await getLastVRFRequestId(mockVRF);
+      if (reqId > previousRequest) {
+        const pending = await mockVRF.pendingRequests(reqId);
+        if (!pending.fulfilled) {
+          await fulfillVRF(mockVRF, reqId, 123456789n);
+          delivered = true;
+        }
+      }
+      if (delivered && await game.lastVrfProcessed() > before && !(await game.rngLocked())) return;
+      await game.connect(caller).mineFlip({ gasLimit: 12_000_000 });
     }
-    for (let i = 0; i < 30; i++) {
-      if (!(await game.rngLocked())) break;
-      await game.connect(caller).mineFlip();
-    }
+    throw new Error("VRF recovery did not request, deliver and apply a new daily word");
   }
 
   // =========================================================================

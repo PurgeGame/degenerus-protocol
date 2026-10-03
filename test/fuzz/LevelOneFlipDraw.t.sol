@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
+import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsPreferenceStore} from "../craps/CrapsPreferenceStore.sol";
@@ -118,6 +119,8 @@ contract LevelOneFlipDrawTest is Test {
     function setUp() public {
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 5) * 1 days + 82_620 + 1 hours);
         h = new FlipDrawHarness();
+        vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameJackpotDrawModule()).code);
+        assertGt(ContractAddresses.GAME_JACKPOT_DRAW_MODULE.code.length, 0, "the delegated draw has code");
         vm.etch(ContractAddresses.COINFLIP, address(new FlipDrawCoinflipDouble()).code);
         vm.etch(ContractAddresses.CRAPS, address(new NoCrapsCallsDouble()).code);
         coinflip = FlipDrawCoinflipDouble(ContractAddresses.COINFLIP);
@@ -230,7 +233,11 @@ contract LevelOneFlipDrawTest is Test {
         uint256 cap = units < CAP_MAX ? units : CAP_MAX;
         uint256 amount = cap == 0 ? 0 : (units / cap) * UNIT;
         uint256 paid = _countSig(logs, FLIP_WIN_SIG);
+        assertGt(cap, 0, "the populated-board fixture has a payable budget");
+        assertEq(paid, cap, "every populated-board share resolves a winner");
         assertLe(paid, cap, "more winners than the cap");
+        assertEq(coinflip.count(), paid, "each winner reaches the real credit boundary");
+        assertEq(coinflip.batches(), 1, "the populated draw credits one batch");
         assertEq(coinflip.total(), paid * amount, "credited total != paid winners * amount");
         assertLe(coinflip.total(), b, "overspent");
         assertEq(craps.creditPassesCalls(), 0, "the draw banked a craps pass");

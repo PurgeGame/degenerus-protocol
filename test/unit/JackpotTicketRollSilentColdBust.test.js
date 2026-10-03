@@ -72,7 +72,7 @@ const TICKET_SCALE = 100n;
 
 const MODULE_SOURCE_PATH = path.resolve(
   process.cwd(),
-  "contracts/modules/DegenerusGameJackpotModule.sol"
+  "contracts/modules/DegenerusGameJackpotDrawModule.sol"
 );
 const STORAGE_PATH = path.resolve(
   process.cwd(),

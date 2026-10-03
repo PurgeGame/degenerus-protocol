@@ -2,11 +2,8 @@
 # Test-only code, upstream implementations and off-chain applications are not production
 # Solidity targets. Tests, deployment scripts and compiler settings remain supporting
 # evidence: report a deployment/configuration defect that affects in-scope contracts.
-# Supporting build inputs, not standalone audit targets:
-contracts/ContractAddresses.sol
-contracts/Icons32Data.sol
-# Swappable deity-pass artwork: display only; the Vault owner can replace or unset it.
-contracts/DeityPassCustomizationRenderer.sol
+# All production Solidity, including address pins and display/data dependencies,
+# is inventoried in scope.txt. Display artwork receives dependency review only.
 contracts/mocks/
 contracts/test/
 test/

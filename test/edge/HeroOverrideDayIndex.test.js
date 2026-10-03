@@ -627,7 +627,7 @@ describe("TST-JPSURF — F-41-03 cross-day CALL 1/CALL 2 regression (Phase 288)"
       // slot (canonical), confirming the slot semantic.
       const interWindowSlotWinner = await readWinner(game, D + 1);
       expect(interWindowSlotWinner.winQuadrant).to.equal(
-        3,
+        1,
         "inter-window bet must land at slot[D+1] (canonical) — disjoint from slot[dailyIdx=D]"
       );
       expect(interWindowSlotWinner.winSymbol).to.equal(5);

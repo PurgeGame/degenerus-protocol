@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 // v55.0 D-351-02: the `AfKing` import is DROPPED — the standalone de-custody contract
 // (contracts/AfKing.sol) was DELETED (ARCH-03; funding is game-resident afkingFunding).
@@ -15,6 +16,19 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 interface IFlipCoinflipPlayerMock {
     function getCoinflipDayResult(uint32 day) external view returns (uint16 rewardPercent, bool win);
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
+}
+
+/// @dev Complete the Game side of the directly resolved unit-test cohort. Inherit
+///      its layout so the real claim and forwarding routes keep their stage guard.
+contract RedemptionStethSessionFixture is DegenerusGame {
+    function publishRedemptionSession(uint256 word) external {
+        rngWordCurrent = word;
+        rngLockedFlag = false;
+        ticketsFullyProcessed = true;
+        _setRngRequestActive(false);
+        _setRngSessionPublished(true);
+        _setRngComplete(false);
+    }
 }
 
 /// @title RedemptionStethFallback — F-47-02 stETH-fallback path (RFALL-05) + POOL-04 receive() safety
@@ -156,6 +170,12 @@ contract RedemptionStethFallback is DeployProtocol {
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
         vm.prank(address(game));
         sdgnrs.beginRedemptionSettlement(uint24(dayToResolve), 99);
+        bytes memory original = address(game).code;
+        vm.etch(address(game), type(RedemptionStethSessionFixture).runtimeCode);
+        RedemptionStethSessionFixture(payable(address(game))).publishRedemptionSession(99);
+        vm.etch(address(game), original);
+        assertTrue(sdgnrs.redemptionSettlementPending(), "fixture: real beneficiary cohort pending");
+        assertEq(game.rngConsumerStage(), 1, "fixture: redemption is the live FIFO stage");
     }
 
     /// @dev THE load-bearing v47 REDEEM-08 solvency invariant under the fallback: sDGNRS's own

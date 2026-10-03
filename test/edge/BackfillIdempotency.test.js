@@ -21,28 +21,23 @@ async function readClocks(game) {
   };
 }
 
-async function advanceStage(game, advanceModule) {
-  const receipt = await (await game.mineFlip()).wait();
+async function advanceStages(game, advanceModule, gasLimit = 12_000_000) {
+  const receipt = await (await game.mineFlip({ gasLimit })).wait();
   const topic = advanceModule.interface.getEvent("Advance").topicHash;
   const gameAddress = (await game.getAddress()).toLowerCase();
   const events = receipt.logs
     .filter((log) => log.address.toLowerCase() === gameAddress && log.topics[0] === topic)
     .map((log) => advanceModule.interface.parseLog(log));
-  expect(events.length, "at most one advance stage per transaction").to.be.at.most(1);
-  if (events.length === 0) {
-    // The public work router can finish unlocked read consumers before a fresh request.
-    expect(await game.rngLocked(), "consumer-only work does not hold the daily lock").to.equal(false);
-    return 0n;
-  }
-  return events[0].args.stage;
+  // The engine may complete several safe atomic steps in one transaction.
+  return events.map((event) => event.args.stage);
 }
 
 async function requestDay(game, advanceModule, mockVRF) {
   expect(await game.rngLocked(), "request begins unlocked").to.equal(false);
   const previousId = await mockVRF.lastRequestId();
   for (let i = 0; i < 64; ++i) {
-    const stage = await advanceStage(game, advanceModule);
-    if (stage === STAGE_RNG_REQUESTED) {
+    const stages = await advanceStages(game, advanceModule);
+    if (stages.includes(STAGE_RNG_REQUESTED)) {
       expect(await game.rngLocked(), "fresh request holds the lock").to.equal(true);
       const requestId = await mockVRF.lastRequestId();
       expect(requestId, "coordinator received a new request").to.be.gt(previousId);
@@ -54,8 +49,9 @@ async function requestDay(game, advanceModule, mockVRF) {
 
 async function drainDay(game, advanceModule, assertState) {
   for (let i = 0; i < 128 && await game.rngLocked(); ++i) {
-    const stage = await advanceStage(game, advanceModule);
-    expect(stage, "draining an applied word cannot repeat the backfill").not.to.equal(STAGE_GAP_BACKFILLED);
+    await advanceStages(game, advanceModule);
+    // Gap application and daily application can both emit stage 12. The clock
+    // and packed-outcome assertions below prove that credit never repeats.
     await assertState();
   }
   expect(await game.rngLocked(), "the committed day finishes within the drain bound").to.equal(false);
@@ -122,7 +118,9 @@ describe("BackfillIdempotency", function () {
     await mockVRF.fulfillRandomWords(resumeId, resumeWord);
     let reachedBackfill = false;
     for (let i = 0; i < 64; ++i) {
-      if (await advanceStage(game, advanceModule) === STAGE_GAP_BACKFILLED) {
+      // Physically supplied gas admits the 1.5M gap step but not the following
+      // 3.6M daily-application step, exposing the real safe checkpoint.
+      if ((await advanceStages(game, advanceModule, 3_000_000)).includes(STAGE_GAP_BACKFILLED)) {
         reachedBackfill = true;
         break;
       }
@@ -137,21 +135,18 @@ describe("BackfillIdempotency", function () {
     expect(await readClocks(game)).to.deep.equal({
       purchaseStartDay: creditedStart, dailyIdx: resumeDayW - 1n,
     });
-    const expectedWords = new Map([[requestDayR, requestWord], [resumeDayW, appliedResumeWord]]);
+    expect(await game.rngWordForDay(resumeDayW), "daily application is still owed at the gap checkpoint").to.equal(0n);
+    const expectedWords = new Map([[requestDayR, requestWord]]);
     for (let day = requestDayR + 1n; day < resumeDayW; ++day) {
       const derived = BigInt(hre.ethers.solidityPackedKeccak256(["uint256", "uint24"], [resumeWord, day]));
       expectedWords.set(day, derived === 0n ? 1n : derived);
     }
     const expectedResults = new Map();
-    const rewardTag = hre.ethers.keccak256(hre.ethers.toUtf8Bytes("degenerus.coinflip.reward-percent"));
     for (let day = requestDayR + 1n; day < resumeDayW; ++day) {
       // Gap wins use bits 1..31 of the RAW root; nudges affect only the real daily word.
       // The retained yesterday word still serves the other daily RNG consumers.
-      const seed = BigInt(hre.ethers.solidityPackedKeccak256(["bytes32", "uint256", "uint24"], [rewardTag, resumeWord, day]));
       const win = ((resumeWord >> (day - (requestDayR + 1n) + 1n)) & 1n) !== 0n;
-      const roll = seed % 20n;
-      const reward = roll === 0n ? 50n : roll === 1n ? 150n : seed % 38n + 78n;
-      expectedResults.set(day, [win ? reward : 1n, win]);
+      expectedResults.set(day, [win ? 100n : 1n, win]);
     }
     async function assertRetainedWordsAndGapResults() {
       const today = await game.currentDayView();
@@ -178,6 +173,8 @@ describe("BackfillIdempotency", function () {
     expect(await game.currentDayView()).to.equal(resumeDayW + 1n);
     await drainDay(game, advanceModule, assertFrozenGap);
     expect((await readClocks(game)).dailyIdx).to.equal(resumeDayW);
+    expect(await game.rngWordForDay(resumeDayW), "original logical day applied after the checkpoint").to.equal(appliedResumeWord);
+    expectedWords.set(resumeDayW, appliedResumeWord);
     expect((await coinflip.getCoinflipDayResult(resumeDayW))[1], "real daily flip uses the final nudged bit 0")
       .to.equal((appliedResumeWord & 1n) !== 0n);
     expect(await game.gameOver()).to.equal(false);
