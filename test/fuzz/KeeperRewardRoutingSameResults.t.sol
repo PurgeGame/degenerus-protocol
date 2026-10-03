@@ -57,6 +57,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     address private keeper;
     uint256 private constant DRAIN_MAX_ITERATIONS = 50;
     uint256 private _lastFulfilledReqId;
+    uint256 private _passFactor = 1;
 
     function setUp() public {
         _deployProtocol();
@@ -156,20 +157,23 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         uint256 rewardPrice = game.mintPrice();
         uint256 elapsed = _rewardElapsed();
+        bool lockedAtStart = game.rngLocked();
         vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip();
 
         // Read the recorded logs ONCE (vm.getRecordedLogs drains them) and derive BOTH the count and the
         // credited amount in a single pass, so the amount is not lost to a prior drain.
-        (uint256 count, uint256 amount) = _keeperCreditCountAndAmount(rewardPrice, elapsed);
+        (uint256 count, uint256 amount) = _keeperCreditCountAndAmount(rewardPrice, elapsed, lockedAtStart);
         assertEq(count, amount == 0 ? 0 : 1, "only qualifying measured work credits the miner");
         return amount;
     }
 
     /// @dev Single-pass recorded-log read returning (count, summed amount) of the keeper's
     ///      CoinflipStakeUpdated emissions. Avoids the double-getRecordedLogs drain hazard.
-    function _keeperCreditCountAndAmount(uint256 rewardPrice, uint256 elapsed) internal returns (uint256 count, uint256 amount) {
+    function _keeperCreditCountAndAmount(uint256 rewardPrice, uint256 elapsed, bool lockedAtStart)
+        internal returns (uint256 count, uint256 amount)
+    {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 declaredReward;
         uint256 workEvents;
@@ -180,8 +184,9 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
                 if (step > 4) step = 4;
                 uint256 cap = uint256(0.5 gwei) << step;
                 uint256 rate = block.basefee < cap ? block.basefee : cap;
-                uint256 expected = used < 1_000_000 ? 0
-                    : used * rate * 1000 ether * (7500 + step * 5000) / (rewardPrice * 10_000);
+                uint256 expected = used <= 1_000_000 ? 0
+                    : (used - 1_000_000) * rate * 1000 ether * (3000 + step * 4500) * _passFactor * (lockedAtStart ? 2 : 1)
+                        / (rewardPrice * 10_000);
                 assertEq(paid, expected, "reward prices qualifying measured gas at capped base fee");
                 assertGt(used, 0);
                 ++workEvents;
@@ -212,6 +217,47 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @notice A published mid-day ticket cohort earns the same measured-work compensation.
     function testMidDayPartialDrainRewardedViaMintFlip() public {
+        _seedMidDayCohort();
+        uint256 amount = _mineSeededCohort();
+        assertGt(amount, 0, "mid-day ticket work exceeds the measured-gas cutoff");
+    }
+
+    /// @notice An active pass doubles the bounty for the same measured work.
+    function testActivePassDoublesMineFlipBounty() public {
+        _seedMidDayCohort();
+        uint256 snap = vm.snapshotState();
+        uint256 plain = _mineSeededCohort();
+        vm.revertToState(snap);
+        _grantDeityPass(keeper);
+        assertTrue(game.hasDeityPass(keeper), "pre: keeper holds a deity pass");
+        _passFactor = 2;
+        uint256 doubled = _mineSeededCohort();
+        assertGt(plain, 0, "the plain miner is paid");
+        assertApproxEqAbs(doubled, plain * 2, 1, "an active pass doubles the same work's bounty");
+    }
+
+    /// @notice Ticket work that starts under the daily RNG lock pays double.
+    function testRngLockedWorkPaysDouble() public {
+        _settleGame(0x10CC0001);
+        vm.warp(block.timestamp + 1 days);
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && !game.rngLocked(); i++) game.mineFlip();
+        assertTrue(game.rngLocked(), "pre: the daily request holds the lock");
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0x10CC0002);
+
+        uint24 readKey = _readKey(uint24(game.level()) + 1);
+        for (uint256 i; i < 200; i++) {
+            _seedReadSlotTickets(readKey, makeAddr(string(abi.encodePacked("locked_player_", _u(i)))), 3);
+        }
+        _setTicketsFullyProcessed(false);
+
+        assertTrue(game.rngLocked(), "pre: work starts under the lock");
+        uint256 amount = _mineSeededCohort();
+        assertGt(amount, 0, "locked ticket work exceeds the measured-gas cutoff");
+    }
+
+    /// @dev Model an authenticated, published mid-day cohort with enough ticket
+    ///      work to cross the reward cutoff and reach a resumable checkpoint.
+    function _seedMidDayCohort() internal {
         // Settle to a clean, not-due, not-locked baseline: `day == dailyIdx` (the mid-day precondition).
         _settleGame(0x1D0E0003);
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
@@ -223,29 +269,29 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         uint24 purchaseLevel = uint24(game.level()) + 1;
         uint24 readKey = _readKey(purchaseLevel);
 
-        // Model an authenticated, published mid-day cohort with enough ticket
-        // work to cross the reward cutoff and reach a resumable checkpoint.
         uint256 M = 200;
-        address[] memory players = new address[](M);
         for (uint256 i; i < M; i++) {
-            players[i] = makeAddr(string(abi.encodePacked("midday_player_", _u(i))));
-            _seedReadSlotTickets(readKey, players[i], 3); // 3 whole tickets each (12 entries)
+            _seedReadSlotTickets(readKey, makeAddr(string(abi.encodePacked("midday_player_", _u(i)))), 3); // 3 whole tickets each (12 entries)
         }
         _setTicketsFullyProcessed(false);
         RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(uint256(0x1D0E0003)));
 
         assertTrue(game.advanceDue(), "pre: a mid-day partial-drain advance is due (read slot un-fully-processed)");
         assertFalse(game.rngLocked(), "pre: not locked (mid-day, no escalation)");
+    }
 
+    /// @dev One keeper mineFlip over seeded work, checked against the reward oracle.
+    function _mineSeededCohort() internal returns (uint256 amount) {
         uint256 rewardPrice = game.mintPrice();
         uint256 elapsed = _rewardElapsed();
+        bool lockedAtStart = game.rngLocked();
         vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip{gas: 9_500_000}();
 
-        (uint256 count, uint256 amount) = _keeperCreditCountAndAmount(rewardPrice, elapsed);
-        assertEq(count, 1, "mid-day ticket work credits the miner exactly once");
-        assertGt(amount, 0, "mid-day ticket work exceeds the measured-gas cutoff");
+        uint256 count;
+        (count, amount) = _keeperCreditCountAndAmount(rewardPrice, elapsed, lockedAtStart);
+        assertEq(count, 1, "seeded ticket work credits the miner exactly once");
     }
 
     /// @notice GAMEOVER idle crank reverts via mineFlip: post-gameover dailyIdx freezes so the advance

@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -47,6 +48,8 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         bool rewardEligible = first != MinerAction.Terminal;
         uint256 rewardPrice = PriceLookupLib.priceForLevel(_activeTicketLevel());
         uint256 rewardDueAt = _minerRewardDueAt();
+        // Read before work, like the clock: the call that releases the lock still earns the locked rate.
+        bool lockedAtStart = rngLockedFlag;
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
         bool moved;
         uint256 unpaidAttemptGas;
@@ -197,13 +200,18 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         // retain the actual bounds. No successful call can overspend this initial amount.
         uint256 used = rewardStart - gasleft() - unpaidAttemptGas;
         uint256 reward;
-        if (rewardEligible && !gameOver && used >= MineFlipGas.MIN_REWARDED_GAS) {
+        // Every call's first MIN_REWARDED_GAS is unpaid, so splitting work into small calls
+        // only costs the miner.
+        if (rewardEligible && !gameOver && used > MineFlipGas.MIN_REWARDED_GAS) {
             // Price only compensation, after work and its gas measurement are complete.
             uint256 elapsed = block.timestamp > rewardDueAt ? block.timestamp - rewardDueAt : 0;
             (uint256 cap, uint256 multiplierBps) = _minerRewardTerms(elapsed);
+            if (_minerHoldsActivePass(msg.sender)) multiplierBps <<= 1;
+            if (lockedAtStart) multiplierBps <<= 1;
             uint256 rate = block.basefee;
             if (rate > cap) rate = cap;
-            reward = used * rate * PRICE_COIN_UNIT * multiplierBps / (rewardPrice * 10_000);
+            reward = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * multiplierBps
+                / (rewardPrice * 10_000);
             if (reward != 0) {
                 coinflip.creditFlip(msg.sender, reward);
                 emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
@@ -217,7 +225,17 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         uint256 steps = elapsed / 30 minutes;
         if (steps > 4) steps = 4;
         capWei = INITIAL_REWARD_BASEFEE_CAP << steps;
-        multiplierBps = 7_500 + 5_000 * steps;
+        multiplierBps = 3_000 + 4_500 * steps;
+    }
+
+    /// @dev A deity pass, or a lazy/whale pass whose window covers the current level,
+    ///      doubles the caller's bounty. Same pass test as the activity score.
+    function _minerHoldsActivePass(address miner) internal view returns (bool) {
+        uint256 packed = mintPacked_[miner];
+        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return true;
+        uint256 passType = (packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3;
+        return (passType == 1 || passType == 3)
+            && ((packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24) >= level;
     }
 
     /// @dev One clock for every action in a call: the wait since the latest accepted VRF

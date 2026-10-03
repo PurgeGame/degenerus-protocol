@@ -122,6 +122,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         vm.cool(ContractAddresses.JACKPOT_BATTLE); vm.cool(ContractAddresses.GAME_MINER_MODULE);
         uint256 price = game.mintPrice();
         uint256 prior = coinflip.coinflipAmount(MINER);
+        uint256 lockFactor = game.rngLocked() ? 2 : 1;
         vm.recordLogs();
         vm.prank(MINER);
         game.mineFlip{gas: 9_500_000}();
@@ -136,7 +137,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertEq(workEvents, 1);
         assertGe(measured, 1_000_000);
         uint256 rate = baseFee < 0.5 gwei ? baseFee : 0.5 gwei;
-        assertEq(reward, measured * rate * 1000 ether * 7500 / (price * 10_000));
+        assertEq(reward, (measured - 1_000_000) * rate * 1000 ether * 3000 * lockFactor / (price * 10_000));
         assertEq(coinflip.coinflipAmount(MINER) - prior, reward);
         if (crapsBattle.bonusCursorOf(slot) < FIELD) _finish(14_000_000, true);
         assertEq(crapsBattle.bonusCursorOf(slot), FIELD);
@@ -263,6 +264,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
 
         vm.fee(50 gwei);
         uint256 price = game.mintPrice();
+        uint256 lockFactor = game.rngLocked() ? 2 : 1;
         vm.recordLogs();
         vm.prank(MINER);
         game.mineFlip{gas: 9_500_000}();
@@ -272,7 +274,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == MINER_WORK) {
                 (, uint256 measured, uint256 reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
                 assertGe(measured, 1_000_000);
-                assertEq(reward, measured * 1 gwei * 1000 ether * 12_500 / (price * 10_000),
+                assertEq(reward, (measured - 1_000_000) * 1 gwei * 1000 ether * 7_500 * lockFactor / (price * 10_000),
                     "31-minute backlog uses the first raised cap and multiplier");
                 ++workEvents;
             }

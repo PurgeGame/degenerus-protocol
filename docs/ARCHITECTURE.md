@@ -127,7 +127,11 @@ The dispatcher calls the advance worker or drains existing read consumers before
 next daily request can reuse their randomness storage. Neither public entry calls the
 other. Workers run by delegatecall, preserving the original caller. Only `mineFlip`
 enables the keeper bounty; standalone advancement and its prerequisite drains are
-unrewarded.
+unrewarded. The bounty prices measured gas above each call's first 1M at a capped basefee
+times a multiplier that starts at 0.3x and rises 0.45x per 30 minutes the work waits: 1.2x
+after one hour, 2.1x after two. A caller with a deity pass, or a lazy/whale pass covering
+the current level, earns double. A call that starts while the daily RNG lock is held earns
+double again.
 
 `Advance(18, lvl)` reports a fresh daily word applied with its jackpot field still
 pending. `Advance(19, lvl)` reports committed ticket progress waiting for the previous
