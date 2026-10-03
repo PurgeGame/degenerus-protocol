@@ -35,7 +35,6 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {
     IDegenerusGameLootboxModule,
-    IDegenerusGameMinerModule,
     IDegenerusGameWhaleModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
@@ -172,6 +171,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///        1 = AutoPause (funding-skip kill of a NORMAL sub)
     ///        2 = CancelReclaim (in-pass reclaim of an externally-cancelled tombstone)
     event SubscriptionExpired(address indexed player, uint8 reason);
+    /// @dev A pending-box count with no openable stamp behind it was cleared so the read
+    ///      cohort can complete; the stamps' ETH stays in the prize pools.
+    event AfkingBoxCountForfeited(uint16 count);
 
     /// @notice A consented funding wallet paid the residual subscription cost in stETH.
     /// @dev Any share-rounding excess remains in the source's prepaid balance.
@@ -1636,7 +1638,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @notice Open stamped boxes belonging to the unlocked active session.
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
-        if (_pendingBoxCount != 0 && _subscribers.length == 0) revert IDegenerusGameMinerModule.NoWork();
         return _runAfkingWork(gasAllowance);
     }
 
@@ -1645,10 +1646,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (_pendingBoxCount == 0) { result.done = true; return result; }
         if (_rngConsumerStage() != 2) return result;
         uint256 len = _subscribers.length;
-        // An empty iterable set cannot supply a recipient. Leave the obligation
-        // intact and report no progress; never certify completion from the count
-        // alone or erase a paid stamp to make a later request possible.
-        if (len == 0) return result;
         uint256 cursor = _subOpenCursor;
         uint256 initialCursor = cursor;
         if (cursor >= len) cursor = 0;
@@ -1674,9 +1671,26 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint16 nextCursor = uint16(cursor >= len ? 0 : cursor);
         if (nextCursor != initialCursor) _subOpenCursor = nextCursor;
         result.progressed = nextCursor != initialCursor || result.rewardBasis != 0;
-        result.done = _pendingBoxCount == 0;
-        if (result.done) _tryCompleteRng();
+        if (result.rewardBasis == 0 && scanned == len && _pendingBoxCount != 0) {
+            // A full scan found no openable stamp, so the count has no box behind it.
+            _forfeitPendingBoxCount(result);
+        } else {
+            result.done = _pendingBoxCount == 0;
+            if (result.done) _tryCompleteRng();
+        }
         MineFlipGas.finish(meter);
+    }
+
+    /// @dev Clear a pending-box count that no stamp in the ring can satisfy, so the read
+    ///      cohort completes instead of reselecting this stage. The ETH that bought the
+    ///      counted boxes reached the prize pools when they were stamped and stays there;
+    ///      no box opens and no stamp is written.
+    function _forfeitPendingBoxCount(MineFlipGas.Result memory result) private {
+        emit AfkingBoxCountForfeited(_pendingBoxCount);
+        _pendingBoxCount = 0;
+        result.progressed = true;
+        result.done = true;
+        _tryCompleteRng();
     }
 
     /// @dev Legacy internal harness surface; external allowance selection remains disabled.

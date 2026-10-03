@@ -69,7 +69,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         uint256[4] indices;
     }
 
-    /// @dev Experimental L -> L+1 delivery. The jackpot worker owns pricing, passes
+    /// @dev Direct L -> L+1 delivery. The jackpot worker owns pricing, passes
     ///      and completion. Source buckets remain frozen; the target is already live.
     ///      Each checkpoint completes all four quadrants, with one reveal per ticket.
     function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
@@ -77,15 +77,37 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     {
         JackpotWork storage work = jackpotWork;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        // The direct lane needs a live target buffer, unscaled entries and registered
+        // deities; otherwise the queued path finishes the draw from the same cursor. Both
+        // paths draw winner i of quadrant q from the same seed, so completed groups are not
+        // drawn again. A group whose rounds were only partly materialized is skipped: its
+        // winners keep the rounds they received and the rest stays as nextPrizePool backing.
+        // Every input here is state, so caller gas never chooses the delivery mode.
+        if (work.directTickets && (work.kind != 6 || plan.sourceLvl != work.lvl
+            || plan.queueLvl != work.lvl + 1 || _ticketBufferLevel(plan.queueLvl) != plan.queueLvl
+            || _snapShiftFor(plan.queueLvl) != 0 || !_deitiesRegistered(plan))) {
+            work.directTickets = false;
+            if (work.directTicketRound != 0) {
+                work.directTicketRound = 0;
+                uint8 sq = work.quadrant;
+                uint256 si = work.winner;
+                uint256 scount = sq < 4 ? plan.counts[sq] : 0;
+                if (si < scount) {
+                    uint256 sn = scount - si;
+                    if (sn > 32) sn = 32;
+                    si += sn;
+                    if (si >= scount) { si = 0; ++sq; }
+                    work.quadrant = sq;
+                    work.winner = uint16(si);
+                }
+            }
+        }
         if (!work.directTickets) {
             _resumeQueuedJackpotTickets(work, plan, meter, result);
             result.done = work.quadrant == 4;
             MineFlipGas.finish(meter);
             return result;
         }
-        if (work.kind != 6 || plan.sourceLvl != work.lvl
-            || plan.queueLvl != work.lvl + 1 || _ticketBufferLevel(plan.queueLvl) != plan.queueLvl
-            || _snapShiftFor(plan.queueLvl) != 0) revert E();
         uint8 q = work.quadrant;
         uint256 i = work.winner;
         uint32 round = work.directTicketRound;
@@ -184,6 +206,16 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         }
         if (q != work.quadrant) work.quadrant = q;
         if (i != work.winner) work.winner = uint16(i);
+    }
+
+    /// @dev Every deity a drawn quadrant can pay must hold a registry ID, which the direct
+    ///      lane writes in place of an address.
+    function _deitiesRegistered(TicketWorkPlan calldata plan) private view returns (bool) {
+        for (uint256 q; q < 4; ++q) {
+            address deity = plan.deities[q];
+            if (deity != address(0) && plan.counts[q] != 0 && ticketOwnerId[deity] == 0) return false;
+        }
+        return true;
     }
 
     function _directTicketGroup(TicketWorkPlan calldata plan, uint8 q, uint256 start, uint256 n)

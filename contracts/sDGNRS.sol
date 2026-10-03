@@ -972,8 +972,12 @@ contract sDGNRS {
             // amount. The MAX − rolled difference is over-pulled ETH that stays as free backing.
             uint256 segregatedMax = (ethBase * MAX_ROLL) / 100;
             uint256 rolledEth = (ethBase * roll) / 100;
-            // Checked arithmetic (reverts on underflow); narrowing cast is safe.
-            _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - segregatedMax + rolledEth);
+            // The cumulative reservation holds at least this day's MAX share, so the release
+            // saturates only as a floor: a zero here leaves the rolled amount as the whole
+            // reservation. Accounting only — no claimable value is created either way.
+            uint256 reserved = _pendingRedemptionEthValue;
+            reserved = reserved > segregatedMax ? reserved - segregatedMax : 0;
+            _pendingRedemptionEthValue = uint96(reserved + rolledEth);
         }
 
         // Store the per-day result before emitting and invalidating the aggregate.

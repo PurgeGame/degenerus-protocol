@@ -797,6 +797,9 @@ contract FLIP {
         if (backing < DECIMATOR_MIN) return 0;
         amount = backing < SDGNRS_DECIMATOR_CAP ? backing : SDGNRS_DECIMATOR_CAP;
         amount = coinflip.consumeFlipForSalvage(player, amount);
+        // Below the entry minimum the consumed backing is retired without an entry: the
+        // battle takes no entry it would refuse, and the advance that called continues.
+        if (amount < DECIMATOR_MIN) return 0;
 
         _recordDecimatorBurn(player, amount, lvl, 0);
     }

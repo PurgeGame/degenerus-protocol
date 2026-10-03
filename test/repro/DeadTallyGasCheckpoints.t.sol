@@ -62,13 +62,14 @@ contract DeadTallyGasCheckpointsTest is Test {
         assertEq(traits, expectedTraits, "live zero-count bucket is not a populated trait");
     }
 
-    function test_CreatedTallyRejectsRetiredLevelAndIgnoresFutureAlias() public {
+    function test_CreatedTallyCountsNothingForRetiredLevelAndIgnoresFutureAlias() public {
         DeadTallyCheckpointHarness h = new DeadTallyCheckpointHarness();
         h.seedCreated(110, type(uint256).max, 3);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        h.tallyDeadVrf(108);
-        (uint8 stage,,) = h.tallyState();
-        assertEq(stage, 2, "retired level cannot finish the tally");
+        assertTrue(h.tallyDeadVrf(108), "retired level finishes the tally");
+        (uint64 retiredCreated, uint16 retiredTraits) = h.createdState();
+        assertEq(retiredCreated, 0, "retired level must not read the retained level's counts");
+        assertEq(retiredTraits, 0);
+        h.seedCreated(110, type(uint256).max, 3);
         assertTrue(h.tallyDeadVrf(112));
         (uint64 created, uint16 traits) = h.createdState();
         assertEq(created, 0, "future level must not read the retained level's counts");

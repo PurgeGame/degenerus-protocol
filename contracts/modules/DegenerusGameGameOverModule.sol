@@ -242,12 +242,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // --- Deterministic ending ---
         if (dead) {
             if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) == 0) {
-                _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
-                // Revoke callback authority and discard late entropy, retaining metadata.
-                // The dead latch and unpublished session keep the terminal fallback reachable.
-                _setRngRequestActive(false);
-                _setRngSessionPublished(false);
-                rngWordCurrent = RNG_WORD_WAITING;
+                _latchDeadEnding();
                 work.progressed = true;
             }
             // These are the persisted tally frontiers, including empty-cohort stage advances.
@@ -395,6 +390,16 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         }
     }
 
+    /// @dev Latch the deterministic ending. Revokes callback authority and discards late
+    ///      entropy, retaining metadata; the dead latch and unpublished session keep the
+    ///      terminal fallback reachable.
+    function _latchDeadEnding() private {
+        _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
+        _setRngRequestActive(false);
+        _setRngSessionPublished(false);
+        rngWordCurrent = RNG_WORD_WAITING;
+    }
+
     function _terminalWordApplied() private view returns (bool) {
         return rngRequestDay != 0 && _rngRequestActive() && _rngSessionPublished()
             && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) != 0;
@@ -475,10 +480,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///        fixed as the pot every terminal-level ticket claims from (claimDeadVrf)
     ///      - Any uncredited remainder later swept by handleFinalSweep three-way to vault / sDGNRS / GNRUS
     ///
-    ///      The normal ending reads _recordedDailyWord(day) and reverts if funds exist but the word
-    ///      is not yet available. The deterministic ending reads no word.
+    ///      The normal ending needs the terminal word. With distributable funds and no word it
+    ///      latches the deterministic ending instead, which reads no word.
     /// @param day Day index for RNG word lookup from rngWordByDay mapping.
-    /// @custom:reverts Invariant When distributable funds exist but the RNG word is unavailable (defense-in-depth).
     /// @custom:reverts TransferFailed When an stETH or ETH transfer fails.
     function handleGameOverDrain(uint24 day) public virtual {
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
@@ -493,7 +497,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // At most 32 deity refunds, terminal burns and accounting, with no draw
         // admitted until the remaining allowance is measured after this setup.
         if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_SETUP, GasBounds.TERMINAL_TAIL)) return false;
-        work.progressed = true; // Admitted one-time terminal setup below sets gameOver.
+        work.progressed = true; // Admitted setup below sets gameOver or latches the dead ending.
 
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint24 lvl = level;
@@ -509,16 +513,15 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         uint256 reserved = uint256(claimablePool);
         uint256 preRefundAvailable = totalFunds > reserved ? totalFunds - reserved : 0;
 
-        // RNG gate: when distributable funds exist, require RNG word.
-        // Defense-in-depth -- caller (_handleGameOverPath) already guarantees
-        // _recordedDailyWord(day) != 0 before calling, so this revert should never fire.
-        uint256 rngWord;
-        if (preRefundAvailable != 0 && !dead) {
-            rngWord = _lootboxWord(_rngReadBuffer());
-            if (rngWord == 0) revert Invariant();
+        // The normal ending draws on the terminal word. Without one, distributable funds take
+        // the deterministic ending: the next terminal call tallies the cohort and fixes the
+        // pot, so fund release never waits on a word that is not there. Nothing is paid here.
+        if (preRefundAvailable != 0 && !dead && _lootboxWord(_rngReadBuffer()) == 0) {
+            _latchDeadEnding();
+            return false;
         }
 
-        // === All side effects below this line (RNG confirmed or no funds to distribute) ===
+        // === All side effects below this line (word confirmed, dead, or no funds to distribute) ===
 
         // The deterministic ending has no word to roll a pending sDGNRS gambling-burn pool
         // with, so it resolves at the roll's expected value, 100%. The pool's ETH is
@@ -850,9 +853,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         }
         uint256 created;
         uint256 traits;
-        // No calls or bucket mutations occur during this scan. Authenticate the
-        // retained level once, then reuse its live bitmap and bucket base.
-        _assertReadableTicketLevel(lvl);
+        // No calls or bucket mutations occur during this scan. Only a buffer stamped with
+        // this level holds created tickets; any other stamp (unprepared or retired) counts
+        // none, so the ending always completes and the pot divides over the queued weight.
         uint256 live = _ticketBufferLevel(lvl) == lvl ? traitBucketLive[lvl & 1] : 0;
         uint256 base = _traitBufferBase(lvl);
         for (uint256 t; t < 256; ) {

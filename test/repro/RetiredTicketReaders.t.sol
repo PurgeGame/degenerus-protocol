@@ -41,13 +41,12 @@ contract RetiredTicketReadersTest is Test {
         h.awardWhalePass(1, 0, 80 ether, 11, false);
         assertEq(h.awarded(DEITY), 0);
     }
-    function test_RetiredJackpotRejectsBeforeCachedLengthDeityDraw() public {
+    function test_RetiredJackpotTerminalPaysNobodyBeforeCachedLengthDeityDraw() public {
         RetiredJackpotHarness h = new RetiredJackpotHarness();
         h.seed(DEITY, true);
         vm.prank(ContractAddresses.GAME);
-        vm.expectRevert(DegenerusGameStorage.E.selector);
-        h.runTerminalJackpot(10 ether, 1, 11);
-        assertEq(h.credited(DEITY), 0);
+        assertEq(h.runTerminalJackpot(10 ether, 1, 11), 0, "retired level: every quadrant settles unpaid");
+        assertEq(h.credited(DEITY), 0, "no empty-bucket deity draw on a retired level");
         h.seed(DEITY, false);
         vm.prank(ContractAddresses.GAME);
         h.runTerminalJackpot(10 ether, 1, 11);

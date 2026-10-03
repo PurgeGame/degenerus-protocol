@@ -5,7 +5,6 @@ import {Test} from "forge-std/Test.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-import {IDegenerusGameMinerModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
 contract AfkingMembershipHarness is GameAfkingModule {
     function seed(address pending, address clean, uint8 quantity) external returns (uint24 processDay) {
@@ -34,6 +33,7 @@ contract AfkingMembershipHarness is GameAfkingModule {
     }
     function deliver() external { ++dailyIdx; _setRngComplete(false); }
     function corruptEmptySet() external { delete _subscribers; }
+    function complete() external view returns (bool) { return _rngComplete(); }
     function state(address player) external view returns (uint256 count, uint256 members, uint256 index, uint24 stamp, uint24 opened, uint8 quantity) {
         Sub storage sub = _subOf[player];
         return (_pendingBoxCount, _subscribers.length, _subscriberIndex[player], sub.lastAutoBoughtDay, sub.lastOpenedDay, sub.dailyQuantity);
@@ -86,13 +86,19 @@ contract AfkingPendingMembershipTest is Test {
         assertLt(opened, stamp);
     }
 
-    function test_EmptySetDoesNotEraseUnresolvedCountOrCertifyCompletion() public {
+    /// @dev A count no ring member can satisfy is forfeited: the stage completes and the
+    ///      session certifies instead of reselecting this stage; the stamp itself is untouched.
+    function test_EmptySetForfeitsUnresolvedCountAndCertifiesCompletion() public {
         h.seed(PLAYER, address(0), 1);
         h.deliver();
         h.corruptEmptySet();
-        vm.expectRevert(IDegenerusGameMinerModule.NoWork.selector);
-        h.runAfkingWork(9_000_000);
-        (uint256 pending,,,,,) = h.state(PLAYER);
-        assertEq(pending, 1);
+        MineFlipGas.Result memory result = h.runAfkingWork(9_000_000);
+        assertTrue(result.done);
+        assertTrue(result.progressed);
+        assertEq(result.rewardBasis, 0, "no box opened");
+        (uint256 pending,,, uint24 stamp, uint24 opened,) = h.state(PLAYER);
+        assertEq(pending, 0, "phantom count cleared");
+        assertLt(opened, stamp, "the orphaned stamp is not written");
+        assertTrue(h.complete(), "the read cohort certified");
     }
 }

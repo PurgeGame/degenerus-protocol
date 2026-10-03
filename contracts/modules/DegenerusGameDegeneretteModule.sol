@@ -34,7 +34,6 @@ import {
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
-import {IDegenerusGameMinerModule} from "../interfaces/IDegenerusGameModules.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
@@ -414,7 +413,6 @@ contract DegenerusGameDegeneretteModule is
 
     /// @notice Consume the active session's FIFO bet queue after human boxes finish.
     function runDegeneretteWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
-        if (prizePoolFrozen) revert IDegenerusGameMinerModule.NoWork();
         return _runDegeneretteWork(gasAllowance);
     }
 
@@ -426,7 +424,7 @@ contract DegenerusGameDegeneretteModule is
         uint256 pos = degeneretteCursor;
         uint256 qlen = queue.length;
         if (pos == qlen) { result.done = true; return result; }
-        if (prizePoolFrozen || _rngConsumerStage() != 4) return result;
+        if (_rngConsumerStage() != 4) return result;
         uint256 rngWord = _lootboxWord(index);
         if (rngWord == 0) return result;
         ResolveAcc memory acc;

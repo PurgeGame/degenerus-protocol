@@ -63,10 +63,10 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
 
             if (action == MinerAction.CertifyRead) {
-                bool wasComplete = _rngComplete();
-                _tryCompleteRng();
-                if (!_rngComplete()) revert E();
-                if (wasComplete) break;
+                // Selected only with the read cohort drained (stage 7) and no certificate.
+                // That selector read is the certificate's evidence, so certify from it:
+                // the action can never be reselected in the same state.
+                _setRngComplete(true);
                 moved = true;
                 continue;
             }

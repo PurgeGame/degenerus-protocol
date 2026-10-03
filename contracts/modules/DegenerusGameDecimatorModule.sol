@@ -171,8 +171,10 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         DecBattleRound storage round = decBattleRounds[lvl];
         // An empty or already sealed event hands the pool back untouched.
         if (round.phase != 0 || round.count == 0) return poolWei;
+        // A seal the session cannot take hands the pool back unsealed: the round keeps its
+        // entries at phase 0, the pool stays with the caller and no entrant is paid.
         if (_decWindowOpen() || poolWei > type(uint128).max || decBattleQueue != 0
-            || rngWord <= RNG_WORD_WAITING || rngWord != _lootboxWord(_rngReadBuffer())) revert E();
+            || rngWord <= RNG_WORD_WAITING || rngWord != _lootboxWord(_rngReadBuffer())) return poolWei;
         _setRngComplete(false);
         round.poolWei = uint128(poolWei);
         uint256 places = (uint256(round.count) + 9) / 10;
